@@ -173,7 +173,6 @@ Invoke-Checked $dotnet (@('publish', $appProject, '-o', $appOut, '-p:Platform=x6
     ('-p:ApplicationManifest=' + (Join-Path $releaseTools 'app.release.manifest')), ('-p:ROO_INDUSTRIES_UPDATE_FEED=' + $UpdateFeedUrl)) + $common) 'App publish'
 
 $boundedOutputs = @($stage, (Join-Path $work 'wasdk'))
-foreach ($projectFolder in @('docs\internal\frontend\RooIndustries.OptimizationSuite.App', 'backend\native\Optimizer.Core', 'backend\native\Optimizer.Host', 'backend\native\Optimizer.SessionHost')) { $boundedOutputs += Join-Path $repoRoot ($projectFolder + '\obj') }
 Assert-ReleasePathBound -OutputRoots $boundedOutputs
 
 foreach ($config in @((Join-Path $hostOut 'Optimizer.Host.runtimeconfig.json'), (Join-Path $sessionOut 'RooIndustries.SessionHost.runtimeconfig.json'), (Join-Path $appOut 'RooIndustries.OptimizationSuite.App.runtimeconfig.json'))) {

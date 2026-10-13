@@ -1,5 +1,5 @@
 param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutRoot,
-    [Parameter(Mandatory)][ValidateSet('seed','manual-install','feed-down','slow-feed','close-during-check','malformed-feed','bad-signature','wrong-product','wrong-channel','same-version','older-version','tampered','tampered-size','manual-download','ready','scheduled-download','blocked','cancel','install','failure','copy-failure','cleanup','transport-error','manual-timeout','settings-readonly','timer-read-failure')][string]$Scenario,
+    [Parameter(Mandatory)][ValidateSet('seed','manual-install','feed-down','slow-feed','close-during-check','malformed-feed','bad-signature','wrong-product','wrong-channel','same-version','cache-cleanup','older-version','tampered','tampered-size','manual-download','ready','scheduled-download','blocked','cancel','install','failure','copy-failure','cleanup','transport-error','manual-timeout','settings-readonly','timer-read-failure')][string]$Scenario,
     [string]$InstallerPath='', [string]$ExpectedVersion='', [string]$EvidenceName='', [string]$FixtureExe='',[switch]$ManualRetry,[switch]$HelpersOnly,[string]$NextVersion='',[string]$InitialDataRoot='',[string]$FeedUrl='',[string]$FeedKeyId='',[string]$OlderVersion='',[switch]$CurrentData)
 $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
@@ -24,6 +24,22 @@ public static class RooUpdateUi {
  [DllImport("user32.dll",SetLastError=true)] public static extern bool PostMessage(IntPtr window,uint message,IntPtr w,IntPtr l);
 }
 '@}
+if(-not('RooUpdateCacheLock' -as [type])){Add-Type @'
+using System;
+using System.IO;
+using System.Threading;
+public sealed class RooUpdateCacheLock : IDisposable {
+ readonly object gate = new object(); FileStream file; Timer timer; DateTime released;
+ public RooUpdateCacheLock(string path) { file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read); }
+ public DateTime ReleasedAtUtc { get { lock(gate) return released; } }
+ public void Arm(DateTime birth, int seconds) {
+  if(seconds <= 0) throw new ArgumentOutOfRangeException("seconds");
+  lock(gate) { if(timer != null || file == null) throw new InvalidOperationException("Cache lock already armed or disposed"); timer = new Timer(_ => Release(), null, (int)Math.Max(0, Math.Ceiling((birth.AddSeconds(seconds) - DateTime.UtcNow).TotalMilliseconds)), Timeout.Infinite); }
+ }
+ void Release() { lock(gate) { if(file != null) { file.Dispose(); file = null; released = DateTime.UtcNow; } } }
+ public void Dispose() { lock(gate) { if(timer != null) { timer.Dispose(); timer = null; } Release(); } }
+}
+'@}
 [RooUpdateUi]::SetProcessDPIAware()|Out-Null
 $install='C:\Program Files\Roo Industries\Optimization Suite'
 $exe=if($FixtureExe){$FixtureExe}else{Join-Path $install 'app\RooIndustries.OptimizationSuite.App.exe'}
@@ -34,7 +50,7 @@ $A=[Windows.Automation.AutomationElement];$TS=[Windows.Automation.TreeScope];$CT
 $utf8=[Text.UTF8Encoding]::new($false)
 $directory=New-HarnessEvidenceDirectory $OutRoot $(if($EvidenceName){$EvidenceName}else{$Scenario})
 $script:feedLogCursor=Get-ShippedLogCursor (Join-Path $data 'logs\app.log')
-$script:window=$null;$script:app=$null;$script:owned=$null;$settingsAttributes=$null;$settingsOriginal=$null;$settingsPath=Join-Path $data 'settings.json'
+$script:window=$null;$script:app=$null;$script:owned=$null;$settingsAttributes=$null;$settingsOriginal=$null;$script:cacheLock=$null;$settingsPath=Join-Path $data 'settings.json'
 $script:setupReceipts=[Collections.Generic.List[object]]::new()
 Start-ProcessTrace|Out-Null
 Start-Sleep -Milliseconds 500
@@ -112,14 +128,67 @@ function Attach{
  Register-HarnessWindow $script:window|Out-Null
  Save 'owned-app.json' @{identity=$script:owned.Identity;ownershipProof=$script:owned.OwnershipProof}
 }
-function Launch{
+function Launch($CacheLock=$null,[int]$HoldSeconds=0){
  Assert-HarnessHostLease
  Assert-NoForeignInstance $exe
  if(@(Get-CimInstance Win32_Process|Where-Object {$_.ExecutablePath -ieq $exe}).Count){throw 'This invocation already has an app; stop it before launching another.'}
  $script:launchAfter=[DateTime]::UtcNow;$script:installPressed=$null;$script:appLogCursor=Get-ShippedLogCursor (Join-Path $data 'logs\app.log');$script:feedLogCursor=$script:appLogCursor
  Assert-HarnessHostLease
  $script:owned=Start-OwnedProcess -FilePath $exe -WindowStyle Normal -Purpose app
- $script:app=$script:owned.process;Attach
+ $script:app=$script:owned.process;if($CacheLock){$CacheLock.Arm([DateTime]::FromFileTimeUtc([long]$script:owned.Identity.creationTimeFileTimeUtc),$HoldSeconds)};Attach
+}
+function CacheAbsentWithin([string]$VersionName,[int]$Seconds=35){
+ $birth=[DateTime]::FromFileTimeUtc([long]$script:owned.Identity.creationTimeFileTimeUtc)
+ $path=Join-Path $updates $VersionName;$until=$birth.AddSeconds($Seconds)
+ while([DateTime]::UtcNow -le $until){
+  if(-not(Test-HarnessPath $path)){return @{path=$path;absent=$true;secondsFromNativeStart=([DateTime]::UtcNow-$birth).TotalSeconds;app=$script:owned.Identity}}
+  if($script:app.HasExited){throw 'App exited during installed-cache cleanup'}
+  Start-Sleep -Milliseconds 50
+ }
+ throw ('Installed cache still present after '+$Seconds+' seconds from native start: '+$path)
+}
+function CacheLockRaces{
+ StopApp
+ foreach($seconds in 5,40){
+  $folder=Join-Path $updates $ExpectedVersion
+  $folderEntry=New-HarnessDirectory $folder 'installed-cache-lock' 'invocation'
+  $file=Join-Path $folder 'owned-lock.txt';$fileEntry=New-HarnessText $file ($nonce+' '+$seconds) 'installed-cache-lock' 'invocation'
+  $cacheEntry=Register-HarnessCache $ExpectedVersion
+  $script:cacheLock=[RooUpdateCacheLock]::new((Get-HarnessLongPath $file))
+  try{
+   Launch $script:cacheLock $seconds;Settings
+   $birth=[DateTime]::FromFileTimeUtc([long]$script:owned.Identity.creationTimeFileTimeUtc)
+   if($seconds -eq 5){
+    $gone=CacheAbsentWithin $ExpectedVersion
+    $warnings=[regex]::Matches((Read-ShippedLog $script:appLogCursor),"\[update\] Couldn't clean up the installed update:").Count
+    if($warnings -or $script:cacheLock.ReleasedAtUtc -eq [DateTime]::MinValue){throw 'Short lock was not released cleanly'}
+    $released=($script:cacheLock.ReleasedAtUtc-$birth).TotalSeconds
+    if($released -lt 5 -or $released -gt 8){throw ('Short lock release did not match native app start: '+$released)}
+    Save 'cache-lock-5.json' @{status='pass';holdSeconds=5;releasedSeconds=$released;cleanup=$gone;warningCount=$warnings;alive=(-not$script:app.HasExited)}
+    Shot 'cache-lock-5'
+    StopApp
+   }else{
+    while([DateTime]::UtcNow -lt $birth.AddSeconds(35)){if($script:app.HasExited){throw 'App exited during blocked cleanup'};Start-Sleep -Milliseconds 50}
+    $checkpoint=([DateTime]::UtcNow-$birth).TotalSeconds
+    if($checkpoint -gt 38 -or -not(Test-HarnessPath $folder)){throw 'Blocked folder did not remain at the 35-second checkpoint'}
+    WaitFor {$script:cacheLock.ReleasedAtUtc -ne [DateTime]::MinValue} 10 '40-second file lock release'|Out-Null
+    $released=($script:cacheLock.ReleasedAtUtc-$birth).TotalSeconds
+    $warnings=[regex]::Matches((Read-ShippedLog $script:appLogCursor),"\[update\] Couldn't clean up the installed update:").Count
+    if($released -lt 40 -or $released -gt 43 -or $warnings -ne 1 -or -not(Test-HarnessPath $folder) -or $script:app.HasExited){throw ('Bounded cleanup differs: released='+$released+'; warnings='+$warnings)}
+    Save 'cache-lock-40.json' @{status='pass';holdSeconds=40;releasedSeconds=$released;checkpointSeconds=$checkpoint;folderPresent=$true;warningCount=$warnings;alive=$true;app=$script:owned.Identity;log=(Read-ShippedLog $script:appLogCursor)}
+    Shot 'cache-lock-40'
+    StopApp;Launch;Settings
+    $gone=CacheAbsentWithin $ExpectedVersion
+    $warnings=[regex]::Matches((Read-ShippedLog $script:appLogCursor),"\[update\] Couldn't clean up the installed update:").Count
+    if($warnings){throw 'Unlocked next-start cleanup logged a failure'}
+    Save 'cache-lock-next-start.json' @{status='pass';cleanup=$gone;warningCount=$warnings;alive=(-not$script:app.HasExited)}
+    Shot 'cache-lock-next-start'
+    StopApp
+   }
+  }finally{if($script:cacheLock){$script:cacheLock.Dispose();$script:cacheLock=$null}}
+  foreach($entry in @($fileEntry,$cacheEntry,$folderEntry)){Remove-HarnessEntry $entry}
+ }
+ Launch;Settings;Click 'UpdateCheckButton';WaitStatus 'You have the latest version' 40|Out-Null
 }
 function StopApp{if($script:owned){if(-not$script:app.HasExited){$script:app.CloseMainWindow()|Out-Null;$script:app.WaitForExit(20000)|Out-Null};Stop-HarnessProcess $script:owned;$script:owned=$null;$script:app=$null;$script:window=$null}}
 function Version{(Get-ItemProperty 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{746C4DD8-B7BA-48CD-9FFA-0C378F19368A}_is1').DisplayVersion}
@@ -227,7 +296,17 @@ try{
     Click 'UpdateCheckButton';WaitStatus "Version $NextVersion is ready to install" 180|Out-Null;Preserved
     $cache=Register-HarnessCache $NextVersion;if(-not$cache){throw 'Ready priming did not create a verified cache.'}
     Save 'ready-cache-prime.json' @{app=$script:owned.Identity;cache=$cache.identity;status=StatusText}
-    StopApp;Launch;Settings;WaitStatus "Version $NextVersion is ready to install" 180|Out-Null
+    $cachedInstaller=Join-Path (Join-Path $updates $NextVersion) ('RooIndustries-OptimizationSuite-'+$NextVersion+'-setup.exe')
+    $cachedHash=Get-HarnessFileSha256 $cachedInstaller;$cachedLength=(Get-HarnessItem $cachedInstaller).Length
+    StopApp
+    $older=Join-Path $updates '0.0.1';$olderEntry=New-HarnessDirectory $older 'older-installed-cache' 'invocation'
+    $olderFile=New-HarnessText (Join-Path $older 'owned-old.txt') $nonce 'older-installed-cache' 'invocation'
+    Launch;Settings;WaitStatus "Version $NextVersion is ready to install" 180|Out-Null
+    $oldGone=CacheAbsentWithin '0.0.1'
+    $sameCache=(Get-HarnessFolderIdentity $cache.identity.path).creationTimeFileTimeUtc -ceq $cache.identity.creationTimeFileTimeUtc
+    if(-not$sameCache -or (Get-HarnessFileSha256 $cachedInstaller) -cne $cachedHash -or (Get-HarnessItem $cachedInstaller).Length -ne $cachedLength){throw 'Startup cleanup changed the newer ready update'}
+    Save 'cache-newer-kept.json' @{status='pass';older=$oldGone;newer=$cache.identity;installer=@{path=$cachedInstaller;sha256=$cachedHash;bytes=$cachedLength};sameCreationIdentity=$sameCache}
+    Remove-HarnessEntry $olderFile;Remove-HarnessEntry $olderEntry
    }
    if($Scenario -eq 'manual-timeout'){$toggle=(ById 'AutomaticUpdatesToggle').GetCurrentPattern([Windows.Automation.TogglePattern]::Pattern);if([string]$toggle.Current.ToggleState -eq 'On'){$toggle.Toggle()}}
    if($ManualRetry){$toggle=(ById 'AutomaticUpdatesToggle').GetCurrentPattern([Windows.Automation.TogglePattern]::Pattern);if([string]$toggle.Current.ToggleState -eq 'On'){$toggle.Toggle()}}
@@ -249,7 +328,7 @@ try{
     $theme=ById 'ThemePicker';$theme.GetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern).Expand()
     Activate (WaitFor {ByName 'Roo Industries Blue'} 15 'blue theme');Start-Sleep 1;Attach;Settings
    }
-   if($Scenario -in @('feed-down','slow-feed','close-during-check','malformed-feed','bad-signature','wrong-product','wrong-channel','same-version','older-version','tampered','tampered-size','manual-download','ready','transport-error','manual-timeout')){Click 'UpdateCheckButton'}
+   if($Scenario -in @('feed-down','slow-feed','close-during-check','malformed-feed','bad-signature','wrong-product','wrong-channel','same-version','cache-cleanup','older-version','tampered','tampered-size','manual-download','ready','transport-error','manual-timeout')){Click 'UpdateCheckButton'}
    if($ManualRetry -and $Scenario -in 'transport-error','tampered','tampered-size'){WaitStatus "Version $NextVersion is available" 60|Out-Null;Click 'UpdateDownloadButton'}
    $retryText=if($ManualRetry -or $Scenario -eq 'manual-timeout'){'Press Download to try again.'}else{'The app will try again later.'}
    switch($Scenario){
@@ -261,6 +340,7 @@ try{
     'wrong-product' {WaitStatus "Couldn't verify the update. This release is for another product."|Out-Null}
     'wrong-channel' {WaitStatus "Couldn't verify the update. This release is for another update channel."|Out-Null}
     'same-version' {WaitStatus 'You have the latest version'|Out-Null}
+    'cache-cleanup' {CacheLockRaces}
     'older-version' {WaitStatus 'You have the latest version'|Out-Null}
     {$_ -in 'tampered','tampered-size'} {WaitStatus ("The download didn't match the signed release, so it was deleted. "+$retryText) 180|Out-Null;if(@(UpdateFiles|Where-Object {$_.path -match '\.exe(?:\.partial)?$'}).Count){throw 'Rejected installer remains'}}
     'manual-download' {WaitStatus "Version $NextVersion is available"|Out-Null;if(@(UpdateFiles|Where-Object {$_.path -match '\.exe(?:\.partial)?$'}).Count){throw 'Automatic-off downloaded an installer'};Shot 'available';Click 'UpdateDownloadButton';WaitStatus "Version $NextVersion is ready to install" 180|Out-Null;Preserved}
@@ -301,7 +381,7 @@ try{
       Save 'interactive-recovery-result.json' @{exitCode=$setup.ExitCode;installedVersion=Version;exists=(Test-HarnessPath $exe -PathType Leaf)}
      }
      $script:owned=$null;$script:app=$null;$script:window=$null;Attach;Settings;Save 'relaunch-ownership.json' @{identity=$script:owned.Identity;proof=$script:owned.OwnershipProof};if($script:owned.OwnershipProof.kind -ne 'trace'){throw 'Update relaunch did not use trace proof'}
-     if($Scenario -in 'install','copy-failure'){WaitStatus "Updated to version $NextVersion" 90|Out-Null;if((Version) -ne $NextVersion){throw 'Installed version did not advance'};if($Scenario -eq 'install'){if(Test-HarnessPath (Join-Path $updates $NextVersion)){throw 'Installed version cache was retained'};$logs=@(Get-HarnessChildren $updates -Filter 'install-*.log'|Sort-Object LastWriteTimeUtc -Descending);Save 'cleanup-logs.json' @($logs|Select-Object Name,Length,LastWriteTimeUtc);if($logs.Count -ne 3){throw 'Install log retention is not three'};if(Test-HarnessPath (Join-Path $updates 'pending-install.json')){throw 'Successful pending record remains'}}}else{WaitStatus "The update to $NextVersion didn't finish. Setup log: *" 90|Out-Null;if((Version) -ne $ExpectedVersion){throw 'Failure changed installed version'};if((ById 'UpdateInstallButton').Current.Name -ne 'Try again'){throw 'Settings did not offer Try again'};Click 'UpdateCheckButton';WaitStatus "The update to $NextVersion didn't finish. Setup log: *" 90|Out-Null}
+     if($Scenario -in 'install','copy-failure'){WaitStatus "Updated to version $NextVersion" 90|Out-Null;if((Version) -ne $NextVersion){throw 'Installed version did not advance'};$cacheGone=CacheAbsentWithin $NextVersion;Save 'installed-cache-cleanup.json' @{scenario=$Scenario;cleanup=$cacheGone};if($Scenario -eq 'install'){$logs=@(Get-HarnessChildren $updates -Filter 'install-*.log'|Sort-Object LastWriteTimeUtc -Descending);Save 'cleanup-logs.json' @($logs|Select-Object Name,Length,LastWriteTimeUtc);if($logs.Count -ne 3){throw 'Install log retention is not three'};if(Test-HarnessPath (Join-Path $updates 'pending-install.json')){throw 'Successful pending record remains'}}}else{WaitStatus "The update to $NextVersion didn't finish. Setup log: *" 90|Out-Null;if((Version) -ne $ExpectedVersion){throw 'Failure changed installed version'};if((ById 'UpdateInstallButton').Current.Name -ne 'Try again'){throw 'Settings did not offer Try again'};Click 'UpdateCheckButton';WaitStatus "The update to $NextVersion didn't finish. Setup log: *" 90|Out-Null}
      if($script:app.Id -eq $prior){throw 'App did not relaunch'};Preserved
     }
    }
@@ -311,7 +391,7 @@ try{
     $available='Feed '+$feed.IdnHost+': Available, key '+$FeedKeyId+', release '+$NextVersion+'. Version '+$NextVersion+' is available; installed '+$ExpectedVersion+'.'
     $cached='Cached feed '+$feed.IdnHost+': Available, key '+$FeedKeyId+', release '+$NextVersion+'. Version '+$NextVersion+' is available; installed '+$ExpectedVersion+'.'
     $expected=@(switch($Scenario){
-     'same-version' {'Feed '+$feed.IdnHost+': Current, key '+$FeedKeyId+', release '+$ExpectedVersion+'. You have the latest version; installed '+$ExpectedVersion+'.'}
+     {$_ -in 'same-version','cache-cleanup'} {'Feed '+$feed.IdnHost+': Current, key '+$FeedKeyId+', release '+$ExpectedVersion+'. You have the latest version; installed '+$ExpectedVersion+'.'}
      'older-version' {'Feed '+$feed.IdnHost+': Current, key '+$FeedKeyId+', release '+$OlderVersion+'. You have the latest version; installed '+$ExpectedVersion+'.'}
      'bad-signature' {'Feed '+$feed.IdnHost+": Refused. The update signature is invalid. Couldn't verify this release; installed "+$ExpectedVersion+'.'}
      'wrong-product' {'Feed '+$feed.IdnHost+': Refused, key '+$FeedKeyId+'. This release is for another product; installed '+$ExpectedVersion+'.'}
@@ -326,7 +406,7 @@ try{
     })
     foreach($line in $expected){if(-not$segment.Contains($line)){throw ('Expected fresh feed log is absent: '+$line)}}
     $statusExpected=switch($Scenario){
-     {$_ -in 'same-version','older-version'} {'You have the latest version'}
+     {$_ -in 'same-version','cache-cleanup','older-version'} {'You have the latest version'}
      {$_ -in 'manual-download','ready','scheduled-download'} {'Version '+$NextVersion+' is ready to install'}
      'bad-signature' {"Couldn't verify the update. The update signature is invalid. Couldn't verify this release."}
      'wrong-product' {"Couldn't verify the update. This release is for another product."}
@@ -340,7 +420,7 @@ try{
     Save $(if($expected.Count){'feed-log.json'}else{'app-log-safety.json'}) @{expected=$expected;lines=@($segment -split "`n"|Where-Object {$_ -like '*[[]update]*'});feedPathAbsent=$true;status=$status;statusExpected=$statusExpected}
    }
    if($script:window){Shot 'settings-banner'}
-   if($Scenario -in @('feed-down','slow-feed','close-during-check','malformed-feed','bad-signature','wrong-product','wrong-channel','same-version','older-version','tampered','tampered-size','blocked','cancel','manual-download','ready','transport-error','manual-timeout','settings-readonly','timer-read-failure')){
+   if($Scenario -in @('feed-down','slow-feed','close-during-check','malformed-feed','bad-signature','wrong-product','wrong-channel','same-version','cache-cleanup','older-version','tampered','tampered-size','blocked','cancel','manual-download','ready','transport-error','manual-timeout','settings-readonly','timer-read-failure')){
     if((Version) -ne $ExpectedVersion){throw 'Refusal/download changed installed version'}
     if(@(ProcessStarts|Where-Object {$_.image -like '*-setup*'}).Count){throw 'Unexpected setup process'}
    }
@@ -351,6 +431,7 @@ try{
  'Scenario '+$Scenario+' completed'
 }catch{$script:scenarioStatus='fail';Save 'failure.json' @{error=$_.Exception.ToString();texts=if($script:window){@(Texts)}else{@()};processStarts=@(ProcessStarts)};throw}
 finally{
+ if($script:cacheLock){$script:cacheLock.Dispose();$script:cacheLock=$null}
  $cleanupErrors=[Collections.Generic.List[string]]::new()
  if($settingsAttributes -ne $null){try{[IO.File]::SetAttributes((Get-HarnessLongPath $settingsPath),($settingsAttributes -band (-bnot [IO.FileAttributes]::ReadOnly)));[IO.File]::WriteAllBytes((Get-HarnessLongPath $settingsPath),$settingsOriginal);[IO.File]::SetAttributes((Get-HarnessLongPath $settingsPath),$settingsAttributes)}catch{$cleanupErrors.Add($_.Exception.Message)}}
  try{Register-HarnessCache $NextVersion|Out-Null}catch{$cleanupErrors.Add($_.Exception.Message)}
