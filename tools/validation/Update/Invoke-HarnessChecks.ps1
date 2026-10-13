@@ -85,57 +85,105 @@ using System.Runtime.InteropServices;
 using Microsoft.Win32.SafeHandles;
 public static class RooPathOracle {
  [DllImport("kernel32.dll",CharSet=CharSet.Unicode,SetLastError=true)] static extern SafeFileHandle CreateFileW(string path,uint access,uint share,IntPtr security,uint creation,uint flags,IntPtr template);
+ [DllImport("kernel32.dll",CharSet=CharSet.Unicode,SetLastError=true)] static extern bool CreateDirectoryW(string path,IntPtr security);
+ public static void Directory(string path){if(!CreateDirectoryW(path,IntPtr.Zero))throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());}
+ public static SafeFileHandle Create(string path){var handle=CreateFileW(path,0xC0000000,1,IntPtr.Zero,1,0,IntPtr.Zero);if(handle.IsInvalid){int error=Marshal.GetLastWin32Error();handle.Dispose();throw new System.ComponentModel.Win32Exception(error,"Literal CreateFileW could not create: "+path);}return handle;}
  public static SafeFileHandle Open(string path){var handle=CreateFileW(path,0,7,IntPtr.Zero,3,0,IntPtr.Zero);if(handle.IsInvalid){int error=Marshal.GetLastWin32Error();handle.Dispose();throw new System.ComponentModel.Win32Exception(error,"Plain CreateFileW could not open: "+path);}return handle;}
 }
 '@
  }
+ . (Get-HarnessToolPath (Join-Path $Source 'tools\scripts\Release.Checks.ps1'))
+ $normalizers=[ordered]@{harness={param($path) Get-HarnessLongPath $path}}
+ if(Get-Command ConvertTo-ReleaseExtendedPath -ErrorAction SilentlyContinue){$normalizers['release']={param($path) ConvertTo-ReleaseExtendedPath $path}}
  $base=Fixture 'os-paths';$cwd=[IO.Directory]::GetCurrentDirectory()
  try{
   [IO.Directory]::SetCurrentDirectory((Get-HarnessToolPath $base))
   foreach($size in 'short','long'){
    $parent=Join-Path $base $size;New-HarnessDirectory $parent 'normalization-fixture'|Out-Null
-   if($size -eq 'long'){foreach($segment in @(('p'*80),('q'*80),('r'*80))){$parent=Join-Path $parent $segment;New-HarnessDirectory $parent 'normalization-fixture'|Out-Null}}
+   if($size -eq 'long'){
+    foreach($segment in @(('p'*80),('q'*80),('r'*80))){
+     $parent=$parent+'\'+$segment;$literal='\\?\'+$parent
+     [RooPathOracle]::Directory($literal)
+     Add-HarnessEntry 'folder' (Get-HarnessFolderIdentity $literal) 'normalization-fixture' 'invocation'|Out-Null
+    }
+   }
    $child=Join-Path $parent 'child';New-HarnessDirectory $child 'normalization-fixture'|Out-Null
-   $file=Join-Path $parent 'identity.txt';New-HarnessText $file ($nonce+' '+$size) 'normalization-file'|Out-Null
+   $leaf=if($size -eq 'long'){'target.txt'}else{'identity.txt'}
+   $file=Join-Path $parent $leaf;$canonical='\\?\'+$file
+   if($size -eq 'long'){
+    $handle=[RooPathOracle]::Create($canonical);$streamWriter=[IO.FileStream]::new($handle,[IO.FileAccess]::ReadWrite)
+    try{$bytes=[Text.Encoding]::UTF8.GetBytes($nonce+' '+$size);$streamWriter.Write($bytes,0,$bytes.Length);$streamWriter.Flush($true)}finally{$streamWriter.Dispose()}
+    Register-HarnessFile $canonical 'normalization-file' 'invocation'|Out-Null
+   }else{New-HarnessText $file ($nonce+' '+$size) 'normalization-file'|Out-Null}
+   $canonicalHandle=[RooPathOracle]::Open($canonical)
+   try{$canonicalId=[RooValidationOwnership.Native]::FileId($canonicalHandle)}finally{$canonicalHandle.Dispose()}
    if($size -eq 'long' -and $file.Length -lt 300){throw 'The native normalization fixture did not reach 300 characters.'}
    $relative=$file.Substring($base.Length+1)
    $forms=@(
-    @{name='doubled separators';path=$parent+'\\identity.txt'},
-    @{name='dot segment';path=$parent+'\.\identity.txt'},
-    @{name='parent segment';path=$child+'\..\identity.txt'},
+    @{name='doubled separators';path=$parent+'\\'+$leaf},
+    @{name='dot segment';path=$parent+'\.\'+$leaf},
+    @{name='parent segment';path=$child+'\..\'+$leaf},
     @{name='trailing dot';path=$file+'.'},
     @{name='trailing space';path=$file+' '},
     @{name='forward slashes';path=$file.Replace('\','/')},
     @{name='relative path';path='.\'+$relative},
     @{name='drive-relative path';path=$file.Substring(0,2)+$relative}
    )
+   if($size -eq 'long'){$forms=@($forms|Where-Object {$_.name -notin 'relative path','drive-relative path'})}
    foreach($form in $forms){
     $value=@{size=$size;form=$form.name;input=$form.path;length=$form.path.Length;expected=$file;normalized=$null;plainFileId=$null;extendedFileId=$null;error=$null}
     try{
      $value.normalized=Get-HarnessLongPath $form.path
-     $plain=[RooPathOracle]::Open($form.path)
-     try{$value.plainFileId=[RooValidationOwnership.Native]::FileId($plain)}finally{$plain.Dispose()}
+     if($size -eq 'short'){$plain=[RooPathOracle]::Open($form.path);try{$value.plainFileId=[RooValidationOwnership.Native]::FileId($plain)}finally{$plain.Dispose()}}
      $extended=[RooPathOracle]::Open($value.normalized)
      try{$value.extendedFileId=[RooValidationOwnership.Native]::FileId($extended)}finally{$extended.Dispose()}
-     $expected=[RooPathOracle]::Open((Get-HarnessLongPath $file))
-     try{$value.expectedFileId=[RooValidationOwnership.Native]::FileId($expected)}finally{$expected.Dispose()}
-     if($value.plainFileId -cne $value.extendedFileId -or $value.expectedFileId -cne $value.extendedFileId){throw 'Windows plain and normalized extended paths opened different file IDs.'}
+     $value.expectedFileId=$canonicalId;$value.canonicalLiteral=$canonical
+     if(($size -eq 'short' -and $value.plainFileId -cne $value.extendedFileId) -or $value.expectedFileId -cne $value.extendedFileId){throw 'Windows plain and normalized extended paths opened different file IDs.'}
      Passed ('Windows normalization '+$size+' '+$form.name) $value
+     if($size -eq 'long' -and $normalizers.Contains('release')){
+      $releasePath=& $normalizers.release $form.path;$value.releaseNormalized=$releasePath;$releaseHandle=[RooPathOracle]::Open($releasePath)
+      try{$releaseId=[RooValidationOwnership.Native]::FileId($releaseHandle)}finally{$releaseHandle.Dispose()}
+      if($releaseId -cne $canonicalId){throw 'Release normalization opened a different file ID.'}
+      Passed ('Release normalization long '+$form.name) @{input=$form.path;normalized=$releasePath;canonicalLiteral=$canonical;expectedFileId=$canonicalId;actualFileId=$releaseId}
+     }
     }catch{
      $value.error=$_.Exception.ToString();$rows.Add(@{check=('Windows normalization '+$size+' '+$form.name);status='fail';observed=$value})
      Write-HarnessResult $directory 'path-failure.json' $value|Out-Null
      throw
     }
    }
-   $stream=$file+':Zone.Identifier';$text="[ZoneTransfer]`r`nZoneId=3`r`n";New-HarnessText $stream $text 'normalization-stream'|Out-Null
+   $stream=$file+':Zone.Identifier';$text="[ZoneTransfer]`r`nZoneId=3`r`n"
+   if($size -eq 'long'){
+    $literalStream=$canonical+':Zone.Identifier';$handle=[RooPathOracle]::Create($literalStream);$streamWriter=[IO.FileStream]::new($handle,[IO.FileAccess]::ReadWrite)
+    try{$bytes=[Text.Encoding]::UTF8.GetBytes($text);$streamWriter.Write($bytes,0,$bytes.Length);$streamWriter.Flush($true)}finally{$streamWriter.Dispose()}
+    Register-HarnessFile $literalStream 'normalization-stream' 'invocation'|Out-Null
+   }else{New-HarnessText $stream $text 'normalization-stream'|Out-Null}
    if([IO.File]::ReadAllText((Get-HarnessLongPath $stream)) -cne $text -or [IO.File]::ReadAllText((Get-HarnessLongPath ($stream+':$DATA'))) -cne $text){throw 'The ADS contents were not preserved.'}
-   $plain=[RooPathOracle]::Open($stream);$extended=[RooPathOracle]::Open((Get-HarnessLongPath $stream))
+   $plain=[RooPathOracle]::Open($(if($size -eq 'long'){$canonical+':Zone.Identifier'}else{$stream}));$extended=[RooPathOracle]::Open((Get-HarnessLongPath $stream))
    try{if([RooValidationOwnership.Native]::FileId($plain) -cne [RooValidationOwnership.Native]::FileId($extended)){throw 'ADS file IDs differ'}}finally{$plain.Dispose();$extended.Dispose()}
    $streamInfo=$null
    if($size -eq 'short'){$streamInfo=Get-Item -LiteralPath (Get-HarnessToolPath $file) -Stream Zone.Identifier;if($streamInfo.Stream -cne 'Zone.Identifier' -or $streamInfo.Length -ne [Text.Encoding]::UTF8.GetByteCount($text)){throw 'The independent PowerShell ADS readback differs.'}}
    Passed ('Windows normalization '+$size+' Zone.Identifier ADS and explicit DATA') @{path=$stream;length=$stream.Length;bytes=[Text.Encoding]::UTF8.GetByteCount($text);providerStream=$(if($streamInfo){$streamInfo.Stream}else{$null});fileIdsMatch=$true}
    Rejected ('Windows normalization '+$size+' invalid stream refused') {Get-HarnessLongPath ($file+':bad*stream')} {[IO.File]::ReadAllText((Get-HarnessLongPath $stream)) -ceq $text}
    Rejected ('tool boundary '+$size+' stream refused') {Get-HarnessToolPath $stream} {[IO.File]::ReadAllText((Get-HarnessLongPath $stream)) -ceq $text}
+   if($size -eq 'long'){
+    Rejected 'tool boundary long canonical path refused' {Get-HarnessToolPath $canonical} {Test-HarnessPath $canonical}
+    if($rows[$rows.Count-1].observed -notlike 'Path reaches the 260-character tool limit;*'){throw 'Long canonical path was refused for the wrong reason.'}
+    $baseHandle=[RooPathOracle]::Open($canonical)
+    try{if([RooValidationOwnership.Native]::FileId($baseHandle) -cne $canonicalId){throw 'ADS write changed the base file identity.'}}finally{$baseHandle.Dispose()}
+    if($normalizers.Contains('release')){
+     $releaseStream=& $normalizers.release $stream
+     if([IO.File]::ReadAllText($releaseStream) -cne $text){throw 'Release ADS round-trip differs.'}
+     $releaseHandle=[RooPathOracle]::Open($releaseStream)
+     try{if([RooValidationOwnership.Native]::FileId($releaseHandle) -cne $canonicalId){throw 'Release ADS file ID differs.'}}finally{$releaseHandle.Dispose()}
+     Passed 'Release normalization long Zone.Identifier ADS' @{path=$stream;canonicalLiteral=$canonical;bytes=[Text.Encoding]::UTF8.GetByteCount($text);baseFileId=$canonicalId}
+     Rejected 'release tool boundary long canonical path refused' {Get-ReleaseToolPath $canonical} {Test-HarnessPath $canonical}
+     if($rows[$rows.Count-1].observed -notlike 'Path reaches the 260-character tool limit;*'){throw 'Release canonical path was refused for the wrong reason.'}
+     Rejected 'release tool boundary long ADS refused' {Get-ReleaseToolPath $stream} {[IO.File]::ReadAllText($literalStream) -ceq $text}
+     if($rows[$rows.Count-1].observed -cne 'stream paths are .NET-only; cmdlets take -Stream separately'){throw 'Release stream was refused for the wrong reason.'}
+    }
+    Passed 'long relative forms are not applicable under the tool working-directory bound' @{notApplicable=@('relative path','drive-relative path');reason='The tool boundary refuses a 260+ current directory; the long fixture uses canonical absolute paths.'}
+   }
   }
  }finally{[IO.Directory]::SetCurrentDirectory((Get-HarnessToolPath $cwd))}
 }
