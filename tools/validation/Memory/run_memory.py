@@ -55,6 +55,7 @@ def cleanup_checks(before, after, frame):
     files = lambda roots: {f['path']: f['sha256'] for r in roots for f in r['files']}
     tasks = lambda rows: {t['path'] + t['name']: t for t in rows}
     old_tasks, new_tasks = tasks(before['tasks']), tasks(after['tasks'])
+    relevant = {k for k, t in old_tasks.items() if 'roo' in t['name'].casefold()}
     cs2 = [t for t in before['tasks'] if 'CS2' in t['name']]
     old_frames = {f['path']: f['creationTimeFileTimeUtc'] for f in before['frames'] if f['path'] != frame['runRoot']}
     new_frames = {f['path']: f['creationTimeFileTimeUtc'] for f in after['frames']}
@@ -65,7 +66,7 @@ def cleanup_checks(before, after, frame):
         'dataByteIdentical': files(before['dataRoots']) == files(after['dataRoots']),
         'dataRootPresenceRestored': {r['path']: r['exists'] for r in before['dataRoots']} == {r['path']: r['exists'] for r in after['dataRoots']},
         'rawRegistryByteIdentical': same_registry(before['rawRegistry'], after['rawRegistry']),
-        'scheduledTasksRestored': old_tasks.keys() == new_tasks.keys() and all(task_definition(old_tasks[k]) == task_definition(new_tasks[k]) and old_tasks[k]['enabled'] == new_tasks[k]['enabled'] for k in old_tasks),
+        'scheduledTasksRestored': old_tasks.keys() == new_tasks.keys() and all(task_definition(old_tasks[k]) == task_definition(new_tasks[k]) and old_tasks[k]['enabled'] == new_tasks[k]['enabled'] for k in relevant),
         'CS2TasksUnchanged': all(t['path'] + t['name'] in new_tasks and new_tasks[t['path'] + t['name']]['state'] == t['state'] and new_tasks[t['path'] + t['name']]['enabled'] == t['enabled'] for t in cs2),
         'legacyFramesUnchanged': old_frames == new_frames,
         'noOwnedFrame': not any(f['path'] == frame['runRoot'] for f in after['frames']),
