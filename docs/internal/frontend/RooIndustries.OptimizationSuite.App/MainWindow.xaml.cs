@@ -55,6 +55,8 @@ public sealed partial class MainWindow : Window
         App.Updates.Changed += OnUpdateChanged;
         Closed += OnWindowClosed;
         MemoryRelief.Attach(this);
+        ContentFrame.Navigated += (_, _) => MemoryRelief.PageShown();
+        MemoryRelief.PageShown();
         EarlierVersionConsent.Ask = AskEarlierVersionAsync;
         ApplyEffects();
         ApplySimpleMode();
