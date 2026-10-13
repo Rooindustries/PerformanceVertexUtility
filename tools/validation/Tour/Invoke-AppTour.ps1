@@ -4,7 +4,7 @@ $ErrorActionPreference='Stop';$ProgressPreference='SilentlyContinue'
 $nonce=Initialize-HarnessInvocation 'app-tour' $OutRoot
 Ensure-HarnessOutputDirectory $OutRoot
 Add-Type -AssemblyName UIAutomationClient,UIAutomationTypes,System.Drawing,System.Windows.Forms,WindowsBase
-Add-Type -Path (Get-HarnessToolPath (Join-Path $Source 'tools\validation\Tour\TourCapture.cs')) -ReferencedAssemblies System.Drawing,System.Windows.Forms
+Add-Type -Path (Get-HarnessToolPath (Join-Path $Source 'tools\validation\Tour\TourCapture.cs')) -ReferencedAssemblies System.Drawing,System.Windows.Forms,Accessibility
 [RooTour.Desktop]::SetProcessDPIAware()|Out-Null
 $A=[Windows.Automation.AutomationElement];$TS=[Windows.Automation.TreeScope];$CT=[Windows.Automation.ControlType]
 $exe=Join-Path $env:ProgramFiles 'Roo Industries\Optimization Suite\app\RooIndustries.OptimizationSuite.App.exe'
@@ -29,7 +29,7 @@ function Shot([string]$pass,[string]$page,[string]$tab,[int]$part=0){
  Write-HarnessResult $directory ($name+'.uia.json') @{screen=$name;elements=@(WindowTree)}|Out-Null
  Write-Output ('SCREEN '+$name)
 }
-function MouseAction($element,[string]$kind){
+function MouseAction($element,[string]$kind,$TargetBounds=$null,[string]$AccessibleName=''){
  if(-not$element -or $element.Current.IsOffscreen -or -not$element.Current.IsEnabled){throw ('Allowed target unavailable: '+$kind)}
  $allowed=$false;$id=$element.Current.AutomationId;$name=$element.Current.Name
  switch($kind){
@@ -42,15 +42,16 @@ function MouseAction($element,[string]$kind){
   'firmware' {$allowed=$id -eq 'OpenFirmware'}
   'back' {$allowed=$name -eq '← Tools'}
   'expander' {$allowed=$element.Current.ClassName -eq 'Expander'}
+  'wizard-launch-checkbox' {$allowed=$script:window.Current.ClassName -eq 'TWizardForm' -and $element.Current.ClassName -eq 'TNewCheckListBox' -and $AccessibleName -in 'Read the beta tester guide','Open Roo Industries Optimization Suite'}
   'wizard' {$allowed=$name -in 'Next >','Next','Install','Finish','Run','Yes','OK' -and $script:window.Current.ClassName -in 'TWizardForm','#32770'}
  }
- if($kind -in 'simple','theme','theme-choice','wizard'){Assert-HarnessHostLease}
+ if($kind -in 'simple','theme','theme-choice','wizard','wizard-launch-checkbox'){Assert-HarnessHostLease}
  if(-not$allowed){throw ('Action refused by tour whitelist: '+$kind+' '+$id+' '+$name)}
- $r=$element.Current.BoundingRectangle;$record=@{kind=$kind;id=$id;name=$name;timeUtc=[DateTime]::UtcNow.ToString('o');bounds=$r.ToString();method='cursor';verified=$false;checks=@()}
+ $r=if($TargetBounds){$TargetBounds}else{$element.Current.BoundingRectangle};$record=@{kind=$kind;id=$id;name=$name;accessibleName=$AccessibleName;timeUtc=[DateTime]::UtcNow.ToString('o');bounds=$r.ToString();method='cursor';verified=$false;checks=@()}
  foreach($fraction in @(.5,.25,.75)){
   $x=[int]($r.Left+$r.Width*$fraction);$y=[int]($r.Top+$r.Height*.5);[RooTour.Desktop]::Move($x,$y)
-  $hit=$A::FromPoint([Windows.Point]::new($x,$y));$match=$hit.Current.ProcessId -eq $element.Current.ProcessId -and (($id -and $hit.Current.AutomationId -ceq $id) -or ($name -and $hit.Current.Name -ceq $name))
-  $record.checks+=@(@{x=$x;y=$y;name=$hit.Current.Name;id=$hit.Current.AutomationId;pid=$hit.Current.ProcessId;matched=$match})
+  $actual=[RooTour.Desktop]::Position();$hit=$A::FromPoint([Windows.Point]::new($actual[0],$actual[1]));$match=$hit.Current.ProcessId -eq $element.Current.ProcessId -and (($id -and $hit.Current.AutomationId -ceq $id) -or ($name -and $hit.Current.Name -ceq $name))
+  $record.checks+=@(@{x=$actual[0];y=$actual[1];requestedX=$x;requestedY=$y;name=$hit.Current.Name;id=$hit.Current.AutomationId;pid=$hit.Current.ProcessId;matched=$match})
   if($match){$record.verified=$true;[RooTour.Desktop]::Click();break}
  }
  if(-not$record.verified){if($kind -eq 'navigation'){$element.GetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern).Select();$record.method='SelectionItemPattern.Select fallback'}else{$script:actions.Add($record);throw ('Cursor target verification failed: '+$kind+' '+$name)}}
@@ -81,6 +82,21 @@ function CapturePage([string]$page,[string]$tab='main'){
  }
  if($scroll.pattern.Current.VerticalScrollPercent -lt 99.8){throw 'Page scroll did not reach the bottom.'}
  SetScroll $scroll 0
+}
+function SetWizardLaunch{
+ $boxes=@($script:window.FindAll($TS::Descendants,[Windows.Automation.Condition]::TrueCondition)|Where-Object {$_.Current.ClassName -eq 'TNewCheckListBox' -and -not$_.Current.IsOffscreen})
+ if($boxes.Count -ne 1){throw 'Finish checklist missing or ambiguous.'};$box=$boxes[0]
+ $items=@([RooTour.Desktop]::Checks([IntPtr]$box.Current.NativeWindowHandle))
+ if($items.Count -ne 2 -or @($items|Where-Object {$_.Name -notin 'Read the beta tester guide','Open Roo Industries Optimization Suite'}).Count){throw 'Finish choices differ; refuse.'}
+ foreach($item in $items){$wanted=$item.Name -eq 'Open Roo Industries Optimization Suite';if((($item.State -band 16) -ne 0) -ne $wanted){MouseAction $box 'wizard-launch-checkbox' $item.Bounds $item.Name}}
+ $after=@([RooTour.Desktop]::Checks([IntPtr]$box.Current.NativeWindowHandle))
+ if(@($after|Where-Object {(($_.State -band 16) -ne 0) -ne ($_.Name -eq 'Open Roo Industries Optimization Suite')}).Count){throw 'Finish checkbox readback differs.'}
+}
+function CollectOwnedChildren{
+ Receive-ProcessTrace
+ foreach($entry in @(Get-HarnessEntries|Where-Object {$_.kind -eq 'trace' -and $_.nonce -ceq $nonce})){
+  if(Get-Process -Id $entry.identity.processId -ErrorAction SilentlyContinue){Test-OwnedDescendant ([int]$entry.identity.processId)|Out-Null}
+ }
 }
 function FitApp{
  $area=[Windows.Forms.Screen]::PrimaryScreen.WorkingArea
@@ -148,7 +164,7 @@ try{
     if(-not(Test-OwnedDescendant ([int]$win.Current.ProcessId) -Ancestor $shell -PassThru)){throw 'Wizard ownership failed.'};AttachWindow $win
     $tree=@(WindowTree);$button=$null;foreach($name in 'Finish','Install','Next >','Next'){$test=WizardButton $name;if($test -and $test.Current.IsEnabled){$button=$test;break}}
     $key=if($button){$tree.name -join '|'}else{'installing'}
-    if($seen.Add($key)){Start-Sleep -Seconds $HoldSeconds;Shot 'installer' 'wizard' $(if($button){$button.Current.Name.ToLowerInvariant().Replace(' >','')}else{'installing'});if($button){$finished=$button.Current.Name -eq 'Finish';MouseAction $button wizard}}
+    if($seen.Add($key)){if($button -and $button.Current.Name -eq 'Finish'){SetWizardLaunch};Start-Sleep -Seconds $HoldSeconds;Shot 'installer' 'wizard' $(if($button){$button.Current.Name.ToLowerInvariant().Replace(' >','')}else{'installing'});if($button){$finished=$button.Current.Name -eq 'Finish';MouseAction $button wizard}}
    }elseif($win.Current.ClassName -eq '#32770' -and $win.Current.ProcessId -eq $shell.Identity.pid){
     AttachWindow $win;Start-Sleep -Seconds $HoldSeconds;Shot 'installer' 'wizard' 'security-warning';$run=WizardButton 'Run';if(-not$run){throw 'Unexpected launcher dialog.'};MouseAction $run wizard
    }elseif($win.Current.ClassName -eq '#32770' -and (Test-OwnedDescendant ([int]$win.Current.ProcessId) -Ancestor $shell)){
@@ -171,11 +187,13 @@ try{
  try{Simple $true;CapturePass A;Simple $false;CapturePass B;Theme 'Blackout Gold';CapturePass C}
  finally{Theme $originalTheme;Simple $originalSimple}
  $tourMovie=StopMovie;$tourMovie.folder=$tourFrames
+ $script:missing.Add(@{state='BIOS inventory/session states';reason='Loading a package, firmware session, review or restart is outside the read-only navigation tour.'})
  $script:missing.Add(@{state='Operation-dependent dialogs and results';reason='Apply, restore, remove, restart, download, report submission and system-setting controls are outside the read-only tour.'})
  Write-HarnessResult $OutRoot 'receipt.json' @{status='pass';nonce=$nonce;version=$display;desktop=$desktop.ToString();originalTheme=$originalTheme;originalSimple=$originalSimple;appearanceRestored=$true;app=$app.Identity;screens=@($script:shots);actions=@($script:actions);notCaptured=@($script:missing);movies=@{installer=$installerMovie;tour=$tourMovie}}|Out-Null
  $status='pass'
 }finally{
  if($script:recorder){$script:recorder.Dispose();$script:recorder=$null}
  if($status -ne 'pass'){Write-HarnessResult $OutRoot 'failure.json' @{status='fail';screens=@($script:shots);actions=@($script:actions);notCaptured=@($script:missing)}|Out-Null}
+ CollectOwnedChildren
  Complete-HarnessInvocation $status -Cleanup|Out-Null
 }

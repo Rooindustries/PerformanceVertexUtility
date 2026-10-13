@@ -5,6 +5,8 @@ using System.Drawing.Imaging;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
+using Accessibility;
+using System.Collections.Generic;
 
 namespace RooTour {
  public static class Desktop {
@@ -14,6 +16,10 @@ namespace RooTour {
   [StructLayout(LayoutKind.Sequential)] struct Icon { public bool IsIcon; public int X,Y; public IntPtr Mask,Color; }
   [StructLayout(LayoutKind.Sequential)] struct Input { public uint Type; public Mouse Mouse; }
   [StructLayout(LayoutKind.Sequential)] struct Mouse { public int X,Y; public uint Data,Flags,Time; public IntPtr Extra; }
+  [DllImport("oleacc.dll")] static extern int AccessibleObjectFromWindow(IntPtr hwnd,uint id,ref Guid iid,[MarshalAs(UnmanagedType.Interface)] out IAccessible value);
+  public sealed class Check { public int Index;public string Name;public int State;public Rect Bounds; }
+  public static Check[] Checks(IntPtr hwnd) { IAccessible accessible=null;var iid=new Guid("618736E0-3C3D-11CF-810C-00AA00389B71");int hr=AccessibleObjectFromWindow(hwnd,0xfffffffc,ref iid,out accessible);if(hr!=0 || accessible==null)throw new InvalidOperationException("Wizard checklist inaccessible");try{int count=accessible.accChildCount;if(count<1 || count>20)throw new InvalidOperationException("Wizard checklist count differs");var result=new List<Check>();for(int i=1;i<=count;i++){if(Convert.ToInt32(accessible.get_accRole(i))!=44)throw new InvalidOperationException("Wizard item is not a checkbox");int x,y,w,h;accessible.accLocation(out x,out y,out w,out h,i);result.Add(new Check{Index=i,Name=accessible.get_accName(i),State=Convert.ToInt32(accessible.get_accState(i)),Bounds=new Rect{Left=x,Top=y,Right=x+w,Bottom=y+h}});}return result.ToArray();}finally{Marshal.ReleaseComObject(accessible);} }
+  public static int[] Position() { Point point;GetCursorPos(out point);return new[]{point.X,point.Y}; }
   [DllImport("dwmapi.dll")] static extern int DwmGetWindowAttribute(IntPtr hwnd,int attribute,out Rect rect,int length);
   [DllImport("user32.dll")] static extern bool SetWindowPos(IntPtr hwnd,IntPtr after,int x,int y,int width,int height,uint flags);
   [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr hwnd,out Rect rect);
