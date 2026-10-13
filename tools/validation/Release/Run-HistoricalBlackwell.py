@@ -20,7 +20,7 @@ SID = 'S-1-5-21-1846494563-3099854232-4004002307-1001'
 
 
 def invoke(script):
-    return WIN.invoke(HOST, MACHINE, f"if([Security.Principal.WindowsIdentity]::GetCurrent().User.Value -cne '{SID}'){{throw 'Wrong SID'}}\n" + script)
+    return WIN.invoke(HOST, MACHINE, f"if([Security.Principal.WindowsIdentity]::GetCurrent().User.Value -cne '{SID}'){{throw 'Wrong SID'}}\n" + script, timeout=900)
 
 
 def prepare():

@@ -39,7 +39,7 @@ try {
 }finally{foreach($r in $held){$r.Dispose()};$directory.Dispose()}
 """
     (out / 'execution-cleanup.ps1').write_text(cleanup)
-    result = w.invoke('optimizer-9070', 'SERVI-WINDOWS-D', cleanup)
+    result = w.invoke('optimizer-9070', 'SERVI-WINDOWS-D', cleanup, timeout=w.CLEANUP_TIMEOUT)
     (out / 'execution-cleanup.json').write_text(result.stdout)
     return json.loads(result.stdout.strip().splitlines()[-1])
 
@@ -276,7 +276,7 @@ try:
     subprocess.run(['scp', *w.SSH_OPTIONS, str(entry), 'optimizer-9070:' + (execution + '\\entry.ps1').replace('\\', '/')], check=True, capture_output=True)
     setup = w.REMOTE_GUARDS + "\nif((Get-FileHash -LiteralPath " + p(helper_path) + " -Algorithm SHA256).Hash -ine '" + hashlib.sha256(helper_file.read_bytes()).hexdigest() + "'){throw 'Task helper bytes differ'};. " + p(helper_path) + ";$name=" + p(task_name) + ";$run=" + p(execution) + ";$system=[Environment]::SystemDirectory;$r=$null;try{if((Get-FileHash -LiteralPath (Join-Path $run 'entry.ps1') -Algorithm SHA256).Hash -ine '" + hashlib.sha256(entry.read_bytes()).hexdigest() + "'){throw 'Task entry bytes differ'};$r=Register-OwnedProbeTask $name (Join-Path $system 'conhost.exe') ('--headless \"'+(Join-Path $system 'WindowsPowerShell\\v1.0\\powershell.exe')+'\" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"'+(Join-Path $run 'entry.ps1')+'\"') $system 'S-1-5-21-2864832615-2000329836-3074386272-1001' 3 3;$r|ConvertTo-Json -Depth 8|Set-Content -LiteralPath (Join-Path $run 'task.json');Assert-OwnedTaskUnchanged $r;[void](Get-OwnedTaskFolder '\\').GetTask($name).Run($null);$deadline=[DateTime]::UtcNow.AddSeconds(100);while(-not[IO.File]::Exists((Join-Path $run 'result.json')) -and [DateTime]::UtcNow -lt $deadline){Start-Sleep -Milliseconds 100};if(-not[IO.File]::Exists((Join-Path $run 'result.json'))){throw 'Native scheduled fixture timeout'};Get-Content -Raw -LiteralPath (Join-Path $run 'result.json')}finally{if($r){Remove-OwnedTask $r;Assert-OwnedTaskAbsent $r.name}}"
     (args.out / 'task-setup.ps1').write_text(setup)
-    result = w.invoke('optimizer-9070', 'SERVI-WINDOWS-D', setup)
+    result = w.invoke('optimizer-9070', 'SERVI-WINDOWS-D', setup, timeout=300)
     (args.out / 'stdout.txt').write_text(result.stdout)
     (args.out / 'stderr.txt').write_text(result.stderr)
     evidence = json.loads(result.stdout.strip().splitlines()[-1])

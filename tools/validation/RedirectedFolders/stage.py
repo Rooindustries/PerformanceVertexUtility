@@ -15,5 +15,5 @@ with tempfile.TemporaryDirectory() as td:
  with tarfile.open(archive,'w:gz') as t:
   for p in files:t.add(p,arcname=str(p.relative_to(root)),recursive=False)
  subprocess.run(['scp','-q',*w.SSH_OPTIONS,str(archive),host+':'+remote.replace('\\','/')+'/f10.tar.gz'],check=True)
-w.invoke(host,machine,"$root="+w.ps_literal(remote)+";tar.exe -xzf (Join-Path $root 'f10.tar.gz') -C $root;if($LASTEXITCODE){throw 'Extract failed'}")
+w.invoke(host,machine,"$root="+w.ps_literal(remote)+";tar.exe -xzf (Join-Path $root 'f10.tar.gz') -C $root;if($LASTEXITCODE){throw 'Extract failed'}",timeout=w.SOURCE_TIMEOUT)
 print(remote)

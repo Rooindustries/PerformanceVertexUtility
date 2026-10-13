@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import uuid
 
 REPO = Path(__file__).resolve().parents[3]
 spec = importlib.util.spec_from_file_location('windows_ssh', REPO / 'tools/validation/windows_ssh.py')
@@ -50,7 +51,13 @@ def main():
         fields['FocusSamples'] = True
     minutes = 35 if args.scenario == 'memory' else 10
     try:
-        result = windows.interactive(host, machine, receipt, script, fields, minutes, 'RooIndustries_Roo20_Background_' + args.machine + '_' + args.scenario)
+        if args.scenario == 'install':
+            install_spec = importlib.util.spec_from_file_location('update_manual_install', REPO / 'tools/validation/Update/run_manual_install.py')
+            install_driver = importlib.util.module_from_spec(install_spec)
+            install_spec.loader.exec_module(install_driver)
+            result = install_driver.install(host, machine, receipt, fields, args.receipt.resolve().parent / ('install-' + uuid.uuid4().hex))
+        else:
+            result = windows.interactive(host, machine, receipt, script, fields, minutes, 'RooIndustries_Roo20_Background_' + args.machine + '_' + args.scenario)
         print(result.stdout, end='')
     except subprocess.CalledProcessError as error:
         print(error.stdout or '', end='')

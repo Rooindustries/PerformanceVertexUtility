@@ -1,54 +1,67 @@
 param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutRoot,
-    [Parameter(Mandatory)][ValidateSet('start-game','stop-game','block-setup','unblock-setup','read-security','reset-download')][string]$Action)
+    [Parameter(Mandatory)][ValidateSet('start-game','stop-game','block-setup','unblock-setup','read-security','reset-download','contract-probe')][string]$Action,[string]$Version='',[string]$CurrentVersion='',[string]$Probe='',[string]$Manifest='',[string]$FeedUrl='',[string]$InstallerPath='')
 $ErrorActionPreference='Stop'
-. (Join-Path $Source 'tools\validation\LoadTimes\CleanupOwnership.Common.ps1')
-. (Join-Path $Source 'backend\scripts\BrandCompatibility.Common.ps1')
+. (Join-Path $Source 'tools\validation\Update\Harness.Common.ps1')
+$nonce=Initialize-HarnessInvocation ('fixture-'+$Action) $OutRoot
+Assert-HarnessHostLease
+Ensure-HarnessOutputDirectory $OutRoot
+$directory=New-HarnessEvidenceDirectory $OutRoot ('fixture-'+$Action)
+. (Get-HarnessToolPath (Join-Path $Source 'backend\scripts\BrandCompatibility.Common.ps1'))
 $install='C:\Program Files\Roo Industries\Optimization Suite'
 $hostExe=Join-Path $install 'backend\bin\optimizer\Optimizer.Host.exe'
 $data=Get-RooIndustriesLocalDataRoot
 $utf8=[Text.UTF8Encoding]::new($false)
-function Save([string]$name,$value){[IO.File]::WriteAllText((Join-Path $OutRoot $name),($value|ConvertTo-Json -Depth 40),$utf8)}
-function Core([string]$action,[hashtable]$fields){$request=@{schemaVersion=1;repoRoot=$install;confirm=$true};foreach($key in $fields.Keys){$request[$key]=$fields[$key]};$OutputEncoding=$utf8;$raw=@(($request|ConvertTo-Json -Depth 30)|& $hostExe $action '-') -join "`n";$result=$raw|ConvertFrom-Json;if($LASTEXITCODE -ne 0 -or $result.status -ne 'completed'){throw $raw};$result.data}
+function Save([string]$name,$value){Write-HarnessResult $directory $name $value|Out-Null}
+function Core([string]$action,[hashtable]$fields){Assert-HarnessHostLease;$request=@{schemaVersion=1;repoRoot=$install;confirm=$true};foreach($key in $fields.Keys){$request[$key]=$fields[$key]};$result=Invoke-HarnessHost $hostExe $action $request;if($result.status -ne 'completed'){throw ($result|ConvertTo-Json -Depth 30)};$result.data}
+$state='fail'
+try{
 switch($Action){
+ 'contract-probe' {
+  if(-not$Probe -or -not$Manifest -or -not$FeedUrl -or -not$CurrentVersion){throw 'Contract probe arguments are missing.'}
+  $output=Get-HarnessOutputPath $directory 'contract-probe.json';$env:ROO_HARNESS_NONCE=$nonce
+  $arguments=(@($Manifest,$FeedUrl,$CurrentVersion,$output)+@($(if($InstallerPath){$InstallerPath})))|Where-Object {$_}|ForEach-Object {'"'+$_+'"'}
+  $process=Start-OwnedProcess -FilePath $Probe -ArgumentList ($arguments -join ' ') -Purpose contract
+  if(-not$process.process.WaitForExit(120000)){throw 'Contract probe timeout'}
+  if($process.process.ExitCode -ne 0){throw 'Contract probe failed'}
+  $entry=Register-HarnessFile $output 'probe-result';$record=[IO.File]::ReadAllText((Get-HarnessLongPath $output))|ConvertFrom-Json
+  if($record.nonce -cne $nonce){throw 'Contract output nonce differs.'}
+  Save 'contract.json' $record.data
+ }
+
+
  'reset-download' {
-  $folder=Join-Path $data 'updates\0.11.1-beta';$manifest=Join-Path $folder 'manifest.json'
-  $binary=Join-Path $folder 'RooIndustries-OptimizationSuite-0.11.1-beta-setup.exe'
-  if(Test-Path $binary){
-   $envelope=Get-Content -Raw $manifest|ConvertFrom-Json
-   $release=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($envelope.payload))|ConvertFrom-Json
-   if($release.version -ne '0.11.1-beta' -or (Get-Item $binary).Length -ne $release.installer.size -or (Get-FileHash $binary).Hash -ine $release.installer.sha256){throw 'Cached test installer changed; retain it'}
-   Save 'reset-download.json' @{installer=$binary;sha256=$release.installer.sha256;size=$release.installer.size}
-   [IO.File]::Delete($binary);[IO.File]::Delete($manifest)
-   if(@(Get-ChildItem -LiteralPath $folder -Force).Count -eq 0){[IO.Directory]::Delete($folder)}
-  }
+  if(-not$Version -or -not$CurrentVersion){throw 'reset-download requires this run current and next versions.'}
+  $updates=Join-Path $data 'updates';Initialize-HarnessCache $updates @($CurrentVersion,$Version)
+  $entry=Register-HarnessCache $Version
+  if($entry){Save 'reset-download.json' @{version=$Version;entry=$entry};Remove-HarnessEntry $entry}
  }
  'start-game' {
-  $fixture=Join-Path $OutRoot 'game-fixture';[IO.Directory]::CreateDirectory($fixture)|Out-Null
+  $fixture=Join-Path $directory 'game-fixture';New-HarnessDirectory $fixture 'game-fixture'|Out-Null
   $launcher=Join-Path $fixture 'ota-launcher.exe';$game=Join-Path $fixture 'ota-game.exe'
-  Copy-Item "$env:SystemRoot\System32\PING.EXE" $launcher;Copy-Item "$env:SystemRoot\System32\PING.EXE" $game
-  $process=Start-Process $launcher -ArgumentList '-t 127.0.0.1' -WindowStyle Hidden -PassThru;$owned=New-OwnedProcess $process
-  Save 'game-launcher.json' $owned.Identity
+  Copy-HarnessFile "$env:SystemRoot\System32\PING.EXE" $launcher|Out-Null;Copy-HarnessFile "$env:SystemRoot\System32\PING.EXE" $game|Out-Null
+  $owned=Start-OwnedProcess -FilePath $launcher -ArgumentList '-t 127.0.0.1' -Purpose game-launcher -Lifetime run;$process=$owned.process
+  Save 'game-launcher.json' @{identity=$owned.Identity;ledgerId=$owned.LedgerId}
   $preview=Join-Path $fixture 'preview.json'
   $plan=Core 'protected-session-preview' @{processId=$process.Id;gamePath=$game;controls=@{cpuPriority='Normal'};acceptLauncherScope=$true;outputPath=$preview}
   $session=Join-Path $data ('operations\game-session-'+$plan.operationId+'\session')
-  $result=@(& (Join-Path $install 'backend\scripts\Invoke-ProtectedGameSession.ps1') -Action Start -PreviewPath $preview -ReviewHash (Get-FileHash $preview).Hash -SessionRoot $session -ConfirmApply) -join "`n"
+  $result=@(& (Get-HarnessToolPath (Join-Path $install 'backend\scripts\Invoke-ProtectedGameSession.ps1')) -Action Start -PreviewPath (Get-HarnessToolPath $preview) -ReviewHash (Get-HarnessFileSha256 $preview) -SessionRoot (Get-HarnessToolPath $session) -ConfirmApply) -join "`n"
   Save 'game-session.json' @{sessionRoot=$session;result=($result|ConvertFrom-Json)}
  }
  'stop-game' {
-  $session=Get-Content -Raw (Join-Path $OutRoot 'game-session.json')|ConvertFrom-Json
-  $result=@(& (Join-Path $install 'backend\scripts\Invoke-ProtectedGameSession.ps1') -Action Stop -SessionRoot $session.sessionRoot -ConfirmApply) -join "`n"
+  $session=Read-HarnessLatestResult 'game-session.json' 'fixture-start-game'
+  $result=@(& (Get-HarnessToolPath (Join-Path $install 'backend\scripts\Invoke-ProtectedGameSession.ps1')) -Action Stop -SessionRoot (Get-HarnessToolPath $session.sessionRoot) -ConfirmApply) -join "`n"
   Save 'game-stop.json' ($result|ConvertFrom-Json)
-  Stop-OwnedProcessIdentity (Get-Content -Raw (Join-Path $OutRoot 'game-launcher.json')|ConvertFrom-Json)
+  $launcher=Read-HarnessLatestResult 'game-launcher.json' 'fixture-start-game';Remove-HarnessEntry (Get-HarnessEntryById $launcher.ledgerId)
  }
  'block-setup' {
-  $path=Join-Path $install 'setup';if(Test-Path $path){throw 'Setup path already exists; retain it'}
-  $file=New-OwnedTextFile $path 'Roo Industries OTA E2E preparation refusal'
-  Save 'setup-blocker.json' $file.Identity;$file.Dispose()
+  $path=Join-Path $install 'setup';if(Test-HarnessPath $path){throw 'Setup path already exists; retain it'}
+  $entry=New-HarnessText $path 'Roo Industries OTA E2E preparation refusal' 'setup-blocker'
+  Save 'setup-blocker.json' @{ledgerId=$entry.id}
  }
- 'unblock-setup' { $file=Open-OwnedProbe (Get-Content -Raw (Join-Path $OutRoot 'setup-blocker.json')|ConvertFrom-Json);Remove-OwnedProbe $file }
+ 'unblock-setup' { $blocker=Read-HarnessLatestResult 'setup-blocker.json' 'fixture-block-setup';Remove-HarnessEntry (Get-HarnessEntryById $blocker.ledgerId) }
  'read-security' {
   $paths=@($data,(Join-Path $data 'updates'))
-  $rows=@(foreach($path in $paths){$acl=Get-Acl $path;@{path=$path;owner=$acl.Owner;sddl=$acl.Sddl;protected=$acl.AreAccessRulesProtected;rules=@($acl.Access|ForEach-Object {@{sid=$_.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value;rights=[string]$_.FileSystemRights;type=[string]$_.AccessControlType;inherited=$_.IsInherited}})}})
+  $rows=@(foreach($path in $paths){$acl=Get-Acl -LiteralPath (Get-HarnessToolPath $path);@{path=$path;owner=$acl.Owner;sddl=$acl.Sddl;protected=$acl.AreAccessRulesProtected;rules=@($acl.Access|ForEach-Object {@{sid=$_.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value;rights=[string]$_.FileSystemRights;type=[string]$_.AccessControlType;inherited=$_.IsInherited}})}})
   Save 'update-folder-security.json' $rows
   Add-Type @'
 using System;
@@ -81,6 +94,9 @@ public static class RooUpdatePermissions {
 '@
   $probeName='roo-ota-write-'+[Guid]::NewGuid().ToString('N')+'.tmp'
   $control=Join-Path (Join-Path (Get-RooIndustriesLocalAppData) 'Temp') $probeName;$sealed=Join-Path (Join-Path $data 'updates') $probeName
-  try{$result=[RooUpdatePermissions]::Check($control,$sealed);Save 'update-folder-write-probe.json' @{administratorGroupDisabled=$true;privilegesRemoved=$true;controlWin32=$result[0];updatesWin32=$result[1]};if($result[0] -ne 0 -or $result[1] -ne 5){throw 'Update-folder permission control failed'}}finally{foreach($path in @($control,$sealed)){if(Test-Path -LiteralPath $path){[IO.File]::Delete($path)}}}
+  try{$result=[RooUpdatePermissions]::Check((Get-HarnessLongPath $control),(Get-HarnessLongPath $sealed));if($result[0] -eq 0){$controlEntry=Register-HarnessFile $control 'restricted-write' 'invocation'};if($result[1] -eq 0){$sealedEntry=Register-HarnessFile $sealed 'restricted-write' 'invocation'};Save 'update-folder-write-probe.json' @{administratorGroupDisabled=$true;privilegesRemoved=$true;controlWin32=$result[0];updatesWin32=$result[1]};if($result[0] -ne 0 -or $result[1] -ne 5){throw 'Update-folder permission control failed'}}finally{foreach($entry in @($controlEntry,$sealedEntry)){if($entry){Remove-HarnessEntry $entry}}}
  }
 }
+
+$state='pass'
+}finally{$state=Complete-HarnessInvocation $state -Cleanup;Save 'invocation.json' @{status=$state;nonce=$nonce}}
