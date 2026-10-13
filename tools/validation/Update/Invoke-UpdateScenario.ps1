@@ -1,6 +1,6 @@
 param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutRoot,
     [Parameter(Mandatory)][ValidateSet('seed','manual-install','feed-down','slow-feed','close-during-check','malformed-feed','bad-signature','wrong-product','wrong-channel','same-version','older-version','tampered','tampered-size','manual-download','ready','scheduled-download','blocked','cancel','install','failure','copy-failure','cleanup','transport-error','manual-timeout','settings-readonly','timer-read-failure')][string]$Scenario,
-    [string]$InstallerPath='', [string]$ExpectedVersion='', [string]$EvidenceName='', [string]$FixtureExe='',[switch]$ManualRetry,[switch]$HelpersOnly,[string]$NextVersion='',[string]$InitialDataRoot='',[string]$FeedUrl='',[string]$FeedKeyId='',[string]$OlderVersion='')
+    [string]$InstallerPath='', [string]$ExpectedVersion='', [string]$EvidenceName='', [string]$FixtureExe='',[switch]$ManualRetry,[switch]$HelpersOnly,[string]$NextVersion='',[string]$InitialDataRoot='',[string]$FeedUrl='',[string]$FeedKeyId='',[string]$OlderVersion='',[switch]$CurrentData)
 $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
 . (Join-Path $Source 'tools\validation\Update\Harness.Common.ps1')
@@ -129,13 +129,23 @@ function Readback{
  $settings=if(Test-HarnessPath (Join-Path $data 'settings.json')){[IO.File]::ReadAllText((Get-HarnessLongPath (Join-Path $data 'settings.json')))|ConvertFrom-Json}else{$null}
  @{installedVersion=Version;runningPid=if($script:app){$script:app.Id}else{$null};runningImage=if($script:app){$script:app.Path}else{$null};runningProductVersion=if($script:app){(Get-HarnessItem $script:app.Path).VersionInfo.ProductVersion}else{$null};installedProductVersion=(Get-HarnessItem $exe).VersionInfo.ProductVersion;settings=$settings;status=if($script:window -and (ById 'UpdateStatusText')){StatusText}else{$null};texts=if($script:window){@(Texts)}else{@()};files=@(UpdateFiles);processStarts=@(ProcessStarts);helpers=@(Get-CimInstance Win32_Process|Where-Object {$_.ExecutablePath -like ($install+'\*') -or $script:app -and $_.ParentProcessId -eq $script:app.Id}|Select-Object ProcessId,ParentProcessId,ExecutablePath);governor=(Core 'policy-status' @{policyRoot=(Join-Path $data 'process-rules')});governorTasks=@(Get-ScheduledTask|Where-Object {$_.TaskName -match '^(RooIndustriesOptimizationSuite|RooOptimizationSuite)\.ProcessRules\.'}|Select-Object TaskName,TaskPath,State,@{n='enabled';e={$_.Settings.Enabled}},@{n='userId';e={$_.Principal.UserId}});utc=[DateTime]::UtcNow.ToString('o')}
 }
-function Preserved{
- $seed=Read-HarnessLatestResult 'preservation.json' 'seed'
+function CapturePreservation{
+ $files=@()
+ foreach($root in @((Join-Path $data 'process-rules\rules'),(Join-Path $data 'operations'))){
+  if(Test-HarnessPath $root){$files+=@(Get-HarnessTree $root -FilesOnly|Where-Object {(Test-HarnessVisiblePath $_ $root) -and [IO.Path]::GetFileName($_.FullName) -notlike '*.lock'}|ForEach-Object {@{path=$_.FullName;sha256=(Get-HarnessFileSha256 $_.LongPath)}})}
+ }
+ $settings=if(Test-HarnessPath $settingsPath){[IO.File]::ReadAllText((Get-HarnessLongPath $settingsPath))|ConvertFrom-Json}else{$null}
+ $governor=Core 'policy-status' @{policyRoot=(Join-Path $data 'process-rules')}
+ if($governor.error){throw ('Could not capture governor state: '+$governor.error)}
+ return @{files=$files;themeId=$settings.themeId;hostRunning=$governor.hostRunning}
+}
+function Preserved($Snapshot=$null){
+ $seed=if($Snapshot){$Snapshot}else{Read-HarnessLatestResult 'preservation.json' 'seed'}
  $changed=@($seed.files|Where-Object {-not[IO.File]::Exists((Get-HarnessLongPath $_.path)) -or (Get-HarnessFileSha256 $_.path) -cne $_.sha256})
  if($changed.Count){throw ('Preserved files changed: '+($changed.path -join ', '))}
  $settings=[IO.File]::ReadAllText((Get-HarnessLongPath (Join-Path $data 'settings.json')))|ConvertFrom-Json
  if($settings.themeId -ne $seed.themeId){throw 'Theme did not survive the upgrade'}
- $before=Read-HarnessLatestResult 'before.json' 'seed'
+ $before=if($Snapshot){@{governor=@{hostRunning=$Snapshot.hostRunning}}}else{Read-HarnessLatestResult 'before.json' 'seed'}
  $governor=Core 'policy-status' @{policyRoot=(Join-Path $data 'process-rules')}
  if($governor.hostRunning -ne $before.governor.hostRunning -or $governor.error){throw 'Governor running state changed across the upgrade'}
  Save 'preservation.json' @{allFilesMatch=$true;files=$seed.files;themeId=$settings.themeId}
@@ -173,6 +183,8 @@ try{
   'manual-install' {
    Assert-HarnessInstallStart $exe
    if(-not$InstallerPath){throw 'InstallerPath required'}
+   $installSnapshot=if($CurrentData){CapturePreservation}else{$null}
+   if($installSnapshot){Save 'install-preservation-before.json' $installSnapshot}
    $script:smartScreenBefore=@($A::RootElement.FindAll($TS::Children,[Windows.Automation.Condition]::TrueCondition)|ForEach-Object {$_.Current.NativeWindowHandle})
    Assert-HarnessInstallStart $exe
    $setupOwned=Start-OwnedProcess -FilePath $InstallerPath -ArgumentList ('/SUPPRESSMSGBOXES /NORESTART /LOG="'+(Join-Path $directory ('setup-'+$nonce+'.log'))+'"') -WindowStyle Normal -Purpose setup
@@ -201,7 +213,7 @@ try{
    }
    if(-not$setup.HasExited){Save 'setup-stalled-texts.json' @(Texts);throw 'Normal installer did not finish in six minutes'}
    Save 'setup-result.json' @{exitCode=$setup.ExitCode;version=Version};if($setup.ExitCode -ne 0 -or (Version) -ne $ExpectedVersion){throw 'Manual install did not reach expected version'}
-   $script:window=$null;Launch;Settings;Shot 'settings';Preserved
+   $script:window=$null;Launch;Settings;Shot 'settings';Preserved $installSnapshot
   }
   'cleanup' {Launch;Settings;Save 'final.json' (Readback);StopApp}
   default {
