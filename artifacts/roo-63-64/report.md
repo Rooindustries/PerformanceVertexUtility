@@ -288,3 +288,22 @@ Completed production installer downloads: **0**. One production installer Invoke
 **Verdict: not ready to merge.** R1 staging, hardening and the ownership checks pass, but the shared provider/download IO blocker is open and P2/P3 plus B's unsigned/contracts/close/signed/build guards still lack the required final-gate proof. No product failure was observed.
 
 Update-cache audit found no release directory, executable, partial file or pending record. The as-found install-0.11.1-beta.log is preserved with its original SHA; install logs are not counted as release cache. Evidence: cache-audit.json and task-cache-audit.json.
+
+
+## Slice 18: boundary fix, final gate stopped
+
+**Not ready to merge.** Gate heads A `0f19fd230230e5dd498c7dcb24a87b1561cf8934`, B `5bbf0369c2ddf12216b6b2f6b3bde0ecf4d1e5d5`. A's full [Slice 18 report](../roo-62/report.md) contains the audit table, fixture outcomes, repairs, commands and all evidence paths. B adds Get-ReleaseToolPath / argument validation in Build-Release/Release.Checks, native extended-path deletion, and three actual Assert-ReleasePathBound success markers. Product app code is unchanged in this slice.
+
+| Check | Observed | Result | Evidence |
+|---|---|---|---|
+| Final B report-bearing staging / parse / compile | 81 PS files, zero errors; HarnessTrace compiled | pass | `artifacts/roo-62/slice18/trace2/frame.json`, `trace2/final-b-parse.json` |
+| Final runner / boundary checks | 97/97; 33 new tool-boundary checks repeated in the whole suite | pass | `artifacts/roo-62/slice18/harness5/receipt.json` |
+| Trace | 3/3 required + ambiguity | pass | `artifacts/roo-62/slice18/trace2/receipt.json` |
+| B all 21 | Not started after P2 stop | not run | `artifacts/roo-62/slice18/gate-summary.json` |
+| Contracts 25 | Not started | not run | same |
+| Close-during-check exact cancellation line | Not started | not run | same |
+| Normal/pair/signed/negative build path-bound execution | Logging added, runtime builds not started | unverified | `tools/scripts/Release.Checks.ps1`; same gate summary |
+| Signed subset / fresh cert / governor / OTA / wrong subject | No cert created; not started | not run | same |
+| Cleanup / lease / raw byte preservation | All 14 audit checks pass; no owned process/frame/cache/lease | pass | `artifacts/roo-62/slice18/cleanup-audit.json` |
+
+P2 downloaded the exact published installer once, then Get-HarnessLongPath rejected its `:Zone.Identifier` name at the short-path GetFullPath call. Published setup never started. This is another CR8 native-path boundary issue, so the same-class stop rule controls; no product patch or ADS workaround was made. The 9070 is back on its as-found signed test-feed 0.11.1-beta, governor paused, exact data and raw tweak-registry bytes restored. Six CS2 tasks and all 160 legacy frames unchanged. No owned services/processes remain; the unrelated Linux support server is preserved. Production download count: **1 completed installer download**; publishing: **0**. Blackwell/KVM untouched. Both branches require the native alternate-stream fix and the remaining gates before merge.
