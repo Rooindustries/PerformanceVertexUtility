@@ -12,6 +12,23 @@ function ConvertTo-ReleaseExtendedPath([string]$Path) {
     return '\\?\' + $plain
 }
 
+function Get-ReleaseToolPath([string]$Path) {
+    $long = ConvertTo-ReleaseExtendedPath $Path
+    $plain = if ($long.StartsWith('\\?\UNC\', [StringComparison]::OrdinalIgnoreCase)) { '\\' + $long.Substring(8) } else { $long.Substring(4) }
+    if ($plain.Length -ge 260) { throw ('Path reaches the 260-character tool limit; use a shorter frame: ' + $plain) }
+    return $plain
+}
+
+function Get-ReleaseToolArguments([string[]]$Arguments) {
+    foreach ($argument in $Arguments) {
+        $match = [regex]::Match($argument, '(?:^|=)(?<path>(?:[A-Za-z]:[\\/]|\\\\).*)$')
+        if ($match.Success -and -not $argument.StartsWith('/Sroosign=')) {
+            $offset = $match.Groups['path'].Index
+            $argument.Substring(0, $offset) + (Get-ReleaseToolPath $argument.Substring($offset))
+        } else { $argument }
+    }
+}
+
 function Get-ReleaseXamlIntermediatePath([string]$RepoRoot, [string]$ProjectRoot = $RepoRoot) {
     $relative = 'docs\internal\frontend\RooIndustries.OptimizationSuite.App'
     $project = [xml][IO.File]::ReadAllText((ConvertTo-ReleaseExtendedPath (Join-Path $ProjectRoot ($relative + '\RooIndustries.OptimizationSuite.App.csproj'))))
@@ -21,8 +38,10 @@ function Get-ReleaseXamlIntermediatePath([string]$RepoRoot, [string]$ProjectRoot
 }
 
 function Assert-ReleasePathBound([string]$RepoRoot, [string]$ProjectRoot = $RepoRoot, [string[]]$OutputRoots = @()) {
+    $count = 0; $maximum = 0
     if ($RepoRoot) {
         $path = Get-ReleaseXamlIntermediatePath $RepoRoot $ProjectRoot
+        $maximum = $path.Length
         if ($path.Length -ge 260) { throw ('Release XAML path reaches the 260-character limit: ' + $path + '. Use a shorter source root.') }
     }
     foreach ($root in $OutputRoots) {
@@ -32,19 +51,21 @@ function Assert-ReleasePathBound([string]$RepoRoot, [string]$ProjectRoot = $Repo
         while ($pending.Count) {
             $path = $pending.Pop()
             $plain = if ($path.StartsWith('\\?\UNC\', [StringComparison]::OrdinalIgnoreCase)) { '\\' + $path.Substring(8) } else { $path.Substring(4) }
+            $count++; $maximum = [Math]::Max($maximum, $plain.Length)
             if ($plain.Length -ge 260) { throw ('Release output path reaches the 260-character limit: ' + $plain + '. Use a shorter source or output root.') }
             $attributes = [IO.File]::GetAttributes($path)
             if ($attributes -band [IO.FileAttributes]::ReparsePoint) { throw ('Release path is a reparse point: ' + $plain) }
             if ($attributes -band [IO.FileAttributes]::Directory) { foreach ($entry in [IO.Directory]::EnumerateFileSystemEntries($path)) { $pending.Push($entry) } }
         }
     }
+    Write-Host ('Assert-ReleasePathBound passed: ' + $(if ($RepoRoot) { 'source' } else { 'outputs' }) + '; checked ' + $count + ' paths; maximum ' + $maximum + ' characters.')
 }
 
 $script:ForbiddenReleaseScripts = @('Test-*', 'Measure-Optimizer*', 'Measure-ProcessControlFootprint*', 'Build-NativeProcessGovernor*', 'Start-NativeProcessGovernorSession*', 'Get-NativeProcessGovernorToolchain*', 'Build-OptimizerHost*', 'Validation.Common*', 'Get-RooIndustriesValidationTempArtifacts*', 'Scenario.*')
 
 function Get-ReleaseScriptNames([string]$RepoRoot) {
     $path = Join-Path $RepoRoot 'tools\release\shipped-scripts.txt'
-    $names = @(Get-Content -LiteralPath $path | ForEach-Object { $_.Trim() } | Where-Object { $_ -and -not $_.StartsWith('#') })
+    $names = @(Get-Content -LiteralPath (Get-ReleaseToolPath $path) | ForEach-Object { $_.Trim() } | Where-Object { $_ -and -not $_.StartsWith('#') })
     foreach ($name in $names) {
         if ($name -notmatch '^[A-Za-z0-9._-]+\.(ps1|cmd)$') { throw "shipped-scripts.txt lists '$name', which is not a plain script file name." }
         if (Test-ForbiddenReleaseScript $name) { throw "shipped-scripts.txt lists $name, a scenario, test or developer script." }
@@ -67,8 +88,8 @@ function Copy-ReleaseScripts([string]$RepoRoot, [string]$Stage) {
     [IO.Directory]::CreateDirectory($target) | Out-Null
     foreach ($name in (Get-ReleaseScriptNames $RepoRoot)) {
         $file = Join-Path $source $name
-        if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { throw "shipped-scripts.txt lists $name, which is not in backend\scripts." }
-        Copy-Item -LiteralPath $file -Destination (Join-Path $target $name)
+        if (-not (Test-Path -LiteralPath (Get-ReleaseToolPath $file) -PathType Leaf)) { throw "shipped-scripts.txt lists $name, which is not in backend\scripts." }
+        Copy-Item -LiteralPath (Get-ReleaseToolPath $file) -Destination (Get-ReleaseToolPath (Join-Path $target $name))
     }
 }
 
@@ -90,14 +111,14 @@ function Copy-ReleaseData([string]$RepoRoot, [string]$Stage) {
         $destination = Join-Path $Stage $entry[0]
         [IO.Directory]::CreateDirectory($destination) | Out-Null
         foreach ($pattern in $entry[1]) {
-            foreach ($file in (Get-ChildItem -LiteralPath $source -Filter $pattern -File)) { Copy-Item -LiteralPath $file.FullName -Destination $destination }
+            foreach ($file in (Get-ChildItem -LiteralPath (Get-ReleaseToolPath $source) -Filter $pattern -File)) { Copy-Item -LiteralPath (Get-ReleaseToolPath $file.FullName) -Destination (Get-ReleaseToolPath $destination) }
         }
     }
 }
 
 function Get-ReleaseScriptCalls([string]$RepoRoot, [string]$Stage) {
     $known = @{}
-    foreach ($file in (Get-ChildItem -LiteralPath (Join-Path $RepoRoot 'backend\scripts') -File)) { if ($file.Extension -in '.ps1', '.cmd') { $known[$file.Name.ToLowerInvariant()] = $file.Name } }
+    foreach ($file in (Get-ChildItem -LiteralPath (Get-ReleaseToolPath (Join-Path $RepoRoot 'backend\scripts')) -File)) { if ($file.Extension -in '.ps1', '.cmd') { $known[$file.Name.ToLowerInvariant()] = $file.Name } }
     $quote = '["' + "'" + [char]96 + ']'
     $literal = [regex]::new($quote + '(?:[^"' + "'" + [char]96 + '\s]*[\\/])?([A-Za-z0-9_.-]+\.(?:ps1|cmd))' + $quote, [Text.RegularExpressions.RegexOptions]::IgnoreCase)
     $sources = New-Object System.Collections.Generic.List[string]
@@ -105,11 +126,11 @@ function Get-ReleaseScriptCalls([string]$RepoRoot, [string]$Stage) {
         @('backend\native\Optimizer.Core', '*.cs'), @('backend\native\Optimizer.Host', '*.cs'), @('backend\native\Optimizer.SessionHost', '*.cs'),
         @('docs\internal\frontend', '*.cs'), @('docs\internal\frontend', '*.xaml'), @('tools\release', '*.iss'))) {
         $folder = Join-Path $RepoRoot $entry[0]
-        if (-not (Test-Path -LiteralPath $folder)) { continue }
-        foreach ($file in (Get-ChildItem -LiteralPath $folder -Filter $entry[1] -File -Recurse | Where-Object { $_.FullName -notmatch '[\\/](obj|bin)[\\/]' })) { $sources.Add($file.FullName) }
+        if (-not (Test-Path -LiteralPath (Get-ReleaseToolPath $folder))) { continue }
+        foreach ($file in (Get-ChildItem -LiteralPath (Get-ReleaseToolPath $folder) -Filter $entry[1] -File -Recurse | Where-Object { $_.FullName -notmatch '[\\/](obj|bin)[\\/]' })) { $sources.Add($file.FullName) }
     }
-    foreach ($file in (Get-ChildItem -LiteralPath (Join-Path $Stage 'backend\scripts') -File -Recurse)) { if ($file.Extension -in '.ps1', '.cmd') { $sources.Add($file.FullName) } }
-    foreach ($file in (Get-ChildItem -LiteralPath $Stage -Filter '*.json' -File -Recurse)) { $sources.Add($file.FullName) }
+    foreach ($file in (Get-ChildItem -LiteralPath (Get-ReleaseToolPath (Join-Path $Stage 'backend\scripts')) -File -Recurse)) { if ($file.Extension -in '.ps1', '.cmd') { $sources.Add($file.FullName) } }
+    foreach ($file in (Get-ChildItem -LiteralPath (Get-ReleaseToolPath $Stage) -Filter '*.json' -File -Recurse)) { $sources.Add($file.FullName) }
     $calls = @{}
     foreach ($path in $sources) {
         foreach ($match in $literal.Matches([IO.File]::ReadAllText($path))) {
@@ -121,9 +142,9 @@ function Get-ReleaseScriptCalls([string]$RepoRoot, [string]$Stage) {
 }
 
 function Assert-ReleaseScripts([string]$RepoRoot, [string]$Stage, [switch]$TestHooks) {
-    if(-not $TestHooks -and (Test-Path -LiteralPath (Join-Path $Stage 'backend\test-hooks.enabled'))){throw 'A production release stage contains backend\test-hooks.enabled.'}
+    if(-not $TestHooks -and (Test-Path -LiteralPath (Get-ReleaseToolPath (Join-Path $Stage 'backend\test-hooks.enabled')))){throw 'A production release stage contains backend\test-hooks.enabled.'}
     $scripts = Join-Path $Stage 'backend\scripts'
-    $staged = @(Get-ChildItem -LiteralPath $scripts -File -Recurse | ForEach-Object { $_.FullName.Substring($scripts.Length).TrimStart('\', '/') })
+    $staged = @(Get-ChildItem -LiteralPath (Get-ReleaseToolPath $scripts) -File -Recurse | ForEach-Object { $_.FullName.Substring($scripts.Length).TrimStart('\', '/') })
     foreach ($name in $staged) { if (Test-ForbiddenReleaseScript $name) { throw "The release stage contains $name, a scenario, test or developer script." } }
     $listed = @(Get-ReleaseScriptNames $RepoRoot)
     foreach ($name in $staged) { if ($listed -notcontains $name) { throw "The release stage contains $name, which shipped-scripts.txt does not list." } }
@@ -160,7 +181,7 @@ function Compare-ReleaseVersion([string]$Left, [string]$Right) {
 
 function Assert-ReleaseVersion([string]$RepoRoot, [string]$Version) {
     $path = Join-Path $RepoRoot 'tools\release\released-versions.txt'
-    foreach ($released in @(Get-Content -LiteralPath $path | ForEach-Object { $_.Trim() } | Where-Object { $_ -and -not $_.StartsWith('#') })) {
+    foreach ($released in @(Get-Content -LiteralPath (Get-ReleaseToolPath $path) | ForEach-Object { $_.Trim() } | Where-Object { $_ -and -not $_.StartsWith('#') })) {
         if ((Compare-ReleaseVersion $Version $released) -le 0) { throw "Version $Version is not newer than the released version $released. Raise Version in the app project." }
     }
 }
