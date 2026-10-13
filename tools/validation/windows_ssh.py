@@ -406,6 +406,7 @@ def upload(host: str, machine: str, directory: str, include_frontend: bool = Fal
         raise ValueError('Use a roo-industries- prefixed source frame name.')
     if not parent:
         raise ValueError('Specify an existing verified admin-protected staging parent.')
+    contents = snapshot_files(include_frontend)
     identity = inspect(host, machine)
     if not identity['admin']:
         raise ValueError('Protected staging requires an administrator token.')
@@ -414,7 +415,6 @@ def upload(host: str, machine: str, directory: str, include_frontend: bool = Fal
     remote_root = parent.rstrip('\\/') + '\\' + directory + '-' + frame_id
     remote_source = remote_root + '\\source'
     root = Path(__file__).resolve().parents[2]
-    contents = snapshot_files(include_frontend)
     manifest = {
         'protocol': 'roo-industries-source-snapshot/v2', 'machine': identity['machine'],
         'sid': scope['sid'], 'frameId': frame_id,
