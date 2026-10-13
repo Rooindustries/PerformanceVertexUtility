@@ -592,7 +592,7 @@ function Test-HarnessEncodedReference([string]$Image,[string]$CommandLine,[strin
  for($i=0;$i -lt $arguments.Count;$i++){
   if($arguments[$i] -notmatch '^(?:--?|/)([A-Za-z]+)$'){continue}
   $name=$Matches[1].ToLowerInvariant()
-  $encoded=$name -in 'e','ec' -or $name.Length -ge 2 -and 'encodedcommand'.StartsWith($name) -or $name.Length -ge 8 -and 'encodedarguments'.StartsWith($name)
+  $encoded=($name -in @('e','ec')) -or ($name.Length -ge 2 -and 'encodedcommand'.StartsWith($name)) -or ($name.Length -ge 8 -and 'encodedarguments'.StartsWith($name))
   if(-not$encoded){continue}
   if($i+1 -ge $arguments.Count){return $true}
   try{$bytes=[Convert]::FromBase64String($arguments[++$i]);if($bytes.Length % 2){return $true};$text=[Text.UnicodeEncoding]::new($false,$false,$true).GetString($bytes)}catch{return $true}
