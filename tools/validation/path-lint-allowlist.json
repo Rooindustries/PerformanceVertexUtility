@@ -7,13 +7,13 @@
   },
   {
     "file": "tools/validation/Update/Harness.Common.ps1",
-    "line": 554,
+    "line": 555,
     "text": "'cert'{$path=$Entry.identity.store+'\\'+$Entry.identity.thumbprint;if(Test-Path $path){$cert=Get-Item $path;if($cert.Subject -cne $Entry.identity.subject){throw 'Certificate identity changed; retained.'};Remove-Item -LiteralPath $path -DeleteKey}}",
     "reason": "Verified certificate-store/thumbprint identity; no filesystem path."
   },
   {
     "file": "tools/validation/Update/Harness.Common.ps1",
-    "line": 649,
+    "line": 650,
     "text": "[IO.Directory]::Move((Get-HarnessLongPath $ActiveRoot),(Get-HarnessLongPath $Destination));Set-HarnessEntryState $entry[0].id 'removed';Add-HarnessEntry 'folder' (Get-HarnessFolderIdentity $Destination) 'data-archive' 'run'|Out-Null",
     "reason": "Shared data-archive helper moves both endpoints through Get-HarnessLongPath after ownership/reparse verification."
   },
@@ -25,31 +25,31 @@
   },
   {
     "file": "tools/validation/Update/Invoke-HarnessChecks.ps1",
-    "line": 145,
+    "line": 147,
     "text": "$text=Get-Content -LiteralPath (Get-HarnessToolPath $download) -Raw",
     "reason": "Owned fixture deliberately exercises this cmdlet with a plain bounded tool path; native readback verifies the effect."
   },
   {
     "file": "tools/validation/Update/Invoke-HarnessChecks.ps1",
-    "line": 147,
+    "line": 149,
     "text": "$copy=Join-Path $tools 'cmdlet-copy.txt';Copy-Item -LiteralPath (Get-HarnessToolPath $download) -Destination (Get-HarnessToolPath $copy)",
     "reason": "Owned fixture deliberately exercises this cmdlet with a plain bounded tool path; native readback verifies the effect."
   },
   {
     "file": "tools/validation/Update/Invoke-HarnessChecks.ps1",
-    "line": 149,
+    "line": 151,
     "text": "$hash=(Get-FileHash -LiteralPath (Get-HarnessToolPath $copy) -Algorithm SHA256).Hash",
     "reason": "Owned fixture deliberately exercises this cmdlet with a plain bounded tool path; native readback verifies the effect."
   },
   {
     "file": "tools/validation/Update/Invoke-HarnessChecks.ps1",
-    "line": 152,
+    "line": 154,
     "text": "$children=@(Get-ChildItem -LiteralPath (Get-HarnessToolPath $tools) -File)",
     "reason": "Owned fixture deliberately exercises this cmdlet with a plain bounded tool path; native readback verifies the effect."
   },
   {
     "file": "tools/validation/Update/Invoke-HarnessChecks.ps1",
-    "line": 156,
+    "line": 158,
     "text": "Remove-Item -LiteralPath (Get-HarnessToolPath $copy)",
     "reason": "Owned fixture deliberately exercises this cmdlet with a plain bounded tool path; native readback verifies the effect."
   },
@@ -61,19 +61,19 @@
   },
   {
     "file": "tools/validation/Update/Invoke-HarnessChecks.ps1",
-    "line": 151,
+    "line": 153,
     "text": "Passed 'tool boundary Copy-Item normal paths' $hash;Passed 'tool boundary Get-FileHash normal path' $hash",
     "reason": "Display-only fixture category/observation; no filesystem cmdlet is called in this statement."
   },
   {
     "file": "tools/validation/Update/Invoke-HarnessChecks.ps1",
-    "line": 153,
+    "line": 155,
     "text": "if($children.Name -notcontains 'cmdlet-copy.txt'){throw 'Tool children missed a file'};Passed 'tool boundary Get-ChildItem normal path' $children.Count",
     "reason": "Display-only fixture category/observation; no filesystem cmdlet is called in this statement."
   },
   {
     "file": "tools/validation/Update/Invoke-HarnessChecks.ps1",
-    "line": 158,
+    "line": 160,
     "text": "if(Test-HarnessPath $copy){throw 'Tool Remove-Item left its owned file'};Passed 'tool boundary Remove-Item normal path' $copy",
     "reason": "Display-only fixture category/observation; no filesystem cmdlet is called in this statement."
   }
