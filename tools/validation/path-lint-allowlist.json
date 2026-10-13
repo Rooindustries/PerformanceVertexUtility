@@ -1,19 +1,19 @@
 [
   {
     "file": "tools/validation/Update/Harness.Common.ps1",
-    "line": 32,
+    "line": 37,
     "text": "if($Path -match '^(HKLM|HKCU|Cert):'){if($PathType -eq 'Any'){return Test-Path -LiteralPath $Path};return Test-Path -LiteralPath $Path -PathType $PathType}",
     "reason": "Provider-only branch excludes filesystem paths; registry/certificate providers need their own cmdlet."
   },
   {
     "file": "tools/validation/Update/Harness.Common.ps1",
-    "line": 538,
+    "line": 543,
     "text": "'cert'{$path=$Entry.identity.store+'\\'+$Entry.identity.thumbprint;if(Test-Path $path){$cert=Get-Item $path;if($cert.Subject -cne $Entry.identity.subject){throw 'Certificate identity changed; retained.'};Remove-Item -LiteralPath $path -DeleteKey}}",
     "reason": "Verified certificate-store/thumbprint identity; no filesystem path."
   },
   {
     "file": "tools/validation/Update/Harness.Common.ps1",
-    "line": 633,
+    "line": 638,
     "text": "[IO.Directory]::Move((Get-HarnessLongPath $ActiveRoot),(Get-HarnessLongPath $Destination));Set-HarnessEntryState $entry[0].id 'removed';Add-HarnessEntry 'folder' (Get-HarnessFolderIdentity $Destination) 'data-archive' 'run'|Out-Null",
     "reason": "Shared data-archive helper moves both endpoints through Get-HarnessLongPath after ownership/reparse verification."
   },
