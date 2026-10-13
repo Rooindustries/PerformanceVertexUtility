@@ -322,7 +322,7 @@ def enter_host_lease(host, machine, receipt):
 def safe_archive_path(name):
     normalized = name.replace('\\', '/')
     path = Path(normalized)
-    if name.startswith(('\\\\', '\\\\?\\')) or ':' in name or '..' in path.parts or path.is_absolute():
+    if name.startswith(('\\\\', '\\\\?\\')) or ':' in name or '..' in name or path.is_absolute():
         raise ValueError('Unsafe archive member: ' + name)
     return path
 

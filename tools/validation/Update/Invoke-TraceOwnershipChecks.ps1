@@ -25,7 +25,7 @@ function TraceEntry([int]$ProcessId){
 }
 try{
  $launcher=Join-Path $directory 'RooTraceParent.exe'
- Add-Type -OutputAssembly (Get-HarnessLongPath $launcher) -OutputType ConsoleApplication @'
+ New-HarnessConsoleAssembly -Path $launcher -Code @'
 using System;
 using System.Diagnostics;
 using System.Threading;

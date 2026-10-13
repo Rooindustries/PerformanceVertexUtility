@@ -89,7 +89,7 @@ def main():
         else:
             raise RuntimeError(name + ' did not refuse')
 
-    for member in ('\\\\?\\C:\\escape.json', '\\\\host\\share\\file', 'C:/escape.json', '../escape.json', '/absolute.json'):
+    for member in ('\\\\?\\C:\\escape.json', '\\\\host\\share\\file', 'C:/escape.json', '../escape.json', '/absolute.json', 'name..json'):
         refused('CR8 unsafe archive member refused: ' + member, lambda member=member: windows.safe_archive_path(member), 'Unsafe archive member')
     dummy = ROOT / 'tools/validation/Update/roo-key-fixture.pem'
     with dummy.open('x') as output:
