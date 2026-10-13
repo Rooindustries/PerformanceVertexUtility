@@ -106,11 +106,12 @@ try{switch($Scenario){
    do{$result=Invoke-HarnessHost $signedHost 'policy-status' @{schemaVersion=1;repoRoot=$install;policyRoot=$root};if($result.status -ne 'completed'){throw 'Signed governor status read failed.'};$status=$result.data;if(-not$status.hostRunning){break};Start-Sleep -Milliseconds 200}while([DateTime]::UtcNow -lt $until)
    if($status.hostRunning){throw 'Owned signed governor did not pause.'}
   }
-  $record=Read-HarnessLatestResult 'signing-certificate.json' 'signing-build'
-  $path='Cert:\CurrentUser\My\'+$record.thumbprint
-  Remove-HarnessEntry (Get-HarnessEntryById $record.ledgerId)
+  $entries=@(Get-HarnessEntries|Where-Object {$_.kind -eq 'cert' -and $_.purpose -eq 'signing'})
+  if($entries.Count -ne 1 -or $entries[0].identity.store -cne 'Cert:\CurrentUser\My' -or $entries[0].identity.subject -cne $subject){throw 'No unique owned signing certificate is recorded; retained.'}
+  $entry=$entries[0];$path=$entry.identity.store+'\'+$entry.identity.thumbprint
+  Remove-HarnessEntry $entry
   if(Test-Path $path){throw 'Owned certificate remains.'}
-  Save 'certificate-cleanup.json' @{status='pass';thumbprint=$record.thumbprint;exists=$false;rootTrustChanged=$false;privateKeyExported=$false}
+  Save 'certificate-cleanup.json' @{status='pass';thumbprint=$entry.identity.thumbprint;exists=$false;rootTrustChanged=$false;privateKeyExported=$false}
  }
 }
 
