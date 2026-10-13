@@ -1,10 +1,10 @@
-param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutRoot,[switch]$Hold,[switch]$TimeoutOnly,[switch]$CacheOnly,[switch]$TrackingOnly)
+param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutRoot,[switch]$Hold,[switch]$TimeoutOnly,[switch]$CacheOnly,[switch]$TrackingOnly,[switch]$ToolsOnly)
 $ErrorActionPreference='Stop'
 . (Join-Path $Source 'tools\validation\Update\Harness.Common.ps1')
 $nonce=Initialize-HarnessInvocation 'harness-checks' $OutRoot
 Ensure-HarnessOutputDirectory $OutRoot
 $directory=New-HarnessEvidenceDirectory $OutRoot 'checks'
-if(@($Hold,$TimeoutOnly,$CacheOnly,$TrackingOnly|Where-Object {$_}).Count -gt 1){throw 'Choose only one harness check mode.'}
+if(@($Hold,$TimeoutOnly,$CacheOnly,$TrackingOnly,$ToolsOnly|Where-Object {$_}).Count -gt 1){throw 'Choose only one harness check mode.'}
 if($Hold){Write-HarnessResult $directory 'holding.json' @{pid=$PID;nonce=$nonce}|Out-Null;Start-Sleep -Seconds 30;Complete-HarnessInvocation 'pass' -Cleanup|Out-Null;return}
 $rows=[Collections.Generic.List[object]]::new();$status='fail';$main=$script:Harness
 function Passed([string]$Name,$Value){$rows.Add(@{check=$Name;status='pass';observed=$Value})}
@@ -145,7 +145,7 @@ public static class ToolFixture {
  Register-HarnessFile (Join-Path $tools 'external.txt') 'tool-result'|Out-Null
  Passed 'tool boundary external executable normal paths' $assembly
  $text=Get-Content -LiteralPath (Get-HarnessToolPath $download) -Raw
- if($text -cne $nonce){throw 'Tool Get-Content bytes differ'};Passed 'tool boundary Get-Content normal path' $text
+ if($text -cne $nonce){throw 'Tool Get-Content bytes differ'};Passed 'tool boundary Get-Content normal path' @{characters=$text.Length;sha256=(Get-HarnessFileSha256 $download)}
  $copy=Join-Path $tools 'cmdlet-copy.txt';Copy-Item -LiteralPath (Get-HarnessToolPath $download) -Destination (Get-HarnessToolPath $copy)
  $copyEntry=Register-HarnessFile $copy 'tool-copy'
  $hash=(Get-FileHash -LiteralPath (Get-HarnessToolPath $copy) -Algorithm SHA256).Hash
@@ -158,6 +158,15 @@ public static class ToolFixture {
  Remove-Item -LiteralPath (Get-HarnessToolPath $copy)
  Set-HarnessEntryState $copyEntry.id 'removed'
  if(Test-HarnessPath $copy){throw 'Tool Remove-Item left its owned file'};Passed 'tool boundary Remove-Item normal path' $copy
+}
+if($ToolsOnly){
+ try{ToolBoundaryChecks;$status='pass'}finally{
+  Write-HarnessResult $directory 'boundary-types.json' @($rows|ForEach-Object {@{check=$_.check;type=if($null -ne $_.observed){$_.observed.GetType().FullName}else{'null'}}})|Out-Null
+  Write-HarnessResult $directory 'boundary-before-cleanup.json' @{status=$status;checks=@($rows)}|Out-Null
+  $status=Complete-HarnessInvocation $status -Cleanup
+  Write-HarnessResult $directory 'receipt.json' @{status=$status;checks=@($rows)}|Out-Null
+ }
+ return
 }
 try{
  ToolBoundaryChecks
