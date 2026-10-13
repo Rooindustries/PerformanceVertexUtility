@@ -50,9 +50,9 @@ function Action([string]$Kind,[string]$Selector,$Element=$null,[double]$Value=0)
   'firmware' {if($Selector -cne 'OpenFirmware'){throw 'Button is not allowed'};$target=FindId $Selector;$patternName='InvokePattern.Invoke'}
   'back' {if($Selector -cne ([string][char]0x2190+' Tools')){throw 'Button is not allowed'};$target=Unique $parent '' $Selector $CT::Button;$patternName='InvokePattern.Invoke'}
   'scroll' {
-   if(-not$Element -or $Element.Current.ClassName -ne 'ScrollViewer'){throw 'Only a page ScrollViewer may scroll'}
+   if(-not$Element -or ($Element.Current.ClassName -ne 'ScrollViewer' -and $Element.Current.AutomationId -notin 'WindowsTweaksList','RemovalApps','AppsCleanupInstalledAppsList')){throw 'Only a page ScrollViewer or its named list viewport may scroll'}
    $parent=[Windows.Automation.TreeWalker]::RawViewWalker.GetParent($Element)
-   $target=Unique $parent $Element.Current.AutomationId $Element.Current.Name $Element.Current.ControlType 'ScrollViewer' -Children
+   $target=Unique $parent $Element.Current.AutomationId $Element.Current.Name $Element.Current.ControlType $Element.Current.ClassName -Children
    $patternName='ScrollPattern.SetScrollPercent'
   }
   'expander' {if(-not$Element -or $Element.Current.ClassName -ne 'Expander'){throw 'Only a read-only Expander may expand'};$parent=[Windows.Automation.TreeWalker]::RawViewWalker.GetParent($Element);$target=Unique $parent $Element.Current.AutomationId $Element.Current.Name $Element.Current.ControlType 'Expander' -Children;$patternName='ExpandCollapsePattern.Expand'}
@@ -83,8 +83,8 @@ function Nav([string]$name){Action navigation $name;Start-Sleep -Seconds 2}
 function Tab([string]$id){$item=FindId $id -Optional;if(-not$item -or $item.Current.IsOffscreen){$script:missing.Add(@{pass=$script:pass;state=$id;reason='The app hides this tab in this mode.'});return $false};Action tab $id;Start-Sleep -Seconds 2;return $true}
 function ScrollPage{
  $frame=[RooTour.Desktop]::Bounds([IntPtr]$script:window.Current.NativeWindowHandle)
- $candidates=@(foreach($item in $script:window.FindAll($TS::Descendants,[Windows.Automation.PropertyCondition]::new($A::ClassNameProperty,'ScrollViewer'))){
-  if($item.Current.IsOffscreen){continue};$r=$item.Current.BoundingRectangle
+ $candidates=@(foreach($item in $script:window.FindAll($TS::Descendants,[Windows.Automation.Condition]::TrueCondition)){
+  if($item.Current.IsOffscreen -or ($item.Current.ClassName -ne 'ScrollViewer' -and $item.Current.AutomationId -notin 'WindowsTweaksList','RemovalApps','AppsCleanupInstalledAppsList')){continue};$r=$item.Current.BoundingRectangle
   if($r.Left -lt $frame.Left+220 -or $r.Width -lt 400 -or $r.Height -lt 180){continue}
   $pattern=$null;if($item.TryGetCurrentPattern([Windows.Automation.ScrollPattern]::Pattern,[ref]$pattern) -and $pattern.Current.VerticallyScrollable){[pscustomobject]@{element=$item;pattern=$pattern;area=$r.Width*$r.Height}}
  });return $candidates|Sort-Object area -Descending|Select-Object -First 1
