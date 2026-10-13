@@ -11,28 +11,27 @@ ROOT = Path(__file__).resolve().parents[3]
 
 
 def lint_tree(directory):
-    tokens = ('-' + 'Recurse', 'Get-' + 'FileHash', 'Compress-' + 'Archive')
+    root = directory.parent.parent.parent
+    files = [p for p in directory.rglob('*') if p.is_file() and '__pycache__' not in p.parts]
+    files += [root / 'tools/validation/windows_ssh.py', root / 'tools/validation/LoadTimes/CleanupOwnership.Common.ps1']
+    tokens = ['-' + 'Recurse', 'Get-' + 'FileHash', 'Compress-' + 'Archive', 'Test-' + 'Path', 'Get-' + 'Item', 'Get-' + 'ChildItem', 'Copy-' + 'Item', 'Move-' + 'Item', 'Remove-' + 'Item', 'Directory]' + '::Move']
+    allow_path = root / 'tools/validation/path-lint-allowlist.json'
+    exceptions = json.loads(allow_path.read_text()) if allow_path.exists() else []
     errors = []
-    for path in sorted(directory.rglob('*')):
-        if not path.is_file() or '__pycache__' in path.parts:
-            continue
+    for path in sorted(set(files)):
+        if not path.is_file():
+            raise RuntimeError('Path lint input is missing: ' + str(path))
         text = path.read_bytes().decode('utf-8', errors='replace')
-        allowed = []
-        if path.name == 'Harness.Common.ps1':
-            functions = list(re.finditer(r'^function (\w+)\(', text, re.MULTILINE))
-            for index, function in enumerate(functions):
-                if function.group(1) in ('Get-HarnessTree', 'Get-HarnessFileSha256'):
-                    limit = functions[index + 1].start() if index + 1 < len(functions) else len(text)
-                    body = re.search(r'^}', text[function.start():limit], re.MULTILINE)
-                    if not body:
-                        raise RuntimeError('Extended-path helper has no complete body: ' + function.group(1))
-                    allowed.append((function.start(), function.start() + body.end()))
+        rel = path.relative_to(root).as_posix()
         for token in tokens:
-            for match in re.finditer(re.escape(token), text, re.IGNORECASE):
-                if not any(start <= match.start() < end for start, end in allowed):
-                    errors.append(str(path.relative_to(directory)) + ':' + str(text.count('\n', 0, match.start()) + 1) + ': ' + token)
+            for match in re.finditer(re.escape(token) + (r'(?![A-Za-z])' if not token.endswith('Move') else ''), text, re.IGNORECASE):
+                line = text.count('\n', 0, match.start()) + 1
+                actual = text.splitlines()[line - 1].strip()
+                if any(e['file'] == rel and e['line'] == line and e['text'] == actual and e['reason'] for e in exceptions):
+                    continue
+                errors.append(rel + ':' + str(line) + ': ' + token)
     if errors:
-        raise RuntimeError('Legacy tree/file API is forbidden; use the shared extended-path helpers:\n' + '\n'.join(errors))
+        raise RuntimeError('Legacy filesystem API is forbidden; use extended-path helpers:\n' + '\n'.join(errors))
 
 
 def load(name, path):
@@ -42,8 +41,19 @@ def load(name, path):
     return module
 
 
+def frozen_inputs(path=None):
+    common = Path(subprocess.check_output(['git', 'rev-parse', '--path-format=absolute', '--git-common-dir'], cwd=ROOT, text=True).strip()).parent
+    candidates = [path] if path else [common / 'artifacts/roo-29/p2-real-0.10/p0', common / 'artifacts/roo-29/p0']
+    for candidate in candidates:
+        if candidate and all((candidate / name).is_file() for name in ('live-feed.json', 'verified-release.json')):
+            return candidate.resolve()
+    raise ValueError('Frozen input is missing; supply --frozen-p0 PATH containing live-feed.json and verified-release.json.')
+
+
 def main():
     parser = argparse.ArgumentParser()
+    parser.add_argument('--resolve-inputs-only', action='store_true')
+    parser.add_argument('--frozen-p0', type=Path)
     parser.add_argument('--lint-only', action='store_true')
     parser.add_argument('--lint-root', type=Path, default=ROOT / 'tools/validation/Update')
     parser.add_argument('--host')
@@ -52,6 +62,9 @@ def main():
     parser.add_argument('--published-installer', type=Path)
     parser.add_argument('--out-dir', type=Path)
     args = parser.parse_args()
+    if args.resolve_inputs_only:
+        print(str(frozen_inputs(args.frozen_p0)))
+        return
     lint_tree(args.lint_root)
     if args.lint_only:
         print('PASS extended-path lint')
@@ -76,12 +89,14 @@ def main():
         else:
             raise RuntimeError(name + ' did not refuse')
 
+    for member in ('\\\\?\\C:\\escape.json', '\\\\host\\share\\file', 'C:/escape.json', '../escape.json', '/absolute.json'):
+        refused('CR8 unsafe archive member refused: ' + member, lambda member=member: windows.safe_archive_path(member), 'Unsafe archive member')
     dummy = ROOT / 'tools/validation/Update/roo-key-fixture.pem'
     with dummy.open('x') as output:
         output.write('DUMMY FIXTURE - NO KEY')
     try:
         refused('in-repository signing key rejected', lambda: windows.assert_external_signing_key(dummy), 'outside')
-        refused('upload rejects PEM before SSH', lambda: windows.upload('must-not-contact', 'must-not-contact', 'roo-industries-harness', True, r'C:\RooBuild'), 'cannot be staged')
+        refused('upload rejects PEM before SSH', lambda: windows.upload_frame('must-not-contact', 'must-not-contact', 'roo-industries-harness', True, r'C:\RooBuild'), 'cannot be staged')
     finally:
         dummy.unlink()
     extensionless = ROOT / 'tools/release/update-signing-private'
@@ -89,12 +104,12 @@ def main():
         raise RuntimeError('Private-marker fixture path already exists; retained.')
     extensionless.write_bytes(b'-----BEGIN EC ' + b'PRIVATE ' + b'KEY-----\nDUMMY\n-----END EC ' + b'PRIVATE ' + b'KEY-----\n')
     try:
-        refused('F7 extensionless PEM content rejected before SSH', lambda: windows.upload('must-not-contact', 'must-not-contact', 'roo-industries-harness', True, r'C:\RooBuild'), 'cannot be staged')
+        refused('F7 extensionless PEM content rejected before SSH', lambda: windows.upload_frame('must-not-contact', 'must-not-contact', 'roo-industries-harness', True, r'C:\RooBuild'), 'cannot be staged')
     finally:
         extensionless.unlink()
     extensionless.write_bytes(bytes.fromhex('3014020103300f06092a864886f70d010701a0020400'))
     try:
-        refused('F7 extensionless PKCS12 DER rejected before SSH', lambda: windows.upload('must-not-contact', 'must-not-contact', 'roo-industries-harness', True, r'C:\RooBuild'), 'cannot be staged')
+        refused('F7 extensionless PKCS12 DER rejected before SSH', lambda: windows.upload_frame('must-not-contact', 'must-not-contact', 'roo-industries-harness', True, r'C:\RooBuild'), 'cannot be staged')
     finally:
         extensionless.unlink()
     result = subprocess.run([__import__('sys').executable, '-I', str(ROOT / 'tools/validation/Update/run_e2e.py'), '--scenario', 'contracts', '--skip-contracts'], capture_output=True, text=True)
@@ -119,9 +134,7 @@ def main():
         raise RuntimeError('P1 rows from another frame were accepted')
     rows.append({'check': 'P1 refuses pass rows from another frame', 'status': 'pass', 'observed': 'other-frame rows => fail'})
     journey.binding()
-    frozen = ROOT.parents[2] / 'artifacts/roo-29/p2-real-0.10/p0'
-    if not frozen.is_dir():
-        frozen = ROOT.parents[2] / 'artifacts/roo-29/p0'
+    frozen = frozen_inputs(args.frozen_p0)
     import shutil
     for name in ('live-feed.json', 'verified-release.json'):
         shutil.copyfile(frozen / name, args.out_dir / 'p0' / name)
@@ -129,8 +142,9 @@ def main():
     (args.out_dir / 'p0/payload-hashes.json').write_text(json.dumps(stale))
     refused('stale payload oracle rejected', journey.extract, 'another installer')
     (args.out_dir / 'p0/payload-hashes.json').unlink()
-    receipt = windows.upload(args.host, args.expected_machine, 'roo-industries-roo29-shipped', True, r'C:\RooBuild')
+    receipt = windows.upload_frame(args.host, args.expected_machine, 'roo-industries-roo29-shipped', True, r'C:\RooBuild')
     (args.out_dir / 'frame.json').write_text(json.dumps(receipt, indent=2))
+    windows.enter_host_lease(args.host, args.expected_machine, receipt)
     windows.verify_local_source(args.host, args.expected_machine, receipt)
     path = ROOT / 'tools/validation/Update/README.md'
     original = path.read_bytes()
@@ -143,7 +157,7 @@ def main():
     result = windows.invoke(args.host, args.expected_machine, parse)
     (args.out_dir / 'powershell-parse.json').write_text(result.stdout)
     try:
-        result = windows.interactive(args.host, args.expected_machine, receipt, 'tools/validation/Update/Invoke-HarnessChecks.ps1', {'Source': receipt['stagingPath'], 'OutRoot': receipt['runRoot'] + r'\checks'}, 8)
+        result = windows.interactive_frame(args.host, args.expected_machine, receipt, 'tools/validation/Update/Invoke-HarnessChecks.ps1', {'Source': receipt['stagingPath'], 'OutRoot': receipt['runRoot'] + r'\checks'}, 8)
     except subprocess.CalledProcessError as error:
         (args.out_dir / 'desktop.log').write_text((error.stdout or '') + (error.stderr or ''))
         raise RuntimeError('Owned harness fixture failed; see desktop.log') from None
@@ -161,9 +175,20 @@ def main():
     guard_scope = '. ' + windows.ps_literal(receipt['stagingPath'] + '/tools/validation/Update/Harness.Common.ps1') + ';Open-HarnessRun ' + ' '.join(windows.ps_literal(receipt[k]) for k in ('runRoot', 'frameId', 'manifestSha256')) + ' ' + windows.ps_literal(receipt['frameId'])
     extra = receipt['stagingPath'] + r'\Directory.Build.targets'
     windows.invoke(args.host, args.expected_machine, guard_scope + ';$entry=New-HarnessText ' + windows.ps_literal(extra) + " '<Project/>' 'extra-targets';$entry.id")
-    refused('F8 extra remote Directory.Build.targets refuses reuse', lambda: windows.verify_source(args.host, args.expected_machine, receipt), 'Staged source file set differs')
+    refused('F8 extra remote Directory.Build.targets refuses reuse', lambda: windows.verify_frame_source(args.host, args.expected_machine, receipt), 'Staged source file set differs')
     windows.invoke(args.host, args.expected_machine, guard_scope + ';$entry=@(Get-HarnessEntries|Where-Object {$_.identity.path -ieq ' + windows.ps_literal(extra) + " -and $_.state -eq 'active'})[0];Remove-HarnessEntry $entry")
-    other = windows.upload(args.host, args.expected_machine, 'roo-industries-roo29-shipped', True, r'C:\RooBuild')
+    for generated in (True, False):
+        parent = receipt['stagingPath'] + (r'\tools\validation\Update\obj' if generated else r'\tools\validation\Update\unexpected-long-source')
+        folder = parent + '\\' + 'a' * 90 + '\\' + 'b' * 90
+        file = folder + r'\long-source.json'
+        windows.invoke(args.host, args.expected_machine, guard_scope + ';New-HarnessDirectory ' + windows.ps_literal(folder) + " 'source-fixture'|Out-Null;New-HarnessText " + windows.ps_literal(file) + " '{}' 'source-fixture'|Out-Null")
+        if generated:
+            windows.verify_frame_source(args.host, args.expected_machine, receipt)
+            rows.append({'check': 'CR8 long generated obj path is ignored by source snapshot', 'status': 'pass', 'observed': {'path': file, 'length': len(file)}})
+        else:
+            refused('CR8 long extra file in manifest-listed directory refused', lambda: windows.verify_frame_source(args.host, args.expected_machine, receipt), 'Staged source file set differs')
+        windows.invoke(args.host, args.expected_machine, guard_scope + ";$items=@(Get-HarnessEntries|Where-Object {$_.purpose -eq 'source-fixture' -and $_.state -eq 'active'});[array]::Reverse($items);foreach($entry in $items){Remove-HarnessEntry $entry}")
+    other = windows.upload_frame(args.host, args.expected_machine, 'roo-industries-roo29-shipped', True, r'C:\RooBuild')
     (args.out_dir / 'other-frame.json').write_text(json.dumps(other, indent=2))
     other_scope = ". " + windows.ps_literal(other["stagingPath"] + "/tools/validation/Update/Harness.Common.ps1") + ";Open-HarnessRun " + " ".join(windows.ps_literal(other[k]) for k in ("runRoot", "frameId", "manifestSha256")) + " " + windows.ps_literal(other["frameId"]) + ";"
     foreign_directory = receipt['runRoot'] + r'\foreign-empty-directory'
@@ -175,7 +200,7 @@ def main():
         observed = (error.stdout or '') + (error.stderr or '')
         if 'Unrecorded frame directory retained; ledger kept' not in observed:
             raise
-        retained = windows.invoke(args.host, args.expected_machine, "(Test-Path " + windows.ps_literal(receipt['runRoot'] + r'\ledger.json') + ") -and (Test-Path " + windows.ps_literal(receipt['stagingPath'] + r'\source-verification.json') + ")").stdout.strip()
+        retained = windows.invoke(args.host, args.expected_machine, windows.harness_tree_helpers() + "(Test-HarnessPath " + windows.ps_literal(receipt['runRoot'] + r'\ledger.json') + ") -and (Test-HarnessPath " + windows.ps_literal(receipt['stagingPath'] + r'\source-verification.json') + ")").stdout.strip()
         if retained != 'True':
             raise RuntimeError('Empty-directory refusal lost the frame ledger or source')
         rows.append({'check': 'unrecorded empty frame directory refuses cleanup and keeps ledger/source', 'status': 'pass', 'observed': observed.strip()})
@@ -184,10 +209,10 @@ def main():
     windows.invoke(args.host, args.expected_machine, other_scope + "$entry=@(Get-HarnessEntries|Where-Object {$_.identity.path -ieq " + windows.ps_literal(foreign_directory) + "})[0];Remove-HarnessEntry $entry")
     result = windows.invoke(args.host, args.expected_machine, '& ' + windows.ps_literal(other['stagingPath'] + '/tools/validation/Update/Clear-UpdateFrame.ps1') + ' -Frame ' + windows.ps_literal(other['runRoot']) + ' -ExpectedMachine ' + windows.ps_literal(args.expected_machine), timeout=windows.CLEANUP_TIMEOUT)
     (args.out_dir / 'other-cleanup.json').write_text(result.stdout)
-    held_frame = windows.upload(args.host, args.expected_machine, 'roo-industries-roo29-shipped', True, r'C:\RooBuild')
+    held_frame = windows.upload_frame(args.host, args.expected_machine, 'roo-industries-roo29-shipped', True, r'C:\RooBuild')
     (args.out_dir / 'held-frame.json').write_text(json.dumps(held_frame, indent=2))
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-        running = pool.submit(windows.interactive, args.host, args.expected_machine, held_frame, 'tools/validation/Update/Invoke-HarnessChecks.ps1', {'Source': held_frame['stagingPath'], 'OutRoot': held_frame['runRoot'] + r'\checks', 'Hold': True}, 2)
+        running = pool.submit(windows.interactive_frame, args.host, args.expected_machine, held_frame, 'tools/validation/Update/Invoke-HarnessChecks.ps1', {'Source': held_frame['stagingPath'], 'OutRoot': held_frame['runRoot'] + r'\checks', 'Hold': True}, 2)
         deadline = time.monotonic() + 40
         while time.monotonic() < deadline:
             held_scope = ". " + windows.ps_literal(held_frame["stagingPath"] + "/tools/validation/Update/Harness.Common.ps1") + ";Open-HarnessRun " + " ".join(windows.ps_literal(held_frame[k]) for k in ("runRoot", "frameId", "manifestSha256")) + " " + windows.ps_literal(held_frame["frameId"]) + " -ReadOnly;"

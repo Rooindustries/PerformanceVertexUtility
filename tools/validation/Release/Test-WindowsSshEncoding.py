@@ -5,6 +5,8 @@ from pathlib import Path
 import subprocess
 
 parser = argparse.ArgumentParser()
+parser.add_argument('--host', required=True)
+parser.add_argument('--expected-machine', required=True)
 parser.add_argument('--out', required=True, type=Path)
 parser.add_argument('--receipt', type=Path)
 parser.add_argument('--before', action='store_true')
@@ -13,7 +15,7 @@ args.out.mkdir(parents=True, exist_ok=False)
 spec = importlib.util.spec_from_file_location('w', Path(__file__).resolve().parents[1] / 'windows_ssh.py')
 w = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(w)
-host, machine = 'optimizer-9070', 'SERVI-WINDOWS-D'
+host, machine = args.host, args.expected_machine
 text = 'middot · arrow → pound £ accent é'
 script = "$t='middot '+[char]0x00B7+' arrow '+[char]0x2192+' pound '+[char]0x00A3+' accent '+[char]0x00E9;"
 proof = {'passed': False, 'checks': []}
