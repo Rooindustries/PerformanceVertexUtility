@@ -85,6 +85,12 @@ function Test-HarnessVisiblePath($Item,[string]$Root){
  }
  return $true
 }
+function New-HarnessConsoleAssembly([string]$Path,[string]$Code){
+ $plain=Get-HarnessPlainPath $Path
+ if($plain.Length -ge 260){throw 'Console fixture output reaches the compiler path limit; use a shorter frame.'}
+ if(Test-HarnessPath $plain){throw 'Console fixture output exists; retained.'}
+ Add-Type -OutputAssembly $plain -OutputType ConsoleApplication -TypeDefinition $Code
+}
 function Get-HarnessFolderIdentity([string]$Path){
  $long=Get-HarnessLongPath $Path;$attributes=[IO.File]::GetAttributes($long)
  if(-not($attributes -band [IO.FileAttributes]::Directory) -or $attributes -band [IO.FileAttributes]::ReparsePoint){throw 'Owned folder identity is not a plain directory.'}

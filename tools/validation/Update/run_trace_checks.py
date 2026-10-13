@@ -3,6 +3,7 @@ import importlib.util
 import json
 from pathlib import Path
 import statistics
+import subprocess
 
 ROOT = Path(__file__).resolve().parents[3]
 spec = importlib.util.spec_from_file_location('trace_windows', ROOT / 'tools/validation/windows_ssh.py')
@@ -38,7 +39,11 @@ def main():
                 totals = [row['value'] for row in json.loads(counters.stdout) if '(_total)' in row['path'].lower()]
                 if not totals or statistics.mean(totals) < 85:
                     raise RuntimeError('Owned CPU load did not saturate the PC: ' + str(totals))
-            result = windows.interactive_frame(args.host, args.expected_machine, receipt, 'tools/validation/Update/Invoke-TraceOwnershipChecks.ps1', {'Source': receipt['stagingPath'], 'OutRoot': receipt['runRoot'] + r'\checks'}, 6)
+            try:
+                result = windows.interactive_frame(args.host, args.expected_machine, receipt, 'tools/validation/Update/Invoke-TraceOwnershipChecks.ps1', {'Source': receipt['stagingPath'], 'OutRoot': receipt['runRoot'] + r'\checks'}, 6)
+            except subprocess.CalledProcessError as error:
+                (args.out_dir / ('trace-' + str(number) + '-failure.log')).write_text((error.stdout or '') + (error.stderr or ''))
+                raise RuntimeError('Trace invocation failed; see trace-' + str(number) + '-failure.log') from None
             (args.out_dir / ('trace-' + str(number) + '.log')).write_text(result.stdout)
             nonce = windows.completion(result.stdout)['nonce']
             observed = windows.read_result(args.host, args.expected_machine, receipt, 'receipt.json', nonce)
