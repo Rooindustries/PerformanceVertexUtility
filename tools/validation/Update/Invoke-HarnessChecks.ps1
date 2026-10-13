@@ -166,6 +166,14 @@ end;
  New-Item -ItemType Junction -Path (Get-HarnessLongPath $junction) -Target (Get-HarnessLongPath $target)|Out-Null
  $junctionItem=Get-HarnessItem $junction -Force;$junctionEntry=Add-HarnessEntry 'folder' @{path=$junction;creationTimeFileTimeUtc=$junctionItem.CreationTimeUtc.ToFileTimeUtc().ToString()} 'junction-fixture' 'invocation' @{reparseTarget=$target}
  try{Rejected 'junction frame retained without touching target' {& (Join-Path $Source 'tools\validation\Update\Clear-UpdateFrame.ps1') -Frame $junction -ExpectedMachine $env:COMPUTERNAME} {[IO.File]::ReadAllText((Get-HarnessLongPath (Join-Path $target 'keep.txt'))) -ceq 'untouched'}}finally{Remove-HarnessEntry $junctionEntry}
+ $danglingTarget=Fixture 'dangling-junction-target';$dangling='C:\RooBuild\roo-industries-junction-'+[Guid]::NewGuid().ToString('N')
+ New-Item -ItemType Junction -Path (Get-HarnessLongPath $dangling) -Target (Get-HarnessLongPath $danglingTarget)|Out-Null
+ $item=Get-HarnessItem $dangling;$entry=Add-HarnessEntry 'folder' @{path=$dangling;creationTimeFileTimeUtc=$item.CreationTimeUtc.ToFileTimeUtc().ToString()} 'dangling-junction-fixture' 'invocation' @{reparseTarget=$danglingTarget}
+ $targetEntries=@(Get-HarnessEntries|Where-Object {$_.state -eq 'active' -and $_.identity.path -and ($_.identity.path -ieq $danglingTarget -or $_.identity.path.StartsWith($danglingTarget+'\',[StringComparison]::OrdinalIgnoreCase))});[array]::Reverse($targetEntries);foreach($targetEntry in $targetEntries){Remove-HarnessEntry $targetEntry}
+ if(-not(Test-HarnessPath $dangling) -or (Get-HarnessItem $dangling).Target[0] -ine $danglingTarget){throw 'A dangling recorded junction was missed.'}
+ Remove-HarnessEntry $entry
+ if(Test-HarnessPath $dangling){throw 'Recorded dangling junction remained.'}
+ Passed 'CR8 recorded dangling junction retains its link identity through cleanup' @{path=$dangling;target=$danglingTarget;removed=$true}
  $unownedDownload=Fixture 'unowned-download'
  $entry=@(Get-HarnessEntries|Where-Object {$_.identity.path -ieq $unownedDownload})[0];Set-HarnessEntryState $entry.id 'retained'
  Complete-HarnessInvocation 'running' -Cleanup|Out-Null
