@@ -14,9 +14,17 @@ namespace RooValidationOwnership {
   [DllImport("kernel32.dll",SetLastError=true)] static extern bool TerminateProcess(IntPtr h,uint exit);
   [DllImport("kernel32.dll",SetLastError=true)] static extern uint WaitForSingleObject(IntPtr h,uint ms);
   [DllImport("kernel32.dll",CharSet=CharSet.Unicode,SetLastError=true)] static extern SafeFileHandle CreateFileW(string p,uint access,uint share,IntPtr security,uint creation,uint flags,IntPtr template);
-  public static string Long(string path){if(path.StartsWith(@"\\?\"))return path;string p=path.Replace('/', '\\');if(!(p.Length>2&&p[1]==':'&&p[2]=='\\')&&!p.StartsWith(@"\\")||Array.Exists(p.Split('\\'),s=>s=="."||s==".."))p=System.IO.Path.GetFullPath(p);return p.StartsWith(@"\\")?@"\\?\UNC\"+p.Substring(2):@"\\?\"+p;}
+  [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)] static extern uint GetFullPathNameW(string lpFileName, uint nBufferLength, StringBuilder lpBuffer, IntPtr lpFilePart);
+  public static string FullPath(string path) {
+   var buffer = new StringBuilder(32768);
+   var length = GetFullPathNameW(path, (uint)buffer.Capacity, buffer, IntPtr.Zero);
+   if (length == 0 || length >= buffer.Capacity) throw new Win32Exception(Marshal.GetLastWin32Error(), "Windows could not normalize the path: " + path);
+   return buffer.ToString();
+  }
+  public static int StreamOffset(string path){int colon=path.IndexOf(':',path.LastIndexOf('\\')+1);return colon==1&&char.IsLetter(path[0])?path.IndexOf(':',2):colon;}
+  public static string Long(string path){if(path.StartsWith(@"\\?\",StringComparison.Ordinal))return path;string p=path.Replace('/', '\\'),stream="";int offset=StreamOffset(p);if(offset>=0){stream=p.Substring(offset);if(!System.Text.RegularExpressions.Regex.IsMatch(stream.Substring(1),@"^[^\\/:*?""<>|]+(:\$DATA)?$"))throw new InvalidOperationException("Invalid stream name; refused: "+path);p=p.Substring(0,offset);}p=FullPath(p);return (p.StartsWith(@"\\",StringComparison.Ordinal)?@"\\?\UNC\"+p.Substring(2):@"\\?\"+p)+stream;}
   public static string Plain(string path){string p=Long(path);return p.StartsWith(@"\\?\UNC\",StringComparison.OrdinalIgnoreCase)?@"\\"+p.Substring(8):p.Substring(4);}
-  public static string Tool(string path){string p=Plain(path);if(p.Length>=260)throw new InvalidOperationException("Path reaches the 260-character tool limit; use a shorter frame: "+p);return System.IO.Path.GetFullPath(p);}
+  public static string Tool(string path){string p=Plain(path);if(StreamOffset(p)>=0)throw new InvalidOperationException("stream paths are .NET-only; cmdlets take -Stream separately");if(p.Length>=260)throw new InvalidOperationException("Path reaches the 260-character tool limit; use a shorter frame: "+p);return p;}
   [DllImport("shell32.dll",CharSet=CharSet.Unicode,SetLastError=true)] static extern IntPtr CommandLineToArgvW(string command,out int count);
   [DllImport("kernel32.dll")] static extern IntPtr LocalFree(IntPtr memory);
   static string Quote(string value){if(value.Length>0&&value.IndexOfAny(new[]{' ', '\t', '"'})<0)return value;var b=new StringBuilder("\"");int slashes=0;foreach(char c in value){if(c=='\\'){slashes++;continue;}if(c=='"'){b.Append('\\',slashes*2+1);b.Append(c);}else{b.Append('\\',slashes);b.Append(c);}slashes=0;}b.Append('\\',slashes*2);return b.Append('"').ToString();}
