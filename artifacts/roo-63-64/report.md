@@ -217,3 +217,16 @@ Final parse repeated on the final B code tree: 127/127 PowerShell files, zero pa
 The explicit lint allowlist is five entries: provider Test-Path in Harness.Common:32 (HKLM/HKCU/Cert); certificate removal at Harness.Common:538 (store/thumbprint); data-archive Directory.Move at Harness.Common:633 (both endpoints extended after identity check); certificate enumeration in Invoke-SigningScenario:41 (Cert provider); SDK enumeration in Invoke-SigningScenario:47 (fixed short Windows SDK path, owned fallback uses extended walker). The JSON records exact current line/text and reason and is authoritative if these text line references move.
 
 No task-owned Linux server or runner remains. No feed or installer production request was made. The authoritative slice evidence report is `artifacts/roo-62/slice16/report.md`; the final branches receipt records report commits and clean trees.
+
+
+R3 final caller audit also found Background's historical install subcommand still passing a v1 context to the now-v2 Update scenario. Commit f0da1de adds an Update-side adapter that stages a fresh frame, takes its lease, captures current rule/undo hashes, theme and governor state immediately before setup, collects evidence and closes only that frame. The caller's build/installer remains read-only. Non-install Background scenarios keep public v1 interactive. Commit a3d8b95 puts receipt persistence inside the cleanup-protected block. This is a compatibility repair, not a product change.
+
+| Additional check | Observed | Result | Evidence |
+| --- | --- | --- | --- |
+| Legacy Background install adapter, owned dry invocation | Fresh v2 frame and host lease; current-data preservation capture succeeds; no installer starts; legacy source verification still succeeds | 4/4 pass | legacy-install/probe-corrected/receipt.json; adapter/evidence.zip; owner-cleanup.json |
+| Changed/merged PowerShell | Both changed scripts parse under 5.1 with zero errors; merged B retains FeedUrl/FeedKeyId/OlderVersion and CurrentData | pass | ../../roo-63-64/slice16/legacy-merge-parse.json |
+| Final cleanup after adapter check | 160 legacy frames; zero ledger frames, Roo/frame processes, leases, harness network rules/hosts markers or test certificates; exact data bytes unchanged | pass | audit/final-inventory.json; preservation.json |
+
+The initial local ZIP-result reader expected a filename without the helper's sequence suffix. The desktop invocation and its cleanup passed; that reader failed and its receipt remains fail. The corrected reader requires the actual invocation nonce and sequence-bound filename, and its fresh owned invocation passes. No installed product or seeded data changed. The adapter's real setup path is deliberately not run in this targeted-only slice; it uses the existing manual-install path for the next authorized gate.
+
+Slice16 final code heads before report-only commits: A `a3d8b951614278863e5af198788c027b6e18dd9f`, B `42f5ff616b4a4b46b190daf38508b51ed5893895`. Exact final report-bearing heads and clean states are recorded in `artifacts/roo-62/slice16/final-branches.json`.
