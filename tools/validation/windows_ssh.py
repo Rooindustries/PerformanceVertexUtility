@@ -384,9 +384,10 @@ def interactive_frame(host: str, machine: str, receipt: dict, script: str, argum
         f"Write-HarnessResult $run 'done.json' @{{nonce='{nonce}';status=$status;childExit=$exit;childIdentity=$(if($r){{$r.Identity}}else{{$null}})}}|Out-Null",
         "}", "exit $exit",
     ])
-    encoded = base64.b64encode(wrapper.encode('utf-16le')).decode()
-    args = '--headless "SYSTEM_POWERSHELL" -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand ' + encoded
+    wrapper_path = run + '\\wrapper-' + nonce + '.ps1'
+    args = '--headless "SYSTEM_POWERSHELL" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + wrapper_path + '"'
     setup = REMOTE_GUARDS + f"\n$m=Assert-FrameSourceSnapshot {ps_literal(receipt['stagingPath'])} {ps_literal(receipt['manifestSha256'])};if($m.frameId -cne {ps_literal(receipt['frameId'])} -or $m.sid -cne {ps_literal(receipt['sid'])}){{throw 'Source run receipt scope differs'}};. {common};{scope};New-HarnessDirectory {ps_literal(run)} 'interactive-output'|Out-Null;"
+    setup += f"New-HarnessText (Get-HarnessToolPath {ps_literal(wrapper_path)}) {ps_literal(wrapper)} 'interactive-wrapper-script' 'runner'|Out-Null;\n"
     setup += f"$name={ps_literal(task_name)};$run={ps_literal(run)};$taskReceipt=$null;$completed=$null;$action=$null\n"
     setup += "$user=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value;$system=[Environment]::SystemDirectory\n"
     setup += f"$arguments={ps_literal(args)}.Replace('SYSTEM_POWERSHELL',(Join-Path $system 'WindowsPowerShell\\v1.0\\powershell.exe'))\n"
