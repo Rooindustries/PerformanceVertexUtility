@@ -1,8 +1,8 @@
 param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutRoot,
- [Parameter(Mandatory)][ValidateSet('p2','p3-alpha','p3','p4','p5')][string]$Part,
+ [Parameter(Mandatory)][ValidateSet('p2','p2b','release-reset','p3-alpha','p3','p4','p5')][string]$Part,
  [Parameter(Mandatory)][string]$ReleasePath,[string]$OldInstaller='',[string]$OldVersion='',
  [string]$AlphaInstaller='',[string]$AlphaVersion='',[string]$PayloadHashes='',[string]$FrameId='',
- [string]$PreflightPath='',[switch]$HarnessOnly)
+ [string]$PreflightPath='',[string]$CandidateInstaller='',[string]$HandoffProbe='',[switch]$HarnessOnly)
 $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
 . (Get-HarnessToolPath (Join-Path $Source 'backend\scripts\BrandCompatibility.Common.ps1'))
@@ -12,6 +12,7 @@ Add-Type -Path (Get-HarnessToolPath (Join-Path $Source 'tools\validation\Backgro
 $nonce=Initialize-HarnessInvocation $Part $OutRoot
 $release=Read-HarnessInputText $ReleasePath|ConvertFrom-Json
 $item=$release.payload.installer
+$seedPart=if($Part -eq 'p2b'){'p2b'}else{'p2'}
 $script:checks=[Collections.Generic.List[object]]::new()
 $script:fixtures=[Collections.Generic.List[object]]::new()
 $script:extraProcesses=[Collections.Generic.List[object]]::new()
@@ -212,16 +213,21 @@ function DownloadPublished{
  $downloadFolder=Join-Path ([Environment]::GetFolderPath('UserProfile')) ('Downloads\RooTest-Shipped-'+$nonce)
  if(Test-HarnessPath $downloadFolder){throw 'Owned browser-download folder already exists; retain it.'}
  New-HarnessDirectory $downloadFolder 'browser-download' 'invocation'|Out-Null
- $path=Join-Path $downloadFolder ([IO.Path]::GetFileName(([uri]$item.url).AbsolutePath))
+ $path=Join-Path $downloadFolder $(if($CandidateInstaller){[IO.Path]::GetFileName($CandidateInstaller)}else{[IO.Path]::GetFileName(([uri]$item.url).AbsolutePath)})
  if(Test-HarnessPath $path){throw 'Published installer download already exists; do not silently repeat the GET.'}
  $clock=[Diagnostics.Stopwatch]::StartNew()
- Invoke-WebRequest -UseBasicParsing -Uri $item.url -OutFile (Get-HarnessToolPath $path)
- Register-HarnessFile $path 'download' 'invocation'|Out-Null
- $script:completedInstallerDownloads++
+ if($CandidateInstaller){
+  if(-not$release.candidateBootstrap){throw 'Local candidate requires explicit candidate-bootstrap metadata.'}
+  Copy-HarnessFile $CandidateInstaller $path 'candidate-bootstrap' 'invocation'|Out-Null
+ }else{
+  Invoke-WebRequest -UseBasicParsing -Uri $item.url -OutFile (Get-HarnessToolPath $path)
+  Register-HarnessFile $path 'download' 'invocation'|Out-Null
+  $script:completedInstallerDownloads++
+ }
  $clock.Stop();[IO.File]::WriteAllText((Get-HarnessLongPath ($path+':Zone.Identifier')), "[ZoneTransfer]`r`nZoneId=3",[Text.Encoding]::ASCII)
  $actual=@{path=$path;url=$item.url;bytes=(Get-HarnessItem $path).Length;sha256=(Get-HarnessFileSha256 $path);seconds=$clock.Elapsed.TotalSeconds;completedInstallerDownloads=$script:completedInstallerDownloads;zone=Zone $path}
  Save 'published-download.json' $actual
- Check 'published installer downloaded on PC' $actual ($actual.bytes -eq $item.size -and $actual.sha256 -ieq $item.sha256 -and $actual.zone -match 'ZoneId=3') 'published-download.json'
+ Check $(if($CandidateInstaller){'unpublished candidate staged locally with MOTW; no installer GET'}else{'published installer downloaded on PC'}) $actual ($actual.bytes -eq $item.size -and $actual.sha256 -ieq $item.sha256 -and $actual.zone -match 'ZoneId=3') 'published-download.json'
  return $path
 }
 function Governor([string]$action){Assert-HarnessHostLease;
@@ -274,7 +280,7 @@ function SeedTester{
  Check 'old app and governor running at upgrade' @{appPid=$script:app.Id;governor=$baseline.governor} ($baseline.governor.status.hostRunning -eq $true -and -not$script:app.HasExited)
 }
 function Preservation{
- $baseline=Read-HarnessLatestResult 'tester-preservation.json' 'p2'
+ $baseline=Read-HarnessLatestResult 'tester-preservation.json' $seedPart
  $rows=@($baseline.files|ForEach-Object {$exists=[IO.File]::Exists((Get-HarnessLongPath $_.path));@{path=$_.path;expected=$_.sha256;observed=if($exists){(Get-HarnessFileSha256 $_.path)}else{$null};match=($exists -and (Get-HarnessFileSha256 $_.path) -ieq $_.sha256)}})
  Save 'preservation-readback.json' $rows
  Check 'tester preservation hashes' @{files=$rows.Count;mismatches=@($rows|Where-Object {-not$_.match})} (@($rows|Where-Object {-not$_.match}).Count -eq 0) 'preservation-readback.json'
@@ -297,7 +303,8 @@ function Current([bool]$pressCheck){
  if($pressCheck){Click 'UpdateCheckButton'}
  $status=WaitStatus 'You have the latest version' 50
  $newLines=Read-ShippedLog $cursor
- $feedResult='[update] Feed '+([uri]$release.feedUrl).IdnHost+': Current, key '+$release.keyId+', release '+$release.payload.version+'. You have the latest version; installed '+(Version)+'.'
+ $feedVersion=if($release.liveRelease){$release.liveRelease.version}else{$release.payload.version}
+ $feedResult='[update] Feed '+([uri]$release.feedUrl).IdnHost+': Current, key '+$release.keyId+', release '+$feedVersion+'. You have the latest version; installed '+(Version)+'.'
  $currentLines=@($newLines -split "`n"|Where-Object {$_ -like '*[[]update] You have the latest version*' -or $_.Contains($feedResult)})
  Save 'current-process-log.json' @{pid=$script:app.Id;creationTimeUtc=$script:app.StartTime.ToUniversalTime().ToString('o');launchAfter=$script:launchAfter.ToString('o');lines=$currentLines;segment=$newLines}
  Check 'Current is a new log result from this owned launch' $currentLines ($currentLines.Count -gt 0 -and $newLines -notmatch '[[]update] Downloading') 'current-process-log.json'
@@ -325,7 +332,7 @@ function ShippedProfileCall([string]$Script,[hashtable]$Arguments){
  if($result.errors.Count){throw ($Script+': '+($result.errors|ConvertTo-Json -Depth 10))};return $result
 }
 function SavedRuleReadback{
- $seed=Read-HarnessLatestResult 'tester-preservation.json' 'p2'
+ $seed=Read-HarnessLatestResult 'tester-preservation.json' $seedPart
  $governor=GovernorRead
  if(-not$governor.status.hostRunning){throw 'Saved-rule check requires the published governor running.'}
  $attempts=@();$observed=$false;$ownedProcess=$null
@@ -438,18 +445,62 @@ try{
    $oldApp=$script:owned
    $published=DownloadPublished
    $script:governorBeforeUpgrade=GovernorRead;Save 'governor-immediately-before-upgrade.json' $script:governorBeforeUpgrade
-   Wizard $published 'published' $release.payload.version
+   try{Wizard $published 'published' $release.payload.version}catch{
+    if(-not$CandidateInstaller -or $_.Exception.Message -notlike 'SmartScreen shown;*'){throw}
+    Save 'candidate-smartscreen-release-fact.json' @{shown=$true;action='owned launcher canceled; SmartScreen was never clicked';candidate=$published}
+    foreach($ownedLauncher in @($script:extraProcesses|Where-Object {$_.Purpose -eq 'shell-launcher' -or $_.Identity.imagePath -like '*powershell.exe'})){Stop-HarnessProcess $ownedLauncher}
+    if((Version) -cne $OldVersion){throw 'SmartScreen cancellation changed the installed baseline; retained.'}
+    [IO.File]::Delete((Get-HarnessLongPath ($published+':Zone.Identifier')))
+    Save 'candidate-without-motw.json' @{candidate=$published;sha256=Get-HarnessFileSha256 $published;label='P2 completed without MOTW after SmartScreen refusal'}
+    Wizard $published 'published-without-motw' $release.payload.version
+    $script:setupLogs['published']=$script:setupLogs['published-without-motw']
+   }
    Check 'installer closed old app automatically' $oldApp.Identity (-not(Test-OwnedProcess $oldApp))
    $script:governorStarted=$true
    WaitFor {(Core 'policy-status' @{policyRoot=$ruleRoot}).hostRunning} 70 'enabled governor resumes'|Out-Null
    Launch;Versions;Payload;Preservation;GovernorVerified;SavedRuleReadback;Current $false
-   $files=@(UpdateFiles);$segment=Read-ShippedLog $script:appLogCursor;Check 'up-to-date check starts no download and leaves no release cache' @{files=$files;log=$segment} ((ReleaseCacheEmpty) -and $segment -like '*[[]update] You have the latest version*' -and $segment -notmatch '[[]update] Downloading')
+   $files=@(UpdateFiles);$segment=Read-ShippedLog $script:appLogCursor;Check 'up-to-date check starts no download and leaves no release cache' @{files=$files;log=$segment} ((ReleaseCacheEmpty) -and ($segment -like '*[[]update] You have the latest version*' -or $segment -like '*: Current, key *You have the latest version; installed *') -and $segment -notmatch '[[]update] Downloading')
    $setupLog=[IO.File]::ReadAllText((Get-HarnessLongPath $script:setupLogs['published']))
    $candidates=@($setupLog -split "`n"|Where-Object {$_ -match '(?i)\berror\b|\bexception\b'})
    $errors=@($candidates|Where-Object {$_ -notmatch '^\d{4}-\d{2}-\d{2} .*?\s+(Dest filename|Source filename): '})
    Save 'setup-error-audit.json' @{errors=$errors;filenameLines=@($candidates|Where-Object {$_ -notin $errors})}
    Check 'published setup log has no errors' $errors ($errors.Count -eq 0) 'setup-error-audit.json'
    AppLog
+  }
+  'p2b'{
+   if(-not$CandidateInstaller -or -not$PayloadHashes -or -not$OldInstaller -or -not$OldVersion -or -not$HandoffProbe){throw 'p2b requires candidate, baseline, payload and handoff probe inputs.'}
+   Initialize-HarnessCache $updates @($release.payload.version)
+   Uninstall;Wizard $OldInstaller 'published-baseline' $OldVersion;SeedTester
+   $folder=Join-Path $updates $release.payload.version
+   New-HarnessDirectory $folder 'candidate-ota-cache' 'invocation'|Out-Null
+   $candidate=Join-Path $folder ([IO.Path]::GetFileName($CandidateInstaller));Copy-HarnessFile $CandidateInstaller $candidate 'candidate-ota-cache' 'invocation'|Out-Null
+   $oldApp=$script:owned;$script:governorBeforeUpgrade=GovernorRead;Save 'governor-immediately-before-upgrade.json' $script:governorBeforeUpgrade
+   $script:appLogCursor=Get-ShippedLogCursor $logPath;$script:installPressed=[DateTime]::UtcNow;Start-ProcessTrace -Anchor $oldApp|Out-Null
+   $result=Get-HarnessOutputPath $directory 'handoff.json'
+   $env:ROO_HARNESS_NONCE=$nonce
+   $arguments='--installer-handoff "'+$exe+'" '+$script:app.Id+' "'+$candidate+'" '+$release.payload.version+' '+$item.size+' '+$item.sha256+' "'+$updates+'" "'+$result+'"'
+   Assert-HarnessInstallStart $exe
+   $probe=Start-OwnedProcess -FilePath $HandoffProbe -ArgumentList $arguments -Purpose candidate-handoff
+   $script:extraProcesses.Add($probe)
+   WaitFor {if(Test-HarnessPath $result){Get-HarnessFileSha256 $result}} 30 'nonce-bound handoff receipt'|Out-Null
+   Register-HarnessFile $result 'result' 'run'|Out-Null;$handoff=Read-HarnessResult $result $nonce
+   $setup=Test-OwnedDescendant ([int]$handoff.setupPid) -Ancestor $probe -PassThru
+   if(-not$setup -or $setup.Identity.creationTimeFileTimeUtc -cne $handoff.setupCreationTimeFileTimeUtc){throw 'Candidate setup does not belong to the owned handoff probe'}
+   $script:setupReceipts.Add($setup);Save 'handoff-observed.json' $handoff
+   Check 'stand-in uses exact pending schema and installer launch' $handoff ($handoff.pending.FromVersion -eq $OldVersion -and $handoff.pending.ToVersion -eq $release.payload.version -and $handoff.Arguments -ceq ('/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS /LOG="'+$handoff.pending.LogPath+'" /ROORELAUNCH=1 /ROOWAITPID='+$oldApp.Identity.pid) -and -not$handoff.UseShellExecute)
+   if(-not$script:app.CloseMainWindow()){throw 'Owned app refused a clean window close'}
+   if(-not$script:app.WaitForExit(20000)){throw 'Owned app did not close cleanly'}
+   Check 'stand-in closes the owned app cleanly' $oldApp.Identity $script:app.HasExited
+   $script:owned=$null;$script:app=$null;$script:window=$null;$script:launchAfter=$script:installPressed
+   Attach;Settings;$updated=WaitStatus ('Updated to version '+$release.payload.version) 90;Shot 'candidate-ota-updated'
+   Check 'candidate relaunch and updated banner' @{status=$updated;identity=$script:owned.Identity;proof=$script:owned.OwnershipProof} ($updated -ceq ('Updated to version '+$release.payload.version))
+   Check 'candidate pending record consumed' @{exists=Test-HarnessPath (Join-Path $updates 'pending-install.json')} (-not(Test-HarnessPath (Join-Path $updates 'pending-install.json')))
+   $gone=CacheAbsentWithin $release.payload.version;Save 'candidate-installed-cache-cleanup.json' $gone;Check 'candidate installed cache removed within 35 seconds' $gone $gone.absent
+   Versions;Payload;Preservation;GovernorVerified;Current $true;SavedRuleReadback;AppLog
+  }
+  'release-reset'{
+   Wizard $OldInstaller 'end-state-published' $OldVersion
+   Check 'published end-state version installed' @{version=Version;expected=$OldVersion} ((Version) -ceq $OldVersion)
   }
   'p3-alpha'{
    if(-not$AlphaInstaller -or -not$AlphaVersion){throw 'p3-alpha requires AlphaInstaller and AlphaVersion.'}

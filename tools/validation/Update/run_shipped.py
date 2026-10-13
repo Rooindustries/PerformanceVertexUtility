@@ -129,9 +129,17 @@ class Journey:
                 raise RuntimeError('Live feed did not return HTTPS 200 at the committed URL.')
             data = response.read(65537)
             (directory / 'live-feed.headers.txt').write_text(str(response.headers))
-        payload = release_tool.verify_manifest(data, self.args.published_installer, self.feed)
+        candidate = getattr(self.args, 'candidate', False)
+        live = release_tool.verify_manifest(data, None if candidate else self.args.published_installer, self.feed)
+        identity = release_tool.file_identity(self.args.published_installer)
+        payload = live
+        if candidate:
+            version = release_tool.product_version(self.args.published_installer)
+            if version != self.source_version():
+                raise RuntimeError('Candidate ProductVersion differs from the bound source version.')
+            payload = dict(live, version=version, installer={'url': None, 'size': identity[0], 'sha256': identity[1]})
         manifest.write_bytes(data)
-        value = {'feedUrl': self.feed, 'keyId': json.loads(data)['keyId'], 'payload': payload, 'verifiedVersion': payload['version'], 'manifestSource': 'live HTTPS GET', 'localInstaller': str(self.args.published_installer), 'localInstallerIdentity': release_tool.file_identity(self.args.published_installer), 'verification': 'ECDSA P-256 SHA-256 RFC3279 DER against tools/release/update-keys.json'}
+        value = {'feedUrl': self.feed, 'keyId': json.loads(data)['keyId'], 'payload': payload, 'verifiedVersion': payload['version'], 'manifestSource': 'live HTTPS GET', 'liveRelease': live, 'candidateBootstrap': candidate, 'installerSource': 'local unpublished candidate' if candidate else 'signed live release', 'localInstaller': str(self.args.published_installer), 'localInstallerIdentity': release_tool.file_identity(self.args.published_installer), 'verification': 'ECDSA P-256 SHA-256 RFC3279 DER against tools/release/update-keys.json'}
         self.save(directory / 'verified-release.json', value)
         return value
 
@@ -144,7 +152,7 @@ class Journey:
             windows.enter_host_lease(host, machine, receipt)
             self.frames[host] = (machine, receipt)
             return receipt
-        receipt = windows.upload_frame(host, machine, 'roo-industries-roo29-shipped', True, r'C:\RooBuild')
+        receipt = windows.upload_frame(host, machine, 'roo-industries-rc', True, r'C:\RooBuild')
         self.save(path, receipt)
         self.frames[host] = (machine, receipt)
         windows.enter_host_lease(host, machine, receipt)
@@ -216,7 +224,9 @@ $files=@(($roots|Where-Object path -eq $data).files)
         if not installer:
             raise RuntimeError('--published-installer is required for installed payload verification.')
         verified = json.loads((self.out / 'p0/verified-release.json').read_text())
-        release_tool.verify_manifest((self.out / 'p0/live-feed.json').read_bytes(), installer, self.feed)
+        release_tool.verify_manifest((self.out / 'p0/live-feed.json').read_bytes(), None if verified.get('candidateBootstrap') else installer, self.feed)
+        if list(release_tool.file_identity(installer)) != verified['localInstallerIdentity']:
+            raise RuntimeError('Local installer changed after verification; retained.')
         hashes = self.out / 'p0/payload-hashes.json'
         identity = release_tool.file_identity(installer)
         if hashes.exists():
@@ -335,11 +345,15 @@ New-HarnessArchive $frame $destination {
         receipt = self.frame(host, machine, label)
         pc, inputs = self.inputs(host, machine, receipt)
         fields = {'Source': receipt['stagingPath'], 'OutRoot': pc, 'Part': part, 'ReleasePath': inputs + r'\verified-release.json', 'FrameId': receipt['frameId']}
-        if part in ('p2', 'p3', 'p5'):
+        if part in ('p2', 'p2b', 'p3', 'p5'):
             hashes = self.extract()
             self.copy_to(host, hashes, inputs + r'\payload-hashes.json')
             fields['PayloadHashes'] = inputs + r'\payload-hashes.json'
-        if part == 'p2':
+        if getattr(self.args, 'candidate', False):
+            candidate = inputs + '\\' + self.args.published_installer.name
+            self.copy_to(host, self.args.published_installer, candidate)
+            fields['CandidateInstaller'] = candidate
+        if part in ('p2', 'p2b'):
             if not self.args.baseline_installer or not self.args.baseline_sha256:
                 raise RuntimeError('p2 requires --baseline-installer and --baseline-sha256.')
             size, sha = release_tool.file_identity(self.args.baseline_installer)
@@ -349,7 +363,14 @@ New-HarnessArchive $frame $destination {
             self.copy_to(host, self.args.baseline_installer, old)
             fields['OldInstaller'] = old
             fields['OldVersion'] = release_tool.product_version(self.args.baseline_installer)
-            self.save(self.out / 'p2/old-installer.json', {'path': str(self.args.baseline_installer), 'size': size, 'sha256': sha, 'expectedSha256': self.args.baseline_sha256.lower(), 'productVersion': fields['OldVersion']})
+            self.save(self.out / part / 'old-installer.json', {'path': str(self.args.baseline_installer), 'size': size, 'sha256': sha, 'expectedSha256': self.args.baseline_sha256.lower(), 'productVersion': fields['OldVersion']})
+        if part == 'p2b':
+            probe = receipt['runRoot'] + r'\q'
+            result = self.desktop(host, machine, receipt, 'tools/validation/Update/Build-ReleaseCandidate.ps1', {'Source': receipt['stagingPath'], 'OutRoot': probe, 'ProbeOnly': True}, 'p2b/build-probe', 10)
+            if result['status'] != 'pass':
+                self.collect(host, machine, receipt, part)
+                raise RuntimeError('Candidate launch probe build failed.')
+            fields['HandoffProbe'] = probe + r'\probe\UpdateProbe.exe'
         if part == 'p3':
             alpha = receipt['runRoot'] + r'\a'
             published_version = json.loads((self.out / 'p0/verified-release.json').read_text())['payload']['version']
@@ -377,7 +398,7 @@ New-HarnessArchive $frame $destination {
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--scenario', required=True, choices=['p0', 'p1', 'p2', 'p3', 'p4', 'p5'])
+    parser.add_argument('--scenario', required=True, choices=['p0', 'p1', 'p2', 'p2b', 'p3', 'p4', 'p5'])
     parser.add_argument('--source-commit', required=True)
     parser.add_argument('--host', default=os.environ.get('ROO_TEST_SSH_HOST'))
     parser.add_argument('--expected-machine', default=os.environ.get('ROO_TEST_COMPUTER'))
@@ -386,6 +407,7 @@ def main():
     parser.add_argument('--test-feed-url', default=os.environ.get('ROO_TEST_UPDATE_FEED'))
     parser.add_argument('--signing-key', type=Path, default=os.environ.get('ROO_UPDATE_SIGNING_KEY'))
     parser.add_argument('--published-installer', type=Path)
+    parser.add_argument('--candidate', action='store_true', help='P2/P2b only: stage an unpublished local installer; verify the signed live feed independently and never GET the candidate URL.')
     parser.add_argument('--baseline-installer', type=Path)
     parser.add_argument('--baseline-sha256')
     parser.add_argument('--innoextract', type=Path)
@@ -397,7 +419,11 @@ def main():
         parser.error('--host and --expected-machine (or ROO_TEST_SSH_HOST / ROO_TEST_COMPUTER) are required.')
     if args.scenario != 'p1' and not args.published_installer:
         parser.error('--published-installer is required for p0 and p2-p5.')
-    if args.scenario == 'p2' and (not args.baseline_installer or not args.baseline_sha256 or not re.fullmatch(r'[0-9a-fA-F]{64}', args.baseline_sha256)):
+    if args.candidate and args.scenario not in ('p2', 'p2b'):
+        parser.error('--candidate is only available for p2/p2b.')
+    if args.scenario == 'p2b' and not args.candidate:
+        parser.error('p2b is a local candidate installer-launch stand-in; --candidate is required.')
+    if args.scenario in ('p2', 'p2b') and (not args.baseline_installer or not args.baseline_sha256 or not re.fullmatch(r'[0-9a-fA-F]{64}', args.baseline_sha256)):
         parser.error('p2 requires --baseline-installer and a 64-hex --baseline-sha256.')
     if args.signing_key:
         windows.assert_external_signing_key(args.signing_key)
