@@ -65,7 +65,7 @@ def remote(script, name, timeout=windows.COMMAND_TIMEOUT):
 def interactive(receipt, script, fields, name, minutes=10):
     start = time.monotonic()
     try:
-        result = windows.interactive(HOST, MACHINE, receipt, script, fields, minutes, "RooIndustries_ROO20_OTA_" + name)
+        result = windows.interactive_frame(HOST, MACHINE, receipt, script, fields, minutes, "RooIndustries_ROO20_OTA_" + name)
         output = result.stdout
     except subprocess.CalledProcessError as error:
         output = (error.stdout or "") + (error.stderr or "")
@@ -87,7 +87,7 @@ def copy_from(remote_path, destination):
 
 def copy_to(local_path, remote_path):
     scope = ". " + windows.ps_literal(FRAME_RECEIPT["stagingPath"] + "/tools/validation/Update/Harness.Common.ps1") + ";Open-HarnessRun " + " ".join(windows.ps_literal(FRAME_RECEIPT[k]) for k in ("runRoot", "frameId", "manifestSha256")) + " " + windows.ps_literal(FRAME_RECEIPT["frameId"]) + ";"
-    remote(scope + "if(Test-Path -LiteralPath " + windows.ps_literal(remote_path) + "){throw 'Upload input already exists; retained.'}", "upload-input-guard")
+    remote(scope + "if(Test-HarnessPath " + windows.ps_literal(remote_path) + "){throw 'Upload input already exists; retained.'}", "upload-input-guard")
     command(["scp", local_path, HOST + ":" + remote_path.replace("\\", "/")])
     remote(scope + "Register-HarnessFile " + windows.ps_literal(remote_path) + " 'upload-input'|Out-Null", "upload-input-record")
 
@@ -210,11 +210,12 @@ def main():
     OUT.mkdir(parents=True, exist_ok=True)
     receipt_path = args.receipt or OUT / "receipt.json"
     if args.scenario in ("all", "build") and args.receipt is None and not args.skip_build:
-        receipt = windows.upload(HOST, MACHINE, "roo-industries-roo20-ota", True, r"C:\RooBuild")
+        receipt = windows.upload_frame(HOST, MACHINE, "roo-industries-roo20-ota", True, r"C:\RooBuild")
         receipt_path.write_text(json.dumps(receipt, indent=2))
     else:
         receipt = json.loads(receipt_path.read_text())
     FRAME_RECEIPT = receipt
+    windows.enter_host_lease(HOST, MACHINE, receipt)
     windows.verify_local_source(HOST, MACHINE, receipt)
     frame = receipt["runRoot"]
     source = receipt["stagingPath"]
@@ -460,7 +461,7 @@ def main():
             import zipfile
             with zipfile.ZipFile(OUT / "pc-evidence.zip") as archive:
                 for entry in archive.infolist():
-                    relative = Path(entry.filename.replace("\\", "/"))
+                    relative = windows.safe_archive_path(entry.filename)
                     if relative.is_absolute() or ".." in relative.parts:
                         raise RuntimeError("Unexpected evidence archive path")
                     target = OUT / "pc-artifacts/ota" / relative

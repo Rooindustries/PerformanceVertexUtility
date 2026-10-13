@@ -11,7 +11,7 @@ try{
  Write-HarnessResult $directory 'windows.json' $rows|Out-Null
  $bounds=[Windows.Forms.SystemInformation]::VirtualScreen
  $bitmap=[Drawing.Bitmap]::new($bounds.Width,$bounds.Height);$graphics=[Drawing.Graphics]::FromImage($bitmap)
- $path=Get-HarnessOutputPath $directory 'desktop.png';$stream=[IO.FileStream]::new($path,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None)
+ $path=Get-HarnessOutputPath $directory 'desktop.png';$stream=[IO.FileStream]::new((Get-HarnessLongPath $path),[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None)
  try{$graphics.CopyFromScreen($bounds.X,$bounds.Y,0,0,$bitmap.Size);$bitmap.Save($stream,[Drawing.Imaging.ImageFormat]::Png)}finally{$graphics.Dispose();$bitmap.Dispose();$stream.Dispose()}
  Register-HarnessFile $path 'screenshot'|Out-Null
  $state='pass'

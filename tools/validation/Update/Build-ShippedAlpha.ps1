@@ -9,7 +9,7 @@ Initialize-HarnessBuildFolders $Source
 $env:ROO_HARNESS_NONCE=$nonce
 
 $copy=Join-Path $OutRoot 'src'
-if(Test-Path $copy){throw 'Alpha source already exists; allocate a fresh frame.'}
+if(Test-HarnessPath $copy){throw 'Alpha source already exists; allocate a fresh frame.'}
 New-HarnessDirectory $copy 'build-source'|Out-Null
 $differences=@()
 foreach($file in Get-HarnessTree $Source -FilesOnly|Where-Object {Test-HarnessVisiblePath $_ $Source}){
@@ -42,14 +42,14 @@ Invoke-HarnessProcess $dotnet ('publish "'+(Join-Path $Source 'tools\validation\
 $app=Join-Path $OutRoot ('release\work-'+$AlphaVersion+'\stage\app\RooIndustries.OptimizationSuite.App.dll')
 $feedOutput=Get-HarnessOutputPath $OutRoot 'embedded-feed.json'
 Invoke-HarnessProcess (Join-Path $OutRoot 'probe\UpdateProbe.exe') ('--embedded-feed "'+$app+'" "'+$feedOutput+'"') 'embedded-feed'|Out-Null
-$feedRecord=Get-Content -Raw $feedOutput|ConvertFrom-Json;if($feedRecord.nonce -cne $nonce){throw 'Embedded feed result nonce differs.'};Register-HarnessFile $feedOutput 'probe-result'|Out-Null;$actual=$feedRecord.data.feed
-$expected='url='+([IO.File]::ReadAllText((Join-Path $Source 'tools\release\update-feed.txt')).Trim())
+$feedRecord=[IO.File]::ReadAllText((Get-HarnessLongPath $feedOutput))|ConvertFrom-Json;if($feedRecord.nonce -cne $nonce){throw 'Embedded feed result nonce differs.'};Register-HarnessFile $feedOutput 'probe-result'|Out-Null;$actual=$feedRecord.data.feed
+$expected='url='+([IO.File]::ReadAllText((Get-HarnessLongPath (Join-Path $Source 'tools\release\update-feed.txt'))).Trim())
 if($actual -cne $expected){throw 'Built alpha does not embed the committed production feed.'}
 
 $publishedOutput=Get-HarnessOutputPath $OutRoot 'published-resources.json';$alphaOutput=Get-HarnessOutputPath $OutRoot 'alpha-resources.json'
 Invoke-HarnessProcess (Join-Path $OutRoot 'probe\UpdateProbe.exe') ('--resources "'+$PublishedApp+'" "'+$publishedOutput+'"') 'resources'|Out-Null
 Invoke-HarnessProcess (Join-Path $OutRoot 'probe\UpdateProbe.exe') ('--resources "'+$app+'" "'+$alphaOutput+'"') 'resources'|Out-Null
-$p=Get-Content -Raw $publishedOutput|ConvertFrom-Json;$a=Get-Content -Raw $alphaOutput|ConvertFrom-Json;if($p.nonce -cne $nonce -or $a.nonce -cne $nonce){throw 'Resource output nonce differs.'};Register-HarnessFile $publishedOutput 'probe-result'|Out-Null;Register-HarnessFile $alphaOutput 'probe-result'|Out-Null;$published=$p.data;$alpha=$a.data
+$p=[IO.File]::ReadAllText((Get-HarnessLongPath $publishedOutput))|ConvertFrom-Json;$a=[IO.File]::ReadAllText((Get-HarnessLongPath $alphaOutput))|ConvertFrom-Json;if($p.nonce -cne $nonce -or $a.nonce -cne $nonce){throw 'Resource output nonce differs.'};Register-HarnessFile $publishedOutput 'probe-result'|Out-Null;Register-HarnessFile $alphaOutput 'probe-result'|Out-Null;$published=$p.data;$alpha=$a.data
 $resourceDifferences=@(Compare-Object @($published|ForEach-Object {$_.name+':'+$_.sha256}) @($alpha|ForEach-Object {$_.name+':'+$_.sha256}))
 Write-HarnessResult $OutRoot 'resource-comparison.json' @{differences=$resourceDifferences;versionOnly=($resourceDifferences.Count -eq 0)}|Out-Null
 if($resourceDifferences.Count){throw 'Alpha embedded resources differ from the published app; see resource-comparison.json.'}

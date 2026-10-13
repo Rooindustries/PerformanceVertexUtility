@@ -20,9 +20,9 @@ function Fixture([string]$Name,[string]$Text='untouched'){
 }
 function CacheLifecycle([string]$Clean,[string]$Version){
  $path=Join-Path $Clean $Version
- [RooHarnessWindow]::CreateDirectory($path);$before=Register-HarnessCache $Version;Remove-HarnessDirectory $path
+ [RooHarnessWindow]::CreateDirectory((Get-HarnessLongPath $path));$before=Register-HarnessCache $Version;Remove-HarnessDirectory $path
  if((Register-HarnessCache $Version) -or (Get-HarnessEntryById $before.id).state -cne 'removed'){throw 'App-deleted cache identity was not retired.'}
- [RooHarnessWindow]::CreateDirectory($path);$after=Register-HarnessCache $Version
+ [RooHarnessWindow]::CreateDirectory((Get-HarnessLongPath $path));$after=Register-HarnessCache $Version
  if($after.id -ceq $before.id -or $after.identity.creationTimeFileTimeUtc -ceq $before.identity.creationTimeFileTimeUtc){throw 'Recreated cache reused the earlier identity.'}
  Remove-HarnessEntry $after;Passed 'app-deleted cache retires before a later download creates it' @{before=$before.id;after=$after.id;version=$Version}
 }
@@ -46,7 +46,7 @@ function ForeignScope{
  $entry=New-HarnessDirectory $root 'foreign-ledger-fixture'
  $id=$root.Substring($root.Length-32);$manifest='0'*64
  $ledger=@{protocol='roo-harness-ledger/v1';machine=$env:COMPUTERNAME;frameId=$id;manifestSha256=$manifest;entries=@();invocations=@()}
- $stream=[IO.FileStream]::new((Join-Path $root 'ledger.json'),[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None)
+ $stream=[IO.FileStream]::new((Get-HarnessLongPath (Join-Path $root 'ledger.json')),[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None)
  try{$bytes=[Text.UTF8Encoding]::new($false).GetBytes(($ledger|ConvertTo-Json -Depth 20));$stream.Write($bytes,0,$bytes.Length)}finally{$stream.Dispose()}
  Open-HarnessRun $root $id $manifest ([Guid]::NewGuid().ToString('N'))
  return @{scope=$script:Harness;rootEntry=$entry}
@@ -79,10 +79,10 @@ function CloseLongFrame($Fixture){
 }
 try{
  $fixture=Fixture 'present-data';$sentinel=Join-Path $fixture 'keep.txt'
- Rejected 'active current data root present in preflight' {Move-ShippedFreshData $fixture @{dataRoots=@(@{path=$fixture;exists=$true})} (Join-Path $directory 'moved-data')} {[IO.File]::ReadAllText($sentinel) -ceq 'untouched'}
+ Rejected 'active current data root present in preflight' {Move-ShippedFreshData $fixture @{dataRoots=@(@{path=$fixture;exists=$true})} (Join-Path $directory 'moved-data')} {[IO.File]::ReadAllText((Get-HarnessLongPath $sentinel)) -ceq 'untouched'}
  $staleP0=@{dataRoots=@(@{path=$fixture;exists=$false})}
- $p5=@{dataRoots=@(@{path=$fixture;exists=(Test-Path $fixture)})}
- Rejected 'F1 P5 resnapshot refuses root created since P0' {Assert-HarnessFreshData $fixture $p5} {[IO.File]::ReadAllText($sentinel) -ceq 'untouched' -and -not$staleP0.dataRoots[0].exists}
+ $p5=@{dataRoots=@(@{path=$fixture;exists=(Test-HarnessPath $fixture)})}
+ Rejected 'F1 P5 resnapshot refuses root created since P0' {Assert-HarnessFreshData $fixture $p5} {[IO.File]::ReadAllText((Get-HarnessLongPath $sentinel)) -ceq 'untouched' -and -not$staleP0.dataRoots[0].exists}
  $foreign=ForeignScope
  $name='RooTest-ShippedOffline-'+[Guid]::NewGuid().ToString('N');$foreignNonce='OtherOwner-'+[Guid]::NewGuid().ToString('N')
  New-ShippedFirewall $name $foreignNonce "$env:SystemRoot\System32\PING.EXE"
@@ -125,14 +125,14 @@ begin
 end;
 '@
  New-HarnessText $wizardSource $wizardText 'wizard-fixture'|Out-Null
- $iscc=Join-Path $env:LOCALAPPDATA 'Programs\Inno Setup 6\ISCC.exe';if(-not(Test-Path $iscc)){$iscc=Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'}
+ $iscc=Join-Path $env:LOCALAPPDATA 'Programs\Inno Setup 6\ISCC.exe';if(-not(Test-HarnessPath $iscc)){$iscc=Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'}
  Invoke-HarnessProcess $iscc ('/Q /O"'+$directory+'" "'+$wizardSource+'"') 'wizard-compile'|Out-Null
  $windowExe=Join-Path $directory 'window-fixture.exe';Register-HarnessFile $windowExe 'window-fixture'|Out-Null
  Add-Type -AssemblyName UIAutomationClient,UIAutomationTypes
  foreach($title in 'Setup Roo Industries recovery fixture','Windows protected your PC'){
   $script:Harness=$foreign.scope
   $foreignWindowExe=Join-Path $foreign.scope.Root ([IO.Path]::GetFileName($windowExe))
-  if(-not(Test-Path $foreignWindowExe)){Copy-HarnessFile $windowExe $foreignWindowExe|Out-Null}
+  if(-not(Test-HarnessPath $foreignWindowExe)){Copy-HarnessFile $windowExe $foreignWindowExe|Out-Null}
   $windowProcess=Start-HarnessExplorerProcess $foreignWindowExe ('/FixtureTitle="'+$title+'"') 'explorer-window'
   try{
    $until=[DateTime]::UtcNow.AddSeconds(30);$window=$null
@@ -155,49 +155,50 @@ end;
  }
  $sequence=@(Get-HarnessEntries|Where-Object {$_.nonce -ceq $nonce -and $_.purpose -eq 'result'}).Count+1
  $stale=Join-Path $directory ('collision-'+$nonce+'-'+('{0:D4}'-f$sequence)+'.json');New-HarnessText $stale '{"nonce":"earlier","data":"stale"}' 'targeted-fixture'|Out-Null
- Rejected 'F3 existing invocation result is never overwritten or read' {Write-HarnessResult $directory 'collision.json' @{fresh=$true}} {[IO.File]::ReadAllText($stale).Contains('stale')}
+ Rejected 'F3 existing invocation result is never overwritten or read' {Write-HarnessResult $directory 'collision.json' @{fresh=$true}} {[IO.File]::ReadAllText((Get-HarnessLongPath $stale)).Contains('stale')}
  $bound=Write-HarnessResult $directory 'bound.json' @{fresh=$true}
- Rejected 'F3 result reader refuses another nonce' {Read-HarnessResult $bound ('0'*32)} {Test-Path $bound}
+ Rejected 'F3 result reader refuses another nonce' {Read-HarnessResult $bound ('0'*32)} {Test-HarnessPath $bound}
  $frame='C:\RooBuild\roo-industries-roo29-shipped-'+[Guid]::NewGuid().ToString('N');New-HarnessDirectory $frame 'frame-guard-fixture'|Out-Null
  $stay=Join-Path $frame 'stay.ps1';New-HarnessText $stay 'Start-Sleep -Seconds 180' 'targeted-fixture'|Out-Null
  $owned=Start-OwnedProcess -FilePath powershell.exe -ArgumentList ('-NoProfile -File "'+$stay+'"') -Purpose fixture
- try{Rejected 'frame script in PowerShell command line retained' {Assert-HarnessFrameIdle $frame} {Test-Path $stay}}finally{Stop-HarnessProcess $owned}
+ try{Rejected 'frame script in PowerShell command line retained' {Assert-HarnessFrameIdle $frame} {Test-HarnessPath $stay}}finally{Stop-HarnessProcess $owned}
  $target=Fixture 'junction-target';$junction='C:\RooBuild\roo-industries-roo29-shipped-'+[Guid]::NewGuid().ToString('N')
- New-Item -ItemType Junction -Path $junction -Target $target|Out-Null
- $junctionItem=Get-Item -LiteralPath $junction -Force;$junctionEntry=Add-HarnessEntry 'folder' @{path=$junction;creationTimeFileTimeUtc=$junctionItem.CreationTimeUtc.ToFileTimeUtc().ToString()} 'junction-fixture' 'invocation' @{reparseTarget=$target}
- try{Rejected 'junction frame retained without touching target' {& (Join-Path $Source 'tools\validation\Update\Clear-UpdateFrame.ps1') -Frame $junction -ExpectedMachine $env:COMPUTERNAME} {[IO.File]::ReadAllText((Join-Path $target 'keep.txt')) -ceq 'untouched'}}finally{Remove-HarnessEntry $junctionEntry}
+ New-Item -ItemType Junction -Path (Get-HarnessLongPath $junction) -Target (Get-HarnessLongPath $target)|Out-Null
+ $junctionItem=Get-HarnessItem $junction -Force;$junctionEntry=Add-HarnessEntry 'folder' @{path=$junction;creationTimeFileTimeUtc=$junctionItem.CreationTimeUtc.ToFileTimeUtc().ToString()} 'junction-fixture' 'invocation' @{reparseTarget=$target}
+ try{Rejected 'junction frame retained without touching target' {& (Join-Path $Source 'tools\validation\Update\Clear-UpdateFrame.ps1') -Frame $junction -ExpectedMachine $env:COMPUTERNAME} {[IO.File]::ReadAllText((Get-HarnessLongPath (Join-Path $target 'keep.txt'))) -ceq 'untouched'}}finally{Remove-HarnessEntry $junctionEntry}
  $unownedDownload=Fixture 'unowned-download'
  $entry=@(Get-HarnessEntries|Where-Object {$_.identity.path -ieq $unownedDownload})[0];Set-HarnessEntryState $entry.id 'retained'
  Complete-HarnessInvocation 'running' -Cleanup|Out-Null
- if(-not(Test-Path (Join-Path $unownedDownload 'keep.txt'))){throw 'Unowned download was removed'}
+ if(-not(Test-HarnessPath (Join-Path $unownedDownload 'keep.txt'))){throw 'Unowned download was removed'}
  Set-HarnessEntryState $entry.id 'active';Passed 'F5 cleanup ignores a download folder absent from the active ledger' $unownedDownload
  $cache=Fixture 'foreign-cache';$version='4.2.8-beta';$folder=Join-Path $cache $version;New-HarnessDirectory $folder 'targeted-fixture'|Out-Null
- Rejected 'F9 foreign B cache is refused and retained' {Initialize-HarnessCache $cache @('4.2.7-beta',$version)} {Test-Path $folder}
+ Rejected 'F9 foreign B cache is refused and retained' {Initialize-HarnessCache $cache @('4.2.7-beta',$version)} {Test-HarnessPath $folder}
  $clean=Fixture 'cache-preflight';Initialize-HarnessCache $clean @('4.2.7-beta',$version)
  $b=Join-Path $clean $version;New-HarnessDirectory $b 'targeted-cache'|Out-Null
  $entry=Register-HarnessCache $version
  if($entry.metadata.version -cne $version){throw 'Reset used a hardcoded version'};Remove-HarnessEntry $entry
- if(Test-Path $b){throw 'Owned actual-version cache remained'};Passed 'F9 reset selects actual B version from preflight' @{version=$version;absent=$true}
+ if(Test-HarnessPath $b){throw 'Owned actual-version cache remained'};Passed 'F9 reset selects actual B version from preflight' @{version=$version;absent=$true}
  CacheLifecycle $clean $version
  $hosts=Join-Path $directory 'hosts-fixture';$original=[byte[]]@(239,187,191,35,32,195,169,10)
- $stream=[IO.FileStream]::new($hosts,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None);try{$stream.Write($original,0,$original.Length)}finally{$stream.Dispose()}
+ $stream=[IO.FileStream]::new((Get-HarnessLongPath $hosts),[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None);try{$stream.Write($original,0,$original.Length)}finally{$stream.Dispose()}
  $marker='# RooShipped-fixture';$line='192.0.2.1 example.test '+$marker
  Add-HarnessHostsLine $hosts $line $marker;Remove-HarnessEntry (@(Get-HarnessEntries|Where-Object {$_.kind -eq 'hosts' -and $_.identity.marker -eq $marker})[0])
- if([Convert]::ToBase64String([IO.File]::ReadAllBytes($hosts)) -cne [Convert]::ToBase64String($original)){throw 'Hosts cleanup changed unrelated bytes.'}
+ if([Convert]::ToBase64String([IO.File]::ReadAllBytes((Get-HarnessLongPath $hosts))) -cne [Convert]::ToBase64String($original)){throw 'Hosts cleanup changed unrelated bytes.'}
  Passed 'hosts cleanup preserves BOM, UTF-8 and original line endings' 'byte-identical after marked line removal'
  Add-HarnessHostsLine $hosts $line $marker
- $writerCode='$ErrorActionPreference="Stop";for($i=0;$i -lt 100;$i++){try{$f=[IO.FileStream]::new("'+$hosts+'",[IO.FileMode]::Open,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None);$f.Position=$f.Length;$b=[Text.Encoding]::ASCII.GetBytes("SECOND-WRITER");$f.Write($b,0,$b.Length);$f.Dispose();exit 0}catch [IO.IOException]{Start-Sleep -Milliseconds 50}};exit 1'
+ $writerCode='$ErrorActionPreference="Stop";for($i=0;$i -lt 100;$i++){try{$f=[IO.FileStream]::new((Get-HarnessLongPath "'+$hosts+'"),[IO.FileMode]::Open,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None);$f.Position=$f.Length;$b=[Text.Encoding]::ASCII.GetBytes("SECOND-WRITER");$f.Write($b,0,$b.Length);$f.Dispose();exit 0}catch [IO.IOException]{Start-Sleep -Milliseconds 50}};exit 1'
+ $writerCode='function Get-HarnessLongPath {'+${function:Get-HarnessLongPath}.ToString()+'};'+$writerCode
  $encoded=[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($writerCode));$script:competingWriter=$null
  Remove-HarnessHostsLine $hosts $line $marker {
   $script:competingWriter=Start-OwnedProcess -FilePath powershell.exe -ArgumentList ('-NoProfile -EncodedCommand '+$encoded) -Purpose competing-hosts-writer
   Start-Sleep -Milliseconds 1000
   if($script:competingWriter.process.HasExited ){throw 'Second writer was not blocked by the exclusive cleanup stream'}
  }
- if(-not$script:competingWriter.process.WaitForExit(10000) -or $script:competingWriter.process.ExitCode -ne 0 -or -not[IO.File]::ReadAllText($hosts).EndsWith('SECOND-WRITER') -or [IO.File]::ReadAllText($hosts).Contains($marker)){throw 'Competing hosts edit did not survive after cleanup'}
+ if(-not$script:competingWriter.process.WaitForExit(10000) -or $script:competingWriter.process.ExitCode -ne 0 -or -not[IO.File]::ReadAllText((Get-HarnessLongPath $hosts)).EndsWith('SECOND-WRITER') -or [IO.File]::ReadAllText((Get-HarnessLongPath $hosts)).Contains($marker)){throw 'Competing hosts edit did not survive after cleanup'}
  $entry=@(Get-HarnessEntries|Where-Object {$_.kind -eq 'hosts' -and $_.identity.marker -eq $marker -and $_.state -eq 'active'})[0];Set-HarnessEntryState $entry.id 'removed'
  Passed 'F13 concurrent hosts writer is blocked then its edit survives' 'SECOND-WRITER present after cleanup released its exclusive handle'
- $log=Join-Path $directory 'app.log';[IO.File]::WriteAllText($log,'before');$cursor=Get-ShippedLogCursor $log
- [IO.File]::AppendAllText($log,' old-tail');[IO.File]::Move($log,$log+'.old');[IO.File]::WriteAllText($log,'new-head')
+ $log=Join-Path $directory 'app.log';[IO.File]::WriteAllText((Get-HarnessLongPath $log),'before');$cursor=Get-ShippedLogCursor $log
+ [IO.File]::AppendAllText((Get-HarnessLongPath $log),' old-tail');[IO.File]::Move((Get-HarnessLongPath $log),(Get-HarnessLongPath ($log+'.old')));[IO.File]::WriteAllText((Get-HarnessLongPath $log),'new-head')
  $read=Read-ShippedLog $cursor;if($read -cne ' old-tailnew-head'){throw 'Rotated log tail was lost.'};Passed 'app-log rotation retains old tail' $read
  $before=@{pid=100;creationTimeUtc='2026-10-01T00:00:00Z'}
  if((Test-ShippedGovernorReplacement $before $before) -or (Test-ShippedGovernorReplacement $before @{pid=101;creationTimeUtc=$before.creationTimeUtc}) -or (Test-ShippedGovernorReplacement $before @{pid=100;creationTimeUtc='2026-10-02T00:00:00Z'}) -or -not(Test-ShippedGovernorReplacement $before @{pid=101;creationTimeUtc='2026-10-02T00:00:00Z'})){throw 'Governor identity checks do not discriminate.'}
@@ -211,12 +212,12 @@ end;
  $parent=Split-Path $nested -Parent;Ensure-HarnessOutputDirectory $parent
  $entries=@(Get-HarnessEntries|Where-Object {$_.kind -eq 'folder' -and $_.identity.path -in @($nested,$parent) -and $_.state -eq 'active'})
  if($entries.Count -ne 2 -or -not($entries|Where-Object {$_.identity.path -ieq $parent}).metadata.emptyOnly){throw 'Recursive output creation left an unrecorded ancestor or broad parent cleanup.'}
- try{[RooHarnessWindow]::CreateDirectory($parent);throw 'Atomic directory creation adopted an existing path.'}catch{if($_.Exception.Message -like '*adopted an existing*'){throw}}
+ try{[RooHarnessWindow]::CreateDirectory((Get-HarnessLongPath $parent));throw 'Atomic directory creation adopted an existing path.'}catch{if($_.Exception.Message -like '*adopted an existing*'){throw}}
  Passed 'nested output records every created ancestor' @{folders=$entries.identity.path;parentCleanup='empty-only';existingNativeCreate='refused'}
  $projectRoot=Fixture 'foreign-build-folder';New-HarnessText (Join-Path $projectRoot 'Example.csproj') '<Project/>' 'project-fixture'|Out-Null
  $script:Harness=$foreign.scope;$foreignBin=Join-Path $projectRoot 'bin';New-HarnessDirectory $foreignBin 'foreign-build'|Out-Null;New-HarnessText (Join-Path $foreignBin 'keep.txt') 'foreign build output'|Out-Null;$script:Harness=$main
  $refusal=$null;try{Initialize-HarnessBuildFolders $projectRoot}catch{$refusal=$_.Exception.Message}
- if($refusal -cne 'An existing build folder is not owned by this run; retained.' -or [IO.File]::ReadAllText((Join-Path $foreignBin 'keep.txt')) -cne 'foreign build output' -or @(Get-HarnessEntries|Where-Object {$_.identity.path -ieq $foreignBin}).Count){throw 'Foreign build folder was not refused for its ownership.'}
+ if($refusal -cne 'An existing build folder is not owned by this run; retained.' -or [IO.File]::ReadAllText((Get-HarnessLongPath (Join-Path $foreignBin 'keep.txt'))) -cne 'foreign build output' -or @(Get-HarnessEntries|Where-Object {$_.identity.path -ieq $foreignBin}).Count){throw 'Foreign build folder was not refused for its ownership.'}
  Passed 'foreign generated folder is never adopted by timestamp' $refusal
  $script:Harness=$foreign.scope;$entry=@(Get-HarnessEntries|Where-Object {$_.kind -eq 'file' -and $_.identity.path -ieq (Join-Path $foreignBin 'keep.txt')})[0];Remove-HarnessEntry $entry;$entry=@(Get-HarnessEntries|Where-Object {$_.kind -eq 'folder' -and $_.identity.path -ieq $foreignBin})[0];Remove-HarnessEntry $entry;$script:Harness=$main
  Initialize-HarnessBuildFolders $projectRoot
@@ -242,6 +243,67 @@ end;
  $relative=$long.path.Substring($long.root.Length+1).Replace('\','/')
  try{$entry=$zip.GetEntry($relative);if(-not$entry){throw 'Long JSON archive member was omitted.'};$stream=$entry.Open();$reader=[IO.StreamReader]::new($stream);try{$text=$reader.ReadToEnd()}finally{$reader.Dispose()};if($text -cne [IO.File]::ReadAllText((Get-HarnessLongPath $long.path))){throw 'Long JSON archive bytes differ.'}}finally{$zip.Dispose()}
  Passed 'CR8 archive includes 300+ character JSON with its relative name and bytes' @{path=$long.path;length=$long.path.Length;entry=$relative;archive=$archive;bytesMatch=$true}
+ CloseLongFrame $long|Out-Null
+ $lease=@(Get-HarnessEntries|Where-Object {$_.purpose -eq 'host-lease' -and $_.state -eq 'active'})[0]
+ $sentinel=Fixture 'lease-owner';$app=Start-OwnedProcess -FilePath "$env:SystemRoot\System32\PING.EXE" -ArgumentList '-t 127.0.0.1' -Purpose lease-fixture
+ try{
+  $script:Harness=$foreign.scope
+  Rejected 'R2 second frame install refused without touching first frame bytes/app' {Assert-HarnessInstallStart "$env:SystemRoot\System32\PING.EXE"} {[IO.File]::ReadAllText((Get-HarnessLongPath (Join-Path $sentinel 'keep.txt'))) -ceq 'untouched' -and -not$app.process.HasExited}
+ }finally{$script:Harness=$main;Stop-HarnessProcess $app}
+ Remove-HarnessEntry $lease
+ $missing='C:\RooBuild\roo-industries-missing-'+[Guid]::NewGuid().ToString('N')
+ $stale=New-HarnessText 'C:\RooBuild\host-lease.json' (@{frameId=$missing.Substring($missing.Length-32);nonce=$nonce;runRoot=$missing;createdUtc=[DateTime]::UtcNow.ToString('o')}|ConvertTo-Json -Compress) 'stale-lease-fixture'
+ try{Rejected 'R2 missing owner frame stale lease is kept' {Enter-HarnessHostLease} {(Get-HarnessFileSha256 $stale.identity.path) -ceq $stale.identity.hash}}finally{Remove-HarnessEntry $stale}
+ $hostOwner=LongFrame $false
+ $ownerMain=$script:Harness
+ $manifest=(Get-HarnessFileSha256 (Join-Path $hostOwner.root 'source\source-verification.json')).ToLowerInvariant()
+ Open-HarnessRun $hostOwner.root $hostOwner.root.Substring($hostOwner.root.Length-32) $manifest $nonce
+ Enter-HarnessHostLease
+ $script:Harness=$main
+ $ownerClosed=CloseLongFrame $hostOwner
+ if(Test-HarnessPath 'C:\RooBuild\host-lease.json'){throw 'Owner Clear did not release its lease'}
+ Passed 'R2 owner frame Clear releases lease' @{frame=$hostOwner.root;leaseAbsent=$true;activeEntries=@($ownerClosed.entries|Where-Object state -EQ 'active').Count}
+ Enter-HarnessHostLease
+ $script:Harness=$foreign.scope
+ $foreignAppImage=Join-Path $foreign.scope.Root 'NonLedgerApp.exe';Copy-HarnessFile "$env:SystemRoot\System32\PING.EXE" $foreignAppImage|Out-Null
+ $foreignApp=Start-OwnedProcess -FilePath $foreignAppImage -ArgumentList '-t 127.0.0.1' -Purpose fixture
+ $script:Harness=$main
+ try{
+  Rejected 'R2 manual-install foreign app refuses before setup starts' {Assert-HarnessInstallStart $foreignAppImage} {-not$foreignApp.process.HasExited}
+ }finally{$script:Harness=$foreign.scope;Stop-HarnessProcess $foreignApp;$script:Harness=$main}
+ $root=Fixture 'encoded-runners'
+ Add-Type @'
+using System;
+using System.Runtime.InteropServices;
+public static class RooSuspendedShell {
+ [StructLayout(LayoutKind.Sequential,CharSet=CharSet.Unicode)] struct StartInfo {public int cb; public string reserved,desktop,title; public int x,y,cx,cy,charsX,charsY,fill,flags; public short show,reserved2;public IntPtr data,input,output,error;}
+ [StructLayout(LayoutKind.Sequential)] struct Info {public IntPtr process,thread;public int pid,tid;}
+ [DllImport("kernel32.dll",CharSet=CharSet.Unicode,SetLastError=true)] static extern bool CreateProcess(string image,string command,IntPtr a,IntPtr b,bool inherit,int flags,IntPtr env,string directory,ref StartInfo start,out Info info);
+ [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr h);
+ public static int Start(string image,string arguments){var start=new StartInfo{cb=Marshal.SizeOf(typeof(StartInfo))};Info info;if(!CreateProcess(image,"\""+image+"\" "+arguments,IntPtr.Zero,IntPtr.Zero,false,4|0x08000000,IntPtr.Zero,null,ref start,out info))throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());CloseHandle(info.thread);CloseHandle(info.process);return info.pid;}
+}
+'@
+ foreach($switch in '-ec','/enc','-e'){
+  $value=if($switch -eq '-e'){'%%%invalid%%%'}else{[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes('Start-Sleep 60 # '+$root))}
+  $shell=Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+  $id=[RooSuspendedShell]::Start($shell,($switch+' '+$value));$ownedShell=Register-HarnessStartedProcess (Get-Process -Id $id) 'encoded-shell-fixture'
+  try{Rejected ('R5 live suspended powershell '+$switch+' refuses frame clear') {Assert-HarnessFrameIdle $root} {Test-HarnessPath (Join-Path $root 'keep.txt')}}finally{Stop-HarnessProcess $ownedShell}
+ }
+ $payload=[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($root))
+ $pwsh=Get-Command pwsh.exe -ErrorAction SilentlyContinue
+ if($pwsh){$id=[RooSuspendedShell]::Start($pwsh.Source,('--encodedcommand '+$payload));$ownedShell=Register-HarnessStartedProcess (Get-Process -Id $id) 'encoded-pwsh-fixture';try{Rejected 'R5 live suspended pwsh encoded command refuses frame clear' {Assert-HarnessFrameIdle $root} {Test-HarnessPath (Join-Path $root 'keep.txt')}}finally{Stop-HarnessProcess $ownedShell}}
+ if(-not(Test-HarnessEncodedReference 'pwsh.exe' ('pwsh.exe --encodedcommand '+$payload) $root) -or -not(Test-HarnessEncodedReference 'PWSH.EXE' 'pwsh.exe /encodedarguments %%%' $root) -or -not(Test-HarnessEncodedReference 'pwsh.exe' 'pwsh.exe -e' $root)){throw 'pwsh or malformed encoded argument was missed'}
+ Passed 'R5 pwsh decoder and malformed/missing values refuse' @{standIn=(-not[bool]$pwsh);image='pwsh.exe';switches=@('--encodedcommand','/encodedarguments','-e');refused=$true}
+ $long=LongFrame $false
+ $registered=Register-HarnessFile $long.path 'long-registration'
+ if($registered.identity.hash -cne (Get-HarnessFileSha256 $long.path)){throw 'Long file registration hash differs'}
+ $copy=Join-Path $long.unrecordedDirectory 'long-copy.json';Copy-HarnessFile $long.path $copy 'long-copy' 'invocation'|Out-Null
+ if((Get-HarnessFileSha256 $copy) -cne (Get-HarnessFileSha256 $long.path)){throw 'Long copy bytes differ'}
+ $result=Write-HarnessResult $long.unrecordedDirectory 'long-result.json' @{value='long result'}
+ if((Read-HarnessResult $result $nonce).value -cne 'long result'){throw 'Long result read differs'}
+ Passed 'CR10 long register/create/copy/result read use extended paths before normalization' @{path=$long.path;length=$long.path.Length;copy=$copy;result=$result}
+ foreach($file in @($copy,$result)){$entry=@(Get-HarnessEntries|Where-Object {$_.kind -eq 'file' -and $_.identity.path -ieq $file -and $_.state -eq 'active'})[0];Remove-HarnessEntry $entry}
+ Set-HarnessEntryState $registered.id 'removed'
  CloseLongFrame $long|Out-Null
  $status='pass'
 }finally{

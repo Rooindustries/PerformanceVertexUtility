@@ -85,7 +85,7 @@ SmartScreen stops the harness with a screenshot and UIA tree: a tester presses M
 
 The shared process-start trace subscribes to Win32_ProcessStartTrace before product launches. A separate .NET event callback buffers events during UI or ledger locks. Trace adoption requires a recorded owned-parent chain, invocation timestamps in order, the candidate's native birth within two seconds of its own event, and the same retained native handle. Live parent proof is also accepted; paths and titles only locate candidates. SmartScreen is never clicked.
 
-`Invoke-TraceOwnershipChecks.ps1` covers a 25 ms parent under an 800 ms ledger lock, the same image under a foreign parent, and simulated PID reuse. The foreign fixture belongs to its own ledger; child fixtures self-exit after 45 seconds if a proof fails. `Invoke-HarnessChecks.ps1 -TrackingOnly` runs these three checks. The existing forty checks remain available through `run_harness_checks.py`.
+`Invoke-TraceOwnershipChecks.ps1` covers a 25 ms parent under an 800 ms ledger lock, the same image under a foreign parent, and simulated PID reuse. The foreign fixture belongs to its own ledger; child fixtures self-exit after 120 seconds if a proof fails. `Invoke-HarnessChecks.ps1 -TrackingOnly` runs the three ownership checks and an ambiguous-birth check. The existing forty checks remain available through `run_harness_checks.py`.
 
 SSH/SCP use direct bounded connections without shared ControlMaster sockets, connection/keepalive limits, and subprocess deadlines (75 seconds for commands, 300 seconds for transfers; desktop scenarios retain their requested bounded deadline). `python3 -I tools/validation/Update/check_windows_transport.py --host 192.0.2.1 --expected-machine UNREACHABLE --out-dir <new-output-folder>` verifies real SSH/SCP refusals under 90 seconds on Linux.
 
@@ -94,3 +94,5 @@ Add `--live-host <test-pc> --expected-machine <computer-name>` to check a live 2
 Use a short `-OutRoot <frame>\s` for `Invoke-SigningScenario.ps1`. Its preflight refuses an intermediate XAML assembly path of 260 characters or more before creating a certificate. The Windows XAML compiler cannot resolve that assembly through a long ordinary path. Certificate cleanup reads its creation ledger even when the build failed.
 
 The harness uses one extended-path tree walker and file-hash helper for source, data, cleanup and ZIP evidence. Run `python3 -I tools/validation/Update/run_harness_checks.py --lint-only` before staging; the driver enforces the same lint before Windows checks.
+
+Update drivers use `upload_frame` / `interactive_frame` and hold a ledger-owned `C:\RooBuild\host-lease.json` until frame cleanup; legacy transport entry points retain the v1 invocation contract. `run_harness_checks.py --frozen-p0 <snapshot-folder>` overrides the repository-wide frozen inputs; `--resolve-inputs-only` checks resolution without contacting a PC.

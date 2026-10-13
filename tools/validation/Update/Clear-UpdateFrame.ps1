@@ -1,19 +1,19 @@
 param([Parameter(Mandatory)][string]$Frame,[string]$ExpectedMachine=$env:ROO_TEST_COMPUTER)
 $ErrorActionPreference='Stop'
+. (Join-Path $PSScriptRoot 'Harness.Common.ps1')
 if(-not$ExpectedMachine -or $env:COMPUTERNAME -cne $ExpectedMachine){throw 'ExpectedMachine is required and must match.'}
-$root=[IO.Path]::GetFullPath($Frame).TrimEnd('\')
+$root=(Get-HarnessPlainPath $Frame).TrimEnd('\')
 if($root -cnotmatch '^C:\\RooBuild\\roo-industries-[A-Za-z0-9_-]+-[a-f0-9]{32}$'){throw 'Update frame scope differs'}
-if(-not[IO.Directory]::Exists($root)){throw 'Frame is missing; no ledger identity can be verified.'}
+if(-not[IO.Directory]::Exists((Get-HarnessLongPath $root))){throw 'Frame is missing; no ledger identity can be verified.'}
 for($ancestor=$root;$ancestor;$ancestor=[IO.Path]::GetDirectoryName($ancestor)){
- if((Get-Item -LiteralPath $ancestor -Force).Attributes -band [IO.FileAttributes]::ReparsePoint){throw 'Linked update frame ancestry retained'}
+ if((Get-HarnessItem $ancestor).Attributes -band [IO.FileAttributes]::ReparsePoint){throw 'Linked update frame ancestry retained'}
  if($ancestor -ieq 'C:\RooBuild'){break}
 }
-. (Join-Path $PSScriptRoot 'Harness.Common.ps1')
 $receipt=[IO.File]::ReadAllText((Get-HarnessLongPath (Join-Path $root 'source\source-verification.json')))|ConvertFrom-Json
 $manifestHash=(Get-HarnessFileSha256 (Join-Path $root 'source\source-verification.json')).ToLowerInvariant()
 Open-HarnessRun $root $receipt.frameId $manifestHash ''
 Assert-HarnessFrameIdle $root
-$entries=@(Get-HarnessEntries|Where-Object state -EQ 'active')
+$entries=@(Get-HarnessEntries|Where-Object {$_.state -in 'active','error'})
 $rootEntry=@($entries|Where-Object {$_.kind -eq 'folder' -and $_.identity.path -ieq $root})
 if($rootEntry.Count -ne 1){throw 'Frame root has no unique creation identity; retained.'}
 $source=Join-Path $root 'source'
@@ -36,20 +36,22 @@ foreach($item in @(Get-HarnessTree $root)){
  if(-not$manifestFile -and -not$tracked -and -not$container -and $path -ine (Join-Path $root 'ledger.json')){throw ('Unrecorded frame file retained: '+$path)}
 }
 [array]::Reverse($entries)
+$lease=@($entries|Where-Object purpose -EQ 'host-lease')
 foreach($entry in $entries){
- if($entry.id -ceq $rootEntry[0].id -or $entry.kind -eq 'window' -or $entry.lifetime -eq 'retained'){continue}
+ if($entry.purpose -eq 'host-lease' -or $entry.id -ceq $rootEntry[0].id -or $entry.lifetime -eq 'retained'){continue}
  Remove-HarnessEntry $entry
 }
+foreach($entry in $lease){Remove-HarnessEntry $entry}
 $actual=Get-HarnessFolderIdentity $root
 if($actual.creationTimeFileTimeUtc -cne $rootEntry[0].identity.creationTimeFileTimeUtc){throw 'Frame identity changed; retained.'}
-$saved=[IO.File]::ReadAllBytes($script:Harness.LedgerPath)
+$saved=[IO.File]::ReadAllBytes((Get-HarnessLongPath $script:Harness.LedgerPath))
 $final=[Text.Encoding]::UTF8.GetString($saved)|ConvertFrom-Json
 if(@(Get-HarnessTree $root|Where-Object FullName -INE $script:Harness.LedgerPath).Count){throw 'Frame is not empty after cleanup; ledger kept.'}
 $final.entries|Where-Object id -CEQ $rootEntry[0].id|ForEach-Object {$_.state='removed'}
-[IO.File]::Delete($script:Harness.LedgerPath)
-try{[IO.Directory]::Delete($root,$false)}catch{
- if([IO.Directory]::Exists($root) -and (Get-HarnessFolderIdentity $root).creationTimeFileTimeUtc -ceq $rootEntry[0].identity.creationTimeFileTimeUtc -and -not(Test-Path $script:Harness.LedgerPath)){
-  $stream=[IO.FileStream]::new($script:Harness.LedgerPath,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None)
+[IO.File]::Delete((Get-HarnessLongPath $script:Harness.LedgerPath))
+try{[IO.Directory]::Delete((Get-HarnessLongPath $root),$false)}catch{
+ if([IO.Directory]::Exists((Get-HarnessLongPath $root)) -and (Get-HarnessFolderIdentity $root).creationTimeFileTimeUtc -ceq $rootEntry[0].identity.creationTimeFileTimeUtc -and -not(Test-HarnessPath $script:Harness.LedgerPath)){
+  $stream=[IO.FileStream]::new((Get-HarnessLongPath $script:Harness.LedgerPath),[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None)
   try{$stream.Write($saved,0,$saved.Length);$stream.Flush($true)}finally{$stream.Dispose()}
  }
  throw

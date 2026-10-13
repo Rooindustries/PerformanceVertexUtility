@@ -11,7 +11,7 @@ function Trigger($Root,[string]$Gate){
  $locked=$null
  try{
   $until=[DateTime]::UtcNow.AddSeconds(5)
-  while(-not$locked){try{$locked=[IO.FileStream]::new($script:Harness.LedgerPath,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::None)}catch [IO.IOException]{if(($_.Exception.HResult -band 0xffff) -notin 32,33 -or [DateTime]::UtcNow -ge $until){throw};Start-Sleep -Milliseconds 50}}
+  while(-not$locked){try{$locked=[IO.FileStream]::new((Get-HarnessLongPath $script:Harness.LedgerPath),[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::None)}catch [IO.IOException]{if(($_.Exception.HResult -band 0xffff) -notin 32,33 -or [DateTime]::UtcNow -ge $until){throw};Start-Sleep -Milliseconds 50}}
   $ready.Set()|Out-Null;Start-Sleep -Milliseconds 800
  }
  finally{if($locked){$locked.Dispose()};$ready.Dispose()}
@@ -25,13 +25,13 @@ function TraceEntry([int]$ProcessId){
 }
 try{
  $launcher=Join-Path $directory 'RooTraceParent.exe'
- Add-Type -OutputAssembly $launcher -OutputType ConsoleApplication @'
+ Add-Type -OutputAssembly (Get-HarnessLongPath $launcher) -OutputType ConsoleApplication @'
 using System;
 using System.Diagnostics;
 using System.Threading;
 public static class RooTraceParent {
  public static void Main(string[] args) {
-  if(args[0]=="child"){Thread.Sleep(45000);return;}
+  if(args[0]=="child"){Thread.Sleep(120000);return;}
   if(args[0]=="middle"){Process.Start(new ProcessStartInfo(args[1],"child"){UseShellExecute=false,CreateNoWindow=true});Thread.Sleep(25);return;}
   using(var ready=new EventWaitHandle(false,EventResetMode.ManualReset,args[2]))ready.WaitOne();
   var middle=Process.Start(new ProcessStartInfo(Process.GetCurrentProcess().MainModule.FileName,"middle \""+args[1]+"\""){UseShellExecute=false,CreateNoWindow=true});middle.WaitForExit();
@@ -52,7 +52,7 @@ public static class RooTraceParent {
  $foreignFolder=New-HarnessDirectory $foreignRoot 'foreign-trace-fixture'
  $foreignId=$foreignRoot.Substring($foreignRoot.Length-32);$foreignNonce=[Guid]::NewGuid().ToString('N');$foreignManifest='0'*64
  $ledger=@{protocol='roo-harness-ledger/v1';machine=$env:COMPUTERNAME;frameId=$foreignId;manifestSha256=$foreignManifest;entries=@();invocations=@(@{nonce=$foreignNonce;scenario='foreign-trace-fixture';startedAtUtc=[DateTime]::UtcNow.ToString('o');status='running';cleanupErrors=@()})}
- $stream=[IO.FileStream]::new((Join-Path $foreignRoot 'ledger.json'),[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None)
+ $stream=[IO.FileStream]::new((Get-HarnessLongPath (Join-Path $foreignRoot 'ledger.json')),[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None)
  try{$bytes=[Text.UTF8Encoding]::new($false).GetBytes(($ledger|ConvertTo-Json -Depth 20));$stream.Write($bytes,0,$bytes.Length);$stream.Flush($true)}finally{$stream.Dispose()}
  Open-HarnessRun $foreignRoot $foreignId $foreignManifest $foreignNonce
  $foreign=$script:Harness;Start-ProcessTrace|Out-Null
@@ -71,14 +71,14 @@ public static class RooTraceParent {
  $root=Start-OwnedProcess -FilePath $launcher -ArgumentList ('root "'+$image+'" "'+$gate+'"') -Purpose trace-fixture
  Trigger $root $gate;$childId=ChildPid $image;$event=TraceEntry $childId
  $p=Get-Process -Id $childId;try{$native=[RooValidationOwnership.Native]::Created($p.Handle)}finally{$p.Dispose()}
- $original=$event.identity.timeCreatedFileTimeUtc;$wrong=($native+50000000).ToString()
- Start-Sleep -Seconds 6
+ $original=$event.identity.timeCreatedFileTimeUtc;$wrong=($native+150000000).ToString()
+ Start-Sleep -Seconds 16
  Invoke-HarnessLedger {param($l) (@($l.entries|Where-Object id -CEQ $event.id)[0]).identity.timeCreatedFileTimeUtc=$wrong}|Out-Null
  try{
   if(Test-TracedDescendant $childId){throw 'Native/event creation mismatch was accepted'}
   $inside=[long]$wrong -ge $main.Trace.Start.ToFileTimeUtc() -and [long]$wrong -le [DateTime]::UtcNow.ToFileTimeUtc()
   if(-not$inside){throw 'Reuse fixture accidentally tested an out-of-window event'}
-  $rows.Add(@{check='iii simulated PID reuse native/event mismatch';status='pass';observed=@{childPid=$childId;nativeBirth=$native.ToString();eventTime=$wrong;differenceSeconds=5;insideInvocationWindow=$inside;adopted=$false}})
+  $rows.Add(@{check='iii simulated PID reuse native/event mismatch';status='pass';observed=@{childPid=$childId;nativeBirth=$native.ToString();eventTime=$wrong;differenceSeconds=15;insideInvocationWindow=$inside;adopted=$false}})
  }finally{Invoke-HarnessLedger {param($l) (@($l.entries|Where-Object id -CEQ $event.id)[0]).identity.timeCreatedFileTimeUtc=$original}|Out-Null}
  $rootEvent=TraceEntry ([int]$root.Identity.pid);$rootName=$rootEvent.identity.processName
  Invoke-HarnessLedger {param($l) (@($l.entries|Where-Object id -CEQ $rootEvent.id)[0]).identity.processName='RooTraceForeignParent.exe'}|Out-Null
@@ -87,6 +87,11 @@ public static class RooTraceParent {
   $rows[$rows.Count-1].observed.rootEventMismatchRefused=$true
  }finally{Invoke-HarnessLedger {param($l) (@($l.entries|Where-Object id -CEQ $rootEvent.id)[0]).identity.processName=$rootName}|Out-Null}
  $child=Wait-Trace {Test-TracedDescendant $childId -PassThru -Ancestor $root} 'cleanup after correct event restored';Stop-HarnessProcess $child
+ $birth=[DateTime]::UtcNow.ToFileTimeUtc()
+ $synthetic=@(@{identity=@{processId=123;timeCreatedFileTimeUtc=($birth+1000000).ToString()}},@{identity=@{processId=123;timeCreatedFileTimeUtc=($birth+2000000).ToString()}})
+ $match=Get-HarnessBirthMatch $synthetic 123 $birth
+ if($match.unique -or $match.matches.Count -ne 2){throw 'Ambiguous synthetic birth events were accepted'}
+ $rows.Add(@{check='CR9 two same-PID start events in birth window refuse';status='pass';observed=@{standIn=$true;pid=123;events=2;refused=$true}})
  $status='pass'
 }finally{
  if($foreign){$script:Harness=$foreign;try{Complete-HarnessInvocation 'fail' -Cleanup|Out-Null}finally{$script:Harness=$main}}

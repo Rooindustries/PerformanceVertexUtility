@@ -3,6 +3,7 @@ param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutRo
 $ErrorActionPreference='Stop'
 . (Join-Path $Source 'tools\validation\Update\Harness.Common.ps1')
 $nonce=Initialize-HarnessInvocation ('fixture-'+$Action) $OutRoot
+Assert-HarnessHostLease
 Ensure-HarnessOutputDirectory $OutRoot
 $directory=New-HarnessEvidenceDirectory $OutRoot ('fixture-'+$Action)
 . (Join-Path $Source 'backend\scripts\BrandCompatibility.Common.ps1')
@@ -11,7 +12,7 @@ $hostExe=Join-Path $install 'backend\bin\optimizer\Optimizer.Host.exe'
 $data=Get-RooIndustriesLocalDataRoot
 $utf8=[Text.UTF8Encoding]::new($false)
 function Save([string]$name,$value){Write-HarnessResult $directory $name $value|Out-Null}
-function Core([string]$action,[hashtable]$fields){$request=@{schemaVersion=1;repoRoot=$install;confirm=$true};foreach($key in $fields.Keys){$request[$key]=$fields[$key]};$result=Invoke-HarnessHost $hostExe $action $request;if($result.status -ne 'completed'){throw ($result|ConvertTo-Json -Depth 30)};$result.data}
+function Core([string]$action,[hashtable]$fields){Assert-HarnessHostLease;$request=@{schemaVersion=1;repoRoot=$install;confirm=$true};foreach($key in $fields.Keys){$request[$key]=$fields[$key]};$result=Invoke-HarnessHost $hostExe $action $request;if($result.status -ne 'completed'){throw ($result|ConvertTo-Json -Depth 30)};$result.data}
 $state='fail'
 try{
 switch($Action){
@@ -22,7 +23,7 @@ switch($Action){
   $process=Start-OwnedProcess -FilePath $Probe -ArgumentList ($arguments -join ' ') -Purpose contract
   if(-not$process.process.WaitForExit(120000)){throw 'Contract probe timeout'}
   if($process.process.ExitCode -ne 0){throw 'Contract probe failed'}
-  $entry=Register-HarnessFile $output 'probe-result';$record=Get-Content -Raw $output|ConvertFrom-Json
+  $entry=Register-HarnessFile $output 'probe-result';$record=[IO.File]::ReadAllText((Get-HarnessLongPath $output))|ConvertFrom-Json
   if($record.nonce -cne $nonce){throw 'Contract output nonce differs.'}
   Save 'contract.json' $record.data
  }
@@ -53,14 +54,14 @@ switch($Action){
   $launcher=Read-HarnessLatestResult 'game-launcher.json' 'fixture-start-game';Remove-HarnessEntry (Get-HarnessEntryById $launcher.ledgerId)
  }
  'block-setup' {
-  $path=Join-Path $install 'setup';if(Test-Path $path){throw 'Setup path already exists; retain it'}
+  $path=Join-Path $install 'setup';if(Test-HarnessPath $path){throw 'Setup path already exists; retain it'}
   $entry=New-HarnessText $path 'Roo Industries OTA E2E preparation refusal' 'setup-blocker'
   Save 'setup-blocker.json' @{ledgerId=$entry.id}
  }
  'unblock-setup' { $blocker=Read-HarnessLatestResult 'setup-blocker.json' 'fixture-block-setup';Remove-HarnessEntry (Get-HarnessEntryById $blocker.ledgerId) }
  'read-security' {
   $paths=@($data,(Join-Path $data 'updates'))
-  $rows=@(foreach($path in $paths){$acl=Get-Acl $path;@{path=$path;owner=$acl.Owner;sddl=$acl.Sddl;protected=$acl.AreAccessRulesProtected;rules=@($acl.Access|ForEach-Object {@{sid=$_.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value;rights=[string]$_.FileSystemRights;type=[string]$_.AccessControlType;inherited=$_.IsInherited}})}})
+  $rows=@(foreach($path in $paths){$acl=Get-Acl -LiteralPath (Get-HarnessLongPath $path);@{path=$path;owner=$acl.Owner;sddl=$acl.Sddl;protected=$acl.AreAccessRulesProtected;rules=@($acl.Access|ForEach-Object {@{sid=$_.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value;rights=[string]$_.FileSystemRights;type=[string]$_.AccessControlType;inherited=$_.IsInherited}})}})
   Save 'update-folder-security.json' $rows
   Add-Type @'
 using System;
@@ -93,7 +94,7 @@ public static class RooUpdatePermissions {
 '@
   $probeName='roo-ota-write-'+[Guid]::NewGuid().ToString('N')+'.tmp'
   $control=Join-Path (Join-Path (Get-RooIndustriesLocalAppData) 'Temp') $probeName;$sealed=Join-Path (Join-Path $data 'updates') $probeName
-  try{$result=[RooUpdatePermissions]::Check($control,$sealed);if($result[0] -eq 0){$controlEntry=Register-HarnessFile $control 'restricted-write' 'invocation'};if($result[1] -eq 0){$sealedEntry=Register-HarnessFile $sealed 'restricted-write' 'invocation'};Save 'update-folder-write-probe.json' @{administratorGroupDisabled=$true;privilegesRemoved=$true;controlWin32=$result[0];updatesWin32=$result[1]};if($result[0] -ne 0 -or $result[1] -ne 5){throw 'Update-folder permission control failed'}}finally{foreach($entry in @($controlEntry,$sealedEntry)){if($entry){Remove-HarnessEntry $entry}}}
+  try{$result=[RooUpdatePermissions]::Check((Get-HarnessLongPath $control),(Get-HarnessLongPath $sealed));if($result[0] -eq 0){$controlEntry=Register-HarnessFile $control 'restricted-write' 'invocation'};if($result[1] -eq 0){$sealedEntry=Register-HarnessFile $sealed 'restricted-write' 'invocation'};Save 'update-folder-write-probe.json' @{administratorGroupDisabled=$true;privilegesRemoved=$true;controlWin32=$result[0];updatesWin32=$result[1]};if($result[0] -ne 0 -or $result[1] -ne 5){throw 'Update-folder permission control failed'}}finally{foreach($entry in @($controlEntry,$sealedEntry)){if($entry){Remove-HarnessEntry $entry}}}
  }
 }
 
