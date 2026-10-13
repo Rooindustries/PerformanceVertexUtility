@@ -152,4 +152,13 @@ A diff since 06dddb5:
  15 files changed, 86 insertions(+), 37 deletions(-)
 ```
 
-**Verdict: I do not yet agree A and B are ready to merge to main.** Required remaining work is one shared generated-path/filesystem policy, its exact long-path cleanup check, and closure of signed frame `31805230c2994beebc7ab152f304f221`. The already passing product gates need no repetition unless that fix touches their inputs. The final code is committed; the reports are committed separately; neither branch was pushed or merged into main. Final report-only SHAs/clean readback: `slice14/final-branches.json`.
+**Slice-14 verdict (the filesystem blocker is resolved in slice 15 below): I did not yet agree A and B were ready to merge to main.** Required remaining work is one shared generated-path/filesystem policy, its exact long-path cleanup check, and closure of signed frame `31805230c2994beebc7ab152f304f221`. The already passing product gates need no repetition unless that fix touches their inputs. The final code is committed; the reports are committed separately; neither branch was pushed or merged into main. Final report-only SHAs/clean readback: `slice14/final-branches.json`.
+
+
+## Slice 15: CR8 closure
+
+One shared extended-path walker/hash/archive path now handles the listed harness tree operations. Linux lint passes and rejects a reverted scratch walk before Windows work. PowerShell 5.1 parsed all 14 scripts with zero errors, HarnessTrace compiled, ownership checks passed 43/43 and trace fixtures passed 3/3 on retry. The first trace refusal is retained and explained without a causal claim in the detailed report.
+
+Frame `31805230c2994beebc7ab152f304f221` is closed: 1,039 entries, 137.017 seconds, frame/ledger/264-character path absent. The three new fixtures distinguish recorded versus unrecorded long descendants and ZIP inclusion, with 331-character file paths. Final audit: zero owned processes or ledgered frames; same 160 legacy frames; 449 unchanged data files and exactly three ledger-owned fixture files removed. Installed build remains the stopped signed test-feed 0.11.1-beta; governor paused/disabled. Completed installer downloads this slice: 0. Blackwell/KVM untouched.
+
+Detailed check and site-by-site tables: `slice15/report.md`; authoritative evidence: `slice15/harness-last/receipt.json`, `slice15/trace-receipt.json`, `slice15/frame-31805230-receipt.json`, `slice15/final-audit-receipt.json`. CR8 is resolved. Full gates remain intentionally deferred until the independent review/fix round, as requested. Final commit identities and clean-state proof: `slice15/final-branches.json`.

@@ -51,6 +51,32 @@ function ForeignScope{
  Open-HarnessRun $root $id $manifest ([Guid]::NewGuid().ToString('N'))
  return @{scope=$script:Harness;rootEntry=$entry}
 }
+function LongFrame([bool]$Unrecorded){
+ $root='C:\RooBuild\roo-industries-long-path-'+[Guid]::NewGuid().ToString('N')
+ New-HarnessDirectory $root 'long-path-fixture' 'invocation'|Out-Null
+ $source=Join-Path $root 'source';New-HarnessDirectory $source 'long-path-source' 'invocation'|Out-Null
+ $id=$root.Substring($root.Length-32)
+ $manifestPath=Join-Path $source 'source-verification.json'
+ New-HarnessText $manifestPath (@{frameId=$id;files=@{}}|ConvertTo-Json) 'long-path-manifest' 'invocation'|Out-Null
+ $path=$root
+ foreach($segment in @(('a'*80),('b'*80),('c'*80))){$path=Join-Path $path $segment;New-HarnessDirectory $path 'long-path-fixture' 'invocation'|Out-Null}
+ $file=Join-Path $path 'long-evidence.json'
+ New-HarnessText $file (@{nonce=$nonce;value='long path bytes'}|ConvertTo-Json) 'long-path-file' 'invocation'|Out-Null
+ if($file.Length -lt 300 -or $path.Length -lt 300){throw 'Fixture did not reach the long path.'}
+ $owned=@(Get-HarnessEntries|Where-Object {$_.state -eq 'active' -and $_.identity.path -and ($_.identity.path -ieq $root -or $_.identity.path.StartsWith($root+'\',[StringComparison]::OrdinalIgnoreCase))})
+ $entries=@($owned|ForEach-Object {$copy=$_|ConvertTo-Json -Depth 30|ConvertFrom-Json;if($copy.kind -eq 'folder'){$copy.purpose='source-frame'};if(-not$Unrecorded -or $copy.identity.path -notin @($path,$file)){$copy}})
+ $ledgerPath=Join-Path $root 'ledger.json'
+ $ledger=@{protocol='roo-harness-ledger/v1';machine=$env:COMPUTERNAME;frameId=$id;manifestSha256=(Get-HarnessFileSha256 $manifestPath).ToLowerInvariant();entries=$entries;invocations=@()}
+ New-HarnessText $ledgerPath ($ledger|ConvertTo-Json -Depth 60) 'long-path-ledger' 'invocation'|Out-Null
+ return @{root=$root;path=$file;unrecordedDirectory=$path;ledger=$ledgerPath;owned=@(Get-HarnessEntries|Where-Object {$_.state -eq 'active' -and $_.identity.path -and ($_.identity.path -ieq $root -or $_.identity.path.StartsWith($root+'\',[StringComparison]::OrdinalIgnoreCase))})}
+}
+function CloseLongFrame($Fixture){
+ $closed=& (Join-Path $Source 'tools\validation\Update\Clear-UpdateFrame.ps1') -Frame $Fixture.root -ExpectedMachine $env:COMPUTERNAME|ConvertFrom-Json
+ $script:Harness=$main
+ if([IO.Directory]::Exists((Get-HarnessLongPath $Fixture.root)) -or @($closed.entries|Where-Object state -EQ 'active').Count){throw 'Long frame or active ledger entry remained.'}
+ foreach($entry in $Fixture.owned){Set-HarnessEntryState $entry.id 'removed'}
+ return $closed
+}
 try{
  $fixture=Fixture 'present-data';$sentinel=Join-Path $fixture 'keep.txt'
  Rejected 'active current data root present in preflight' {Move-ShippedFreshData $fixture @{dataRoots=@(@{path=$fixture;exists=$true})} (Join-Path $directory 'moved-data')} {[IO.File]::ReadAllText($sentinel) -ceq 'untouched'}
@@ -195,6 +221,28 @@ end;
  $script:Harness=$foreign.scope;$entry=@(Get-HarnessEntries|Where-Object {$_.kind -eq 'file' -and $_.identity.path -ieq (Join-Path $foreignBin 'keep.txt')})[0];Remove-HarnessEntry $entry;$entry=@(Get-HarnessEntries|Where-Object {$_.kind -eq 'folder' -and $_.identity.path -ieq $foreignBin})[0];Remove-HarnessEntry $entry;$script:Harness=$main
  Initialize-HarnessBuildFolders $projectRoot
  if(@(Get-HarnessEntries|Where-Object {$_.purpose -eq 'generated-build' -and $_.identity.path -in @((Join-Path $projectRoot 'bin'),(Join-Path $projectRoot 'obj'))}).Count -ne 2){throw 'Prepared build folders were not recorded.'}
+ $long=LongFrame $false
+ $longHash=Get-HarnessFileSha256 $long.path
+ $closed=CloseLongFrame $long
+ Write-HarnessResult $directory 'long-recorded-closed.json' $closed|Out-Null
+ Passed 'CR8 recorded 300+ character frame clears with a closed ledger' @{path=$long.path;length=$long.path.Length;sha256=$longHash;frameGone=$true;activeEntries=0}
+ $long=LongFrame $true
+ $longHash=Get-HarnessFileSha256 $long.path;$message=$null
+ try{& (Join-Path $Source 'tools\validation\Update\Clear-UpdateFrame.ps1') -Frame $long.root -ExpectedMachine $env:COMPUTERNAME|Out-Null}catch{$message=$_.Exception.Message}finally{$script:Harness=$main}
+ if($message -notmatch 'Unrecorded frame (file|directory) retained' -or -not($message.Contains($long.path) -or $message.Contains($long.unrecordedDirectory)) -or -not[IO.File]::Exists((Get-HarnessLongPath $long.ledger)) -or (Get-HarnessFileSha256 $long.path) -cne $longHash){throw ('Long unrecorded entry was not safely refused: '+$message)}
+ $retained=[IO.File]::ReadAllText((Get-HarnessLongPath $long.ledger))|ConvertFrom-Json
+ Write-HarnessResult $directory 'long-unrecorded-retained.json' @{message=$message;path=$long.path;pathLength=$long.path.Length;directory=$long.unrecordedDirectory;hash=$longHash;ledger=$retained}|Out-Null
+ Passed 'CR8 unrecorded 300+ character directory and file are retained' @{message=$message;path=$long.path;length=$long.path.Length;sha256=$longHash;ledgerKept=$true}
+ foreach($path in @($long.path,$long.unrecordedDirectory)){$entry=@($long.owned|Where-Object {$_.identity.path -ieq $path})[0];Remove-HarnessEntry $entry}
+ CloseLongFrame $long|Out-Null
+ $long=LongFrame $false
+ $archive=Get-HarnessOutputPath $directory 'long-evidence.zip'
+ New-HarnessArchive $long.root $archive {param($item,$relative) [IO.Path]::GetExtension($item.FullName) -ieq '.json'}|Out-Null
+ $zip=[IO.Compression.ZipFile]::OpenRead((Get-HarnessLongPath $archive))
+ $relative=$long.path.Substring($long.root.Length+1).Replace('\','/')
+ try{$entry=$zip.GetEntry($relative);if(-not$entry){throw 'Long JSON archive member was omitted.'};$stream=$entry.Open();$reader=[IO.StreamReader]::new($stream);try{$text=$reader.ReadToEnd()}finally{$reader.Dispose()};if($text -cne [IO.File]::ReadAllText((Get-HarnessLongPath $long.path))){throw 'Long JSON archive bytes differ.'}}finally{$zip.Dispose()}
+ Passed 'CR8 archive includes 300+ character JSON with its relative name and bytes' @{path=$long.path;length=$long.path.Length;entry=$relative;archive=$archive;bytesMatch=$true}
+ CloseLongFrame $long|Out-Null
  $status='pass'
 }finally{
  $script:Harness=$main
