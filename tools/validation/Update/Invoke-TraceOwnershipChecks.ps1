@@ -46,6 +46,10 @@ public static class RooTraceParent {
  $child=Wait-Trace {Test-TracedDescendant $childId -PassThru -Ancestor $root} 'trace adoption after parent exit'
  if($child.OwnershipProof.kind -cne 'trace' -or $child.OwnershipProof.eventIds.Count -lt 2 -or -not$root.process.HasExited){throw 'Dead-parent case did not use the recorded trace chain'}
  $rows.Add(@{check='i 25 ms parent during 800 ms ledger lock';status='pass';observed=@{proof=$child.OwnershipProof;root=$root.Identity;child=$child.Identity;rootExited=$root.process.HasExited;middleLifetimeMs=25;ledgerLockedMs=800}})
+ Stop-HarnessProcess $root
+ $retained=Test-TracedDescendant $childId -PassThru -Ancestor $root
+ if(-not$retained -or -not$retained.RetainedOwnershipProof -or $retained.Identity.creationTimeFileTimeUtc -cne $child.Identity.creationTimeFileTimeUtc -or $retained.OwnershipProof.kind -cne 'trace'){throw 'An accepted trace proof was lost after its owned root exited.'}
+ $rows.Add(@{check='accepted trace proof survives owned root receipt retirement';status='pass';observed=@{root=$root.Identity;rootExited=$root.process.HasExited;child=$retained.Identity;proof=$retained.OwnershipProof;retained=$retained.RetainedOwnershipProof}})
  Stop-HarnessProcess $child
 
  $foreignRoot='C:\RooBuild\roo-industries-trace-foreign-'+[Guid]::NewGuid().ToString('N')
