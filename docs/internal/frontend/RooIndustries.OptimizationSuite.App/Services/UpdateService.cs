@@ -138,6 +138,31 @@ public sealed class UpdateService
             if (Path.GetFileName(folder) != version && SemanticVersion.TryParse(Path.GetFileName(folder), out _)) Directory.Delete(folder, true);
     }
 
+    private async Task CleanInstalledCacheAsync(string root)
+    {
+        try
+        {
+            if (!SemanticVersion.TryParse(CurrentVersion, out var installed)) return;
+            for (var attempt = 1; ; attempt++)
+            {
+                var blocked = 0;
+                foreach (var folder in Directory.EnumerateDirectories(root))
+                {
+                    if (!SemanticVersion.TryParse(Path.GetFileName(folder), out var version) || version!.CompareTo(installed) > 0) continue;
+                    try { Directory.Delete(folder, true); }
+                    catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+                    {
+                        blocked++;
+                        if (attempt == 30) AppLog.Write("update", "Couldn't clean up the installed update: " + error.Message);
+                    }
+                }
+                if (blocked == 0 || attempt == 30) return;
+                try { await Task.Delay(1000, _stop.Token); } catch (OperationCanceledException) { return; }
+            }
+        }
+        catch (Exception error) { AppLog.Write("update", "Couldn't clean up the installed update: " + error.Message); }
+    }
+
     private async Task RecoverAsync()
     {
         try
@@ -161,8 +186,6 @@ public sealed class UpdateService
                 {
                     try
                     {
-                        var installedFolder = Path.Combine(root, CurrentVersion);
-                        if (Directory.Exists(installedFolder)) Directory.Delete(installedFolder, true);
                         foreach (var log in Directory.EnumerateFiles(root, "install-*.log").Select(path => new FileInfo(path))
                             .OrderByDescending(file => file.LastWriteTimeUtc).ThenByDescending(file => file.Name, StringComparer.Ordinal).Skip(3))
                             log.Delete();
@@ -170,6 +193,7 @@ public sealed class UpdateService
                     catch (Exception error) { AppLog.Write("update", "Couldn't clean up the installed update: " + error.Message); }
                 }
             }
+            _ = CleanInstalledCacheAsync(root);
             if (_feed is null) return;
             var candidates = Directory.EnumerateDirectories(root).Select(folder => new { Folder = folder, Name = Path.GetFileName(folder) })
                 .Where(item => SemanticVersion.TryParse(item.Name, out _)).OrderByDescending(item => { SemanticVersion.TryParse(item.Name, out var value); return value; });

@@ -96,3 +96,5 @@ Use a short `-OutRoot <frame>\s` for `Invoke-SigningScenario.ps1`. Its preflight
 The harness uses one extended-path tree walker and file-hash helper for source, data, cleanup and ZIP evidence. Run `python3 -I tools/validation/Update/run_harness_checks.py --lint-only` before staging; the driver enforces the same lint before Windows checks.
 
 Update drivers use `upload_frame` / `interactive_frame` and hold a ledger-owned `C:\RooBuild\host-lease.json` until frame cleanup; legacy transport entry points retain the v1 invocation contract. `run_harness_checks.py --frozen-p0 <snapshot-folder>` overrides the repository-wide frozen inputs; `--resolve-inputs-only` checks resolution without contacting a PC.
+
+`cache-cleanup` holds an owned installed-version cache file for 5 and 40 seconds from the native app birth, then checks deletion within 35 seconds, the single terminal warning, continued app operation and next-start retry. The all journey includes it after same-version. Install/copy-failure read back cache absence within 35 seconds; ready checks an owned older cache is removed while the newer installer and creation identity stay unchanged.

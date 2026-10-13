@@ -167,7 +167,7 @@ def contracts(receipt, builds, pc_out, installer, valid):
 def main():
     global OUT, HOST, MACHINE, FEED, KEY, VERSION_A, VERSION_B, FRAME_RECEIPT
     parser = argparse.ArgumentParser()
-    parser.add_argument("--scenario", default="all", choices=["all", "build", "seed", "manual-install", "feed-down", "slow-feed", "close-during-check", "malformed-feed", "bad-signature", "wrong-product", "wrong-channel", "same-version", "older-version", "tampered", "tampered-size", "manual-download", "ready", "scheduled-download", "blocked", "cancel", "install", "failure", "copy-failure", "cleanup", "contracts", "transport-error", "manual-timeout", "settings-readonly", "timer-read-failure"])
+    parser.add_argument("--scenario", default="all", choices=["all", "build", "seed", "manual-install", "feed-down", "slow-feed", "close-during-check", "malformed-feed", "bad-signature", "wrong-product", "wrong-channel", "same-version", "cache-cleanup", "older-version", "tampered", "tampered-size", "manual-download", "ready", "scheduled-download", "blocked", "cancel", "install", "failure", "copy-failure", "cleanup", "contracts", "transport-error", "manual-timeout", "settings-readonly", "timer-read-failure"])
     parser.add_argument("--host", default=os.environ.get("ROO_TEST_SSH_HOST"))
     parser.add_argument("--expected-machine", default=os.environ.get("ROO_TEST_COMPUTER"))
     parser.add_argument("--feed-url", default=os.environ.get("ROO_TEST_UPDATE_FEED"))
@@ -367,7 +367,7 @@ def main():
                 if name == "malformed-feed":
                     stop_server()
                 start_server()
-            if name in ("seed", "manual-install", "same-version", "cleanup", "settings-readonly"):
+            if name in ("seed", "manual-install", "same-version", "cache-cleanup", "cleanup", "settings-readonly"):
                 shutil.copyfile(OUT / "same.json", feed_file)
             elif name == "older-version":
                 shutil.copyfile(OUT / "older.json", feed_file)
@@ -390,6 +390,9 @@ def main():
                     target.write(b"x")
             if name == "manual-install":
                 scenario(name, builds + "\\A\\" + a.name)
+            elif name == "same-version":
+                scenario(name)
+                scenario("cache-cleanup", evidence_name="installed-cache-locks")
             elif name == "blocked":
                 fixture("start-game")
                 try:
