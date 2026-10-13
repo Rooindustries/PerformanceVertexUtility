@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import gzip
 import hashlib
 import io
 import json
@@ -448,6 +449,13 @@ def verify_source(host: str, machine: str, receipt: dict):
     validate_receipt(machine, receipt)
     invoke(host, machine, REMOTE_GUARDS + f"\n$m=Assert-SourceSnapshot {ps_literal(receipt['stagingPath'])} {ps_literal(receipt['manifestSha256'])}; 'source verified'", timeout=SOURCE_TIMEOUT)
 
+def compact_powershell(script: str, frame: str):
+    payload = base64.b64encode(gzip.compress(script.encode('utf-8'), mtime=0)).decode()
+    loader = "$b=[Convert]::FromBase64String('" + payload + "');$m=[IO.MemoryStream]::new($b,$false);$z=[IO.Compression.GZipStream]::new($m,[IO.Compression.CompressionMode]::Decompress);$r=[IO.StreamReader]::new($z,[Text.Encoding]::UTF8);try{$s=$r.ReadToEnd()}finally{$r.Dispose();$z.Dispose();$m.Dispose()};& ([scriptblock]::Create($s))"
+    loader += ';$rooEncodedFrameScope=' + ps_literal(frame)
+    return base64.b64encode(loader.encode('utf-16le')).decode()
+
+
 def interactive(host: str, machine: str, receipt: dict, script: str, arguments: dict,
                 minutes: float, task_name: str | None = None, logon_type: int = 3):
     validate_receipt(machine, receipt)
@@ -466,9 +474,9 @@ def interactive(host: str, machine: str, receipt: dict, script: str, arguments: 
     helpers = 'function Get-HarnessLongPath([string]$Path){[RooValidationOwnership.Native]::Long($Path)}\nfunction Get-HarnessPlainPath([string]$Path){[RooValidationOwnership.Native]::Plain($Path)}\nfunction Get-HarnessToolPath([string]$Path){[RooValidationOwnership.Native]::Tool($Path)}\n'
     functions = harness_tree_helpers()
     helpers += functions[functions.index('function Test-HarnessPath('):functions.index('function Get-HarnessItem(')]
-    native = '. ' + ps_literal(receipt['stagingPath'] + '/tools/validation/LoadTimes/CleanupOwnership.Common.ps1') + ';'
+    native = functions[:functions.index('function Get-HarnessLongPath(')] + '. ' + ps_literal(receipt['stagingPath'] + '/tools/validation/LoadTimes/CleanupOwnership.Common.ps1') + ';'
     child = f"{native}{helpers}$ErrorActionPreference='Stop';$ProgressPreference='SilentlyContinue';[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false);$OutputEncoding=[Console]::OutputEncoding;try{{$run={ps_literal(run)};$global:RooVerificationInvocationContext=[pscustomobject]@{{protocol='roo-industries-verification-invocation/v1';run=$run;taskName={ps_literal(task_name)};task=([IO.File]::ReadAllText((Get-HarnessLongPath (Join-Path $run 'task.json')))|ConvertFrom-Json);wrapper=([IO.File]::ReadAllText((Get-HarnessLongPath (Join-Path $run 'wrapper.json')))|ConvertFrom-Json)}};$p=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{payload}'))|ConvertFrom-Json;$a=@{{}};foreach($v in $p.PSObject.Properties){{$a[$v.Name]=$v.Value}};& (Get-HarnessToolPath {ps_literal(receipt['stagingPath'] + '/' + str(relative))}) @a;if(-not$?){{exit 1}};exit 0}}catch{{Write-Output ('FAIL child exception :: '+$_.Exception.Message+' :: '+$_.ScriptStackTrace);exit 1}}"
-    child_encoded = base64.b64encode(child.encode('utf-16le')).decode()
+    child_encoded = compact_powershell(child, receipt['runRoot'])
     wrapper = "\n".join([
         "$ErrorActionPreference='Stop'",
         native,
@@ -488,7 +496,7 @@ def interactive(host: str, machine: str, receipt: dict, script: str, arguments: 
         "}",
         "exit $exit",
     ])
-    encoded = base64.b64encode(wrapper.encode('utf-16le')).decode()
+    encoded = compact_powershell(wrapper, receipt['runRoot'])
     args = '--headless "' + 'SYSTEM_POWERSHELL' + '" -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand ' + encoded
     setup = REMOTE_GUARDS + f"\n$m=Assert-SourceSnapshot {ps_literal(receipt['stagingPath'])} {ps_literal(receipt['manifestSha256'])};if($m.frameId -cne {ps_literal(receipt['frameId'])} -or $m.sid -cne {ps_literal(receipt['sid'])}){{throw 'Source run receipt scope differs'}};New-ProtectedFrame {ps_literal(run)};"
     setup += f"\n. {ps_literal(receipt['stagingPath'] + '/tools/validation/LoadTimes/CleanupOwnership.Common.ps1')}\n"
