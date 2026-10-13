@@ -1,0 +1,216 @@
+import argparse
+import json
+from pathlib import Path
+import shutil
+import subprocess
+
+import importlib.util
+
+ROOT = Path(__file__).resolve().parents[3]
+
+
+def load(name, path):
+    spec = importlib.util.spec_from_file_location(name, path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+memory = load('tour_memory', ROOT / 'tools/validation/Memory/run_memory.py')
+
+
+class Tour(memory.Measurement):
+    def desktop(self, name, fields, minutes, suite='Tour'):
+        w = self.windows
+        result = w.interactive_frame(self.args.host, self.args.expected_machine, self.frame,
+                                     'tools/validation/' + suite + '/' + name + '.ps1', fields, minutes)
+        (self.out / (name + '.log')).write_text(result.stdout)
+        completion = w.completion(result.stdout)
+        memory.save(self.out / (name + '-completion.json'), completion)
+        if not completion['passed']:
+            raise RuntimeError(name + ' did not complete')
+        receipt = w.read_result(self.args.host, self.args.expected_machine, self.frame, 'receipt.json', completion['nonce'])
+        if receipt['status'] != 'pass':
+            raise RuntimeError('Desktop scenario failed')
+        return completion, receipt
+
+    def restore(self):
+        original = self.desktop
+        self.desktop = lambda name, fields, minutes: original(name, fields, minutes, 'Memory')
+        try:
+            super().restore()
+        finally:
+            self.desktop = original
+
+    def run(self):
+        checks, errors = [], []
+        restored = True
+        result = {'status': 'fail', 'checks': checks, 'cleanupErrors': errors, 'completedInstallerDownloads': 0}
+        try:
+            w = self.windows
+            self.frame = w.upload_frame(self.args.host, self.args.expected_machine, 'roo-industries-tour', True, r'C:\RooBuild')
+            memory.save(self.out / 'frame.json', self.frame)
+            w.enter_host_lease(self.args.host, self.args.expected_machine, self.frame)
+            w.verify_local_source(self.args.host, self.args.expected_machine, self.frame)
+            self.restore_remote = self.input(self.args.restore_installer, 'restore.exe')
+            self.preflight()
+            candidate = self.input(self.args.installer, 'candidate.exe')
+            parse = self.invoke(self.scope() + '$rows=@();foreach($file in Get-HarnessTree ' + w.ps_literal(self.frame['stagingPath'] + '/tools/validation/Tour') + " -FilesOnly|Where-Object {[IO.Path]::GetExtension($_.FullName) -ieq '.ps1'}){$tokens=$null;$errors=$null;[Management.Automation.Language.Parser]::ParseInput([IO.File]::ReadAllText($file.LongPath),[ref]$tokens,[ref]$errors)|Out-Null;$rows+=@{path=$file.FullName;errors=@($errors|ForEach-Object {$_.Message})}};@{powershell=$PSVersionTable.PSVersion.ToString();files=$rows}|ConvertTo-Json -Depth 10")
+            (self.out / 'parse.json').write_text(parse.stdout)
+            parsed = json.loads(parse.stdout)
+            if any(r['errors'] for r in parsed['files']):
+                raise ValueError('PowerShell parse failed')
+            checks.append({'check': 'PS 5.1 parse', 'observed': parsed['powershell'], 'passed': parsed['powershell'].startswith('5.1.')})
+            _, inspection = self.desktop('Inspect-Tour', {'Source': self.frame['stagingPath'], 'OutRoot': self.frame['runRoot'] + '\\inspect'}, 3)
+            memory.save(self.out / 'desktop-inspection.json', inspection)
+            if inspection['width'] < 1600 or inspection['height'] < 1000:
+                raise RuntimeError('Signed-in desktop cannot contain 1600x1000: ' + inspection['workArea'])
+            self.modified_install = True
+            completion, capture = self.desktop('Invoke-AppTour', {
+                'Source': self.frame['stagingPath'], 'OutRoot': self.frame['runRoot'] + '\\tour',
+                'Installer': candidate, 'Sha256': self.args.sha256.upper(), 'ExpectedVersion': self.args.version,
+                'HoldSeconds': self.args.hold_seconds}, 45)
+            memory.save(self.out / 'capture.json', capture)
+            checks.extend([
+                {'check': 'candidate interactive upgrade', 'passed': capture['version'] == self.args.version},
+                {'check': 'original appearance restored in Settings', 'passed': capture['appearanceRestored']},
+                {'check': 'all app screenshots are 1600x1000 DWM bounds', 'passed': all(s['width'] == 1600 and s['height'] == 1000 for s in capture['screens'] if s['pass'] != 'installer')},
+                {'check': 'only verified cursor clicks or recorded navigation Select fallbacks', 'passed': all(a['verified'] or a['kind'] == 'navigation' and a['method'].endswith('fallback') for a in capture['actions'])},
+            ])
+        except BaseException as error:
+            result['failure'] = memory.describe_error(error)
+            if isinstance(error, subprocess.CalledProcessError):
+                (self.out / 'failure.log').write_text((error.stdout or '') + (error.stderr or ''))
+        finally:
+            if self.frame:
+                if self.modified_install and self.before:
+                    try:
+                        self.restore()
+                    except BaseException as error:
+                        restored = False
+                        errors.append('Restore: ' + memory.describe_error(error))
+                try:
+                    self.collect()
+                except BaseException as error:
+                    errors.append('Evidence: ' + memory.describe_error(error))
+                if restored:
+                    try:
+                        self.clear()
+                    except BaseException as error:
+                        errors.append('Frame cleanup: ' + memory.describe_error(error))
+                else:
+                    result['retainedFrame'] = self.frame['runRoot']
+                if self.before:
+                    try:
+                        after = self.final_snapshot()
+                        audit = memory.cleanup_checks(self.before, after, self.frame)
+                        memory.save(self.out / 'cleanup-audit.json', {'status': 'pass' if all(audit.values()) else 'fail', 'checks': audit})
+                        checks.extend({'check': name, 'passed': passed} for name, passed in audit.items())
+                    except BaseException as error:
+                        errors.append('Audit: ' + memory.describe_error(error))
+            result['status'] = 'pass' if checks and all(c['passed'] for c in checks) and not errors and 'failure' not in result else 'fail'
+            memory.save(self.out / 'receipt.json', result)
+        return result
+
+
+def encode(out, capture, hold):
+    from PIL import Image, ImageDraw
+    extracted = out / 'evidence'
+    screens, installer = out / 'screens', out / 'installer'
+    screens.mkdir(exist_ok=True)
+    installer.mkdir(exist_ok=True)
+    listing = []
+    for shot in capture['screens']:
+        matches = list(extracted.rglob(shot['file']))
+        if len(matches) != 1 or memory.identity(matches[0])['sha256'].upper() != shot['sha256']:
+            raise ValueError('Screenshot identity differs: ' + shot['file'])
+        target = (installer if shot['pass'] == 'installer' else screens) / shot['file']
+        shutil.copyfile(matches[0], target)
+        listing.append((target.relative_to(out).as_posix(), shot['pass'] + ': ' + shot['page'] + ', ' + shot['tab'] + (', scroll part ' + str(shot['part']) if shot['part'] else '')))
+    for name in ['installer', 'tour']:
+        info = capture['movies'][name]
+        relative = info['folder'].split('\\tour\\', 1)[1]
+        folder = extracted / 'tour' / relative.replace('\\', '/')
+        frames = sorted(folder.glob('frame-*.jpg'))
+        if len(frames) != info['frames'] or not frames:
+            raise ValueError('Video frame count differs')
+        output = out / (name + '.mp4')
+        subprocess.run(['/usr/bin/ffmpeg', '-nostdin', '-v', 'error', '-y', '-framerate', '15', '-i', str(folder / 'frame-%07d.jpg'),
+                        '-vf', 'scale=ceil(iw/2)*2:ceil(ih/2)*2', '-c:v', 'libx264', '-preset', 'medium', '-crf', '20',
+                        '-pix_fmt', 'yuv420p', '-movflags', '+faststart', str(output)], check=True)
+        metadata = json.loads(subprocess.check_output(['/usr/bin/ffprobe', '-v', 'error', '-show_format', '-show_streams', '-of', 'json', str(output)], text=True))
+        memory.save(out / (name + '-video.json'), metadata)
+        listing.append((output.name, name + ' tour, real cursor, H.264, 15 fps'))
+    for letter in ['A', 'B', 'C']:
+        shots = [s for s in capture['screens'] if s['pass'] == letter]
+        columns = 4
+        sheet = Image.new('RGB', (columns * 400, ((len(shots) + columns - 1) // columns) * 285), '#151515')
+        draw = ImageDraw.Draw(sheet)
+        for i, shot in enumerate(shots):
+            with Image.open(screens / shot['file']) as image:
+                image.thumbnail((390, 245))
+                x, y = i % columns * 400, i // columns * 285
+                sheet.paste(image, (x + 5, y + 5))
+                draw.text((x + 5, y + 251), shot['file'][:57], fill='white')
+        target = out / ('contact-sheet-' + letter + '.png')
+        sheet.save(target)
+        listing.append((target.name, 'Pass ' + letter + ' contact sheet'))
+    memory.save(out / 'media-summary.json', {
+        'screenshots': {key: sum(s['pass'] == key for s in capture['screens']) for key in ['installer', 'A', 'B', 'C']},
+        'fallbacks': [a for a in capture['actions'] if not a['verified']],
+        'notCaptured': capture['notCaptured'], 'holdSeconds': hold,
+        'videos': {name: {**memory.identity(out / (name + '.mp4')), 'durationSeconds': float(json.loads((out / (name + '-video.json')).read_text())['format']['duration'])} for name in ['tour', 'installer']}})
+    # Raw frames remain in the verified archive; the index inventories that archive once.
+    for name in ['installer', 'tour']:
+        relative = capture['movies'][name]['folder'].split('\\tour\\', 1)[1]
+        folder = extracted / 'tour' / relative.replace('\\', '/')
+        shutil.rmtree(folder)
+    lines = ['# Roo Industries Optimization Suite ' + capture['version'] + ' tour', '',
+             'The installer upgrades published 0.11.0. Pass A uses the original theme in Simple mode; B uses advanced mode; C uses Blackout Gold in advanced mode. App images contain only their 1600×1000 DWM frame bounds.', '',
+             '## Media', '']
+    lines += ['- [' + path + '](' + path + '): ' + description for path, description in listing]
+    lines += ['', '## Not captured', ''] + ['- ' + str(item.get('pass', 'All')) + ': ' + item['state'] + '. ' + item['reason'] for item in capture['notCaptured']]
+    lines += ['', '## Evidence', '', 'The nonce-bound capture receipt contains every cursor verification, navigation fallback, DWM bound and screenshot hash. Raw 15 fps window frames and UIA trees are retained in evidence.zip. cleanup-audit.json records published-build, file-data and raw-registry restoration.']
+    for path in sorted(out.rglob('*')):
+        if path.is_file() and path.relative_to(out).as_posix() not in {p for p, _ in listing} and path.name != 'index.md':
+            lines.append('- [' + path.relative_to(out).as_posix() + '](' + path.relative_to(out).as_posix() + '): ' + ('UIA tree or raw capture provenance' if path.is_relative_to(extracted) else 'Run evidence'))
+    (out / 'index.md').write_text('\n'.join(lines) + '\n')
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--scenario', choices=['full'], required=True)
+    parser.add_argument('--host', required=True)
+    parser.add_argument('--expected-machine', required=True)
+    parser.add_argument('--installer', type=Path, required=True)
+    parser.add_argument('--sha256', required=True)
+    parser.add_argument('--version', required=True)
+    parser.add_argument('--restore-installer', type=Path, required=True)
+    parser.add_argument('--restore-sha256', required=True)
+    parser.add_argument('--hold-seconds', type=int, default=4, choices=[3, 4])
+    parser.add_argument('--out-dir', type=Path, required=True)
+    args = parser.parse_args()
+    for path, expected in [(args.installer, args.sha256), (args.restore_installer, args.restore_sha256)]:
+        if memory.identity(path)['sha256'].lower() != expected.lower():
+            parser.error('Installer SHA-256 differs; no remote action started')
+    if subprocess.check_output(['git', 'status', '--porcelain'], cwd=ROOT, text=True).strip():
+        parser.error('Commit the scripts first; stage a clean head')
+    load('tour_lint', ROOT / 'tools/validation/Update/run_harness_checks.py').lint_tree(ROOT / 'tools/validation/Tour')
+    args.out_dir.mkdir(parents=True, exist_ok=False)
+    memory.save(args.out_dir / 'source-binding.json', {'head': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(),
+                                                    'candidate': memory.identity(args.installer), 'restore': memory.identity(args.restore_installer)})
+    result = Tour(args).run()
+    if (args.out_dir / 'capture.json').exists():
+        try:
+            encode(args.out_dir, json.loads((args.out_dir / 'capture.json').read_text()), args.hold_seconds)
+        except Exception as error:
+            result['status'] = 'fail'
+            result['encodingFailure'] = memory.describe_error(error)
+            memory.save(args.out_dir / 'receipt.json', result)
+    print(json.dumps(result, indent=2))
+    if result['status'] != 'pass':
+        raise SystemExit(1)
+
+
+if __name__ == '__main__':
+    main()
