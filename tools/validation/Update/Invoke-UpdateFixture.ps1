@@ -6,7 +6,7 @@ $nonce=Initialize-HarnessInvocation ('fixture-'+$Action) $OutRoot
 Assert-HarnessHostLease
 Ensure-HarnessOutputDirectory $OutRoot
 $directory=New-HarnessEvidenceDirectory $OutRoot ('fixture-'+$Action)
-. (Join-Path $Source 'backend\scripts\BrandCompatibility.Common.ps1')
+. (Get-HarnessToolPath (Join-Path $Source 'backend\scripts\BrandCompatibility.Common.ps1'))
 $install='C:\Program Files\Roo Industries\Optimization Suite'
 $hostExe=Join-Path $install 'backend\bin\optimizer\Optimizer.Host.exe'
 $data=Get-RooIndustriesLocalDataRoot
@@ -44,12 +44,12 @@ switch($Action){
   $preview=Join-Path $fixture 'preview.json'
   $plan=Core 'protected-session-preview' @{processId=$process.Id;gamePath=$game;controls=@{cpuPriority='Normal'};acceptLauncherScope=$true;outputPath=$preview}
   $session=Join-Path $data ('operations\game-session-'+$plan.operationId+'\session')
-  $result=@(& (Join-Path $install 'backend\scripts\Invoke-ProtectedGameSession.ps1') -Action Start -PreviewPath $preview -ReviewHash (Get-HarnessFileSha256 $preview) -SessionRoot $session -ConfirmApply) -join "`n"
+  $result=@(& (Get-HarnessToolPath (Join-Path $install 'backend\scripts\Invoke-ProtectedGameSession.ps1')) -Action Start -PreviewPath (Get-HarnessToolPath $preview) -ReviewHash (Get-HarnessFileSha256 $preview) -SessionRoot (Get-HarnessToolPath $session) -ConfirmApply) -join "`n"
   Save 'game-session.json' @{sessionRoot=$session;result=($result|ConvertFrom-Json)}
  }
  'stop-game' {
   $session=Read-HarnessLatestResult 'game-session.json' 'fixture-start-game'
-  $result=@(& (Join-Path $install 'backend\scripts\Invoke-ProtectedGameSession.ps1') -Action Stop -SessionRoot $session.sessionRoot -ConfirmApply) -join "`n"
+  $result=@(& (Get-HarnessToolPath (Join-Path $install 'backend\scripts\Invoke-ProtectedGameSession.ps1')) -Action Stop -SessionRoot (Get-HarnessToolPath $session.sessionRoot) -ConfirmApply) -join "`n"
   Save 'game-stop.json' ($result|ConvertFrom-Json)
   $launcher=Read-HarnessLatestResult 'game-launcher.json' 'fixture-start-game';Remove-HarnessEntry (Get-HarnessEntryById $launcher.ledgerId)
  }
@@ -61,7 +61,7 @@ switch($Action){
  'unblock-setup' { $blocker=Read-HarnessLatestResult 'setup-blocker.json' 'fixture-block-setup';Remove-HarnessEntry (Get-HarnessEntryById $blocker.ledgerId) }
  'read-security' {
   $paths=@($data,(Join-Path $data 'updates'))
-  $rows=@(foreach($path in $paths){$acl=Get-Acl -LiteralPath (Get-HarnessLongPath $path);@{path=$path;owner=$acl.Owner;sddl=$acl.Sddl;protected=$acl.AreAccessRulesProtected;rules=@($acl.Access|ForEach-Object {@{sid=$_.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value;rights=[string]$_.FileSystemRights;type=[string]$_.AccessControlType;inherited=$_.IsInherited}})}})
+  $rows=@(foreach($path in $paths){$acl=Get-Acl -LiteralPath (Get-HarnessToolPath $path);@{path=$path;owner=$acl.Owner;sddl=$acl.Sddl;protected=$acl.AreAccessRulesProtected;rules=@($acl.Access|ForEach-Object {@{sid=$_.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value;rights=[string]$_.FileSystemRights;type=[string]$_.AccessControlType;inherited=$_.IsInherited}})}})
   Save 'update-folder-security.json' $rows
   Add-Type @'
 using System;

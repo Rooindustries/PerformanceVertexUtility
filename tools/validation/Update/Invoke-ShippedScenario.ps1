@@ -5,10 +5,10 @@ param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutRo
  [string]$PreflightPath='',[switch]$HarnessOnly)
 $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
-. (Join-Path $Source 'backend\scripts\BrandCompatibility.Common.ps1')
+. (Get-HarnessToolPath (Join-Path $Source 'backend\scripts\BrandCompatibility.Common.ps1'))
 $bootstrapRoot=if($Part -eq 'p5'){Get-RooIndustriesLocalDataRoot -LocalData (Get-RooIndustriesLocalAppData)}else{''}
-. (Join-Path $Source 'tools\validation\Update\Invoke-UpdateScenario.ps1') -Source $Source -OutRoot $OutRoot -Scenario seed -EvidenceName $Part -HelpersOnly -InitialDataRoot $bootstrapRoot
-Add-Type -Path (Join-Path $Source 'tools\validation\Background\Oracle.cs')
+. (Get-HarnessToolPath (Join-Path $Source 'tools\validation\Update\Invoke-UpdateScenario.ps1')) -Source (Get-HarnessToolPath $Source) -OutRoot (Get-HarnessToolPath $OutRoot) -Scenario seed -EvidenceName $Part -HelpersOnly -InitialDataRoot $bootstrapRoot
+Add-Type -Path (Get-HarnessToolPath (Join-Path $Source 'tools\validation\Background\Oracle.cs'))
 $nonce=Initialize-HarnessInvocation $Part $OutRoot
 $release=Read-HarnessInputText $ReleasePath|ConvertFrom-Json
 $item=$release.payload.installer
@@ -142,7 +142,7 @@ $ErrorActionPreference='Stop'
 Open-HarnessRun $FrameRoot $FrameId $Manifest $Nonce
 if(Test-HarnessPath $Result){throw 'Shell result already exists; retained.'}
 try{
- $start=[Diagnostics.ProcessStartInfo]::new($Installer);$start.UseShellExecute=$true;$start.WorkingDirectory=Split-Path $Installer -Parent;$start.Arguments='/LOG="'+$Log+'"'
+ $Installer=Get-HarnessToolPath $Installer; $Log=Get-HarnessToolPath $Log; $start=[Diagnostics.ProcessStartInfo]::new($Installer);$start.UseShellExecute=$true;$start.WorkingDirectory=Get-HarnessToolPath ([IO.Path]::GetDirectoryName($Installer));$start.Arguments='/LOG="'+$Log+'"'
  Assert-HarnessInstallStart (Join-Path $env:ProgramFiles 'Roo Industries\Optimization Suite\app\RooIndustries.OptimizationSuite.App.exe')
  $process=[Diagnostics.Process]::Start($start)
  $owned=Register-HarnessStartedProcess $process 'shell-setup'
@@ -215,7 +215,7 @@ function DownloadPublished{
  $path=Join-Path $downloadFolder ([IO.Path]::GetFileName(([uri]$item.url).AbsolutePath))
  if(Test-HarnessPath $path){throw 'Published installer download already exists; do not silently repeat the GET.'}
  $clock=[Diagnostics.Stopwatch]::StartNew()
- Invoke-WebRequest -UseBasicParsing -Uri $item.url -OutFile (Get-HarnessLongPath $path)
+ Invoke-WebRequest -UseBasicParsing -Uri $item.url -OutFile (Get-HarnessToolPath $path)
  Register-HarnessFile $path 'download' 'invocation'|Out-Null
  $script:completedInstallerDownloads++
  $clock.Stop();[IO.File]::WriteAllText((Get-HarnessLongPath ($path+':Zone.Identifier')), "[ZoneTransfer]`r`nZoneId=3",[Text.Encoding]::ASCII)
@@ -225,7 +225,7 @@ function DownloadPublished{
  return $path
 }
 function Governor([string]$action){Assert-HarnessHostLease;
- $raw=@(& (Join-Path $install 'backend\scripts\Invoke-ProcessPolicyWorker.ps1') -Action $action -PolicyRoot $ruleRoot -ConfirmApply) -join "`n"
+ $raw=@(& (Get-HarnessToolPath (Join-Path $install 'backend\scripts\Invoke-ProcessPolicyWorker.ps1')) -Action $action -PolicyRoot (Get-HarnessToolPath $ruleRoot) -ConfirmApply) -join "`n"
  $result=$raw|ConvertFrom-Json
  Save ('governor-'+$action+'.json') $result
  if($result.status -ne 'completed'){throw ('Governor '+$action+': '+$raw)}
@@ -319,7 +319,7 @@ function ShippedFixtureRead($Process){
  $Process.Refresh();@{pid=$Process.Id;name=$Process.ProcessName;path=$Process.Path;startTimeUtc=$Process.StartTime.ToUniversalTime().ToString('o');priorityClass=[string]$Process.PriorityClass;affinityMask=$Process.ProcessorAffinity.ToInt64();ioPriority=[RooBackgroundOracle]::Io($Process);memoryPriority=[RooBackgroundOracle]::Memory($Process)}
 }
 function ShippedProfileCall([string]$Script,[hashtable]$Arguments){
- $raw=& (Join-Path $install ('backend\scripts\'+$Script+'.ps1')) @Arguments
+ $raw=& (Get-HarnessToolPath (Join-Path $install ('backend\scripts\'+$Script+'.ps1'))) @Arguments
  $result=$raw|ConvertFrom-Json
  if($result.errors.Count){throw ($Script+': '+($result.errors|ConvertTo-Json -Depth 10))};return $result
 }
@@ -542,8 +542,8 @@ try{
    $private=@($samples|Where-Object {$_.Path -like '*\working set - private' -and $_.InstanceName -in $instances}|Select-Object -ExpandProperty CookedValue)
    $script:app.Refresh();Check 'minimized private working set after 10 seconds' @{pid=$processId;privateWorkingSetBytes=$private;workingSet64=$script:app.WorkingSet64;privateMemorySize64=$script:app.PrivateMemorySize64;seconds=10} ($private.Count -eq 1)
    StopApp
-   . (Join-Path $install 'backend\scripts\ProcessProfile.Common.ps1')
-   . (Join-Path $install 'backend\scripts\BackgroundPlacement.Common.ps1')
+   . (Get-HarnessToolPath (Join-Path $install 'backend\scripts\ProcessProfile.Common.ps1'))
+   . (Get-HarnessToolPath (Join-Path $install 'backend\scripts\BackgroundPlacement.Common.ps1'))
    $fixtureProcesses=@(foreach($name in 'RooFixtureUpdater','RooFixtureWebHelper','RooFixtureGame','MsMpEng'){
     $path=Join-Path $directory ($name+'.exe');Copy-HarnessFile "$env:SystemRoot\System32\PING.EXE" $path|Out-Null
     $fixtureOwned=Start-OwnedProcess -FilePath $path -ArgumentList '-t 127.0.0.1' -Purpose background-fixture;$script:fixtures.Add($fixtureOwned);$fixtureOwned.process

@@ -33,6 +33,12 @@ function Get-HarnessPlainPath([string]$Path){
  if($long.StartsWith('\\?\UNC\',[StringComparison]::OrdinalIgnoreCase)){return '\\'+$long.Substring(8)}
  return $long.Substring(4)
 }
+function Get-HarnessToolPath([string]$Path){
+ $plain=Get-HarnessPlainPath $Path
+ if($plain.Length -ge 260){throw ('Path reaches the 260-character tool limit; use a shorter frame: '+$plain)}
+ return $plain
+}
+function Get-HarnessToolArguments([string]$Arguments){[RooValidationOwnership.Native]::ToolArguments($Arguments)}
 function Test-HarnessPath([string]$Path,[ValidateSet('Any','Leaf','Container')][string]$PathType='Any'){
  if($Path -match '^(HKLM|HKCU|Cert):'){if($PathType -eq 'Any'){return Test-Path -LiteralPath $Path};return Test-Path -LiteralPath $Path -PathType $PathType}
  $long=Get-HarnessLongPath $Path
@@ -91,8 +97,7 @@ function Test-HarnessVisiblePath($Item,[string]$Root){
  return $true
 }
 function New-HarnessConsoleAssembly([string]$Path,[string]$Code){
- $plain=Get-HarnessPlainPath $Path
- if($plain.Length -ge 260){throw 'Console fixture output reaches the compiler path limit; use a shorter frame.'}
+ $plain=Get-HarnessToolPath $Path
  if(Test-HarnessPath $plain){throw 'Console fixture output exists; retained.'}
  Add-Type -OutputAssembly $plain -OutputType ConsoleApplication -TypeDefinition $Code
 }
@@ -197,7 +202,7 @@ function Start-ProcessTrace($Anchor=$null){
  if($global:RooHarnessTraces.ContainsKey($key)){$script:Harness.Trace=$global:RooHarnessTraces[$key];return $script:Harness.Trace}
  $invocation=Invoke-HarnessLedger {param($ledger) @($ledger.invocations|Where-Object nonce -CEQ $script:Harness.Nonce)|Select-Object -First 1} -NoWrite
  if(-not$invocation){throw 'Process trace has no invocation window.'}
- if(-not('RooHarnessProcessTrace' -as [type])){Add-Type -Path (Join-Path $PSScriptRoot 'HarnessTrace.cs') -ReferencedAssemblies System.dll,System.Management.dll}
+ if(-not('RooHarnessProcessTrace' -as [type])){Add-Type -Path (Get-HarnessToolPath (Join-Path $PSScriptRoot 'HarnessTrace.cs')) -ReferencedAssemblies System.dll,System.Management.dll}
  $traceNonce=[Guid]::NewGuid().ToString('N');$started=[DateTime]::UtcNow
  $receiver=[RooHarnessProcessTrace]::new($traceNonce)
  $script:Harness.Trace=@{Receiver=$receiver;Nonce=$traceNonce;Start=[DateTime]::Parse($invocation.startedAtUtc).ToUniversalTime();Subscribed=$started;Stopped=$false}
@@ -298,11 +303,17 @@ function Register-HarnessStartedProcess($Process,[string]$Purpose='',[string]$Li
  $script:Harness.Handles[[int]$receipt.Identity.pid]=$receipt
  return $receipt
 }
-function Start-OwnedProcess([string]$FilePath,[string]$ArgumentList='',[string]$WindowStyle='Hidden',[string]$Purpose='',[string]$Lifetime='invocation',[Diagnostics.ProcessStartInfo]$StartInfo){
+function Start-OwnedProcess([string]$FilePath,[string]$ArgumentList='',[string]$WindowStyle='Hidden',[string]$Purpose='',[string]$Lifetime='invocation',[Diagnostics.ProcessStartInfo]$StartInfo,[string]$WorkingDirectory=''){
  if($StartInfo -and $StartInfo.UseShellExecute){throw 'Run ShellExecute in a separate owned launcher so its dialogs cannot block the harness.'}
- if($StartInfo){$process=[Diagnostics.Process]::Start($StartInfo)}else{
-  $arguments=@{FilePath=$FilePath;WindowStyle=$WindowStyle;PassThru=$true}
-  if(-not[string]::IsNullOrEmpty($ArgumentList)){$arguments.ArgumentList=$ArgumentList}
+ if($StartInfo){
+  $StartInfo.FileName=Get-HarnessToolPath $StartInfo.FileName
+  if($StartInfo.WorkingDirectory){$StartInfo.WorkingDirectory=Get-HarnessToolPath $StartInfo.WorkingDirectory}
+  $StartInfo.Arguments=Get-HarnessToolArguments $StartInfo.Arguments
+  $process=[Diagnostics.Process]::Start($StartInfo)
+ }else{
+  $arguments=@{FilePath=(Get-HarnessToolPath $FilePath);WindowStyle=$WindowStyle;PassThru=$true}
+  if($WorkingDirectory){$arguments.WorkingDirectory=Get-HarnessToolPath $WorkingDirectory}
+  if(-not[string]::IsNullOrEmpty($ArgumentList)){$arguments.ArgumentList=Get-HarnessToolArguments $ArgumentList}
   $process=Start-Process @arguments
  }
  return Register-HarnessStartedProcess $process $Purpose $Lifetime
@@ -326,7 +337,7 @@ function Start-HarnessExplorerProcess([string]$Image,[string]$Arguments,[string]
  $broker=Get-HarnessExplorerBroker;$owned=$null
  try{
   $started=[DateTime]::UtcNow
-  $broker.dispatch.ShellExecute($Image,$Arguments,(Split-Path $Image -Parent),'open',0)
+  $broker.dispatch.ShellExecute((Get-HarnessToolPath $Image),(Get-HarnessToolArguments $Arguments),(Get-HarnessToolPath ([IO.Path]::GetDirectoryName($Image))),'open',0)
   $deadline=[DateTime]::UtcNow.AddSeconds(15)
   do{
    $matches=@(Get-CimInstance Win32_Process|Where-Object ExecutablePath -IEQ $Image)
@@ -685,7 +696,7 @@ function Invoke-HarnessProcess([string]$File,[string]$Arguments,[string]$Purpose
 }
 
 function Get-HarnessMachineSnapshot{
- . (Join-Path $PSScriptRoot '..\..\..\backend\scripts\BrandCompatibility.Common.ps1')
+ . (Get-HarnessToolPath (Join-Path $PSScriptRoot '..\..\..\backend\scripts\BrandCompatibility.Common.ps1'))
  $local=Get-RooIndustriesLocalAppData
  $install=Join-Path $env:ProgramFiles 'Roo Industries\Optimization Suite'
  $key='HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{746C4DD8-B7BA-48CD-9FFA-0C378F19368A}_is1'

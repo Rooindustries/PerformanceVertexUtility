@@ -26,7 +26,7 @@ function CacheLifecycle([string]$Clean,[string]$Version){
  if($after.id -ceq $before.id -or $after.identity.creationTimeFileTimeUtc -ceq $before.identity.creationTimeFileTimeUtc){throw 'Recreated cache reused the earlier identity.'}
  Remove-HarnessEntry $after;Passed 'app-deleted cache retires before a later download creates it' @{before=$before.id;after=$after.id;version=$Version}
 }
-if($TrackingOnly){& (Join-Path $Source 'tools\validation\Update\Invoke-TraceOwnershipChecks.ps1') -Source $Source -OutRoot $OutRoot;return}
+if($TrackingOnly){& (Get-HarnessToolPath (Join-Path $Source 'tools\validation\Update\Invoke-TraceOwnershipChecks.ps1')) -Source (Get-HarnessToolPath $Source) -OutRoot (Get-HarnessToolPath $OutRoot);return}
 if($CacheOnly){
  try{$clean=Fixture 'cache-lifecycle';Initialize-HarnessCache $clean @('4.2.7-beta','4.2.8-beta');CacheLifecycle $clean '4.2.8-beta';$status='pass'}
  finally{$status=Complete-HarnessInvocation $status -Cleanup;Write-HarnessResult $directory 'receipt.json' @{status=$status;checks=@($rows)}|Out-Null}
@@ -71,13 +71,93 @@ function LongFrame([bool]$Unrecorded){
  return @{root=$root;path=$file;unrecordedDirectory=$path;ledger=$ledgerPath;owned=@(Get-HarnessEntries|Where-Object {$_.state -eq 'active' -and $_.identity.path -and ($_.identity.path -ieq $root -or $_.identity.path.StartsWith($root+'\',[StringComparison]::OrdinalIgnoreCase))})}
 }
 function CloseLongFrame($Fixture){
- $closed=& (Join-Path $Source 'tools\validation\Update\Clear-UpdateFrame.ps1') -Frame $Fixture.root -ExpectedMachine $env:COMPUTERNAME|ConvertFrom-Json
+ $closed=& (Get-HarnessToolPath (Join-Path $Source 'tools\validation\Update\Clear-UpdateFrame.ps1')) -Frame $Fixture.root -ExpectedMachine $env:COMPUTERNAME|ConvertFrom-Json
  $script:Harness=$main
  if([IO.Directory]::Exists((Get-HarnessLongPath $Fixture.root)) -or @($closed.entries|Where-Object state -EQ 'active').Count){throw 'Long frame or active ledger entry remained.'}
  foreach($entry in $Fixture.owned){Set-HarnessEntryState $entry.id 'removed'}
  return $closed
 }
+function ToolBoundaryChecks{
+ $tools=Fixture 'tool-boundary'
+ $long=Join-Path (Join-Path (Join-Path $tools ('a'*90)) ('b'*90)) ('c'*90)
+ $longFile=Join-Path $long 'never-created.json'
+ $refusals=@('Invoke-WebRequest -OutFile','Add-Type -OutputAssembly','Start-Process working directory and argument','Get-AuthenticodeSignature','Set-Location','Get-Acl','Expand-Archive','New-Item junction','script invocation','external executable','Get-Content','Copy-Item','Get-FileHash','Get-ChildItem','Remove-Item','Resolve-Path')
+ foreach($category in $refusals){
+  $called=$false;$message=$null
+  try{$path=Get-HarnessToolPath $longFile;$called=$true;throw 'Tool guard unexpectedly allowed a long path'}catch{$message=$_.Exception.Message}
+  if($called -or $message -notlike 'Path reaches the 260-character tool limit;*' -or (Test-HarnessPath $longFile)){throw ('Tool boundary did not refuse before '+$category)}
+  Passed ('tool boundary refuses long path before '+$category) @{length=$longFile.Length;called=$called;message=$message}
+ }
+ $source=Join-Path $tools 'tool-fixture.cs';$assembly=Join-Path $tools 'tool-fixture.exe'
+ $code=@'
+using System;
+using System.IO;
+using System.Net;
+using System.Text;
+public static class ToolFixture {
+ public static void Main(string[] args) {
+  if(args[0]=="listener") { using(var listener=new HttpListener()){listener.Prefixes.Add(args[1]);listener.Start();var request=listener.GetContext();var bytes=Encoding.UTF8.GetBytes(args[2]);request.Response.ContentLength64=bytes.Length;request.Response.OutputStream.Write(bytes,0,bytes.Length);request.Response.Close();}return; }
+  File.WriteAllText(args[1],Environment.CurrentDirectory,new UTF8Encoding(false));
+ }
+}
+'@
+ New-HarnessText $source $code 'tool-fixture'|Out-Null
+ Add-Type -OutputAssembly (Get-HarnessToolPath $assembly) -OutputType ConsoleApplication -TypeDefinition $code
+ Register-HarnessFile $assembly 'tool-fixture'|Out-Null
+ Passed 'tool boundary Add-Type normal output' (Get-HarnessFileSha256 $assembly)
+ $portProbe=[Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback,0);$portProbe.Start();$port=$portProbe.LocalEndpoint.Port;$portProbe.Stop()
+ $uri='http://127.0.0.1:'+ $port+'/'
+ $listener=Start-OwnedProcess -FilePath $assembly -ArgumentList ('listener "'+$uri+'" '+$nonce) -Purpose local-listener
+ try{
+  $ready=$false;$deadline=[DateTime]::UtcNow.AddSeconds(10)
+  do{$client=[Net.Sockets.TcpClient]::new();try{$client.Connect('127.0.0.1',$port);$ready=$true}catch{Start-Sleep -Milliseconds 50}finally{$client.Dispose()}}while(-not$ready -and [DateTime]::UtcNow -lt $deadline)
+  if(-not$ready){throw 'Owned loopback listener did not start'}
+  $download=Join-Path $tools 'download.txt'
+  Invoke-WebRequest -UseBasicParsing -Uri $uri -OutFile (Get-HarnessToolPath $download)
+  Register-HarnessFile $download 'tool-download'|Out-Null
+  if([IO.File]::ReadAllText((Get-HarnessLongPath $download)) -cne $nonce){throw 'Owned loopback download bytes differ'}
+  Passed 'tool boundary Invoke-WebRequest normal output' @{uri=$uri;sha256=(Get-HarnessFileSha256 $download)}
+ }finally{Stop-HarnessProcess $listener}
+ $output=Join-Path $tools 'working-directory.txt'
+ $owned=Start-OwnedProcess -FilePath $assembly -WorkingDirectory (Get-HarnessLongPath $tools) -ArgumentList ('record "'+(Get-HarnessLongPath $output)+'"') -Purpose tool-fixture
+ try{if(-not$owned.process.WaitForExit(10000) -or $owned.process.ExitCode -ne 0){throw 'Tool fixture process failed'};Register-HarnessFile $output 'tool-result'|Out-Null;if([IO.File]::ReadAllText((Get-HarnessLongPath $output)) -ine $tools){throw 'Child working directory or argument path differs'};Passed 'tool boundary Start-Process normal working directory and argument' $tools}finally{Stop-HarnessProcess $owned}
+ $signature=Get-AuthenticodeSignature -LiteralPath (Get-HarnessToolPath $assembly)
+ Passed 'tool boundary Get-AuthenticodeSignature normal path' ([string]$signature.Status)
+ $beforeLocation=Get-Location
+ try{Set-Location -LiteralPath (Get-HarnessToolPath $tools);if($pwd.ProviderPath -ine $tools){throw 'Tool fixture location differs'};Passed 'tool boundary Set-Location normal path' $pwd.ProviderPath}finally{Set-Location -LiteralPath (Get-HarnessToolPath $beforeLocation.ProviderPath)}
+ $acl=Get-Acl -LiteralPath (Get-HarnessToolPath $tools);Passed 'tool boundary Get-Acl normal path' $acl.Owner
+ $archive=Join-Path $tools 'normal.zip';New-HarnessArchive $tools $archive {$true}|Out-Null
+ $expanded=Join-Path $tools 'expanded';New-HarnessDirectory $expanded 'tool-archive'|Out-Null
+ Expand-Archive -LiteralPath (Get-HarnessToolPath $archive) -DestinationPath (Get-HarnessToolPath $expanded)
+ if((Get-HarnessFileSha256 (Join-Path $expanded 'download.txt')) -cne (Get-HarnessFileSha256 $download)){throw 'Tool archive extraction bytes differ'}
+ Passed 'tool boundary Expand-Archive normal paths' $expanded
+ $junction=Join-Path $tools 'junction'
+ New-Item -ItemType Junction -Path (Get-HarnessToolPath $junction) -Target (Get-HarnessToolPath $expanded)|Out-Null
+ $entry=Add-HarnessEntry 'reparse' @{path=$junction;target=$expanded} 'tool-junction'
+ Remove-HarnessEntry $entry;Passed 'tool boundary New-Item junction normal paths' $junction
+ $scriptPath=Join-Path $tools 'tool-script.ps1';New-HarnessText $scriptPath "param([string]`$Value);`$Value" 'tool-script'|Out-Null
+ $value=& (Get-HarnessToolPath $scriptPath) -Value $nonce
+ if($value -cne $nonce){throw 'Tool script invocation differs'};Passed 'tool boundary script invocation normal path' $value
+ $external=Invoke-HarnessProcess $assembly ('record "'+(Join-Path $tools 'external.txt')+'"') 'boundary-external'
+ Register-HarnessFile (Join-Path $tools 'external.txt') 'tool-result'|Out-Null
+ Passed 'tool boundary external executable normal paths' $assembly
+ $text=Get-Content -LiteralPath (Get-HarnessToolPath $download) -Raw
+ if($text -cne $nonce){throw 'Tool Get-Content bytes differ'};Passed 'tool boundary Get-Content normal path' $text
+ $copy=Join-Path $tools 'cmdlet-copy.txt';Copy-Item -LiteralPath (Get-HarnessToolPath $download) -Destination (Get-HarnessToolPath $copy)
+ $copyEntry=Register-HarnessFile $copy 'tool-copy'
+ $hash=(Get-FileHash -LiteralPath (Get-HarnessToolPath $copy) -Algorithm SHA256).Hash
+ if($hash -cne (Get-HarnessFileSha256 $download)){throw 'Tool copy/hash bytes differ'}
+ Passed 'tool boundary Copy-Item normal paths' $hash;Passed 'tool boundary Get-FileHash normal path' $hash
+ $children=@(Get-ChildItem -LiteralPath (Get-HarnessToolPath $tools) -File)
+ if($children.Name -notcontains 'cmdlet-copy.txt'){throw 'Tool children missed a file'};Passed 'tool boundary Get-ChildItem normal path' $children.Count
+ $resolved=(Resolve-Path -LiteralPath (Get-HarnessToolPath $copy)).ProviderPath
+ if($resolved -ine $copy){throw 'Tool Resolve-Path differs'};Passed 'tool boundary Resolve-Path normal path' $resolved
+ Remove-Item -LiteralPath (Get-HarnessToolPath $copy)
+ Set-HarnessEntryState $copyEntry.id 'removed'
+ if(Test-HarnessPath $copy){throw 'Tool Remove-Item left its owned file'};Passed 'tool boundary Remove-Item normal path' $copy
+}
 try{
+ ToolBoundaryChecks
  $fixture=Fixture 'present-data';$sentinel=Join-Path $fixture 'keep.txt'
  Rejected 'active current data root present in preflight' {Move-ShippedFreshData $fixture @{dataRoots=@(@{path=$fixture;exists=$true})} (Join-Path $directory 'moved-data')} {[IO.File]::ReadAllText((Get-HarnessLongPath $sentinel)) -ceq 'untouched'}
  $staleP0=@{dataRoots=@(@{path=$fixture;exists=$false})}
@@ -163,11 +243,15 @@ end;
  $owned=Start-OwnedProcess -FilePath powershell.exe -ArgumentList ('-NoProfile -File "'+$stay+'"') -Purpose fixture
  try{Rejected 'frame script in PowerShell command line retained' {Assert-HarnessFrameIdle $frame} {Test-HarnessPath $stay}}finally{Stop-HarnessProcess $owned}
  $target=Fixture 'junction-target';$junction='C:\RooBuild\roo-industries-roo29-shipped-'+[Guid]::NewGuid().ToString('N')
- New-Item -ItemType Junction -Path (Get-HarnessLongPath $junction) -Target (Get-HarnessLongPath $target)|Out-Null
+ New-Item -ItemType Junction -Path (Get-HarnessToolPath $junction) -Target (Get-HarnessToolPath $target)|Out-Null
  $junctionItem=Get-HarnessItem $junction -Force;$junctionEntry=Add-HarnessEntry 'folder' @{path=$junction;creationTimeFileTimeUtc=$junctionItem.CreationTimeUtc.ToFileTimeUtc().ToString()} 'junction-fixture' 'invocation' @{reparseTarget=$target}
- try{Rejected 'junction frame retained without touching target' {& (Join-Path $Source 'tools\validation\Update\Clear-UpdateFrame.ps1') -Frame $junction -ExpectedMachine $env:COMPUTERNAME} {[IO.File]::ReadAllText((Get-HarnessLongPath (Join-Path $target 'keep.txt'))) -ceq 'untouched'}}finally{Remove-HarnessEntry $junctionEntry}
+ try{Rejected 'junction frame retained without touching target' {
+  & (Get-HarnessToolPath (Join-Path $Source 'tools\validation\Update\Clear-UpdateFrame.ps1')) -Frame $junction -ExpectedMachine $env:COMPUTERNAME
+ } {
+  [IO.File]::ReadAllText((Get-HarnessLongPath (Join-Path $target 'keep.txt'))) -ceq 'untouched'
+ }}finally{Remove-HarnessEntry $junctionEntry}
  $danglingTarget=Fixture 'dangling-junction-target';$dangling='C:\RooBuild\roo-industries-junction-'+[Guid]::NewGuid().ToString('N')
- New-Item -ItemType Junction -Path (Get-HarnessLongPath $dangling) -Target (Get-HarnessLongPath $danglingTarget)|Out-Null
+ New-Item -ItemType Junction -Path (Get-HarnessToolPath $dangling) -Target (Get-HarnessToolPath $danglingTarget)|Out-Null
  $item=Get-HarnessItem $dangling;$entry=Add-HarnessEntry 'folder' @{path=$dangling;creationTimeFileTimeUtc=$item.CreationTimeUtc.ToFileTimeUtc().ToString()} 'dangling-junction-fixture' 'invocation' @{reparseTarget=$danglingTarget}
  $targetEntries=@(Get-HarnessEntries|Where-Object {$_.state -eq 'active' -and $_.identity.path -and ($_.identity.path -ieq $danglingTarget -or $_.identity.path.StartsWith($danglingTarget+'\',[StringComparison]::OrdinalIgnoreCase))});[array]::Reverse($targetEntries);foreach($targetEntry in $targetEntries){Remove-HarnessEntry $targetEntry}
  if(-not(Test-HarnessPath $dangling) -or (Get-HarnessItem $dangling).Target[0] -ine $danglingTarget){throw 'A dangling recorded junction was missed.'}
@@ -245,7 +329,7 @@ end;
  Passed 'CR8 recorded 300+ character frame clears with a closed ledger' @{path=$long.path;length=$long.path.Length;sha256=$longHash;frameGone=$true;activeEntries=0}
  $long=LongFrame $true
  $longHash=Get-HarnessFileSha256 $long.path;$message=$null
- try{& (Join-Path $Source 'tools\validation\Update\Clear-UpdateFrame.ps1') -Frame $long.root -ExpectedMachine $env:COMPUTERNAME|Out-Null}catch{$message=$_.Exception.Message}finally{$script:Harness=$main}
+ try{& (Get-HarnessToolPath (Join-Path $Source 'tools\validation\Update\Clear-UpdateFrame.ps1')) -Frame $long.root -ExpectedMachine $env:COMPUTERNAME|Out-Null}catch{$message=$_.Exception.Message}finally{$script:Harness=$main}
  if($message -notmatch 'Unrecorded frame (file|directory) retained' -or -not($message.Contains($long.path) -or $message.Contains($long.unrecordedDirectory)) -or -not[IO.File]::Exists((Get-HarnessLongPath $long.ledger)) -or (Get-HarnessFileSha256 $long.path) -cne $longHash){throw ('Long unrecorded entry was not safely refused: '+$message)}
  $retained=[IO.File]::ReadAllText((Get-HarnessLongPath $long.ledger))|ConvertFrom-Json
  Write-HarnessResult $directory 'long-unrecorded-retained.json' @{message=$message;path=$long.path;pathLength=$long.path.Length;directory=$long.unrecordedDirectory;hash=$longHash;ledger=$retained}|Out-Null
