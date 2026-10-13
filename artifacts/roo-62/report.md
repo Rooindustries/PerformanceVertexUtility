@@ -1,4 +1,110 @@
-# ROO-62 Slice14 final report
+# ROO-62 validation report
+
+## Slice 21: final B gate passed
+
+**Verdict: READY. I agree A and B are ready to merge to main.** The accepted low, rare cache-cleanup finding is fixed and independently reproduced with locked files. All 21 scenarios, 25 contracts, close-during-check and the signed subset pass. Final cleanup and exact as-found comparisons pass. The historical Slice 20 stop below is resolved by this round.
+
+### Source binding and changes
+
+Gate/code head A: **fa814a1e106853f812a97ed1e02cb7cc747d1b60**. Gate/code head B: **b3e26d789c27baa46aaf5f3010c534566ee03f07**. Product/fixture commit: `b3e26d7` (`fix(update): retry cache cleanup and narrow release path bounds`). Final report-only commit and merge SHAs are recorded in `artifacts/roo-63-64/slice21/final-branches.json` and the handoff. No code changed after either B gate frame was staged.
+
+B changes six files, **147 insertions / 21 deletions**:
+
+| Change | Code location | Verification |
+| --- | --- | --- |
+| Retry deletion of current/older semantic-version cache directories independently of pending-install.json, up to 30 attempts, one second apart; cancellation exits and other exceptions are logged | `docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/UpdateService.cs:141`, call at `:196` | Actual install, copy-failure, 5-second/40-second deny-delete locks, next start and newer-ready cache checks below |
+| Keep successful pending banner/record behavior and install-log trimming; remove the old one-shot installedFolder deletion | `UpdateService.cs:185` | Updated banner, consumed pending record, three retained install logs and byte-identical status assertions |
+| Limit post-publish output bounds to stage and wasdk; retain the pre-build XAML bound | `tools/scripts/Build-Release.ps1:175` | Bound fixture 3/3; unsigned, signed and wrong-subject build checkpoints |
+| Native-birth deadlines and independently timed deny-delete handle; newer cache hash/identity readback | `tools/validation/Update/Invoke-UpdateScenario.ps1:140`, `:150`, `:300`, `:382` | Nonce-bound JSON and screenshots retained in the gate artifacts |
+| Named cache-cleanup scenario, included as an auxiliary check under the existing same-version row | `tools/validation/Update/run_e2e.py:170`, `:393`; `tools/validation/Update/README.md` | Full all sequence remains 21 required rows and executes the additional lock races |
+| Exercise actual boundedOutputs assignment from the release script | `tools/validation/Update/Invoke-ReleaseBoundChecks.ps1:26` | A 327-character staged file refuses; a 342-character obj-only file remains and passes |
+
+A has **no code change in Slice 21**. Since its accepted `68d157f` gate, the only code changes were `Build-UpdatePair.ps1:13` (`source-B` to `c`) and `Invoke-SigningScenario.ps1:41` (same copy root in its XAML guard). The pair builder is byte-identical in A/B and was executed by both fresh B pairs. The exact A guard body was also executed against the actual signed layout: 239-character XAML intermediate passes, an 80-character deeper root refuses. A's product-source diff against `20618f6` remains empty, SHA-256 `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`. Evidence: `a-affected-code.json`, `a-signing-guard-command.json`, `a-signing-guard-check.json`, `product-source-binding.json`.
+
+The Slice 20 mid-gate correction shortened the temporary copy to `c` and aligned the signing preguard. It did **not** weaken the bound. This round supersedes the obj-inclusive output audit that caused the generated-editorconfig refusal; it keeps the short layout and pre-build XAML protection.
+
+### Cache checks a–d
+
+Times below are the first independent observation of absence relative to **native app creation**, not a claim of the precise deletion instant. Evidence paths in this section are under `artifacts/roo-63-64/slice21/`.
+
+| Check | Decisive control and observed effect | Result | Evidence |
+| --- | --- | --- | --- |
+| a. Normal silent OTA | Correct signed manifest/installer, normal setup; installed 0.11.1-beta cache absent by **10.45 s** from relaunch | PASS | `unsigned/installed-cache-cleanup.json`; nonce-bound install result and screenshot under `unsigned/all/pc-artifacts/ota/install-a778add1fc5646b78d299ae8ea07811a/` |
+| b. Mid-copy failure plus interactive finish | Only forced copy failure varies; app relaunched with updated banner; installed-version cache absent by **16.17 s** | PASS | `unsigned/copy-failure-cache-cleanup.json`; `unsigned/all/pc-artifacts/ota/copy-failure-21e3f2bf4e61416dbd0169a9af18b8ac/` |
+| c1. Short deterministic lock | Owned FileShare.Read handle denies delete until **5.005 s**; cache absent by **5.364 s**, zero cleanup warnings, app alive | PASS | `unsigned/cache-lock-readbacks/cache-lock-5.json` |
+| c2. Exhausted retry bound | Same owned file and sharing mode, held **40.014 s**; still present at **35.047 s**, exactly one cleanup warning, app alive | PASS | `unsigned/cache-lock-readbacks/cache-lock-40.json`, 40-second screenshot in `unsigned/all/pc-artifacts/ota/installed-cache-locks-9d213970dd93480287dea1de41fb4728/` |
+| c3. Next startup | Release previous lock, restart owned app; cache absent by **4.988 s**, zero cleanup warnings | PASS | `unsigned/cache-lock-readbacks/cache-lock-next-start.json` |
+| d. Preserve ready version | Newer 0.11.1-beta folder keeps its native creation identity and installer bytes; old 0.0.1 absent by **7.471 s** | PASS | `unsigned/cache-newer-kept.json` |
+
+The preserved ready installer is **110,081,259 bytes**, SHA-256 `043A64367947BE4AC92602BFA6F815405D2D5D7087E5498FA736A73DBD7F6B3D`. The lock's .NET timer is armed immediately after Start-OwnedProcess, against native birth, independently of UI Automation waits. These checks vary lock duration/version eligibility and observe filesystem identity, bytes, fresh process log segments, warning count and app liveness. They do not model arbitrary filesystem/security failures; the outer exception guard was also checked in the final diff.
+
+### Gate table
+
+| Gate | Observed | Result | Evidence |
+| --- | --- | --- | --- |
+| Fresh report-bearing A/B staging | A report and both B reports are manifest-listed; source snapshots match exact gate heads | PASS | `staging-receipt.json`, `a-staging-frame.json`, `b-staging-frame.json` |
+| Parse and native compile | PS 5.1 parses 80 A / 81 B files with zero errors; ownership native helper and HarnessTrace compile | PASS | `a-parse.json`, `b-parse.json`, `signed/powershell-parse.json` |
+| Linux compile/lint | Changed Python compiles; final path lint passes | PASS | `linux-verification.log` |
+| Release-bound exact cases | Deep XAML build refuses before output; 327-character staging file refuses; 342-character obj-only file passes and is retained | PASS 3/3 | `release-bound-receipt.json`, `release-bound.log` |
+| Accepted A harness/trace/P2/P3 | Unchanged product and unchanged shipped scenario paths; accepted 116/116, trace 5/5 and published P2/P3 stand | ACCEPTED, not rerun | `artifacts/roo-62/slice20/harness-final/receipt.json`, `artifacts/roo-62/slice20/trace-final/receipt.json`, `artifacts/roo-62/slice20/published-final/p2/receipt.json`, `artifacts/roo-62/slice20/published-final/p3/receipt.json` |
+| A changed copy-layout paths | Both real B pairs use the shared A/B builder; exact A preguard body passes 239-character layout and refuses deeper layout | PASS, affected checks only | `a-signing-guard-check.json`, unsigned/signed `build-times.json` |
+| Unsigned pair | A 126.28 s, B 124.18 s; every source/post-publish/final-output checkpoint passes, outputs max 176 characters | PASS | `unsigned/all/build-times.json`, `unsigned/build-bound-evidence.json` |
+| All scenarios plus new cache assertions | 21/21, including early-abort and copy-failure traced relaunches; a–d above pass | PASS | `unsigned/all/scenario-results.json`, `unsigned/unsigned-gate-results.json` |
+| Contracts | 25/25 expected kind and verified key match | PASS | `unsigned/contracts/contracts/results.json` |
+| Close during check | Clean exit; exact `Feed <test-feed-host>: canceled: the app is closing; installed 0.11.0-beta.` line; unchanged Checking status | PASS | `unsigned/close-during-check/pc-artifacts/` |
+| Signed pair | A 133.37 s, B 130.65 s, test certificate only; all bound checkpoints pass, outputs max 183 characters | PASS | `signed/build-times.json`, `signed/build-bound-evidence.json`, `signed/signed-build.json` |
+| Signed A and B files / governor | All nine required app/helper PEs, unins000.exe and both setups carry fresh subject/thumbprint; governor runs from signed installed Host | PASS, 12 signature rows each | `signed/verify-A.json`, `signed/verify-B.json` |
+| Signed OTA | Ready, Install, relaunch on 0.11.1-beta and updated banner; preservation and installed-cache absence pass | PASS | `signed/gate-results.json`, `signed/ota-install/pc-artifacts/` |
+| Wrong-subject negative | Fails before ISCC with Signer subject differs; zero installers; all three prior bound checkpoints pass, outputs max 238 characters | PASS | `signed/negative.json`, `signed/build-bound-evidence.json` |
+| Certificate cleanup | Fresh thumbprint **E25C8D50993F72AF92D076051568EC5A4CA5F494** removed by ledger, private key not exported, no root trust change | PASS | `signed/certificate-cleanup.json` |
+| Lease, ledgers and as-found audit | Six terminal frames removed/ledgers closed, zero cleanup errors; all audit fields pass | PASS | `terminal-ledger-audit.json`, `cleanup-audit.json`, `owned-process-audit.json` |
+
+Each gate's actual commands, frame IDs and nonces are retained in `command.json`, `*-command.json`, frame receipts and desktop invocation records. The mechanical orchestration commands were:
+
+```text
+python3 -I artifacts/roo-63-64/slice21/prepare.py
+python3 -I artifacts/roo-63-64/slice21/b-gate.py
+python3 -I artifacts/roo-63-64/slice21/signed.py
+python3 -I artifacts/roo-63-64/slice21/cleanup-capture.py
+python3 -I artifacts/roo-63-64/slice21/cleanup-read-new.py
+python3 -I artifacts/roo-63-64/slice21/a-guard-check.py
+python3 -I artifacts/roo-63-64/slice21/cleanup-restore.py
+python3 -I artifacts/roo-63-64/slice21/final-audit.py
+python3 -I artifacts/roo-63-64/slice21/owned-audit.py
+```
+
+The unsigned fresh frame is `d92f5bd46d024e2598a3543f58ebf23e`, manifest `9be0753090063468ad807fdd1b717fa33833dbcefcff3665747b91619bd338fe`. The successful signed frame is `a046d569cc68455892c0836a7e2a19db`; its exact manifest is in `signed/receipt.json`. Build logs were copied from ledger-recorded output files and checked against their SHA-256 identities. All published scenarios remain from the accepted A gate; no P2/P3 rerun was needed.
+
+### Log assertions and controls
+
+Every feed-log receipt records the complete expected string, observed fresh segment and exact status expectation. The following expected strings use the receipt's host, with no path/query:
+
+| Control | Expected line | Observation/evidence |
+| --- | --- | --- |
+| Correct same-version signed feed | `Feed <host>: Current, key e4af8027d58d3b3f, release 0.11.0-beta. You have the latest version; installed 0.11.0-beta.` | Asserted in same-version and cache-cleanup receipts |
+| Correct newer release, automatic off then Download | `Feed <host>: Available, key e4af8027d58d3b3f, release 0.11.1-beta. Version 0.11.1-beta is available; installed 0.11.0-beta.` | Asserted in manual-download receipt |
+| Startup of newer ready cache | `Cached feed <host>: Available, key e4af8027d58d3b3f, release 0.11.1-beta. Version 0.11.1-beta is available; installed 0.11.0-beta.` | Ready, install and recovery receipts |
+| Valid signature, wrong product | `Feed <host>: Refused, key e4af8027d58d3b3f. This release is for another product; installed 0.11.0-beta.` | Wrong-product receipt; exact Settings text unchanged |
+| Valid signature, wrong channel | `Feed <host>: Refused, key e4af8027d58d3b3f. This release is for another update channel; installed 0.11.0-beta.` | Wrong-channel receipt; exact Settings text unchanged |
+| Invalid signature | `Feed <host>: Refused. The update signature is invalid. Couldn't verify this release; installed 0.11.0-beta.` | Bad-signature receipt, no verified key |
+| HTTP failure | `Feed <host>: HTTP 502; installed 0.11.0-beta.` | Feed-down receipt |
+| Owned app closed while checking | `Feed <host>: canceled: the app is closing; installed 0.11.0-beta.` | Close-during-check receipt, exit 0 |
+
+All rows assert `feedPathAbsent=true` and the applicable byte-identical status. Their controls vary only the feed/response or close action; actual installed files, cache, process starts and preservation are also checked by the scenario. They do not re-gate unrelated priority, services, memory or Blackwell behavior.
+
+### Cleanup, deviations and review
+
+The final installed app is the **fresh signed test-feed 0.11.1-beta B**. Final app/Host/SessionHost/uninstaller signatures match the fresh certificate thumbprint, which is now absent from certificate stores. Governor is paused, app/helpers are stopped, and all **456 recorded native process identities** are absent or a preserved reused PID. No owned Linux server/runner remains. The unrelated pre-existing `/opt/roo-support` server, PID 1530 on port 8080, was preserved.
+
+Nine new product-output files were removed only after binding them to the two nonce-bound saved-rule responses and the owned launcher/stopped session response, then checking native creation/hash before ledger cleanup. Five changed originals were restored from SHA-256-verified archives. Final **449 data files** and both data-root presence flags match as found. Raw registry comparison uses native RegQueryValueEx bytes, including the **17,833,984-byte State** value and four-byte EnableTransparency value; equality passes without rewriting the registry. Six CS2 tasks are Ready/Enabled with unchanged XML. The 160 legacy frame paths/births are unchanged. Lease, owned frames, new Roo tasks, firewall rules, hosts edits, test certs and version-cache folders are absent. Tailscale serve JSON equals as found; no 8460 entry remains. Evidence: `cleanup/data-restore.json`, `cleanup-audit.json`, `raw-registry-as-found.json`, `raw-registry-final.json`, `final-inventory.json`, `terminal-ledger-audit.json`, `update-cache-audit.json`, `linux-process-audit.txt`.
+
+**Completed production installer downloads this slice: 0.** All new builds/scenarios use the tailnet test feed. No production build replacement, push, publish, Blackwell or KVM action occurred; the signing key stayed on Linux and LongPathsEnabled was not changed.
+
+Two harness/operator deviations are retained. First, a relative edit initially targeted main's UpdateService; its bytes were verified as HEAD plus only that owned edit and restored exactly before any build or commit. Main is clean, and every gate used the B worktree. Evidence: `wrong-cwd-owned-diff.patch`, `wrong-cwd-restoration.json`. Second, the signing orchestration initially supplied the frame itself as OutRoot; interactive_frame correctly refused before certificate/build creation. Its frame/ledger was closed, the runner was corrected to an owned child `s`, and only the signed subset was rerun fresh at the same code head. Evidence: `signed-scope-refusal/`, `signing-runner-correction.json`. This was an invocation-scope refusal, not a path-normalization failure. Two read-only cleanup-progress probes encountered the expected exclusive ledger lock; no ledger change or gate retry resulted, and terminal cleanup passed.
+
+Final diff review: the retry is called even with no pending record or no feed, respects newer versions and the 30-attempt/cancellation limit, catches unexpected errors, and leaves existing status/banner/KeepVersion behavior intact. The release output scope matches the tools that consume those paths, while XAML retains its pre-build bound. The accepted cache race and obj overreach have exact-scenario passing checks. **No blocking finding remains for this slice or either branch.** This verdict relies on the accepted unchanged A gates and the final B evidence above; no unrun suite is claimed.
+
+## Earlier rounds (historical evidence)
 
 ## Slice 20: corrected oracle passed; gate stopped on product cleanup
 
