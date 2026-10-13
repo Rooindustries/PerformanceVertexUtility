@@ -1,10 +1,10 @@
-param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutRoot,[switch]$Hold,[switch]$TimeoutOnly,[switch]$CacheOnly,[switch]$TrackingOnly,[switch]$ToolsOnly)
+param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutRoot,[switch]$Hold,[switch]$TimeoutOnly,[switch]$CacheOnly,[switch]$TrackingOnly,[switch]$ToolsOnly,[switch]$PathsOnly)
 $ErrorActionPreference='Stop'
 . (Join-Path $Source 'tools\validation\Update\Harness.Common.ps1')
 $nonce=Initialize-HarnessInvocation 'harness-checks' $OutRoot
 Ensure-HarnessOutputDirectory $OutRoot
 $directory=New-HarnessEvidenceDirectory $OutRoot 'checks'
-if(@($Hold,$TimeoutOnly,$CacheOnly,$TrackingOnly,$ToolsOnly|Where-Object {$_}).Count -gt 1){throw 'Choose only one harness check mode.'}
+if(@($Hold,$TimeoutOnly,$CacheOnly,$TrackingOnly,$ToolsOnly,$PathsOnly|Where-Object {$_}).Count -gt 1){throw 'Choose only one harness check mode.'}
 if($Hold){Write-HarnessResult $directory 'holding.json' @{pid=$PID;nonce=$nonce}|Out-Null;Start-Sleep -Seconds 30;Complete-HarnessInvocation 'pass' -Cleanup|Out-Null;return}
 $rows=[Collections.Generic.List[object]]::new();$status='fail';$main=$script:Harness
 function Passed([string]$Name,$Value){$rows.Add(@{check=$Name;status='pass';observed=$Value})}
@@ -76,6 +76,72 @@ function CloseLongFrame($Fixture){
  if([IO.Directory]::Exists((Get-HarnessLongPath $Fixture.root)) -or @($closed.entries|Where-Object state -EQ 'active').Count){throw 'Long frame or active ledger entry remained.'}
  foreach($entry in $Fixture.owned){Set-HarnessEntryState $entry.id 'removed'}
  return $closed
+}
+function PathNormalizationChecks{
+ if(-not('RooPathOracle' -as [type])){
+  Add-Type @'
+using System;
+using System.Runtime.InteropServices;
+using Microsoft.Win32.SafeHandles;
+public static class RooPathOracle {
+ [DllImport("kernel32.dll",CharSet=CharSet.Unicode,SetLastError=true)] static extern SafeFileHandle CreateFileW(string path,uint access,uint share,IntPtr security,uint creation,uint flags,IntPtr template);
+ public static SafeFileHandle Open(string path){var handle=CreateFileW(path,0,7,IntPtr.Zero,3,0,IntPtr.Zero);if(handle.IsInvalid){int error=Marshal.GetLastWin32Error();handle.Dispose();throw new System.ComponentModel.Win32Exception(error,"Plain CreateFileW could not open: "+path);}return handle;}
+}
+'@
+ }
+ $base=Fixture 'os-paths';$cwd=[IO.Directory]::GetCurrentDirectory()
+ try{
+  [IO.Directory]::SetCurrentDirectory((Get-HarnessToolPath $base))
+  foreach($size in 'short','long'){
+   $parent=Join-Path $base $size;New-HarnessDirectory $parent 'normalization-fixture'|Out-Null
+   if($size -eq 'long'){foreach($segment in @(('p'*80),('q'*80),('r'*80))){$parent=Join-Path $parent $segment;New-HarnessDirectory $parent 'normalization-fixture'|Out-Null}}
+   $child=Join-Path $parent 'child';New-HarnessDirectory $child 'normalization-fixture'|Out-Null
+   $file=Join-Path $parent 'identity.txt';New-HarnessText $file ($nonce+' '+$size) 'normalization-file'|Out-Null
+   if($size -eq 'long' -and $file.Length -lt 300){throw 'The native normalization fixture did not reach 300 characters.'}
+   $relative=$file.Substring($base.Length+1)
+   $forms=@(
+    @{name='doubled separators';path=$parent+'\\identity.txt'},
+    @{name='dot segment';path=$parent+'\.\identity.txt'},
+    @{name='parent segment';path=$child+'\..\identity.txt'},
+    @{name='trailing dot';path=$file+'.'},
+    @{name='trailing space';path=$file+' '},
+    @{name='forward slashes';path=$file.Replace('\','/')},
+    @{name='relative path';path='.\'+$relative},
+    @{name='drive-relative path';path=$file.Substring(0,2)+$relative}
+   )
+   foreach($form in $forms){
+    $value=@{size=$size;form=$form.name;input=$form.path;length=$form.path.Length;expected=$file;normalized=$null;plainFileId=$null;extendedFileId=$null;error=$null}
+    try{
+     $value.normalized=Get-HarnessLongPath $form.path
+     $plain=[RooPathOracle]::Open($form.path)
+     try{$value.plainFileId=[RooValidationOwnership.Native]::FileId($plain)}finally{$plain.Dispose()}
+     $extended=[RooPathOracle]::Open($value.normalized)
+     try{$value.extendedFileId=[RooValidationOwnership.Native]::FileId($extended)}finally{$extended.Dispose()}
+     $expected=[RooPathOracle]::Open((Get-HarnessLongPath $file))
+     try{$value.expectedFileId=[RooValidationOwnership.Native]::FileId($expected)}finally{$expected.Dispose()}
+     if($value.plainFileId -cne $value.extendedFileId -or $value.expectedFileId -cne $value.extendedFileId){throw 'Windows plain and normalized extended paths opened different file IDs.'}
+     Passed ('Windows normalization '+$size+' '+$form.name) $value
+    }catch{
+     $value.error=$_.Exception.ToString();$rows.Add(@{check=('Windows normalization '+$size+' '+$form.name);status='fail';observed=$value})
+     Write-HarnessResult $directory 'path-failure.json' $value|Out-Null
+     throw
+    }
+   }
+   $stream=$file+':Zone.Identifier';$text="[ZoneTransfer]`r`nZoneId=3`r`n";New-HarnessText $stream $text 'normalization-stream'|Out-Null
+   if([IO.File]::ReadAllText((Get-HarnessLongPath $stream)) -cne $text -or [IO.File]::ReadAllText((Get-HarnessLongPath ($stream+':$DATA'))) -cne $text){throw 'The ADS contents were not preserved.'}
+   $plain=[RooPathOracle]::Open($stream);$extended=[RooPathOracle]::Open((Get-HarnessLongPath $stream))
+   try{if([RooValidationOwnership.Native]::FileId($plain) -cne [RooValidationOwnership.Native]::FileId($extended)){throw 'ADS file IDs differ'}}finally{$plain.Dispose();$extended.Dispose()}
+   $streamInfo=$null
+   if($size -eq 'short'){$streamInfo=Get-Item -LiteralPath (Get-HarnessToolPath $file) -Stream Zone.Identifier;if($streamInfo.Stream -cne 'Zone.Identifier' -or $streamInfo.Length -ne [Text.Encoding]::UTF8.GetByteCount($text)){throw 'The independent PowerShell ADS readback differs.'}}
+   Passed ('Windows normalization '+$size+' Zone.Identifier ADS and explicit DATA') @{path=$stream;length=$stream.Length;bytes=[Text.Encoding]::UTF8.GetByteCount($text);providerStream=$(if($streamInfo){$streamInfo.Stream}else{$null});fileIdsMatch=$true}
+   Rejected ('Windows normalization '+$size+' invalid stream refused') {Get-HarnessLongPath ($file+':bad*stream')} {[IO.File]::ReadAllText((Get-HarnessLongPath $stream)) -ceq $text}
+   Rejected ('tool boundary '+$size+' stream refused') {Get-HarnessToolPath $stream} {[IO.File]::ReadAllText((Get-HarnessLongPath $stream)) -ceq $text}
+  }
+ }finally{[IO.Directory]::SetCurrentDirectory((Get-HarnessToolPath $cwd))}
+}
+if($PathsOnly){
+ try{PathNormalizationChecks;$status='pass'}finally{$status=Complete-HarnessInvocation $status -Cleanup;Write-HarnessResult $directory 'receipt.json' @{status=$status;checks=@($rows)}|Out-Null}
+ return
 }
 function ToolBoundaryChecks{
  $tools=Fixture 'tool-boundary'
@@ -169,6 +235,7 @@ if($ToolsOnly){
  return
 }
 try{
+ PathNormalizationChecks
  ToolBoundaryChecks
  $fixture=Fixture 'present-data';$sentinel=Join-Path $fixture 'keep.txt'
  Rejected 'active current data root present in preflight' {Move-ShippedFreshData $fixture @{dataRoots=@(@{path=$fixture;exists=$true})} (Join-Path $directory 'moved-data')} {[IO.File]::ReadAllText((Get-HarnessLongPath $sentinel)) -ceq 'untouched'}
@@ -291,7 +358,7 @@ end;
  Passed 'hosts cleanup preserves BOM, UTF-8 and original line endings' 'byte-identical after marked line removal'
  Add-HarnessHostsLine $hosts $line $marker
  $writerCode='$ErrorActionPreference="Stop";for($i=0;$i -lt 100;$i++){try{$f=[IO.FileStream]::new((Get-HarnessLongPath "'+$hosts+'"),[IO.FileMode]::Open,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None);$f.Position=$f.Length;$b=[Text.Encoding]::ASCII.GetBytes("SECOND-WRITER");$f.Write($b,0,$b.Length);$f.Dispose();exit 0}catch [IO.IOException]{Start-Sleep -Milliseconds 50}};exit 1'
- $writerCode='function Get-HarnessLongPath {'+${function:Get-HarnessLongPath}.ToString()+'};'+$writerCode
+ $writerCode='. "'+(Get-HarnessToolPath (Join-Path $Source 'tools\validation\LoadTimes\CleanupOwnership.Common.ps1'))+'";function Get-HarnessLongPath {'+${function:Get-HarnessLongPath}.ToString()+'};'+$writerCode
  $encoded=[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($writerCode));$script:competingWriter=$null
  Remove-HarnessHostsLine $hosts $line $marker {
   $script:competingWriter=Start-OwnedProcess -FilePath powershell.exe -ArgumentList ('-NoProfile -EncodedCommand '+$encoded) -Purpose competing-hosts-writer
@@ -327,14 +394,6 @@ end;
  Initialize-HarnessBuildFolders $projectRoot
  if(@(Get-HarnessEntries|Where-Object {$_.purpose -eq 'generated-build' -and $_.identity.path -in @((Join-Path $projectRoot 'bin'),(Join-Path $projectRoot 'obj'))}).Count -ne 2){throw 'Prepared build folders were not recorded.'}
  $long=LongFrame $false
- $short=Fixture 'normalization';$shortDouble=$short.Replace('\normalization','\\normalization')
- if(-not(Test-HarnessPath $shortDouble -PathType Container)){throw 'Existing short directory with a doubled separator was missed.'}
- Passed 'normalization short doubled separator finds the owned directory' @{path=$shortDouble;found=$true}
- $longDouble=$long.unrecordedDirectory.Replace('\'+('c'*80),'\\'+('c'*80))
- if($longDouble.Length -lt 300 -or -not(Test-HarnessPath $longDouble -PathType Container)){throw 'Existing long directory with a doubled separator was missed.'}
- Passed 'normalization 300+ doubled separator finds the owned directory' @{path=$longDouble;length=$longDouble.Length;found=$true}
- $longParent=$long.unrecordedDirectory+'\..\'+('d'*80)
- Rejected 'normalization 300+ parent segment is refused' {Test-HarnessPath $longParent} {Test-HarnessPath $long.path}
  $longHash=Get-HarnessFileSha256 $long.path
  $closed=CloseLongFrame $long
  Write-HarnessResult $directory 'long-recorded-closed.json' $closed|Out-Null
