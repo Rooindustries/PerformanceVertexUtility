@@ -76,6 +76,8 @@ class Journey:
         except subprocess.CalledProcessError as error:
             Path(log).parent.mkdir(parents=True, exist_ok=True)
             Path(log).write_text((error.stdout or '') + (error.stderr or ''))
+            if isinstance(error, (windows.HostUnreachable, windows.RemoteTimeout)):
+                raise
             raise RuntimeError(f'Windows command failed; evidence: {log}') from None
         Path(log).parent.mkdir(parents=True, exist_ok=True)
         Path(log).write_text(result.stdout)
@@ -165,7 +167,7 @@ $files=@(($roots|Where-Object path -eq $data).files)
             path = self.out / 'p0' / (label + '-as-found.json')
             try:
                 value = json.loads(self.remote(host, machine, script, path, timeout=windows.EVIDENCE_TIMEOUT))
-            except RuntimeError:
+            except windows.HostUnreachable:
                 if label != 'blackwell':
                     raise
                 rows.append({'check': 'blackwell reachable', 'status': 'unverified', 'observed': 'SSH unavailable; no power action.', 'evidence': str(path)})
