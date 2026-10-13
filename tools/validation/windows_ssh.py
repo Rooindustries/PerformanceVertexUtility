@@ -425,7 +425,7 @@ def upload(host: str, machine: str, directory: str, include_frontend: bool = Fal
     receipt = {'machine': identity['machine'], 'sid': scope['sid'], 'frameId': frame_id,
                'runRoot': remote_root, 'stagingPath': remote_source,
                'manifestSha256': hashlib.sha256(data).hexdigest(),
-               'sourceCommit': manifest['commit'], 'sourceFileCount': len(files),
+               'sourceCommit': manifest['commit'], 'sourceFileCount': len(contents),
                'frontendIncluded': include_frontend}
     invoke(host, machine, REMOTE_GUARDS + f"\nNew-ProtectedFrame {ps_literal(remote_root)};New-ProtectedFrame {ps_literal(remote_source)} {ps_literal(scope['sid'])}")
     with tempfile.TemporaryDirectory(prefix='roo-industries-source-upload-') as staging:
