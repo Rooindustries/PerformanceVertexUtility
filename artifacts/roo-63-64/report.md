@@ -131,4 +131,22 @@ B diff since 68c154b:
  15 files changed, 86 insertions(+), 38 deletions(-)
 ```
 
-Own delta review found one open Medium merge blocker: generated-path handling is still inconsistent between the XAML compiler, PowerShell traversal and ledger cleanup. The final signed negative-build cache has a 264-character directory; ordinary Exists is false, extended-path Exists true, and Clear fails before mutation. Per the lead’s same-class rule I stopped further patches and retained the frame. CR7, trace ownership, logging, signatures and certificate cleanup otherwise pass. **I do not yet agree both branches are ready to merge.** The remaining fix/check is shared long-path-safe generated-work/file traversal/cleanup, followed by closing that ledger. Final report-only SHAs/clean trees: `../roo-62/slice14/final-branches.json`.
+Own delta review found one open Medium merge blocker: generated-path handling is still inconsistent between the XAML compiler, PowerShell traversal and ledger cleanup. The final signed negative-build cache has a 264-character directory; ordinary Exists is false, extended-path Exists true, and Clear fails before mutation. Per the lead’s same-class rule I stopped further patches and retained the frame. CR7, trace ownership, logging, signatures and certificate cleanup otherwise pass. **Slice-14 verdict (the CR8 blocker is resolved below): I did not yet agree both branches were ready to merge.** The remaining fix/check is shared long-path-safe generated-work/file traversal/cleanup, followed by closing that ledger. Final report-only SHAs/clean trees: `../roo-62/slice14/final-branches.json`.
+
+
+## Slice 15: CR8 merged and retained frame closed
+
+A commit `c91173f` was merged into B in `1ac8ea0`. The shared extended-path tree/hash/archive helpers, Linux lint, all call-site replacements and long-path fixtures are identical on both branches. B lint and changed Python syntax checks pass after the merge. Product logging/signing code, short build roots and the XAML guard are unchanged.
+
+| Check | Observed | Pass/fail | Evidence |
+| --- | --- | --- | --- |
+| Final ownership checks | 43/43 including three long-path fixtures, zero skips | pass | ../roo-62/slice15/harness-last/receipt.json |
+| PowerShell 5.1/native trace compile | All 14 scripts, zero errors; HarnessTrace compiled | pass | ../roo-62/slice15/harness-last/powershell-parse.json |
+| Trace fixtures | 3/3 on retry; first safe refusal retained, no predicate relaxed | pass on retry | ../roo-62/slice15/trace-receipt.json; trace-first-*.json/log |
+| Long ZIP | Relative JSON name/bytes verified in Windows and independently on Linux | pass | ../roo-62/slice15/harness-last/long-evidence.zip; long-zip-independent-readback.json |
+| Historical signed frame closure | 31805230c2994beebc7ab152f304f221 removed in 137.017 s; 1,039 closed entries; 264-character path absent | pass | ../roo-62/slice15/frame-31805230-receipt.json; frame-31805230-closed-ledger.json |
+| Final residue audit | No owned process, ledgered frame, harness task/firewall/hosts/testcert; same 160 legacy frames | pass | ../roo-62/slice15/final-audit-receipt.json |
+
+The three data-folder files removed by the historical ledger were owned fixture/retention entries. All other 449 as-found files are byte-identical. The PC retains the stopped signed test-feed 0.11.1-beta build; governor paused/disabled. Completed installer downloads: 0. No production requests, push, publish, Blackwell/KVM contact or trust changes. Full B/published/contracts/signed gates were intentionally not rerun.
+
+Detailed site-by-site table, failure ways, deviations, commands and artifacts: `../roo-62/slice15/report.md`. CR8 is resolved and no additional merge blocker was found in this focused self-review. The independent review/fix round and final full gate remain the lead-specified next step. Final identities/clean-tree proof: `../roo-62/slice15/final-branches.json`.
