@@ -14,7 +14,7 @@ def lint_tree(directory):
     root = directory.parent.parent.parent
     files = [p for p in directory.rglob('*') if p.is_file() and '__pycache__' not in p.parts]
     files += [root / 'tools/validation/windows_ssh.py', root / 'tools/validation/LoadTimes/CleanupOwnership.Common.ps1']
-    tokens = ['-' + 'Recurse', 'Get-' + 'FileHash', 'Compress-' + 'Archive', 'Test-' + 'Path', 'Get-' + 'Item', 'Get-' + 'ChildItem', 'Copy-' + 'Item', 'Move-' + 'Item', 'Remove-' + 'Item', 'Directory]' + '::Move']
+    tokens = ['-' + 'Recurse', 'Get-' + 'FileHash', 'Compress-' + 'Archive', 'Test-' + 'Path', 'Get-' + 'Item', 'Get-' + 'ChildItem', 'Copy-' + 'Item', 'Move-' + 'Item', 'Remove-' + 'Item', 'Directory]' + '::Move', '[IO.Path]' + '::GetFullPath', 'System.IO.Path.' + 'GetFullPath']
     allow_path = root / 'tools/validation/path-lint-allowlist.json'
     exceptions = json.loads(allow_path.read_text()) if allow_path.exists() else []
     boundary_inputs = [root / 'tools/scripts/Build-Release.ps1', root / 'tools/scripts/Release.Checks.ps1']
@@ -39,6 +39,11 @@ def lint_tree(directory):
             continue
         text = path.read_bytes().decode('utf-8', errors='replace')
         rel = path.relative_to(root).as_posix()
+        for match in re.finditer(re.escape('[IO.Path]' + '::GetFullPath'), text, re.I):
+            line = text.count('\n', 0, match.start()) + 1
+            actual = text.splitlines()[line - 1].strip()
+            if not any(e['file'] == rel and e['line'] == line and e['text'] == actual and e['reason'] for e in exceptions):
+                errors.append(rel + ':' + str(line) + ': .NET path normalization requires an explicit allowlist reason')
         offset = 0
         for statement in re.split(r'[;\n]', text):
             if native_path.search(statement) and tool_call.search(statement):

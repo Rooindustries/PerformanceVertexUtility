@@ -18,15 +18,15 @@ public static class RooHarnessWindow {
 function Get-HarnessLongPath([string]$Path){
  if($Path.StartsWith('\\?\',[StringComparison]::Ordinal)){return $Path}
  $plain=$Path.Replace('/','\')
- $unc=$plain.StartsWith('\\',[StringComparison]::Ordinal)
- if($plain.Length -lt 260){$plain=[IO.Path]::GetFullPath($plain)}
- else{
-  $plain=($(if($unc){'\\'}else{''}))+([regex]::Replace($plain.Substring($(if($unc){2}else{0})),'\\{2,}','\'))
-  $rooted=$plain -match '^[A-Za-z]:\\' -or $plain -match '^\\\\[^\\]+\\[^\\]+'
-  if(-not$rooted -or @($plain.Split('\')|Where-Object {$_ -in '.','..' -or ($_ -and $_ -match '[. ]$')}).Count){throw ('Long path needs normalization the extended form cannot apply; refused: '+$plain)}
+ $stream='';$offset=[RooValidationOwnership.Native]::StreamOffset($plain)
+ if($offset -ge 0){
+  $stream=$plain.Substring($offset)
+  if($stream.Substring(1) -cnotmatch '^[^\\/:*?"<>|]+(:\$DATA)?$'){throw ('Invalid stream name; refused: '+$Path)}
+  $plain=$plain.Substring(0,$offset)
  }
- if($plain.StartsWith('\\',[StringComparison]::Ordinal)){return '\\?\UNC\'+$plain.Substring(2)}
- return '\\?\'+$plain
+ $plain=[RooValidationOwnership.Native]::FullPath($plain)
+ if($plain.StartsWith('\\',[StringComparison]::Ordinal)){return '\\?\UNC\'+$plain.Substring(2)+$stream}
+ return '\\?\'+$plain+$stream
 }
 function Get-HarnessPlainPath([string]$Path){
  $long=Get-HarnessLongPath $Path
@@ -35,6 +35,7 @@ function Get-HarnessPlainPath([string]$Path){
 }
 function Get-HarnessToolPath([string]$Path){
  $plain=Get-HarnessPlainPath $Path
+ if([RooValidationOwnership.Native]::StreamOffset($plain) -ge 0){throw 'stream paths are .NET-only; cmdlets take -Stream separately'}
  if($plain.Length -ge 260){throw ('Path reaches the 260-character tool limit; use a shorter frame: '+$plain)}
  return $plain
 }
