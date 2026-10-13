@@ -295,7 +295,7 @@ public static class RooSuspendedShell {
   $value=if($switch -eq '-e'){'%%%invalid%%%'}else{[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes('Start-Sleep 60 # '+$root))}
   $shell=Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
   $id=[RooSuspendedShell]::Start($shell,($switch+' '+$value));$ownedShell=Register-HarnessStartedProcess (Get-Process -Id $id) 'encoded-shell-fixture'
-  try{Rejected ('R5 live suspended powershell '+$switch+' refuses frame clear') {Assert-HarnessFrameIdle $root} {Test-HarnessPath (Join-Path $root 'keep.txt')}}finally{Stop-HarnessProcess $ownedShell}
+  try{Rejected ('R5 live suspended powershell '+$switch+' refuses frame clear') {Assert-HarnessFrameIdle $root} {Test-HarnessPath (Join-Path $root 'keep.txt')};if($rows[$rows.Count-1].observed -notlike 'Encoded PowerShell runner*'){throw 'The encoded fixture was refused by a different guard.'}}finally{Stop-HarnessProcess $ownedShell}
  }
  $payload=[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($root))
  $pwsh=Get-Command pwsh.exe -ErrorAction SilentlyContinue
