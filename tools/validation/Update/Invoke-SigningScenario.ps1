@@ -36,7 +36,7 @@ try{switch($Scenario){
  'build'{
   if(-not$FeedUrl -or -not$VersionA -or -not$VersionB){throw 'Signed pair requires FeedUrl, VersionA and VersionB.'}
   . (Join-Path $Source 'tools\scripts\Release.Checks.ps1')
-  Assert-ReleasePathBound -RepoRoot (Join-Path $OutRoot 'builds\source-B') -ProjectRoot $Source
+  Assert-ReleasePathBound -RepoRoot (Join-Path $OutRoot 'builds\c') -ProjectRoot $Source
   if(@(Get-HarnessEntries|Where-Object {$_.kind -eq 'cert' -and $_.state -eq 'active'}).Count){throw 'This run already has a test certificate; preserve it.'}
   if(@(Get-ChildItem Cert:\CurrentUser\My|Where-Object Subject -ceq $subject).Count){throw 'An unrelated test certificate already exists; preserve it.'}
   $cert=New-SelfSignedCertificate -Type CodeSigningCert -Subject $subject -KeyAlgorithm RSA -KeyLength 3072 -CertStoreLocation Cert:\CurrentUser\My -NotAfter (Get-Date).AddDays(2)
