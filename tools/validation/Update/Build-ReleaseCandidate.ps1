@@ -30,10 +30,10 @@ try{
   $result=Get-HarnessOutputPath $OutRoot 'embedded-feed.json'
   Invoke-HarnessProcess (Join-Path $probe 'UpdateProbe.exe') ('--embedded-feed "'+(Get-HarnessToolPath (Join-Path $stage 'app\RooIndustries.OptimizationSuite.App.dll'))+'" "'+(Get-HarnessToolPath $result)+'"') 'candidate-embedded-feed'|Out-Null
   Register-HarnessFile $result 'result' 'run'|Out-Null;$embedded=Read-HarnessResult $result $nonce
-  if($embedded.feed -cne $feed){throw 'Candidate embedded feed differs from the committed feed.'}
+  if($embedded.feed -cne ('url='+$feed)){throw 'Candidate embedded feed differs from the committed feed.'}
   if((Get-HarnessItem $installer).VersionInfo.ProductVersion.TrimEnd(' ') -cne $version){throw 'Candidate ProductVersion differs from source.'}
   $clock.Stop()
-  Write-HarnessResult $OutRoot 'receipt.json' @{status='pass';version=$version;numericVersion=($version.Split('-')[0]+'.0');installer=$installer;bytes=(Get-HarnessItem $installer).Length;sha256=Get-HarnessFileSha256 $installer;stage=$stage;feed=$embedded.feed;signed=$false;seconds=$clock.Elapsed.TotalSeconds;files=$files.Count}|Out-Null
+  Write-HarnessResult $OutRoot 'receipt.json' @{status='pass';version=$version;numericVersion=($version.Split('-')[0]+'.0');installer=$installer;bytes=(Get-HarnessItem $installer).Length;sha256=Get-HarnessFileSha256 $installer;stage=$stage;feed=$embedded.feed.Substring(4);embeddedResource=$embedded.feed;signed=$false;seconds=$clock.Elapsed.TotalSeconds;files=$files.Count}|Out-Null
  }
  Complete-HarnessInvocation 'pass' -Cleanup|Out-Null
 }catch{
