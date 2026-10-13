@@ -43,7 +43,7 @@ switch($Action){
   $preview=Join-Path $fixture 'preview.json'
   $plan=Core 'protected-session-preview' @{processId=$process.Id;gamePath=$game;controls=@{cpuPriority='Normal'};acceptLauncherScope=$true;outputPath=$preview}
   $session=Join-Path $data ('operations\game-session-'+$plan.operationId+'\session')
-  $result=@(& (Join-Path $install 'backend\scripts\Invoke-ProtectedGameSession.ps1') -Action Start -PreviewPath $preview -ReviewHash (Get-FileHash $preview).Hash -SessionRoot $session -ConfirmApply) -join "`n"
+  $result=@(& (Join-Path $install 'backend\scripts\Invoke-ProtectedGameSession.ps1') -Action Start -PreviewPath $preview -ReviewHash (Get-HarnessFileSha256 $preview) -SessionRoot $session -ConfirmApply) -join "`n"
   Save 'game-session.json' @{sessionRoot=$session;result=($result|ConvertFrom-Json)}
  }
  'stop-game' {

@@ -5,8 +5,34 @@ from pathlib import Path
 import subprocess
 import time
 import concurrent.futures
+import re
 
 ROOT = Path(__file__).resolve().parents[3]
+
+
+def lint_tree(directory):
+    tokens = ('-' + 'Recurse', 'Get-' + 'FileHash', 'Compress-' + 'Archive')
+    errors = []
+    for path in sorted(directory.rglob('*')):
+        if not path.is_file() or '__pycache__' in path.parts:
+            continue
+        text = path.read_bytes().decode('utf-8', errors='replace')
+        allowed = []
+        if path.name == 'Harness.Common.ps1':
+            functions = list(re.finditer(r'^function (\w+)\(', text, re.MULTILINE))
+            for index, function in enumerate(functions):
+                if function.group(1) in ('Get-HarnessTree', 'Get-HarnessFileSha256'):
+                    limit = functions[index + 1].start() if index + 1 < len(functions) else len(text)
+                    body = re.search(r'^}', text[function.start():limit], re.MULTILINE)
+                    if not body:
+                        raise RuntimeError('Extended-path helper has no complete body: ' + function.group(1))
+                    allowed.append((function.start(), function.start() + body.end()))
+        for token in tokens:
+            for match in re.finditer(re.escape(token), text, re.IGNORECASE):
+                if not any(start <= match.start() < end for start, end in allowed):
+                    errors.append(str(path.relative_to(directory)) + ':' + str(text.count('\n', 0, match.start()) + 1) + ': ' + token)
+    if errors:
+        raise RuntimeError('Legacy tree/file API is forbidden; use the shared extended-path helpers:\n' + '\n'.join(errors))
 
 
 def load(name, path):
@@ -18,12 +44,21 @@ def load(name, path):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--host', required=True)
-    parser.add_argument('--expected-machine', required=True)
-    parser.add_argument('--source-commit', required=True)
-    parser.add_argument('--published-installer', type=Path, required=True)
-    parser.add_argument('--out-dir', type=Path, required=True)
+    parser.add_argument('--lint-only', action='store_true')
+    parser.add_argument('--lint-root', type=Path, default=ROOT / 'tools/validation/Update')
+    parser.add_argument('--host')
+    parser.add_argument('--expected-machine')
+    parser.add_argument('--source-commit')
+    parser.add_argument('--published-installer', type=Path)
+    parser.add_argument('--out-dir', type=Path)
     args = parser.parse_args()
+    lint_tree(args.lint_root)
+    if args.lint_only:
+        print('PASS extended-path lint')
+        return
+    for field in ('host', 'expected_machine', 'source_commit', 'published_installer', 'out_dir'):
+        if not getattr(args, field):
+            parser.error('--' + field.replace('_', '-') + ' is required unless --lint-only is used')
     args.out_dir.mkdir(parents=True, exist_ok=True)
     windows = load('harness_windows', ROOT / 'tools/validation/windows_ssh.py')
     shipped = load('harness_shipped', ROOT / 'tools/validation/Update/run_shipped.py')
@@ -104,7 +139,7 @@ def main():
         refused('changed local harness rejects frame reuse', lambda: windows.verify_local_source(args.host, args.expected_machine, receipt), 'stage a fresh frame')
     finally:
         path.write_bytes(original)
-    parse = "$errors=@();Get-ChildItem -LiteralPath " + windows.ps_literal(receipt['stagingPath'] + r'\tools\validation\Update') + " -Filter '*.ps1'|ForEach-Object {$t=$null;$e=$null;[Management.Automation.Language.Parser]::ParseFile($_.FullName,[ref]$t,[ref]$e)|Out-Null;$errors+=@($e)};@{errors=$errors.Count;detail=$errors}|ConvertTo-Json -Depth 10;if($errors.Count){throw 'Parse failed'}"
+    parse = ". " + windows.ps_literal(receipt['stagingPath'] + r'\tools\validation\Update\Harness.Common.ps1') + ";$errors=@();$files=@(Get-HarnessTree " + windows.ps_literal(receipt['stagingPath'] + r'\tools\validation\Update') + " -FilesOnly|Where-Object {[IO.Path]::GetExtension($_.FullName) -ieq '.ps1'});foreach($file in $files){$t=$null;$e=$null;[Management.Automation.Language.Parser]::ParseInput([IO.File]::ReadAllText($file.LongPath),[ref]$t,[ref]$e)|Out-Null;$errors+=@($e)};Add-Type -Path " + windows.ps_literal(receipt['stagingPath'] + r'\tools\validation\Update\HarnessTrace.cs') + " -ReferencedAssemblies System.dll,System.Management.dll;@{files=$files.Count;errors=$errors.Count;detail=$errors;traceCompiled=[bool]('RooHarnessProcessTrace' -as [type])}|ConvertTo-Json -Depth 10;if($errors.Count){throw 'Parse failed'}"
     result = windows.invoke(args.host, args.expected_machine, parse)
     (args.out_dir / 'powershell-parse.json').write_text(result.stdout)
     try:
@@ -117,6 +152,12 @@ def main():
     pc_receipt = windows.read_result(args.host, args.expected_machine, receipt, 'receipt.json', completion['nonce'])
     (args.out_dir / 'windows-receipt.json').write_text(json.dumps(pc_receipt, indent=2))
     rows.extend(pc_receipt['checks'])
+    for name in ('long-recorded-closed.json', 'long-unrecorded-retained.json'):
+        value = windows.read_result(args.host, args.expected_machine, receipt, name, completion['nonce'])
+        (args.out_dir / name).write_text(json.dumps(value, indent=2))
+    for row in pc_receipt['checks']:
+        if row['check'].startswith('CR8 archive includes'):
+            journey.copy_from(args.host, row['observed']['archive'], args.out_dir / 'long-evidence.zip')
     guard_scope = '. ' + windows.ps_literal(receipt['stagingPath'] + '/tools/validation/Update/Harness.Common.ps1') + ';Open-HarnessRun ' + ' '.join(windows.ps_literal(receipt[k]) for k in ('runRoot', 'frameId', 'manifestSha256')) + ' ' + windows.ps_literal(receipt['frameId'])
     extra = receipt['stagingPath'] + r'\Directory.Build.targets'
     windows.invoke(args.host, args.expected_machine, guard_scope + ';$entry=New-HarnessText ' + windows.ps_literal(extra) + " '<Project/>' 'extra-targets';$entry.id")

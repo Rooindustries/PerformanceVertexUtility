@@ -111,10 +111,15 @@ def inspect(host: str, machine: str):
     return json.loads(invoke(host, machine, script).stdout)
 
 
-REMOTE_GUARDS = r"""
+def harness_tree_helpers():
+    text = (Path(__file__).resolve().parents[2] / 'tools/validation/Update/Harness.Common.ps1').read_text()
+    return text[text.index('function Get-HarnessLongPath('):text.index('function Test-HarnessVisiblePath(')]
+
+
+REMOTE_GUARDS = harness_tree_helpers() + r"""
 function Assert-PlainAncestry([string]$Path) {
  $p=[IO.Path]::GetFullPath($Path)
- while($p){$i=Get-Item -LiteralPath $p -Force;if($i.Attributes -band [IO.FileAttributes]::ReparsePoint){throw ('Reparse ancestry: '+$p)};$p=[IO.Path]::GetDirectoryName($p)}
+ while($p){if([IO.File]::GetAttributes((Get-HarnessLongPath $p)) -band [IO.FileAttributes]::ReparsePoint){throw ('Reparse ancestry: '+$p)};$p=[IO.Path]::GetDirectoryName($p)}
 }
 function Assert-ProtectedFrame([string]$Path) {
  Assert-PlainAncestry $Path
@@ -136,14 +141,14 @@ function New-ProtectedFrame([string]$Path,[string]$ReadSid) {
 function Assert-SourceSnapshot([string]$Source,[string]$Expected) {
  Assert-ProtectedFrame $Source
  $manifestPath=Join-Path $Source 'source-verification.json'
- if((Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash -ine $Expected){throw 'Source manifest receipt changed'}
- $m=Get-Content -Raw -LiteralPath $manifestPath|ConvertFrom-Json
+ if((Get-HarnessFileSha256 $manifestPath) -ine $Expected){throw 'Source manifest receipt changed'}
+ $m=[IO.File]::ReadAllText((Get-HarnessLongPath $manifestPath))|ConvertFrom-Json
  if($m.protocol -cne 'roo-industries-source-snapshot/v2' -or $m.machine -ine $env:COMPUTERNAME -or $m.sid -cne [Security.Principal.WindowsIdentity]::GetCurrent().User.Value){throw 'Source scope changed'}
  if(-not$m.files -or @($m.files.PSObject.Properties).Count -eq 0){throw 'Empty source manifest'}
- $actual=@(Get-ChildItem -LiteralPath $Source -File -Force -Recurse|ForEach-Object {$n=$_.FullName.Substring($Source.TrimEnd('\').Length+1).Replace('\','/');if($n -ne 'source-verification.json' -and $n -notmatch '(^|/)(bin|obj|artifacts|\.git)(/|$)'){$n}})
+ $actual=@(Get-HarnessTree $Source -FilesOnly|ForEach-Object {$n=$_.FullName.Substring($Source.TrimEnd('\').Length+1).Replace('\','/');if($n -ne 'source-verification.json' -and ($m.files.PSObject.Properties[$n] -or $n -notmatch '(^|/)(bin|obj|artifacts|\.git)(/|$)')){$n}})
  $wanted=@($m.files.PSObject.Properties.Name)
  if(@(Compare-Object $actual $wanted -CaseSensitive).Count){throw 'Staged source file set differs; stage a fresh frame.'}
- foreach($f in $m.files.PSObject.Properties){$p=[IO.Path]::GetFullPath((Join-Path $Source $f.Name));if(-not$p.StartsWith($Source.TrimEnd('\')+'\',[StringComparison]::OrdinalIgnoreCase)){throw 'Manifest traversal'};Assert-PlainAncestry $p;if((Get-FileHash -LiteralPath $p -Algorithm SHA256).Hash -ine $f.Value){throw ('Staged bytes changed: '+$f.Name)}}
+ foreach($f in $m.files.PSObject.Properties){$p=[IO.Path]::GetFullPath((Join-Path $Source $f.Name));if(-not$p.StartsWith($Source.TrimEnd('\')+'\',[StringComparison]::OrdinalIgnoreCase)){throw 'Manifest traversal'};Assert-PlainAncestry $p;if((Get-HarnessFileSha256 $p) -ine $f.Value){throw ('Staged bytes changed: '+$f.Name)}}
  return $m
 }
 """

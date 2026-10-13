@@ -36,7 +36,7 @@ foreach($root in 'RooOptimizationSuite','RooIndustriesOptimizationSuite'){
  foreach($file in @(Get-ChildItem $folder -File -ErrorAction SilentlyContinue|Where-Object Name -like 'app*')){
   $destination=Get-HarnessOutputPath $OutRoot ($root+'-'+$file.Name)
   Copy-HarnessFile $file.FullName $destination 'log-copy'|Out-Null
-  $logs+=@(@{root=$root;path=$file.FullName;copy=$destination;bytes=$file.Length;sha256=(Get-FileHash $destination).Hash})
+  $logs+=@(@{root=$root;path=$file.FullName;copy=$destination;bytes=$file.Length;sha256=(Get-HarnessFileSha256 $destination)})
   $lineNumber=0;$stamp=$null
   foreach($line in [IO.File]::ReadLines($destination)){
    $lineNumber++

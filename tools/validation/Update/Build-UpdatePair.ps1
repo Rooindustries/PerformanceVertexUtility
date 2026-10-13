@@ -12,17 +12,17 @@ $env:ROO_INDUSTRIES_BUG_WEBHOOK=''
 [IO.Directory]::CreateDirectory($OutputRoot)|Out-Null
 $copy=Join-Path $OutputRoot 'source-B'
 New-HarnessDirectory $copy 'build-source'|Out-Null
-foreach($file in Get-ChildItem -LiteralPath $Source -File -Recurse){
+foreach($file in Get-HarnessTree $Source -FilesOnly|Where-Object {Test-HarnessVisiblePath $_ $Source}){
  $relative=$file.FullName.Substring($Source.Length).TrimStart('\')
  if($relative -match '(^|\\)(obj|bin|artifacts|\.git)(\\|$)' -or $relative -eq 'source-verification.json'){continue}
- $destination=Join-Path $copy $relative;[IO.Directory]::CreateDirectory((Split-Path $destination -Parent))|Out-Null
- Copy-Item -LiteralPath $file.FullName -Destination $destination
+ $destination=Join-Path $copy $relative;[IO.Directory]::CreateDirectory((Get-HarnessLongPath ([IO.Path]::GetDirectoryName($destination))))|Out-Null
+ [IO.File]::Copy($file.LongPath,(Get-HarnessLongPath $destination),$true)
 }
 $project=Join-Path $copy 'docs\internal\frontend\RooIndustries.OptimizationSuite.App\RooIndustries.OptimizationSuite.App.csproj'
-$text=[IO.File]::ReadAllText($project)
+$text=[IO.File]::ReadAllText((Get-HarnessLongPath $project))
 $pattern='<Version>'+[regex]::Escape($VersionA)+'</Version>'
 if([regex]::Matches($text,$pattern).Count -ne 1){throw 'Build A Version differs from the selected source version'}
-[IO.File]::WriteAllText($project,[regex]::Replace($text,$pattern,('<Version>'+$VersionB+'</Version>')),[Text.UTF8Encoding]::new($false))
+[IO.File]::WriteAllText((Get-HarnessLongPath $project),[regex]::Replace($text,$pattern,('<Version>'+$VersionB+'</Version>')),[Text.UTF8Encoding]::new($false))
 $rows=@()
 foreach($build in @(@{name='A';source=$Source},@{name='B';source=$copy})){
  New-HarnessDirectory (Join-Path $OutputRoot $build.name) 'release-output'|Out-Null
