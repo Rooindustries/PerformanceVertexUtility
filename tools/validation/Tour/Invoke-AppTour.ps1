@@ -13,6 +13,7 @@ $directory=Join-Path $OutRoot ('capture-'+$nonce);New-HarnessDirectory $director
 $script:installDir=Join-Path $directory 'installer';$script:screensDir=Join-Path $directory 'screens';New-HarnessDirectory $script:installDir 'installer-screens'|Out-Null;New-HarnessDirectory $script:screensDir 'app-screens'|Out-Null
 function FindId([string]$id){$script:window.FindFirst($TS::Descendants,[Windows.Automation.PropertyCondition]::new($A::AutomationIdProperty,$id))}
 function FindName([string]$name,$type){$script:window.FindFirst($TS::Descendants,[Windows.Automation.AndCondition]::new([Windows.Automation.PropertyCondition]::new($A::NameProperty,$name),[Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty,$type)))}
+function WizardButton([string]$name){@($script:window.FindAll($TS::Descendants,[Windows.Automation.PropertyCondition]::new($A::NameProperty,$name))|Where-Object {$_.Current.ClassName -in 'TNewButton','Button' -and -not$_.Current.IsOffscreen})|Select-Object -First 1}
 function WaitFor([scriptblock]$test,[int]$seconds,[string]$label){$limit=[DateTime]::UtcNow.AddSeconds($seconds);do{$answer=& $test;if($answer){return $answer};Start-Sleep -Milliseconds 200}while([DateTime]::UtcNow -lt $limit);throw ('Timed out: '+$label)}
 function WindowTree{ @($script:window.FindAll($TS::Descendants,[Windows.Automation.Condition]::TrueCondition)|ForEach-Object {@{name=$_.Current.Name;id=$_.Current.AutomationId;type=$_.Current.ControlType.ProgrammaticName;class=$_.Current.ClassName;offscreen=$_.Current.IsOffscreen;enabled=$_.Current.IsEnabled;bounds=$_.Current.BoundingRectangle.ToString()}}) }
 function AttachWindow($win){$script:window=Register-HarnessWindow $win;[RooTour.Desktop]::Focus([IntPtr]$win.Current.NativeWindowHandle)|Out-Null;if($script:recorder){$script:recorder.Window([IntPtr]$win.Current.NativeWindowHandle,[int]$win.Current.ProcessId)}}
@@ -145,11 +146,11 @@ try{
    if($win.Current.NativeWindowHandle -notin $existing){Assert-HarnessSmartScreen $win $directory}
    if($win.Current.ClassName -eq 'TWizardForm' -and -not$win.Current.IsOffscreen){
     if(-not(Test-OwnedDescendant ([int]$win.Current.ProcessId) -Ancestor $shell -PassThru)){throw 'Wizard ownership failed.'};AttachWindow $win
-    $tree=@(WindowTree);$button=$null;foreach($name in 'Finish','Install','Next >','Next'){$test=FindName $name $CT::Button;if($test -and $test.Current.IsEnabled){$button=$test;break}}
+    $tree=@(WindowTree);$button=$null;foreach($name in 'Finish','Install','Next >','Next'){$test=WizardButton $name;if($test -and $test.Current.IsEnabled){$button=$test;break}}
     $key=if($button){$tree.name -join '|'}else{'installing'}
     if($seen.Add($key)){Start-Sleep -Seconds $HoldSeconds;Shot 'installer' 'wizard' $(if($button){$button.Current.Name.ToLowerInvariant().Replace(' >','')}else{'installing'});if($button){$finished=$button.Current.Name -eq 'Finish';MouseAction $button wizard}}
    }elseif($win.Current.ClassName -eq '#32770' -and $win.Current.ProcessId -eq $shell.Identity.pid){
-    AttachWindow $win;Start-Sleep -Seconds $HoldSeconds;Shot 'installer' 'wizard' 'security-warning';$run=FindName 'Run' $CT::Button;if(-not$run){throw 'Unexpected launcher dialog.'};MouseAction $run wizard
+    AttachWindow $win;Start-Sleep -Seconds $HoldSeconds;Shot 'installer' 'wizard' 'security-warning';$run=WizardButton 'Run';if(-not$run){throw 'Unexpected launcher dialog.'};MouseAction $run wizard
    }elseif($win.Current.ClassName -eq '#32770' -and (Test-OwnedDescendant ([int]$win.Current.ProcessId) -Ancestor $shell)){
     AttachWindow $win;Shot 'installer' 'wizard' 'dialog';throw 'Installer raised an unplanned dialog; retained.'
    }
