@@ -1,7 +1,13 @@
 function ConvertTo-ReleaseExtendedPath([string]$Path) {
     if ($Path.StartsWith('\\?\', [StringComparison]::Ordinal)) { return $Path }
     $plain = $Path.Replace('/', '\')
-    if (($plain -notmatch '^[A-Za-z]:\\' -and $plain -notmatch '^\\\\[^\\]+\\[^\\]+') -or @($plain.Split('\') | Where-Object { $_ -in '.', '..' }).Count) { $plain = [IO.Path]::GetFullPath($plain) }
+    $unc = $plain.StartsWith('\\', [StringComparison]::Ordinal)
+    if ($plain.Length -lt 260) { $plain = [IO.Path]::GetFullPath($plain) }
+    else {
+        $plain = ($(if ($unc) { '\\' } else { '' })) + ([regex]::Replace($plain.Substring($(if ($unc) { 2 } else { 0 })), '\\{2,}', '\'))
+        $rooted = $plain -match '^[A-Za-z]:\\' -or $plain -match '^\\\\[^\\]+\\[^\\]+'
+        if (-not $rooted -or @($plain.Split('\') | Where-Object { $_ -in '.', '..' -or ($_ -and $_ -match '[. ]$') }).Count) { throw ('Long path needs normalization the extended form cannot apply; refused: ' + $plain) }
+    }
     if ($plain.StartsWith('\\', [StringComparison]::Ordinal)) { return '\\?\UNC\' + $plain.Substring(2) }
     return '\\?\' + $plain
 }
