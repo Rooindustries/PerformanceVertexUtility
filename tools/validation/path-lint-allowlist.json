@@ -25,61 +25,61 @@
   },
   {
     "file": "tools/validation/Update/Invoke-HarnessChecks.ps1",
-    "line": 213,
+    "line": 261,
     "text": "$text=Get-Content -LiteralPath (Get-HarnessToolPath $download) -Raw",
     "reason": "Owned fixture deliberately exercises this cmdlet with a plain bounded tool path; native readback verifies the effect."
   },
   {
     "file": "tools/validation/Update/Invoke-HarnessChecks.ps1",
-    "line": 215,
+    "line": 263,
     "text": "$copy=Join-Path $tools 'cmdlet-copy.txt';Copy-Item -LiteralPath (Get-HarnessToolPath $download) -Destination (Get-HarnessToolPath $copy)",
     "reason": "Owned fixture deliberately exercises this cmdlet with a plain bounded tool path; native readback verifies the effect."
   },
   {
     "file": "tools/validation/Update/Invoke-HarnessChecks.ps1",
-    "line": 217,
+    "line": 265,
     "text": "$hash=(Get-FileHash -LiteralPath (Get-HarnessToolPath $copy) -Algorithm SHA256).Hash",
     "reason": "Owned fixture deliberately exercises this cmdlet with a plain bounded tool path; native readback verifies the effect."
   },
   {
     "file": "tools/validation/Update/Invoke-HarnessChecks.ps1",
-    "line": 220,
+    "line": 268,
     "text": "$children=@(Get-ChildItem -LiteralPath (Get-HarnessToolPath $tools) -File)",
     "reason": "Owned fixture deliberately exercises this cmdlet with a plain bounded tool path; native readback verifies the effect."
   },
   {
     "file": "tools/validation/Update/Invoke-HarnessChecks.ps1",
-    "line": 224,
+    "line": 272,
     "text": "Remove-Item -LiteralPath (Get-HarnessToolPath $copy)",
     "reason": "Owned fixture deliberately exercises this cmdlet with a plain bounded tool path; native readback verifies the effect."
   },
   {
     "file": "tools/validation/Update/Invoke-HarnessChecks.ps1",
-    "line": 150,
+    "line": 198,
     "text": "$refusals=@('Invoke-WebRequest -OutFile','Add-Type -OutputAssembly','Start-Process working directory and argument','Get-AuthenticodeSignature','Set-Location','Get-Acl','Expand-Archive','New-Item junction','script invocation','external executable','Get-Content','Copy-Item','Get-FileHash','Get-ChildItem','Remove-Item','Resolve-Path')",
     "reason": "Display-only fixture category/observation; no filesystem cmdlet is called in this statement."
   },
   {
     "file": "tools/validation/Update/Invoke-HarnessChecks.ps1",
-    "line": 219,
+    "line": 267,
     "text": "Passed 'tool boundary Copy-Item normal paths' $hash;Passed 'tool boundary Get-FileHash normal path' $hash",
     "reason": "Display-only fixture category/observation; no filesystem cmdlet is called in this statement."
   },
   {
     "file": "tools/validation/Update/Invoke-HarnessChecks.ps1",
-    "line": 221,
+    "line": 269,
     "text": "if($children.Name -notcontains 'cmdlet-copy.txt'){throw 'Tool children missed a file'};Passed 'tool boundary Get-ChildItem normal path' $children.Count",
     "reason": "Display-only fixture category/observation; no filesystem cmdlet is called in this statement."
   },
   {
     "file": "tools/validation/Update/Invoke-HarnessChecks.ps1",
-    "line": 226,
+    "line": 274,
     "text": "if(Test-HarnessPath $copy){throw 'Tool Remove-Item left its owned file'};Passed 'tool boundary Remove-Item normal path' $copy",
     "reason": "Display-only fixture category/observation; no filesystem cmdlet is called in this statement."
   },
   {
     "file": "tools/validation/Update/Invoke-HarnessChecks.ps1",
-    "line": 135,
+    "line": 165,
     "text": "if($size -eq 'short'){$streamInfo=Get-Item -LiteralPath (Get-HarnessToolPath $file) -Stream Zone.Identifier;if($streamInfo.Stream -cne 'Zone.Identifier' -or $streamInfo.Length -ne [Text.Encoding]::UTF8.GetByteCount($text)){throw 'The independent PowerShell ADS readback differs.'}}",
     "reason": "Independent ADS provider readback on a bounded short plain file path, with the stream supplied separately through -Stream."
   }
