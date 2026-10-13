@@ -470,7 +470,14 @@ try{
   'p2b'{
    if(-not$CandidateInstaller -or -not$PayloadHashes -or -not$OldInstaller -or -not$OldVersion -or -not$HandoffProbe){throw 'p2b requires candidate, baseline, payload and handoff probe inputs.'}
    Initialize-HarnessCache $updates @($release.payload.version)
-   Uninstall;Wizard $OldInstaller 'published-baseline' $OldVersion;SeedTester
+   Uninstall
+   if($release.liveRelease.version -cne $OldVersion){throw 'P2b baseline differs from the independently verified live release.'}
+   $candidateInput=$CandidateInstaller;$candidateMetadata=$item
+   try{
+    $CandidateInstaller='';$item=$release.liveRelease.installer;$publishedBaseline=DownloadPublished
+    if((Get-HarnessFileSha256 $publishedBaseline) -cne (Get-HarnessFileSha256 $OldInstaller)){throw 'Live baseline bytes differ from the supplied verified baseline.'}
+   }finally{$CandidateInstaller=$candidateInput;$item=$candidateMetadata}
+   Wizard $publishedBaseline 'published-baseline' $OldVersion;SeedTester
    $folder=Join-Path $updates $release.payload.version
    New-HarnessDirectory $folder 'candidate-ota-cache' 'invocation'|Out-Null
    $candidate=Join-Path $folder ([IO.Path]::GetFileName($CandidateInstaller));Copy-HarnessFile $CandidateInstaller $candidate 'candidate-ota-cache' 'invocation'|Out-Null
@@ -487,6 +494,10 @@ try{
    $setup=Test-OwnedDescendant ([int]$handoff.setupPid) -Ancestor $probe -PassThru
    if(-not$setup -or $setup.Identity.creationTimeFileTimeUtc -cne $handoff.setupCreationTimeFileTimeUtc){throw 'Candidate setup does not belong to the owned handoff probe'}
    $script:setupReceipts.Add($setup);Save 'handoff-observed.json' $handoff
+   $pendingPath=Join-Path $updates 'pending-install.json';Register-HarnessFile $pendingPath 'candidate-pending-install' 'invocation'|Out-Null
+   $pending=[IO.File]::ReadAllText((Get-HarnessLongPath $pendingPath))|ConvertFrom-Json;Save 'pending-install-observed.json' $pending
+   $fields=@($pending.PSObject.Properties.Name|Sort-Object)
+   Check 'pending record has exact shipped fields and values' $pending (($fields -join ',') -ceq 'fromVersion,logPath,startedAtUtc,toVersion' -and $pending.fromVersion -ceq $OldVersion -and $pending.toVersion -ceq $release.payload.version -and $pending.logPath -ceq $handoff.pending.LogPath)
    Check 'stand-in uses exact pending schema and installer launch' $handoff ($handoff.pending.FromVersion -eq $OldVersion -and $handoff.pending.ToVersion -eq $release.payload.version -and $handoff.Arguments -ceq ('/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS /LOG="'+$handoff.pending.LogPath+'" /ROORELAUNCH=1 /ROOWAITPID='+$oldApp.Identity.pid) -and -not$handoff.UseShellExecute)
    if(-not$script:app.CloseMainWindow()){throw 'Owned app refused a clean window close'}
    if(-not$script:app.WaitForExit(20000)){throw 'Owned app did not close cleanly'}
