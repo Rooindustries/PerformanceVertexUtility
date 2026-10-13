@@ -9,8 +9,8 @@ for($ancestor=$root;$ancestor;$ancestor=[IO.Path]::GetDirectoryName($ancestor)){
  if($ancestor -ieq 'C:\RooBuild'){break}
 }
 . (Join-Path $PSScriptRoot 'Harness.Common.ps1')
-$receipt=Get-Content -Raw (Join-Path $root 'source\source-verification.json')|ConvertFrom-Json
-$manifestHash=(Get-FileHash (Join-Path $root 'source\source-verification.json')).Hash.ToLowerInvariant()
+$receipt=[IO.File]::ReadAllText((Get-HarnessLongPath (Join-Path $root 'source\source-verification.json')))|ConvertFrom-Json
+$manifestHash=(Get-HarnessFileSha256 (Join-Path $root 'source\source-verification.json')).ToLowerInvariant()
 Open-HarnessRun $root $receipt.frameId $manifestHash ''
 Assert-HarnessFrameIdle $root
 $entries=@(Get-HarnessEntries|Where-Object state -EQ 'active')
@@ -19,11 +19,10 @@ if($rootEntry.Count -ne 1){throw 'Frame root has no unique creation identity; re
 $source=Join-Path $root 'source'
 foreach($expected in $receipt.files.PSObject.Properties){
  $path=Join-Path $source $expected.Name
- if(-not(Test-Path $path -PathType Leaf) -or (Get-FileHash $path).Hash -ine $expected.Value){throw ('Source file changed; retained: '+$expected.Name)}
+ if(-not[IO.File]::Exists((Get-HarnessLongPath $path)) -or (Get-HarnessFileSha256 $path) -ine $expected.Value){throw ('Source file changed; retained: '+$expected.Name)}
 }
-foreach($item in @(Get-ChildItem $root -Force -Recurse)){
- if($item.Attributes -band [IO.FileAttributes]::ReparsePoint){throw 'Linked update frame entry retained'}
- if($item.PSIsContainer){
+foreach($item in @(Get-HarnessTree $root)){
+ if($item.IsDirectory){
   $known=@($entries|Where-Object {$_.kind -eq 'folder' -and $_.identity.path -ieq $item.FullName}).Count
   $container=@($entries|Where-Object {$_.kind -eq 'folder' -and $_.purpose -ne 'source-frame' -and $item.FullName.StartsWith($_.identity.path+'\',[StringComparison]::OrdinalIgnoreCase)}).Count
   $manifestDirectory=$item.FullName.StartsWith($source+'\',[StringComparison]::OrdinalIgnoreCase) -and @($receipt.files.PSObject.Properties|Where-Object {$_.Name.StartsWith($item.FullName.Substring($source.Length+1).Replace('\','/')+'/',[StringComparison]::OrdinalIgnoreCase)}).Count
@@ -45,7 +44,7 @@ $actual=Get-HarnessFolderIdentity $root
 if($actual.creationTimeFileTimeUtc -cne $rootEntry[0].identity.creationTimeFileTimeUtc){throw 'Frame identity changed; retained.'}
 $saved=[IO.File]::ReadAllBytes($script:Harness.LedgerPath)
 $final=[Text.Encoding]::UTF8.GetString($saved)|ConvertFrom-Json
-if(@(Get-ChildItem -LiteralPath $root -Force|Where-Object FullName -INE $script:Harness.LedgerPath).Count){throw 'Frame is not empty after cleanup; ledger kept.'}
+if(@(Get-HarnessTree $root|Where-Object FullName -INE $script:Harness.LedgerPath).Count){throw 'Frame is not empty after cleanup; ledger kept.'}
 $final.entries|Where-Object id -CEQ $rootEntry[0].id|ForEach-Object {$_.state='removed'}
 [IO.File]::Delete($script:Harness.LedgerPath)
 try{[IO.Directory]::Delete($root,$false)}catch{

@@ -92,3 +92,5 @@ SSH/SCP use direct bounded connections without shared ControlMaster sockets, con
 Add `--live-host <test-pc> --expected-machine <computer-name>` to check a live 20-second command with a five-second deadline and an immediate follow-up. RemoteTimeout is a run failure; only exit-255 connection errors are HostUnreachable. Source verification/extraction allows 300 seconds, evidence archives 600 seconds, and frame cleanup 900 seconds. `windows_ssh.py run --timeout <seconds> <script>` supplies an explicit bound for longer direct scripts.
 
 Use a short `-OutRoot <frame>\s` for `Invoke-SigningScenario.ps1`. Its preflight refuses an intermediate XAML assembly path of 260 characters or more before creating a certificate. The Windows XAML compiler cannot resolve that assembly through a long ordinary path. Certificate cleanup reads its creation ledger even when the build failed.
+
+The harness uses one extended-path tree walker and file-hash helper for source, data, cleanup and ZIP evidence. Run `python3 -I tools/validation/Update/run_harness_checks.py --lint-only` before staging; the driver enforces the same lint before Windows checks.

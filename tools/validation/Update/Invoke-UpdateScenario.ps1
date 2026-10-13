@@ -121,7 +121,7 @@ function Launch{
 }
 function StopApp{if($script:owned){if(-not$script:app.HasExited){$script:app.CloseMainWindow()|Out-Null;$script:app.WaitForExit(20000)|Out-Null};Stop-HarnessProcess $script:owned;$script:owned=$null;$script:app=$null;$script:window=$null}}
 function Version{(Get-ItemProperty 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{746C4DD8-B7BA-48CD-9FFA-0C378F19368A}_is1').DisplayVersion}
-function UpdateFiles{@(if(Test-Path $updates){Get-ChildItem $updates -File -Recurse|ForEach-Object {@{path=$_.FullName;bytes=$_.Length;sha256=(Get-FileHash $_.FullName).Hash}}})}
+function UpdateFiles{@(if(Test-Path $updates){Get-HarnessTree $updates -FilesOnly|Where-Object {Test-HarnessVisiblePath $_ $updates}|ForEach-Object {@{path=$_.FullName;bytes=$_.Length;sha256=(Get-HarnessFileSha256 $_.LongPath)}}})}
 function ProcessStarts{Receive-ProcessTrace;@(Get-HarnessEntries|Where-Object {$_.kind -eq 'trace' -and $_.nonce -ceq $nonce -and $_.identity.processName -match '(?i)RooIndustries|Optimizer\.|ProcessGovernor|powershell|setup'}|ForEach-Object {@{pid=$_.identity.processId;parentPid=$_.identity.parentProcessId;image=$_.identity.processName;time=$_.identity.timeCreatedFileTimeUtc;eventNonce=$_.identity.eventNonce}})}
 function Readback{
  $settings=if(Test-Path (Join-Path $data 'settings.json')){Get-Content -Raw (Join-Path $data 'settings.json')|ConvertFrom-Json}else{$null}
@@ -129,7 +129,7 @@ function Readback{
 }
 function Preserved{
  $seed=Read-HarnessLatestResult 'preservation.json' 'seed'
- $changed=@($seed.files|Where-Object {-not(Test-Path -LiteralPath $_.path) -or (Get-FileHash -LiteralPath $_.path).Hash -cne $_.sha256})
+ $changed=@($seed.files|Where-Object {-not[IO.File]::Exists((Get-HarnessLongPath $_.path)) -or (Get-HarnessFileSha256 $_.path) -cne $_.sha256})
  if($changed.Count){throw ('Preserved files changed: '+($changed.path -join ', '))}
  $settings=Get-Content -Raw (Join-Path $data 'settings.json')|ConvertFrom-Json
  if($settings.themeId -ne $seed.themeId){throw 'Theme did not survive the upgrade'}
@@ -163,8 +163,8 @@ try{
    Save 'as-found-settings.json' $settings
    $settings|Add-Member themeId 'roo-industries-blue' -Force;$settings|Add-Member simpleMode '1' -Force
    [IO.File]::WriteAllText($settingsPath,($settings|ConvertTo-Json -Compress),$utf8)
-   $files=@(Get-ChildItem (Join-Path $data 'process-rules\rules') -File|ForEach-Object {@{path=$_.FullName;sha256=(Get-FileHash $_.FullName).Hash}})
-   if(Test-Path (Join-Path $data 'operations')){$files+=@(Get-ChildItem (Join-Path $data 'operations') -File -Recurse|Where-Object {$_.Name -notlike '*.lock'}|ForEach-Object {@{path=$_.FullName;sha256=(Get-FileHash $_.FullName).Hash}})}
+   $files=@(Get-HarnessTree (Join-Path $data 'process-rules\rules') -FilesOnly|Where-Object {(Test-HarnessVisiblePath $_ (Join-Path $data 'process-rules\rules')) -and [IO.Path]::GetDirectoryName($_.FullName) -ieq (Join-Path $data 'process-rules\rules')}|ForEach-Object {@{path=$_.FullName;sha256=(Get-HarnessFileSha256 $_.LongPath)}})
+   if(Test-Path (Join-Path $data 'operations')){$files+=@(Get-HarnessTree (Join-Path $data 'operations') -FilesOnly|Where-Object {(Test-HarnessVisiblePath $_ (Join-Path $data 'operations')) -and [IO.Path]::GetFileName($_.FullName) -notlike '*.lock'}|ForEach-Object {@{path=$_.FullName;sha256=(Get-HarnessFileSha256 $_.LongPath)}})}
    Save 'preservation.json' @{files=$files;themeId='roo-industries-blue';ruleId=$rule.ruleId}
    Save 'before.json' (Readback)
   }

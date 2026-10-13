@@ -52,7 +52,7 @@ try{switch($Scenario){
    $package=Get-HarnessOutputPath $directory 'sdk-buildtools.zip'
    Invoke-WebRequest -UseBasicParsing ('https://api.nuget.org/v3-flatcontainer/microsoft.windows.sdk.buildtools/'+$version+'/microsoft.windows.sdk.buildtools.'+$version+'.nupkg') -OutFile $package
    $sdkDirectory=Join-Path $directory 'sdk-buildtools';Register-HarnessFile $package 'sdk-package'|Out-Null;New-HarnessDirectory $sdkDirectory 'sdk-tools'|Out-Null;Expand-Archive -LiteralPath $package -DestinationPath $sdkDirectory
-   $tool=Get-ChildItem $sdkDirectory -Recurse -File -Filter signtool.exe|Where-Object {$_.FullName.EndsWith('\x64\signtool.exe',[StringComparison]::OrdinalIgnoreCase)}|Select-Object -First 1
+   $tool=Get-HarnessTree $sdkDirectory -FilesOnly|Where-Object {(Test-HarnessVisiblePath $_ $sdkDirectory) -and $_.FullName.EndsWith('\x64\signtool.exe',[StringComparison]::OrdinalIgnoreCase)}|Select-Object -First 1
    $record.packageVersion=$version
   }
   if(-not$tool){throw 'The owned Windows SDK package contains no x64 signtool.exe.'}

@@ -150,12 +150,12 @@ class Journey:
         return receipt
 
     def preflight(self):
-        script = r'''
+        script = windows.harness_tree_helpers() + r'''
 $data=Join-Path $env:LOCALAPPDATA 'RooOptimizationSuite';$install='C:\Program Files\Roo Industries\Optimization Suite'
 $key='HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{746C4DD8-B7BA-48CD-9FFA-0C378F19368A}_is1'
 $tasks=@(Get-ScheduledTask|ForEach-Object {@{name=$_.TaskName;path=$_.TaskPath;state=[string]$_.State;enabled=[bool]$_.Settings.Enabled;xml=(Export-ScheduledTask -TaskName $_.TaskName -TaskPath $_.TaskPath)}})
 $ts=Get-Command tailscale -ErrorAction SilentlyContinue;$binary=if($ts){$ts.Source}else{Join-Path $env:ProgramFiles 'Tailscale\tailscale.exe'}
-$roots=@(foreach($name in 'RooOptimizationSuite','RooIndustriesOptimizationSuite'){$root=Join-Path $env:LOCALAPPDATA $name;@{path=$root;exists=(Test-Path -LiteralPath $root);files=@(if(Test-Path $root){Get-ChildItem $root -File -Recurse -Force|ForEach-Object {@{path=$_.FullName.Substring($root.Length+1);bytes=$_.Length;sha256=(Get-FileHash $_.FullName).Hash;attributes=[string]$_.Attributes}}})}})
+$roots=@(foreach($name in 'RooOptimizationSuite','RooIndustriesOptimizationSuite'){$root=Join-Path $env:LOCALAPPDATA $name;@{path=$root;exists=(Test-Path -LiteralPath $root);files=@(if(Test-Path $root){Get-HarnessTree $root -FilesOnly|ForEach-Object {@{path=$_.FullName.Substring($root.Length+1);bytes=$_.Length;sha256=(Get-HarnessFileSha256 $_.LongPath);attributes=[string]$_.Attributes}}})}})
 $files=@(($roots|Where-Object path -eq $data).files)
 @{machine=$env:COMPUTERNAME;timeUtc=[DateTime]::UtcNow.ToString('o');installedVersion=if(Test-Path $key){(Get-ItemProperty $key).DisplayVersion}else{$null};installExists=(Test-Path $install);dataRoot=$data;dataFiles=$files;dataRoots=$roots;tasks=$tasks;processes=@(Get-CimInstance Win32_Process|Where-Object {$_.ExecutablePath -like ($install+'\*') -or $_.ExecutablePath -like 'C:\RooBuild\*' -or $_.CommandLine -like '*C:\RooBuild\*'}|Select-Object ProcessId,ParentProcessId,CreationDate,ExecutablePath,CommandLine);frames=@(if(Test-Path 'C:\RooBuild'){Get-ChildItem 'C:\RooBuild' -Directory|Select-Object Name,CreationTimeUtc,LastWriteTimeUtc});tailscale=if(Test-Path $binary){(& $binary serve status --json) -join "`n"|ConvertFrom-Json}else{$null};tailscaleBinary=if(Test-Path $binary){$binary}else{$null}}|ConvertTo-Json -Depth 30
 '''
@@ -247,12 +247,11 @@ $files=@(($roots|Where-Object path -eq $data).files)
         destination = frame + r'\shipped' + '\\evidence-' + uuid.uuid4().hex + '.zip'
         scope = '. ' + windows.ps_literal(receipt['stagingPath'] + '/tools/validation/Update/Harness.Common.ps1') + ';Open-HarnessRun ' + ' '.join(windows.ps_literal(receipt[k]) for k in ('runRoot', 'frameId', 'manifestSha256')) + ' ' + windows.ps_literal(receipt['frameId']) + ';'
         script = scope + r'''
-Add-Type -AssemblyName System.IO.Compression,System.IO.Compression.FileSystem
 $frame=FRAME;$destination=DEST
-if(Test-Path $destination){throw 'Fresh evidence archive already exists'}
-$file=[IO.FileStream]::new($destination,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None);$zip=[IO.Compression.ZipArchive]::new($file,[IO.Compression.ZipArchiveMode]::Create)
-try{foreach($item in Get-ChildItem $frame -File -Recurse){$relative=$item.FullName.Substring($frame.Length+1);if($item.FullName -ieq $destination){continue};if($relative -match '^(source|source-alpha)\\|\\(source-B|source-alpha|work-[^\\]+|timer-source|timer-app|timer-core|client-probe|probe|stage|obj|bin)\\' -or $item.Extension -notin '.json','.png','.log','.txt','.csv','.sha256'){continue};[IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip,$item.FullName,$relative.Replace('\','/'))|Out-Null}}finally{$zip.Dispose();$file.Dispose()}
-Register-HarnessFile $destination 'evidence-archive'|Out-Null
+New-HarnessArchive $frame $destination {
+ param($item,$relative)
+ (Test-HarnessVisiblePath $item $frame) -and $relative -notmatch '^(source|source-alpha)\\|\\(source-B|source-alpha|work-[^\\]+|timer-source|timer-app|timer-core|client-probe|probe|stage|obj|bin)\\' -and [IO.Path]::GetExtension($item.FullName) -in '.json','.png','.log','.txt','.csv','.sha256'
+}|Out-Null
 '''.replace('FRAME', windows.ps_literal(frame)).replace('DEST', windows.ps_literal(destination))
         self.remote(host, machine, script, self.out / label / 'collect.log', timeout=windows.EVIDENCE_TIMEOUT)
         local = self.out / label / 'pc-evidence.zip'

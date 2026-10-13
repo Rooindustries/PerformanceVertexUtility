@@ -454,7 +454,8 @@ def main():
                 raise RuntimeError('Tailnet configuration differs from its as-found JSON.')
             evidence = pc_out + "\\evidence-" + uuid.uuid4().hex + ".zip"
             scope = ". " + windows.ps_literal(receipt["stagingPath"] + "/tools/validation/Update/Harness.Common.ps1") + ";Open-HarnessRun " + " ".join(windows.ps_literal(receipt[k]) for k in ("runRoot", "frameId", "manifestSha256")) + " " + windows.ps_literal(receipt["frameId"]) + ";"
-            remote(scope + "$items=@(Get-ChildItem -LiteralPath " + windows.ps_literal(pc_out) + " | Where-Object {$_.Name -notin @('builds','contracts','game-fixture','rule-inspect','obj','bin','timer-fixtures')});if(Test-Path " + windows.ps_literal(evidence) + "){throw 'Evidence archive already exists; retained.'};Compress-Archive -LiteralPath $items.FullName -DestinationPath " + windows.ps_literal(evidence) + ";Register-HarnessFile " + windows.ps_literal(evidence) + " 'evidence-archive'|Out-Null", "collect-evidence", timeout=windows.EVIDENCE_TIMEOUT)
+            collection = scope + "$root=" + windows.ps_literal(pc_out) + ";New-HarnessArchive $root " + windows.ps_literal(evidence) + " {param($item,$relative) (Test-HarnessVisiblePath $item $root) -and $relative.Split('\\')[0] -notin @('builds','contracts','game-fixture','rule-inspect','obj','bin','timer-fixtures')}|Out-Null"
+            remote(collection, "collect-evidence", timeout=windows.EVIDENCE_TIMEOUT)
             copy_from(evidence, OUT / "pc-evidence.zip")
             import zipfile
             with zipfile.ZipFile(OUT / "pc-evidence.zip") as archive:
