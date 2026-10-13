@@ -231,6 +231,14 @@ end;
  Initialize-HarnessBuildFolders $projectRoot
  if(@(Get-HarnessEntries|Where-Object {$_.purpose -eq 'generated-build' -and $_.identity.path -in @((Join-Path $projectRoot 'bin'),(Join-Path $projectRoot 'obj'))}).Count -ne 2){throw 'Prepared build folders were not recorded.'}
  $long=LongFrame $false
+ $short=Fixture 'normalization';$shortDouble=$short.Replace('\normalization','\\normalization')
+ if(-not(Test-HarnessPath $shortDouble -PathType Container)){throw 'Existing short directory with a doubled separator was missed.'}
+ Passed 'normalization short doubled separator finds the owned directory' @{path=$shortDouble;found=$true}
+ $longDouble=$long.unrecordedDirectory.Replace('\'+('c'*80),'\\'+('c'*80))
+ if($longDouble.Length -lt 300 -or -not(Test-HarnessPath $longDouble -PathType Container)){throw 'Existing long directory with a doubled separator was missed.'}
+ Passed 'normalization 300+ doubled separator finds the owned directory' @{path=$longDouble;length=$longDouble.Length;found=$true}
+ $longParent=$long.unrecordedDirectory+'\..\'+('d'*80)
+ Rejected 'normalization 300+ parent segment is refused' {Test-HarnessPath $longParent} {Test-HarnessPath $long.path}
  $longHash=Get-HarnessFileSha256 $long.path
  $closed=CloseLongFrame $long
  Write-HarnessResult $directory 'long-recorded-closed.json' $closed|Out-Null
