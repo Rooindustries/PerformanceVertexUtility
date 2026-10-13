@@ -50,8 +50,17 @@ function MouseAction($element,[string]$kind,$TargetBounds=$null,[string]$Accessi
  $r=if($TargetBounds){$TargetBounds}else{$element.Current.BoundingRectangle};$record=@{kind=$kind;id=$id;name=$name;accessibleName=$AccessibleName;timeUtc=[DateTime]::UtcNow.ToString('o');bounds=$r.ToString();method='cursor';verified=$false;checks=@()}
  foreach($fraction in @(.5,.25,.75)){
   $x=[int]($r.Left+$r.Width*$fraction);$y=[int]($r.Top+$r.Height*.5);[RooTour.Desktop]::Move($x,$y)
-  $actual=[RooTour.Desktop]::Position();$hit=$A::FromPoint([Windows.Point]::new($actual[0],$actual[1]));$match=$hit.Current.ProcessId -eq $element.Current.ProcessId -and (($id -and $hit.Current.AutomationId -ceq $id) -or ($name -and $hit.Current.Name -ceq $name))
-  $record.checks+=@(@{x=$actual[0];y=$actual[1];requestedX=$x;requestedY=$y;name=$hit.Current.Name;id=$hit.Current.AutomationId;pid=$hit.Current.ProcessId;matched=$match})
+  $actual=[RooTour.Desktop]::Position();$hit=$A::FromPoint([Windows.Point]::new($actual[0],$actual[1]));$match=$false;$chain=@();$cursor=$hit
+  for($depth=0;$cursor -and $depth -lt 16;$depth++){
+   $same=$cursor.Current.ProcessId -eq $element.Current.ProcessId -and (($id -and $cursor.Current.AutomationId -ceq $id) -or ($name -and $cursor.Current.Name -ceq $name)) -and ($cursor.GetRuntimeId() -join ',') -ceq ($element.GetRuntimeId() -join ',')
+   $chain+=@(@{name=$cursor.Current.Name;id=$cursor.Current.AutomationId;type=$cursor.Current.ControlType.ProgrammaticName;matched=$same})
+   if($same){$match=$true;break}
+   if($cursor.Current.ProcessId -ne $element.Current.ProcessId){break}
+   $other=$null
+   if($cursor.TryGetCurrentPattern([Windows.Automation.InvokePattern]::Pattern,[ref]$other) -or $cursor.TryGetCurrentPattern([Windows.Automation.TogglePattern]::Pattern,[ref]$other) -or $cursor.TryGetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern,[ref]$other)){break}
+   $cursor=[Windows.Automation.TreeWalker]::RawViewWalker.GetParent($cursor)
+  }
+  $record.checks+=@(@{x=$actual[0];y=$actual[1];requestedX=$x;requestedY=$y;name=$hit.Current.Name;id=$hit.Current.AutomationId;pid=$hit.Current.ProcessId;matched=$match;ancestry=$chain})
   if($match){$record.verified=$true;[RooTour.Desktop]::Click();break}
  }
  if(-not$record.verified){if($kind -eq 'navigation'){$element.GetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern).Select();$record.method='SelectionItemPattern.Select fallback'}else{$script:actions.Add($record);throw ('Cursor target verification failed: '+$kind+' '+$name)}}
