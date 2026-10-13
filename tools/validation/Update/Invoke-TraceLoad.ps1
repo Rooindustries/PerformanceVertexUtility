@@ -9,7 +9,7 @@ $status='fail'
 try{
  if($Action -eq 'start'){
   $image=Join-Path $directory 'RooTraceCpuLoad.exe'
-  Add-Type -OutputType ConsoleApplication -OutputAssembly (Get-HarnessLongPath $image) @'
+  New-HarnessConsoleAssembly -Path $image -Code @'
 using System;
 using System.Threading;
 public static class RooTraceCpuLoad { public static void Main(){for(int i=1;i<Environment.ProcessorCount;i++)new Thread(Busy){IsBackground=true}.Start();Busy();}static void Busy(){double x=1;while(true){x=Math.Sqrt(x+1.234567);}} }
