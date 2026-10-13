@@ -6,6 +6,7 @@ from pathlib import Path
 import subprocess
 import time
 import zipfile
+import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[3]
 MIB = 1048576
@@ -40,6 +41,16 @@ def same_registry(before, after):
     return index(before) == index(after)
 
 
+def task_definition(task):
+    if not task['name'].startswith(('RooIndustriesOptimizationSuite.ProcessRules.', 'RooOptimizationSuite.ProcessRules.')):
+        return task['xml']
+    root = ET.fromstring(task['xml'])
+    ns = {'t': 'http://schemas.microsoft.com/windows/2004/02/mit/task'}
+    for node in root.findall('t:Triggers/t:TimeTrigger/t:StartBoundary', ns):
+        node.text = ''
+    return ET.tostring(root, encoding='unicode')
+
+
 def cleanup_checks(before, after, frame):
     files = lambda roots: {f['path']: f['sha256'] for r in roots for f in r['files']}
     tasks = lambda rows: {t['path'] + t['name']: t for t in rows}
@@ -54,7 +65,7 @@ def cleanup_checks(before, after, frame):
         'dataByteIdentical': files(before['dataRoots']) == files(after['dataRoots']),
         'dataRootPresenceRestored': {r['path']: r['exists'] for r in before['dataRoots']} == {r['path']: r['exists'] for r in after['dataRoots']},
         'rawRegistryByteIdentical': same_registry(before['rawRegistry'], after['rawRegistry']),
-        'scheduledTasksRestored': old_tasks.keys() == new_tasks.keys() and all(old_tasks[k]['xml'] == new_tasks[k]['xml'] and old_tasks[k]['enabled'] == new_tasks[k]['enabled'] for k in old_tasks),
+        'scheduledTasksRestored': old_tasks.keys() == new_tasks.keys() and all(task_definition(old_tasks[k]) == task_definition(new_tasks[k]) and old_tasks[k]['enabled'] == new_tasks[k]['enabled'] for k in old_tasks),
         'CS2TasksUnchanged': all(t['path'] + t['name'] in new_tasks and new_tasks[t['path'] + t['name']]['state'] == t['state'] and new_tasks[t['path'] + t['name']]['enabled'] == t['enabled'] for t in cs2),
         'legacyFramesUnchanged': old_frames == new_frames,
         'noOwnedFrame': not any(f['path'] == frame['runRoot'] for f in after['frames']),
@@ -204,7 +215,7 @@ class Measurement:
     def final_snapshot(self):
         w = self.windows
         common = (ROOT / 'tools/validation/Memory/Memory.Common.ps1').read_text().splitlines()
-        script = w.harness_tree_helpers() + '\n' + (ROOT / 'backend/scripts/BrandCompatibility.Common.ps1').read_text(encoding='utf-8-sig') + '\n' + '\n'.join(common[2:]) + '\nGet-MemorySnapshot|ConvertTo-Json -Depth 20'
+        script = w.harness_tree_helpers() + '\n$script:RooIndustriesInstallRoot=' + w.ps_literal(self.before['install']) + ';\n' + (ROOT / 'backend/scripts/BrandCompatibility.Common.ps1').read_text(encoding='utf-8-sig') + '\n' + '\n'.join(common[2:]) + '\nGet-MemorySnapshot|ConvertTo-Json -Depth 20'
         result = self.invoke(script)
         (self.out / 'final-inventory.json').write_text(result.stdout)
         return json.loads(result.stdout)

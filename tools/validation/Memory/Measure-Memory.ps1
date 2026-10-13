@@ -3,7 +3,7 @@ $ErrorActionPreference='Stop'
 . (Get-HarnessToolPath (Join-Path $Source 'tools\validation\Memory\Memory.Common.ps1'))
 $nonce=Initialize-HarnessInvocation 'memory-baseline' $OutRoot
 Assert-HarnessHostLease;Ensure-HarnessOutputDirectory $OutRoot
-$script:logBindings=[Collections.Generic.List[object]]::new();$script:files=@{};$script:reopenRows=[Collections.Generic.List[object]]::new();$script:extraRows=[Collections.Generic.List[object]]::new();$script:extraSamples=[Collections.Generic.List[object]]::new()
+$script:samplingRaces=[Collections.Generic.List[object]]::new();$script:logBindings=[Collections.Generic.List[object]]::new();$script:files=@{};$script:reopenRows=[Collections.Generic.List[object]]::new();$script:extraRows=[Collections.Generic.List[object]]::new();$script:extraSamples=[Collections.Generic.List[object]]::new()
 
 $ProgressPreference='SilentlyContinue'
 . (Get-HarnessToolPath (Join-Path $Source 'tools\validation\LoadTimes\CleanupOwnership.Common.ps1'))
@@ -54,12 +54,22 @@ function Sample([int]$run,[string]$point,[int]$settle,[string]$state='active'){
  $utc=[DateTime]::UtcNow.ToString('o');$procs=@(Processes);$perf=@(Get-CimInstance Win32_PerfRawData_PerfProc_Process -Property IDProcess,Name,WorkingSetPrivate,WorkingSet,PrivateBytes)
  $memory=[Collections.Generic.List[object]]::new()
  foreach($c in $procs){
-  try{$p=Get-Process -Id $c.ProcessId -ErrorAction Stop;$p.Refresh();if([Math]::Abs(($p.StartTime.ToUniversalTime()-$c.CreationDate.ToUniversalTime()).TotalMilliseconds) -gt 1){throw 'Process identity changed during sample'}
+  $helper=$null;$p=$null
+  try{
+   try{$p=Get-Process -Id $c.ProcessId -ErrorAction Stop}catch [Microsoft.PowerShell.Commands.ProcessCommandException]{
+    if($c.ProcessId -eq $script:app.Id -or @(Get-CimInstance Win32_Process -Filter ('ProcessId='+$c.ProcessId)).Count){throw}
+    $script:samplingRaces.Add(@{run=$run;point=$point;pid=[int]$c.ProcessId;image=$c.Name;path=$c.ExecutablePath;creationDate=$c.CreationDate;reason='exited between enumeration and read';utc=[DateTime]::UtcNow.ToString('o')});Log ('HELPER EXITED '+$c.ProcessId+' '+$c.Name);continue
+   }
+   $helper=$null
+   if($p.Id -ne $script:app.Id){$helper=Test-OwnedDescendant $p.Id -PassThru;if(-not$helper){if($p.HasExited){$script:samplingRaces.Add(@{run=$run;point=$point;pid=$p.Id;image=$c.Name;reason='exited before ownership read';utc=[DateTime]::UtcNow.ToString('o')});continue};throw ('Foreign helper PID '+$p.Id+'; retained')};if($script:helpersSeen.Add($helper.Identity.pid.ToString()+':'+$helper.Identity.creationTimeFileTimeUtc)){$script:ownedHelpers.Add($helper)}}
+   $p.Refresh();if([Math]::Abs(($p.StartTime.ToUniversalTime()-$c.CreationDate.ToUniversalTime()).TotalMilliseconds) -gt 1){throw 'Process identity changed during sample'}
    $counter=@($perf|Where-Object {[int]$_.IDProcess -eq $p.Id});if($counter.Count -ne 1){throw ('Private working-set counter missing for PID '+$p.Id)}
    $row=[pscustomobject]@{nonce=$nonce;run=$run;point=$point;windowState=$state;settleSeconds=$settle;utc=$utc;elapsedSeconds=[Math]::Round($script:runClock.Elapsed.TotalSeconds,3);pid=$p.Id;parentPid=[int]$c.ParentProcessId;image=[string]$c.Name;imagePath=[string]$c.ExecutablePath;kind=$(if($p.Id -eq $script:app.Id){'app'}else{'helper'});workingSetBytes=$p.WorkingSet64;privateBytes=$p.PrivateMemorySize64;privateWorkingSetBytes=[long]$counter[0].WorkingSetPrivate;perfInstance=[string]$counter[0].Name;cpuMilliseconds=$p.TotalProcessorTime.TotalMilliseconds;priorityClass=[string]$p.PriorityClass;startTimeUtc=$p.StartTime.ToUniversalTime().ToString('o')}
    $memory.Add($row);$script:rows.Add($row)
-   if($p.Id -ne $script:app.Id){$r=Test-OwnedDescendant $p.Id -PassThru;if(-not$r){throw ('Foreign helper PID '+$p.Id+'; retained')};if($r -and $script:helpersSeen.Add($r.Identity.pid.ToString()+':'+$r.Identity.creationTimeFileTimeUtc)){$script:ownedHelpers.Add($r)}}
-  }catch{Log ('SAMPLE ERROR '+$c.ProcessId+' '+$_.Exception.Message);throw}
+  }catch{
+   if($helper -and $p.HasExited){$script:samplingRaces.Add(@{run=$run;point=$point;pid=$p.Id;image=$c.Name;identity=$helper.Identity;reason='owned helper exited during metrics read';utc=[DateTime]::UtcNow.ToString('o')});continue}
+   Log ('SAMPLE ERROR '+$c.ProcessId+' '+$c.Name+' '+$_.Exception.Message);throw
+  }
  }
  $total=[pscustomobject]@{nonce=$nonce;run=$run;point=$point;windowState=$state;settleSeconds=$settle;utc=$utc;elapsedSeconds=[Math]::Round($script:runClock.Elapsed.TotalSeconds,3);pid=0;parentPid=0;image='TOTAL';imagePath='';kind='total';workingSetBytes=[long](($memory|Measure-Object workingSetBytes -Sum).Sum);privateBytes=[long](($memory|Measure-Object privateBytes -Sum).Sum);privateWorkingSetBytes=[long](($memory|Measure-Object privateWorkingSetBytes -Sum).Sum);perfInstance='';cpuMilliseconds=($memory|Measure-Object cpuMilliseconds -Sum).Sum;priorityClass='';startTimeUtc=''}
  $script:rows.Add($total)
@@ -76,7 +86,7 @@ $logPath=Join-Path (Get-RooIndustriesLocalDataRoot) 'logs\app.log';$status='fail
 try{
  for($run=1;$run -le $Runs;$run++){
   $script:runClock=[Diagnostics.Stopwatch]::StartNew();Log ('RUN START '+$run)
-  $cursor=Get-ShippedLogCursor $logPath;$launchUtc=[DateTime]::UtcNow
+  $cursor=Get-ShippedLogCursor $logPath;$launchUtc=[DateTime]::UtcNow;$logCaptured=$false
   Assert-HarnessHostLease;Assert-NoForeignInstance $exe;$script:receipt=Start-OwnedProcess -FilePath (Get-HarnessToolPath $exe) -WindowStyle Normal -Purpose measured-app;$script:app=$script:receipt.process
   $script:window=WaitFor { $condition=[Windows.Automation.PropertyCondition]::new($A::ProcessIdProperty,$script:app.Id);@($A::RootElement.FindAll($TS::Children,$condition)|Where-Object {$_.Current.Name -like 'Roo Industries*' -and $_.Current.NativeWindowHandle -ne 0})|Select-Object -First 1 } 120 'app main window'
   Register-HarnessWindow $script:window|Out-Null;WaitFor {(@(Texts) -contains 'Start here')} 120 'Home rendered'|Out-Null
@@ -141,19 +151,23 @@ try{
   }finally{$focusWindow.Close();$focusWindow.Dispose()}
   Stop-OwnedValidationApp $script:app $script:receipt;Stop-HarnessProcess $script:receipt;Log ('RUN STOP '+$run)
   $segment=Read-ShippedLog $cursor;$path=Get-HarnessOutputPath $OutRoot ('app-log-run'+$run+'.txt');New-HarnessText $path $segment 'app-log'|Out-Null;$script:files['app-log-run'+$run+'.txt']=@{path=$path;format='text';sha256=Get-HarnessFileSha256 $path}
-  $script:logBindings.Add(@{run=$run;identity=$script:receipt.Identity;launchUtc=$launchUtc.ToString('o');endUtc=[DateTime]::UtcNow.ToString('o');logPath=$logPath;cursorLength=$cursor.length})
+  $logCaptured=$true;$script:logBindings.Add(@{run=$run;identity=$script:receipt.Identity;launchUtc=$launchUtc.ToString('o');endUtc=[DateTime]::UtcNow.ToString('o');logPath=$logPath;cursorLength=$cursor.length})
   if($segment.Contains('Freeing memory failed')){throw 'The app logged Freeing memory failed'}
   $completedRuns++;$script:app=$null;$script:receipt=$null;$script:window=$null;Start-Sleep 3
  }
  $status='pass'
 }catch{$errorText=$_.Exception.ToString();throw}finally{
  try{
-  if($script:app){Stop-OwnedValidationApp $script:app $script:receipt;Stop-HarnessProcess $script:receipt}
+  if($script:app){
+   Stop-OwnedValidationApp $script:app $script:receipt;Stop-HarnessProcess $script:receipt
+   if(-not$logCaptured){$segment=Read-ShippedLog $cursor;$path=Get-HarnessOutputPath $OutRoot ('app-log-run'+$run+'.txt');New-HarnessText $path $segment 'app-log'|Out-Null;$script:files['app-log-run'+$run+'.txt']=@{path=$path;format='text';sha256=Get-HarnessFileSha256 $path};$script:logBindings.Add(@{run=$run;identity=$script:receipt.Identity;launchUtc=$launchUtc.ToString('o');endUtc=[DateTime]::UtcNow.ToString('o');logPath=$logPath;cursorLength=$cursor.length;partial=$true})}
+  }
   foreach($receipt in $script:ownedHelpers){Stop-HarnessProcess $receipt}
   foreach($setting in $settings){[IO.File]::WriteAllBytes((Get-HarnessLongPath $setting.path),$setting.bytes);if((Get-HarnessFileSha256 $setting.path) -cne $setting.hash){throw 'As-found settings bytes were not restored'}}
   SaveCsv 'memory.csv' @($script:rows);Save 'memory.json' @($script:samples)
   SaveCsv 'post-reopen-memory.csv' @($script:extraRows);Save 'post-reopen-memory.json' @($script:extraSamples)
   SaveCsv 'reopen.csv' @($script:reopenRows);Save 'reopen.json' @($script:reopenRows)
+  Save 'sampling-races.json' @($script:samplingRaces)
   Save 'app-log-bindings.json' @($script:logBindings)
   Save 'cleanup.json' @{appStopped=(-not$script:app -or $script:app.HasExited);helperProcesses=@($script:ownedHelpers|ForEach-Object {@{identity=$_.Identity;exited=$_.process.HasExited}});settingsRestored=@($settings|ForEach-Object {@{path=$_.path;expectedHash=$_.hash;actualHash=Get-HarnessFileSha256 $_.path}})}
  }catch{$status='fail';$errorText+="`nCleanup: "+$_.Exception.ToString();throw}finally{
