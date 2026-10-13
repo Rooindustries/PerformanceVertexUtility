@@ -195,8 +195,9 @@ public sealed class UpdateService
             }
             _ = CleanInstalledCacheAsync(root);
             if (_feed is null) return;
+            if (!SemanticVersion.TryParse(CurrentVersion, out var installedVersion)) return;
             var candidates = Directory.EnumerateDirectories(root).Select(folder => new { Folder = folder, Name = Path.GetFileName(folder) })
-                .Where(item => SemanticVersion.TryParse(item.Name, out _)).OrderByDescending(item => { SemanticVersion.TryParse(item.Name, out var value); return value; });
+                .Where(item => SemanticVersion.TryParse(item.Name, out var version) && version!.CompareTo(installedVersion) > 0).OrderByDescending(item => { SemanticVersion.TryParse(item.Name, out var value); return value; });
             foreach (var candidate in candidates)
             {
                 var path = Path.Combine(candidate.Folder, "manifest.json");
