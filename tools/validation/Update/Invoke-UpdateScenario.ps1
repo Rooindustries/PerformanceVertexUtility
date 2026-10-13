@@ -117,6 +117,7 @@ function Launch{
  Assert-NoForeignInstance $exe
  if(@(Get-CimInstance Win32_Process|Where-Object {$_.ExecutablePath -ieq $exe}).Count){throw 'This invocation already has an app; stop it before launching another.'}
  $script:launchAfter=[DateTime]::UtcNow;$script:installPressed=$null;$script:appLogCursor=Get-ShippedLogCursor (Join-Path $data 'logs\app.log');$script:feedLogCursor=$script:appLogCursor
+ Assert-HarnessHostLease
  $script:owned=Start-OwnedProcess -FilePath $exe -WindowStyle Normal -Purpose app
  $script:app=$script:owned.process;Attach
 }
@@ -173,6 +174,7 @@ try{
    Assert-HarnessInstallStart $exe
    if(-not$InstallerPath){throw 'InstallerPath required'}
    $script:smartScreenBefore=@($A::RootElement.FindAll($TS::Children,[Windows.Automation.Condition]::TrueCondition)|ForEach-Object {$_.Current.NativeWindowHandle})
+   Assert-HarnessInstallStart $exe
    $setupOwned=Start-OwnedProcess -FilePath $InstallerPath -ArgumentList ('/SUPPRESSMSGBOXES /NORESTART /LOG="'+(Join-Path $directory ('setup-'+$nonce+'.log'))+'"') -WindowStyle Normal -Purpose setup
    $setup=$setupOwned.process
    $script:setupReceipts.Add($setupOwned);Save 'owned-setup.json' @($script:setupReceipts.Identity)
