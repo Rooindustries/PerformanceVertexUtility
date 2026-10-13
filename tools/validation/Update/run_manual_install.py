@@ -19,11 +19,11 @@ def install(host, machine, legacy_receipt, fields, out_dir,
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=False)
     receipt = windows.upload_frame(host, machine, 'roo-industries-background-install', True, r'C:\RooBuild')
-    (out_dir / 'frame.json').write_text(json.dumps(receipt, indent=2))
     failure = None
     cleanup_errors = []
     invocation = None
     try:
+        (out_dir / 'frame.json').write_text(json.dumps(receipt, indent=2))
         windows.enter_host_lease(host, machine, receipt)
         arguments = dict(fields, Source=receipt['stagingPath'], OutRoot=receipt['runRoot'] + r'\install',
                          Scenario='manual-install', CurrentData=True)
