@@ -27,6 +27,13 @@ def identity(path):
         return {'bytes': path.stat().st_size, 'sha256': hashlib.file_digest(stream, 'sha256').hexdigest()}
 
 
+def describe_error(error):
+    if isinstance(error, subprocess.CalledProcessError):
+        detail = (error.stderr or error.stdout or str(error)).strip()
+        return type(error).__name__ + ': ' + detail[-2048:]
+    return type(error).__name__ + ': ' + str(error)
+
+
 def same_registry(before, after):
     def index(rows):
         return {(r['hive'], r['path']): (r['exists'], {v['name']: (v['kind'], v['rawBase64']) for v in r['values']}) for r in rows}
@@ -98,7 +105,7 @@ class Measurement:
 
     def scope(self):
         w, f = self.windows, self.frame
-        return '. ' + w.ps_literal(f['stagingPath'] + '/tools/validation/Memory/Memory.Common.ps1') + ';Open-HarnessRun ' + ' '.join(w.ps_literal(f[k]) for k in ['runRoot', 'frameId', 'manifestSha256']) + ' ' + w.ps_literal(f['frameId']) + ';Assert-HarnessHostLease;'
+        return w.harness_tree_helpers() + '\n. (Get-HarnessToolPath ' + w.ps_literal(f['stagingPath'] + '/tools/validation/Memory/Memory.Common.ps1') + ');Open-HarnessRun ' + ' '.join(w.ps_literal(f[k]) for k in ['runRoot', 'frameId', 'manifestSha256']) + ' ' + w.ps_literal(f['frameId']) + ';Assert-HarnessHostLease;'
 
     def invoke(self, code, timeout=None):
         return self.windows.invoke(self.args.host, self.args.expected_machine, code, timeout=timeout or self.windows.EVIDENCE_TIMEOUT)
@@ -248,7 +255,7 @@ class Measurement:
             checks.extend(gate(summary, logs))
             result['status'] = 'pass' if all(c['passed'] for c in checks) else 'fail'
         except BaseException as error:
-            result['failure'] = str(error)
+            result['failure'] = describe_error(error)
             if isinstance(error, subprocess.CalledProcessError):
                 (self.out / 'failure.log').write_text((error.stdout or '') + (error.stderr or ''))
         finally:
@@ -258,16 +265,16 @@ class Measurement:
                         self.restore()
                     except BaseException as error:
                         restored = False
-                        errors.append('Restore: ' + str(error))
+                        errors.append('Restore: ' + describe_error(error))
                 try:
                     self.collect()
                 except BaseException as error:
-                    errors.append('Evidence: ' + str(error))
+                    errors.append('Evidence: ' + describe_error(error))
                 if restored:
                     try:
                         self.clear()
                     except BaseException as error:
-                        errors.append('Frame cleanup: ' + str(error))
+                        errors.append('Frame cleanup: ' + describe_error(error))
                 else:
                     result['retainedFrame'] = self.frame['runRoot']
                 if self.before:
@@ -277,7 +284,7 @@ class Measurement:
                         save(self.out / 'cleanup-audit.json', {'status': 'pass' if all(audit.values()) else 'fail', 'checks': audit})
                         checks.extend({'check': name, 'passed': passed} for name, passed in audit.items())
                     except BaseException as error:
-                        errors.append('Audit: ' + str(error))
+                        errors.append('Audit: ' + describe_error(error))
             if errors or not checks or not all(c['passed'] for c in checks):
                 result['status'] = 'fail'
             save(self.out / 'receipt.json', result)
