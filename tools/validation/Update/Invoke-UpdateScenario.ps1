@@ -301,7 +301,13 @@ try{
     StopApp
     $older=Join-Path $updates '0.0.1';$olderEntry=New-HarnessDirectory $older 'older-installed-cache' 'invocation'
     $olderFile=New-HarnessText (Join-Path $older 'owned-old.txt') $nonce 'older-installed-cache' 'invocation'
-    Launch;Settings;WaitStatus "Version $NextVersion is ready to install" 180|Out-Null
+    Launch;Settings
+    $startupStatuses=[Collections.Generic.List[string]]::new();$until=[DateTime]::UtcNow.AddSeconds(180)
+    do{$text=StatusText;$startupStatuses.Add($text);if($text -like '*Couldn''t recover the update*'){throw 'Ready startup showed a recovery error'};if($text -ceq ('Version '+$NextVersion+' is ready to install')){break};Start-Sleep -Milliseconds 50}while([DateTime]::UtcNow -lt $until)
+    if($text -cne ('Version '+$NextVersion+' is ready to install')){throw 'Ready startup did not recover the newer cache'}
+    $startupLog=Read-ShippedLog $script:appLogCursor
+    if($startupLog.Contains("Couldn't recover the update")){throw 'Ready startup logged a recovery error'}
+    Save 'ready-startup-no-recovery-error.json' @{status='pass';statuses=@($startupStatuses);log=$startupLog;app=$script:owned.Identity}
     $oldGone=CacheAbsentWithin '0.0.1'
     $sameCache=(Get-HarnessFolderIdentity $cache.identity.path).creationTimeFileTimeUtc -ceq $cache.identity.creationTimeFileTimeUtc
     if(-not$sameCache -or (Get-HarnessFileSha256 $cachedInstaller) -cne $cachedHash -or (Get-HarnessItem $cachedInstaller).Length -ne $cachedLength){throw 'Startup cleanup changed the newer ready update'}
