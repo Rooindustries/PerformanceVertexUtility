@@ -79,6 +79,8 @@ public sealed class UpdateService
     private void Notify() => _dispatcher?.TryEnqueue(() => Changed?.Invoke());
     private void Set(UpdateState state) { State = state; Notify(); }
     private void Status(string text) { Set(State with { Status = text }); AppLog.Write("update", text); }
+    private static string Describe(UpdateFeedResult r) => r.Kind + (r.KeyId is { } key ? ", key " + key : "") + (r.Release is { } release ? ", release " + release.Version : "") + ". " + r.Reason;
+    private void LogFeed(string outcome, string source = "Feed") => AppLog.Write("update", source + " " + _feed!.IdnHost + ": " + outcome.TrimEnd('.') + "; installed " + CurrentVersion + ".");
 
     public void Start(DispatcherQueue dispatcher)
     {
@@ -136,6 +138,31 @@ public sealed class UpdateService
             if (Path.GetFileName(folder) != version && SemanticVersion.TryParse(Path.GetFileName(folder), out _)) Directory.Delete(folder, true);
     }
 
+    private async Task CleanInstalledCacheAsync(string root)
+    {
+        try
+        {
+            if (!SemanticVersion.TryParse(CurrentVersion, out var installed)) return;
+            for (var attempt = 1; ; attempt++)
+            {
+                var blocked = 0;
+                foreach (var folder in Directory.EnumerateDirectories(root))
+                {
+                    if (!SemanticVersion.TryParse(Path.GetFileName(folder), out var version) || version!.CompareTo(installed) > 0) continue;
+                    try { Directory.Delete(folder, true); }
+                    catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+                    {
+                        blocked++;
+                        if (attempt == 30) AppLog.Write("update", "Couldn't clean up the installed update: " + error.Message);
+                    }
+                }
+                if (blocked == 0 || attempt == 30) return;
+                try { await Task.Delay(1000, _stop.Token); } catch (OperationCanceledException) { return; }
+            }
+        }
+        catch (Exception error) { AppLog.Write("update", "Couldn't clean up the installed update: " + error.Message); }
+    }
+
     private async Task RecoverAsync()
     {
         try
@@ -159,8 +186,6 @@ public sealed class UpdateService
                 {
                     try
                     {
-                        var installedFolder = Path.Combine(root, CurrentVersion);
-                        if (Directory.Exists(installedFolder)) Directory.Delete(installedFolder, true);
                         foreach (var log in Directory.EnumerateFiles(root, "install-*.log").Select(path => new FileInfo(path))
                             .OrderByDescending(file => file.LastWriteTimeUtc).ThenByDescending(file => file.Name, StringComparer.Ordinal).Skip(3))
                             log.Delete();
@@ -168,6 +193,7 @@ public sealed class UpdateService
                     catch (Exception error) { AppLog.Write("update", "Couldn't clean up the installed update: " + error.Message); }
                 }
             }
+            _ = CleanInstalledCacheAsync(root);
             if (_feed is null) return;
             var candidates = Directory.EnumerateDirectories(root).Select(folder => new { Folder = folder, Name = Path.GetFileName(folder) })
                 .Where(item => SemanticVersion.TryParse(item.Name, out _)).OrderByDescending(item => { SemanticVersion.TryParse(item.Name, out var value); return value; });
@@ -177,6 +203,7 @@ public sealed class UpdateService
                 if (!File.Exists(path) || new FileInfo(path).Length > UpdateFeed.MaximumBodyBytes) continue;
                 var bytes = await File.ReadAllBytesAsync(path, _stop.Token);
                 var result = UpdateFeed.Verify(bytes, 200, _feed, CurrentVersion);
+                LogFeed(Describe(result), "Cached feed");
                 if (result.Kind != UpdateFeedKind.Available || result.Release is not { } release || release.Version != candidate.Name) continue;
                 var installer = Installer(release);
                 if (!File.Exists(installer)) continue;
@@ -215,6 +242,7 @@ public sealed class UpdateService
             using var response = await GetAsync(builder.Uri, deadline.Token);
             if (response.StatusCode != HttpStatusCode.OK)
             {
+                LogFeed("HTTP " + (int)response.StatusCode);
                 Status("Couldn't check for updates. The update server returned HTTP " + (int)response.StatusCode + " instead of 200.");
                 return;
             }
@@ -230,12 +258,12 @@ public sealed class UpdateService
             }
             var bytes = output.ToArray();
             var result = UpdateFeed.Verify(bytes, (int)response.StatusCode, _feed, CurrentVersion);
+            LogFeed(Describe(result));
             if (result.Kind == UpdateFeedKind.Refused) { Status("Couldn't verify the update. " + result.Reason); return; }
             if (result.Kind == UpdateFeedKind.Current)
             {
                 _release = null; _envelope = null;
                 Set(State with { Ready = false, CanDownload = false, Notes = "", Status = result.Reason, Banner = State.BannerKind == "ready" ? "" : State.Banner });
-                AppLog.Write("update", result.Reason);
                 return;
             }
             var release = result.Release!;
@@ -245,8 +273,8 @@ public sealed class UpdateService
                 Banner = same ? State.Banner : "", BannerKind = same ? State.BannerKind : "" });
             if (AutomaticDownloads && !same) await DownloadCoreAsync();
         }
-        catch (OperationCanceledException) { if (!_stop.IsCancellationRequested) Status("Couldn't check for updates. The request timed out."); }
-        catch (Exception error) { Status("Couldn't check for updates. " + error.Message); }
+        catch (OperationCanceledException) { if (_stop.IsCancellationRequested) LogFeed("canceled: the app is closing"); else { LogFeed("failed: The request timed out."); Status("Couldn't check for updates. The request timed out."); } }
+        catch (Exception error) { LogFeed("failed: " + error.Message); Status("Couldn't check for updates. " + error.Message); }
         finally { Set(State with { Busy = false }); _gate.Release(); }
     }
 

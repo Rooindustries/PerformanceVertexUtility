@@ -25,6 +25,33 @@ static class RestartChecks
         }
 
         var refused = false;
+        foreach (var failBootTarget in new[] { false, true })
+        {
+            var sequence = new List<string>();
+            SystemRestart.Restart(system, command =>
+            {
+                sequence.Add("run " + Path.GetFileName(command.FileName));
+                if (failBootTarget && command.Optional) throw new InvalidOperationException("fixture boot target failure");
+            }, log: message => sequence.Add("log " + message));
+            check(sequence.SequenceEqual([
+                "log Running bcdedit.exe /set {fwbootmgr} bootsequence {bootmgr}", "run bcdedit.exe",
+                "log Running shutdown.exe /r /t 0", "run shutdown.exe"]),
+                "Restart logs each command before running it" + (failBootTarget ? " when bcdedit fails" : ""));
+        }
+
+        foreach (var throwEveryTime in new[] { true, false })
+        {
+            var ran = new List<string>();
+            var calls = 0;
+            SystemRestart.Restart(system, command => ran.Add(Path.GetFileName(command.FileName)), log: _ =>
+            {
+                calls++;
+                if (throwEveryTime || calls == 2) throw new InvalidOperationException("fixture logger failure");
+            });
+            check(calls == 2 && ran.SequenceEqual(["bcdedit.exe", "shutdown.exe"]),
+                "Restart runs both commands in order when logging throws " + (throwEveryTime ? "on every call" : "on the second call"));
+        }
+
         try { SystemRestart.Restart(system, command => { if (command.FileName.EndsWith("shutdown.exe", StringComparison.Ordinal)) throw new InvalidOperationException("shutdown.exe returned 5."); }); }
         catch (InvalidOperationException) { refused = true; }
         check(refused, "A failed restart is reported instead of hidden");
