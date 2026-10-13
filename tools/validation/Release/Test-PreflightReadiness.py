@@ -29,7 +29,7 @@ try:
         success=True
         try:
             if mode=='direct':
-                run=t.invoke('blackwell-lan','CS2-GEN4',f"& {p(receipt['stagingPath']+'/tools/validation/Release/Test-PreflightReadiness.ps1')} -Source {p(receipt['stagingPath'])} -OutDir {p(remote)} -Mode direct")
+                run=t.invoke('blackwell-lan','CS2-GEN4',f"& {p(receipt['stagingPath']+'/tools/validation/Release/Test-PreflightReadiness.ps1')} -Source {p(receipt['stagingPath'])} -OutDir {p(remote)} -Mode direct", timeout=300)
             else:
                 run=t.interactive('blackwell-lan','CS2-GEN4',receipt,'tools/validation/Release/Test-PreflightReadiness.ps1',{'Source':receipt['stagingPath'],'OutDir':remote,'Mode':mode},3,name)
             output=run.stdout
@@ -62,6 +62,6 @@ finally:
     for row in results:
         if row.get('task'):cleanup+=f"Assert-OwnedTaskAbsent {p(row['task'])};"
     cleanup+="'PASS exact owned tasks absent; foreign XML/SDDL preserved before fixture cleanup'"
-    (out/'task-leftovers.log').write_text(t.invoke('blackwell-lan','CS2-GEN4',cleanup).stdout)
+    (out/'task-leftovers.log').write_text(t.invoke('blackwell-lan','CS2-GEN4',cleanup,timeout=t.CLEANUP_TIMEOUT).stdout)
     (out/'checks.json').write_text(json.dumps(results,indent=2))
 sys.exit(int(any(not r['passed'] for r in results)))

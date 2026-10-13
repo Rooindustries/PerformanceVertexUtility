@@ -45,9 +45,10 @@ python3 -I tools/validation/Background/run_e2e.py --machine intel --host <test-p
 
 Build-Merged.ps1 parses the PowerShell scripts, runs the synthetic topology cases,
 then invokes Build-Release.ps1 with the tailnet test feed. The install scenario
-uses the OTA validation driver's manual-install path and its preservation seed.
-For a frame without that seed, run the manual installer from the signed-in
-desktop session and use the other scenarios directly. `--arguments` accepts a
+uses the OTA validation driver's manual-install path in a fresh leased Update
+frame, captures existing rules, undo files, theme and governor state immediately
+before setup, and keeps its evidence beside the supplied receipt. The original
+build frame and installer remain untouched. `--arguments` accepts a
 JSON object of script parameters, including `InstallerPath`; `--out-root` sets
 the remote artifact directory.
 
