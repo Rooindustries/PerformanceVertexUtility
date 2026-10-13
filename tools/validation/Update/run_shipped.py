@@ -89,7 +89,7 @@ class Journey:
         self.save(log.with_suffix('.command.json'), {'script': script, 'arguments': fields, 'minutes': minutes, 'machine': machine})
         started = time.monotonic()
         try:
-            result = windows.interactive(host, machine, receipt, script, fields, minutes, 'RooIndustries_ROO29_' + label.replace('/', '_').replace('-', '_'))
+            result = windows.interactive_frame(host, machine, receipt, script, fields, minutes, 'RooIndustries_ROO29_' + label.replace('/', '_').replace('-', '_'))
             log.write_text(result.stdout)
             completion = windows.completion(result.stdout)
             return {'status': 'pass' if completion['passed'] else 'fail', 'nonce': completion['nonce'], 'frameId': receipt['frameId'], 'seconds': time.monotonic() - started, 'evidence': str(log)}
@@ -141,12 +141,14 @@ class Journey:
             receipt = json.loads(path.read_text())
             windows.validate_receipt(machine, receipt)
             windows.verify_local_source(host, machine, receipt)
+            windows.enter_host_lease(host, machine, receipt)
             self.frames[host] = (machine, receipt)
             return receipt
-        receipt = windows.upload(host, machine, 'roo-industries-roo29-shipped', True, r'C:\RooBuild')
+        receipt = windows.upload_frame(host, machine, 'roo-industries-roo29-shipped', True, r'C:\RooBuild')
         self.save(path, receipt)
         self.frames[host] = (machine, receipt)
-        self.remote(host, machine, "$errors=@();Get-ChildItem -LiteralPath " + windows.ps_literal(receipt['stagingPath'] + r'\tools\validation\Update') + " -Filter '*.ps1'|ForEach-Object {$tokens=$null;$parseErrors=$null;[Management.Automation.Language.Parser]::ParseFile($_.FullName,[ref]$tokens,[ref]$parseErrors)|Out-Null;$errors+=@($parseErrors)};@{errors=$errors.Count;detail=$errors}|ConvertTo-Json -Depth 10;if($errors.Count){throw 'PowerShell parse failed'}", self.out / 'p0' / (label + '-powershell-parse.json'))
+        windows.enter_host_lease(host, machine, receipt)
+        self.remote(host, machine, windows.harness_tree_helpers() + "$errors=@();Get-HarnessChildren " + windows.ps_literal(receipt['stagingPath'] + r'\tools\validation\Update') + " -Filter '*.ps1'|ForEach-Object {$tokens=$null;$parseErrors=$null;[Management.Automation.Language.Parser]::ParseInput([IO.File]::ReadAllText($_.LongPath),[ref]$tokens,[ref]$parseErrors)|Out-Null;$errors+=@($parseErrors)};@{errors=$errors.Count;detail=$errors}|ConvertTo-Json -Depth 10;if($errors.Count){throw 'PowerShell parse failed'}", self.out / 'p0' / (label + '-powershell-parse.json'))
         return receipt
 
     def preflight(self):
@@ -155,9 +157,9 @@ $data=Join-Path $env:LOCALAPPDATA 'RooOptimizationSuite';$install='C:\Program Fi
 $key='HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{746C4DD8-B7BA-48CD-9FFA-0C378F19368A}_is1'
 $tasks=@(Get-ScheduledTask|ForEach-Object {@{name=$_.TaskName;path=$_.TaskPath;state=[string]$_.State;enabled=[bool]$_.Settings.Enabled;xml=(Export-ScheduledTask -TaskName $_.TaskName -TaskPath $_.TaskPath)}})
 $ts=Get-Command tailscale -ErrorAction SilentlyContinue;$binary=if($ts){$ts.Source}else{Join-Path $env:ProgramFiles 'Tailscale\tailscale.exe'}
-$roots=@(foreach($name in 'RooOptimizationSuite','RooIndustriesOptimizationSuite'){$root=Join-Path $env:LOCALAPPDATA $name;@{path=$root;exists=(Test-Path -LiteralPath $root);files=@(if(Test-Path $root){Get-HarnessTree $root -FilesOnly|ForEach-Object {@{path=$_.FullName.Substring($root.Length+1);bytes=$_.Length;sha256=(Get-HarnessFileSha256 $_.LongPath);attributes=[string]$_.Attributes}}})}})
+$roots=@(foreach($name in 'RooOptimizationSuite','RooIndustriesOptimizationSuite'){$root=Join-Path $env:LOCALAPPDATA $name;@{path=$root;exists=(Test-HarnessPath $root);files=@(if(Test-HarnessPath $root){Get-HarnessTree $root -FilesOnly|ForEach-Object {@{path=$_.FullName.Substring($root.Length+1);bytes=$_.Length;sha256=(Get-HarnessFileSha256 $_.LongPath);attributes=[string]$_.Attributes}}})}})
 $files=@(($roots|Where-Object path -eq $data).files)
-@{machine=$env:COMPUTERNAME;timeUtc=[DateTime]::UtcNow.ToString('o');installedVersion=if(Test-Path $key){(Get-ItemProperty $key).DisplayVersion}else{$null};installExists=(Test-Path $install);dataRoot=$data;dataFiles=$files;dataRoots=$roots;tasks=$tasks;processes=@(Get-CimInstance Win32_Process|Where-Object {$_.ExecutablePath -like ($install+'\*') -or $_.ExecutablePath -like 'C:\RooBuild\*' -or $_.CommandLine -like '*C:\RooBuild\*'}|Select-Object ProcessId,ParentProcessId,CreationDate,ExecutablePath,CommandLine);frames=@(if(Test-Path 'C:\RooBuild'){Get-ChildItem 'C:\RooBuild' -Directory|Select-Object Name,CreationTimeUtc,LastWriteTimeUtc});tailscale=if(Test-Path $binary){(& $binary serve status --json) -join "`n"|ConvertFrom-Json}else{$null};tailscaleBinary=if(Test-Path $binary){$binary}else{$null}}|ConvertTo-Json -Depth 30
+@{machine=$env:COMPUTERNAME;timeUtc=[DateTime]::UtcNow.ToString('o');installedVersion=if(Test-HarnessPath $key){(Get-ItemProperty $key).DisplayVersion}else{$null};installExists=(Test-HarnessPath $install);dataRoot=$data;dataFiles=$files;dataRoots=$roots;tasks=$tasks;processes=@(Get-CimInstance Win32_Process|Where-Object {$_.ExecutablePath -like ($install+'\*') -or $_.ExecutablePath -like 'C:\RooBuild\*' -or $_.CommandLine -like '*C:\RooBuild\*'}|Select-Object ProcessId,ParentProcessId,CreationDate,ExecutablePath,CommandLine);frames=@(if(Test-HarnessPath 'C:\RooBuild'){Get-HarnessChildren 'C:\RooBuild' -Directory|Select-Object Name,CreationTimeUtc,LastWriteTimeUtc});tailscale=if(Test-HarnessPath $binary){(& $binary serve status --json) -join "`n"|ConvertFrom-Json}else{$null};tailscaleBinary=if(Test-HarnessPath $binary){$binary}else{$null}}|ConvertTo-Json -Depth 30
 '''
         rows = []
         for host, machine, label in [(self.args.host, self.args.expected_machine, '9070'), (self.args.blackwell_host, self.args.blackwell_machine, 'blackwell')]:
@@ -189,7 +191,7 @@ $files=@(($roots|Where-Object path -eq $data).files)
     def copy_to(self, host, local, remote):
         machine, receipt = self.frames[host]
         scope = '. ' + windows.ps_literal(receipt['stagingPath'] + '/tools/validation/Update/Harness.Common.ps1') + ';Open-HarnessRun ' + ' '.join(windows.ps_literal(receipt[k]) for k in ('runRoot', 'frameId', 'manifestSha256')) + ' ' + windows.ps_literal(receipt['frameId']) + ';'
-        windows.invoke(host, machine, scope + 'if(Test-Path -LiteralPath ' + windows.ps_literal(remote) + "){throw 'Upload input already exists; retained.'}")
+        windows.invoke(host, machine, scope + 'if(Test-HarnessPath ' + windows.ps_literal(remote) + "){throw 'Upload input already exists; retained.'}")
         self.command(['scp', local, host + ':' + remote.replace('\\', '/')], host=host)
         windows.invoke(host, machine, scope + 'Register-HarnessFile ' + windows.ps_literal(remote) + " 'upload-input'|Out-Null")
 
@@ -234,7 +236,7 @@ $files=@(($roots|Where-Object path -eq $data).files)
             if path.is_file():
                 with path.open('rb') as source:
                     sha = hashlib.file_digest(source, 'sha256').hexdigest()
-                values.append({'path': path.relative_to(app).as_posix(), 'bytes': path.stat().st_size, 'sha256': sha})
+                values.append({'path': windows.safe_archive_path(path.relative_to(app).as_posix()).as_posix(), 'bytes': path.stat().st_size, 'sha256': sha})
         if not values or not any(v['path'] == 'app/RooIndustries.OptimizationSuite.App.exe' for v in values):
             raise RuntimeError('Extracted published installer has no expected app payload.')
         self.save(hashes, {'installerSha256': identity[1], 'installerSize': identity[0], 'files': values})
@@ -258,7 +260,7 @@ New-HarnessArchive $frame $destination {
         self.copy_from(host, destination, local)
         with zipfile.ZipFile(local) as bundle:
             for item in bundle.infolist():
-                path = Path(item.filename)
+                path = windows.safe_archive_path(item.filename)
                 if path.is_absolute() or '..' in path.parts:
                     raise RuntimeError('Unsafe evidence archive member.')
                 if not item.is_dir():

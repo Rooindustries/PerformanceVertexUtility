@@ -102,6 +102,7 @@ function Attach{
  Save 'owned-app.json' @{identity=$script:owned.Identity;ownershipProof=$script:owned.OwnershipProof}
 }
 function Launch{
+ Assert-HarnessHostLease
  Assert-ShippedNoApp $exe
  $script:launchAfter=[DateTime]::UtcNow;$script:installPressed=$null
  $script:appLogCursor=Get-ShippedLogCursor $logPath
@@ -113,15 +114,16 @@ function Tree{
  @($script:window.FindAll($TS::Descendants,[Windows.Automation.Condition]::TrueCondition)|ForEach-Object {@{name=$_.Current.Name;id=$_.Current.AutomationId;class=$_.Current.ClassName;type=$_.Current.ControlType.ProgrammaticName;enabled=$_.Current.IsEnabled}})
 }
 function Zone([string]$path){
- $raw=Get-Content -Raw -LiteralPath $path -Stream Zone.Identifier
+ $raw=[IO.File]::ReadAllText((Get-HarnessLongPath ($path+':Zone.Identifier')))
  return [string]::new($raw.ToCharArray())
 }
 function ReleaseCacheEmpty{
  $unexpected=@(UpdateFiles|Where-Object {[IO.Path]::GetDirectoryName($_.path) -ine $updates -or [IO.Path]::GetFileName($_.path) -notlike 'install-*.log'})
- $folders=@(if(Test-Path $updates){Get-ChildItem -LiteralPath $updates -Directory})
+ $folders=@(if(Test-HarnessPath $updates){Get-HarnessChildren $updates -Directory})
  return $unexpected.Count -eq 0 -and $folders.Count -eq 0
 }
 function Wizard([string]$path,[string]$label,[string]$version){
+ Assert-HarnessInstallStart $exe
  Start-ProcessTrace|Out-Null
  $foreign=@(Get-CimInstance Win32_Process|Where-Object {$_.Name -match '(?i)setup.*\.(exe|tmp)$' -and -not(Get-HarnessProcess ([int]$_.ProcessId))})
  if($foreign.Count){throw 'Another non-owned setup is running; retain it.'}
@@ -129,7 +131,7 @@ function Wizard([string]$path,[string]$label,[string]$version){
  $setupLog=Get-HarnessOutputPath $directory ($label+'-setup.log');$script:setupLogs=@{}+$script:setupLogs;$script:setupLogs[$label]=$setupLog
  $launchResult=Join-Path $directory ($label+'-shell-result-'+$nonce+'.json')
  $launcherPath=Get-HarnessOutputPath $directory ($label+'-shell.ps1')
- if(Test-Path -LiteralPath $launchResult){throw 'Shell result already exists; retained.'}
+ if(Test-HarnessPath $launchResult){throw 'Shell result already exists; retained.'}
  $launcher=@'
 param([Parameter(Mandatory)][string]$Installer,[Parameter(Mandatory)][string]$Log,[Parameter(Mandatory)][string]$Result,
  [Parameter(Mandatory)][string]$Nonce,[Parameter(Mandatory)][string]$FrameRoot,[Parameter(Mandatory)][string]$FrameId,
@@ -137,7 +139,7 @@ param([Parameter(Mandatory)][string]$Installer,[Parameter(Mandatory)][string]$Lo
 $ErrorActionPreference='Stop'
 . (Join-Path $Source 'tools\validation\Update\Harness.Common.ps1')
 Open-HarnessRun $FrameRoot $FrameId $Manifest $Nonce
-if(Test-Path -LiteralPath $Result){throw 'Shell result already exists; retained.'}
+if(Test-HarnessPath $Result){throw 'Shell result already exists; retained.'}
 try{
  $start=[Diagnostics.ProcessStartInfo]::new($Installer);$start.UseShellExecute=$true;$start.WorkingDirectory=Split-Path $Installer -Parent;$start.Arguments='/LOG="'+$Log+'"'
  $process=[Diagnostics.Process]::Start($start)
@@ -191,10 +193,11 @@ if($outcome.status -eq 'failed'){exit 1}
  $script:window=$null;$script:app=$null;$script:owned=$null
 }
 function Uninstall{
+ Assert-HarnessInstallStart $exe
  $unins=Join-Path $install 'unins000.exe'
- if(-not(Test-Path $unins)){
+ if(-not(Test-HarnessPath $unins)){
   $key='HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{746C4DD8-B7BA-48CD-9FFA-0C378F19368A}_is1'
-  if(Test-Path $key){throw 'Installed uninstaller is missing.'}
+  if(Test-HarnessPath $key){throw 'Installed uninstaller is missing.'}
   Check 'no current installation to uninstall' @{uninstallerExists=$false;uninstallKeyExists=$false} $true;return
  }
  $ownedProcess=Start-OwnedProcess -FilePath $unins -ArgumentList ('/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /LOG="'+(Get-HarnessOutputPath $directory 'uninstall.log')+'"') -Purpose uninstaller
@@ -203,21 +206,21 @@ function Uninstall{
 }
 function DownloadPublished{
  $downloadFolder=Join-Path ([Environment]::GetFolderPath('UserProfile')) ('Downloads\RooTest-Shipped-'+$nonce)
- if(Test-Path $downloadFolder){throw 'Owned browser-download folder already exists; retain it.'}
+ if(Test-HarnessPath $downloadFolder){throw 'Owned browser-download folder already exists; retain it.'}
  New-HarnessDirectory $downloadFolder 'browser-download' 'invocation'|Out-Null
  $path=Join-Path $downloadFolder ([IO.Path]::GetFileName(([uri]$item.url).AbsolutePath))
- if(Test-Path $path){throw 'Published installer download already exists; do not silently repeat the GET.'}
+ if(Test-HarnessPath $path){throw 'Published installer download already exists; do not silently repeat the GET.'}
  $clock=[Diagnostics.Stopwatch]::StartNew()
- Invoke-WebRequest -UseBasicParsing -Uri $item.url -OutFile $path
+ Invoke-WebRequest -UseBasicParsing -Uri $item.url -OutFile (Get-HarnessLongPath $path)
  Register-HarnessFile $path 'download' 'invocation'|Out-Null
  $script:completedInstallerDownloads++
- $clock.Stop();Set-Content -LiteralPath $path -Stream Zone.Identifier -Value "[ZoneTransfer]`r`nZoneId=3" -Encoding ASCII
- $actual=@{path=$path;url=$item.url;bytes=(Get-Item $path).Length;sha256=(Get-HarnessFileSha256 $path);seconds=$clock.Elapsed.TotalSeconds;completedInstallerDownloads=$script:completedInstallerDownloads;zone=Zone $path}
+ $clock.Stop();[IO.File]::WriteAllText((Get-HarnessLongPath ($path+':Zone.Identifier')), "[ZoneTransfer]`r`nZoneId=3",[Text.Encoding]::ASCII)
+ $actual=@{path=$path;url=$item.url;bytes=(Get-HarnessItem $path).Length;sha256=(Get-HarnessFileSha256 $path);seconds=$clock.Elapsed.TotalSeconds;completedInstallerDownloads=$script:completedInstallerDownloads;zone=Zone $path}
  Save 'published-download.json' $actual
  Check 'published installer downloaded on PC' $actual ($actual.bytes -eq $item.size -and $actual.sha256 -ieq $item.sha256 -and $actual.zone -match 'ZoneId=3') 'published-download.json'
  return $path
 }
-function Governor([string]$action){
+function Governor([string]$action){Assert-HarnessHostLease;
  $raw=@(& (Join-Path $install 'backend\scripts\Invoke-ProcessPolicyWorker.ps1') -Action $action -PolicyRoot $ruleRoot -ConfirmApply) -join "`n"
  $result=$raw|ConvertFrom-Json
  Save ('governor-'+$action+'.json') $result
@@ -227,7 +230,7 @@ function Governor([string]$action){
 function GovernorRead{
  $status=Core 'policy-status' @{policyRoot=$ruleRoot}
  $process=if($status.hostRunning){Get-CimInstance Win32_Process -Filter ('ProcessId='+$status.state.host.processId)}else{$null}
- @{status=$status;path=$process.ExecutablePath;arguments=$process.CommandLine;productVersion=if($process){(Get-Item $process.ExecutablePath).VersionInfo.ProductVersion.Trim()}else{$null};sha256=if($process){(Get-HarnessFileSha256 $process.ExecutablePath)}else{$null};pid=$process.ProcessId;creationTimeUtc=if($process){$process.CreationDate.ToUniversalTime().ToString('o')}else{$null};tasks=@(Get-ScheduledTask|Where-Object {$_.TaskName -match '^(RooIndustriesOptimizationSuite|RooOptimizationSuite)\.ProcessRules\.'}|Select-Object TaskName,State,@{n='enabled';e={$_.Settings.Enabled}})}
+ @{status=$status;path=$process.ExecutablePath;arguments=$process.CommandLine;productVersion=if($process){(Get-HarnessItem $process.ExecutablePath).VersionInfo.ProductVersion.Trim()}else{$null};sha256=if($process){(Get-HarnessFileSha256 $process.ExecutablePath)}else{$null};pid=$process.ProcessId;creationTimeUtc=if($process){$process.CreationDate.ToUniversalTime().ToString('o')}else{$null};tasks=@(Get-ScheduledTask|Where-Object {$_.TaskName -match '^(RooIndustriesOptimizationSuite|RooOptimizationSuite)\.ProcessRules\.'}|Select-Object TaskName,State,@{n='enabled';e={$_.Settings.Enabled}})}
 }
 function SeedTester{
  Launch;WaitFor {@(Texts) -contains 'Start here'} 90 'baseline Home'|Out-Null
@@ -241,14 +244,14 @@ function SeedTester{
  $sha=[Security.Cryptography.SHA256]::Create();try{$fingerprint=([BitConverter]::ToString($sha.ComputeHash($utf8.GetBytes($text)))).Replace('-','')}finally{$sha.Dispose()}
  $rule=@{schemaVersion=1;ruleId=([Guid]::NewGuid().ToString('N'));owner=@{machine=$env:COMPUTERNAME;userSid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value};name='Shipped tester game rule';enabled=$true;matchMode='path';executablePath=$target;executableHash=$null;controls=@{cpuPriority='High';memoryPriority=2;affinity=@{group=0;mask='0x3'}};cpuSelection=$null;affinityTopologyHash=$fingerprint}
  $savedRule=Core 'rule-save' @{policyRoot=$ruleRoot;rule=$rule};Save 'saved-rule.json' $savedRule
- $settings=Get-Content -Raw $settingsPath|ConvertFrom-Json;Save 'as-found-settings.json' $settings
+ $settings=[IO.File]::ReadAllText((Get-HarnessLongPath $settingsPath))|ConvertFrom-Json;Save 'as-found-settings.json' $settings
  $settings|Add-Member themeId 'roo-industries-blue' -Force;$settings|Add-Member simpleMode '1' -Force;$settings|Add-Member downloadUpdatesAutomatically '1' -Force
- [IO.File]::WriteAllText($settingsPath,($settings|ConvertTo-Json -Compress),$utf8)
+ [IO.File]::WriteAllText((Get-HarnessLongPath $settingsPath),($settings|ConvertTo-Json -Compress),$utf8)
  $registry='HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize'
  $before=Get-ItemProperty -LiteralPath $registry -Name EnableTransparency -ErrorAction SilentlyContinue
  $option=if($before.EnableTransparency -eq 0){'choice-6b253977ea5987f3'}else{'choice-95a6ed84299d0109'}
  $preview=Join-Path $data ('operations\shipped-tester-tweak-'+[Guid]::NewGuid().ToString('N')+'\preview.json')
- [IO.Directory]::CreateDirectory((Split-Path $preview -Parent))|Out-Null
+ [IO.Directory]::CreateDirectory((Get-HarnessLongPath (Split-Path $preview -Parent)))|Out-Null
  Save 'tester-tweak-before.json' @{settingId='windows.0689e69eedc05770';optionId=$option;original=$before.EnableTransparency}
  $plan=Core 'tweak-preview' @{profileId='shipped-tester';selections=@(@{settingId='windows.0689e69eedc05770';optionId=$option});outputPath=$preview}
  Save 'tester-tweak-preview.json' $plan
@@ -271,7 +274,7 @@ function Preservation{
  $rows=@($baseline.files|ForEach-Object {$exists=[IO.File]::Exists((Get-HarnessLongPath $_.path));@{path=$_.path;expected=$_.sha256;observed=if($exists){(Get-HarnessFileSha256 $_.path)}else{$null};match=($exists -and (Get-HarnessFileSha256 $_.path) -ieq $_.sha256)}})
  Save 'preservation-readback.json' $rows
  Check 'tester preservation hashes' @{files=$rows.Count;mismatches=@($rows|Where-Object {-not$_.match})} (@($rows|Where-Object {-not$_.match}).Count -eq 0) 'preservation-readback.json'
- $settings=Get-Content -Raw $settingsPath|ConvertFrom-Json
+ $settings=[IO.File]::ReadAllText((Get-HarnessLongPath $settingsPath))|ConvertFrom-Json
  Check 'theme and settings kept' $settings ($settings.themeId -eq $baseline.themeId -and $settings.simpleMode -eq $baseline.simpleMode -and $settings.downloadUpdatesAutomatically -eq $baseline.automaticDownloads)
 }
 function Payload{
@@ -294,15 +297,15 @@ function Current([bool]$pressCheck){
  Save 'current-process-log.json' @{pid=$script:app.Id;creationTimeUtc=$script:app.StartTime.ToUniversalTime().ToString('o');launchAfter=$script:launchAfter.ToString('o');lines=$currentLines;segment=$newLines}
  Check 'Current is a new log result from this owned launch' $currentLines ($currentLines.Count -gt 0 -and $newLines -notmatch '[[]update] Downloading') 'current-process-log.json'
  Shot 'live-feed-current'
- Check 'live feed up to date' @{text=$status;feed=$release.feedUrl;checkButtonPressed=$pressCheck;productVersion=(Get-Item $exe).VersionInfo.ProductVersion.Trim()} ($status -ceq 'You have the latest version') 'live-feed-current.png'
+ Check 'live feed up to date' @{text=$status;feed=$release.feedUrl;checkButtonPressed=$pressCheck;productVersion=(Get-HarnessItem $exe).VersionInfo.ProductVersion.Trim()} ($status -ceq 'You have the latest version') 'live-feed-current.png'
 }
 function Versions{
- $actual=@{displayVersion=Version;productVersion=(Get-Item $exe).VersionInfo.ProductVersion.Trim();runningPid=$script:app.Id;runningPath=$script:app.Path}
+ $actual=@{displayVersion=Version;productVersion=(Get-HarnessItem $exe).VersionInfo.ProductVersion.Trim();runningPid=$script:app.Id;runningPath=$script:app.Path}
  Check 'published version installed and running' $actual ($actual.displayVersion -eq $release.payload.version -and $actual.productVersion -eq $release.payload.version -and -not$script:app.HasExited)
 }
 function GovernorVerified{
  $governor=GovernorRead;Save 'governor-readback.json' $governor
- $oracle=Get-Content -Raw $PayloadHashes|ConvertFrom-Json
+ $oracle=[IO.File]::ReadAllText((Get-HarnessLongPath $PayloadHashes))|ConvertFrom-Json
  if($oracle.installerSha256 -ine $item.sha256 -or $oracle.installerSize -ne $item.size){throw 'Payload oracle installer identity differs.'}
  $hashes=@($oracle.files)
  $hostHash=($hashes|Where-Object {$_.path -eq 'backend/bin/optimizer/Optimizer.Host.exe'}|Select-Object -First 1).sha256
@@ -358,17 +361,17 @@ function AppLog{
 function Remove-ShippedHosts{
  if(-not$script:hostsCreated){return}
  $path=Join-Path $env:SystemRoot 'System32\drivers\etc\hosts'
- $entry=@(Get-HarnessEntries|Where-Object {$_.kind -eq 'hosts' -and $_.identity.marker -ceq $script:hostsMarker -and $_.state -eq 'active'});if($entry.Count -ne 1){throw 'Hosts line is not in this creation ledger; retained.'};Remove-HarnessEntry $entry[0]
+ $entry=@(Get-HarnessEntries|Where-Object {$_.kind -eq 'hosts' -and $_.identity.marker -ceq $script:hostsMarker -and $_.state -eq 'active'});if($entry.Count -ne 1){throw 'Hosts line is not in this creation ledger; retained.'};Assert-HarnessHostLease;Remove-HarnessEntry $entry[0]
  $script:hostsCreated=$false
- Invoke-HarnessProcess (Join-Path $env:SystemRoot 'System32\ipconfig.exe') '/flushdns' 'flush-dns'|Out-Null
 }
+
 function HangingNetwork{
  $path=Join-Path $env:SystemRoot 'System32\drivers\etc\hosts';$hostName=([uri]$release.feedUrl).DnsSafeHost
  $begin=[DateTime]::UtcNow
  $line='192.0.2.1 '+$hostName+' '+$script:hostsMarker;$script:hostsLine=$line
  try{
-  Add-HarnessHostsLine $path $line $script:hostsMarker;$script:hostsCreated=$true
-  if(-not[IO.File]::ReadAllText($path).Contains($line)){throw 'Owned hosts entry was reverted.'}
+  Assert-HarnessHostLease;Add-HarnessHostsLine $path $line $script:hostsMarker;$script:hostsCreated=$true
+  if(-not[IO.File]::ReadAllText((Get-HarnessLongPath $path)).Contains($line)){throw 'Owned hosts entry was reverted.'}
   Invoke-HarnessProcess (Join-Path $env:SystemRoot 'System32\ipconfig.exe') '/flushdns' 'flush-dns'|Out-Null
  }catch{
   Save 'hosts-edit-failure.json' @{error=$_.Exception.Message;events=@(Get-WinEvent -FilterHashtable @{LogName='Microsoft-Windows-Windows Defender/Operational';StartTime=$begin.ToLocalTime()} -ErrorAction SilentlyContinue|Select-Object TimeCreated,Id,Message)}
@@ -392,9 +395,9 @@ function HangingNetwork{
  $clock.Stop();Shot 'hanging-timeout'
  Check 'navigation renders during a hanging network check' $pages ($pages.Count -eq 3) 'hanging-settings.png'
  Check 'hanging check reports timeout within 30 seconds' @{text=$status;seconds=$clock.Elapsed.TotalSeconds;alive=(-not$script:app.HasExited)} (Test-ShippedRequestTimeout $status $clock.Elapsed.TotalSeconds) 'hanging-timeout.png'
- if(-not[IO.File]::ReadAllText($path).Contains($line)){throw 'Owned hosts entry was reverted during the test.'}
+ if(-not[IO.File]::ReadAllText((Get-HarnessLongPath $path)).Contains($line)){throw 'Owned hosts entry was reverted during the test.'}
  Remove-ShippedHosts
- Check 'owned hosts entry removed' @{marker=$script:hostsMarker;exists=[IO.File]::ReadAllText($path).Contains($script:hostsMarker)} (-not[IO.File]::ReadAllText($path).Contains($script:hostsMarker))
+ Check 'owned hosts entry removed' @{marker=$script:hostsMarker;exists=[IO.File]::ReadAllText((Get-HarnessLongPath $path)).Contains($script:hostsMarker)} (-not[IO.File]::ReadAllText((Get-HarnessLongPath $path)).Contains($script:hostsMarker))
  Current $true
 }
 function RestoreFreshP5Installation{
@@ -406,13 +409,13 @@ function RestoreFreshP5Installation{
  CollectStarts
  foreach($process in $script:extraProcesses){Stop-HarnessProcess $process}
  Uninstall
- WaitFor {-not(Test-Path $install)} 20 'uninstaller final directory removal'|Out-Null
+ WaitFor {-not(Test-HarnessPath $install)} 20 'uninstaller final directory removal'|Out-Null
  $active=Get-RooIndustriesLocalDataRoot
- Check 'uninstaller leftovers before harness cleanup' @{activeRoot=$active;dataExists=(Test-Path $active);installExists=(Test-Path $install);dataFiles=@(if(Test-Path $active){Get-HarnessTree $active -FilesOnly|Where-Object {Test-HarnessVisiblePath $_ $active}|Select-Object FullName,Length})} $true
- if(Test-Path $active){Move-ShippedFreshData $active $before (Join-Path $directory 'removed-test-data')}
+ Check 'uninstaller leftovers before harness cleanup' @{activeRoot=$active;dataExists=(Test-HarnessPath $active);installExists=(Test-HarnessPath $install);dataFiles=@(if(Test-HarnessPath $active){Get-HarnessTree $active -FilesOnly|Where-Object {Test-HarnessVisiblePath $_ $active}|Select-Object FullName,Length})} $true
+ if(Test-HarnessPath $active){Move-ShippedFreshData $active $before (Join-Path $directory 'removed-test-data')}
  $tasks=@(Get-ScheduledTask|Where-Object {$_.TaskName -match '^(RooIndustriesOptimizationSuite|RooOptimizationSuite)\.ProcessRules\.'}|Select-Object TaskName,State)
  $services=@(Get-Service|Where-Object {$_.Name -match 'RooIndustries|RooOptimizationSuite'}|Select-Object Name,Status)
- Check 'fresh-install uninstall leaves no Suite tasks services files or data' @{tasks=$tasks;services=$services;installExists=(Test-Path $install);dataExists=(Test-Path $data);dataArchived=(Join-Path $directory 'removed-test-data')} ($tasks.Count -eq 0 -and $services.Count -eq 0 -and -not(Test-Path $install) -and -not(Test-Path $data))
+ Check 'fresh-install uninstall leaves no Suite tasks services files or data' @{tasks=$tasks;services=$services;installExists=(Test-HarnessPath $install);dataExists=(Test-HarnessPath $data);dataArchived=(Join-Path $directory 'removed-test-data')} ($tasks.Count -eq 0 -and $services.Count -eq 0 -and -not(Test-HarnessPath $install) -and -not(Test-HarnessPath $data))
  $script:freshP5Installed=$false
 }
 if($HarnessOnly){return}
@@ -435,7 +438,7 @@ try{
    WaitFor {(Core 'policy-status' @{policyRoot=$ruleRoot}).hostRunning} 70 'enabled governor resumes'|Out-Null
    Launch;Versions;Payload;Preservation;GovernorVerified;SavedRuleReadback;Current $false
    $files=@(UpdateFiles);$segment=Read-ShippedLog $script:appLogCursor;Check 'up-to-date check starts no download and leaves no release cache' @{files=$files;log=$segment} ((ReleaseCacheEmpty) -and $segment -like '*[[]update] You have the latest version*' -and $segment -notmatch '[[]update] Downloading')
-   $setupLog=[IO.File]::ReadAllText($script:setupLogs['published'])
+   $setupLog=[IO.File]::ReadAllText((Get-HarnessLongPath $script:setupLogs['published']))
    $candidates=@($setupLog -split "`n"|Where-Object {$_ -match '(?i)\berror\b|\bexception\b'})
    $errors=@($candidates|Where-Object {$_ -notmatch '^\d{4}-\d{2}-\d{2} .*?\s+(Dest filename|Source filename): '})
    Save 'setup-error-audit.json' @{errors=$errors;filenameLines=@($candidates|Where-Object {$_ -notin $errors})}
@@ -460,7 +463,7 @@ try{
    $until=[DateTime]::UtcNow.AddSeconds(80);$download=$null
    while([DateTime]::UtcNow -lt $until){
     CollectStarts
-    $files=@(Get-ChildItem (Join-Path $updates $release.payload.version) -File -ErrorAction SilentlyContinue)
+    $files=@(Get-HarnessChildren (Join-Path $updates $release.payload.version) -File -ErrorAction SilentlyContinue)
     if(@($files|Where-Object {$_.Name -match '\.exe(?:\.partial)?$'}).Count){break}
     Start-Sleep -Milliseconds 500
    }
@@ -474,15 +477,15 @@ try{
    Shot 'live-installer-ready'
    $downloads=@(UpdateFiles|Where-Object {$_.path -match '\.exe$'})
    if($downloads.Count -ne 1){throw 'Expected one newly downloaded installer.'}
-   $download=$downloads[0];Register-HarnessCache $release.payload.version|Out-Null;$created=(Get-Item $download.path).CreationTimeUtc
+   $download=$downloads[0];Register-HarnessCache $release.payload.version|Out-Null;$created=(Get-HarnessItem $download.path).CreationTimeUtc
    Check 'installer was created after this app launch' @{created=$created;appStarted=$script:app.StartTime.ToUniversalTime()} ($created -ge $script:app.StartTime.ToUniversalTime())
    Save 'live-download.json' @{file=$download;secondsFromLaunch=([DateTime]::UtcNow-$launched).TotalSeconds;automaticDownloads=$toggle;checkButtonPressed=$false;status=$ready;texts=@(Texts)}
    Check 'startup live download exactly signed published bytes' $download ($download.bytes -eq $item.size -and $download.sha256 -ieq $item.sha256) 'live-download.json'
    $script:governorBeforeUpgrade=GovernorRead;Save 'governor-immediately-before-upgrade.json' $script:governorBeforeUpgrade
    $prior=$script:app.Id;Click 'UpdateInstallButton'
-   WaitFor {ByName 'Install'} 30 'Install confirmation'|Out-Null;Shot 'install-confirmation';Start-ProcessTrace -Anchor $script:owned|Out-Null;$script:installPressed=[DateTime]::UtcNow;Activate (ByName 'Install');Bind-UpdateSetup $script:owned $download.path
+   WaitFor {ByName 'Install'} 30 'Install confirmation'|Out-Null;Shot 'install-confirmation';Start-ProcessTrace -Anchor $script:owned|Out-Null;$script:installPressed=[DateTime]::UtcNow;Assert-HarnessInstallStart $exe;Activate (ByName 'Install');Bind-UpdateSetup $script:owned $download.path
    $until=[DateTime]::UtcNow.AddMinutes(5)
-   while([DateTime]::UtcNow -lt $until){CollectStarts;$pending=Join-Path $updates 'pending-install.json';if(Test-Path $pending){try{Save 'pending-install-observed.json' (Get-Content -Raw $pending|ConvertFrom-Json)}catch{}};if($script:app.HasExited -and (Version) -eq $release.payload.version){break};Start-Sleep -Milliseconds 100}
+   while([DateTime]::UtcNow -lt $until){CollectStarts;$pending=Join-Path $updates 'pending-install.json';if(Test-HarnessPath $pending){try{Save 'pending-install-observed.json' ([IO.File]::ReadAllText((Get-HarnessLongPath $pending))|ConvertFrom-Json)}catch{}};if($script:app.HasExited -and (Version) -eq $release.payload.version){break};Start-Sleep -Milliseconds 100}
    Check 'alpha exits for silent setup' @{pid=$prior;exited=$script:app.HasExited} $script:app.HasExited
    $script:app=$null;$script:owned=$null;$script:window=$null;$script:launchAfter=$script:installPressed;$script:appLogCursor=Get-ShippedLogCursor $logPath;Attach;Settings
    $updated=WaitStatus ('Updated to version '+$release.payload.version) 100;Shot 'updated-banner'
@@ -490,13 +493,13 @@ try{
    CollectStarts
    $setup=@($script:starts|Where-Object {$_.arguments -like '*/ROOWAITPID=*' -and $_.arguments -like '*/ROORELAUNCH=1*'})
    Check 'silent installer wait/relaunch arguments' $setup ($setup.Count -gt 0) 'process-starts-detailed.json'
-   Check 'successful pending record consumed' @{pendingExists=(Test-Path (Join-Path $updates 'pending-install.json'));status=$updated} (-not(Test-Path (Join-Path $updates 'pending-install.json')))
+   Check 'successful pending record consumed' @{pendingExists=(Test-HarnessPath (Join-Path $updates 'pending-install.json'));status=$updated} (-not(Test-HarnessPath (Join-Path $updates 'pending-install.json')))
    Versions;Payload;Preservation;GovernorVerified;Current $true;AppLog
    Save 'updates-final.json' @(UpdateFiles)
   }
   'p4'{
    $script:governorStarted=$true
-   New-ShippedFirewall $firewallName $script:firewallNonce $exe
+   Assert-HarnessHostLease;New-ShippedFirewall $firewallName $script:firewallNonce $exe
    $script:firewallCreated=$true
    Save 'firewall-created.json' @(Get-NetFirewallRule -Name $firewallName|Select-Object Name,Enabled,Direction,Action)
    Launch;Settings
@@ -523,7 +526,7 @@ try{
    $data=Get-RooIndustriesLocalDataRoot;$updates=Join-Path $data 'updates';$ruleRoot=Join-Path $data 'process-rules';$logPath=Join-Path $data 'logs\app.log';$settingsPath=Join-Path $data 'settings.json'
    Versions;Current $false
    Activate (ByName 'Memory')
-   $guides=Get-Content -Raw (Join-Path $Source 'docs\internal\frontend\RooIndustries.OptimizationSuite.App\Assets\Guides\memory-guides.json')|ConvertFrom-Json
+   $guides=[IO.File]::ReadAllText((Get-HarnessLongPath (Join-Path $Source 'docs\internal\frontend\RooIndustries.OptimizationSuite.App\Assets\Guides\memory-guides.json')))|ConvertFrom-Json
    WaitFor {ByName $guides.title} 60 'Memory guides'|Out-Null
    $found=@($guides.guides|Where-Object {ByName $_.title})
    Activate (ByName $guides.guides[0].title);Shot 'memory-guide-expanded'
@@ -541,7 +544,7 @@ try{
     $path=Join-Path $directory ($name+'.exe');Copy-HarnessFile "$env:SystemRoot\System32\PING.EXE" $path|Out-Null
     $fixtureOwned=Start-OwnedProcess -FilePath $path -ArgumentList '-t 127.0.0.1' -Purpose background-fixture;$script:fixtures.Add($fixtureOwned);$fixtureOwned.process
    })
-   $profile=Get-Content -Raw (Join-Path $install 'backend\profiles\game-session.profile.json')|ConvertFrom-Json
+   $profile=[IO.File]::ReadAllText((Get-HarnessLongPath (Join-Path $install 'backend\profiles\game-session.profile.json')))|ConvertFrom-Json
    $profile.profileId='shipped-fixture';$profile.protectedCatalogPath=Join-Path $install 'backend\profiles\protected-processes.json'
    $profile.foregroundGame.processNames=@('RooFixtureGame.exe');$profile.targetGames=@([pscustomobject]@{gameId='fixture';processNames=@('RooFixtureGame.exe')})
    $profile.rules=@([pscustomobject]@{ruleId='fixture-background';enabled=$true;match=@{processNames=@('RooFixtureUpdater.exe','RooFixtureWebHelper.exe','RooFixtureGame.exe','MsMpEng.exe')};action=@{actionType='setPriority';priorityClass='BelowNormal'};risk='low'})
@@ -585,7 +588,7 @@ try{
  try{Remove-ShippedHosts}catch{$script:cleanupErrors.Add($_.Exception.Message)}
  foreach($fixture in $script:fixtures){try{Stop-HarnessProcess $fixture}catch{$script:cleanupErrors.Add($_.Exception.Message)}}
  try{StopApp}catch{$script:cleanupErrors.Add($_.Exception.Message)}
- if($script:governorStarted -and (Test-Path $hostExe)){
+ if($script:governorStarted -and (Test-HarnessPath $hostExe)){
   try{Governor 'Pause'|Out-Null;WaitFor {-not(Core 'policy-status' @{policyRoot=$ruleRoot}).hostRunning} 40 'owned governor stops'|Out-Null}catch{$script:cleanupErrors.Add($_.Exception.Message);Save 'governor-cleanup-error.json' @{error=$_.Exception.Message}}
  }
  foreach($process in @($script:setupReceipts)+@($script:extraProcesses)){try{Stop-HarnessProcess $process}catch{$script:cleanupErrors.Add($_.Exception.Message)}}
