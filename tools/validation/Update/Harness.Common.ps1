@@ -248,6 +248,16 @@ function Test-TracedDescendant([int]$ProcessId,[switch]$PassThru,$Ancestor=$null
  $trace=$script:Harness.Trace;$end=[DateTime]::UtcNow.ToFileTimeUtc();$start=$trace.Start.ToFileTimeUtc()
  $entries=@(Get-HarnessEntries);$traceEvents=@($entries|Where-Object {$_.kind -eq 'trace' -and $_.nonce -ceq $script:Harness.Nonce -and $_.identity.traceNonce -ceq $trace.Nonce});$events=@($traceEvents|Where-Object {[long]$_.identity.timeCreatedFileTimeUtc -ge $start -and [long]$_.identity.timeCreatedFileTimeUtc -le $end})
  $candidates=@($events|Where-Object {$_.identity.processId -eq $ProcessId})
+ $existing=Get-HarnessProcess $ProcessId
+ if($existing -and $existing.Nonce -ceq $script:Harness.Nonce -and $existing.OwnershipProof.kind -ceq 'trace'){
+  $proof=$existing.OwnershipProof
+  $birthMatch=Get-HarnessBirthMatch $traceEvents $ProcessId ([long]$existing.Identity.creationTimeFileTimeUtc)
+  $ancestorMatches=-not$Ancestor -or ($proof.root.pid -eq $Ancestor.Identity.pid -and $proof.root.creationTimeFileTimeUtc -ceq $Ancestor.Identity.creationTimeFileTimeUtc -and $proof.root.imagePath -ieq $Ancestor.Identity.imagePath)
+  if($proof.traceNonce -ceq $trace.Nonce -and $proof.nativeBirth -ceq $existing.Identity.creationTimeFileTimeUtc -and $birthMatch.unique -and $birthMatch.matches[0].identity.eventNonce -ceq $proof.eventIds[0] -and $ancestorMatches){
+   $existing|Add-Member RetainedOwnershipProof $true -Force
+   if($PassThru){return $existing};return $true
+  }
+ }
  if(-not$candidates.Count){return Register-HarnessTraceRefusal $ProcessId 'No start event' $candidates}
  $proofs=@()
  foreach($candidate in $candidates){
