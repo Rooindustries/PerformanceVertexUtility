@@ -19,13 +19,13 @@
   },
   {
     "file": "tools/validation/Update/Invoke-SigningScenario.ps1",
-    "line": 43,
+    "line": 41,
     "text": "if(@(Get-ChildItem Cert:\\CurrentUser\\My|Where-Object Subject -ceq $subject).Count){throw 'An unrelated test certificate already exists; preserve it.'}",
     "reason": "Certificate-store enumeration, not a filesystem walk."
   },
   {
     "file": "tools/validation/Update/Invoke-SigningScenario.ps1",
-    "line": 49,
+    "line": 47,
     "text": "$tool=Get-ChildItem -Path (Join-Path $sdk '10.*\\x64\\signtool.exe') -File -ErrorAction SilentlyContinue|Sort-Object {[Version]$_.Directory.Parent.Name} -Descending|Select-Object -First 1",
     "reason": "Fixed system Windows SDK location; the owned package fallback uses the extended walker."
   }

@@ -26,6 +26,7 @@ elseif ($env:RooIndustriesTestHooks) { throw 'RooIndustriesTestHooks is set in t
 if ($env:GovernorTestHooks) { throw 'GovernorTestHooks is set in this environment, so this build would contain governor test hooks. Remove it before building a release.' }
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).ProviderPath
+Assert-ReleasePathBound -RepoRoot $repoRoot
 $releaseTools = Join-Path $repoRoot 'tools\release'
 if (-not $PSBoundParameters.ContainsKey('UpdateFeedUrl')) { $UpdateFeedUrl = [IO.File]::ReadAllText((Join-Path $releaseTools 'update-feed.txt')).Trim() }
 if ($UpdateFeedUrl) {
@@ -162,6 +163,10 @@ Invoke-Checked $dotnet (@('publish', (Join-Path $repoRoot 'backend\native\Optimi
 Invoke-Checked $dotnet (@('publish', $appProject, '-o', $appOut, '-p:Platform=x64', '-p:WindowsAppSDKSelfContained=true', '-p:WindowsPackageType=None', ('-p:SelfContainedIntermediateOutputPath=' + (Join-Path $work 'wasdk') + '/'),
     ('-p:ApplicationManifest=' + (Join-Path $releaseTools 'app.release.manifest')), ('-p:ROO_INDUSTRIES_UPDATE_FEED=' + $UpdateFeedUrl)) + $common) 'App publish'
 
+$boundedOutputs = @($stage, (Join-Path $work 'wasdk'))
+foreach ($projectFolder in @('docs\internal\frontend\RooIndustries.OptimizationSuite.App', 'backend\native\Optimizer.Core', 'backend\native\Optimizer.Host', 'backend\native\Optimizer.SessionHost')) { $boundedOutputs += Join-Path $repoRoot ($projectFolder + '\obj') }
+Assert-ReleasePathBound -OutputRoots $boundedOutputs
+
 foreach ($config in @((Join-Path $hostOut 'Optimizer.Host.runtimeconfig.json'), (Join-Path $sessionOut 'RooIndustries.SessionHost.runtimeconfig.json'), (Join-Path $appOut 'RooIndustries.OptimizationSuite.App.runtimeconfig.json'))) {
     if ((Get-Content -LiteralPath $config -Raw | ConvertFrom-Json).runtimeOptions.configProperties.'System.StartupHookProvider.IsSupported' -ne $false) { throw ('Startup hooks are not disabled in ' + $config) }
 }
@@ -183,6 +188,7 @@ foreach ($native in @('CpuSets', 'ProcessGovernor', 'ProcessOutput', 'StandbyMem
 Copy-Tree (Join-Path $repoRoot 'assets\brand\roo-industries') (Join-Path $stage 'assets\brand\roo-industries') @('favicon-96x96.png', 'web-app-manifest-192x192.png', 'embed_logo.png', 'favicon.ico')
 [IO.File]::WriteAllText((Join-Path $stage 'README-BETA.txt'), [IO.File]::ReadAllText((Join-Path $releaseTools 'README-BETA.txt')).Replace('{Version}', $version), [Text.UTF8Encoding]::new($false))
 
+Assert-ReleasePathBound -OutputRoots $boundedOutputs
 Get-ChildItem -LiteralPath $stage -Recurse -File -Filter '*.pdb' | Remove-Item -Force
 foreach ($required in @('app\RooIndustries.OptimizationSuite.App.exe', 'backend\bin\optimizer\Optimizer.Host.exe', 'backend\bin\optimizer\hostpolicy.dll', 'backend\bin\optimizer\session\RooIndustries.SessionHost.exe', 'backend\scripts\Start-RooIndustriesHelper.cmd', 'backend\scripts\Invoke-GovernorSetup.ps1', 'backend\scripts\BrandCompatibility.Common.ps1', 'backend\samples', 'backend\catalogs\windows-tweaks.json', 'app\Microsoft.WindowsAppRuntime.dll', 'app\RooIndustries.OptimizationSuite.App.pri')) {
     if (-not (Test-Path -LiteralPath (Join-Path $stage $required))) { throw "The release layout is missing $required." }
