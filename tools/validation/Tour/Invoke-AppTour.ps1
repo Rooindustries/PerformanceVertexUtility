@@ -1,4 +1,4 @@
-param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutRoot,[Parameter(Mandatory)][string]$ExpectedVersion,[int]$HoldSeconds=4)
+﻿param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutRoot,[Parameter(Mandatory)][string]$ExpectedVersion,[int]$HoldSeconds=4)
 $ErrorActionPreference='Stop';$ProgressPreference='SilentlyContinue'
 . (Get-HarnessToolPath (Join-Path $Source 'tools\validation\Memory\Memory.Common.ps1'))
 $nonce=Initialize-HarnessInvocation 'app-tour' $OutRoot
@@ -48,7 +48,7 @@ function Action([string]$Kind,[string]$Selector,$Element=$null,[double]$Value=0)
   'theme' {if($Selector -cne 'ThemePicker'){throw 'ComboBox is not allowed'};$target=FindId $Selector;$patternName='ExpandCollapsePattern.Expand'}
   'theme-choice' {if($Selector -notin 'Roo Industries Blue','Blackout Gold'){throw 'Theme is not allowed'};$parent=FindId 'ThemePicker';$target=Unique $parent '' $Selector $CT::ListItem;$patternName='SelectionItemPattern.Select'}
   'firmware' {if($Selector -cne 'OpenFirmware'){throw 'Button is not allowed'};$target=FindId $Selector;$patternName='InvokePattern.Invoke'}
-  'back' {if($Selector -cne '← Tools'){throw 'Button is not allowed'};$target=Unique $parent '' $Selector $CT::Button;$patternName='InvokePattern.Invoke'}
+  'back' {if($Selector -cne ([string][char]0x2190+' Tools')){throw 'Button is not allowed'};$target=Unique $parent '' $Selector $CT::Button;$patternName='InvokePattern.Invoke'}
   'scroll' {
    if(-not$Element -or $Element.Current.ClassName -ne 'ScrollViewer'){throw 'Only a page ScrollViewer may scroll'}
    $parent=[Windows.Automation.TreeWalker]::RawViewWalker.GetParent($Element)
@@ -131,7 +131,7 @@ function CapturePass([string]$value){
   if($name -eq 'Games'){foreach($tab in @(@('GamesTab','games'),@('ProcessesTab','processes'),@('BackgroundTab','background-apps'))){if(Tab $tab[0]){CapturePage $slug $tab[1]}}}
   elseif($name -eq 'Remove apps'){foreach($tab in @(@('RemovalTab','remove-apps'),@('LeftoversTab','leftover-cleanup'))){if(Tab $tab[0]){CapturePage $slug $tab[1]}}}
   elseif($name -eq 'Windows tweaks'){Sections}
-  else{CapturePage $slug;if($name -eq 'Tools'){Action firmware 'OpenFirmware';Start-Sleep -Seconds 3;CapturePage 'bios';Action back '← Tools';Start-Sleep -Seconds 2}}
+  else{CapturePage $slug;if($name -eq 'Tools'){Action firmware 'OpenFirmware';Start-Sleep -Seconds 3;CapturePage 'bios';Action back ([string][char]0x2190+' Tools');Start-Sleep -Seconds 2}}
  }
 }
 $status='fail';$tourMovie=$null
