@@ -14,6 +14,7 @@ def lint_tree(directory):
     root = directory.parent.parent.parent
     files = [p for p in directory.rglob('*') if p.is_file() and '__pycache__' not in p.parts]
     files += [root / 'tools/validation/windows_ssh.py', root / 'tools/validation/LoadTimes/CleanupOwnership.Common.ps1']
+    files += [p for p in (root / 'tools/validation/Memory').rglob('*') if p.is_file() and '__pycache__' not in p.parts]
     tokens = ['-' + 'Recurse', 'Get-' + 'FileHash', 'Compress-' + 'Archive', 'Test-' + 'Path', 'Get-' + 'Item', 'Get-' + 'ChildItem', 'Copy-' + 'Item', 'Move-' + 'Item', 'Remove-' + 'Item', 'Directory]' + '::Move', '[IO.Path]' + '::GetFullPath', 'System.IO.Path.' + 'GetFullPath']
     allow_path = root / 'tools/validation/path-lint-allowlist.json'
     exceptions = json.loads(allow_path.read_text()) if allow_path.exists() else []
