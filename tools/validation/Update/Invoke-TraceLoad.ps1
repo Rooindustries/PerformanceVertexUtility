@@ -12,7 +12,13 @@ try{
   New-HarnessConsoleAssembly -Path $image -Code @'
 using System;
 using System.Threading;
-public static class RooTraceCpuLoad { public static void Main(string[] args){new Thread(()=>{Thread.Sleep(240000);Environment.Exit(0);}){IsBackground=true}.Start();int cores=int.Parse(args[0]);for(int i=1;i<cores;i++)new Thread(Busy){IsBackground=true}.Start();Busy();}static void Busy(){double x=1;while(true){x=Math.Sqrt(x+1.234567);}} }
+using System.Runtime.InteropServices;
+public static class RooTraceCpuLoad {
+ [DllImport("kernel32.dll")] static extern IntPtr GetCurrentThread();
+ [DllImport("kernel32.dll",SetLastError=true)] static extern UIntPtr SetThreadAffinityMask(IntPtr thread,UIntPtr mask);
+ public static void Main(string[] args){new Thread(()=>{Thread.Sleep(240000);Environment.Exit(0);}){IsBackground=true}.Start();int cores=int.Parse(args[0]);for(int i=0;i<cores-1;i++){int cpu=i;new Thread(()=>Busy(cpu)){IsBackground=true}.Start();}Busy(cores-1);}
+ static void Busy(int cpu){if(SetThreadAffinityMask(GetCurrentThread(),new UIntPtr(1UL<<cpu))==UIntPtr.Zero)Environment.Exit(2);double x=1;while(true){x=Math.Sqrt(x+1.234567);}}
+}
 '@
   Register-HarnessFile $image 'trace-load'|Out-Null
   Add-Type @'
@@ -33,7 +39,7 @@ public static class RooTraceLoadPlacement {
   if($cores -gt 63){throw 'The all-core load fixture requires one processor group.'}
   $load=Start-OwnedProcess -FilePath $image -ArgumentList $cores.ToString() -Purpose trace-load -Lifetime run
   $before=$load.process.ProcessorAffinity.ToInt64();$setsBefore=[RooTraceLoadPlacement]::CpuSets($load.handle);$powerBefore=[RooTraceLoadPlacement]::ReadPower($load.handle);$priorityBefore=[string]$load.process.PriorityClass
-  [RooTraceLoadPlacement]::Configure($load.handle);$load.process.PriorityClass=[Diagnostics.ProcessPriorityClass]::Normal
+  [RooTraceLoadPlacement]::Configure($load.handle);$load.process.PriorityClass=[Diagnostics.ProcessPriorityClass]::BelowNormal
   $mask=([long]1 -shl $cores)-1
   $load.process.ProcessorAffinity=[IntPtr]::new($mask)
   $after=$load.process.ProcessorAffinity.ToInt64()
