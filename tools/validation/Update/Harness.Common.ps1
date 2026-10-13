@@ -15,10 +15,46 @@ public static class RooHarnessWindow {
 }
 '@
 }
+function Get-HarnessLongPath([string]$Path){
+ if($Path.StartsWith('\\?\UNC\',[StringComparison]::OrdinalIgnoreCase)){$Path='\\'+$Path.Substring(8)}
+ elseif($Path.StartsWith('\\?\',[StringComparison]::Ordinal)){$Path=$Path.Substring(4)}
+ $full=[IO.Path]::GetFullPath($Path)
+ if($full.StartsWith('\\',[StringComparison]::Ordinal)){return '\\?\UNC\'+$full.Substring(2)}
+ return '\\?\'+$full
+}
+function Get-HarnessTree([string]$Root,[switch]$FilesOnly){
+ $long=Get-HarnessLongPath $Root
+ $attributes=[IO.File]::GetAttributes($long)
+ if($attributes -band [IO.FileAttributes]::ReparsePoint){throw ('Reparse point retained: '+$Root)}
+ if(-not($attributes -band [IO.FileAttributes]::Directory)){throw ('Tree root is not a directory: '+$Root)}
+ $queue=[Collections.Generic.Stack[string]]::new();$queue.Push($long)
+ while($queue.Count){
+  foreach($entry in [IO.Directory]::EnumerateFileSystemEntries($queue.Pop())){
+   $attributes=[IO.File]::GetAttributes($entry)
+   $plain=if($entry.StartsWith('\\?\UNC\',[StringComparison]::OrdinalIgnoreCase)){'\\'+$entry.Substring(8)}else{$entry.Substring(4)}
+   if($attributes -band [IO.FileAttributes]::ReparsePoint){throw ('Reparse point retained: '+$plain)}
+   $isDirectory=[bool]($attributes -band [IO.FileAttributes]::Directory)
+   if($isDirectory){$queue.Push($entry)}
+   if(-not$FilesOnly -or -not$isDirectory){[pscustomobject]@{FullName=$plain;LongPath=$entry;IsDirectory=$isDirectory;Attributes=$attributes;Length=if($isDirectory){0}else{[IO.FileInfo]::new($entry).Length};CreationTimeUtc=[IO.File]::GetCreationTimeUtc($entry)}}
+  }
+ }
+}
+function Get-HarnessFileSha256([string]$Path){
+ $stream=[IO.File]::OpenRead((Get-HarnessLongPath $Path));$sha=[Security.Cryptography.SHA256]::Create()
+ try{return [BitConverter]::ToString($sha.ComputeHash($stream)).Replace('-','')}finally{$sha.Dispose();$stream.Dispose()}
+}
+function Test-HarnessVisiblePath($Item,[string]$Root){
+ for($path=$Item.FullName;$path -ine $Root;$path=[IO.Path]::GetDirectoryName($path)){
+  if(-not$path){throw 'Tree item is outside its root.'}
+  if([IO.File]::GetAttributes((Get-HarnessLongPath $path)) -band [IO.FileAttributes]::Hidden){return $false}
+ }
+ return $true
+}
 function Get-HarnessFolderIdentity([string]$Path){
- $item=Get-Item -LiteralPath $Path -Force
- if(-not$item.PSIsContainer -or $item.Attributes -band [IO.FileAttributes]::ReparsePoint){throw 'Owned folder identity is not a plain directory.'}
- @{path=$item.FullName;creationTimeFileTimeUtc=$item.CreationTimeUtc.ToFileTimeUtc().ToString()}
+ $long=Get-HarnessLongPath $Path;$attributes=[IO.File]::GetAttributes($long)
+ if(-not($attributes -band [IO.FileAttributes]::Directory) -or $attributes -band [IO.FileAttributes]::ReparsePoint){throw 'Owned folder identity is not a plain directory.'}
+ $plain=if($long.StartsWith('\\?\UNC\',[StringComparison]::OrdinalIgnoreCase)){'\\'+$long.Substring(8)}else{$long.Substring(4)}
+ @{path=$plain;creationTimeFileTimeUtc=[IO.Directory]::GetCreationTimeUtc($long).ToFileTimeUtc().ToString()}
 }
 function Invoke-HarnessLedger([scriptblock]$Action,[switch]$NoWrite){
  if(-not$script:Harness){throw 'Harness invocation has no verified frame scope.'}
@@ -290,22 +326,22 @@ function Register-HarnessWindow($Window){
 }
 function New-HarnessDirectory([string]$Path,[string]$Purpose='',[string]$Lifetime='run'){
  $full=[IO.Path]::GetFullPath($Path).TrimEnd('\')
- if(Test-Path -LiteralPath $full){throw 'Directory exists before this creation; retained.'}
+ if([IO.File]::Exists((Get-HarnessLongPath $full)) -or [IO.Directory]::Exists((Get-HarnessLongPath $full))){throw 'Directory exists before this creation; retained.'}
  $missing=[Collections.Generic.Stack[string]]::new();$parent=$full
- while(-not(Test-Path -LiteralPath $parent)){$missing.Push($parent);$parent=[IO.Path]::GetDirectoryName($parent);if(-not$parent){throw 'Directory has no existing ancestor.'}}
+ while(-not[IO.Directory]::Exists((Get-HarnessLongPath $parent))){$missing.Push($parent);$parent=[IO.Path]::GetDirectoryName($parent);if(-not$parent){throw 'Directory has no existing ancestor.'}}
  Get-HarnessFolderIdentity $parent|Out-Null
  $leaf=$null
  while($missing.Count){
-  $next=$missing.Pop();[RooHarnessWindow]::CreateDirectory($next)
+  $next=$missing.Pop();[RooHarnessWindow]::CreateDirectory((Get-HarnessLongPath $next))
   $entry=Add-HarnessEntry 'folder' (Get-HarnessFolderIdentity $next) $Purpose $Lifetime $(if($next -ine $full){@{emptyOnly=$true}}else{$null})
   if($next -ieq $full){$leaf=$entry}
  }
  return $leaf
 }
 function Register-HarnessFile([string]$Path,[string]$Purpose='',[string]$Lifetime='run',$Metadata=$null){
- $handle=[RooValidationOwnership.Native]::CreateFile($Path,[uint32]2147483648,7,[IntPtr]::Zero,3,0x00200000,[IntPtr]::Zero)
+ $handle=[RooValidationOwnership.Native]::CreateFile((Get-HarnessLongPath $Path),[uint32]2147483648,7,[IntPtr]::Zero,3,0x00200000,[IntPtr]::Zero)
  try{$id=[RooValidationOwnership.Native]::FileId($handle)}finally{$handle.Dispose()}
- $probe=[RooValidationOwnership.ProbeFile]::Open($Path,$id,(Get-FileHash -LiteralPath $Path).Hash)
+ $probe=[RooValidationOwnership.ProbeFile]::Open((Get-HarnessLongPath $Path),$id,(Get-HarnessFileSha256 $Path));$probe.Identity.path=[IO.Path]::GetFullPath($Path)
  try{return Add-HarnessEntry 'file' $probe.Identity $Purpose $Lifetime $Metadata}finally{$probe.Dispose()}
 }
 function New-HarnessEvidenceDirectory([string]$OutRoot,[string]$Name){
@@ -315,7 +351,7 @@ function New-HarnessEvidenceDirectory([string]$OutRoot,[string]$Name){
  return $path
 }
 function Copy-HarnessFile([string]$Source,[string]$Destination,[string]$Purpose='fixture',[string]$Lifetime='run'){
- $probe=[RooValidationOwnership.ProbeFile]::Copy($Source,$Destination)
+ $probe=[RooValidationOwnership.ProbeFile]::Copy((Get-HarnessLongPath $Source),(Get-HarnessLongPath $Destination));$probe.Identity.path=[IO.Path]::GetFullPath($Destination)
  try{return Add-HarnessEntry 'file' $probe.Identity $Purpose $Lifetime}finally{$probe.Dispose()}
 }
 function Get-HarnessEntryById([string]$Id){$rows=@(Get-HarnessEntries|Where-Object id -CEQ $Id);if($rows.Count -ne 1){throw 'Creation ledger entry is missing or ambiguous.'};return $rows[0]}
@@ -340,7 +376,7 @@ function Assert-HarnessNewSmartScreen($Before,[string]$Directory){
  }
 }
 function New-HarnessText([string]$Path,[string]$Text,[string]$Purpose='',[string]$Lifetime='run'){
- $probe=New-OwnedTextFile $Path $Text
+ $probe=[RooValidationOwnership.ProbeFile]::Text((Get-HarnessLongPath $Path),$Text);$probe.Identity.path=[IO.Path]::GetFullPath($Path)
  try{return Add-HarnessEntry 'file' $probe.Identity $Purpose $Lifetime}finally{$probe.Dispose()}
 }
 function Write-HarnessResult([string]$Directory,[string]$Name,$Value){
@@ -355,13 +391,13 @@ function Write-HarnessResult([string]$Directory,[string]$Name,$Value){
 function Read-HarnessResult([string]$Path,[string]$Nonce){
  $entry=@(Get-HarnessEntries|Where-Object {$_.kind -eq 'file' -and $_.purpose -eq 'result' -and $_.identity.path -ieq $Path -and $_.nonce -ceq $Nonce -and $_.state -eq 'active'})
  if($entry.Count -ne 1){throw 'Result is not bound to the requested invocation nonce.'}
- $probe=Open-OwnedProbe $entry[0].identity
+ $probe=[RooValidationOwnership.ProbeFile]::Open((Get-HarnessLongPath $entry[0].identity.path),$entry[0].identity.id,$entry[0].identity.hash)
  try{$value=$probe.ReadText()|ConvertFrom-Json;if($value.nonce -cne $Nonce){throw 'Result content nonce differs.'};return $value.data}finally{$probe.Dispose()}
 }
 function Read-HarnessInputText([string]$Path){
  $entry=@(Get-HarnessEntries|Where-Object {$_.kind -eq 'file' -and $_.identity.path -ieq $Path -and $_.state -eq 'active'})
  if($entry.Count -ne 1){throw 'Input file is not in this run creation ledger; retained.'}
- $probe=Open-OwnedProbe $entry[0].identity
+ $probe=[RooValidationOwnership.ProbeFile]::Open((Get-HarnessLongPath $entry[0].identity.path),$entry[0].identity.id,$entry[0].identity.hash)
  try{return $probe.ReadText()}finally{$probe.Dispose()}
 }
 function Read-HarnessLatestResult([string]$Name,[string]$Scenario='', [string]$Nonce=''){
@@ -402,20 +438,20 @@ function Remove-HarnessEntry($Entry){
    'window'{
     if([RooHarnessWindow]::IsWindow([IntPtr]::new([long]$Entry.identity.hwnd))){[int]$owner=0;[RooHarnessWindow]::GetWindowThreadProcessId([IntPtr]::new([long]$Entry.identity.hwnd),[ref]$owner)|Out-Null;if($owner -ne $Entry.identity.ownerPid){throw 'Window owner changed; retained.'};$held=Get-HarnessProcess $owner;if(-not$held){throw 'Window owner is no longer an owned process; retained.'};if($held.Identity.creationTimeFileTimeUtc -cne $Entry.identity.ownerCreationTime){throw 'Window process identity changed; retained.'}}
    }
-   'file'{if(Test-Path -LiteralPath $Entry.identity.path){
+   'file'{if([IO.File]::Exists((Get-HarnessLongPath $Entry.identity.path))){
     $identity=$Entry.identity
     if(-not$identity.id){
-     $handle=[RooValidationOwnership.Native]::CreateFile($identity.path,[uint32]2147483648,7,[IntPtr]::Zero,3,0x00200000,[IntPtr]::Zero)
+     $handle=[RooValidationOwnership.Native]::CreateFile((Get-HarnessLongPath $identity.path),[uint32]2147483648,7,[IntPtr]::Zero,3,0x00200000,[IntPtr]::Zero)
      try{$id=[RooValidationOwnership.Native]::FileId($handle)}finally{$handle.Dispose()}
      if($id.Split(':')[-1] -cne $identity.creationTimeFileTimeUtc){throw 'File creation identity changed; retained.'}
      $identity=@{path=$identity.path;id=$id;hash=$identity.hash}
     }
-    $probe=Open-OwnedProbe $identity;try{Remove-OwnedProbe $probe}finally{$probe.Dispose()}
+    $probe=[RooValidationOwnership.ProbeFile]::Open((Get-HarnessLongPath $identity.path),$identity.id,$identity.hash);try{Remove-OwnedProbe $probe}finally{$probe.Dispose()}
    }}
    {$_ -in 'folder','cache'}{
-    if(Test-Path -LiteralPath $Entry.identity.path){
-     if($Entry.metadata.reparseTarget){$item=Get-Item -LiteralPath $Entry.identity.path -Force;if(-not($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -or $item.CreationTimeUtc.ToFileTimeUtc().ToString() -cne $Entry.identity.creationTimeFileTimeUtc -or @($item.Target).Count -ne 1 -or $item.Target[0] -ine $Entry.metadata.reparseTarget){throw 'Owned junction fixture identity changed; retained.'};[IO.Directory]::Delete($Entry.identity.path,$false)}
-     elseif($Entry.metadata.emptyOnly){$actual=Get-HarnessFolderIdentity $Entry.identity.path;if($actual.creationTimeFileTimeUtc -cne $Entry.identity.creationTimeFileTimeUtc){throw 'Folder identity changed; retained.'};[IO.Directory]::Delete($Entry.identity.path,$false)}
+    if([IO.Directory]::Exists((Get-HarnessLongPath $Entry.identity.path))){
+     if($Entry.metadata.reparseTarget){$item=Get-Item -LiteralPath $Entry.identity.path -Force;if(-not($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -or $item.CreationTimeUtc.ToFileTimeUtc().ToString() -cne $Entry.identity.creationTimeFileTimeUtc -or @($item.Target).Count -ne 1 -or $item.Target[0] -ine $Entry.metadata.reparseTarget){throw 'Owned junction fixture identity changed; retained.'};[IO.Directory]::Delete((Get-HarnessLongPath $Entry.identity.path),$false)}
+     elseif($Entry.metadata.emptyOnly){$actual=Get-HarnessFolderIdentity $Entry.identity.path;if($actual.creationTimeFileTimeUtc -cne $Entry.identity.creationTimeFileTimeUtc){throw 'Folder identity changed; retained.'};[IO.Directory]::Delete((Get-HarnessLongPath $Entry.identity.path),$false)}
      else{$actual=Get-HarnessFolderIdentity $Entry.identity.path;if($actual.creationTimeFileTimeUtc -cne $Entry.identity.creationTimeFileTimeUtc){throw 'Folder identity changed; retained.'};if(@(Get-HarnessEntries|Where-Object {$_.state -eq 'error' -and $_.identity.path -and $_.identity.path.StartsWith($Entry.identity.path+'\',[StringComparison]::OrdinalIgnoreCase)}).Count){throw 'Folder has a child with a failed cleanup identity; retained.'};Remove-HarnessDirectory $Entry.identity.path}
     }
    }
@@ -505,7 +541,7 @@ function Move-ShippedFreshData([string]$ActiveRoot,$Before,[string]$Destination)
  if($entry.Count -ne 1){throw 'Data root is not in this invocation creation ledger; retained.'}
  $actual=Get-HarnessFolderIdentity $ActiveRoot;if($actual.creationTimeFileTimeUtc -cne $entry[0].identity.creationTimeFileTimeUtc){throw 'Data root identity changed; retained.'}
  if(Test-Path $Destination){throw 'Data archive exists; retained.'}
- foreach($item in @(Get-ChildItem $ActiveRoot -Force -Recurse)){if($item.Attributes -band [IO.FileAttributes]::ReparsePoint){throw 'Data includes a reparse point; retained.'}}
+ @(Get-HarnessTree $ActiveRoot)|Out-Null
  [IO.Directory]::Move($ActiveRoot,$Destination);Set-HarnessEntryState $entry[0].id 'removed';Add-HarnessEntry 'folder' (Get-HarnessFolderIdentity $Destination) 'data-archive' 'run'|Out-Null
 }
 function New-ShippedFirewall([string]$Name,[string]$Nonce,[string]$Image){
@@ -562,7 +598,7 @@ function Get-HarnessMachineSnapshot{
  $key='HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{746C4DD8-B7BA-48CD-9FFA-0C378F19368A}_is1'
  $roots=@(foreach($name in 'RooOptimizationSuite','RooIndustriesOptimizationSuite'){
   $path=Join-Path $local $name
-  $files=@(if(Test-Path $path){Get-ChildItem $path -File -Force -Recurse|ForEach-Object {@{path=$_.FullName;bytes=$_.Length;sha256=(Get-FileHash $_.FullName).Hash}}})
+  $files=@(if(Test-Path $path){Get-HarnessTree $path -FilesOnly|ForEach-Object {@{path=$_.FullName;bytes=$_.Length;sha256=(Get-HarnessFileSha256 $_.LongPath)}}})
   @{path=$path;exists=(Test-Path $path);files=$files}
  })
  $tasks=@(Get-ScheduledTask|ForEach-Object {@{name=$_.TaskName;path=$_.TaskPath;state=[string]$_.State;enabled=$_.Settings.Enabled;xml=(Export-ScheduledTask -TaskName $_.TaskName -TaskPath $_.TaskPath)}})
@@ -581,10 +617,10 @@ function Invoke-HarnessHost([string]$File,[string]$Action,$Request){
 }
 
 function Initialize-HarnessBuildFolders([string]$Base){
- foreach($project in @(Get-ChildItem -LiteralPath $Base -File -Recurse -Filter '*.csproj'|Where-Object {$_.FullName.Substring($Base.Length) -notmatch '(^|\\)(bin|obj)(\\|$)'})){
+ foreach($project in @(Get-HarnessTree $Base -FilesOnly|Where-Object {(Test-HarnessVisiblePath $_ $Base) -and [IO.Path]::GetExtension($_.FullName) -ieq '.csproj' -and $_.FullName.Substring($Base.Length) -notmatch '(^|\\)(bin|obj)(\\|$)'})){
   foreach($name in 'bin','obj'){
-   $path=Join-Path $project.DirectoryName $name
-   if(-not(Test-Path -LiteralPath $path)){New-HarnessDirectory $path 'generated-build'|Out-Null;continue}
+   $path=Join-Path ([IO.Path]::GetDirectoryName($project.FullName)) $name
+   if(-not[IO.Directory]::Exists((Get-HarnessLongPath $path))){New-HarnessDirectory $path 'generated-build'|Out-Null;continue}
    $entries=@(Get-HarnessEntries|Where-Object {$_.kind -eq 'folder' -and $_.identity.path -ieq $path -and $_.state -eq 'active'})
    if($entries.Count -ne 1 -or (Get-HarnessFolderIdentity $path).creationTimeFileTimeUtc -cne $entries[0].identity.creationTimeFileTimeUtc){throw 'An existing build folder is not owned by this run; retained.'}
   }
@@ -592,9 +628,27 @@ function Initialize-HarnessBuildFolders([string]$Base){
 }
 
 function Remove-HarnessDirectory([string]$Path){
- $queue=[Collections.Generic.Stack[string]]::new();$queue.Push('\\?\'+$Path)
- $folders=[Collections.Generic.List[string]]::new();$files=[Collections.Generic.List[string]]::new()
- while($queue.Count){$folder=$queue.Pop();$folders.Add($folder);foreach($entry in [IO.Directory]::EnumerateFileSystemEntries($folder)){$attributes=[IO.File]::GetAttributes($entry);if($attributes -band [IO.FileAttributes]::ReparsePoint){throw 'Owned folder contains a reparse point; retained.'};if($attributes -band [IO.FileAttributes]::Directory){$queue.Push($entry)}else{$files.Add($entry)}}}
- foreach($file in $files){$attributes=[IO.File]::GetAttributes($file);if($attributes -band [IO.FileAttributes]::ReadOnly){[IO.File]::SetAttributes($file,($attributes -band (-bnot [IO.FileAttributes]::ReadOnly)))};[IO.File]::Delete($file)}
- foreach($folder in @($folders|Sort-Object Length -Descending)){[IO.Directory]::Delete($folder,$false)}
+ $items=@(Get-HarnessTree $Path)
+ foreach($file in @($items|Where-Object {-not$_.IsDirectory})){
+  if($file.Attributes -band [IO.FileAttributes]::ReadOnly){[IO.File]::SetAttributes($file.LongPath,($file.Attributes -band (-bnot [IO.FileAttributes]::ReadOnly)))}
+  [IO.File]::Delete($file.LongPath)
+ }
+ foreach($folder in @($items|Where-Object IsDirectory|Sort-Object {$_.FullName.Length} -Descending)){[IO.Directory]::Delete($folder.LongPath,$false)}
+ [IO.Directory]::Delete((Get-HarnessLongPath $Path),$false)
+}
+function New-HarnessArchive([string]$Root,[string]$Destination,[scriptblock]$Include){
+ Add-Type -AssemblyName System.IO.Compression,System.IO.Compression.FileSystem
+ $items=@(Get-HarnessTree $Root -FilesOnly)
+ $file=[IO.FileStream]::new((Get-HarnessLongPath $Destination),[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None)
+ $zip=[IO.Compression.ZipArchive]::new($file,[IO.Compression.ZipArchiveMode]::Create)
+ try{
+  foreach($item in $items){
+   if($item.FullName -ieq $Destination){continue}
+   $relative=$item.FullName.Substring($Root.TrimEnd('\').Length+1)
+   if($Include -and -not(& $Include $item $relative)){continue}
+   [IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip,$item.LongPath,$relative.Replace('\','/'))|Out-Null
+  }
+ }finally{$zip.Dispose();$file.Dispose()}
+ Register-HarnessFile $Destination 'evidence-archive'|Out-Null
+ return $Destination
 }

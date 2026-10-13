@@ -212,7 +212,7 @@ function DownloadPublished{
  Register-HarnessFile $path 'download' 'invocation'|Out-Null
  $script:completedInstallerDownloads++
  $clock.Stop();Set-Content -LiteralPath $path -Stream Zone.Identifier -Value "[ZoneTransfer]`r`nZoneId=3" -Encoding ASCII
- $actual=@{path=$path;url=$item.url;bytes=(Get-Item $path).Length;sha256=(Get-FileHash $path).Hash;seconds=$clock.Elapsed.TotalSeconds;completedInstallerDownloads=$script:completedInstallerDownloads;zone=Zone $path}
+ $actual=@{path=$path;url=$item.url;bytes=(Get-Item $path).Length;sha256=(Get-HarnessFileSha256 $path);seconds=$clock.Elapsed.TotalSeconds;completedInstallerDownloads=$script:completedInstallerDownloads;zone=Zone $path}
  Save 'published-download.json' $actual
  Check 'published installer downloaded on PC' $actual ($actual.bytes -eq $item.size -and $actual.sha256 -ieq $item.sha256 -and $actual.zone -match 'ZoneId=3') 'published-download.json'
  return $path
@@ -227,7 +227,7 @@ function Governor([string]$action){
 function GovernorRead{
  $status=Core 'policy-status' @{policyRoot=$ruleRoot}
  $process=if($status.hostRunning){Get-CimInstance Win32_Process -Filter ('ProcessId='+$status.state.host.processId)}else{$null}
- @{status=$status;path=$process.ExecutablePath;arguments=$process.CommandLine;productVersion=if($process){(Get-Item $process.ExecutablePath).VersionInfo.ProductVersion.Trim()}else{$null};sha256=if($process){(Get-FileHash $process.ExecutablePath).Hash}else{$null};pid=$process.ProcessId;creationTimeUtc=if($process){$process.CreationDate.ToUniversalTime().ToString('o')}else{$null};tasks=@(Get-ScheduledTask|Where-Object {$_.TaskName -match '^(RooIndustriesOptimizationSuite|RooOptimizationSuite)\.ProcessRules\.'}|Select-Object TaskName,State,@{n='enabled';e={$_.Settings.Enabled}})}
+ @{status=$status;path=$process.ExecutablePath;arguments=$process.CommandLine;productVersion=if($process){(Get-Item $process.ExecutablePath).VersionInfo.ProductVersion.Trim()}else{$null};sha256=if($process){(Get-HarnessFileSha256 $process.ExecutablePath)}else{$null};pid=$process.ProcessId;creationTimeUtc=if($process){$process.CreationDate.ToUniversalTime().ToString('o')}else{$null};tasks=@(Get-ScheduledTask|Where-Object {$_.TaskName -match '^(RooIndustriesOptimizationSuite|RooOptimizationSuite)\.ProcessRules\.'}|Select-Object TaskName,State,@{n='enabled';e={$_.Settings.Enabled}})}
 }
 function SeedTester{
  Launch;WaitFor {@(Texts) -contains 'Start here'} 90 'baseline Home'|Out-Null
@@ -252,14 +252,14 @@ function SeedTester{
  Save 'tester-tweak-before.json' @{settingId='windows.0689e69eedc05770';optionId=$option;original=$before.EnableTransparency}
  $plan=Core 'tweak-preview' @{profileId='shipped-tester';selections=@(@{settingId='windows.0689e69eedc05770';optionId=$option});outputPath=$preview}
  Save 'tester-tweak-preview.json' $plan
- $applied=Core 'tweak-apply' @{previewPath=$preview;reviewHash=(Get-FileHash $preview).Hash;confirm=$true};Save 'tester-tweak-apply.json' $applied
+ $applied=Core 'tweak-apply' @{previewPath=$preview;reviewHash=(Get-HarnessFileSha256 $preview);confirm=$true};Save 'tester-tweak-apply.json' $applied
  $tweakAfter=(Get-ItemProperty -LiteralPath $registry -Name EnableTransparency).EnableTransparency
  $expected=if($before.EnableTransparency -eq 0){1}else{0}
  Check 'tester tweak applied with independent registry readback' @{before=$before.EnableTransparency;expected=$expected;after=$tweakAfter;changed=$applied.changed} ($applied.changed -and $tweakAfter -eq $expected) 'tester-tweak-apply.json'
  $script:governorStarted=$true;Governor 'Resume'|Out-Null
  WaitFor {(Core 'policy-status' @{policyRoot=$ruleRoot}).hostRunning} 60 '0.10 governor starts'|Out-Null
- $files=@(Get-Item $settingsPath;Get-ChildItem (Join-Path $ruleRoot 'rules') -File;Get-ChildItem (Join-Path $data 'operations') -File -Recurse|Where-Object {$_.Name -notlike '*.lock'})
- $baseline=@{files=@($files|ForEach-Object {@{path=$_.FullName;bytes=$_.Length;sha256=(Get-FileHash $_.FullName).Hash}});themeId='roo-industries-blue';simpleMode='1';automaticDownloads='1';ruleId=$savedRule.ruleId;fixturePath=$target;controls=$rule.controls;governor=(GovernorRead)}
+ $files=@([pscustomobject]@{FullName=$settingsPath;LongPath=(Get-HarnessLongPath $settingsPath);Length=[IO.FileInfo]::new((Get-HarnessLongPath $settingsPath)).Length};Get-HarnessTree (Join-Path $ruleRoot 'rules') -FilesOnly|Where-Object {(Test-HarnessVisiblePath $_ (Join-Path $ruleRoot 'rules')) -and [IO.Path]::GetDirectoryName($_.FullName) -ieq (Join-Path $ruleRoot 'rules')};Get-HarnessTree (Join-Path $data 'operations') -FilesOnly|Where-Object {(Test-HarnessVisiblePath $_ (Join-Path $data 'operations')) -and [IO.Path]::GetFileName($_.FullName) -notlike '*.lock'})
+ $baseline=@{files=@($files|ForEach-Object {@{path=$_.FullName;bytes=$_.Length;sha256=(Get-HarnessFileSha256 $_.LongPath)}});themeId='roo-industries-blue';simpleMode='1';automaticDownloads='1';ruleId=$savedRule.ruleId;fixturePath=$target;controls=$rule.controls;governor=(GovernorRead)}
  Save 'tester-preservation.json' $baseline
  Launch;WaitFor {@(Texts) -contains 'Start here'} 90 'seeded 0.10 Home'|Out-Null;Shot 'seeded-0.10-home'
  Save 'tester-before-upgrade.json' @{appPid=$script:app.Id;governor=(GovernorRead);preservation=$baseline}
@@ -268,7 +268,7 @@ function SeedTester{
 }
 function Preservation{
  $baseline=Read-HarnessLatestResult 'tester-preservation.json' 'p2'
- $rows=@($baseline.files|ForEach-Object {$exists=Test-Path $_.path;@{path=$_.path;expected=$_.sha256;observed=if($exists){(Get-FileHash $_.path).Hash}else{$null};match=($exists -and (Get-FileHash $_.path).Hash -ieq $_.sha256)}})
+ $rows=@($baseline.files|ForEach-Object {$exists=[IO.File]::Exists((Get-HarnessLongPath $_.path));@{path=$_.path;expected=$_.sha256;observed=if($exists){(Get-HarnessFileSha256 $_.path)}else{$null};match=($exists -and (Get-HarnessFileSha256 $_.path) -ieq $_.sha256)}})
  Save 'preservation-readback.json' $rows
  Check 'tester preservation hashes' @{files=$rows.Count;mismatches=@($rows|Where-Object {-not$_.match})} (@($rows|Where-Object {-not$_.match}).Count -eq 0) 'preservation-readback.json'
  $settings=Get-Content -Raw $settingsPath|ConvertFrom-Json
@@ -278,7 +278,7 @@ function Payload{
  $oracle=Read-HarnessInputText $PayloadHashes|ConvertFrom-Json
  if($oracle.installerSha256 -ine $item.sha256 -or $oracle.installerSize -ne $item.size){throw 'Payload oracle installer identity differs.'}
  $hashes=@($oracle.files)
- $rows=@($hashes|ForEach-Object {$p=Join-Path $install $_.path;$exists=Test-Path $p -PathType Leaf;@{path=$_.path;expected=$_.sha256;observed=if($exists){(Get-FileHash $p).Hash}else{$null};match=($exists -and (Get-FileHash $p).Hash -ieq $_.sha256)}})
+ $rows=@($hashes|ForEach-Object {$p=Join-Path $install $_.path;$exists=[IO.File]::Exists((Get-HarnessLongPath $p));@{path=$_.path;expected=$_.sha256;observed=if($exists){(Get-HarnessFileSha256 $p)}else{$null};match=($exists -and (Get-HarnessFileSha256 $p) -ieq $_.sha256)}})
  Save 'payload-readback.json' $rows
  Check 'installed files match published payload' @{files=$rows.Count;mismatches=@($rows|Where-Object {-not$_.match})} ($rows.Count -gt 0 -and @($rows|Where-Object {-not$_.match}).Count -eq 0) 'payload-readback.json'
 }
@@ -410,7 +410,7 @@ function RestoreFreshP5Installation{
  Uninstall
  WaitFor {-not(Test-Path $install)} 20 'uninstaller final directory removal'|Out-Null
  $active=Get-RooIndustriesLocalDataRoot
- Check 'uninstaller leftovers before harness cleanup' @{activeRoot=$active;dataExists=(Test-Path $active);installExists=(Test-Path $install);dataFiles=@(if(Test-Path $active){Get-ChildItem $active -File -Recurse|Select-Object FullName,Length})} $true
+ Check 'uninstaller leftovers before harness cleanup' @{activeRoot=$active;dataExists=(Test-Path $active);installExists=(Test-Path $install);dataFiles=@(if(Test-Path $active){Get-HarnessTree $active -FilesOnly|Where-Object {Test-HarnessVisiblePath $_ $active}|Select-Object FullName,Length})} $true
  if(Test-Path $active){Move-ShippedFreshData $active $before (Join-Path $directory 'removed-test-data')}
  $tasks=@(Get-ScheduledTask|Where-Object {$_.TaskName -match '^(RooIndustriesOptimizationSuite|RooOptimizationSuite)\.ProcessRules\.'}|Select-Object TaskName,State)
  $services=@(Get-Service|Where-Object {$_.Name -match 'RooIndustries|RooOptimizationSuite'}|Select-Object Name,Status)
