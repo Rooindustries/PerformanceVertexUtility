@@ -19,7 +19,7 @@ public static class SystemRestart
     {
         foreach (var command in Commands(systemDirectory))
         {
-            log?.Invoke("Running " + Path.GetFileName(command.FileName) + " " + string.Join(' ', command.Arguments));
+            try { log?.Invoke("Running " + Path.GetFileName(command.FileName) + " " + string.Join(' ', command.Arguments)); } catch { }
             try { run(command); }
             catch (Exception error) when (command.Optional) { skipped?.Invoke(command, error); }
         }

@@ -39,6 +39,19 @@ static class RestartChecks
                 "Restart logs each command before running it" + (failBootTarget ? " when bcdedit fails" : ""));
         }
 
+        foreach (var throwEveryTime in new[] { true, false })
+        {
+            var ran = new List<string>();
+            var calls = 0;
+            SystemRestart.Restart(system, command => ran.Add(Path.GetFileName(command.FileName)), log: _ =>
+            {
+                calls++;
+                if (throwEveryTime || calls == 2) throw new InvalidOperationException("fixture logger failure");
+            });
+            check(calls == 2 && ran.SequenceEqual(["bcdedit.exe", "shutdown.exe"]),
+                "Restart runs both commands in order when logging throws " + (throwEveryTime ? "on every call" : "on the second call"));
+        }
+
         try { SystemRestart.Restart(system, command => { if (command.FileName.EndsWith("shutdown.exe", StringComparison.Ordinal)) throw new InvalidOperationException("shutdown.exe returned 5."); }); }
         catch (InvalidOperationException) { refused = true; }
         check(refused, "A failed restart is reported instead of hidden");

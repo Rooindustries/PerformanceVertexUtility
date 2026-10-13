@@ -1,3 +1,39 @@
+function ConvertTo-ReleaseExtendedPath([string]$Path) {
+    if ($Path.StartsWith('\\?\', [StringComparison]::Ordinal)) { return $Path }
+    $plain = $Path.Replace('/', '\')
+    if (($plain -notmatch '^[A-Za-z]:\\' -and $plain -notmatch '^\\\\[^\\]+\\[^\\]+') -or @($plain.Split('\') | Where-Object { $_ -in '.', '..' }).Count) { $plain = [IO.Path]::GetFullPath($plain) }
+    if ($plain.StartsWith('\\', [StringComparison]::Ordinal)) { return '\\?\UNC\' + $plain.Substring(2) }
+    return '\\?\' + $plain
+}
+
+function Get-ReleaseXamlIntermediatePath([string]$RepoRoot, [string]$ProjectRoot = $RepoRoot) {
+    $relative = 'docs\internal\frontend\RooIndustries.OptimizationSuite.App'
+    $project = [xml][IO.File]::ReadAllText((ConvertTo-ReleaseExtendedPath (Join-Path $ProjectRoot ($relative + '\RooIndustries.OptimizationSuite.App.csproj'))))
+    $framework = $project.SelectSingleNode('//TargetFramework').InnerText
+    $assembly = $project.SelectSingleNode('//AssemblyName').InnerText
+    return Join-Path $RepoRoot ($relative + '\obj\x64\Release\' + $framework + '\win-x64\intermediatexaml\' + $assembly + '.dll')
+}
+
+function Assert-ReleasePathBound([string]$RepoRoot, [string]$ProjectRoot = $RepoRoot, [string[]]$OutputRoots = @()) {
+    if ($RepoRoot) {
+        $path = Get-ReleaseXamlIntermediatePath $RepoRoot $ProjectRoot
+        if ($path.Length -ge 260) { throw ('Release XAML path reaches the 260-character limit: ' + $path + '. Use a shorter source root.') }
+    }
+    foreach ($root in $OutputRoots) {
+        $long = ConvertTo-ReleaseExtendedPath $root
+        if (-not [IO.Directory]::Exists($long)) { continue }
+        $pending = [Collections.Generic.Stack[string]]::new(); $pending.Push($long)
+        while ($pending.Count) {
+            $path = $pending.Pop()
+            $plain = if ($path.StartsWith('\\?\UNC\', [StringComparison]::OrdinalIgnoreCase)) { '\\' + $path.Substring(8) } else { $path.Substring(4) }
+            if ($plain.Length -ge 260) { throw ('Release output path reaches the 260-character limit: ' + $plain + '. Use a shorter source or output root.') }
+            $attributes = [IO.File]::GetAttributes($path)
+            if ($attributes -band [IO.FileAttributes]::ReparsePoint) { throw ('Release path is a reparse point: ' + $plain) }
+            if ($attributes -band [IO.FileAttributes]::Directory) { foreach ($entry in [IO.Directory]::EnumerateFileSystemEntries($path)) { $pending.Push($entry) } }
+        }
+    }
+}
+
 $script:ForbiddenReleaseScripts = @('Test-*', 'Measure-Optimizer*', 'Measure-ProcessControlFootprint*', 'Build-NativeProcessGovernor*', 'Start-NativeProcessGovernorSession*', 'Get-NativeProcessGovernorToolchain*', 'Build-OptimizerHost*', 'Validation.Common*', 'Get-RooIndustriesValidationTempArtifacts*', 'Scenario.*')
 
 function Get-ReleaseScriptNames([string]$RepoRoot) {
