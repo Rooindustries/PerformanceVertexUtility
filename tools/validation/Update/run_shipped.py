@@ -70,9 +70,9 @@ class Journey:
             raise RuntimeError(f'Command failed ({result.returncode}); evidence: {log}\n' + (result.stdout + result.stderr)[-2400:])
         return result.stdout, time.monotonic() - started
 
-    def remote(self, host, machine, script, log):
+    def remote(self, host, machine, script, log, timeout=windows.COMMAND_TIMEOUT):
         try:
-            result = windows.invoke(host, machine, script)
+            result = windows.invoke(host, machine, script, timeout=timeout)
         except subprocess.CalledProcessError as error:
             Path(log).parent.mkdir(parents=True, exist_ok=True)
             Path(log).write_text((error.stdout or '') + (error.stderr or ''))
@@ -164,7 +164,7 @@ $files=@(($roots|Where-Object path -eq $data).files)
                 continue
             path = self.out / 'p0' / (label + '-as-found.json')
             try:
-                value = json.loads(self.remote(host, machine, script, path))
+                value = json.loads(self.remote(host, machine, script, path, timeout=windows.EVIDENCE_TIMEOUT))
             except RuntimeError:
                 if label != 'blackwell':
                     raise
@@ -252,7 +252,7 @@ $file=[IO.FileStream]::new($destination,[IO.FileMode]::CreateNew,[IO.FileAccess]
 try{foreach($item in Get-ChildItem $frame -File -Recurse){$relative=$item.FullName.Substring($frame.Length+1);if($item.FullName -ieq $destination){continue};if($relative -match '^(source|source-alpha)\\|\\(source-B|source-alpha|work-[^\\]+|timer-source|timer-app|timer-core|client-probe|probe|stage|obj|bin)\\' -or $item.Extension -notin '.json','.png','.log','.txt','.csv','.sha256'){continue};[IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip,$item.FullName,$relative.Replace('\','/'))|Out-Null}}finally{$zip.Dispose();$file.Dispose()}
 Register-HarnessFile $destination 'evidence-archive'|Out-Null
 '''.replace('FRAME', windows.ps_literal(frame)).replace('DEST', windows.ps_literal(destination))
-        self.remote(host, machine, script, self.out / label / 'collect.log')
+        self.remote(host, machine, script, self.out / label / 'collect.log', timeout=windows.EVIDENCE_TIMEOUT)
         local = self.out / label / 'pc-evidence.zip'
         self.copy_from(host, destination, local)
         with zipfile.ZipFile(local) as bundle:

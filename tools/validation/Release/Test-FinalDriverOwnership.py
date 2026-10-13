@@ -54,7 +54,7 @@ def main():
     parent = r'C:\Windows\Temp\roo-industries-percent-folders'
     guard = transport.REMOTE_GUARDS + f"\n$frame={transport.ps_literal(parent)};Assert-ProtectedFrame $frame;if([IO.File]::ReadAllText((Join-Path $frame 'fixture-owner.txt')).Trim() -cne 'Roo Industries percent folders owned scratch'){{throw 'Wrong parent identity'}};$cpu=(Get-CimInstance Win32_Processor).Name;$gpu=@(Get-CimInstance Win32_VideoController|ForEach-Object {{$_.Name}});if($cpu -notmatch '9950X3D' -or ($gpu -join ',') -notmatch 'RTX.*6000'){{throw 'Wrong fixture hardware'}};@{{cpu=$cpu;gpu=$gpu;tasks=@(Get-ScheduledTask -TaskName '*CS2*' -ErrorAction SilentlyContinue|ForEach-Object {{$r=Get-OwnedTaskReceipt $_.TaskName $_.TaskPath;$r}})}}|ConvertTo-Json -Depth 12"
     guard = guard.replace("$r=Get-OwnedTaskReceipt $_.TaskName $_.TaskPath;$r", "$s=New-Object -ComObject Schedule.Service;$s.Connect();$t=$s.GetFolder($_.TaskPath).GetTask($_.TaskName);@{name=$_.TaskName;path=$_.TaskPath;xml=$t.Xml;sddl=$t.GetSecurityDescriptor(7)}")
-    before = transport.invoke(host, machine, guard).stdout
+    before = transport.invoke(host, machine, guard, timeout=transport.SOURCE_TIMEOUT).stdout
     (args.out / 'machine-before.json').write_text(before)
     results = []
     extra_frames = []
@@ -131,7 +131,7 @@ def main():
                 require(refused,'Substituted task accepted')
                 encoded=transport.base64.b64encode(json.dumps(native['after']).encode()).decode()
                 cleanup=f". {transport.ps_literal(receipt['stagingPath']+'/tools/validation/LoadTimes/CleanupOwnership.Common.ps1')};$r=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{encoded}'))|ConvertFrom-Json;Assert-OwnedTaskUnchanged $r;Remove-OwnedTask $r;Assert-OwnedTaskAbsent $r.name;'changed private task preserved by wrapper then exact fixture cleanup'"
-                transport.invoke(host,machine,cleanup)
+                transport.invoke(host,machine,cleanup,timeout=transport.CLEANUP_TIMEOUT)
             return name
         case('interactive-substituted-task-retained',changed_task)
     if args.only in ('gi', 'all'):
@@ -176,7 +176,7 @@ def main():
                 return 'altered helper refused before execution; retained in source frame'
             raise AssertionError('Altered source accepted')
         case('altered-staged-untracked-helper-refused', altered)
-    after = transport.invoke(host, machine, guard).stdout
+    after = transport.invoke(host, machine, guard, timeout=transport.SOURCE_TIMEOUT).stdout
     (args.out/'machine-after.json').write_text(after)
     require(json.loads(before) == json.loads(after), 'Machine identity or unrelated CS2 task XML/SDDL changed')
     (args.out/'checks.json').write_text(json.dumps(results,indent=2))
