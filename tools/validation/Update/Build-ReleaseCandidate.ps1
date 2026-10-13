@@ -16,7 +16,7 @@ try{
  if(-not$ProbeOnly){
   $feed=[IO.File]::ReadAllText((Get-HarnessLongPath (Join-Path $Source 'tools\release\update-feed.txt'))).Trim()
   $output=Join-Path $OutRoot 'release';New-HarnessDirectory $output 'release-output'|Out-Null
-  Invoke-HarnessProcess powershell.exe ('-NoProfile -ExecutionPolicy Bypass -File "'+(Get-HarnessToolPath (Join-Path $Source 'tools\scripts\Build-Release.ps1'))+'" -OutputRoot "'+(Get-HarnessToolPath $output)+'" -UpdateFeedUrl "'+$feed+'"') 'candidate-release-build'|Out-Null
+  Invoke-HarnessProcess (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe') ('-NoProfile -ExecutionPolicy Bypass -File "'+(Get-HarnessToolPath (Join-Path $Source 'tools\scripts\Build-Release.ps1'))+'" -OutputRoot "'+(Get-HarnessToolPath $output)+'" -UpdateFeedUrl "'+$feed+'"') 'candidate-release-build'|Out-Null
   $project=[xml][IO.File]::ReadAllText((Get-HarnessLongPath (Join-Path $Source 'docs\internal\frontend\RooIndustries.OptimizationSuite.App\RooIndustries.OptimizationSuite.App.csproj')))
   $version=$project.SelectSingleNode('//Version').InnerText
   $stage=Join-Path $output ('work-'+$version+'\stage')
