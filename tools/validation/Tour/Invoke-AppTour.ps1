@@ -22,7 +22,7 @@ function Unique($Parent,[string]$Id,[string]$Name,$Type=$null,[string]$Class='',
  if($matches.Count -ne 1){throw ('Target identity missing or ambiguous: id='+$Id+', name='+$Name+', count='+$matches.Count)}
  return $matches[0]
 }
-function FindId([string]$id,[switch]$Optional){Unique $script:window $id '' $(if($id -eq 'ThemePicker'){$CT::ComboBox}else{$null}) -Optional:$Optional}
+function FindId([string]$id,[switch]$Optional){if($id -eq 'ThemePicker'){return Unique (Unique $script:window 'SettingsScroller' '' $CT::Pane) $id '' $CT::ComboBox -Optional:$Optional};Unique $script:window $id '' -Optional:$Optional}
 function NavParent([string]$name){FindId $(if($name -in 'Report a bug','Settings'){'FooterItemsScrollViewer'}else{'MenuItemsScrollViewer'})}
 function NavItem([string]$name,[switch]$Optional){Unique (NavParent $name) '' $name $CT::ListItem -Optional:$Optional}
 function WaitFor([scriptblock]$test,[int]$seconds,[string]$label){$limit=[DateTime]::UtcNow.AddSeconds($seconds);do{$answer=& $test;if($answer){return $answer};Start-Sleep -Milliseconds 200}while([DateTime]::UtcNow -lt $limit);throw ('Timed out: '+$label)}
@@ -121,7 +121,7 @@ function CapturePage([string]$page,[string]$tab='main',[switch]$TopOnly){
 function Simple([bool]$value){Nav Settings;$toggle=FindId 'SimpleModeToggle';$old=$toggle.GetCurrentPattern([Windows.Automation.TogglePattern]::Pattern).Current.ToggleState -eq [Windows.Automation.ToggleState]::On;if($old -ne $value){Action simple 'SimpleModeToggle';WaitFor {((FindId 'SimpleModeToggle').GetCurrentPattern([Windows.Automation.TogglePattern]::Pattern).Current.ToggleState -eq [Windows.Automation.ToggleState]::On) -eq $value} 10 'simple mode'|Out-Null}}
 function Theme([string]$value){
  Nav Settings;$picker=FindId 'ThemePicker';$selected=$picker.GetCurrentPattern([Windows.Automation.SelectionPattern]::Pattern).Current.GetSelection()[0].Current.Name;if($selected -ceq $value){return}
- Action theme 'ThemePicker';Action theme-choice $value;Start-Sleep -Seconds 2
+ Action theme 'ThemePicker';Write-HarnessResult $directory 'theme-expanded.json' @{elements=@(WindowTree);matches=@($script:window.FindAll($TS::Descendants,[Windows.Automation.PropertyCondition]::new($A::AutomationIdProperty,'ThemePicker'))|ForEach-Object {$parent=[Windows.Automation.TreeWalker]::RawViewWalker.GetParent($_);@{id=$_.Current.AutomationId;name=$_.Current.Name;class=$_.Current.ClassName;runtimeId=($_.GetRuntimeId() -join ',');parentId=$parent.Current.AutomationId;parentName=$parent.Current.Name;parentClass=$parent.Current.ClassName;parentRuntimeId=($parent.GetRuntimeId() -join ',')}})}|Out-Null;Action theme-choice $value;Start-Sleep -Seconds 2
  $win=WaitFor {AppWindow} 15 'theme window';AttachWindow $win;FitApp;Nav Settings
  if((FindId 'ThemePicker').GetCurrentPattern([Windows.Automation.SelectionPattern]::Pattern).Current.GetSelection()[0].Current.Name -cne $value){throw 'Theme readback failed'}
 }
