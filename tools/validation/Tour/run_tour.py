@@ -18,6 +18,14 @@ def load(name, path):
 
 
 memory = load('tour_memory', ROOT / 'tools/validation/Memory/run_memory.py')
+windows = load('tour_paths', ROOT / 'tools/validation/windows_ssh.py')
+
+
+def movie_relative(folder):
+    parts = folder.split('\\tour\\', 1)
+    if len(parts) != 2:
+        raise ValueError('Movie folder has no tour scope')
+    return str(windows.safe_archive_path(parts[1].replace('\\', '/')))
 
 
 class Tour(memory.Measurement):
@@ -166,7 +174,7 @@ def encode(out, capture, hold, accepted):
         videos = []
         temporary = []
         for index, segment in enumerate(segments):
-            relative = segment['folder'].split('\\tour\\', 1)[1]
+            relative = movie_relative(segment['folder'])
             source = Path(segment['evidenceRoot']) / 'tour' / relative.replace('\\', '/')
             frames = sorted(source.glob('frame-*.jpg'))
             if len(frames) != segment['frames'] or not frames:
@@ -228,9 +236,11 @@ def encode(out, capture, hold, accepted):
     # Raw frames remain in their verified archive.
     for name in ['tour']:
         for segment in capture['movies'][name].get('segments', [dict(capture['movies'][name], evidenceRoot=str(extracted))]):
-            relative = segment['folder'].split('\\tour\\', 1)[1]
-            folder = Path(segment['evidenceRoot']) / 'tour' / relative.replace('\\', '/')
-            shutil.rmtree(folder)
+            relative = movie_relative(segment['folder'])
+            root = Path(segment['evidenceRoot'])
+            if root.resolve() == extracted.resolve():
+                folder = root / 'tour' / relative
+                shutil.rmtree(folder)
     lines = ['# Roo Industries Optimization Suite ' + capture['version'] + ' tour', '',
              'The installer upgrades published 0.11.0. Pass A uses the original theme in Simple mode; B uses advanced mode; C uses Blackout Gold in advanced mode. App images contain only their 1600×1000 DWM frame bounds.', '',
              'The accepted installer clip and first Home shot are retained separately; reused-installer-media.json binds those files to their original receipt. This run silently upgrades the candidate over 0.11.0 before the UIA-only app tour.', '', '## Media', '']
@@ -262,6 +272,11 @@ def main():
     prior = None
     if args.completed_capture:
         prior = json.loads(args.completed_capture.read_text())
+        for segment in prior['movies']['tour']['segments']:
+            try:
+                movie_relative(segment['folder'])
+            except ValueError as error:
+                parser.error(str(error))
         if prior['version'] != args.version or prior['candidateSha256'].lower() != args.sha256.lower():
             parser.error('Completed capture has a different candidate')
         if set(args.passes) & {s['pass'] for s in prior['screens']}:

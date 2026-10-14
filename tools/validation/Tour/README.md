@@ -28,3 +28,5 @@ A completed set of passes can be retained through a nonce-bound, hash-checked co
 After the evidence archive has been downloaded and hash-verified, cleanup removes the ledger-owned raw video folder through its recorded directory identity before the ordinary frame audit. This avoids a per-frame scan of tens of thousands of JPEGs while retaining every byte in the archive. Existing encoded segments can be reused only when their SHA-256 and codec/dimensions/frame count match their recorded binding.
 
 An identified control that is still refreshing gets up to 30 seconds to become visible and enabled. No pattern is invoked while it is disabled; timeout produces a refused-action record and fails.
+
+Retained captures are read-only inputs on Linux: their raw-frame folders are never pruned by another run. Media-relative paths use the shared archive-path validator before remote work and encoding. Only raw frames extracted into the current run are pruned after successful encoding.
