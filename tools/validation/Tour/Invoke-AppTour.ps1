@@ -71,9 +71,11 @@ function Action([string]$Kind,[string]$Selector,$Element=$null,[double]$Value=0)
   default {throw ('Action is outside the allowed list: '+$Kind)}
  }
  if($target.Current.ProcessId -ne $script:window.Current.ProcessId -or -not(Test-OwnedDescendant ([int]$target.Current.ProcessId))){throw 'Target is not owned by this app'}
- if($target.Current.IsOffscreen -or -not$target.Current.IsEnabled){throw ('Target unavailable: '+$Kind+' '+$Selector)}
+ $ready=[Diagnostics.Stopwatch]::StartNew()
+ if($target.Current.IsOffscreen -or -not$target.Current.IsEnabled){try{WaitFor {-not$target.Current.IsOffscreen -and $target.Current.IsEnabled} 30 ('allowed target ready: '+$Kind+' '+$Selector)|Out-Null}catch{Write-HarnessResult $directory 'refused-action.json' @{timeUtc=[DateTime]::UtcNow.ToString('o');kind=$Kind;selector=$Selector;id=$target.Current.AutomationId;name=$target.Current.Name;pattern=$patternName;enabled=$target.Current.IsEnabled;offscreen=$target.Current.IsOffscreen;mouseClick=$false;invoked=$false;result='refused';reason=$_.Exception.Message}|Out-Null;throw}}
+ $ready.Stop()
  $bounds=$target.Current.BoundingRectangle
- $record=@{timeUtc=[DateTime]::UtcNow.ToString('o');kind=$Kind;selector=$Selector;id=$target.Current.AutomationId;name=$target.Current.Name;parentId=$parent.Current.AutomationId;parentName=$parent.Current.Name;parentRuntimeId=($parent.GetRuntimeId() -join ',');runtimeId=($target.GetRuntimeId() -join ',');pattern=$patternName;bounds=$bounds.ToString();mouseClick=$false;result='failed'}
+ $record=@{timeUtc=[DateTime]::UtcNow.ToString('o');kind=$Kind;selector=$Selector;id=$target.Current.AutomationId;name=$target.Current.Name;parentId=$parent.Current.AutomationId;parentName=$parent.Current.Name;parentRuntimeId=($parent.GetRuntimeId() -join ',');runtimeId=($target.GetRuntimeId() -join ',');pattern=$patternName;readyWaitSeconds=$ready.Elapsed.TotalSeconds;bounds=$bounds.ToString();mouseClick=$false;result='failed'}
  try{
   [RooTour.Desktop]::Move([int]($bounds.Left+$bounds.Width/2),[int]($bounds.Top+$bounds.Height/2))
   $record.cursor=[RooTour.Desktop]::Position()
