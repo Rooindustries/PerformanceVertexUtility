@@ -18,7 +18,7 @@ function Unique($Parent,[string]$Id,[string]$Name,$Type=$null,[string]$Class='',
  if($Class){$conditions.Add([Windows.Automation.PropertyCondition]::new($A::ClassNameProperty,$Class))}
  $condition=if($conditions.Count -eq 1){$conditions[0]}else{[Windows.Automation.AndCondition]::new($conditions.ToArray())}
  $raw=@($Parent.FindAll($(if($Children){$TS::Children}else{$TS::Descendants}),$condition));$distinct=[Collections.Generic.List[Windows.Automation.AutomationElement]]::new()
- foreach($candidate in $raw){$same=@($distinct|Where-Object {($_.GetRuntimeId() -join ',') -ceq ($candidate.GetRuntimeId() -join ',') -and $A::Compare($_,$candidate)});if(-not$same.Count){$distinct.Add($candidate)}}
+ foreach($candidate in $raw){$same=@($distinct|Where-Object {($_.GetRuntimeId() -join ',') -ceq ($candidate.GetRuntimeId() -join ',') -and [Windows.Automation.Automation]::Compare($_,$candidate)});if(-not$same.Count){$distinct.Add($candidate)}}
  $matches=@($distinct)
  if($raw.Count -gt $matches.Count){Write-HarnessResult $directory 'identity-duplicates.json' @{id=$Id;name=$Name;parentRuntimeId=($Parent.GetRuntimeId() -join ',');returned=$raw.Count;distinct=$matches.Count;runtimeIds=@($raw|ForEach-Object {$_.GetRuntimeId() -join ','});result='Identical UIA elements collapsed; distinct identities still refused'}|Out-Null}
  if($matches.Count -eq 0 -and $Optional){return $null}
