@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 import shutil
 import subprocess
+import zipfile
 
 import importlib.util
 
@@ -20,6 +21,24 @@ memory = load('tour_memory', ROOT / 'tools/validation/Memory/run_memory.py')
 
 
 class Tour(memory.Measurement):
+    def download(self, remote, local, expected=None):
+        self.windows.run_transport(self.args.host, 'scp', [self.args.host + ':' + remote.replace('\\', '/'), str(local)],
+                                   timeout=1800, capture_output=True, text=True)
+        if expected and memory.identity(local)['sha256'].upper() != expected.upper():
+            raise ValueError('Downloaded evidence hash differs: ' + str(local))
+
+    def collect(self):
+        w, f = self.windows, self.frame
+        path = f['runRoot'] + '\\evidence.zip'
+        remote = self.invoke(self.scope() + 'New-HarnessArchive ' + w.ps_literal(f['runRoot']) + ' ' + w.ps_literal(path) +
+                             " {param($item,$relative) $relative=$relative.Replace('\\','/');$relative -notmatch '^(Source|source|inputs|b/release|b/heap|b/probe)/' -and $relative -ne 'evidence.zip'}|Out-Null;Get-HarnessFileSha256 " + w.ps_literal(path), timeout=1800)
+        local = self.out / 'evidence.zip'
+        self.download(path, local, remote.stdout.strip())
+        with zipfile.ZipFile(local) as archive:
+            for name in archive.namelist():
+                w.safe_archive_path(name)
+            archive.extractall(self.out / 'evidence')
+
     def desktop(self, name, fields, minutes, suite='Tour'):
         w = self.windows
         result = w.interactive_frame(self.args.host, self.args.expected_machine, self.frame,
@@ -70,7 +89,7 @@ class Tour(memory.Measurement):
             completion, capture = self.desktop('Invoke-AppTour', {
                 'Source': self.frame['stagingPath'], 'OutRoot': self.frame['runRoot'] + '\\tour',
                 'ExpectedVersion': self.args.version,
-                'HoldSeconds': self.args.hold_seconds}, 90)
+                'HoldSeconds': self.args.hold_seconds, 'Passes': self.args.passes}, 90)
             memory.save(self.out / 'capture.json', capture)
             checks.extend([
                 {'check': 'candidate upgrade before app tour', 'passed': capture['version'] == self.args.version},
@@ -94,7 +113,7 @@ class Tour(memory.Measurement):
                     self.collect()
                 except BaseException as error:
                     errors.append('Evidence: ' + memory.describe_error(error))
-                if restored:
+                if restored and not any(e.startswith('Evidence:') for e in errors):
                     try:
                         self.clear()
                     except BaseException as error:
@@ -117,12 +136,16 @@ class Tour(memory.Measurement):
 def encode(out, capture, hold, accepted):
     from PIL import Image, ImageDraw
     extracted = out / 'evidence'
+    action_files = list(extracted.rglob(Path(capture['actionLog']['path'].replace('\\', '/')).name))
+    if len(action_files) != 1 or memory.identity(action_files[0])['sha256'].upper() != capture['actionLog']['sha256']:
+        raise ValueError('Action log identity differs')
     screens, installer = out / 'screens', out / 'installer'
     screens.mkdir(exist_ok=True)
     installer.mkdir(exist_ok=True)
     listing = []
     for shot in capture['screens']:
-        matches = list(extracted.rglob(shot['file']))
+        origin = Path(shot.get('evidenceRoot', extracted))
+        matches = list(origin.rglob(shot['file']))
         if len(matches) != 1 or memory.identity(matches[0])['sha256'].upper() != shot['sha256']:
             raise ValueError('Screenshot identity differs: ' + shot['file'])
         target = (installer if shot['pass'] == 'installer' else screens) / shot['file']
@@ -130,11 +153,19 @@ def encode(out, capture, hold, accepted):
         listing.append((target.relative_to(out).as_posix(), shot['pass'] + ': ' + shot['page'] + ', ' + shot['tab'] + (', scroll part ' + str(shot['part']) if shot['part'] else '')))
     for name in ['tour']:
         info = capture['movies'][name]
-        relative = info['folder'].split('\\tour\\', 1)[1]
-        folder = extracted / 'tour' / relative.replace('\\', '/')
-        frames = sorted(folder.glob('frame-*.jpg'))
-        if len(frames) != info['frames'] or not frames:
-            raise ValueError('Video frame count differs')
+        segments = info.get('segments', [dict(info, evidenceRoot=str(extracted))])
+        folder = out / 'encoding-frames'
+        folder.mkdir(exist_ok=False)
+        number = 0
+        for segment in segments:
+            relative = segment['folder'].split('\\tour\\', 1)[1]
+            source = Path(segment['evidenceRoot']) / 'tour' / relative.replace('\\', '/')
+            frames = sorted(source.glob('frame-*.jpg'))
+            if len(frames) != segment['frames'] or not frames:
+                raise ValueError('Video frame count differs')
+            for frame in frames:
+                number += 1
+                (folder / ('frame-%07d.jpg' % number)).hardlink_to(frame)
         output = out / (name + '.mp4')
         subprocess.run(['/usr/bin/ffmpeg', '-nostdin', '-v', 'error', '-y', '-framerate', '15', '-i', str(folder / 'frame-%07d.jpg'),
                         '-vf', 'scale=ceil(iw/2)*2:ceil(ih/2)*2', '-c:v', 'libx264', '-preset', 'medium', '-crf', '20',
@@ -163,10 +194,7 @@ def encode(out, capture, hold, accepted):
     for name in ['installer.mp4', 'installer-video.json']:
         shutil.copyfile(accepted / name, out / name)
     listing.append(('installer.mp4', 'Accepted complete upgrade wizard, reused without recapture'))
-    action_file = next(extracted.rglob(Path(capture['actionLog']['path'].replace('\\', '/')).name))
-    if memory.identity(action_file)['sha256'].upper() != capture['actionLog']['sha256']:
-        raise ValueError('Action log identity differs')
-    shutil.copyfile(action_file, out / 'actions.json')
+    memory.save(out / 'actions.json', {'actions': capture['actions'], 'sources': capture.get('captureSources', []), 'mouseClicks': sum(a['mouseClick'] for a in capture['actions'])})
     memory.save(out / 'reused-installer-media.json', {'source': str(accepted), 'sourceBinding': accepted_receipt, 'files': {str(p.relative_to(accepted)): memory.identity(p) for p in sorted((accepted / 'installer').glob('*.png')) + [accepted / 'installer.mp4']}, 'homeRetained': str(accepted / 'screens/A-001-home-main.png')})
     memory.save(out / 'media-summary.json', {
         'screenshots': {'installer': len(list(installer.glob('*.png'))), **{key: sum(s['pass'] == key for s in capture['screens']) for key in ['A', 'B', 'C']}},
@@ -174,11 +202,13 @@ def encode(out, capture, hold, accepted):
         'mouseClicks': sum(a['mouseClick'] for a in capture['actions']),
         'notCaptured': capture['notCaptured'], 'holdSeconds': hold,
         'videos': {name: {**memory.identity(out / (name + '.mp4')), 'durationSeconds': float(json.loads((out / (name + '-video.json')).read_text())['format']['duration'])} for name in ['tour', 'installer']}})
-    # Raw frames remain in the verified archive; the index inventories that archive once.
+    # Raw frames remain in their verified archive.
+    shutil.rmtree(out / 'encoding-frames')
     for name in ['tour']:
-        relative = capture['movies'][name]['folder'].split('\\tour\\', 1)[1]
-        folder = extracted / 'tour' / relative.replace('\\', '/')
-        shutil.rmtree(folder)
+        for segment in capture['movies'][name].get('segments', [dict(capture['movies'][name], evidenceRoot=str(extracted))]):
+            relative = segment['folder'].split('\\tour\\', 1)[1]
+            folder = Path(segment['evidenceRoot']) / 'tour' / relative.replace('\\', '/')
+            shutil.rmtree(folder)
     lines = ['# Roo Industries Optimization Suite ' + capture['version'] + ' tour', '',
              'The installer upgrades published 0.11.0. Pass A uses the original theme in Simple mode; B uses advanced mode; C uses Blackout Gold in advanced mode. App images contain only their 1600×1000 DWM frame bounds.', '',
              'The accepted installer clip and first Home shot are retained separately; reused-installer-media.json binds those files to their original receipt. This run silently upgrades the candidate over 0.11.0 before the UIA-only app tour.', '', '## Media', '']
@@ -202,9 +232,31 @@ def main():
     parser.add_argument('--version', required=True)
     parser.add_argument('--restore-installer', type=Path, required=True)
     parser.add_argument('--restore-sha256', required=True)
+    parser.add_argument('--passes', nargs='+', choices=['A', 'B', 'C'], default=['A', 'B', 'C'])
+    parser.add_argument('--completed-capture', type=Path)
     parser.add_argument('--hold-seconds', type=int, default=4, choices=[3, 4])
     parser.add_argument('--out-dir', type=Path, required=True)
     args = parser.parse_args()
+    prior = None
+    if args.completed_capture:
+        prior = json.loads(args.completed_capture.read_text())
+        if prior['version'] != args.version or prior['candidateSha256'].lower() != args.sha256.lower():
+            parser.error('Completed capture has a different candidate')
+        if set(args.passes) & {s['pass'] for s in prior['screens']}:
+            parser.error('Completed and requested passes overlap')
+        for shot in prior['screens']:
+            matches = list(Path(shot['evidenceRoot']).rglob(shot['file']))
+            if len(matches) != 1 or memory.identity(matches[0])['sha256'].upper() != shot['sha256']:
+                parser.error('Completed screenshot identity differs')
+        for source in prior['captureSources']:
+            if memory.identity(Path(source['receipt']))['sha256'].lower() != source['sha256'].lower():
+                parser.error('Completed receipt identity differs')
+        if any(a['mouseClick'] or a['result'] != 'success' for a in prior['actions']):
+            parser.error('Completed capture contains a failed or clicked action')
+        if set(args.passes) | {s['pass'] for s in prior['screens']} != {'A', 'B', 'C'}:
+            parser.error('Completed and requested captures must cover all passes')
+    elif args.passes != ['A', 'B', 'C']:
+        parser.error('Partial passes require --completed-capture')
     for path, expected in [(args.installer, args.sha256), (args.restore_installer, args.restore_sha256)]:
         if memory.identity(path)['sha256'].lower() != expected.lower():
             parser.error('Installer SHA-256 differs; no remote action started')
@@ -223,7 +275,15 @@ def main():
     result = Tour(args).run()
     if (args.out_dir / 'capture.json').exists():
         try:
-            encode(args.out_dir, json.loads((args.out_dir / 'capture.json').read_text()), args.hold_seconds, args.installer_media)
+            capture = json.loads((args.out_dir / 'capture.json').read_text())
+            if prior:
+                capture['screens'] = prior['screens'] + capture['screens']
+                capture['actions'] = prior['actions'] + capture['actions']
+                capture['notCaptured'] = prior['notCaptured'] + capture['notCaptured']
+                capture['movies']['tour'] = {'segments': prior['movies']['tour']['segments'] + [dict(capture['movies']['tour'], evidenceRoot=str(args.out_dir / 'evidence'))]}
+                capture['captureSources'] = prior['captureSources'] + [{'head': json.loads((args.out_dir / 'source-binding.json').read_text())['head'], 'receipt': str(args.out_dir / 'capture.json')}]
+                memory.save(args.out_dir / 'capture.json', capture)
+            encode(args.out_dir, capture, args.hold_seconds, args.installer_media)
         except Exception as error:
             result['status'] = 'fail'
             result['encodingFailure'] = memory.describe_error(error)
