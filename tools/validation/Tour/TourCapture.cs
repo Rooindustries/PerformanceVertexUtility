@@ -53,7 +53,6 @@ namespace RooTour {
   }
   public static void Move(int x,int y) { Point start; GetCursorPos(out start); for(int i=1;i<=24;i++){double p=i/24.0;p=p*p*(3-2*p);Point pos=new Point{X=(int)(start.X+(x-start.X)*p),Y=(int)(start.Y+(y-start.Y)*p)}; MoveAbsolute(pos.X,pos.Y);Thread.Sleep(18);} }
   static void MoveAbsolute(int x,int y) { var screen=System.Windows.Forms.SystemInformation.VirtualScreen; var item=new Input{Type=0,Mouse=new Mouse{X=(int)((x-screen.Left)*65535.0/(screen.Width-1)),Y=(int)((y-screen.Top)*65535.0/(screen.Height-1)),Flags=0xC001}}; if(SendInput(1,new[]{item},Marshal.SizeOf(typeof(Input)))!=1)throw new InvalidOperationException("SendInput movement failed"); }
-  public static void Click() { var input=new[]{new Input{Type=0,Mouse=new Mouse{Flags=2}},new Input{Type=0,Mouse=new Mouse{Flags=4}}}; if(SendInput(2,input,Marshal.SizeOf(typeof(Input)))!=2)throw new InvalidOperationException("SendInput click failed"); }
   public static Bitmap Capture(IntPtr hwnd,bool cursor) {
    Rect r=Bounds(hwnd); var result=new Bitmap(r.Width,r.Height,PixelFormat.Format24bppRgb);
    using(var g=Graphics.FromImage(result)){g.CopyFromScreen(r.Left,r.Top,0,0,new Size(r.Width,r.Height),CopyPixelOperation.SourceCopy);
