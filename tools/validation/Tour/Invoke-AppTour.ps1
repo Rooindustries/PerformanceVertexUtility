@@ -1,4 +1,4 @@
-﻿param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutRoot,[Parameter(Mandatory)][string]$ExpectedVersion,[int]$HoldSeconds=4)
+﻿param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutRoot,[Parameter(Mandatory)][string]$ExpectedVersion,[int]$HoldSeconds=4,[ValidateSet('A','B','C')][string[]]$Passes=@('A','B','C'))
 $ErrorActionPreference='Stop';$ProgressPreference='SilentlyContinue'
 . (Get-HarnessToolPath (Join-Path $Source 'tools\validation\Memory\Memory.Common.ps1'))
 $nonce=Initialize-HarnessInvocation 'app-tour' $OutRoot
@@ -22,7 +22,7 @@ function Unique($Parent,[string]$Id,[string]$Name,$Type=$null,[string]$Class='',
  if($matches.Count -ne 1){throw ('Target identity missing or ambiguous: id='+$Id+', name='+$Name+', count='+$matches.Count)}
  return $matches[0]
 }
-function FindId([string]$id,[switch]$Optional){Unique $script:window $id '' -Optional:$Optional}
+function FindId([string]$id,[switch]$Optional){Unique $script:window $id '' $(if($id -eq 'ThemePicker'){$CT::ComboBox}else{$null}) -Optional:$Optional}
 function NavParent([string]$name){FindId $(if($name -in 'Report a bug','Settings'){'FooterItemsScrollViewer'}else{'MenuItemsScrollViewer'})}
 function NavItem([string]$name,[switch]$Optional){Unique (NavParent $name) '' $name $CT::ListItem -Optional:$Optional}
 function WaitFor([scriptblock]$test,[int]$seconds,[string]$label){$limit=[DateTime]::UtcNow.AddSeconds($seconds);do{$answer=& $test;if($answer){return $answer};Start-Sleep -Milliseconds 200}while([DateTime]::UtcNow -lt $limit);throw ('Timed out: '+$label)}
@@ -152,17 +152,17 @@ try{
  $tourFrames=Join-Path $directory 'tour-frames';New-HarnessDirectory $tourFrames 'tour-video-frames'|Out-Null;$script:recorder=[RooTour.Recorder]::new((Get-HarnessLongPath $tourFrames));AttachWindow $win;Nav Settings
  $originalSimple=(FindId 'SimpleModeToggle').GetCurrentPattern([Windows.Automation.TogglePattern]::Pattern).Current.ToggleState -eq [Windows.Automation.ToggleState]::On
  $originalTheme=(FindId 'ThemePicker').GetCurrentPattern([Windows.Automation.SelectionPattern]::Pattern).Current.GetSelection()[0].Current.Name
- try{Simple $true;CapturePass A;Simple $false;CapturePass B;Theme 'Blackout Gold';CapturePass C}
+ try{foreach($requestedPass in $Passes){Simple ($requestedPass -eq 'A');if($requestedPass -eq 'C'){Theme 'Blackout Gold'};CapturePass $requestedPass}}
  finally{Theme $originalTheme;Simple $originalSimple}
  $script:recorder.Dispose();$tourMovie=@{folder=$tourFrames;frames=$script:recorder.Count;skippedTicks=$script:recorder.Skipped;wallSeconds=$script:recorder.Seconds;fps=15};$script:recorder=$null
  $script:missing.Add(@{state='BIOS inventory/session states';reason='Loading a firmware package/session, review or restart is outside the read-only tour.'})
  $script:missing.Add(@{state='Operation-dependent dialogs and results';reason='Apply, restore, remove, restart, download, report submission and tweak/game/process setting controls are forbidden.'})
  $actions=Write-HarnessResult $directory 'actions.json' @{actions=@($script:actions)}
- Write-HarnessResult $OutRoot 'receipt.json' @{status='pass';nonce=$nonce;version=$display;originalTheme=$originalTheme;originalSimple=$originalSimple;appearanceRestored=$true;app=$script:app.Identity;screens=@($script:shots);actions=@($script:actions);actionLog=@{path=$actions;sha256=Get-HarnessFileSha256 $actions};notCaptured=@($script:missing);movies=@{tour=$tourMovie}}|Out-Null
+ Write-HarnessResult $OutRoot 'receipt.json' @{status='pass';nonce=$nonce;passes=$Passes;version=$display;originalTheme=$originalTheme;originalSimple=$originalSimple;appearanceRestored=$true;app=$script:app.Identity;screens=@($script:shots);actions=@($script:actions);actionLog=@{path=$actions;sha256=Get-HarnessFileSha256 $actions};notCaptured=@($script:missing);movies=@{tour=$tourMovie}}|Out-Null
  $status='pass'
 }finally{
- if($script:recorder){$script:recorder.Dispose();$script:recorder=$null}
- if($status -ne 'pass'){Write-HarnessResult $OutRoot 'failure.json' @{status='fail';screens=@($script:shots);actions=@($script:actions);notCaptured=@($script:missing)}|Out-Null}
+ if($script:recorder){$script:recorder.Dispose();$tourMovie=@{folder=$tourFrames;frames=$script:recorder.Count;skippedTicks=$script:recorder.Skipped;wallSeconds=$script:recorder.Seconds;fps=15};$script:recorder=$null}
+ if($status -ne 'pass'){Write-HarnessResult $OutRoot 'failure.json' @{status='fail';version=$display;originalTheme=$originalTheme;originalSimple=$originalSimple;screens=@($script:shots);actions=@($script:actions);notCaptured=@($script:missing);movies=@{tour=$tourMovie}}|Out-Null}
  Receive-ProcessTrace
  foreach($entry in @(Get-HarnessEntries|Where-Object {$_.kind -eq 'trace' -and $_.nonce -ceq $nonce})){if(Get-Process -Id $entry.identity.processId -ErrorAction SilentlyContinue){Test-OwnedDescendant ([int]$entry.identity.processId)|Out-Null}}
  Complete-HarnessInvocation $status -Cleanup|Out-Null
