@@ -39,6 +39,15 @@ class Tour(memory.Measurement):
                 w.safe_archive_path(name)
             archive.extractall(self.out / 'evidence')
 
+    def clear(self):
+        self.invoke(self.scope() + "$entries=@(Get-HarnessEntries|Where-Object {$_.kind -eq 'folder' -and $_.purpose -eq 'tour-video-frames' -and $_.state -eq 'active'});foreach($entry in $entries){Remove-HarnessEntry $entry}", timeout=1800)
+        original = self.windows.CLEANUP_TIMEOUT
+        self.windows.CLEANUP_TIMEOUT = 1800
+        try:
+            super().clear()
+        finally:
+            self.windows.CLEANUP_TIMEOUT = original
+
     def desktop(self, name, fields, minutes, suite='Tour'):
         w = self.windows
         result = w.interactive_frame(self.args.host, self.args.expected_machine, self.frame,
@@ -154,22 +163,36 @@ def encode(out, capture, hold, accepted):
     for name in ['tour']:
         info = capture['movies'][name]
         segments = info.get('segments', [dict(info, evidenceRoot=str(extracted))])
-        folder = out / 'encoding-frames'
-        folder.mkdir(exist_ok=False)
-        number = 0
-        for segment in segments:
+        videos = []
+        temporary = []
+        for index, segment in enumerate(segments):
             relative = segment['folder'].split('\\tour\\', 1)[1]
             source = Path(segment['evidenceRoot']) / 'tour' / relative.replace('\\', '/')
             frames = sorted(source.glob('frame-*.jpg'))
             if len(frames) != segment['frames'] or not frames:
                 raise ValueError('Video frame count differs')
-            for frame in frames:
-                number += 1
-                (folder / ('frame-%07d.jpg' % number)).hardlink_to(frame)
+            if 'encodedVideo' in segment:
+                binding = segment['encodedVideo']
+                video = Path(binding['path'])
+                if memory.identity(video) != binding['identity']:
+                    raise ValueError('Retained encoded segment identity differs')
+            else:
+                video = out / ('segment-%d.mp4' % index)
+                temporary.append(video)
+                subprocess.run(['/usr/bin/ffmpeg', '-nostdin', '-v', 'error', '-y', '-framerate', '15', '-i', str(source / 'frame-%07d.jpg'),
+                                '-vf', 'scale=ceil(iw/2)*2:ceil(ih/2)*2', '-c:v', 'libx264', '-threads', '8', '-preset', 'veryfast', '-crf', '20',
+                                '-pix_fmt', 'yuv420p', '-movflags', '+faststart', str(video)], check=True)
+            probe = json.loads(subprocess.check_output(['/usr/bin/ffprobe', '-v', 'error', '-show_streams', '-of', 'json', str(video)], text=True))['streams'][0]
+            if probe['codec_name'] != 'h264' or probe['pix_fmt'] != 'yuv420p' or probe['width'] != 1600 or probe['height'] != 1000 or int(probe['nb_frames']) != segment['frames']:
+                raise ValueError('Encoded video properties differ')
+            videos.append(video)
+        playlist = out / 'video-segments.txt'
+        playlist.write_text(''.join("file '" + str(video).replace("'", "'\\''") + "'\n" for video in videos))
         output = out / (name + '.mp4')
-        subprocess.run(['/usr/bin/ffmpeg', '-nostdin', '-v', 'error', '-y', '-framerate', '15', '-i', str(folder / 'frame-%07d.jpg'),
-                        '-vf', 'scale=ceil(iw/2)*2:ceil(ih/2)*2', '-c:v', 'libx264', '-preset', 'medium', '-crf', '20',
-                        '-pix_fmt', 'yuv420p', '-movflags', '+faststart', str(output)], check=True)
+        subprocess.run(['/usr/bin/ffmpeg', '-nostdin', '-v', 'error', '-y', '-f', 'concat', '-safe', '0', '-i', str(playlist),
+                        '-c', 'copy', '-movflags', '+faststart', str(output)], check=True)
+        for video in temporary:
+            video.unlink()
         metadata = json.loads(subprocess.check_output(['/usr/bin/ffprobe', '-v', 'error', '-show_format', '-show_streams', '-of', 'json', str(output)], text=True))
         memory.save(out / (name + '-video.json'), metadata)
         listing.append((output.name, name + ' tour, real cursor, H.264, 15 fps'))
@@ -203,7 +226,6 @@ def encode(out, capture, hold, accepted):
         'notCaptured': capture['notCaptured'], 'holdSeconds': hold,
         'videos': {name: {**memory.identity(out / (name + '.mp4')), 'durationSeconds': float(json.loads((out / (name + '-video.json')).read_text())['format']['duration'])} for name in ['tour', 'installer']}})
     # Raw frames remain in their verified archive.
-    shutil.rmtree(out / 'encoding-frames')
     for name in ['tour']:
         for segment in capture['movies'][name].get('segments', [dict(capture['movies'][name], evidenceRoot=str(extracted))]):
             relative = segment['folder'].split('\\tour\\', 1)[1]
