@@ -17,7 +17,10 @@ function Unique($Parent,[string]$Id,[string]$Name,$Type=$null,[string]$Class='',
  if($Type){$conditions.Add([Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty,$Type))}
  if($Class){$conditions.Add([Windows.Automation.PropertyCondition]::new($A::ClassNameProperty,$Class))}
  $condition=if($conditions.Count -eq 1){$conditions[0]}else{[Windows.Automation.AndCondition]::new($conditions.ToArray())}
- $matches=@($Parent.FindAll($(if($Children){$TS::Children}else{$TS::Descendants}),$condition))
+ $raw=@($Parent.FindAll($(if($Children){$TS::Children}else{$TS::Descendants}),$condition));$distinct=[Collections.Generic.List[Windows.Automation.AutomationElement]]::new()
+ foreach($candidate in $raw){$same=@($distinct|Where-Object {($_.GetRuntimeId() -join ',') -ceq ($candidate.GetRuntimeId() -join ',') -and $A::Compare($_,$candidate)});if(-not$same.Count){$distinct.Add($candidate)}}
+ $matches=@($distinct)
+ if($raw.Count -gt $matches.Count){Write-HarnessResult $directory 'identity-duplicates.json' @{id=$Id;name=$Name;parentRuntimeId=($Parent.GetRuntimeId() -join ',');returned=$raw.Count;distinct=$matches.Count;runtimeIds=@($raw|ForEach-Object {$_.GetRuntimeId() -join ','});result='Identical UIA elements collapsed; distinct identities still refused'}|Out-Null}
  if($matches.Count -eq 0 -and $Optional){return $null}
  if($matches.Count -ne 1){throw ('Target identity missing or ambiguous: id='+$Id+', name='+$Name+', count='+$matches.Count)}
  return $matches[0]
@@ -38,7 +41,9 @@ function AppWindow{
  if($matches.Count -gt 1){throw 'Owned app has ambiguous main windows.'};if($matches.Count){return $matches[0]}
 }
 function EnsureForeground{
- $hwnd=[IntPtr]$script:window.Current.NativeWindowHandle;$owner=[int]$script:window.Current.ProcessId
+ $hwnd=[IntPtr]$script:window.Current.NativeWindowHandle
+ if(-not[RooTour.Desktop]::IsWindow($hwnd)){$win=WaitFor {AppWindow} 15 'recreated owned app window';AttachWindow $win;FitApp;$hwnd=[IntPtr]$script:window.Current.NativeWindowHandle}
+ $owner=[int]$script:window.Current.ProcessId
  if([RooTour.Desktop]::VisibleOwner($hwnd,$owner)){return}
  $before=[RooTour.Desktop]::ForegroundPid();[RooTour.Desktop]::Focus($hwnd)|Out-Null
  WaitFor {[RooTour.Desktop]::VisibleOwner($hwnd,$owner)} 5 ('owned foreground, previous PID '+$before)|Out-Null
@@ -73,7 +78,7 @@ function Action([string]$Kind,[string]$Selector,$Element=$null,[double]$Value=0)
   [RooTour.Desktop]::Move([int]($bounds.Left+$bounds.Width/2),[int]($bounds.Top+$bounds.Height/2))
   $record.cursor=[RooTour.Desktop]::Position()
   switch($patternName){
-   'SelectionItemPattern.Select' {$p=$target.GetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern);$p.Select();$record.selected=$p.Current.IsSelected;if(-not$record.selected){throw 'Selection readback failed'}}
+   'SelectionItemPattern.Select' {$p=$target.GetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern);$p.Select();if($Kind -eq 'theme-choice'){Start-Sleep -Seconds 2;$win=WaitFor {AppWindow} 15 'theme window';AttachWindow $win;FitApp;Nav Settings;$record.selected=(FindId 'ThemePicker').GetCurrentPattern([Windows.Automation.SelectionPattern]::Pattern).Current.GetSelection()[0].Current.Name -ceq $Selector;$record.readback='Selected theme on recreated owned window';$record.readbackHwnd=$win.Current.NativeWindowHandle}else{$record.selected=$p.Current.IsSelected};if(-not$record.selected){throw 'Selection readback failed'}}
    'InvokePattern.Invoke' {$target.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()}
    'TogglePattern.Toggle' {$p=$target.GetCurrentPattern([Windows.Automation.TogglePattern]::Pattern);$record.before=$p.Current.ToggleState.ToString();$p.Toggle();$record.after=$p.Current.ToggleState.ToString();if($record.before -ceq $record.after){throw 'Toggle readback unchanged'}}
    'ExpandCollapsePattern.Expand' {$p=$target.GetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern);$p.Expand();$record.after=$p.Current.ExpandCollapseState.ToString()}
@@ -121,8 +126,7 @@ function CapturePage([string]$page,[string]$tab='main',[switch]$TopOnly){
 function Simple([bool]$value){Nav Settings;$toggle=FindId 'SimpleModeToggle';$old=$toggle.GetCurrentPattern([Windows.Automation.TogglePattern]::Pattern).Current.ToggleState -eq [Windows.Automation.ToggleState]::On;if($old -ne $value){Action simple 'SimpleModeToggle';WaitFor {((FindId 'SimpleModeToggle').GetCurrentPattern([Windows.Automation.TogglePattern]::Pattern).Current.ToggleState -eq [Windows.Automation.ToggleState]::On) -eq $value} 10 'simple mode'|Out-Null}}
 function Theme([string]$value){
  Nav Settings;$picker=FindId 'ThemePicker';$selected=$picker.GetCurrentPattern([Windows.Automation.SelectionPattern]::Pattern).Current.GetSelection()[0].Current.Name;if($selected -ceq $value){return}
- Action theme 'ThemePicker';Write-HarnessResult $directory 'theme-expanded.json' @{elements=@(WindowTree);matches=@($script:window.FindAll($TS::Descendants,[Windows.Automation.PropertyCondition]::new($A::AutomationIdProperty,'ThemePicker'))|ForEach-Object {$parent=[Windows.Automation.TreeWalker]::RawViewWalker.GetParent($_);@{id=$_.Current.AutomationId;name=$_.Current.Name;class=$_.Current.ClassName;runtimeId=($_.GetRuntimeId() -join ',');parentId=$parent.Current.AutomationId;parentName=$parent.Current.Name;parentClass=$parent.Current.ClassName;parentRuntimeId=($parent.GetRuntimeId() -join ',')}})}|Out-Null;Action theme-choice $value;Start-Sleep -Seconds 2
- $win=WaitFor {AppWindow} 15 'theme window';AttachWindow $win;FitApp;Nav Settings
+ Action theme 'ThemePicker';Write-HarnessResult $directory 'theme-expanded.json' @{elements=@(WindowTree);matches=@($script:window.FindAll($TS::Descendants,[Windows.Automation.PropertyCondition]::new($A::AutomationIdProperty,'ThemePicker'))|ForEach-Object {$parent=[Windows.Automation.TreeWalker]::RawViewWalker.GetParent($_);@{id=$_.Current.AutomationId;name=$_.Current.Name;class=$_.Current.ClassName;runtimeId=($_.GetRuntimeId() -join ',');parentId=$parent.Current.AutomationId;parentName=$parent.Current.Name;parentClass=$parent.Current.ClassName;parentRuntimeId=($parent.GetRuntimeId() -join ',')}})}|Out-Null;Action theme-choice $value
  if((FindId 'ThemePicker').GetCurrentPattern([Windows.Automation.SelectionPattern]::Pattern).Current.GetSelection()[0].Current.Name -cne $value){throw 'Theme readback failed'}
 }
 function Sections{
