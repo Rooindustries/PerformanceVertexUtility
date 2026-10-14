@@ -163,8 +163,8 @@ try{
  $script:recorder.Dispose();$tourMovie=@{folder=$tourFrames;frames=$script:recorder.Count;skippedTicks=$script:recorder.Skipped;wallSeconds=$script:recorder.Seconds;fps=15};$script:recorder=$null
  $script:missing.Add(@{state='BIOS inventory/session states';reason='Loading a firmware package/session, review or restart is outside the read-only tour.'})
  $script:missing.Add(@{state='Operation-dependent dialogs and results';reason='Apply, restore, remove, restart, download, report submission and tweak/game/process setting controls are forbidden.'})
- $actions=Write-HarnessResult $directory 'actions.json' @{actions=@($script:actions)}
- Write-HarnessResult $OutRoot 'receipt.json' @{status='pass';nonce=$nonce;passes=$Passes;version=$display;originalTheme=$originalTheme;originalSimple=$originalSimple;appearanceRestored=$true;app=$script:app.Identity;screens=@($script:shots);actions=@($script:actions);actionLog=@{path=$actions;sha256=Get-HarnessFileSha256 $actions};notCaptured=@($script:missing);movies=@{tour=$tourMovie}}|Out-Null
+ $actionsPath=Write-HarnessResult $directory 'actions.json' @{actions=@($script:actions)}
+ Write-HarnessResult $OutRoot 'receipt.json' @{status='pass';nonce=$nonce;passes=$Passes;version=$display;originalTheme=$originalTheme;originalSimple=$originalSimple;appearanceRestored=$true;app=$script:app.Identity;screens=@($script:shots);actions=@($script:actions);actionLog=@{path=$actionsPath;sha256=Get-HarnessFileSha256 $actionsPath};notCaptured=@($script:missing);movies=@{tour=$tourMovie}}|Out-Null
  $status='pass'
 }finally{
  if($script:recorder){$script:recorder.Dispose();$tourMovie=@{folder=$tourFrames;frames=$script:recorder.Count;skippedTicks=$script:recorder.Skipped;wallSeconds=$script:recorder.Seconds;fps=15};$script:recorder=$null}
