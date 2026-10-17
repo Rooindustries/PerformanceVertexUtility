@@ -4,7 +4,10 @@ param(
     [switch]$BuildFrontend,
     [switch]$ParseOnly,
     [string]$DotNetPath = $env:ROO_INDUSTRIES_DOTNET_EXE,
-    [ValidateRange(1, 86400)][int]$TestTimeoutSeconds = 900
+    [ValidateRange(1, 86400)][int]$TestTimeoutSeconds = 900,
+    [string[]]$ExcludeTestName = @(),
+    [ValidateRange(1, 64)][int]$ShardCount = 1,
+    [ValidateRange(0, 63)][int]$ShardIndex = 0
 )
 $ErrorActionPreference = 'Stop'
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
@@ -26,12 +29,12 @@ $tempBefore = @(Get-ValidationTempPaths)
 $results = New-Object System.Collections.Generic.List[object]
 $outputReaderFailure = $false
 $suiteTimeoutSeconds = @{ 'Test-GovernorScenarios.ps1' = 2700 }
-$testScripts = @(Get-ChildItem (Join-Path $repoRoot 'backend\scripts') -Filter 'Test-*.ps1' -File | Sort-Object Name)
-if ($TestName.Count -gt 0) {
-    $unknown = @($TestName | Where-Object { $_ -notin $testScripts.Name })
-    if ($unknown.Count -gt 0) { throw ('Unknown tests: ' + ($unknown -join ', ')) }
-    $testScripts = @($testScripts | Where-Object { $_.Name -in $TestName })
-}
+if ($ShardIndex -ge $ShardCount) { throw 'ShardIndex must be lower than ShardCount.' }
+$allTestScripts = @(Get-ChildItem (Join-Path $repoRoot 'backend\scripts') -Filter 'Test-*.ps1' -File | Sort-Object Name)
+$unknown = @(@($TestName) + @($ExcludeTestName) | Where-Object { $_ -notin $allTestScripts.Name })
+if ($unknown.Count -gt 0) { throw ('Unknown tests: ' + ($unknown -join ', ')) }
+$testScripts = @($allTestScripts | Where-Object { ($TestName.Count -eq 0 -or $_.Name -in $TestName) -and $_.Name -notin $ExcludeTestName })
+$testScripts = @(for ($index = 0; $index -lt $testScripts.Count; $index++) { if ($index % $ShardCount -eq $ShardIndex) { $testScripts[$index] } })
 $parseErrors = @()
 $parsedFiles = 0
 foreach ($file in @((Get-ChildItem (Join-Path $repoRoot 'backend') -Filter '*.ps1' -Recurse -File),(Get-ChildItem (Join-Path $repoRoot 'tools') -Filter '*.ps1' -Recurse -File),(Get-Item (Join-Path $repoRoot 'LeanClientOptimizer.ps1'))) | ForEach-Object { $_ }) {
@@ -146,7 +149,7 @@ if ($BuildFrontend) {
 $stateRoot = Join-Path $repoRoot 'backend\state'
 $stateEntries = if (Test-Path $stateRoot) { @(Get-ChildItem $stateRoot -Force -Recurse).Count } else { 0 }
 $newTempArtifacts = @(Get-ValidationTempPaths | Where-Object { $_ -notin $tempBefore })
-$summary = [pscustomobject]@{ newTempArtifacts = $newTempArtifacts; machine=$env:COMPUTERNAME; completedAtUtc=(Get-Date).ToUniversalTime().ToString('o'); testTimeoutSeconds=$TestTimeoutSeconds; outputReaderFailure=$outputReaderFailure; tests=@($results.ToArray()); failedCount=@($results.ToArray() | Where-Object {$_.exitCode -ne 0 -or $_.timedOut}).Count; buildExitCode=$buildExit; stateEntries=$stateEntries }
+$summary = [pscustomobject]@{ newTempArtifacts = $newTempArtifacts; machine=$env:COMPUTERNAME; completedAtUtc=(Get-Date).ToUniversalTime().ToString('o'); testTimeoutSeconds=$TestTimeoutSeconds; shardIndex=$ShardIndex; shardCount=$ShardCount; outputReaderFailure=$outputReaderFailure; tests=@($results.ToArray()); failedCount=@($results.ToArray() | Where-Object {$_.exitCode -ne 0 -or $_.timedOut}).Count; buildExitCode=$buildExit; stateEntries=$stateEntries }
 $summary | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $ResultsRoot 'summary.json') -Encoding UTF8
 Write-Host "Summary: $ResultsRoot\summary.json"
 if ($summary.failedCount -gt 0 -or @($results.ToArray() | Where-Object { $_.leftoverProcesses.Count -gt 0 }).Count -gt 0 -or $outputReaderFailure -or $newTempArtifacts.Count -ne 0 -or $stateEntries -ne 0 -or ($BuildFrontend -and $buildExit -ne 0)) { exit 1 }
