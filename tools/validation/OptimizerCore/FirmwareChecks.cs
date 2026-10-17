@@ -4,7 +4,7 @@ using RooIndustries.Optimizer;
 
 static class FirmwareChecks
 {
-    internal const string ExportText = """
+    internal static readonly string ExportText = """
 // Fixture export; no physical firmware is used.
 HIICrc32 = A1B2C3D4
 
@@ -44,7 +44,7 @@ Value =0A
 // Width =01
 // Options =*[00]Off
 // [01]On
-""";
+""".ReplaceLineEndings("\n");
     internal static string VcoreExport(string crc, string vcore, string value = "0", string mode = "00", string offset = "1044", string twin = "1.079V", string twinValue = "0")
         => "// Script File Name : fixture.txt\n// Created on fixture\n\nHIICrc32= " + crc + "\n\n// FORM SET\n// GUID = 11111111-1111-1111-1111-111111111111\n// Title = Setup\n// FORM\n// GUID = 22222222-2222-2222-2222-222222222222\n// Title = Voltage\n\n"
             + "// GUID = ec87d643-eba4-4bb5-a1e5-3f3e36b20da9\n// Variable = Setup\nSetup Question = Vcore Voltage Mode\nHelp String = Vcore Voltage Mode\nToken =2A9A // Do NOT change this line\nOffset =104C\nWidth =01\nBIOS Default =[00]Auto\nOptions =" + (mode == "00" ? "*" : "") + "[00]Auto // Move \"*\" to the desired Option\n         " + (mode == "01" ? "*" : "") + "[01]Adaptive Vcore\n\n"
