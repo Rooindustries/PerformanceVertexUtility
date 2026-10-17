@@ -202,7 +202,7 @@ try {
         }
         'shader-cache-cleanup' {
             $root = if ([string]::IsNullOrWhiteSpace($ShaderCacheRoot)) { Join-Path $env:LOCALAPPDATA 'NVIDIA' } else { [System.IO.Path]::GetFullPath($ShaderCacheRoot) }
-            if ($ConfirmApply -and $AllowRealSystemExecution -and (Test-RooIndustriesStutterPathInsideTemp $root)) {
+            if ($canRunReal -and $ConfirmApply -and $AllowRealSystemExecution -and (Test-RooIndustriesStutterPathInsideTemp $root)) {
                 $applyParams = @{
                     OptimizationId = 'shader-cache-cleanup'
                     ShaderCacheRoot = $root
