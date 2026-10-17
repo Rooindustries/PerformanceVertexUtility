@@ -10,8 +10,8 @@
   "sessionStatus": "completed",
   "startedAtUtc": "2026-06-30T09:41:16.0000000Z",
   "completedAtUtc": "2026-06-30T09:41:16.0000000Z",
-  "sessionPath": "C:\\Users\\serviroo\\AppData\\Local\\Temp\\roo-industries-process-policy-live\\state\\process-policy-sessions\\process-policy-live-policy-validation-20260630-094100\\session.json",
-  "backupManifestPath": "C:\\Users\\serviroo\\AppData\\Local\\Temp\\roo-industries-process-policy-live\\state\\process-policy-sessions\\process-policy-live-policy-validation-20260630-094100\\backup.json",
+  "sessionPath": "C:\\Users\\Client\\AppData\\Local\\Temp\\roo-industries-process-policy-live\\state\\process-policy-sessions\\process-policy-live-policy-validation-20260630-094100\\session.json",
+  "backupManifestPath": "C:\\Users\\Client\\AppData\\Local\\Temp\\roo-industries-process-policy-live\\state\\process-policy-sessions\\process-policy-live-policy-validation-20260630-094100\\backup.json",
   "restorable": false,
   "preview": [],
   "changedItems": [
@@ -72,7 +72,7 @@
     "backupId": "process-policy-live-policy-validation-20260630-094100",
     "scope": "persistent-process-policy-controls",
     "createdAtUtc": "2026-06-30T09:41:00.0000000Z",
-    "location": "C:\\Users\\serviroo\\AppData\\Local\\Temp\\roo-industries-process-policy-live\\state\\process-policy-sessions\\process-policy-live-policy-validation-20260630-094100\\backup.json",
+    "location": "C:\\Users\\Client\\AppData\\Local\\Temp\\roo-industries-process-policy-live\\state\\process-policy-sessions\\process-policy-live-policy-validation-20260630-094100\\backup.json",
     "restorePoint": {
       "requested": false,
       "status": "not-required-for-process-policy",
@@ -87,7 +87,7 @@
           "affinityMask": 255,
           "ioPriority": "Normal",
           "gpuPriority": "Normal",
-          "executablePath": "C:\\Users\\serviroo\\AppData\\Local\\Temp\\roo-industries-process-policy-live\\RooIndustriesPolicyExistingProbe.exe",
+          "executablePath": "C:\\Users\\Client\\AppData\\Local\\Temp\\roo-industries-process-policy-live\\RooIndustriesPolicyExistingProbe.exe",
           "startTimeUtc": "2026-06-30T09:40:58.0000000Z"
         }
       }
@@ -111,7 +111,7 @@
     "artifacts": [
       {
         "type": "processPolicySessionBackup",
-        "path": "C:\\Users\\serviroo\\AppData\\Local\\Temp\\roo-industries-process-policy-live\\state\\process-policy-sessions\\process-policy-live-policy-validation-20260630-094100\\backup.json"
+        "path": "C:\\Users\\Client\\AppData\\Local\\Temp\\roo-industries-process-policy-live\\state\\process-policy-sessions\\process-policy-live-policy-validation-20260630-094100\\backup.json"
       }
     ]
   },
