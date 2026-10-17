@@ -94,10 +94,26 @@ namespace RooIndustries.OptimizationSuite.Services
         public Task<GameTuneSessionStatus?> GetGameTuneSessionStatusAsync(CancellationToken cancellationToken = default) => Task.FromResult(GameStatusModel);
         public Task<ProcessGovernorSessionStatus?> GetProcessGovernorSessionStatusAsync(CancellationToken cancellationToken = default) => Task.FromResult(GovernorStatusModel);
         public string? FindLatestProcessProfileBackup() => LatestProcessBackup;
-        public Task<LiveDataResult<string>> PreviewProcessProfileResultAsync(CancellationToken cancellationToken = default)
-            => Task.FromResult(new LiveDataResult<string>(ProcessPreviewText, OperationError ?? (ProcessPreviewText is null ? LastError : null)));
-        public Task<LiveDataResult<string>> ApplyProcessProfileResultAsync(CancellationToken cancellationToken = default)
+        public bool ProcessProfileRestorePending => ProcessProfileRecovery is not null;
+        public bool ProcessRecoverySetAside { get; set; }
+        public bool TakeProcessRecoverySetAsideNotice()
         {
+            var notice = ProcessRecoverySetAside;
+            ProcessRecoverySetAside = false;
+            return notice;
+        }
+        public string? BackgroundPlacementText { get; set; }
+        public string? LastProcessPreset { get; private set; }
+        public Task<LiveDataResult<string>> GetBackgroundPlacementResultAsync(CancellationToken cancellationToken = default)
+            => Task.FromResult(new LiveDataResult<string>(BackgroundPlacementText, BackgroundPlacementText is null ? LastError : null));
+        public Task<LiveDataResult<string>> PreviewProcessProfileResultAsync(CancellationToken cancellationToken = default, string preset = "lower")
+        {
+            LastProcessPreset = preset;
+            return Task.FromResult(new LiveDataResult<string>(ProcessPreviewText, OperationError ?? (ProcessPreviewText is null ? LastError : null)));
+        }
+        public Task<LiveDataResult<string>> ApplyProcessProfileResultAsync(CancellationToken cancellationToken = default, string preset = "lower")
+        {
+            LastProcessPreset = preset;
             var recovery = ProcessProfileRecovery.FromApply(ProcessApplyText);
             if (recovery is not null) ProcessProfileRecovery = recovery;
             return Task.FromResult(new LiveDataResult<string>(ProcessApplyText, OperationError ?? (ProcessApplyText is null ? LastError : null), recovery?.Path, recovery?.Generation));
