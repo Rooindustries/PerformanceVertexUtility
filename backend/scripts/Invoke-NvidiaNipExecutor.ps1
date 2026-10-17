@@ -150,36 +150,51 @@ try {
 
     if ($canExecute -and $Operation -eq 'Apply') {
         $exportCommand = Get-RooIndustriesPropertyValue $commands 'exportCurrentProfile' $null
-        $exportResult = Invoke-NvidiaExecutorCommand -Command $exportCommand -Mode $ExecutorMode -MockShim $MockNvpiShimPath -Timeout $TimeoutSeconds
-        $exportCompleted = ((-not [bool](Get-RooIndustriesPropertyValue $exportResult 'timedOut' $false)) -and [int](Get-RooIndustriesPropertyValue $exportResult 'exitCode' -1) -eq 0)
-        $sequence.Add([pscustomobject]@{
-            order = 1
-            operation = 'export'
-            command = $exportCommand
-            result = $exportResult
-            completed = $exportCompleted
-        }) | Out-Null
-        if ($exportCompleted) {
-            Write-NvidiaRollbackManifest -Manifest $rollbackManifest -Path $RollbackManifestPath -ExportCompleted $true -ImportAttempted $true -ImportCompleted $false -RealExecution ($ExecutorMode -eq 'Real')
-            $importCommand = Get-RooIndustriesPropertyValue $commands 'importCandidateProfile' $null
-            $importResult = Invoke-NvidiaExecutorCommand -Command $importCommand -Mode $ExecutorMode -MockShim $MockNvpiShimPath -Timeout $TimeoutSeconds
-            $importCompleted = ((-not [bool](Get-RooIndustriesPropertyValue $importResult 'timedOut' $false)) -and [int](Get-RooIndustriesPropertyValue $importResult 'exitCode' -1) -eq 0)
-            $sequence.Add([pscustomobject]@{
-                order = 2
-                operation = 'import'
-                command = $importCommand
-                result = $importResult
-                completed = $importCompleted
-            }) | Out-Null
-            if (-not $importCompleted) { $status = 'failed' }
-        } else {
+        $exportTarget = [string]@(Get-RooIndustriesPropertyArray $exportCommand 'arguments')[2]
+        $resolvedExportTarget = if ([string]::IsNullOrWhiteSpace($exportTarget)) { '' } else { Resolve-RooIndustriesPath $exportTarget $exportTarget }
+        if ([string]::IsNullOrWhiteSpace($exportTarget) -or (Test-Path -LiteralPath $resolvedExportTarget)) {
             $status = 'failed'
             $sequence.Add([pscustomobject]@{
-                order = 2
+                order = 1
                 operation = 'import'
                 skipped = $true
-                reason = 'Export failed or timed out; import was not attempted.'
+                reason = 'The rollback export path already exists, so an older file cannot stand in for this export. Choose a new export path; import was not attempted.'
             }) | Out-Null
+        } else {
+            $exportResult = Invoke-NvidiaExecutorCommand -Command $exportCommand -Mode $ExecutorMode -MockShim $MockNvpiShimPath -Timeout $TimeoutSeconds
+            $exportFileReady = (Test-Path -LiteralPath $resolvedExportTarget -PathType Leaf) -and (Get-Item -LiteralPath $resolvedExportTarget -Force).Length -gt 0
+            $exportProcessSucceeded = ((-not [bool](Get-RooIndustriesPropertyValue $exportResult 'timedOut' $false)) -and [int](Get-RooIndustriesPropertyValue $exportResult 'exitCode' -1) -eq 0)
+            $exportCompleted = $exportProcessSucceeded -and $exportFileReady
+            $sequence.Add([pscustomobject]@{
+                order = 1
+                operation = 'export'
+                command = $exportCommand
+                result = $exportResult
+                completed = $exportCompleted
+                exportFileVerified = $exportFileReady
+            }) | Out-Null
+            if ($exportCompleted) {
+                Write-NvidiaRollbackManifest -Manifest $rollbackManifest -Path $RollbackManifestPath -ExportCompleted $true -ImportAttempted $true -ImportCompleted $false -RealExecution ($ExecutorMode -eq 'Real')
+                $importCommand = Get-RooIndustriesPropertyValue $commands 'importCandidateProfile' $null
+                $importResult = Invoke-NvidiaExecutorCommand -Command $importCommand -Mode $ExecutorMode -MockShim $MockNvpiShimPath -Timeout $TimeoutSeconds
+                $importCompleted = ((-not [bool](Get-RooIndustriesPropertyValue $importResult 'timedOut' $false)) -and [int](Get-RooIndustriesPropertyValue $importResult 'exitCode' -1) -eq 0)
+                $sequence.Add([pscustomobject]@{
+                    order = 2
+                    operation = 'import'
+                    command = $importCommand
+                    result = $importResult
+                    completed = $importCompleted
+                }) | Out-Null
+                if (-not $importCompleted) { $status = 'failed' }
+            } else {
+                $status = 'failed'
+                $sequence.Add([pscustomobject]@{
+                    order = 2
+                    operation = 'import'
+                    skipped = $true
+                    reason = if ($exportProcessSucceeded) { 'Export finished without writing a usable rollback file; import was not attempted.' } else { 'Export failed or timed out; import was not attempted.' }
+                }) | Out-Null
+            }
         }
     } elseif ($canExecute -and $Operation -eq 'Restore') {
         $restoreCommand = Get-RooIndustriesPropertyValue $restorePreview 'command' $null
