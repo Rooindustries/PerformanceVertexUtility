@@ -5,11 +5,9 @@ using RooIndustries.Optimizer;
 
 static class FirmwareScriptNativeChecks
 {
-    private const string DefaultEvidenceRoot = "/home/serviroo/.local/share/LeanClientOptimizer/work/bios-verification-20260920";
-
-    public static void Run(Action<bool, string> check, string? evidenceRoot = null)
+    public static void Run(Action<bool, string> check, string evidenceRoot)
     {
-        var root = string.IsNullOrWhiteSpace(evidenceRoot) ? DefaultEvidenceRoot : Path.GetFullPath(evidenceRoot);
+        var root = Path.GetFullPath(evidenceRoot);
         var originalPath = Path.Combine(root, "original.txt");
         var goldenPath = Path.Combine(root, "legacy-parser.json");
         var pilotPath = Path.Combine(root, "pilot", "3BE7D87FEFDE62D5A9E5999C4E9315FEE0CFF3477E743FBFBE722340712EE113.txt");
