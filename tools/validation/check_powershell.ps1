@@ -6,6 +6,10 @@ $settings = @{
 }
 
 function Get-PowerShellFailures([string]$Path, [string]$Relative, [switch]$Analyze) {
+    $latin1 = [Text.Encoding]::GetEncoding(28591).GetString([IO.File]::ReadAllBytes($Path))
+    if (-not $latin1.StartsWith([string][char]0xEF + [char]0xBB + [char]0xBF) -and $latin1 -match '[^\x00-\x7F]') {
+        '{0}:1: PS51Encoding: Non-ASCII content needs a UTF-8 byte order mark for Windows PowerShell 5.1.' -f $Relative
+    }
     $tokens = $null
     $parseErrors = $null
     $ast = [System.Management.Automation.Language.Parser]::ParseFile($Path, [ref]$tokens, [ref]$parseErrors)
@@ -28,6 +32,7 @@ function Test-PowerShellControls {
         @{ File = 'parse-error.ps1'; Source = 'function {'; Analyze = $false; Expected = 'parse-error.ps1:1: *' },
         @{ File = 'syntax-error.ps1'; Source = '$a = $null ?? ''x'''; Analyze = $true; Expected = 'syntax-error.ps1:1: PSUseCompatibleSyntax: *' },
         @{ File = 'index-error.ps1'; Source = '$a = ${value}?[0]'; Analyze = $true; Expected = 'index-error.ps1:1: PS51Syntax: *' },
+        @{ File = 'encoding-error.ps1'; Source = "Write-Output 'caf$([char]0xE9)'"; Analyze = $false; Expected = 'encoding-error.ps1:1: PS51Encoding: *' },
         @{ File = 'suppressed-error.ps1'; Source = "[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseCompatibleSyntax','')]`nparam()`n`$a = `$null ?? 'x'"; Analyze = $true; Expected = 'suppressed-error.ps1:3: PSUseCompatibleSyntax: *' }
     )
     [void][IO.Directory]::CreateDirectory($temporary)
