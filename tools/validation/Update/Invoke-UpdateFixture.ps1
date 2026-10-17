@@ -70,7 +70,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Security.Principal;
 using Microsoft.Win32.SafeHandles;
-public static class RooUpdatePermissions {
+public static class RooIndustriesUpdatePermissions {
  [StructLayout(LayoutKind.Sequential)] struct Sid { public IntPtr address; public uint attributes; }
  [DllImport("kernel32.dll")] static extern IntPtr GetCurrentProcess();
  [DllImport("advapi32.dll",SetLastError=true)] static extern bool OpenProcessToken(IntPtr p,uint access,out SafeAccessTokenHandle token);
@@ -94,7 +94,7 @@ public static class RooUpdatePermissions {
 '@
   $probeName='roo-ota-write-'+[Guid]::NewGuid().ToString('N')+'.tmp'
   $control=Join-Path (Join-Path (Get-RooIndustriesLocalAppData) 'Temp') $probeName;$sealed=Join-Path (Join-Path $data 'updates') $probeName
-  try{$result=[RooUpdatePermissions]::Check((Get-HarnessLongPath $control),(Get-HarnessLongPath $sealed));if($result[0] -eq 0){$controlEntry=Register-HarnessFile $control 'restricted-write' 'invocation'};if($result[1] -eq 0){$sealedEntry=Register-HarnessFile $sealed 'restricted-write' 'invocation'};Save 'update-folder-write-probe.json' @{administratorGroupDisabled=$true;privilegesRemoved=$true;controlWin32=$result[0];updatesWin32=$result[1]};if($result[0] -ne 0 -or $result[1] -ne 5){throw 'Update-folder permission control failed'}}finally{foreach($entry in @($controlEntry,$sealedEntry)){if($entry){Remove-HarnessEntry $entry}}}
+  try{$result=[RooIndustriesUpdatePermissions]::Check((Get-HarnessLongPath $control),(Get-HarnessLongPath $sealed));if($result[0] -eq 0){$controlEntry=Register-HarnessFile $control 'restricted-write' 'invocation'};if($result[1] -eq 0){$sealedEntry=Register-HarnessFile $sealed 'restricted-write' 'invocation'};Save 'update-folder-write-probe.json' @{administratorGroupDisabled=$true;privilegesRemoved=$true;controlWin32=$result[0];updatesWin32=$result[1]};if($result[0] -ne 0 -or $result[1] -ne 5){throw 'Update-folder permission control failed'}}finally{foreach($entry in @($controlEntry,$sealedEntry)){if($entry){Remove-HarnessEntry $entry}}}
  }
 }
 

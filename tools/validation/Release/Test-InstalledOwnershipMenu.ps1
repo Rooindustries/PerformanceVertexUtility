@@ -60,7 +60,7 @@ using System.Security.AccessControl;
 using System.Security.Cryptography;
 using Microsoft.Win32;
 using Microsoft.Win32.SafeHandles;
-public static class RooInstalledOwnershipProof {
+public static class RooIndustriesInstalledOwnershipProof {
     [DllImport("advapi32.dll", CharSet=CharSet.Unicode)] static extern int RegQueryValueEx(IntPtr key,string name,IntPtr reserved,out uint type,byte[] data,ref uint size);
     [DllImport("advapi32.dll", CharSet=CharSet.Unicode)] static extern int RegOpenKeyEx(IntPtr key,string name,uint options,uint access,out IntPtr result);
     [DllImport("advapi32.dll", CharSet=CharSet.Unicode)] static extern int RegOpenKeyTransacted(IntPtr key,string name,uint options,uint access,out IntPtr result,IntPtr transaction,IntPtr reserved);
@@ -110,18 +110,18 @@ public static class RooInstalledOwnershipProof {
 }
 '@
 function State-Bytes {
-    $k=[RooInstalledOwnershipProof]::Open([Microsoft.Win32.RegistryHive]::LocalMachine,$stateKey)
+    $k=[RooIndustriesInstalledOwnershipProof]::Open([Microsoft.Win32.RegistryHive]::LocalMachine,$stateKey)
     if(-not$k){throw 'State key missing'}
-    try{[uint32]$t=0;$b=[RooInstalledOwnershipProof]::Read($k,'State',[ref]$t);if($t -ne 3 -or $null -eq $b){throw 'State is not binary'};return ,$b}finally{$k.Dispose()}
+    try{[uint32]$t=0;$b=[RooIndustriesInstalledOwnershipProof]::Read($k,'State',[ref]$t);if($t -ne 3 -or $null -eq $b){throw 'State is not binary'};return ,$b}finally{$k.Dispose()}
 }
-function Stamp([byte[]]$Bytes) {[ordered]@{type='Binary';length=$Bytes.Length;sha256=[RooInstalledOwnershipProof]::Hash($Bytes)}}
+function Stamp([byte[]]$Bytes) {[ordered]@{type='Binary';length=$Bytes.Length;sha256=[RooIndustriesInstalledOwnershipProof]::Hash($Bytes)}}
 function State-Object([byte[]]$Bytes) {[Text.Encoding]::UTF8.GetString($Bytes)|ConvertFrom-Json}
 function Same-Object($A,$B) {(ConvertTo-Json -InputObject $A -Depth 100 -Compress) -ceq (ConvertTo-Json -InputObject $B -Depth 100 -Compress)}
 function Open-ClassesKey([string]$Path) {
     $currentSid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
     $prefix='Software\Classes\'
     if($sid -cne $currentSid -or -not$Path.StartsWith($prefix,[StringComparison]::OrdinalIgnoreCase)){throw 'User classes path differs'}
-    return [RooInstalledOwnershipProof]::Open([Microsoft.Win32.RegistryHive]::Users,($currentSid+'_Classes\'+$Path.Substring($prefix.Length)))
+    return [RooIndustriesInstalledOwnershipProof]::Open([Microsoft.Win32.RegistryHive]::Users,($currentSid+'_Classes\'+$Path.Substring($prefix.Length)))
 }
 function Menu-Rows {
     $rows=New-Object 'Collections.Generic.List[object]'
@@ -130,7 +130,7 @@ function Menu-Rows {
         $k=Open-ClassesKey $Path
         if(-not$k){$rows.Add([ordered]@{path=$Path;missing=$true});return}
         try {
-            $values=@(foreach($n in $k.GetValueNames()|Sort-Object){[uint32]$t=0;$b=[RooInstalledOwnershipProof]::Read($k,$n,[ref]$t);[ordered]@{name=$n;type=$t;length=$b.Length;sha256=[RooInstalledOwnershipProof]::Hash($b)}})
+            $values=@(foreach($n in $k.GetValueNames()|Sort-Object){[uint32]$t=0;$b=[RooIndustriesInstalledOwnershipProof]::Read($k,$n,[ref]$t);[ordered]@{name=$n;type=$t;length=$b.Length;sha256=[RooIndustriesInstalledOwnershipProof]::Hash($b)}})
             $rows.Add([ordered]@{path=$Path;missing=$false;descriptor=$k.GetAccessControl().GetSecurityDescriptorSddlForm([Security.AccessControl.AccessControlSections]'Access, Owner, Group');values=$values})
             foreach($n in $k.GetSubKeyNames()|Sort-Object){$child=$Path+'\'+$n;if($child -ine $menu){Visit $child ($Depth+1)}}
         }finally{$k.Dispose()}
@@ -177,7 +177,7 @@ function Observe-OwnedState($Reply,$Plan) {
 }
 function Undo-OwnProfile {
     $liveBytes=State-Bytes
-    if($ownedBytes -and [RooInstalledOwnershipProof]::Hash($liveBytes) -cne [RooInstalledOwnershipProof]::Hash($ownedBytes)){throw 'Foreign State drift retained before Host undo'}
+    if($ownedBytes -and [RooIndustriesInstalledOwnershipProof]::Hash($liveBytes) -cne [RooIndustriesInstalledOwnershipProof]::Hash($ownedBytes)){throw 'Foreign State drift retained before Host undo'}
     $live=State-Object $liveBytes
     if(@($live.profiles|Where-Object id -CEQ $profile).Count -eq 0){return}
     $path=Join-Path $private ('undo-'+[Guid]::NewGuid().ToString('N')+'.json')
@@ -210,8 +210,8 @@ try {
     Check ($versions.Count -eq 1 -and $versions[0] -ceq '0.10.0-beta') 'Production 0.10.0-beta is installed in Program Files'
     $stateKey='SOFTWARE\RooIndustriesOptimizationSuite\Tweaks\'+$sid
     $beforeBytes=State-Bytes;$before=State-Object $beforeBytes
-    $k=[RooInstalledOwnershipProof]::Open([Microsoft.Win32.RegistryHive]::LocalMachine,$stateKey)
-    try{$stateDescriptor=$k.GetAccessControl().GetSecurityDescriptorSddlForm([Security.AccessControl.AccessControlSections]'Access, Owner, Group');$stateOther=[RooInstalledOwnershipProof]::OtherValues($k);[uint32]$t=0;if($null -ne [RooInstalledOwnershipProof]::Read($k,'Pending',[ref]$t)){throw 'Pending tweak operation retained'}}finally{$k.Dispose()}
+    $k=[RooIndustriesInstalledOwnershipProof]::Open([Microsoft.Win32.RegistryHive]::LocalMachine,$stateKey)
+    try{$stateDescriptor=$k.GetAccessControl().GetSecurityDescriptorSddlForm([Security.AccessControl.AccessControlSections]'Access, Owner, Group');$stateOther=[RooIndustriesInstalledOwnershipProof]::OtherValues($k);[uint32]$t=0;if($null -ne [RooIndustriesInstalledOwnershipProof]::Read($k,'Pending',[ref]$t)){throw 'Pending tweak operation retained'}}finally{$k.Dispose()}
     $menus=Menu-Rows
     Check (Menu-Absent) 'The file ownership menu is absent before the step'
     Check (@($before.profiles|ForEach-Object {$_.selections}|Where-Object settingId -CEQ $filesId).Count -eq 0) 'No existing profile owns setting 693'
@@ -233,7 +233,7 @@ try {
     $plan|Add-Member -NotePropertyName reviewHash -NotePropertyValue $hash
     $ownedBytes=Observe-OwnedState $reply $plan
     $k=Open-ClassesKey $commandKey
-    try{[uint32]$t=0;$raw=[RooInstalledOwnershipProof]::Read($k,'',[ref]$t);$actual=[Text.Encoding]::Unicode.GetString($raw).TrimEnd([char]0)}finally{if($k){$k.Dispose()}}
+    try{[uint32]$t=0;$raw=[RooIndustriesInstalledOwnershipProof]::Read($k,'',[ref]$t);$actual=[Text.Encoding]::Unicode.GetString($raw).TrimEnd([char]0)}finally{if($k){$k.Dispose()}}
     Check ($reply.changed -eq $true -and $reply.replayed -eq $false -and $t -eq 1 -and $actual -ceq $expected) 'Setting 693 applies the exact installed app ownership-review command' $actual
     Check (Other-Menus-DuringApply (Menu-Rows) @($change.before.missingKeys|ForEach-Object {if($_.StartsWith($sid+'_Classes\',[StringComparison]::OrdinalIgnoreCase)){'Software\Classes\'+$_.Substring(($sid+'_Classes\').Length)}else{$_}})) 'Applying setting 693 preserves every other menu key'
     Undo-OwnProfile
@@ -256,7 +256,7 @@ finally {
             $mutex=[Threading.Mutex]::new($false,('Global\RooIndustriesWindowsSettings-'+$context.storeId.Split(':')[1]))
             try{$locked=$mutex.WaitOne(0)}catch [Threading.AbandonedMutexException]{$locked=$true}
             if(-not$locked){throw 'Another Windows settings operation is in progress'}
-            [RooInstalledOwnershipProof]::RestoreState($stateKey,$ownedBytes,$beforeBytes,$stateDescriptor,$stateOther)
+            [RooIndustriesInstalledOwnershipProof]::RestoreState($stateKey,$ownedBytes,$beforeBytes,$stateDescriptor,$stateOther)
             $stateRestored=$true
         }catch{$cleanupFailure='State fixture cleanup: '+$_.Exception.Message}
         finally{if($locked){$mutex.ReleaseMutex()};if($mutex){$mutex.Dispose()}}

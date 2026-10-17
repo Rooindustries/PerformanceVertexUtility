@@ -231,7 +231,7 @@ if ($signing) {
         $signature = Get-AuthenticodeSignature -LiteralPath (Get-ReleaseToolPath $file.FullName)
         if ($signature.Status -eq 'NotSigned') {
             $relative = $file.FullName.Substring($stage.Length + 1)
-            if ($relative -in $signFiles) { throw ('A Roo-built PE is unsigned: ' + $relative) }
+            if ($relative -in $signFiles) { throw ('A Roo Industries-built PE is unsigned: ' + $relative) }
             $unsignedFiles += $relative
         }
     }

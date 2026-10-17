@@ -18,7 +18,7 @@ $sid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
 if($manifest.protocol -cne 'roo-industries-source-snapshot/v2' -or $manifest.machine -ine $env:COMPUTERNAME -or $manifest.sid -cne $sid -or $manifest.frameId -cne $FixtureId){throw 'Source fixture scope differs'}
 foreach($file in $manifest.files.PSObject.Properties){$path=[IO.Path]::GetFullPath((Join-Path $Source $file.Name));if(-not$path.StartsWith($Source+'\',[StringComparison]::OrdinalIgnoreCase)){throw 'Source traversal'};Assert-GiProtected ([IO.Path]::GetDirectoryName($path));if((Get-Item -LiteralPath $path).Attributes -band [IO.FileAttributes]::ReparsePoint -or (Get-FileHash -LiteralPath $path).Hash -ine $file.Value){throw ('Staged source changed: '+$file.Name)}}
 . (Join-Path $Source 'tools\validation\LoadTimes\CleanupOwnership.Common.ps1')
-function Get-GiDirectoryId([string]$Path){$handle=[RooValidationOwnership.Native]::CreateFile($Path,0,7,[IntPtr]::Zero,3,0x02200000,[IntPtr]::Zero);try{if($handle.IsInvalid){throw 'Cannot identify fixture folder'};[RooValidationOwnership.Native]::FileId($handle)}finally{$handle.Dispose()}}
+function Get-GiDirectoryId([string]$Path){$handle=[RooIndustriesValidationOwnership.Native]::CreateFile($Path,0,7,[IntPtr]::Zero,3,0x02200000,[IntPtr]::Zero);try{if($handle.IsInvalid){throw 'Cannot identify fixture folder'};[RooIndustriesValidationOwnership.Native]::FileId($handle)}finally{$handle.Dispose()}}
 $runRoot=Split-Path $Source -Parent
 if((Split-Path $Work -Parent) -ine $runRoot -or (Split-Path $Work -Leaf) -cne ('gi-'+$FixtureId)){throw 'GI work must be this source frame GUID child'}
 $ownerPath=Join-Path $Work 'fixture-owner.json';$statePath=Join-Path $Work 'state.json'
@@ -95,13 +95,13 @@ $probeExe=Join-Path $Work 'probe\RooIndustriesGovernorProbe.exe'
 function Assert-GiProbeReceipt($Row){
  if(-not$Row -or -not$Row.identity -or -not$Row.file -or -not$Row.identity.pid -or -not$Row.identity.creationTimeFileTimeUtc -or -not$Row.identity.imagePath -or -not$Row.file.id -or -not$Row.file.hash -or $Row.file.path -ine $probeExe){throw 'Incomplete or foreign GI probe receipt; retained'}
  $file=Open-OwnedProbe $Row.file
- try{if($Row.identity.imagePath -ine [RooValidationOwnership.Native]::Canonical($Row.file.path)){throw 'Probe receipt image differs; retained'}}finally{$file.Dispose()}
+ try{if($Row.identity.imagePath -ine [RooIndustriesValidationOwnership.Native]::Canonical($Row.file.path)){throw 'Probe receipt image differs; retained'}}finally{$file.Dispose()}
 }
 function Get-GiProbe($Row){
  Assert-GiProbeReceipt $Row
  $p=Get-Process -Id $Row.identity.pid -ErrorAction SilentlyContinue
  if(-not$p){return $null}
- try{if([RooValidationOwnership.Native]::Created($p.Handle).ToString() -cne $Row.identity.creationTimeFileTimeUtc -or [RooValidationOwnership.Native]::Image($p.Handle) -ine $Row.identity.imagePath){throw 'GI probe native identity differs; retained'};return $p}catch{$p.Dispose();throw}
+ try{if([RooIndustriesValidationOwnership.Native]::Created($p.Handle).ToString() -cne $Row.identity.creationTimeFileTimeUtc -or [RooIndustriesValidationOwnership.Native]::Image($p.Handle) -ine $Row.identity.imagePath){throw 'GI probe native identity differs; retained'};return $p}catch{$p.Dispose();throw}
 }
 function Get-Probe([int]$Id){$rows=@($state.probes|Where-Object {$_.identity.pid -eq $Id -and -not$_.stopped});if($rows.Count -ne 1){throw 'Probe has no unique retained receipt'};Get-GiProbe $rows[0]}
 function Start-Probe {
@@ -158,7 +158,7 @@ function Workers {
  $identity=$status.state.host
  if(-not$identity -or -not$identity.creationTimeFileTimeUtc -or $identity.executablePath -ine $hostExe){throw 'Governor status host identity differs'}
  $p=Get-Process -Id $identity.processId -ErrorAction Stop
- try{if([RooValidationOwnership.Native]::Created($p.Handle).ToString() -cne $identity.creationTimeFileTimeUtc -or [RooValidationOwnership.Native]::Image($p.Handle) -ine [RooValidationOwnership.Native]::Canonical($hostExe)){throw 'Governor native host identity differs'}}finally{$p.Dispose()}
+ try{if([RooIndustriesValidationOwnership.Native]::Created($p.Handle).ToString() -cne $identity.creationTimeFileTimeUtc -or [RooIndustriesValidationOwnership.Native]::Image($p.Handle) -ine [RooIndustriesValidationOwnership.Native]::Canonical($hostExe)){throw 'Governor native host identity differs'}}finally{$p.Dispose()}
  $row=Get-CimInstance Win32_Process -Filter ('ProcessId='+[int]$identity.processId)
  if(-not$row -or $row.ExecutablePath -ine $hostExe){throw 'Governor process row contradicts native identity'}
  return @($row)

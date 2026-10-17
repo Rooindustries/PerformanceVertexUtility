@@ -8,7 +8,7 @@ using System.Threading;
 using Accessibility;
 using System.Collections.Generic;
 
-namespace RooTour {
+namespace RooIndustriesTour {
  public static class Desktop {
   [StructLayout(LayoutKind.Sequential)] public struct Rect { public int Left,Top,Right,Bottom; public int Width { get { return Right-Left; } } public int Height { get { return Bottom-Top; } } }
   [StructLayout(LayoutKind.Sequential)] struct Point { public int X,Y; }

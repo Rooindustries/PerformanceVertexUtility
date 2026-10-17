@@ -119,7 +119,7 @@ function Assert-Wizard($Window) {
     $receipts=@($owned|Where-Object {$_.Identity.pid -eq $Window.Current.ProcessId -and -not$_.process.HasExited})
     if($receipts.Count -ne 1){throw 'Native wizard has no unique owned process receipt'}
     $receipt=$receipts[0];$handle=$receipt.process.Handle
-    if($receipt.process.HasExited -or [RooValidationOwnership.Native]::Created($handle).ToString() -cne $receipt.Identity.creationTimeFileTimeUtc -or [RooValidationOwnership.Native]::Image($handle) -cne $receipt.Identity.imagePath){throw 'Native wizard identity changed; refuse input'}
+    if($receipt.process.HasExited -or [RooIndustriesValidationOwnership.Native]::Created($handle).ToString() -cne $receipt.Identity.creationTimeFileTimeUtc -or [RooIndustriesValidationOwnership.Native]::Image($handle) -cne $receipt.Identity.imagePath){throw 'Native wizard identity changed; refuse input'}
 }
 function Button($Window,[string]$Pattern) {
     $buttons=@($Window.FindAll([Windows.Automation.TreeScope]::Descendants,[Windows.Automation.Condition]::TrueCondition)|Where-Object {($_.Current.ControlType -eq [Windows.Automation.ControlType]::Button -or $_.Current.ClassName -ceq 'TNewButton') -and $_.Current.IsEnabled -and -not$_.Current.IsOffscreen -and $_.Current.Name -match $Pattern})
@@ -156,7 +156,7 @@ function Read-NotepadStarts($Watcher) { $decoded=ConvertFrom-Json -InputObject $
 function Is-NotepadImage([string]$Image) { $Image -ieq ('\\?\'+(Join-Path ([Environment]::SystemDirectory) 'notepad.exe')) -or $Image -match '^\\\\\?\\C:\\Program Files\\WindowsApps\\Microsoft\.WindowsNotepad_[^\\]+\\Notepad\\Notepad\.exe$' }
 function Get-NotepadTabs {
     $windows=@([Windows.Automation.AutomationElement]::RootElement.FindAll([Windows.Automation.TreeScope]::Children,[Windows.Automation.Condition]::TrueCondition)|Where-Object {$_.Current.Name -match 'Notepad'})
-    @(foreach($window in $windows){$p=Get-Process -Id $window.Current.ProcessId;$h=$p.Handle;try{if(-not(Is-NotepadImage ([RooValidationOwnership.Native]::Image($h)))){continue};$tabs=@($window.FindAll([Windows.Automation.TreeScope]::Descendants,[Windows.Automation.PropertyCondition]::new([Windows.Automation.AutomationElement]::ControlTypeProperty,[Windows.Automation.ControlType]::TabItem))|ForEach-Object {$selected=$false;$pattern=$null;if($_.TryGetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern,[ref]$pattern)){$selected=$pattern.Current.IsSelected};@{key=($_.GetRuntimeId() -join ':');name=$_.Current.Name;selected=$selected}});@{pid=$p.Id;created=[RooValidationOwnership.Native]::Created($h).ToString();image=[RooValidationOwnership.Native]::Image($h);hwnd=$window.Current.NativeWindowHandle;tabs=$tabs}}finally{$p.Dispose()}})
+    @(foreach($window in $windows){$p=Get-Process -Id $window.Current.ProcessId;$h=$p.Handle;try{if(-not(Is-NotepadImage ([RooIndustriesValidationOwnership.Native]::Image($h)))){continue};$tabs=@($window.FindAll([Windows.Automation.TreeScope]::Descendants,[Windows.Automation.PropertyCondition]::new([Windows.Automation.AutomationElement]::ControlTypeProperty,[Windows.Automation.ControlType]::TabItem))|ForEach-Object {$selected=$false;$pattern=$null;if($_.TryGetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern,[ref]$pattern)){$selected=$pattern.Current.IsSelected};@{key=($_.GetRuntimeId() -join ':');name=$_.Current.Name;selected=$selected}});@{pid=$p.Id;created=[RooIndustriesValidationOwnership.Native]::Created($h).ToString();image=[RooIndustriesValidationOwnership.Native]::Image($h);hwnd=$window.Current.NativeWindowHandle;tabs=$tabs}}finally{$p.Dispose()}})
 }
 function Restore-NotepadTabs($Before,$Starts,[DateTime]$Started) {
     $closed=[Collections.Generic.List[object]]::new()
@@ -165,13 +165,13 @@ function Restore-NotepadTabs($Before,$Starts,[DateTime]$Started) {
     foreach($window in $windows){
         $p=Get-Process -Id $window.Current.ProcessId;$h=$p.Handle
         try{
-            $created=[RooValidationOwnership.Native]::Created($h).ToString();$image=[RooValidationOwnership.Native]::Image($h);if(-not(Is-NotepadImage $image)){continue};$old=@($Before|Where-Object {$_.pid -eq $p.Id -and $_.created -ceq $created -and $_.image -ceq $image -and $_.hwnd -eq $window.Current.NativeWindowHandle})
+            $created=[RooIndustriesValidationOwnership.Native]::Created($h).ToString();$image=[RooIndustriesValidationOwnership.Native]::Image($h);if(-not(Is-NotepadImage $image)){continue};$old=@($Before|Where-Object {$_.pid -eq $p.Id -and $_.created -ceq $created -and $_.image -ceq $image -and $_.hwnd -eq $window.Current.NativeWindowHandle})
             $tabs=@($window.FindAll([Windows.Automation.TreeScope]::Descendants,[Windows.Automation.PropertyCondition]::new([Windows.Automation.AutomationElement]::ControlTypeProperty,[Windows.Automation.ControlType]::TabItem)))
             $matches=@($tabs|Where-Object {$key=$_.GetRuntimeId() -join ':';$_.Current.Name -match '^README-BETA\.txt(?:\. Unmodified\.)?$' -and @($old|ForEach-Object {$_.tabs}|Where-Object {$_.key -ceq $key}).Count -eq 0})
             if($matches.Count -gt 1){throw 'README tab ambiguous; existing Notepad retained'}
             foreach($tab in $matches){$candidates.Add(@{window=$window;tab=$tab;pid=$p.Id;created=$created;image=$image})}
             if($old.Count -eq 0 -and $tabs.Count -eq 0 -and $window.Current.Name -ceq 'README-BETA.txt - Notepad'){
-                $captures=@($Starts|Where-Object {$_.nativeJson -and -not$_.error}|ForEach-Object {$capture=$_;$native=$capture.nativeJson|ConvertFrom-Json;if($native.pid -eq $p.Id -and $native.creationTimeFileTimeUtc -ceq $created -and [RooValidationOwnership.Native]::Canonical($native.imagePath) -ceq $image){@{capture=$capture;native=$native}}})
+                $captures=@($Starts|Where-Object {$_.nativeJson -and -not$_.error}|ForEach-Object {$capture=$_;$native=$capture.nativeJson|ConvertFrom-Json;if($native.pid -eq $p.Id -and $native.creationTimeFileTimeUtc -ceq $created -and [RooIndustriesValidationOwnership.Native]::Canonical($native.imagePath) -ceq $image){@{capture=$capture;native=$native}}})
                 if($captures.Count -ne 1){throw 'Classic README lacks one exact native launch capture; retain'}
                 $native=$captures[0].native;$argv=@([BlackwellReadmeControls]::Args([BlackwellNotepadStarts]::Command($h)));$parent=@($owned|Where-Object {$_.Identity.pid -eq $native.parent.pid -and [long]$_.Identity.creationTimeFileTimeUtc -le [long]$created})
                 if($native.imagePath -ine (Join-Path $system 'notepad.exe') -or $native.session -ne $session -or [DateTime]::FromFileTimeUtc([long]$created) -lt $Started -or $argv.Count -ne 2 -or $argv[0] -ine (Join-Path $system 'notepad.exe') -or $argv[1] -ine $readme -or $parent.Count -ne 1 -or ($native.parent.creationTimeFileTimeUtc -and $native.parent.creationTimeFileTimeUtc -cne $parent[0].Identity.creationTimeFileTimeUtc)){throw 'Classic README identity/argv/parent differs; retain'}
@@ -185,7 +185,7 @@ function Restore-NotepadTabs($Before,$Starts,[DateTime]$Started) {
     foreach($candidate in $candidates){
         $p=Get-Process -Id $candidate.pid;$h=$p.Handle
         try{
-            if($p.HasExited -or [RooValidationOwnership.Native]::Created($h).ToString() -cne $candidate.created -or [RooValidationOwnership.Native]::Image($h) -cne $candidate.image){throw 'README tab window identity differs; retain'}
+            if($p.HasExited -or [RooIndustriesValidationOwnership.Native]::Created($h).ToString() -cne $candidate.created -or [RooIndustriesValidationOwnership.Native]::Image($h) -cne $candidate.image){throw 'README tab window identity differs; retain'}
             $tab=$candidate.tab;$buttons=@($tab.FindAll([Windows.Automation.TreeScope]::Descendants,[Windows.Automation.PropertyCondition]::new([Windows.Automation.AutomationElement]::ControlTypeProperty,[Windows.Automation.ControlType]::Button))|Where-Object {$_.Current.Name -ceq 'Close Tab' -and $_.Current.AutomationId -ceq 'CloseButton'})
             if($buttons.Count -ne 1 -or $tab.Current.Name -notmatch '^README-BETA\.txt(?:\. Unmodified\.)?$'){throw 'README tab close identity differs; retained'}
             $tabKey=$tab.GetRuntimeId() -join ':';$tabName=$tab.Current.Name;$buttons[0].GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke();$closed.Add(@{pid=$p.Id;created=$candidate.created;image=$candidate.image;tabKey=$tabKey;name=$tabName});Start-Sleep -Milliseconds 200
@@ -197,7 +197,7 @@ function Restore-NotepadTabs($Before,$Starts,[DateTime]$Started) {
     foreach($candidate in $classic){
         $p=Get-Process -Id $candidate.pid;$h=$p.Handle
         try{
-            if($p.HasExited -or [RooValidationOwnership.Native]::Created($h).ToString() -cne $candidate.created -or [RooValidationOwnership.Native]::Image($h) -cne $candidate.image -or [BlackwellNotepadStarts]::Command($h) -cne $candidate.commandLine){throw 'Classic README changed before WM_CLOSE; retain'}
+            if($p.HasExited -or [RooIndustriesValidationOwnership.Native]::Created($h).ToString() -cne $candidate.created -or [RooIndustriesValidationOwnership.Native]::Image($h) -cne $candidate.image -or [BlackwellNotepadStarts]::Command($h) -cne $candidate.commandLine){throw 'Classic README changed before WM_CLOSE; retain'}
             $hwnd=$candidate.window.Current.NativeWindowHandle;[BlackwellReadmeControls]::CloseClassicWindow($hwnd,$p.Id,'README-BETA.txt - Notepad');$until=[DateTime]::UtcNow.AddSeconds(5)
             while([DateTime]::UtcNow -lt $until -and [BlackwellReadmeControls]::IsWindow([IntPtr]$hwnd)){Start-Sleep -Milliseconds 100}
             if([BlackwellReadmeControls]::IsWindow([IntPtr]$hwnd)){throw 'Classic README remained or save prompt appeared; no further input'}
@@ -224,7 +224,7 @@ function Own-Reported($Identity,[string]$ExpectedImage) {
     try{
         $receipt=New-OwnedProcess $process
         if(-not$receipt){$process.Dispose();return $null}
-        if($receipt.Identity.creationTimeFileTimeUtc -cne [string]$Identity.creationTimeFileTimeUtc -or $receipt.Identity.imagePath -ine [RooValidationOwnership.Native]::Canonical($ExpectedImage)){throw 'Reported process identity changed; retained'}
+        if($receipt.Identity.creationTimeFileTimeUtc -cne [string]$Identity.creationTimeFileTimeUtc -or $receipt.Identity.imagePath -ine [RooIndustriesValidationOwnership.Native]::Canonical($ExpectedImage)){throw 'Reported process identity changed; retained'}
         $existing=@($owned|Where-Object {$_.Identity.pid -eq $receipt.Identity.pid -and $_.Identity.creationTimeFileTimeUtc -ceq $receipt.Identity.creationTimeFileTimeUtc -and $_.Identity.imagePath -ceq $receipt.Identity.imagePath})
         if($existing.Count){$process.Dispose();return $existing[0]}
         $owned.Add($receipt);$result.ownedProcesses=@($owned|ForEach-Object Identity);Save-Result;return $receipt
@@ -233,10 +233,10 @@ function Own-Reported($Identity,[string]$ExpectedImage) {
 function Has-OwnedAncestry($Native) {
     $cursor=$Native;$seen=[Collections.Generic.HashSet[string]]::new()
     while($cursor -and $cursor.pid -is [int] -and $cursor.creationTimeFileTimeUtc -and $cursor.imagePath -and $seen.Add(([string]$cursor.pid+':'+$cursor.creationTimeFileTimeUtc))){
-        $image=[RooValidationOwnership.Native]::Canonical($cursor.imagePath)
+        $image=[RooIndustriesValidationOwnership.Native]::Canonical($cursor.imagePath)
         $matches=@($owned|Where-Object {$_.Identity.pid -eq $cursor.pid -and $_.Identity.creationTimeFileTimeUtc -ceq [string]$cursor.creationTimeFileTimeUtc -and $_.Identity.imagePath -ieq $image})
         if($matches.Count -gt 1){throw 'Ambiguous owned native ancestry'}
-        if($matches.Count -eq 1){$receipt=$matches[0];return [RooValidationOwnership.Native]::Created($receipt.handle).ToString() -ceq $receipt.Identity.creationTimeFileTimeUtc -and [RooValidationOwnership.Native]::Image($receipt.handle) -ieq $receipt.Identity.imagePath}
+        if($matches.Count -eq 1){$receipt=$matches[0];return [RooIndustriesValidationOwnership.Native]::Created($receipt.handle).ToString() -ceq $receipt.Identity.creationTimeFileTimeUtc -and [RooIndustriesValidationOwnership.Native]::Image($receipt.handle) -ieq $receipt.Identity.imagePath}
         $parent=$cursor.parent
         if(-not$parent -or $parent.pid -isnot [int] -or -not$parent.creationTimeFileTimeUtc -or -not$parent.imagePath){return $false}
         try{$next=[BlackwellNativeProbe]::Inspect($parent.pid)|ConvertFrom-Json}catch{return $false}
@@ -348,7 +348,7 @@ try {
                 $window=$windows[0];$wp=Get-Process -Id $window.Current.ProcessId -ErrorAction Stop
                 if($wp.SessionId -ne $session -or $wp.StartTime.ToUniversalTime() -lt $started){throw 'Wizard process not from this desktop attempt'}
                 $wizardNative=[BlackwellNativeProbe]::Inspect($wp.Id)|ConvertFrom-Json
-                if([RooValidationOwnership.Native]::Created($wp.Handle).ToString() -cne $wizardNative.creationTimeFileTimeUtc -or [RooValidationOwnership.Native]::Image($wp.Handle) -ine [RooValidationOwnership.Native]::Canonical($wizardNative.imagePath)){throw 'Wizard native identity changed before ancestry verification'}
+                if([RooIndustriesValidationOwnership.Native]::Created($wp.Handle).ToString() -cne $wizardNative.creationTimeFileTimeUtc -or [RooIndustriesValidationOwnership.Native]::Image($wp.Handle) -ine [RooIndustriesValidationOwnership.Native]::Canonical($wizardNative.imagePath)){throw 'Wizard native identity changed before ancestry verification'}
                 if(-not(Has-OwnedAncestry $wizardNative)){throw 'Wizard lacks an owned native caller/setup ancestry; refuse input'}
                 if(-not$case.wizardProcess){$receipt=Own-Reported $wizardNative $wizardNative.imagePath;if(-not$receipt){throw 'Verified wizard exited before ownership'};$case.wizardProcess=$wizardNative;Capture ($variant+'-wizard')}
                 $wp.Dispose()

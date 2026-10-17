@@ -44,7 +44,7 @@ function Assert-HistoricalRemovedInstallation {
 function Assert-HistoricalState([string]$ExpectedHash,[long]$Length) {
     $k=[Microsoft.Win32.Registry]::LocalMachine.OpenSubKey(($stateRoot+'\Tweaks\'+$sid),$false)
     if(-not$k){throw 'Original State key is missing; retained'}
-    try{if($k.GetValueNames() -ccontains 'Pending'){throw 'Pending State exists; retained'};$value=[RooHistoricalBlackwell.Raw]::Read($k,'State');if($value.Kind -ne 3 -or $value.Bytes.Length -ne $Length -or (Hash-HistoricalBytes $value.Bytes) -cne $ExpectedHash){throw 'Exact typed State differs; retained'}}finally{$k.Dispose()}
+    try{if($k.GetValueNames() -ccontains 'Pending'){throw 'Pending State exists; retained'};$value=[RooIndustriesHistoricalBlackwell.Raw]::Read($k,'State');if($value.Kind -ne 3 -or $value.Bytes.Length -ne $Length -or (Hash-HistoricalBytes $value.Bytes) -cne $ExpectedHash){throw 'Exact typed State differs; retained'}}finally{$k.Dispose()}
 }
 function Assert-HistoricalPreservedTasks($Capture) {
     $old=Read-HistoricalJson (Join-Path $Frame 'tasks.json');$now=@(Get-HistoricalTasks);$names=@($Capture.historicalTaskNames)
@@ -85,7 +85,7 @@ function Get-HistoricalActivationRegistry($Plan,[switch]$Restored) {
 function Assert-HistoricalActivationState($Plan,[Microsoft.Win32.RegistryKey]$Hive,$Expected) {
     $k=$Hive.OpenSubKey($Plan.StateKey,$false)
     if(-not$k){throw 'Original State key is missing; retained'}
-    try{if($k.GetValueNames() -contains 'Pending'){throw 'Pending State exists; retained'};$value=[RooHistoricalBlackwell.Raw]::Read($k,'State');$hash=if($Expected.sha256){$Expected.sha256}else{$Expected.hash};if($value.Kind -ne 3 -or $value.Bytes.Length -ne $Expected.length -or (Hash-HistoricalBytes $value.Bytes) -cne $hash){throw 'Exact typed State differs; retained'}}finally{$k.Dispose()}
+    try{if($k.GetValueNames() -contains 'Pending'){throw 'Pending State exists; retained'};$value=[RooIndustriesHistoricalBlackwell.Raw]::Read($k,'State');$hash=if($Expected.sha256){$Expected.sha256}else{$Expected.hash};if($value.Kind -ne 3 -or $value.Bytes.Length -ne $Expected.length -or (Hash-HistoricalBytes $value.Bytes) -cne $hash){throw 'Exact typed State differs; retained'}}finally{$k.Dispose()}
 }
 function Invoke-HistoricalActivation($Plan,[Microsoft.Win32.RegistryKey]$Hive,[scriptblock]$AssertIdle={}) {
     $frame=$Plan.Frame;$live=$Plan.Live
@@ -136,7 +136,7 @@ function Invoke-HistoricalActivation($Plan,[Microsoft.Win32.RegistryKey]$Hive,[s
                 Save-RecoveryJson (Join-Path $frame ('restore-marker-'+$i+'-intent.json')) @{key=$marker.key;name=$marker.name;expected=$marker;desired='<absent-value>'}
                 Assert-HistoricalActivationState $Plan $Hive $Plan.ExpectedState
                 Assert-RecoveryEqual (Historical-RegistryLines $remaining) (Historical-RegistryLines @(Get-HistoricalRegistry $Plan.RegistryRoots -Hive $Hive)) 'untargeted registry immediately before marker removal'
-                $value=[RooHistoricalBlackwell.Raw]::Read($key,$marker.name)
+                $value=[RooIndustriesHistoricalBlackwell.Raw]::Read($key,$marker.name)
                 if($value.Kind -ne $marker.kind -or $value.Bytes.Length -ne $marker.length -or (Hash-HistoricalBytes $value.Bytes) -cne $marker.sha256){throw 'Current-root marker changed immediately before removal; retained'}
                 $key.DeleteValue($marker.name,$true);$key.Flush()
                 $remaining=@($remaining|Where-Object {-not($_.key -ceq $marker.key -and $_.name -ceq $marker.name)});$i++
@@ -147,9 +147,9 @@ function Invoke-HistoricalActivation($Plan,[Microsoft.Win32.RegistryKey]$Hive,[s
         try{
             Assert-RecoveryEqual (Historical-RegistryLines $remaining) (Historical-RegistryLines @(Get-HistoricalRegistry $Plan.RegistryRoots -Hive $Hive)) 'registry immediately before State write'
             if($key.GetValueNames() -contains 'Pending'){throw 'Pending State appeared; retained'}
-            $state=[RooHistoricalBlackwell.Raw]::Read($key,'State')
+            $state=[RooIndustriesHistoricalBlackwell.Raw]::Read($key,'State')
             if($state.Kind -ne 3 -or $state.Bytes.Length -ne $Plan.ExpectedState.length -or (Hash-HistoricalBytes $state.Bytes) -cne $Plan.ExpectedState.sha256){throw 'State changed immediately before write; retained'}
-            [RooHistoricalBlackwell.Raw]::Write($key,'State',3,$originalBytes)
+            [RooIndustriesHistoricalBlackwell.Raw]::Write($key,'State',3,$originalBytes)
         }finally{$key.Dispose()}
     }finally{$originalFile.Dispose()}
     Assert-HistoricalActivationState $Plan $Hive $Plan.OriginalState
@@ -206,7 +206,7 @@ if($Phase -ceq 'Capture'){
     $baseline=Read-HistoricalJson (Join-Path $original 'machine-state.json')
     if($baseline.appFolder -ne $false -or @($baseline.uninstallEntries).Count -ne 0 -or @($baseline.productKeys).Count -ne 0 -or $baseline.tweakStateKey -cne 'C90311CD2646AC0DCF74272CDF80B271621BBE19F04DE8BF4E0E57D0DDFA2687'){throw 'Historical baseline contradicts reviewed identity'}
     $metadataMatches=$true;try{$metadata=Assert-HistoricalMetadata (Join-Path $original 'RooIndustriesOptimizationSuite') (Join-Path $original 'RooIndustriesOptimizationSuite.fingerprint.txt')}catch{$metadataMatches=$false;$metadata=@([IO.File]::ReadAllLines((Join-Path $original 'RooIndustriesOptimizationSuite.fingerprint.txt'),[Text.Encoding]::UTF8))}
-    $old=[RooHistoricalBlackwell.Export]::State((Join-Path $Frame 'original-backup\tweak-state.reg'),('HKEY_LOCAL_MACHINE\'+$stateRoot+'\Tweaks\'+$sid))
+    $old=[RooIndustriesHistoricalBlackwell.Export]::State((Join-Path $Frame 'original-backup\tweak-state.reg'),('HKEY_LOCAL_MACHINE\'+$stateRoot+'\Tweaks\'+$sid))
     Save-HistoricalBinary (Join-Path $Frame 'original-state.bin') $old
     $manifests=@(foreach($name in '.migrated','.migrating'){$path=Join-Path (Join-Path $Frame 'current-RooIndustriesOptimizationSuite') $name;if(Test-Path -LiteralPath $path){@{name=$name;hash=(Get-FileHash -LiteralPath $path).Hash;manifest=(Read-HistoricalJson $path)}}})
     $capture=[ordered]@{protocol='blackwell-historical-capture/v1';machine=$env:COMPUTERNAME;sid=$sid;frame=$Frame;atUtc=[DateTime]::UtcNow.ToString('o');trees=$trees;registry=$registry;siblings=$siblings;tasksHash=(Get-FileHash -LiteralPath (Join-Path $Frame 'tasks.json')).Hash;taskCount=$tasks.Count;historicalTaskNames=@($baseline.tasks);historicalTaskDefinitionsAvailable=$false;historicalEarliestByteHashesAvailable=$false;originalMetadataMatches=$metadataMatches;originalItems=$metadata.Count;baselineHash=(Get-FileHash -LiteralPath (Join-Path $original 'machine-state.json')).Hash;exportHash=(Get-FileHash -LiteralPath (Join-Path $original 'tweak-state.reg')).Hash;originalState=@{hash=(Hash-HistoricalBytes $old);length=$old.Length;kind=3};migrationManifests=$manifests;rollbackInstaller=@{source=$installer;hash=$installerHash;length=109923513};installedHashes=$expected;elapsedMs=$sw.ElapsedMilliseconds}

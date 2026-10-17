@@ -148,7 +148,7 @@ function Stop-RooIndustriesApp {
                 if (-not $receipt) { $process.Dispose(); continue }
                 $current=Process-Row $child.ProcessId
                 if (-not $current) { $process.Dispose(); continue }
-                if ($current.CreationDate -ne $child.CreationDate -or $current.ExecutablePath -ine $child.ExecutablePath -or $current.CommandLine -cne $child.CommandLine -or $current.ParentProcessId -ne $child.ParentProcessId -or $receipt.Identity.imagePath -ine [RooValidationOwnership.Native]::Canonical($child.ExecutablePath)) { throw 'App child identity changed; retained.' }
+                if ($current.CreationDate -ne $child.CreationDate -or $current.ExecutablePath -ine $child.ExecutablePath -or $current.CommandLine -cne $child.CommandLine -or $current.ParentProcessId -ne $child.ParentProcessId -or $receipt.Identity.imagePath -ine [RooIndustriesValidationOwnership.Native]::Canonical($child.ExecutablePath)) { throw 'App child identity changed; retained.' }
                 $record=[ordered]@{identity=$receipt.Identity;parent=$child.ParentProcessId;parentIdentity=$script:AppReceipt.Identity;commandLine=$child.CommandLine;capturedUtc=[DateTime]::UtcNow.ToString('o');closeRequestedUtc=$null;exited=$null;exitUtc=$null;observedUtc=$null;waitBudgetSeconds=60}
                 $waitRows.Add($record)
                 $held+=@{process=$process;identity=$receipt.Identity;row=$child;record=$record}

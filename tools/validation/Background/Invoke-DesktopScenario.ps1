@@ -6,7 +6,7 @@ Add-Type -AssemblyName UIAutomationClient,UIAutomationTypes,System.Drawing,Syste
 Add-Type -Path (Join-Path $Source 'tools\validation\Background\Oracle.cs')
 Add-Type @'
 using System;using System.Runtime.InteropServices;
-public static class RooBackgroundUi {
+public static class RooIndustriesBackgroundUi {
  [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
  [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr h,IntPtr after,int x,int y,int width,int height,uint flags);
@@ -14,7 +14,7 @@ public static class RooBackgroundUi {
  [DllImport("user32.dll")] public static extern void mouse_event(uint flags,uint x,uint y,uint data,UIntPtr extra);
 }
 '@
-[RooBackgroundUi]::SetProcessDPIAware()|Out-Null
+[RooIndustriesBackgroundUi]::SetProcessDPIAware()|Out-Null
 $directory=Join-Path $OutRoot $Scenario;[IO.Directory]::CreateDirectory($directory)|Out-Null
 $utf8=[Text.UTF8Encoding]::new($false);$owned=[Collections.Generic.List[object]]::new();$app=$null;$receipt=$null;$job=[IntPtr]::Zero;$denied=$null;$dacl=$null;$choicesPath=$null;$choicesBytes=$null;$serviceProfile=$null;$profileRecoveryOwned=$null
 $A=[Windows.Automation.AutomationElement];$TS=[Windows.Automation.TreeScope];$CT=[Windows.Automation.ControlType]
@@ -33,25 +33,25 @@ function SetValue([string]$id,[string]$value){(WaitFor {$e=ById $id;if($e -and $
 function Toggle([string]$id){$e=WaitFor {ById $id} 45 $id;$p=$e.GetCurrentPattern([Windows.Automation.TogglePattern]::Pattern);if([string]$p.Current.ToggleState -ne 'On'){$p.Toggle()}}
 function Nav([string]$name){$e=WaitFor {@(All|Where-Object {$_.Current.Name -eq $name -and $_.Current.ControlType -eq $CT::ListItem})|Select-Object -First 1} 45 $name;Activate $e}
 function FreshCombo([string]$id,[string]$name){@(All|Where-Object {$_.Current.ControlType -eq $CT::ComboBox -and $(if($id){$_.Current.AutomationId -eq $id}else{$_.Current.Name -eq $name})})|Select-Object -First 1}
-function Click($element){$r=$element.Current.BoundingRectangle;if($r.Width -le 0 -or $r.Height -le 0){throw 'UI element has no clickable bounds'};[RooBackgroundUi]::SetCursorPos([int]($r.X+$r.Width/2),[int]($r.Y+$r.Height/2))|Out-Null;[RooBackgroundUi]::mouse_event(2,0,0,0,[UIntPtr]::Zero);[RooBackgroundUi]::mouse_event(4,0,0,0,[UIntPtr]::Zero)}
+function Click($element){$r=$element.Current.BoundingRectangle;if($r.Width -le 0 -or $r.Height -le 0){throw 'UI element has no clickable bounds'};[RooIndustriesBackgroundUi]::SetCursorPos([int]($r.X+$r.Width/2),[int]($r.Y+$r.Height/2))|Out-Null;[RooIndustriesBackgroundUi]::mouse_event(2,0,0,0,[UIntPtr]::Zero);[RooIndustriesBackgroundUi]::mouse_event(4,0,0,0,[UIntPtr]::Zero)}
 function Options($combo){$id=$combo.Current.AutomationId;$name=$combo.Current.Name;Save ('dropdown-'+($id -replace '\W','-')+'.json') @{id=$id;name=$name;enabled=$combo.Current.IsEnabled;patterns=@($combo.GetSupportedPatterns()|ForEach-Object {$_.ProgrammaticName})};try{$combo.GetCurrentPattern([Windows.Automation.ScrollItemPattern]::Pattern).ScrollIntoView()}catch{};@(WaitFor {$fresh=FreshCombo $id $name;$fresh.GetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern).Expand();$items=@($fresh.FindAll($TS::Descendants,[Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty,$CT::ListItem)));if($items.Count){$items}} 90 ('dropdown choices '+$id+' '+$name))}
 function Choose($combo,[string]$pattern){$id=$combo.Current.AutomationId;$name=$combo.Current.Name;$items=@(Options $combo);$item=@($items|Where-Object {$_.Current.Name -like $pattern})|Select-Object -First 1;for($page=0;-not$item -and $page -lt 30;$page++){$fresh=FreshCombo $id $name;$scroll=@($fresh.FindAll($TS::Descendants,[Windows.Automation.Condition]::TrueCondition)|Where-Object {try{$_.GetCurrentPattern([Windows.Automation.ScrollPattern]::Pattern).Current.VerticallyScrollable}catch{$false}})|Select-Object -First 1;if($scroll){$scroll.GetCurrentPattern([Windows.Automation.ScrollPattern]::Pattern).Scroll([Windows.Automation.ScrollAmount]::NoAmount,[Windows.Automation.ScrollAmount]::LargeIncrement)}else{try{($items|Select-Object -Last 1).GetCurrentPattern([Windows.Automation.ScrollItemPattern]::Pattern).ScrollIntoView()}catch{break}};Start-Sleep -Milliseconds 100;$items=@($fresh.FindAll($TS::Descendants,[Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty,$CT::ListItem)));$item=@($items|Where-Object {$_.Current.Name -like $pattern})|Select-Object -First 1};if(-not$item){Save 'missing-choice-tree.json' (Tree);throw ('Choice missing: '+$pattern)};$names=@($items|ForEach-Object {$_.Current.Name});$errorText=$null;try{$item.GetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern).Select()}catch{$errorText=$_.Exception.Message};Start-Sleep -Milliseconds 500;$combo=FreshCombo $id $name;try{$combo.GetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern).Collapse()}catch{};Save ('choice-'+($id -replace '\W','-')+'.json') @{pattern=$pattern;choices=$names;selectionCallError=$errorText}}
 function ChooseId([string]$id,[string]$pattern){Choose (WaitFor {ById $id} 90 $id) $pattern}
 function Shot([string]$name){Save ($name+'-tree.json') (Tree);Save ($name+'-text.json') (Texts);$r=$window.Current.BoundingRectangle;$b=[Drawing.Bitmap]::new([int]$r.Width,[int]$r.Height);$g=[Drawing.Graphics]::FromImage($b);try{$g.CopyFromScreen([int]$r.X,[int]$r.Y,0,0,$b.Size);$b.Save((Join-Path $directory ($name+'.png')),[Drawing.Imaging.ImageFormat]::Png)}finally{$g.Dispose();$b.Dispose()}}
 function Fixture([string]$name){$path=Join-Path $directory ($name+'.exe');Copy-Item "$env:SystemRoot\System32\PING.EXE" $path;$p=Start-Process $path -ArgumentList '-t 127.0.0.1' -WindowStyle Hidden -PassThru;$owned.Add((New-OwnedProcess $p));Save 'owned-fixtures.json' @($owned|ForEach-Object {$_.Identity});return $p}
-function Read($p){$p.Refresh();@{pid=$p.Id;priorityClass=[string]$p.PriorityClass;affinityMask=$p.ProcessorAffinity.ToInt64();ioPriority=[RooBackgroundOracle]::Io($p);memoryPriority=[RooBackgroundOracle]::Memory($p);path=$p.Path}}
+function Read($p){$p.Refresh();@{pid=$p.Id;priorityClass=[string]$p.PriorityClass;affinityMask=$p.ProcessorAffinity.ToInt64();ioPriority=[RooIndustriesBackgroundOracle]::Io($p);memoryPriority=[RooIndustriesBackgroundOracle]::Memory($p);path=$p.Path}}
 function HostCall([string]$action,[hashtable]$fields){$install='C:\Program Files\Roo Industries\Optimization Suite';$fields.schemaVersion=1;$fields.repoRoot=$install;$start=[Diagnostics.ProcessStartInfo]::new((Join-Path $install 'backend\bin\optimizer\Optimizer.Host.exe'),$action+' -');$start.UseShellExecute=$false;$start.CreateNoWindow=$true;$start.RedirectStandardInput=$true;$start.RedirectStandardOutput=$true;$start.RedirectStandardError=$true;foreach($key in @($start.EnvironmentVariables.Keys)){if($key -match '^(DOTNET_|COMPlus_|CORECLR_|COR_|COREHOST_)'){$start.EnvironmentVariables.Remove($key)}};$p=[Diagnostics.Process]::Start($start);$r=New-OwnedProcess $p;try{$p.StandardInput.WriteLine(($fields|ConvertTo-Json -Depth 30 -Compress));$p.StandardInput.Close();$output=$p.StandardOutput.ReadToEndAsync();$errorOutput=$p.StandardError.ReadToEndAsync();if(-not$p.WaitForExit(180000)){throw 'Host timed out'};if($p.ExitCode -ne 0){throw ($output.Result+' '+$errorOutput.Result)};($output.Result|ConvertFrom-Json).data}finally{Stop-OwnedProcess $r;$p.Dispose()}}
 try {
  Assert-NoUnownedAppProcess
- if($Scenario -eq 'priority'){$target=Fixture 'RooFixturePriority';$job=[RooBackgroundOracle]::PinNormal($target);$denied=Fixture 'RooFixtureDenied'}
- if($Scenario -in 'background-ui','recovery-ui','invalid-recovery-ui'){$backgroundFixture=Fixture 'RooFixtureWebHelperUi';$backgroundFixture.PriorityClass='Normal';[RooBackgroundOracle]::SetMemory($backgroundFixture,5)}
- if($Scenario -eq 'recovery-ui'){$closedFixture=Fixture 'RooFixtureUpdaterClosedUi';$closedFixture.PriorityClass='Normal';[RooBackgroundOracle]::SetMemory($closedFixture,5)}
+ if($Scenario -eq 'priority'){$target=Fixture 'RooFixturePriority';$job=[RooIndustriesBackgroundOracle]::PinNormal($target);$denied=Fixture 'RooFixtureDenied'}
+ if($Scenario -in 'background-ui','recovery-ui','invalid-recovery-ui'){$backgroundFixture=Fixture 'RooFixtureWebHelperUi';$backgroundFixture.PriorityClass='Normal';[RooIndustriesBackgroundOracle]::SetMemory($backgroundFixture,5)}
+ if($Scenario -eq 'recovery-ui'){$closedFixture=Fixture 'RooFixtureUpdaterClosedUi';$closedFixture.PriorityClass='Normal';[RooIndustriesBackgroundOracle]::SetMemory($closedFixture,5)}
  if($Scenario -eq 'games'){$launcher=Fixture 'RooFixtureLauncher';$gamePath=Join-Path $directory 'RooFixtureGame.exe';Copy-Item "$env:SystemRoot\System32\PING.EXE" $gamePath}
  $exe='C:\Program Files\Roo Industries\Optimization Suite\app\RooIndustries.OptimizationSuite.App.exe'
  $app=Start-Process $exe -PassThru;$receipt=New-OwnedProcess $app;Save 'owned-app.json' $receipt.Identity
  $window=WaitFor {$A::RootElement.FindFirst($TS::Children,[Windows.Automation.PropertyCondition]::new($A::ProcessIdProperty,$app.Id))} 120 'app window'
- [RooBackgroundUi]::SetWindowPos([IntPtr]::new($window.Current.NativeWindowHandle),[IntPtr]::new(-1),0,0,0,0,0x43)|Out-Null
- [RooBackgroundUi]::SetForegroundWindow([IntPtr]::new($window.Current.NativeWindowHandle))|Out-Null
+ [RooIndustriesBackgroundUi]::SetWindowPos([IntPtr]::new($window.Current.NativeWindowHandle),[IntPtr]::new(-1),0,0,0,0,0x43)|Out-Null
+ [RooIndustriesBackgroundUi]::SetForegroundWindow([IntPtr]::new($window.Current.NativeWindowHandle))|Out-Null
  try{$window.SetFocus()}catch{}
  if(ById 'UpdateLaterButton'){InvokeId 'UpdateLaterButton'}
  WaitFor {@(Texts) -contains 'Start here'} 90 'Home'|Out-Null
@@ -76,7 +76,7 @@ try {
    $target.ProcessorAffinity=[IntPtr]4095;InvokeId 'ProcessRestore';WaitFor {(ById 'ProcessStatus').Current.Name -eq 'Original controls restored.' -and (ById 'cpuPriority').Current.IsEnabled} 60 'fixture restoration completed'|Out-Null;Save 'restored-after-conflict-cleared.json' (Read $target)
    if($target.ProcessorAffinity.ToInt64() -ne $before.affinityMask){throw 'Fixture affinity was not restored after the conflict was cleared'}
    $restoreDetail=(ById 'ProcessDetail').Current.Name;ChooseId 'cpuPriority' 'Above normal';WaitFor {(ById 'ProcessDetail').Current.Name -cne $restoreDetail} 15 'result invalidated after edit'|Out-Null;$editedDetail=(ById 'ProcessDetail').Current.Name;Save 'result-invalidation.json' @{beforeEdit=$restoreDetail;afterEdit=$editedDetail;control='CPU priority';value='AboveNormal'}
-   $dacl=[RooBackgroundOracle]::DenySetInformation($denied)
+   $dacl=[RooIndustriesBackgroundOracle]::DenySetInformation($denied)
    InvokeId 'ProcessRefresh';ChooseId 'ProcessPicker' ('*RooFixtureDenied*PID '+$denied.Id);WaitFor {$c=ById 'cpuPriority';$c -and -not$c.Current.IsEnabled} 60 'blocked rows'|Out-Null;Shot 'blocked'
    $blocked=@('cpuPriority','ioPriority','ProcessHardAffinity')|ForEach-Object {$e=ById $_;@{id=$_;enabled=if($e){$e.Current.IsEnabled}else{$null}}};Save 'blocked-controls.json' $blocked
    if(@($blocked|Where-Object {$_.enabled -eq $true}).Count){throw 'A blocked control is editable'}
@@ -134,7 +134,7 @@ try {
     & (Join-Path $env:USERPROFILE '.dotnet\dotnet.exe') ([IO.Path]::ChangeExtension($ServiceProbe,'.dll')) --review2-restore-pending (Join-Path $directory 'service-probe') (Split-Path $recoveryPath -Parent) *> (Join-Path $directory 'service-probe.log')
     if($LASTEXITCODE){throw 'Review2 service probe failed'}
    }
-   [RooBackgroundUi]::SetForegroundWindow([IntPtr]::new($window.Current.NativeWindowHandle))|Out-Null
+   [RooIndustriesBackgroundUi]::SetForegroundWindow([IntPtr]::new($window.Current.NativeWindowHandle))|Out-Null
    $restore=WaitFor {$button=ProcessButton 'Restore';if($button.Current.IsEnabled){$button}} 45 'lower Restore enabled'
    Save 'restore-target.json' @{root=@{id=(Button 'Restore').GetRuntimeId();bounds=[string](Button 'Restore').Current.BoundingRectangle;focusable=(Button 'Restore').Current.IsKeyboardFocusable};card=@{id=$restore.GetRuntimeId();bounds=[string]$restore.Current.BoundingRectangle;focusable=$restore.Current.IsKeyboardFocusable}}
    Activate $restore
@@ -196,7 +196,7 @@ try {
  if($window){try{Shot 'failure'}catch{}}
  throw
 } finally {
- if($dacl -and $denied){[RooBackgroundOracle]::RestoreDacl($denied,$dacl)}
+ if($dacl -and $denied){[RooIndustriesBackgroundOracle]::RestoreDacl($denied,$dacl)}
  if($app){Stop-OwnedValidationApp $app $receipt}
  if($profileRecoveryOwned -and (Test-Path $recoveryPath)){
   $current=Get-Content -Raw $recoveryPath|ConvertFrom-Json
@@ -211,6 +211,6 @@ try {
  if($choicesPath){if($choicesBytes){[IO.File]::WriteAllBytes($choicesPath,$choicesBytes)}elseif(Test-Path $choicesPath){Remove-Item -LiteralPath $choicesPath}}
  foreach($r in $owned){Stop-OwnedProcess $r}
  if($Scenario -eq 'priority' -and $previewFile){Save 'cleanup-journal.json' (HostCall 'process-restore' @{journalPath=(Join-Path $previewFile.DirectoryName 'journal.json');confirm=$true})}
- if($job -ne [IntPtr]::Zero){[RooBackgroundOracle]::CloseHandle($job)|Out-Null}
+ if($job -ne [IntPtr]::Zero){[RooIndustriesBackgroundOracle]::CloseHandle($job)|Out-Null}
  Save 'cleanup.json' @{appStopped=if($app){$app.HasExited}else{$true};fixtures=@($owned|ForEach-Object {@{pid=$_.Identity.pid;exited=$_.Process.HasExited}})}
 }

@@ -10,7 +10,7 @@ function Initialize-HistoricalBlackwell([string]$Frame,[string]$Runner) {
     Assert-PlainRecoveryPath $backup;Assert-SealedRecovery $backup
     $env:PATH=[Environment]::GetFolderPath('System')+';'+[Environment]::GetFolderPath('Windows')+';'+$PSHOME
     $script:log=Join-Path $backup ('native-'+[Guid]::NewGuid().ToString('N')+'.log')
-    if(-not('RooHistoricalBlackwell.Raw' -as [type])){
+    if(-not('RooIndustriesHistoricalBlackwell.Raw' -as [type])){
         $compiler=Join-Path $backup ('compiler-'+[Guid]::NewGuid().ToString('N'));New-SealedDirectory $compiler
         $oldTemp=$env:TEMP;$oldTmp=$env:TMP
         try{$env:TEMP=$compiler;$env:TMP=$compiler;Add-Type -TypeDefinition @'
@@ -21,7 +21,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 using Microsoft.Win32;
-namespace RooHistoricalBlackwell {
+namespace RooIndustriesHistoricalBlackwell {
  public sealed class Value { public uint Kind; public byte[] Bytes; }
  public static class Raw {
   [DllImport("advapi32.dll",EntryPoint="RegQueryValueExW",CharSet=CharSet.Unicode)] static extern int Query(IntPtr key,string name,IntPtr reserved,out uint type,byte[] data,ref uint size);
@@ -71,7 +71,7 @@ function Get-HistoricalRegistry([string[]]$Roots,[string]$Destination='',[Micros
                 $rows.Add([pscustomobject][ordered]@{key=$path;name=$null;kind='<key>';sddl=$k.GetAccessControl().GetSecurityDescriptorSddlForm([Security.AccessControl.AccessControlSections]'Access, Owner, Group')})
                 foreach($sub in @($k.GetSubKeyNames()|Sort-Object)){$q.Enqueue($path+'\'+$sub)}
                 foreach($name in @($k.GetValueNames()|Sort-Object)){
-                    $v=[RooHistoricalBlackwell.Raw]::Read($k,$name);$file=('value-'+$index.ToString('D4')+'.bin');$index++
+                    $v=[RooIndustriesHistoricalBlackwell.Raw]::Read($k,$name);$file=('value-'+$index.ToString('D4')+'.bin');$index++
                     if($Destination){Save-HistoricalBinary (Join-Path $Destination $file) $v.Bytes}
                     $rows.Add([pscustomobject][ordered]@{key=$path;name=$name;kind=[int]$v.Kind;length=$v.Bytes.Length;sha256=(Hash-HistoricalBytes $v.Bytes);file=$file})
                 }

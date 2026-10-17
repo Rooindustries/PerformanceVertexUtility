@@ -14,7 +14,7 @@ try{
     $psi=[Diagnostics.ProcessStartInfo]::new((Join-Path $PSHOME 'powershell.exe'),('-NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand '+$encoded));$psi.UseShellExecute=$false;$psi.CreateNoWindow=$true;$psi.WorkingDirectory=$r.outDir;$psi.RedirectStandardOutput=$true;$psi.RedirectStandardError=$true
     foreach($name in @($psi.EnvironmentVariables.Keys)){if($name -match '^(DOTNET_|COMPlus_|CORECLR_|COR_|COREHOST_)'){$psi.EnvironmentVariables.Remove($name)}}
     $p=[Diagnostics.Process]::Start($psi);$handle=$p.Handle
-    $identity=[pscustomobject][ordered]@{pid=$p.Id;creationTimeFileTimeUtc=[RooValidationOwnership.Native]::Created($handle).ToString();imagePath=[RooValidationOwnership.Native]::Image($handle)}
+    $identity=[pscustomobject][ordered]@{pid=$p.Id;creationTimeFileTimeUtc=[RooIndustriesValidationOwnership.Native]::Created($handle).ToString();imagePath=[RooIndustriesValidationOwnership.Native]::Image($handle)}
     $owned=[pscustomobject]@{process=$p;handle=$handle;Identity=$identity}
     Save-HandoffJson (Join-Path $r.outDir 'producer-child.json') $identity -Create
     $stdout=$p.StandardOutput.ReadToEndAsync();$stderr=$p.StandardError.ReadToEndAsync()

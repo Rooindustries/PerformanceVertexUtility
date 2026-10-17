@@ -18,21 +18,21 @@ function HostCall([string]$action,[hashtable]$request){
 }
 try {
  $path=Join-Path $directory 'RooFixtureOwnedUpdater.exe';Copy-Item "$env:SystemRoot\System32\PING.EXE" $path;$process=Start-Process $path -ArgumentList '-t 127.0.0.1' -WindowStyle Hidden -PassThru;$owned=New-OwnedProcess $process
- $process.PriorityClass='Normal';[RooBackgroundOracle]::SetIo($process,2);[RooBackgroundOracle]::SetMemory($process,1)
+ $process.PriorityClass='Normal';[RooIndustriesBackgroundOracle]::SetIo($process,2);[RooIndustriesBackgroundOracle]::SetMemory($process,1)
  $owner=@{machine=$env:COMPUTERNAME;userSid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value}
- $rule=@{schemaVersion=1;ruleId=$ruleId;owner=$owner;name='ROO-20 memory ownership fixture';enabled=$true;matchMode='path';executablePath=$path;executableHash=$null;cpuSelection=$null;controls=@{memoryPriority=1}}
+ $rule=@{schemaVersion=1;ruleId=$ruleId;owner=$owner;name='Memory ownership fixture';enabled=$true;matchMode='path';executablePath=$path;executableHash=$null;cpuSelection=$null;controls=@{memoryPriority=1}}
  Save 'rule-save.json' (HostCall 'rule-save' @{policyRoot=$root;rule=$rule});$saved=$true
  $profile=Get-Content -Raw (Join-Path $Source 'backend\profiles\game-session.profile.json')|ConvertFrom-Json
  $profile.protectedCatalogPath=Join-Path $Source 'backend\profiles\protected-processes.json';$profile.foregroundGame.processNames=@();$profile.targetGames=@();$profile.rules=@(@{ruleId='owned-background';enabled=$true;match=@{processNames=@('RooFixtureOwnedUpdater.exe')};action=@{actionType='setPriority';priorityClass='BelowNormal'}})
  $profilePath=Join-Path $directory 'profile.json';[IO.File]::WriteAllText($profilePath,($profile|ConvertTo-Json -Depth 30),$utf8)
- $before=@{cpu=[string]$process.PriorityClass;memory=[RooBackgroundOracle]::Memory($process);affinity=$process.ProcessorAffinity.ToInt64()};Save 'before.json' $before
+ $before=@{cpu=[string]$process.PriorityClass;memory=[RooIndustriesBackgroundOracle]::Memory($process);affinity=$process.ProcessorAffinity.ToInt64()};Save 'before.json' $before
  $result=& (Join-Path $Source 'backend\scripts\Apply-ProcessProfile.ps1') -ProfilePath $profilePath -StateRoot (Join-Path $directory 'state') -ConfirmApply|ConvertFrom-Json;Save 'lower.json' $result
- $process.Refresh();Save 'after-lower.json' @{cpu=[string]$process.PriorityClass;memory=[RooBackgroundOracle]::Memory($process)}
- if($process.PriorityClass -ne 'BelowNormal' -or [RooBackgroundOracle]::Memory($process) -ne 1){throw 'Per-field ownership did not skip only memory'}
+ $process.Refresh();Save 'after-lower.json' @{cpu=[string]$process.PriorityClass;memory=[RooIndustriesBackgroundOracle]::Memory($process)}
+ if($process.PriorityClass -ne 'BelowNormal' -or [RooIndustriesBackgroundOracle]::Memory($process) -ne 1){throw 'Per-field ownership did not skip only memory'}
  if(-not@($result.result.skippedItems|Where-Object {$_.reason -match 'Managed by the governor'}).Count){throw 'Memory ownership skip was not reported'}
  $restore=& (Join-Path $Source 'backend\scripts\Restore-ProcessProfileBackup.ps1') -BackupPath $result.backup.location -ConfirmApply|ConvertFrom-Json;Save 'restore.json' $restore
  $placement=& (Join-Path $Source 'backend\scripts\Apply-ProcessProfile.ps1') -ProfilePath $profilePath -Preset placement -StateRoot (Join-Path $directory 'state') -ConfirmApply|ConvertFrom-Json;Save 'placement.json' $placement
- $process.Refresh();if($process.PriorityClass -ne 'Normal' -or [RooBackgroundOracle]::Memory($process) -ne 1 -or $process.ProcessorAffinity.ToInt64() -ne $before.affinity){throw 'Placement changed a saved-rule-owned process'}
+ $process.Refresh();if($process.PriorityClass -ne 'Normal' -or [RooIndustriesBackgroundOracle]::Memory($process) -ne 1 -or $process.ProcessorAffinity.ToInt64() -ne $before.affinity){throw 'Placement changed a saved-rule-owned process'}
  Save 'done.json' @{status='passed';ruleId=$ruleId;machine=$env:COMPUTERNAME}
 } finally {
  if($saved){Save 'rule-delete.json' (HostCall 'rule-delete' @{policyRoot=$root;ruleId=$ruleId})}

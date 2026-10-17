@@ -9,7 +9,7 @@ $utf8=[Text.UTF8Encoding]::new($false);$owned=[Collections.Generic.List[object]]
 function Save([string]$name,$value){[IO.File]::WriteAllText((Join-Path $directory ($name+'.json')),($value|ConvertTo-Json -Depth 45),$utf8)}
 function WaitGpu($p){if($Mode -eq 'gpu-controls'){$until=[DateTime]::UtcNow.AddSeconds(15);while(-not(Test-Path (Join-Path $directory ($p.ProcessName+'.signal.gpu-ready'))) -and [DateTime]::UtcNow -lt $until){Start-Sleep -Milliseconds 100};if($p.HasExited -or [DateTime]::UtcNow -ge $until){throw 'GPU fixture did not create its D3D device'}}}
 function Fixture([string]$name){$path=Join-Path $directory ($name+'.exe');if($Mode -eq 'gpu-controls'){Copy-Item $launcherExe $path;$arguments='"'+(Join-Path $directory ($name+'.signal'))+'" "'+$childPath+'" --gpu'}else{Copy-Item "$env:SystemRoot\System32\PING.EXE" $path;$arguments='-t 127.0.0.1'};$p=Start-Process $path -ArgumentList $arguments -WindowStyle Hidden -PassThru;$owned.Add((New-OwnedProcess $p));WaitGpu $p;return $p}
-function Read($p,[switch]$NoGpu){$p.Refresh();[pscustomobject]@{pid=$p.Id;name=$p.ProcessName;path=$p.Path;startTimeUtc=$p.StartTime.ToUniversalTime().ToString('o');priorityClass=[string]$p.PriorityClass;affinityMask=$p.ProcessorAffinity.ToInt64();ioPriority=[RooBackgroundOracle]::Io($p);memoryPriority=[RooBackgroundOracle]::Memory($p);gpuPriority=if($Mode -eq 'gpu-controls' -and -not$NoGpu){[RooBackgroundOracle]::Gpu($p)}else{$null}}}
+function Read($p,[switch]$NoGpu){$p.Refresh();[pscustomobject]@{pid=$p.Id;name=$p.ProcessName;path=$p.Path;startTimeUtc=$p.StartTime.ToUniversalTime().ToString('o');priorityClass=[string]$p.PriorityClass;affinityMask=$p.ProcessorAffinity.ToInt64();ioPriority=[RooIndustriesBackgroundOracle]::Io($p);memoryPriority=[RooIndustriesBackgroundOracle]::Memory($p);gpuPriority=if($Mode -eq 'gpu-controls' -and -not$NoGpu){[RooIndustriesBackgroundOracle]::Gpu($p)}else{$null}}}
 function Equal($actual,$expected){foreach($field in 'priorityClass','affinityMask','ioPriority','memoryPriority','gpuPriority'){if([string]$actual.$field -cne [string]$expected.$field){throw ($actual.name+' '+$field+': '+$actual.$field+' != '+$expected.$field)}}}
 function Backend([string]$name,[hashtable]$fields,[string]$evidence){$value=(& (Join-Path $Source ('backend\scripts\'+$name+'.ps1')) @fields)|ConvertFrom-Json;Save $evidence $value;if($null -ne $value.errors -and @($value.errors).Count){throw ($value.errors|ConvertTo-Json -Depth 10 -Compress)};return $value}
 function Child($parent,[string]$flow){$output=Join-Path $directory ($flow+'-'+$parent.ProcessName+'-child.pid');[IO.File]::WriteAllText((Join-Path $directory ($parent.ProcessName+'.signal')),$output);$until=[DateTime]::UtcNow.AddSeconds(15);while(-not(Test-Path $output) -and [DateTime]::UtcNow -lt $until){Start-Sleep -Milliseconds 100};if(-not(Test-Path $output)){throw 'Launcher did not create a child'};$child=Get-Process -Id ([int][IO.File]::ReadAllText($output));$owned.Add((New-OwnedProcess $child));$read=Read $child -NoGpu;Save ($flow+'-'+$parent.ProcessName+'-child') $read;return $read}
@@ -22,7 +22,7 @@ try {
  $childPath=Join-Path $directory 'RooFixtureChild.exe';Copy-Item "$env:SystemRoot\System32\PING.EXE" $childPath
  $launchers=@(foreach($name in 'steam','RooFixtureLauncher','gamelaunchhelper'){$arguments='"'+(Join-Path $directory ($name+'.signal'))+'" "'+$childPath+'"'+$(if($Mode -eq 'gpu-controls'){' --gpu'}else{''});$p=Start-Process (Join-Path $directory ($name+'.exe')) -ArgumentList $arguments -WindowStyle Hidden -PassThru;$owned.Add((New-OwnedProcess $p));WaitGpu $p;$p})
  $updater=Fixture 'RooFixtureUpdater';$web=Fixture 'RooFixtureWebHelper';$game=Fixture 'RooFixtureGame';$protected=Fixture 'MsMpEng';$fixtures=@($launchers)+@($updater,$web,$game,$protected)
- foreach($p in $fixtures){$p.PriorityClass='Normal';[RooBackgroundOracle]::SetIo($p,2);[RooBackgroundOracle]::SetMemory($p,5)}
+ foreach($p in $fixtures){$p.PriorityClass='Normal';[RooIndustriesBackgroundOracle]::SetIo($p,2);[RooIndustriesBackgroundOracle]::SetMemory($p,5)}
  $originals=@($fixtures|ForEach-Object {Read $_});Save 'originals' $originals
  $profile=Get-Content -Raw (Join-Path $Source 'backend\profiles\game-session.profile.json')|ConvertFrom-Json
  $profile.profileId='roo20-review2-background';$profile.protectedCatalogPath=Join-Path $Source 'backend\profiles\protected-processes.json';$profile.foregroundGame.processNames=@('RooFixtureGame.exe');$profile.targetGames=@([pscustomobject]@{gameId='fixture';processNames=@('RooFixtureGame.exe')})
@@ -31,7 +31,7 @@ try {
  Save 'profile' $profile;$profilePath=Join-Path $directory 'profile.json';$state=Join-Path $directory 'state';$placement=Read-RooIndustriesBackgroundPlacement;Save 'placement' $placement
  $flows=if($Mode -eq 'query-only'){@()}elseif($Mode -eq 'placement'){@('placement')}elseif($Mode -eq 'gpu-controls'){@('lower','game','limits')}else{@('lower','placement','game','limits')}
  foreach($flow in $flows){
-  foreach($p in @($updater,$web)){$p.PriorityClass='AboveNormal';[RooBackgroundOracle]::SetIo($p,1);[RooBackgroundOracle]::SetMemory($p,3)}
+  foreach($p in @($updater,$web)){$p.PriorityClass='AboveNormal';[RooIndustriesBackgroundOracle]::SetIo($p,1);[RooIndustriesBackgroundOracle]::SetMemory($p,3)}
   $before=@($fixtures|ForEach-Object {Read $_});Save ($flow+'-before') $before
   if($flow -eq 'limits'){
    $governor=Get-Content -Raw (Join-Path $Source 'backend\profiles\probalance-governor.profile.json')|ConvertFrom-Json;$governor.profileId='roo20-review2-limits';$governor.protectedCatalogPath=$profile.protectedCatalogPath
@@ -69,14 +69,14 @@ try {
  $alignedPreview=Backend 'Preview-ProcessProfile' @{ProfilePath=(Join-Path $Source 'backend\profiles\background-demotion.profile.json')} 'background-demotion-preview'
  foreach($launcher in $launchers){$entry=@($alignedPreview.preview|Where-Object processId -eq $launcher.Id)|Select-Object -First 1;if(-not$entry -or $entry.reason -notmatch 'Game launchers are left unchanged' -or @($entry.controlChanges|Where-Object {-not$_.blocked}).Count){throw 'Background demotion profile launcher protection is missing'}}
  if($Mode -ne 'placement'){
-  $query=Fixture 'RooFixtureQueryOnly';[RooBackgroundOracle]::SetMemory($query,3);$null=$query.Handle;$dacl=[RooBackgroundOracle]::QueryOnly($query);$fresh=Get-Process -Id $query.Id;$debugPrior=[RooBackgroundOracle]::DebugPrivilege($false)
-  $rights=@(foreach($access in @(0x1000,0x101000,0x200,0x1fffff)){@{access=$access;error=[RooBackgroundOracle]::OpenError($query,$access)}});Save 'query-only-rights' $rights
+  $query=Fixture 'RooFixtureQueryOnly';[RooIndustriesBackgroundOracle]::SetMemory($query,3);$null=$query.Handle;$dacl=[RooIndustriesBackgroundOracle]::QueryOnly($query);$fresh=Get-Process -Id $query.Id;$debugPrior=[RooIndustriesBackgroundOracle]::DebugPrivilege($false)
+  $rights=@(foreach($access in @(0x1000,0x101000,0x200,0x1fffff)){@{access=$access;error=[RooIndustriesBackgroundOracle]::OpenError($query,$access)}});Save 'query-only-rights' $rights
   if(@($rights|Where-Object {$_.access -in @(0x1000,0x101000) -and $_.error -ne 0}).Count -or @($rights|Where-Object {$_.access -in @(0x200,0x1fffff) -and $_.error -ne 5}).Count){throw 'DACL fixture rights differ from query-only contract'}
   $memory=Get-RooIndustriesProcessMemoryPriority $fresh;Save 'query-only-memory' $memory
   $classification=Backend 'Get-ProcessClassification' @{ProfilePath=$profilePath} 'query-only-classification';$row=@($classification.processes|Where-Object pid -eq $query.Id)|Select-Object -First 1
   if(-not$memory.available -or $memory.value -ne 3 -or -not$row.memoryPriorityAvailable -or $row.memoryPriority -ne 3){throw 'Query-only classification memory read failed'}
-  [RooBackgroundOracle]::RestoreDacl($query,$dacl);$dacl=$null;$null=[RooBackgroundOracle]::DebugPrivilege(($debugPrior -band 2) -ne 0);Save 'debug-privilege' @{originalAttributes=$debugPrior;restored=$true};$debugPrior=$null
+  [RooIndustriesBackgroundOracle]::RestoreDacl($query,$dacl);$dacl=$null;$null=[RooIndustriesBackgroundOracle]::DebugPrivilege(($debugPrior -band 2) -ne 0);Save 'debug-privilege' @{originalAttributes=$debugPrior;restored=$true};$debugPrior=$null
  }
  Save 'done' @{status='passed';flows=$flows;machine=$env:COMPUTERNAME;placementMask=$placement.mask;queryOnly=($Mode -eq 'all')}
 }catch{Save 'failure' @{error=$_.Exception.ToString();stack=$_.ScriptStackTrace};throw}
-finally {if($debugPrior -ne $null){$null=[RooBackgroundOracle]::DebugPrivilege(($debugPrior -band 2) -ne 0)};if($query -and $dacl){[RooBackgroundOracle]::RestoreDacl($query,$dacl)};foreach($receipt in $owned){Stop-OwnedProcess $receipt};Save 'cleanup' @($owned|ForEach-Object {@{pid=$_.Identity.pid;exited=$_.Process.HasExited}})}
+finally {if($debugPrior -ne $null){$null=[RooIndustriesBackgroundOracle]::DebugPrivilege(($debugPrior -band 2) -ne 0)};if($query -and $dacl){[RooIndustriesBackgroundOracle]::RestoreDacl($query,$dacl)};foreach($receipt in $owned){Stop-OwnedProcess $receipt};Save 'cleanup' @($owned|ForEach-Object {@{pid=$_.Identity.pid;exited=$_.Process.HasExited}})}

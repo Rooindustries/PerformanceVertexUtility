@@ -8,13 +8,13 @@ Add-Type -TypeDefinition @'
 using System;
 using System.Runtime.InteropServices;
 public static class RooIndustriesGovernorEnvBroadcast { public static void Send() {} }
-public sealed class RooEnvironmentFixture : IDisposable {
+public sealed class RooIndustriesEnvironmentFixture : IDisposable {
  [DllImport("advapi32.dll",CharSet=CharSet.Unicode)] static extern int RegLoadAppKeyW(string path,out IntPtr key,int access,int options,int reserved);
  [DllImport("advapi32.dll")] static extern int RegOverridePredefKey(IntPtr root,IntPtr replacement);
  [DllImport("advapi32.dll")] static extern int RegCloseKey(IntPtr key);
  IntPtr key;
  static readonly IntPtr CurrentUser=new IntPtr(unchecked((int)0x80000001));
- public RooEnvironmentFixture(string file) { int result=RegLoadAppKeyW(file,out key,0xF003F,1,0);if(result!=0)throw new System.ComponentModel.Win32Exception(result);result=RegOverridePredefKey(CurrentUser,key);if(result!=0){RegCloseKey(key);key=IntPtr.Zero;throw new System.ComponentModel.Win32Exception(result);} }
+ public RooIndustriesEnvironmentFixture(string file) { int result=RegLoadAppKeyW(file,out key,0xF003F,1,0);if(result!=0)throw new System.ComponentModel.Win32Exception(result);result=RegOverridePredefKey(CurrentUser,key);if(result!=0){RegCloseKey(key);key=IntPtr.Zero;throw new System.ComponentModel.Win32Exception(result);} }
  public void Dispose(){RegOverridePredefKey(CurrentUser,IntPtr.Zero);if(key!=IntPtr.Zero){RegCloseKey(key);key=IntPtr.Zero;}}
 }
 '@
@@ -29,7 +29,7 @@ $rows=@()
 try {
  foreach($case in @('unrelated-new-name','changed-owned-value','deleted-owned-value','changed-between-mutations','owned-only-restore')){
   $file=Join-Path $OutDir ($case+'-'+[Guid]::NewGuid().ToString('N')+'.hive')
-  $fixture=[RooEnvironmentFixture]::new($file)
+  $fixture=[RooIndustriesEnvironmentFixture]::new($file)
   $key=$null
   try {
    $key=[Microsoft.Win32.Registry]::CurrentUser.CreateSubKey('Environment')

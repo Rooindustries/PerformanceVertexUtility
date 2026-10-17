@@ -3,7 +3,7 @@ param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutRo
  [string]$FeedUrl='',[string]$VersionA='',[string]$VersionB='')
 $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
-$subject='CN=Roo Industries Test Signing ROO-64'
+$subject='CN=Roo Industries Test Signing'
 . (Join-Path $Source 'tools\validation\Update\Harness.Common.ps1')
 $nonce=Initialize-HarnessInvocation ('signing-'+$Scenario) $OutRoot
 Enter-HarnessHostLease

@@ -28,11 +28,11 @@ $directory=[SourceBoundary.DirectoryReceipt]::new($run);$held=[Collections.Gener
 try {
  foreach($name in 'ownership.ps1','native.ps1','entry.ps1','result.json','task.json'){
   $path=Join-Path $run $name;Assert-PlainAncestry $path
-  $h=[RooValidationOwnership.Native]::CreateFile($path,2147483648,7,[IntPtr]::Zero,3,0x00200000,[IntPtr]::Zero)
+  $h=[RooIndustriesValidationOwnership.Native]::CreateFile($path,2147483648,7,[IntPtr]::Zero,3,0x00200000,[IntPtr]::Zero)
   if($h.IsInvalid){throw 'Execution evidence identity missing; retained'}
-  try{$id=[RooValidationOwnership.Native]::FileId($h)}finally{$h.Dispose()}
+  try{$id=[RooIndustriesValidationOwnership.Native]::FileId($h)}finally{$h.Dispose()}
   $hash=(Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash
-  $r=[RooValidationOwnership.ProbeFile]::Open($path,$id,$hash);$held.Add($r);$identities.Add($r.Identity)
+  $r=[RooIndustriesValidationOwnership.ProbeFile]::Open($path,$id,$hash);$held.Add($r);$identities.Add($r.Identity)
  }
  foreach($r in $held){$r.Remove()};$directory.Remove()
  @{execution=$run;directoryId=$directory.Id;files=@($identities);task=$task.name;taskAbsent=$true;executionAbsent=(-not[IO.Directory]::Exists($run))}|ConvertTo-Json -Depth 6 -Compress
@@ -83,13 +83,13 @@ using Microsoft.Win32.SafeHandles;
   SafeFileHandle handle; public string Id; public string Path;
   public DirectoryReceipt(string path,bool sharedDelete=false) {
    Path = path;
-   handle = RooValidationOwnership.Native.CreateFile(path,0x10000,sharedDelete?7u:3u,IntPtr.Zero,3,0x02200000,IntPtr.Zero);
+   handle = RooIndustriesValidationOwnership.Native.CreateFile(path,0x10000,sharedDelete?7u:3u,IntPtr.Zero,3,0x02200000,IntPtr.Zero);
    if(handle.IsInvalid)throw new Win32Exception(Marshal.GetLastWin32Error());
-   Id = RooValidationOwnership.Native.FileId(handle);
+   Id = RooIndustriesValidationOwnership.Native.FileId(handle);
   }
   public void Remove() {
-   if(Id != RooValidationOwnership.Native.FileId(handle))throw new InvalidOperationException("Directory changed; retained");
-   RooValidationOwnership.Native.Delete(handle); Dispose();
+   if(Id != RooIndustriesValidationOwnership.Native.FileId(handle))throw new InvalidOperationException("Directory changed; retained");
+   RooIndustriesValidationOwnership.Native.Delete(handle); Dispose();
   }
   public void Dispose(){if(handle!=null){handle.Dispose();handle=null;}}
  }
@@ -149,9 +149,9 @@ $dirs=[Collections.Generic.List[object]]::new();$files=[Collections.Generic.List
 $results.output=$output
 $clock=[Diagnostics.Stopwatch]::StartNew()
 function Get-Receipt([string]$Path) {
- $h=[RooValidationOwnership.Native]::CreateFile($Path,2147483648,7,[IntPtr]::Zero,3,0x00200000,[IntPtr]::Zero)
+ $h=[RooIndustriesValidationOwnership.Native]::CreateFile($Path,2147483648,7,[IntPtr]::Zero,3,0x00200000,[IntPtr]::Zero)
  if($h.IsInvalid){throw 'Fixture identity open failed'}
- try {[pscustomobject]@{path=$Path;id=[RooValidationOwnership.Native]::FileId($h);hash=(Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash}}finally{$h.Dispose()}
+ try {[pscustomobject]@{path=$Path;id=[RooIndustriesValidationOwnership.Native]::FileId($h);hash=(Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash}}finally{$h.Dispose()}
 } 
 function Seal-ReadFile([string]$Path) {
  $acl=[Security.AccessControl.FileSecurity]::new();$acl.SetAccessRuleProtection($true,$false);$acl.SetOwner([Security.Principal.SecurityIdentifier]::new('S-1-5-32-544'))

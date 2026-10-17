@@ -49,7 +49,7 @@ try{
  $clock=[Diagnostics.Stopwatch]::StartNew();while(-not(Test-Path -LiteralPath $reply) -and $clock.Elapsed.TotalSeconds -lt 15){Start-Sleep -Milliseconds 50}
  if(-not(Test-Path -LiteralPath $reply)){throw 'Restricted child did not report'}
  $native=[IO.File]::ReadAllText($ready)|ConvertFrom-Json;$process=Get-Process -Id $native.pid -ErrorAction Stop;$candidate=New-OwnedProcess $process;$row=Get-CimInstance Win32_Process -Filter ('ProcessId='+$native.pid)
- if(-not$candidate -or -not$row -or -not([string]$row.CommandLine).EndsWith(' -EncodedCommand '+$encoded,[StringComparison]::Ordinal) -or [long]$candidate.Identity.creationTimeFileTimeUtc -lt $born -or $candidate.Identity.creationTimeFileTimeUtc -cne $native.creationTimeFileTimeUtc -or $candidate.Identity.imagePath -cne [RooValidationOwnership.Native]::Canonical((Join-Path $system 'WindowsPowerShell\v1.0\powershell.exe'))){throw 'Restricted child native identity differs'}
+ if(-not$candidate -or -not$row -or -not([string]$row.CommandLine).EndsWith(' -EncodedCommand '+$encoded,[StringComparison]::Ordinal) -or [long]$candidate.Identity.creationTimeFileTimeUtc -lt $born -or $candidate.Identity.creationTimeFileTimeUtc -cne $native.creationTimeFileTimeUtc -or $candidate.Identity.imagePath -cne [RooIndustriesValidationOwnership.Native]::Canonical((Join-Path $system 'WindowsPowerShell\v1.0\powershell.exe'))){throw 'Restricted child native identity differs'}
  $owned=$candidate
  $observed=[IO.File]::ReadAllText($reply)|ConvertFrom-Json
  if($observed.elevated -or $observed.user -cne $sid){throw 'Restricted token differs'}

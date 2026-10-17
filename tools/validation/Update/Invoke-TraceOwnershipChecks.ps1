@@ -74,7 +74,7 @@ public static class RooTraceParent {
  $gate='Local\RooTrace-'+$nonce+'-reuse'
  $root=Start-OwnedProcess -FilePath $launcher -ArgumentList ('root "'+$image+'" "'+$gate+'"') -Purpose trace-fixture
  Trigger $root $gate;$childId=ChildPid $image;$event=TraceEntry $childId
- $p=Get-Process -Id $childId;try{$native=[RooValidationOwnership.Native]::Created($p.Handle)}finally{$p.Dispose()}
+ $p=Get-Process -Id $childId;try{$native=[RooIndustriesValidationOwnership.Native]::Created($p.Handle)}finally{$p.Dispose()}
  $original=$event.identity.timeCreatedFileTimeUtc;$wrong=($native+150000000).ToString()
  Start-Sleep -Seconds 16
  Invoke-HarnessLedger {param($l) (@($l.entries|Where-Object id -CEQ $event.id)[0]).identity.timeCreatedFileTimeUtc=$wrong}|Out-Null

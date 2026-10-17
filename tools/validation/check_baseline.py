@@ -139,6 +139,36 @@ def code_loading_negative_controls(root: Path):
     return results
 
 
+def branding_negative_controls():
+    check = runpy.run_path(str(Path(__file__).with_name('check_branding.py')))['check']
+    prefix = 'Ro' + 'o'
+    legacy = prefix + 'LegacyThing'
+    exception = {'text': legacy, 'files': ['listed.ps1'], 'reason': 'fixture'}
+    location = 'tools/validation/branding-exceptions.json'
+    cases = {
+        'new short name': ([], {'fixture.ps1': prefix + 'NewThing'}, ['fixture.ps1:1: shortened product reference']),
+        'listed exception': ([exception], {'listed.ps1': legacy}, []),
+        'unlisted exception': ([exception], {'listed.ps1': legacy, 'unlisted.ps1': legacy}, ['unlisted.ps1:1: shortened product reference']),
+        'another short name on an excepted line': ([exception], {'listed.ps1': legacy + ' ' + prefix + 'Other'}, ['listed.ps1:1: shortened product reference']),
+        'stale exception': ([exception], {'listed.ps1': 'unchanged'}, [f'{location}: stale exception {legacy!r} in listed.ps1']),
+        'stale file in a used exception': ([dict(exception, files=['listed.ps1', 'other.ps1'])], {'listed.ps1': legacy, 'other.ps1': 'unchanged'}, [f'{location}: stale exception {legacy!r} in other.ps1']),
+        'full name exception': ([dict(exception, text=prefix + 'IndustriesFine')], {'listed.ps1': prefix + 'IndustriesFine'}, [f'{location}: exception {prefix + "IndustriesFine"!r} is not shortened']),
+        'empty exception reason': ([dict(exception, reason='')], {'listed.ps1': legacy}, [f'{location}: exception {legacy!r} has an empty reason']),
+        'exception without files': ([dict(exception, files=[])], {'listed.ps1': legacy}, [f'{location}: exception {legacy!r} lists no files', 'listed.ps1:1: shortened product reference']),
+    }
+    results = {}
+    for label, (exceptions, files, expected) in cases.items():
+        with tempfile.TemporaryDirectory() as folder:
+            temporary = Path(folder)
+            manifest = temporary / location
+            manifest.parent.mkdir(parents=True)
+            manifest.write_text(json.dumps({'exceptions': exceptions}), encoding='utf-8')
+            for relative, source in files.items():
+                (temporary / relative).write_text(source, encoding='utf-8')
+            results[label] = check(temporary) == expected
+    return results
+
+
 def validate(root: Path, contracts_only: bool = False):
     failures = []
     failures.extend(code_loading_failures(root))
@@ -148,6 +178,9 @@ def validate(root: Path, contracts_only: bool = False):
     failures.extend(runpy.run_path(str(Path(__file__).with_name('check_windows_tweaks.py')))['check'](root))
     if not contracts_only:
         failures.extend(runpy.run_path(str(Path(__file__).with_name("check_branding.py")))["check"](root))
+        for label, passed in branding_negative_controls().items():
+            if not passed:
+                failures.append(f'Negative control failed: {label} did not match the branding check result')
     documents = {}
     for folder in ('backend/contracts', 'backend/samples', 'backend/profiles', 'backend/uninstall', 'backend/catalogs', 'backend/capabilities', 'modules'):
         for path in sorted((root / folder).rglob('*.json')):

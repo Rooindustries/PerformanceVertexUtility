@@ -5,7 +5,7 @@ $nonce=Initialize-HarnessInvocation 'app-tour' $OutRoot
 Ensure-HarnessOutputDirectory $OutRoot
 Add-Type -AssemblyName UIAutomationClient,UIAutomationTypes,System.Drawing,System.Windows.Forms,WindowsBase
 Add-Type -Path (Get-HarnessToolPath (Join-Path $Source 'tools\validation\Tour\TourCapture.cs')) -ReferencedAssemblies System.Drawing,System.Windows.Forms,Accessibility
-[RooTour.Desktop]::SetProcessDPIAware()|Out-Null
+[RooIndustriesTour.Desktop]::SetProcessDPIAware()|Out-Null
 $A=[Windows.Automation.AutomationElement];$TS=[Windows.Automation.TreeScope];$CT=[Windows.Automation.ControlType]
 $exe=Join-Path $env:ProgramFiles 'Roo Industries\Optimization Suite\app\RooIndustries.OptimizationSuite.App.exe'
 $script:shots=[Collections.Generic.List[object]]::new();$script:actions=[Collections.Generic.List[object]]::new();$script:missing=[Collections.Generic.List[object]]::new();$script:window=$null;$script:recorder=$null;$script:screenNumber=0
@@ -30,11 +30,11 @@ function NavParent([string]$name){FindId $(if($name -in 'Report a bug','Settings
 function NavItem([string]$name,[switch]$Optional){Unique (NavParent $name) '' $name $CT::ListItem -Optional:$Optional}
 function WaitFor([scriptblock]$test,[int]$seconds,[string]$label){$limit=[DateTime]::UtcNow.AddSeconds($seconds);do{$answer=& $test;if($answer){return $answer};Start-Sleep -Milliseconds 200}while([DateTime]::UtcNow -lt $limit);throw ('Timed out: '+$label)}
 function WindowTree{@($script:window.FindAll($TS::Descendants,[Windows.Automation.Condition]::TrueCondition)|ForEach-Object {@{name=$_.Current.Name;id=$_.Current.AutomationId;type=$_.Current.ControlType.ProgrammaticName;class=$_.Current.ClassName;offscreen=$_.Current.IsOffscreen;enabled=$_.Current.IsEnabled;bounds=$_.Current.BoundingRectangle.ToString()}})}
-function AttachWindow($win){$script:window=Register-HarnessWindow $win;[RooTour.Desktop]::Focus([IntPtr]$win.Current.NativeWindowHandle)|Out-Null;if($script:recorder){$script:recorder.Window([IntPtr]$win.Current.NativeWindowHandle,[int]$win.Current.ProcessId)}}
+function AttachWindow($win){$script:window=Register-HarnessWindow $win;[RooIndustriesTour.Desktop]::Focus([IntPtr]$win.Current.NativeWindowHandle)|Out-Null;if($script:recorder){$script:recorder.Window([IntPtr]$win.Current.NativeWindowHandle,[int]$win.Current.ProcessId)}}
 function FitApp{
  $area=[Windows.Forms.Screen]::PrimaryScreen.WorkingArea
  if($area.Width -lt 1600 -or $area.Height -lt 1000){throw ('Desktop working area cannot contain 1600x1000: '+$area)}
- [RooTour.Desktop]::Center([IntPtr]$script:window.Current.NativeWindowHandle,1600,1000,($area.Left+[int](($area.Width-1600)/2)),($area.Top+[int](($area.Height-1000)/2)))
+ [RooIndustriesTour.Desktop]::Center([IntPtr]$script:window.Current.NativeWindowHandle,1600,1000,($area.Left+[int](($area.Width-1600)/2)),($area.Top+[int](($area.Height-1000)/2)))
 }
 function AppWindow{
  $matches=@($A::RootElement.FindAll($TS::Children,[Windows.Automation.PropertyCondition]::new($A::ProcessIdProperty,[int]$script:app.Identity.pid))|Where-Object {$_.Current.ControlType -eq $CT::Window -and -not$_.Current.IsOffscreen})
@@ -42,11 +42,11 @@ function AppWindow{
 }
 function EnsureForeground{
  $hwnd=[IntPtr]$script:window.Current.NativeWindowHandle
- if(-not[RooTour.Desktop]::IsWindow($hwnd)){$win=WaitFor {AppWindow} 15 'recreated owned app window';AttachWindow $win;FitApp;$hwnd=[IntPtr]$script:window.Current.NativeWindowHandle}
+ if(-not[RooIndustriesTour.Desktop]::IsWindow($hwnd)){$win=WaitFor {AppWindow} 15 'recreated owned app window';AttachWindow $win;FitApp;$hwnd=[IntPtr]$script:window.Current.NativeWindowHandle}
  $owner=[int]$script:window.Current.ProcessId
- if([RooTour.Desktop]::VisibleOwner($hwnd,$owner)){return}
- $before=[RooTour.Desktop]::ForegroundPid();[RooTour.Desktop]::Focus($hwnd)|Out-Null
- WaitFor {[RooTour.Desktop]::VisibleOwner($hwnd,$owner)} 5 ('owned foreground, previous PID '+$before)|Out-Null
+ if([RooIndustriesTour.Desktop]::VisibleOwner($hwnd,$owner)){return}
+ $before=[RooIndustriesTour.Desktop]::ForegroundPid();[RooIndustriesTour.Desktop]::Focus($hwnd)|Out-Null
+ WaitFor {[RooIndustriesTour.Desktop]::VisibleOwner($hwnd,$owner)} 5 ('owned foreground, previous PID '+$before)|Out-Null
  Write-HarnessResult $directory 'foreground.json' @{timeUtc=[DateTime]::UtcNow.ToString('o');previousPid=$before;ownerPid=$owner;hwnd=$hwnd.ToInt64();result='owned window focused'}|Out-Null
 }
 function Action([string]$Kind,[string]$Selector,$Element=$null,[double]$Value=0){
@@ -77,8 +77,8 @@ function Action([string]$Kind,[string]$Selector,$Element=$null,[double]$Value=0)
  $bounds=$target.Current.BoundingRectangle
  $record=@{timeUtc=[DateTime]::UtcNow.ToString('o');kind=$Kind;selector=$Selector;id=$target.Current.AutomationId;name=$target.Current.Name;parentId=$parent.Current.AutomationId;parentName=$parent.Current.Name;parentRuntimeId=($parent.GetRuntimeId() -join ',');runtimeId=($target.GetRuntimeId() -join ',');pattern=$patternName;readyWaitSeconds=$ready.Elapsed.TotalSeconds;bounds=$bounds.ToString();mouseClick=$false;result='failed'}
  try{
-  [RooTour.Desktop]::Move([int]($bounds.Left+$bounds.Width/2),[int]($bounds.Top+$bounds.Height/2))
-  $record.cursor=[RooTour.Desktop]::Position()
+  [RooIndustriesTour.Desktop]::Move([int]($bounds.Left+$bounds.Width/2),[int]($bounds.Top+$bounds.Height/2))
+  $record.cursor=[RooIndustriesTour.Desktop]::Position()
   switch($patternName){
    'SelectionItemPattern.Select' {$p=$target.GetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern);$p.Select();if($Kind -eq 'theme-choice'){Start-Sleep -Seconds 2;$win=WaitFor {AppWindow} 15 'theme window';AttachWindow $win;FitApp;Nav Settings;$record.selected=(FindId 'ThemePicker').GetCurrentPattern([Windows.Automation.SelectionPattern]::Pattern).Current.GetSelection()[0].Current.Name -ceq $Selector;$record.readback='Selected theme on recreated owned window';$record.readbackHwnd=$win.Current.NativeWindowHandle}else{$record.selected=$p.Current.IsSelected};if(-not$record.selected){throw 'Selection readback failed'}}
    'InvokePattern.Invoke' {$target.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()}
@@ -96,7 +96,7 @@ function Action([string]$Kind,[string]$Selector,$Element=$null,[double]$Value=0)
 function Nav([string]$name){Action navigation $name;Start-Sleep -Seconds 2}
 function Tab([string]$id){$item=FindId $id -Optional;if(-not$item -or $item.Current.IsOffscreen){$script:missing.Add(@{pass=$script:pass;state=$id;reason='The app hides this tab in this mode.'});return $false};Action tab $id;Start-Sleep -Seconds 2;return $true}
 function ScrollPage{
- $frame=[RooTour.Desktop]::Bounds([IntPtr]$script:window.Current.NativeWindowHandle)
+ $frame=[RooIndustriesTour.Desktop]::Bounds([IntPtr]$script:window.Current.NativeWindowHandle)
  $candidates=@(foreach($item in $script:window.FindAll($TS::Descendants,[Windows.Automation.Condition]::TrueCondition)){
   if($item.Current.IsOffscreen -or ($item.Current.ClassName -ne 'ScrollViewer' -and $item.Current.AutomationId -notin 'WindowsTweaksList','RemovalApps','AppsCleanupInstalledAppsList')){continue};$r=$item.Current.BoundingRectangle
   if($r.Left -lt $frame.Left+220 -or $r.Width -lt 400 -or $r.Height -lt 180){continue}
@@ -108,8 +108,8 @@ function Shot([string]$page,[string]$tab,[int]$part=0){
  $tab=$tab.Substring(0,[Math]::Min(90,$tab.Length));$script:screenNumber++;$name=$script:pass+'-'+('{0:D3}'-f$script:screenNumber)+'-'+$page+'-'+$tab+$(if($part){'-part'+$part}else{''})+'.png';$path=Join-Path $script:screensDir $name
  EnsureForeground
  $hwnd=[IntPtr]$script:window.Current.NativeWindowHandle
- if(-not[RooTour.Desktop]::VisibleOwner($hwnd,[int]$script:window.Current.ProcessId)){throw 'Owned capture window is not in front'}
- [RooTour.Desktop]::Shot($hwnd,(Get-HarnessLongPath $path));$bounds=[RooTour.Desktop]::Bounds($hwnd)
+ if(-not[RooIndustriesTour.Desktop]::VisibleOwner($hwnd,[int]$script:window.Current.ProcessId)){throw 'Owned capture window is not in front'}
+ [RooIndustriesTour.Desktop]::Shot($hwnd,(Get-HarnessLongPath $path));$bounds=[RooIndustriesTour.Desktop]::Bounds($hwnd)
  $script:shots.Add(@{file=$name;pass=$script:pass;page=$page;tab=$tab;part=$part;path=$path;sha256=Get-HarnessFileSha256 $path;width=$bounds.Width;height=$bounds.Height;bounds=$bounds;timeUtc=[DateTime]::UtcNow.ToString('o')})
  Write-HarnessResult $directory ($name+'.uia.json') @{screen=$name;elements=@(WindowTree)}|Out-Null
  Write-Output ('SCREEN '+$name)
@@ -155,7 +155,7 @@ try{
  Assert-HarnessHostLease;Assert-NoForeignInstance $exe;Start-ProcessTrace|Out-Null
  $script:app=Start-OwnedProcess -FilePath (Get-HarnessToolPath $exe) -WindowStyle Normal -WorkingDirectory (Get-HarnessToolPath ([IO.Path]::GetDirectoryName($exe))) -Purpose tour-app
  $win=WaitFor {AppWindow} 30 'app window';AttachWindow $win;FitApp
- $tourFrames=Join-Path $directory 'tour-frames';New-HarnessDirectory $tourFrames 'tour-video-frames'|Out-Null;$script:recorder=[RooTour.Recorder]::new((Get-HarnessLongPath $tourFrames));AttachWindow $win;Nav Settings
+ $tourFrames=Join-Path $directory 'tour-frames';New-HarnessDirectory $tourFrames 'tour-video-frames'|Out-Null;$script:recorder=[RooIndustriesTour.Recorder]::new((Get-HarnessLongPath $tourFrames));AttachWindow $win;Nav Settings
  $originalSimple=(FindId 'SimpleModeToggle').GetCurrentPattern([Windows.Automation.TogglePattern]::Pattern).Current.ToggleState -eq [Windows.Automation.ToggleState]::On
  $originalTheme=(FindId 'ThemePicker').GetCurrentPattern([Windows.Automation.SelectionPattern]::Pattern).Current.GetSelection()[0].Current.Name
  try{foreach($requestedPass in $Passes){Simple ($requestedPass -eq 'A');if($requestedPass -eq 'C'){Theme 'Blackout Gold'};CapturePass $requestedPass}}
