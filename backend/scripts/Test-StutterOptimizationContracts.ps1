@@ -122,6 +122,34 @@ try {
         Add-Failure 'Shader cache fixture restore did not restore expected files'
     }
 
+    $firstApply = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-StutterOptimization.ps1') -OptimizationId shader-cache-cleanup -ShaderCacheRoot $shaderRoot -ConfirmApply -AllowDisposableFixtureApply)
+    $laterFile = Join-Path $shaderRoot 'NVIDIA\DXCache\later.bin'
+    New-Item -ItemType Directory -Path (Split-Path $laterFile -Parent) -Force | Out-Null
+    'later-cache' | Set-Content -LiteralPath $laterFile -Encoding UTF8
+    $secondApply = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-StutterOptimization.ps1') -OptimizationId shader-cache-cleanup -ShaderCacheRoot $shaderRoot -ConfirmApply -AllowDisposableFixtureApply)
+    $secondSources = @($secondApply.rollback.backupRecords | ForEach-Object { [IO.Path]::GetFileName([string]$_.source) })
+    $secondRestore = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Restore-StutterOptimization.ps1') -RollbackManifestPath $secondApply.rollback.rollbackManifestPath -ConfirmApply -AllowDisposableFixtureApply)
+    $firstRestore = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Restore-StutterOptimization.ps1') -RollbackManifestPath $firstApply.rollback.rollbackManifestPath -ConfirmApply -AllowDisposableFixtureApply)
+    $restoredNames = @(Get-ChildItem -LiteralPath $shaderRoot -Recurse -File | ForEach-Object { $_.Name } | Sort-Object)
+    if ($firstApply.status -eq 'success' -and $secondApply.status -eq 'success' -and $secondApply.summary.backupCount -eq 1 -and $secondSources.Count -eq 1 -and $secondSources[0] -eq 'later.bin' -and
+        -not ([IO.Path]::GetFullPath([string]$firstApply.rollback.backupRoot) + [IO.Path]::DirectorySeparatorChar).StartsWith([IO.Path]::GetFullPath($shaderRoot).TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase) -and $firstApply.rollback.backupRoot -ne $secondApply.rollback.backupRoot -and
+        $secondRestore.status -eq 'success' -and $firstRestore.status -eq 'success' -and ($restoredNames -join ',') -eq 'a.bin,b.bin,c.bin,later.bin') {
+        Add-Pass 'A repeated shader cache cleanup keeps earlier backups out of the cache and both runs restore'
+    } else {
+        Add-Failure "A repeated shader cache cleanup must not consume an earlier backup: second sources $($secondSources -join ', '); restored $($restoredNames -join ', ')"
+    }
+
+    $blockedBackupRoot = Join-Path $tempRoot 'blocked-backup'
+    New-Item -ItemType Directory -Path $blockedBackupRoot -Force | Out-Null
+    'not a folder' | Set-Content -LiteralPath (Join-Path $blockedBackupRoot 'Steam') -Encoding UTF8
+    $partial = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-StutterOptimization.ps1') -OptimizationId shader-cache-cleanup -ShaderCacheRoot $shaderRoot -BackupRoot $blockedBackupRoot -ConfirmApply -AllowDisposableFixtureApply)
+    $remaining = @(Get-ChildItem -LiteralPath $shaderRoot -Recurse -File | ForEach-Object { $_.Name } | Sort-Object)
+    if ($partial.status -eq 'failed' -and $partial.dryRun -eq $true -and $partial.summary.deletedCount -eq 0 -and ($remaining -join ',') -eq 'a.bin,b.bin,c.bin,later.bin') {
+        Add-Pass 'A shader cache backup failure deletes nothing and reports no deletions'
+    } else {
+        Add-Failure "A shader cache backup failure must delete nothing: remaining $($remaining -join ', '); reported deleted $($partial.summary.deletedCount)"
+    }
+
     Remove-Item -LiteralPath $tempRoot -Recurse -Force
     $cleanupDone = $true
     if (-not (Test-Path -LiteralPath $tempRoot)) {

@@ -17,6 +17,10 @@ param(
 
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'StutterOptimization.Common.ps1')
+$backupRecords = New-Object System.Collections.Generic.List[object]
+$deletedRecords = New-Object System.Collections.Generic.List[object]
+$rollbackManifestPath = $null
+$resolvedBackupRoot = $null
 
 try {
     if ($OptimizationId -ne 'shader-cache-cleanup' -or [bool]$AllowRealSystemExecution) {
@@ -40,7 +44,10 @@ try {
 
     $resolvedRoot = if ([string]::IsNullOrWhiteSpace($ShaderCacheRoot)) { $null } else { [System.IO.Path]::GetFullPath($ShaderCacheRoot) }
     $resolvedBackupRoot = if ([string]::IsNullOrWhiteSpace($BackupRoot)) {
-        if ([string]::IsNullOrWhiteSpace($resolvedRoot)) { $null } else { Join-Path $resolvedRoot '_roo-shader-cache-backup' }
+        if ([string]::IsNullOrWhiteSpace($resolvedRoot)) { $null } else {
+            $cacheFolder = $resolvedRoot.TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
+            Join-Path (Split-Path $cacheFolder -Parent) ((Split-Path $cacheFolder -Leaf) + '.roo-industries-shader-backup-' + [guid]::NewGuid().ToString('N'))
+        }
     } else {
         [System.IO.Path]::GetFullPath($BackupRoot)
     }
@@ -50,13 +57,11 @@ try {
         (New-RooIndustriesStutterGate 'confirm-apply' 'Confirmed apply requested' $true ([bool]$ConfirmApply) 'Shader cache fixture deletion remains preview-only until -ConfirmApply is supplied.' $null),
         (New-RooIndustriesStutterGate 'disposable-fixture-flag' 'Disposable fixture apply allowed' $true ([bool]$AllowDisposableFixtureApply) 'Shader cache deletion is allowed only for disposable temp fixtures.' $null),
         (New-RooIndustriesStutterGate 'fixture-root-temp' 'Shader cache root is inside temp' $true $rootIsTemp 'Fixture shader cache root must be under the OS temp path.' ([pscustomobject]@{ shaderCacheRoot = $resolvedRoot })),
-        (New-RooIndustriesStutterGate 'fixture-items-present' 'Shader cache fixture items present' $true ($items.Count -gt 0) 'Fixture apply needs at least one file target.' ([pscustomobject]@{ itemCount = $items.Count }))
+        (New-RooIndustriesStutterGate 'fixture-items-present' 'Shader cache fixture items present' $true ($items.Count -gt 0) 'Fixture apply needs at least one file target.' ([pscustomobject]@{ itemCount = $items.Count })),
+        (New-RooIndustriesStutterGate 'backup-root-outside-cache' 'Backup folder is outside the shader cache' $true (-not (Test-RooIndustriesStutterPathInsideRoot $resolvedBackupRoot $resolvedRoot)) 'Backups must be stored outside the shader cache folder so a later cleanup cannot pick them up.' ([pscustomobject]@{ backupRoot = $resolvedBackupRoot }))
     )
     $blockingGateCount = @($gates | Where-Object { $_.blocking }).Count
     $canApply = ($blockingGateCount -eq 0)
-    $backupRecords = New-Object System.Collections.Generic.List[object]
-    $deletedRecords = New-Object System.Collections.Generic.List[object]
-    $rollbackManifestPath = $null
 
     if ($canApply) {
         Ensure-RooIndustriesDirectory $resolvedBackupRoot
@@ -66,8 +71,7 @@ try {
             $relative = [string](Get-RooIndustriesPropertyValue $item 'relativePath' '')
             $destination = Join-Path $resolvedBackupRoot $relative
             Ensure-RooIndustriesDirectory (Split-Path $destination -Parent)
-            Copy-Item -LiteralPath $source -Destination $destination -Force
-            Remove-Item -LiteralPath $source -Force
+            [System.IO.File]::Copy($source, $destination, $false)
             $backupRecords.Add([pscustomobject]@{
                 itemId = [string](Get-RooIndustriesPropertyValue $item 'itemId' '')
                 source = $source
@@ -75,19 +79,8 @@ try {
                 backupPath = $destination
                 bytes = [uint64](Get-RooIndustriesPropertyValue $item 'bytes' 0)
             }) | Out-Null
-            $deletedRecords.Add([pscustomobject]@{
-                itemId = [string](Get-RooIndustriesPropertyValue $item 'itemId' '')
-                path = $source
-                deleted = $true
-            }) | Out-Null
         }
-        foreach ($dir in @(Get-ChildItem -LiteralPath $resolvedRoot -Directory -Recurse -ErrorAction SilentlyContinue | Sort-Object FullName -Descending)) {
-            if ($dir.FullName -eq $resolvedBackupRoot -or $dir.FullName.StartsWith($resolvedBackupRoot + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase)) { continue }
-            if (@(Get-ChildItem -LiteralPath $dir.FullName -Force -ErrorAction SilentlyContinue).Count -eq 0) {
-                Remove-Item -LiteralPath $dir.FullName -Force
-            }
-        }
-        $rollbackManifestPath = Join-Path $resolvedBackupRoot 'shader-cache-rollback-manifest.json'
+        $manifestPath = Join-Path $resolvedBackupRoot 'shader-cache-rollback-manifest.json'
         $rollbackManifest = [pscustomobject]@{
             manifestId = New-RooIndustriesStutterRollbackManifestId 'shader-cache-cleanup'
             schemaVersion = 1
@@ -101,7 +94,22 @@ try {
             restoreSupported = $true
             fileBackups = @($backupRecords.ToArray())
         }
-        ($rollbackManifest | ConvertTo-Json -Depth 24) | Set-Content -LiteralPath $rollbackManifestPath -Encoding UTF8
+        ($rollbackManifest | ConvertTo-Json -Depth 24) | Set-Content -LiteralPath $manifestPath -Encoding UTF8
+        $rollbackManifestPath = $manifestPath
+        foreach ($record in @($backupRecords.ToArray())) {
+            Remove-Item -LiteralPath $record.source -Force
+            $deletedRecords.Add([pscustomobject]@{
+                itemId = $record.itemId
+                path = $record.source
+                deleted = $true
+            }) | Out-Null
+        }
+        foreach ($dir in @(Get-ChildItem -LiteralPath $resolvedRoot -Directory -Recurse -ErrorAction SilentlyContinue | Sort-Object FullName -Descending)) {
+            if ($dir.FullName -eq $resolvedBackupRoot -or $dir.FullName.StartsWith($resolvedBackupRoot + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase)) { continue }
+            if (@(Get-ChildItem -LiteralPath $dir.FullName -Force -ErrorAction SilentlyContinue).Count -eq 0) {
+                Remove-Item -LiteralPath $dir.FullName -Force
+            }
+        }
     }
 
     $result = [pscustomobject]@{
@@ -145,12 +153,12 @@ try {
         productName = $script:RooIndustriesStutterProductName
         capturedAtUtc = Get-RooIndustriesUtcStamp
         optimizationId = $OptimizationId
-        dryRun = $true
+        dryRun = ($deletedRecords.Count -eq 0)
         status = 'failed'
         executionMode = 'blocked'
-        changedItems = @()
-        rollback = $null
-        summary = [pscustomobject]@{ willChangeSystem = $false; willLaunchUtilities = $false; deletedCount = 0; backupCount = 0 }
+        changedItems = @($deletedRecords.ToArray())
+        rollback = if ($rollbackManifestPath -and (Test-Path -LiteralPath $rollbackManifestPath -PathType Leaf)) { [pscustomobject]@{ rollbackManifestPath = $rollbackManifestPath; backupRoot = $resolvedBackupRoot; backupRecords = @($backupRecords.ToArray()); restoreSupported = $true } } else { $null }
+        summary = [pscustomobject]@{ willChangeSystem = $false; willLaunchUtilities = $false; deletedCount = $deletedRecords.Count; backupCount = $backupRecords.Count }
         warnings = @()
         errors = @((New-RooIndustriesStutterIssue 'STUTTER_APPLY_FAILED' $_.Exception.Message 'error' $OptimizationId $true 'Check fixture paths and retry.' $null))
         logs = @((New-RooIndustriesLog 'Stutter optimization apply failed.' 'error'))
