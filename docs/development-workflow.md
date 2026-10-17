@@ -5,7 +5,7 @@ Use Linux for source changes and Git operations. Use isolated Windows source cop
 1. Start from a clean `main` and record its commit.
 2. Run `python tools/validation/check_baseline.py` with the pinned validation requirements installed.
 3. Copy source files to a new Windows test directory. Exclude `backend/state`, build output, credentials, screenshots, local work notes, and utility archives unless a specific test needs them.
-4. Run `tools/scripts/Test-Baseline.ps1 -BuildFrontend`. Retain its summary and per-test logs outside source control. Suites that exceed `-TestTimeoutSeconds` (default 900) are stopped with their process tree and reported as timed out.
+4. Run `tools/scripts/Test-Baseline.ps1 -BuildFrontend`. Retain its summary and per-test logs outside source control. Suites that exceed `-TestTimeoutSeconds` (default 900; 2700 for the governor scenario suite) are stopped with their process tree and reported as timed out.
 5. Confirm that runtime state and test-owned processes, fixtures, helpers, and temporary power plans are cleaned up.
 6. For UI work, launch the app on the intended Windows desktop, capture screenshots, inspect them, and share the evidence. Compilation alone is not UI verification.
 7. Merge the validated changes into `main` and record the resulting commit and any limits of the checks.

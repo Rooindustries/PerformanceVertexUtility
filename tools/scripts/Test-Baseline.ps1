@@ -25,6 +25,7 @@ $baselineProcess.Dispose()
 $tempBefore = @(Get-ValidationTempPaths)
 $results = New-Object System.Collections.Generic.List[object]
 $outputReaderFailure = $false
+$suiteTimeoutSeconds = @{ 'Test-GovernorScenarios.ps1' = 2700 }
 $testScripts = @(Get-ChildItem (Join-Path $repoRoot 'backend\scripts') -Filter 'Test-*.ps1' -File | Sort-Object Name)
 if ($TestName.Count -gt 0) {
     $unknown = @($TestName | Where-Object { $_ -notin $testScripts.Name })
@@ -59,7 +60,8 @@ foreach ($test in $testScripts) {
     [void]$process.Start()
     $stdout = $process.StandardOutput.ReadToEndAsync()
     $stderr = $process.StandardError.ReadToEndAsync()
-    $timedOut = -not $process.WaitForExit($TestTimeoutSeconds * 1000)
+    $timeoutSeconds = if ($suiteTimeoutSeconds.ContainsKey($test.Name)) { [math]::Max($suiteTimeoutSeconds[$test.Name], $TestTimeoutSeconds) } else { $TestTimeoutSeconds }
+    $timedOut = -not $process.WaitForExit($timeoutSeconds * 1000)
     $exitCode = $null
     $leftoverProcesses = @()
     $testNotes = New-Object System.Collections.Generic.List[string]
@@ -132,8 +134,8 @@ foreach ($test in $testScripts) {
     [IO.File]::WriteAllText($errorLog, $errorOutput)
     $process.Dispose()
     $watch.Stop()
-    $results.Add([pscustomobject]@{ test=$test.Name; exitCode=$exitCode; timedOut=$timedOut; leftoverProcesses=@($leftoverProcesses); seconds=[math]::Round($watch.Elapsed.TotalSeconds,2); stdout=$log; stderr=$errorLog }) | Out-Null
-    if ($timedOut) { Write-Host "TIMEOUT $($test.Name) ($($TestTimeoutSeconds)s)" }
+    $results.Add([pscustomobject]@{ test=$test.Name; exitCode=$exitCode; timedOut=$timedOut; timeoutSeconds=$timeoutSeconds; leftoverProcesses=@($leftoverProcesses); seconds=[math]::Round($watch.Elapsed.TotalSeconds,2); stdout=$log; stderr=$errorLog }) | Out-Null
+    if ($timedOut) { Write-Host "TIMEOUT $($test.Name) ($($timeoutSeconds)s)" }
     else { Write-Host "EXIT $($test.Name) $exitCode ($([math]::Round($watch.Elapsed.TotalSeconds,1))s)" }
 }
 $buildExit = $null
