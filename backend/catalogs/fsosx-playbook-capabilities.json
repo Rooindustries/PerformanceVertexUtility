@@ -21,7 +21,7 @@
   },
   "sourceCounts": {
     "primaryArchive": {
-      "path": "C:\\Users\\serviroo\\Downloads\\FSOS-XR7.apbx",
+      "path": "source-archive:FSOS-XR7.apbx",
       "role": "primary",
       "listedEntries": 195,
       "extractedFiles": 195,
@@ -33,7 +33,7 @@
       "taskActions": 1319
     },
     "comparisonArchive": {
-      "path": "C:\\Users\\serviroo\\Downloads\\FSOS-XR6.5.apbx",
+      "path": "source-archive:FSOS-XR6.5.apbx",
       "role": "older-comparison-only",
       "listedEntries": 199,
       "extractedFiles": 194,
