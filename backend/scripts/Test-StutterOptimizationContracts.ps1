@@ -1,8 +1,12 @@
+param([string]$EvidencePath = '')
+
 $ErrorActionPreference = 'Stop'
 
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..\..')
 $failures = New-Object System.Collections.Generic.List[string]
 $passes = New-Object System.Collections.Generic.List[string]
+$evidence = [ordered]@{ schemaVersion = 1; test = 'shader-backup-recovery'; cases = [ordered]@{} }
+if ([string]::IsNullOrWhiteSpace($EvidencePath)) { $EvidencePath = Join-Path $repoRoot 'artifacts\validation\shader-backup-recovery.json' }
 
 function Add-Pass {
     param([string]$Message)
@@ -109,17 +113,72 @@ try {
     }
 
     $apply = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-StutterOptimization.ps1') -OptimizationId shader-cache-cleanup -ShaderCacheRoot $shaderRoot -ConfirmApply -AllowDisposableFixtureApply)
-    if ($apply.status -eq 'success' -and $apply.summary.deletedCount -eq 3 -and $apply.summary.willDeleteRealFiles -eq $false -and (Test-Path -LiteralPath $apply.rollback.rollbackManifestPath) -and @(Get-ChildItem -LiteralPath $shaderRoot -File -Recurse | Where-Object { $_.FullName -notlike '*_roo-shader-cache-backup*' }).Count -eq 0) {
+    if ($apply.status -eq 'success' -and $apply.summary.deletedCount -eq 3 -and $apply.summary.willDeleteRealFiles -eq $false -and $apply.rollback.backupRoot -like '*.shader-cache-backup-*' -and (Test-Path -LiteralPath $apply.rollback.rollbackManifestPath) -and @(Get-ChildItem -LiteralPath $shaderRoot -File -Recurse).Count -eq 0) {
         Add-Pass 'Shader cache fixture apply backs up and deletes only disposable cache files'
     } else {
         Add-Failure 'Shader cache fixture apply did not produce expected backup/delete proof'
     }
 
     $restore = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Restore-StutterOptimization.ps1') -RollbackManifestPath $apply.rollback.rollbackManifestPath -ConfirmApply -AllowDisposableFixtureApply)
-    if ($restore.status -eq 'success' -and $restore.summary.restoredCount -eq 3 -and @(Get-ChildItem -LiteralPath $shaderRoot -Recurse -File | Where-Object { $_.FullName -notlike '*_roo-shader-cache-backup*' }).Count -eq 3) {
+    if ($restore.status -eq 'success' -and $restore.summary.restoredCount -eq 3 -and @(Get-ChildItem -LiteralPath $shaderRoot -Recurse -File).Count -eq 3) {
         Add-Pass 'Shader cache fixture restore rehydrates files from rollback manifest'
     } else {
         Add-Failure 'Shader cache fixture restore did not restore expected files'
+    }
+
+    $firstApply = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-StutterOptimization.ps1') -OptimizationId shader-cache-cleanup -ShaderCacheRoot $shaderRoot -ConfirmApply -AllowDisposableFixtureApply)
+    $laterFile = Join-Path $shaderRoot 'NVIDIA\DXCache\later.bin'
+    New-Item -ItemType Directory -Path (Split-Path $laterFile -Parent) -Force | Out-Null
+    'later-cache' | Set-Content -LiteralPath $laterFile -Encoding UTF8
+    $secondApply = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-StutterOptimization.ps1') -OptimizationId shader-cache-cleanup -ShaderCacheRoot $shaderRoot -ConfirmApply -AllowDisposableFixtureApply)
+    $secondSources = @($secondApply.rollback.backupRecords | ForEach-Object { [IO.Path]::GetFileName([string]$_.source) })
+    $secondRestore = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Restore-StutterOptimization.ps1') -RollbackManifestPath $secondApply.rollback.rollbackManifestPath -ConfirmApply -AllowDisposableFixtureApply)
+    $firstRestore = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Restore-StutterOptimization.ps1') -RollbackManifestPath $firstApply.rollback.rollbackManifestPath -ConfirmApply -AllowDisposableFixtureApply)
+    $restoredNames = @(Get-ChildItem -LiteralPath $shaderRoot -Recurse -File | ForEach-Object { $_.Name } | Sort-Object)
+    if ($firstApply.status -eq 'success' -and $secondApply.status -eq 'success' -and $secondApply.summary.backupCount -eq 1 -and $secondSources.Count -eq 1 -and $secondSources[0] -eq 'later.bin' -and
+        -not ([IO.Path]::GetFullPath([string]$firstApply.rollback.backupRoot) + [IO.Path]::DirectorySeparatorChar).StartsWith([IO.Path]::GetFullPath($shaderRoot).TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase) -and $firstApply.rollback.backupRoot -ne $secondApply.rollback.backupRoot -and
+        $secondRestore.status -eq 'success' -and $firstRestore.status -eq 'success' -and ($restoredNames -join ',') -eq 'a.bin,b.bin,c.bin,later.bin') {
+        Add-Pass 'A repeated shader cache cleanup keeps earlier backups out of the cache and both runs restore'
+    } else {
+        Add-Failure "A repeated shader cache cleanup must not consume an earlier backup: second sources $($secondSources -join ', '); restored $($restoredNames -join ', ')"
+    }
+
+    $explicitRoot = Join-Path $tempRoot 'explicit-cache'
+    $explicitBackupRoot = Join-Path $tempRoot 'explicit-backup'
+    [IO.Directory]::CreateDirectory($explicitRoot) | Out-Null
+    $firstFile = Join-Path $explicitRoot 'a.bin'; $secondFile = Join-Path $explicitRoot 'b.bin'
+    [IO.File]::WriteAllText($firstFile, 'first cache')
+    $firstHash = (Get-FileHash -LiteralPath $firstFile -Algorithm SHA256).Hash
+    $explicitApply = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-StutterOptimization.ps1') -OptimizationId shader-cache-cleanup -ShaderCacheRoot $explicitRoot -BackupRoot $explicitBackupRoot -ConfirmApply -AllowDisposableFixtureApply)
+    $explicitManifest = $explicitApply.rollback.rollbackManifestPath
+    $manifestHash = (Get-FileHash -LiteralPath $explicitManifest -Algorithm SHA256).Hash
+    [IO.File]::WriteAllText($secondFile, 'second cache')
+    $secondHash = (Get-FileHash -LiteralPath $secondFile -Algorithm SHA256).Hash
+    $explicitRetry = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-StutterOptimization.ps1') -OptimizationId shader-cache-cleanup -ShaderCacheRoot $explicitRoot -BackupRoot $explicitBackupRoot -ConfirmApply -AllowDisposableFixtureApply)
+    $backupGate = @($explicitRetry.gates | Where-Object { $_.gateId -eq 'backup-root-new' })
+    $manifestHashAfter = (Get-FileHash -LiteralPath $explicitManifest -Algorithm SHA256).Hash
+    $explicitRestore = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Restore-StutterOptimization.ps1') -RollbackManifestPath $explicitManifest -ConfirmApply -AllowDisposableFixtureApply)
+    $evidence.cases['explicit-backup-reuse'] = [pscustomobject]@{ firstApply = $explicitApply; retry = $explicitRetry; restore = $explicitRestore; manifestSha256Before = $manifestHash; manifestSha256After = $manifestHashAfter; firstFileSha256Before = $firstHash; firstFileSha256After = (Get-FileHash -LiteralPath $firstFile -Algorithm SHA256).Hash; secondFileSha256Before = $secondHash; secondFileSha256After = (Get-FileHash -LiteralPath $secondFile -Algorithm SHA256).Hash }
+    if ($explicitApply.status -eq 'success' -and $explicitApply.summary.deletedCount -eq 1 -and
+        $explicitRetry.status -eq 'blocked' -and $explicitRetry.dryRun -and $explicitRetry.summary.deletedCount -eq 0 -and $explicitRetry.summary.backupCount -eq 0 -and
+        $backupGate.Count -eq 1 -and $backupGate[0].blocking -and -not $backupGate[0].satisfied -and
+        $manifestHashAfter -eq $manifestHash -and (Get-FileHash -LiteralPath $secondFile -Algorithm SHA256).Hash -eq $secondHash -and
+        $explicitRestore.status -eq 'success' -and $explicitRestore.summary.restoredCount -eq 1 -and (Get-FileHash -LiteralPath $firstFile -Algorithm SHA256).Hash -eq $firstHash) {
+        Add-Pass 'Reusing an explicit shader backup folder is blocked without deletion or manifest changes and its first run still restores'
+    } else { Add-Failure 'Reusing an explicit shader backup folder must preserve both cache files and the first restore manifest' }
+
+    $blockedBackupRoot = Join-Path $tempRoot 'blocked-backup'
+    New-Item -ItemType Directory -Path $blockedBackupRoot -Force | Out-Null
+    'not a folder' | Set-Content -LiteralPath (Join-Path $blockedBackupRoot 'Steam') -Encoding UTF8
+    $partial = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-StutterOptimization.ps1') -OptimizationId shader-cache-cleanup -ShaderCacheRoot $shaderRoot -BackupRoot $blockedBackupRoot -ConfirmApply -AllowDisposableFixtureApply)
+    $remaining = @(Get-ChildItem -LiteralPath $shaderRoot -Recurse -File | ForEach-Object { $_.Name } | Sort-Object)
+    $occupiedGate = @($partial.gates | Where-Object { $_.gateId -eq 'backup-root-new' })
+    $evidence.cases['occupied-backup'] = $partial
+    if ($partial.status -eq 'blocked' -and $partial.dryRun -eq $true -and $partial.summary.deletedCount -eq 0 -and
+        $occupiedGate.Count -eq 1 -and $occupiedGate[0].blocking -and [IO.File]::ReadAllText((Join-Path $blockedBackupRoot 'Steam')).Trim() -eq 'not a folder' -and ($remaining -join ',') -eq 'a.bin,b.bin,c.bin,later.bin') {
+        Add-Pass 'An occupied shader backup folder is blocked before copying or deleting files'
+    } else {
+        Add-Failure "An occupied shader backup folder must be blocked without deletion: remaining $($remaining -join ', '); reported deleted $($partial.summary.deletedCount)"
     }
 
     Remove-Item -LiteralPath $tempRoot -Recurse -Force
@@ -145,6 +204,13 @@ if ($stateBefore -eq $stateAfter -and $stateAfter -eq 0) {
 }
 
 Add-Pass 'Stutter optimization validation did not launch FSOS, WinUtil, power, service, cleanup, registry, driver, or forbidden tweak utilities'
+
+$evidence.scriptSha256 = (Get-FileHash -LiteralPath (Join-Path $PSScriptRoot 'Invoke-StutterOptimization.ps1') -Algorithm SHA256).Hash
+$evidence.passes = @($passes.ToArray()); $evidence.failures = @($failures.ToArray())
+$evidence.stateBefore = $stateBefore; $evidence.stateAfter = $stateAfter; $evidence.fixturesRemoved = -not (Test-Path -LiteralPath $tempRoot)
+[IO.Directory]::CreateDirectory((Split-Path ([IO.Path]::GetFullPath($EvidencePath)) -Parent)) | Out-Null
+$evidence | ConvertTo-Json -Depth 32 | Set-Content -LiteralPath $EvidencePath -Encoding UTF8
+Write-Host "Evidence: $EvidencePath"
 
 Write-Host ''
 if ($failures.Count -eq 0) {
