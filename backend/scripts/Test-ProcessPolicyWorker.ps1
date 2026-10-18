@@ -124,17 +124,18 @@ try {
     try {$topologyHash=([BitConverter]::ToString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes((($topology|ForEach-Object {''+$_.group+':'+$_.index+':'+$_.core+':'+$_.cache+':'+$_.numa+':'+$_.efficiency}) -join ';'))))).Replace('-','')}
     finally {$sha.Dispose()}
     $cpu=@($topology|Where-Object {$_.available -and $_.group -eq 0})[1]
+    $affinity='0x{0:X}' -f ([int64]1 -shl [int]$cpu.index)
     $gpu=if($original.gpuPriority -eq 1){2}else{1}
         $cpuClass=if($original.cpuPriority -eq 'AboveNormal'){'High'}else{'AboveNormal'}
         $io=if($original.ioPriority -eq 2){1}else{2}
         $memory=if($original.memoryPriority -eq 3){4}else{3}
-    $wanted=[ordered]@{cpuPriority=$cpuClass;affinity='0x3';cpuSets=[string]$cpu.id;ioPriority=$io;gpuPriority=$gpu;memoryPriority=$memory;executionQoS='eco';priorityBoostDisabled=$true}
+    $wanted=[ordered]@{cpuPriority=$cpuClass;affinity=$affinity;cpuSets=[string]$cpu.id;ioPriority=$io;gpuPriority=$gpu;memoryPriority=$memory;executionQoS='eco';priorityBoostDisabled=$true}
     Note 'originalControls' $original
     Note 'requestedControls' $wanted
-    Assert (-not (Same $original $wanted) -and  $original.executionQoS -ne 'eco' -and -not $original.priorityBoostDisabled -and $original.affinity -ne '0x3' -and $original.cpuSets -eq '') 'Every requested control differs from the fresh process default'
+    Assert (-not (Same $original $wanted) -and  $original.executionQoS -ne 'eco' -and -not $original.priorityBoostDisabled -and $original.affinity -ne $affinity -and $original.cpuSets -eq '') 'Every requested control differs from the fresh process default'
     $rule=@{schemaVersion=1;ruleId=[Guid]::NewGuid().ToString('N');owner=(Get-RooIndustriesOperationOwner);name='Disposable governor validation';enabled=$true
         matchMode='path';executablePath=$first.MainModule.FileName;executableHash=$null;affinityTopologyHash=$topologyHash
-        controls=@{cpuPriority=$cpuClass;affinity=@{group=0;mask='0x3'};ioPriority=$io;gpuPriority=$gpu;memoryPriority=$memory;executionQoS=@{controlMask=1;stateMask=1};priorityBoost=$false}
+        controls=@{cpuPriority=$cpuClass;affinity=@{group=0;mask=$affinity};ioPriority=$io;gpuPriority=$gpu;memoryPriority=$memory;executionQoS=@{controlMask=1;stateMask=1};priorityBoost=$false}
         cpuSelection=@{kind='logical';topologyHash=$topologyHash;processors=@(@{group=0;index=[int]$cpu.index});oneThreadPerCore=$false}}
 
     # (a) saving the first rule starts the governor and a new matching process gets all 8 controls
