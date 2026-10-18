@@ -1,12 +1,12 @@
-param([Parameter(Mandatory=$true)][ValidateSet('Capture','Stage','Restore','Verify','Diagnose')][string]$Phase,[Parameter(Mandatory=$true)][string]$Frame,[Parameter(Mandatory=$true)][string]$Runner,[string]$CaptureHash='',[string]$StageHash='',[switch]$ExecuteRestoration)
+param([Parameter(Mandatory=$true)][ValidateSet('Capture','Stage','Restore','Verify','Diagnose')][string]$Phase,[Parameter(Mandatory=$true)][string]$Frame,[Parameter(Mandatory=$true)][string]$Runner,[string]$CaptureHash='',[string]$StageHash='',[switch]$ExecuteRestoration,[Parameter(Mandatory)][string]$ExpectedMachine,[Parameter(Mandatory)][string]$ExpectedUserSid)
 $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
 . (Join-Path $PSScriptRoot 'HistoricalBlackwell.Common.ps1')
-Initialize-HistoricalBlackwell $Frame $Runner
+Initialize-HistoricalBlackwell $Frame $Runner -ExpectedMachine $ExpectedMachine -ExpectedUserSid $ExpectedUserSid
 $local=[Environment]::GetFolderPath('LocalApplicationData')
 $app='C:\Program Files\Roo Industries\Optimization Suite'
 $original=Join-Path $local 'Temp\roo-industries-integration-evidence\backup'
-$sid='S-1-5-21-1846494563-3099854232-4004002307-1001'
+$sid=$ExpectedUserSid
 $stateRoot='SOFTWARE\RooIndustriesOptimizationSuite'
 $roots=@($stateRoot,'SOFTWARE\RooIndustries','SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{746C4DD8-B7BA-48CD-9FFA-0C378F19368A}_is1','SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\{746C4DD8-B7BA-48CD-9FFA-0C378F19368A}_is1')
 function Assert-FileHash([string]$Path,[string]$Hash){Assert-PlainRecoveryPath $Path;if($Hash -cnotmatch '^[A-F0-9]{64}$' -or (Get-FileHash -LiteralPath $Path).Hash -cne $Hash){throw ('Bound file hash differs: '+$Path)}}

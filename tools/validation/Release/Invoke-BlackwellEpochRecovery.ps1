@@ -1,6 +1,6 @@
-param([Parameter(Mandatory)][string]$Runner,[Parameter(Mandatory)][string]$OriginalFrame,[Parameter(Mandatory)][string]$Evidence,[switch]$InspectOnly)
+param([Parameter(Mandatory)][string]$Runner,[Parameter(Mandatory)][string]$OriginalFrame,[Parameter(Mandatory)][string]$Evidence,[switch]$InspectOnly,[Parameter(Mandatory)][string]$ExpectedMachine)
 $ErrorActionPreference='Stop'
-if($env:COMPUTERNAME -cne 'CS2-GEN4'){throw 'Blackwell-only recovery'}
+if($env:COMPUTERNAME -cne $ExpectedMachine){throw 'Blackwell-only recovery'}
 if($OriginalFrame -cne 'C:\RooBuild\roo-industries-final-run-25fedf20f8e842dc924d86b133e235b1'){throw 'Wrong original sealed frame'}
 if(Test-Path -LiteralPath $Evidence){throw 'Evidence already exists'}
 $tokens=$null;$errors=$null;$ast=[Management.Automation.Language.Parser]::ParseFile($Runner,[ref]$tokens,[ref]$errors)

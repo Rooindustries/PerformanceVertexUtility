@@ -1,3 +1,4 @@
+import argparse
 from pathlib import Path
 import importlib.util
 import subprocess
@@ -11,7 +12,11 @@ ROOT = Path(__file__).resolve().parents[3]
 spec = importlib.util.spec_from_file_location('windows_ssh', ROOT / 'tools/validation/windows_ssh.py')
 w = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(w)
-HOST, MACHINE = 'optimizer-9070', 'SERVI-WINDOWS-D'
+parser = argparse.ArgumentParser()
+parser.add_argument('--host', required=True)
+parser.add_argument('--expected-machine', required=True)
+args = parser.parse_args()
+HOST, MACHINE = args.host, args.expected_machine
 RUN = 'roo-industries-setup-migration-' + uuid.uuid4().hex
 remote = 'C:\\Windows\\Temp\\' + RUN
 out = ROOT / 'artifacts/continuation/setup-migration-evidence' / RUN
@@ -48,7 +53,7 @@ with tempfile.TemporaryDirectory(prefix='roo-f12-') as td:
     subprocess.run(['scp','-q',*w.SSH_OPTIONS,str(archive),HOST+':'+remote.replace('\\','/')+'/source.tar.gz'],check=True)
 w.invoke(HOST,MACHINE,'Set-Location -LiteralPath '+w.ps_literal(remote)+'; tar.exe -xzf source.tar.gz; if($LASTEXITCODE){throw "Extract failed"}',timeout=w.SOURCE_TIMEOUT)
 (out/'remote-path.txt').write_text(remote)
-command='& '+w.ps_literal(remote+'\\tools\\validation\\SetupMigration\\Test-SetupMigration.ps1')+' -Work '+w.ps_literal(remote)
+command='& '+w.ps_literal(remote+'\\tools\\validation\\SetupMigration\\Test-SetupMigration.ps1')+' -Work '+w.ps_literal(remote)+' -ExpectedMachine '+w.ps_literal(MACHINE)
 try:
     result=w.invoke(HOST,MACHINE,command,timeout=1800)
 except subprocess.CalledProcessError as error:

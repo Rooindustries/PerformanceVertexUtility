@@ -16,12 +16,12 @@ transport = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(transport)
 
 
-def driver_checks(out):
+def driver_checks(out, host, machine):
     shell = root/'tools/validation/Release/Run-FinalVerification.sh'
     run = out/'shell-run';run.mkdir()
-    env = dict(os.environ, HOST='blackwell-lan', MACHINE='CS2-GEN4', OUT=str(run.resolve()), PY=sys.executable)
+    env = dict(os.environ, HOST=host, MACHINE=machine, OUT=str(run.resolve()), PY=sys.executable)
     for key in ('OLD_INSTALLER','NEW_INSTALLER','FROM','SKIP'): env.pop(key,None)
-    receipt = {'machine':'CS2-GEN4','stagingPath':r'C:\Windows\Temp\roo-industries-percent-folders\roo-industries-driver-private\source','runRoot':r'C:\Windows\Temp\roo-industries-percent-folders\roo-industries-driver-private','manifestSha256':'0'*64,'frameId':'0'*32}
+    receipt = {'machine':machine,'stagingPath':r'C:\Windows\Temp\roo-industries-percent-folders\roo-industries-driver-private\source','runRoot':r'C:\Windows\Temp\roo-industries-percent-folders\roo-industries-driver-private','manifestSha256':'0'*64,'frameId':'0'*32}
     results = []
     def refuses(name, command, expected, changes=None):
         result=subprocess.run(['bash',str(shell),*command],env=dict(env,**(changes or {})),capture_output=True,text=True)
@@ -29,7 +29,7 @@ def driver_checks(out):
         passed=result.returncode != 0 and expected in result.stdout+result.stderr
         results.append({'name':name,'passed':passed,'exit':result.returncode})
     refuses('driver-missing-baseline-refuses',['gi','cleanup','cleanup'],'Missing explicit source/run receipt')
-    receipt_file=run/'stage.json';receipt_file.write_text(json.dumps(dict(receipt,machine='OTHER')))
+    receipt_file=run/'stage.json';receipt_file.write_text(json.dumps(dict(receipt,machine=machine+'-other')))
     refuses('driver-other-machine-refuses',['all'],'Source receipt belongs to another machine')
     receipt_file.write_text(json.dumps(receipt))
     refuses('driver-missing-old-installer-refuses',['all'],'Set OLD_INSTALLER')
@@ -45,12 +45,14 @@ def driver_checks(out):
 
 def main():
     parser = argparse.ArgumentParser()
+    parser.add_argument('--host', required=True)
+    parser.add_argument('--expected-machine', required=True)
     parser.add_argument('--out', type=Path, required=True)
     parser.add_argument('--only', choices=('stage', 'wrapper', 'gi', 'driver', 'all'), default='all')
     args = parser.parse_args()
     args.out.mkdir(parents=True, exist_ok=False)
-    if args.only == 'driver': return driver_checks(args.out)
-    host, machine = 'blackwell-lan', 'CS2-GEN4'
+    if args.only == 'driver': return driver_checks(args.out, args.host, args.expected_machine)
+    host, machine = args.host, args.expected_machine
     parent = r'C:\Windows\Temp\roo-industries-percent-folders'
     guard = transport.REMOTE_GUARDS + f"\n$frame={transport.ps_literal(parent)};Assert-ProtectedFrame $frame;if([IO.File]::ReadAllText((Join-Path $frame 'fixture-owner.txt')).Trim() -cne 'Roo Industries percent folders owned scratch'){{throw 'Wrong parent identity'}};$cpu=(Get-CimInstance Win32_Processor).Name;$gpu=@(Get-CimInstance Win32_VideoController|ForEach-Object {{$_.Name}});if($cpu -notmatch '9950X3D' -or ($gpu -join ',') -notmatch 'RTX.*6000'){{throw 'Wrong fixture hardware'}};@{{cpu=$cpu;gpu=$gpu;tasks=@(Get-ScheduledTask -TaskName '*CS2*' -ErrorAction SilentlyContinue|ForEach-Object {{$r=Get-OwnedTaskReceipt $_.TaskName $_.TaskPath;$r}})}}|ConvertTo-Json -Depth 12"
     guard = guard.replace("$r=Get-OwnedTaskReceipt $_.TaskName $_.TaskPath;$r", "$s=New-Object -ComObject Schedule.Service;$s.Connect();$t=$s.GetFolder($_.TaskPath).GetTask($_.TaskName);@{name=$_.TaskName;path=$_.TaskPath;xml=$t.Xml;sddl=$t.GetSecurityDescriptor(7)}")
@@ -100,7 +102,7 @@ def main():
         case('unknown-marker-directory-retained', substituted)
     if args.only in ('wrapper', 'all'):
         def wrapper(mode):
-            kwargs = {'Source': receipt['stagingPath'], 'OutDir': receipt['runRoot']+'/unused', 'Mode': mode, 'Value': "space and O'Brien"}
+            kwargs = {'ExpectedMachine':machine, 'Source': receipt['stagingPath'], 'OutDir': receipt['runRoot']+'/unused', 'Mode': mode, 'Value': "space and O'Brien"}
             try:
                 result = transport.interactive(host, machine, receipt, script, kwargs, 1, logon_type=5)
                 (args.out/('wrapper-'+mode+'.log')).write_text(result.stdout)
@@ -117,7 +119,7 @@ def main():
         def changed_task():
             name='RooIndustries_InstalledOwnership_'+uuid.uuid4().hex
             with ThreadPoolExecutor(max_workers=1) as executor:
-                future=executor.submit(transport.interactive,host,machine,receipt,script,{'Source':receipt['stagingPath'],'OutDir':receipt['runRoot']+'/unused','Mode':'wait'},1,name,5)
+                future=executor.submit(transport.interactive,host,machine,receipt,script,{'ExpectedMachine':machine, 'Source':receipt['stagingPath'],'OutDir':receipt['runRoot']+'/unused','Mode':'wait'},1,name,5)
                 body=transport.REMOTE_GUARDS + f"\n. {transport.ps_literal(receipt['stagingPath']+'/tools/validation/LoadTimes/CleanupOwnership.Common.ps1')};$name={transport.ps_literal(name)};$root={transport.ps_literal(receipt['runRoot'])};"
                 body+=r'''$deadline=[DateTime]::UtcNow.AddSeconds(30);$run=$null;while([DateTime]::UtcNow -lt $deadline -and -not$run){foreach($dir in Get-ChildItem -LiteralPath $root -Directory -Filter execution-*){$p=Join-Path $dir.FullName 'task.json';if((Test-Path -LiteralPath $p) -and (Test-Path -LiteralPath (Join-Path $dir.FullName 'child.json')) -and (Get-Content -Raw $p|ConvertFrom-Json).name -ceq $name){$run=$dir.FullName;break}};if(-not$run){Start-Sleep -Milliseconds 100}};if(-not$run){throw 'Private task did not launch'};$before=Get-OwnedTaskReceipt $name;$folder=Get-OwnedTaskFolder '\';$d=$folder.GetTask($name).Definition;$d.RegistrationInfo.Description='foreign substituted fixture';[void]$folder.RegisterTaskDefinition($name,$d,4,'S-1-5-18',$null,5,$null);$after=Get-OwnedTaskReceipt $name;@{run=$run;before=$before;after=$after}|ConvertTo-Json -Depth 12'''
                 native=json.loads(transport.invoke(host,machine,body).stdout)
@@ -139,7 +141,7 @@ def main():
             out = receipt['runRoot']+'/gi-private-'+uuid.uuid4().hex
             failure = None
             try:
-                result = transport.interactive(host, machine, receipt, script, {'Source':receipt['stagingPath'],'OutDir':out}, 3, logon_type=3)
+                result = transport.interactive(host, machine, receipt, script, {'ExpectedMachine':machine, 'Source':receipt['stagingPath'],'OutDir':out}, 3, logon_type=3)
                 (args.out/'gi.log').write_text(result.stdout)
             except subprocess.CalledProcessError as error:
                 failure = error

@@ -1,9 +1,9 @@
-param([Parameter(Mandatory=$true)][string]$Work)
+param([Parameter(Mandatory=$true)][string]$Work,[Parameter(Mandatory)][string]$ExpectedMachine)
 $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
 $identity=[Security.Principal.WindowsIdentity]::GetCurrent()
 $sid=$identity.User.Value
-if($env:COMPUTERNAME -ine 'SERVI-WINDOWS-D' -or -not [Security.Principal.WindowsPrincipal]::new($identity).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)){throw 'Wrong machine or token'}
+if($env:COMPUTERNAME -ine $ExpectedMachine -or -not [Security.Principal.WindowsPrincipal]::new($identity).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)){throw 'Wrong machine or token'}
 if((Get-CimInstance Win32_Processor).Name -notmatch '14600K' -or -not(@((Get-CimInstance Win32_VideoController).Name) -match 'RX 9070 XT')){throw 'Wrong hardware'}
 if([IO.Path]::GetDirectoryName($Work) -ine (Join-Path ([Environment]::GetFolderPath('Windows')) 'Temp') -or (Get-Content -LiteralPath (Join-Path $Work 'fixture-owner.txt') -Raw) -cne 'setup-migration-f12'){throw 'Unowned work folder'}
 $acl=Get-Acl -LiteralPath $Work

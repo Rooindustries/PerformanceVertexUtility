@@ -8,6 +8,9 @@ import time
 import uuid
 
 parser = argparse.ArgumentParser()
+parser.add_argument('--host', required=True)
+parser.add_argument('--expected-machine', required=True)
+parser.add_argument('--expected-sid', required=True)
 parser.add_argument('--out', type=Path, required=True)
 parser.add_argument('--refusal-only', action='store_true')
 args = parser.parse_args()
@@ -16,8 +19,8 @@ root = Path(__file__).resolve().parents[3]
 spec = importlib.util.spec_from_file_location('windows_ssh', root / 'tools/validation/windows_ssh.py')
 w = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(w)
-machine = 'SERVI-WINDOWS-D'
-host = 'must-not-connect.invalid' if args.refusal_only else 'optimizer-9070'
+machine = args.expected_machine
+host = 'must-not-connect.invalid' if args.refusal_only else args.host
 guard = "$ErrorActionPreference='Stop'; $ProgressPreference='SilentlyContinue'\n" + f"if ($env:COMPUTERNAME -ine {w.ps_literal(machine)}) {{throw 'Unexpected Windows computer'}}\n"
 proof = {'passed': False, 'checks': [], 'toolHash': hashlib.sha256(Path(w.__file__).read_bytes()).hexdigest()}
 
@@ -40,7 +43,7 @@ try:
     if not args.refusal_only:
         frame = 'C:\\RooBuild\\inline-limit-' + uuid.uuid4().hex
         p = w.ps_literal
-        w.invoke(host, machine, w.REMOTE_GUARDS + f"\nif([Security.Principal.WindowsIdentity]::GetCurrent().User.Value -cne 'S-1-5-21-2864832615-2000329836-3074386272-1001'){{throw 'SID differs'}};New-ProtectedFrame {p(frame)}")
+        w.invoke(host, machine, w.REMOTE_GUARDS + f"\nif([Security.Principal.WindowsIdentity]::GetCurrent().User.Value -cne {p(args.expected_sid)}){{throw 'SID differs'}};New-ProtectedFrame {p(frame)}")
         proof['frame'] = frame
         boundary = sized(f"[IO.File]::WriteAllText({p(frame + '/boundary.txt')},'MAX');'PASS exact inline boundary'\n", 65536)
         started = time.monotonic()

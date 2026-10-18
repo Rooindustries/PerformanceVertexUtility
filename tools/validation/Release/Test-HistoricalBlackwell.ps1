@@ -1,7 +1,7 @@
-param([Parameter(Mandatory=$true)][string]$Frame,[Parameter(Mandatory=$true)][string]$Runner,[switch]$PreparedPrivateOnly)
+param([Parameter(Mandatory=$true)][string]$Frame,[Parameter(Mandatory=$true)][string]$Runner,[switch]$PreparedPrivateOnly,[Parameter(Mandatory)][string]$ExpectedMachine,[Parameter(Mandatory)][string]$ExpectedUserSid)
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'HistoricalBlackwell.Common.ps1')
-Initialize-HistoricalBlackwell $Frame $Runner
+Initialize-HistoricalBlackwell $Frame $Runner -ExpectedMachine $ExpectedMachine -ExpectedUserSid $ExpectedUserSid
 $parent='C:\Windows\Temp\roo-industries-percent-folders'
 $test=Join-Path $parent ('historical-blackwell-'+[Guid]::NewGuid().ToString('N'))
 $savedBackup=$backup;$backup=$test;try{Assert-RecoveryEvidenceParent}finally{$backup=$savedBackup}

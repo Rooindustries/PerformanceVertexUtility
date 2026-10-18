@@ -1,6 +1,6 @@
-param([string]$Scratch)
+param([string]$Scratch,[Parameter(Mandatory)][string]$ExpectedMachine)
 $ErrorActionPreference='Stop'
-if($env:COMPUTERNAME -ne 'CS2-GEN4' -or -not(Test-Path -LiteralPath (Join-Path $Scratch 'fixture-owner.txt'))){throw 'Not our fixture'}
+if($env:COMPUTERNAME -ne $ExpectedMachine -or -not(Test-Path -LiteralPath (Join-Path $Scratch 'fixture-owner.txt'))){throw 'Not our fixture'}
 $before=Get-Content -LiteralPath (Join-Path $Scratch 'live-before.json') -Raw|ConvertFrom-Json
 if($before.'missing-poison-exists' -ne 'False'){throw 'Poison control path existed before this test'}
 $root='C:\RooIndustriesF10Missing'

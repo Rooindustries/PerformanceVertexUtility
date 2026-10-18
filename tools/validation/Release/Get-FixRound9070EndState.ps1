@@ -1,7 +1,8 @@
+param([Parameter(Mandatory)][string]$ExpectedMachine,[Parameter(Mandatory)][string]$ExpectedUserSid)
 $ErrorActionPreference='Stop'
-if($env:COMPUTERNAME -cne 'SERVI-WINDOWS-D'){throw 'Wrong machine for this retained audit'}
+if($env:COMPUTERNAME -cne $ExpectedMachine){throw 'Wrong machine for this retained audit'}
 $sid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
-if($sid -cne 'S-1-5-21-2864832615-2000329836-3074386272-1001'){throw 'Wrong SID for this retained audit'}
+if($sid -cne $ExpectedUserSid){throw 'Wrong SID for this retained audit'}
 function Hash([byte[]]$Bytes){$h=[Security.Cryptography.SHA256]::Create();try{[BitConverter]::ToString($h.ComputeHash($Bytes)).Replace('-','')}finally{$h.Dispose()}}
 $expected=@'
 [{"xmlSha256":"C8539679C48C4CFCE7B7BFB5048F8481439108A20008387D37E98050237D77E2","path":"\\","name":"RooIndustriesCS2_cs2-exact-repro","state":"Ready"},{"xmlSha256":"1E897E925E7B633BBE05C7DFCF224B88DFB4BCA804E3CE265B20C576A89025D0","path":"\\","name":"RooIndustriesCS2_cs2-fix1","state":"Ready"},{"xmlSha256":"87CA392070907073F36BB4C1C44B6DFA7953CD842C1340E0AE58EDFFFE2FA94C","path":"\\","name":"RooIndustriesCS2_Echo","state":"Ready"},{"xmlSha256":"52A5211211DFAB21E6652D6610DD4787852FC093E4686CEADC2E1DB460E746A4","path":"\\","name":"RooIndustriesCS2_Guard","state":"Ready"},{"xmlSha256":"B9601570A1364AFE32000B8337843AAC8F8A4B5BC9DE11862B0576637C7902C0","path":"\\","name":"RooIndustriesCS2_Trial","state":"Ready"},{"xmlSha256":"94FB152C5502046B0231028C2A78F223AFEFC5597636A6AB9F70DFA979BB3823","path":"\\","name":"RooIndustriesCS2_UserLaunch","state":"Ready"}]

@@ -1,6 +1,6 @@
-param([string]$Repo,[string]$Scratch,[string]$Phase='after',[string[]]$Scenario=@())
+param([string]$Repo,[string]$Scratch,[string]$Phase='after',[string[]]$Scenario=@(),[Parameter(Mandatory)][string]$ExpectedMachine)
 $ErrorActionPreference='Stop';$ProgressPreference='SilentlyContinue'
-if($env:COMPUTERNAME -ne 'CS2-GEN4'){throw 'Wrong machine'}
+if($env:COMPUTERNAME -ne $ExpectedMachine){throw 'Wrong machine'}
 if(-not(Test-Path -LiteralPath (Join-Path $Scratch 'fixture-owner.txt'))){throw 'Unowned scratch'}
 $acl=Get-Acl -LiteralPath $Scratch
 if(-not $acl.AreAccessRulesProtected -or $acl.GetOwner([Security.Principal.SecurityIdentifier]).Value -notin @('S-1-5-18','S-1-5-32-544')){throw 'The fixture scratch must have protected administrator ownership.'}

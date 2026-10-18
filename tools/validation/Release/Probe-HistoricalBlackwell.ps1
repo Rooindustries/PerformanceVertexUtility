@@ -1,7 +1,7 @@
-param([Parameter(Mandatory=$true)][string]$Frame,[Parameter(Mandatory=$true)][string]$Runner)
+param([Parameter(Mandatory=$true)][string]$Frame,[Parameter(Mandatory=$true)][string]$Runner,[Parameter(Mandatory)][string]$ExpectedMachine,[Parameter(Mandatory)][string]$ExpectedUserSid)
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'HistoricalBlackwell.Common.ps1')
-Initialize-HistoricalBlackwell $Frame $Runner
+Initialize-HistoricalBlackwell $Frame $Runner -ExpectedMachine $ExpectedMachine -ExpectedUserSid $ExpectedUserSid
 $sw=[Diagnostics.Stopwatch]::StartNew()
 function Stamp([string]$Stage){Write-Output ($Stage+' '+$sw.ElapsedMilliseconds+' ms '+(Get-Process -Id $PID).WorkingSet64+' bytes')}
 function HashBytes([byte[]]$bytes){$sha=[Security.Cryptography.SHA256]::Create();try{[BitConverter]::ToString($sha.ComputeHash($bytes)).Replace('-','')}finally{$sha.Dispose()}}

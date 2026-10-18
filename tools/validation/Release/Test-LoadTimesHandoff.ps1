@@ -1,4 +1,4 @@
-param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutDir,[string]$ExpectedMachine='SERVI-WINDOWS-D')
+param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutDir,[Parameter(Mandatory)][string]$ExpectedMachine)
 $ErrorActionPreference='Stop'
 if($env:COMPUTERNAME -ine $ExpectedMachine){throw 'Wrong handoff proof machine'}
 . (Join-Path $Source 'tools\validation\LoadTimes\CleanupOwnership.Common.ps1')

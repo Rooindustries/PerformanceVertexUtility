@@ -1,6 +1,6 @@
-param([Parameter(Mandatory)][string]$Runner,[Parameter(Mandatory)][string]$Evidence,[switch]$Before)
+param([Parameter(Mandatory)][string]$Runner,[Parameter(Mandatory)][string]$Evidence,[switch]$Before,[Parameter(Mandatory)][string]$ExpectedMachine)
 $ErrorActionPreference='Stop'
-if($env:COMPUTERNAME -cne 'CS2-GEN4'){throw 'Blackwell-only private fixture proof'}
+if($env:COMPUTERNAME -cne $ExpectedMachine){throw 'Blackwell-only private fixture proof'}
 $identity=[Security.Principal.WindowsIdentity]::GetCurrent()
 if(-not([Security.Principal.WindowsPrincipal]::new($identity).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator))){throw 'Elevation required'}
 if(Test-Path -LiteralPath $Evidence){throw 'Evidence already exists'}

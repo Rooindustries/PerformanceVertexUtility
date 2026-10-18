@@ -1,7 +1,7 @@
-param([Parameter(Mandatory=$true)][string]$Source,[Parameter(Mandatory=$true)][string]$OutDir,[ValidateSet('capture','direct','contexts','performance','large-worker')][string]$Mode='capture',[string]$PrivateKey='')
+param([Parameter(Mandatory=$true)][string]$Source,[Parameter(Mandatory=$true)][string]$OutDir,[ValidateSet('capture','direct','contexts','performance','large-worker')][string]$Mode='capture',[string]$PrivateKey='',[Parameter(Mandatory)][string]$ExpectedMachine)
 $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
-if($env:COMPUTERNAME -cne 'CS2-GEN4'){throw 'Wrong fixture machine'}
+if($env:COMPUTERNAME -cne $ExpectedMachine){throw 'Wrong fixture machine'}
 . (Join-Path $Source 'tools\validation\LoadTimes\CleanupOwnership.Common.ps1')
 $errors=$null;$tokens=$null
 $ast=[Management.Automation.Language.Parser]::ParseFile((Join-Path $Source 'tools\validation\Release\Invoke-IntegrationVerification.ps1'),[ref]$tokens,[ref]$errors)
@@ -137,7 +137,7 @@ try{
     $key.SetValue('State',$bytes,[Microsoft.Win32.RegistryValueKind]::Binary)
     $key.Dispose();$key=$null
     [IO.File]::WriteAllText((Join-Path $OutDir 'private-key.json'),(ConvertTo-Json @{key=$private;length=$bytes.Length}))
-    $arguments='-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "'+$PSCommandPath+'" -Source "'+$Source+'" -OutDir "'+$OutDir+'" -Mode large-worker -PrivateKey "'+$private+'"'
+    $arguments='-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "'+$PSCommandPath+'" -ExpectedMachine "'+$ExpectedMachine+'" -Source "'+$Source+'" -OutDir "'+$OutDir+'" -Mode large-worker -PrivateKey "'+$private+'"'
     $worker=Start-Process (Join-Path ([Environment]::SystemDirectory) 'WindowsPowerShell\v1.0\powershell.exe') -ArgumentList $arguments -WindowStyle Hidden -RedirectStandardOutput (Join-Path $OutDir 'worker.log') -RedirectStandardError (Join-Path $OutDir 'worker-error.log') -PassThru
     $owned=New-OwnedProcess $worker
     Assert ($null -ne $owned) 'Worker exited before retained identity'

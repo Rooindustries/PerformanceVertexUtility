@@ -1,4 +1,4 @@
-param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$RunRoot,[Parameter(Mandatory)][string]$OutDir,[string]$ExpectedMachine='SERVI-WINDOWS-D')
+param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$RunRoot,[Parameter(Mandatory)][string]$OutDir,[Parameter(Mandatory)][string]$ExpectedMachine)
 $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
 $started=[DateTime]::UtcNow;$deadline=$started.AddMinutes(30)

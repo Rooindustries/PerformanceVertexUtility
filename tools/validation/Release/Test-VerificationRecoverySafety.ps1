@@ -1,7 +1,7 @@
-﻿param([Parameter(Mandatory=$true)][string]$Runner,[Parameter(Mandatory=$true)][string]$OutDir,[Alias('Before')][switch]$LegacyBefore,[string[]]$Only=@(),[string]$LauncherCommon=(Join-Path $PSScriptRoot 'LauncherChecks.Common.ps1'))
+﻿param([Parameter(Mandatory=$true)][string]$Runner,[Parameter(Mandatory=$true)][string]$OutDir,[Alias('Before')][switch]$LegacyBefore,[string[]]$Only=@(),[string]$LauncherCommon=(Join-Path $PSScriptRoot 'LauncherChecks.Common.ps1'),[Parameter(Mandatory)][string]$ExpectedMachine)
 $ErrorActionPreference='Stop'
 $Only=@($Only|ForEach-Object {$_ -split ','})
-if($env:COMPUTERNAME -ine 'CS2-GEN4'){throw 'Wrong fixture computer'}
+if($env:COMPUTERNAME -ine $ExpectedMachine){throw 'Wrong fixture computer'}
 $identity=[Security.Principal.WindowsIdentity]::GetCurrent()
 if(-not([Security.Principal.WindowsPrincipal]::new($identity).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator))){throw 'Fixture requires elevation'}
 if(-not $OutDir.StartsWith('C:\Windows\Temp\roo-industries-percent-folders\recovery-epochs-',[StringComparison]::OrdinalIgnoreCase)){throw 'Wrong fixture frame'}
