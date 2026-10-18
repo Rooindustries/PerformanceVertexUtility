@@ -87,13 +87,13 @@ function Assert-NvidiaPathsWithoutReparsePoint {
         $item = $null
         try { $item = Get-Item -LiteralPath $fullPath -Force -ErrorAction Stop }
         catch [System.Management.Automation.ItemNotFoundException] {}
-        if ($null -ne $item -and ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
-            throw 'The export, rollback manifest and output paths must not go through a junction or symbolic link. Nothing was changed.'
+        if ($null -ne $item -and (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -or $item.LinkType -eq 'HardLink')) {
+            throw 'The export, rollback manifest and output paths must not go through a junction, symbolic link or hard link. Nothing was changed.'
         }
         for ($directory = [IO.DirectoryInfo]::new($fullPath).Parent; $null -ne $directory; $directory = $directory.Parent) {
             $attributes = $directory.Attributes
             if ([int]$attributes -ne -1 -and ($attributes -band [IO.FileAttributes]::ReparsePoint)) {
-                throw 'The export, rollback manifest and output paths must not go through a junction or symbolic link. Nothing was changed.'
+                throw 'The export, rollback manifest and output paths must not go through a junction, symbolic link or hard link. Nothing was changed.'
             }
         }
     }

@@ -217,6 +217,28 @@ try {
         Add-Pass 'An explicit replacement export cannot let refusal output overwrite the original manifest export'
     } else { Add-Failure 'An explicit replacement export must not let refusal output overwrite the original manifest export' }
 
+    $hardLinkOutputPath = Join-Path $tempRoot 'manifest-output-hardlink.json'
+    $manifestHashBeforeHardLink = (Get-FileHash -LiteralPath $rollbackPath -Algorithm SHA256).Hash
+    $hardLinkCreated = $false
+    try {
+        New-Item -ItemType HardLink -Path $hardLinkOutputPath -Target $rollbackPath -ErrorAction Stop | Out-Null
+        $hardLinkCreated = $true
+        $outputLinkType = (Get-Item -LiteralPath $hardLinkOutputPath -Force).LinkType
+        $manifestLinkType = (Get-Item -LiteralPath $rollbackPath -Force).LinkType
+        $hardLinkRestore = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipExecutor.ps1') -Operation Restore -HardwareInventoryPath $nvidiaHardware -ExportPath $exportPath -RollbackManifestPath $rollbackPath -OutputPath $hardLinkOutputPath)
+        $manifestHashAfterHardLink = (Get-FileHash -LiteralPath $rollbackPath -Algorithm SHA256).Hash
+        $evidence.cases['output-hardlink-to-manifest'] = [pscustomobject]@{ result = $hardLinkRestore; outputLinkType = $outputLinkType; manifestLinkType = $manifestLinkType; manifestSha256Before = $manifestHashBeforeHardLink; manifestSha256After = $manifestHashAfterHardLink }
+        if ($outputLinkType -eq 'HardLink' -and $manifestLinkType -eq 'HardLink' -and
+            $hardLinkRestore.status -eq 'failed' -and @($hardLinkRestore.errors).Count -eq 1 -and
+            $hardLinkRestore.errors[0].message -eq 'The export, rollback manifest and output paths must not go through a junction, symbolic link or hard link. Nothing was changed.' -and
+            @($hardLinkRestore.executionSequence).Count -eq 0 -and $manifestHashAfterHardLink -eq $manifestHashBeforeHardLink -and
+            @(Read-MockLog $successLog).Count -eq $logCountBeforeCollisions) {
+            Add-Pass 'A restore preview refuses an output hard link without changing the earlier manifest or invoking the mock shim'
+        } else { Add-Failure 'A restore preview must refuse an output hard link without changing the earlier manifest or invoking the mock shim' }
+    } finally {
+        if ($hardLinkCreated) { [IO.File]::Delete($hardLinkOutputPath) }
+    }
+
     $manifestAlias = Join-Path $tempRoot 'manifest-alias'
     $manifestJunctionCreated = $false
     try {
@@ -226,7 +248,7 @@ try {
         $junctionCollision = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipExecutor.ps1') -ExecutorMode Mock -MockNvpiShimPath $successShim -HardwareInventoryPath $nvidiaHardware -ExportPath $exportPath -RollbackManifestPath $rollbackPath -OutputPath $junctionOutputPath -ConfirmApply -UserApproved -BenchmarkEvidenceAttached)
         $evidence.cases['output-junction-to-manifest'] = $junctionCollision
         if ($junctionCollision.status -eq 'failed' -and @($junctionCollision.errors).Count -eq 1 -and
-            $junctionCollision.errors[0].message -eq 'The export, rollback manifest and output paths must not go through a junction or symbolic link. Nothing was changed.' -and
+            $junctionCollision.errors[0].message -eq 'The export, rollback manifest and output paths must not go through a junction, symbolic link or hard link. Nothing was changed.' -and
             (Get-FileHash -LiteralPath $rollbackPath -Algorithm SHA256).Hash -eq $manifestHashBeforeCollision -and
             @(Read-MockLog $successLog).Count -eq $logCountBeforeCollisions) {
             Add-Pass 'An output path through a junction is refused without changing the earlier manifest or invoking the mock shim'
