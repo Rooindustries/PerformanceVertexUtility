@@ -432,10 +432,10 @@ function New-Report {
     $html = @"
 <!doctype html>
 <html>
-<head><meta charset="utf-8"><title>Lean Client Optimizer Report</title>
+<head><meta charset="utf-8"><title>Performance Tuning Utility Report</title>
 <style>body{font-family:Segoe UI,Arial,sans-serif;margin:24px;color:#1f2937}table{border-collapse:collapse;width:100%;margin:16px 0}th,td{border:1px solid #d1d5db;padding:8px;text-align:left}th{background:#f3f4f6}.muted{color:#6b7280}</style></head>
 <body>
-<h1>Lean Client Optimizer Report</h1>
+<h1>Performance Tuning Utility Report</h1>
 <p class="muted">Generated $(Get-Date)</p>
 <h2>Latest Baseline</h2>
 "@

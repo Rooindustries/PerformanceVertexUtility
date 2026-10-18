@@ -16,7 +16,7 @@ public sealed class ThemeService
     private const string StylesUri = "ms-appx:///Resources/Styles.xaml";
     private const string StylesProbeKey = "PanelBorderStyle";
 
-    public static readonly ThemeOption RooIndustriesBlue = new("roo-industries-blue", "Roo Industries Blue", "ms-appx:///Resources/Theme.RooIndustriesBlue.xaml");
+    public static readonly ThemeOption RooIndustriesBlue = new("roo-industries-blue", "Blue", "ms-appx:///Resources/Theme.RooIndustriesBlue.xaml");
     public static readonly ThemeOption BlackoutGold = new("black-gold", "Blackout Gold", "ms-appx:///Resources/Theme.BlackoutGold.xaml");
 
     private readonly SettingsStore _settings;

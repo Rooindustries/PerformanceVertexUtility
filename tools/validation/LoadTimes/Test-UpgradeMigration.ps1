@@ -289,7 +289,7 @@ function Open-App {
                 $script:SawPreparing = $true; Shot 'preparing'; Log 'the Preparing your saved settings window is showing'
             }
         }
-        $script:Win = @($windows | Where-Object { $_.Current.Name -like 'Roo Industries*' -and $_.FindFirst($TS::Descendants, [Windows.Automation.PropertyCondition]::new($A::NameProperty, 'Start here')) })[0]
+        $script:Win = @($windows | Where-Object { ($_.Current.Name -like 'Performance Tuning Utility*' -or $_.Current.Name -like 'Roo Industries*') -and $_.FindFirst($TS::Descendants, [Windows.Automation.PropertyCondition]::new($A::NameProperty, 'Start here')) })[0]
         if (-not $script:Win) { Start-Sleep -Milliseconds 200 }
     }
     if (-not $script:Win) { throw 'Timed out waiting for the main window and Home' }

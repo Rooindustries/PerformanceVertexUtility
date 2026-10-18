@@ -188,7 +188,7 @@ public sealed class BugReportService
 
     public static string BuildPayload(BugReport report, string fileName)
     {
-        var title = Truncate("Bug report: Roo Industries Optimization Suite " + report.Version, 256);
+        var title = Truncate("Bug report: Performance Tuning Utility " + report.Version, 256);
         var source = report.Specs.Select(spec => (Name: Truncate(Fallback(spec.Label, spec.Key), 256), Value: Fallback(spec.Value, "Unknown")))
             .Append((Name: "Discord or email", Value: Fallback(report.Contact, "Not given")))
             .Take(25)
@@ -349,7 +349,7 @@ public sealed class BugReportService
     private string ReportText(BugReport report)
     {
         var text = new StringBuilder();
-        text.AppendLine("Roo Industries Optimization Suite " + report.Version);
+        text.AppendLine("Performance Tuning Utility " + report.Version);
         text.AppendLine("Discord or email: " + Fallback(report.Contact, "Not given"));
         text.AppendLine();
         foreach (var spec in report.Specs) text.AppendLine(spec.Label + ": " + _redactor.Redact(spec.Value));

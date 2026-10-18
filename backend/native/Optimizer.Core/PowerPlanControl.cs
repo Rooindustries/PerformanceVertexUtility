@@ -33,7 +33,7 @@ public static class PowerPlanControl
     public static TweakControlRead Read(ControlAddress address)
     {
         var target = Target(address); var exists = PowerSchemes.Schemes().Contains(target.Id); var receipt = Receipt(target.Receipt, target.Id);
-        if (exists && receipt?.Phase != "created") throw new InvalidDataException("The destination power plan exists without confirmed Roo Industries creation. It will not be adopted or deleted.");
+        if (exists && receipt?.Phase != "created") throw new InvalidDataException("The destination power plan exists without confirmed creation by this app. It will not be adopted or deleted.");
         return new(address, "power-selection:" + OperationOwner.Current().UserSid, target.Id.ToString("D"), ControlValues.From(new
         {
             active = PowerSchemes.Active().ToString("D"), plan = exists ? PowerSchemes.Fingerprint(target.Id) : null, template = PowerSchemes.Fingerprint(Template), original = (receipt?.OriginalActive ?? PowerSchemes.Active()).ToString("D"),

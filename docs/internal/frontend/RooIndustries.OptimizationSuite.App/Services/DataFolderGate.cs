@@ -15,13 +15,13 @@ public static class DataFolderGate
         try { RooIndustries.Optimizer.RuntimeEnvironment.PinProfile(); }
         catch (InvalidOperationException error)
         {
-            MessageBox(IntPtr.Zero, "Roo Industries could not open its data folder, so it closed without reading it.\n\n" + error.Message, "Roo Industries Optimization Suite", 0x10);
+            MessageBox(IntPtr.Zero, "The app could not open its data folder, so it closed without reading it.\n\n" + error.Message, "Performance Tuning Utility", 0x10);
             Environment.Exit(1);
         }
         if (!PolicyRootSecurity.Elevated()) return AppLog.Enable();
         var problem = Attempt(() => Protected(locator), out var enabled);
         if (problem is null) return enabled;
-        MessageBox(IntPtr.Zero, "Roo Industries could not open its data folder, so it closed without reading it.\n\n" + problem, "Roo Industries Optimization Suite", 0x10);
+        MessageBox(IntPtr.Zero, "The app could not open its data folder, so it closed without reading it.\n\n" + problem, "Performance Tuning Utility", 0x10);
         Environment.Exit(1);
         return false;
     }
@@ -46,7 +46,7 @@ public static class DataFolderGate
     {
         if (PolicyRootSecurity.Elevated() && DataFolder.RecoveryNotice(root) is { } notice)
         {
-            MessageBox(IntPtr.Zero, notice, "Roo Industries Optimization Suite", 0x40);
+            MessageBox(IntPtr.Zero, notice, "Performance Tuning Utility", 0x40);
             DataFolder.AcknowledgeRecoveryNotice(root, notice);
         }
         var temporary = Directory.CreateDirectory(Path.Combine(root, "temp"));

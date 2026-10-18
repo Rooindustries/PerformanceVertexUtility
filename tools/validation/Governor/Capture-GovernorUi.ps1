@@ -38,7 +38,7 @@ $app=$null
 try {
     [RooIndustriesGovernorUser32]::mouse_event(1,3,0,0,[IntPtr]::Zero);Start-Sleep -Milliseconds 200;[RooIndustriesGovernorUser32]::mouse_event(1,-3,0,0,[IntPtr]::Zero)
     Start-GovernorCaptureApp
-    $win=WaitFor {@($A::RootElement.FindAll($TS::Children,[Windows.Automation.PropertyCondition]::new($A::ProcessIdProperty,$app.Id))|Where-Object {$_.Current.NativeWindowHandle -ne 0 -and $_.Current.Name -like 'Roo Industries*'})[0]} 120 'main window'
+    $win=WaitFor {@($A::RootElement.FindAll($TS::Children,[Windows.Automation.PropertyCondition]::new($A::ProcessIdProperty,$app.Id))|Where-Object {$_.Current.NativeWindowHandle -ne 0 -and ($_.Current.Name -like 'Performance Tuning Utility*' -or $_.Current.Name -like 'Roo Industries*')})[0]} 120 'main window'
     $h=[IntPtr]::new($win.Current.NativeWindowHandle);[RooIndustriesGovernorUser32]::ShowWindow($h,3)|Out-Null;[RooIndustriesGovernorUser32]::SetForegroundWindow($h)|Out-Null
     $nav=WaitFor {ByNameType $win $Page ([Windows.Automation.ControlType]::ListItem)} 60 ('nav '+$Page)
     Invoke-Element $nav

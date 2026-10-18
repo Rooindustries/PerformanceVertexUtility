@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://rooindustries.com/schemas/optimization-suite/backend-contracts.schema.json",
-  "title": "Roo Industries Optimization Suite Backend Contracts",
+  "title": "Performance Tuning Utility Backend Contracts",
   "type": "object",
   "additionalProperties": false,
   "required": [

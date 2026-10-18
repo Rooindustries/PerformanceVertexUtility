@@ -11,7 +11,7 @@
                         <FontIcon Glyph="&#xEBE8;" FontSize="28" VerticalAlignment="Top" Foreground="{StaticResource RooIndustriesAccentBrush}" AutomationProperties.AccessibilityView="Raw" />
                         <StackPanel Grid.Column="1" Spacing="7">
                             <TextBlock Text="Report a bug" FontSize="22" FontWeight="SemiBold" Foreground="{StaticResource RooIndustriesTextPrimaryBrush}" />
-                            <TextBlock Text="Tell Roo Industries what went wrong. We filled in your PC details for you." FontSize="13" LineHeight="19" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                            <TextBlock Text="Tell us what went wrong. We filled in your PC details for you." FontSize="13" LineHeight="19" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                         </StackPanel>
                     </Grid>
                 </Border>
@@ -45,7 +45,7 @@
                     </StackPanel>
                 </Border>
                 <StackPanel Spacing="10">
-                    <TextBlock Text="Online reporting isn't set up in this build. Save the report to a file and send it to Roo Industries." TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" Visibility="{x:Bind ViewModel.OfflineOnly, Converter={StaticResource BoolToVisibility}}" />
+                    <TextBlock Text="Online reporting isn't set up in this build. Save the report to a file and send it to the developers." TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" Visibility="{x:Bind ViewModel.OfflineOnly, Converter={StaticResource BoolToVisibility}}" />
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <Button Content="Send report" Click="Send_Click" Style="{StaticResource AccentButtonStyle}" IsEnabled="{x:Bind ViewModel.CanSend, Mode=OneWay}" Visibility="{x:Bind ViewModel.OnlineAvailable, Converter={StaticResource BoolToVisibility}}" AutomationProperties.AutomationId="BugSend" />
                         <Button Content="Save report to a file" Click="Save_Click" IsEnabled="{x:Bind ViewModel.CanSend, Mode=OneWay}" Visibility="{x:Bind ViewModel.ShowSave, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" AutomationProperties.AutomationId="BugSave" />

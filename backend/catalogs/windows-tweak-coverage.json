@@ -2577,7 +2577,7 @@
           "refreshInstructions": null
         }
       ],
-      "compatibility": "Register only Roo Industries menu values. Power and startup entries open Windows review dialogs; ownership opens the app review before changing one selected item. Restore preserves unrelated menus."
+      "compatibility": "Register only menu values owned by this app. Power and startup entries open Windows review dialogs; ownership opens the app review before changing one selected item. Restore preserves unrelated menus."
     },
     {
       "product": "FSOS-X Dash",
@@ -25458,7 +25458,7 @@
           "refreshInstructions": null
         }
       ],
-      "compatibility": "Register only Roo Industries menu values. Power and startup entries open Windows review dialogs; ownership opens the app review before changing one selected item. Restore preserves unrelated menus.",
+      "compatibility": "Register only menu values owned by this app. Power and startup entries open Windows review dialogs; ownership opens the app review before changing one selected item. Restore preserves unrelated menus.",
       "actions": [
         {
           "id": "file-ownership",

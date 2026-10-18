@@ -1,4 +1,4 @@
-# Roo Industries Optimization Suite — WinUI frontend
+# Performance Tuning Utility WinUI frontend
 
 The Windows desktop app uses WinUI 3. System changes run through the existing
 backend review, apply, and restore operations.

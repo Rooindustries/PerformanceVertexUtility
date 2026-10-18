@@ -88,7 +88,7 @@ try{
   $script:runClock=[Diagnostics.Stopwatch]::StartNew();Log ('RUN START '+$run)
   $cursor=Get-ShippedLogCursor $logPath;$launchUtc=[DateTime]::UtcNow;$logCaptured=$false
   Assert-HarnessHostLease;Assert-NoForeignInstance $exe;$script:receipt=Start-OwnedProcess -FilePath (Get-HarnessToolPath $exe) -WindowStyle Normal -Purpose measured-app;$script:app=$script:receipt.process
-  $script:window=WaitFor { $condition=[Windows.Automation.PropertyCondition]::new($A::ProcessIdProperty,$script:app.Id);@($A::RootElement.FindAll($TS::Children,$condition)|Where-Object {$_.Current.Name -like 'Roo Industries*' -and $_.Current.NativeWindowHandle -ne 0})|Select-Object -First 1 } 120 'app main window'
+  $script:window=WaitFor { $condition=[Windows.Automation.PropertyCondition]::new($A::ProcessIdProperty,$script:app.Id);@($A::RootElement.FindAll($TS::Children,$condition)|Where-Object {($_.Current.Name -like 'Performance Tuning Utility*' -or $_.Current.Name -like 'Roo Industries*') -and $_.Current.NativeWindowHandle -ne 0})|Select-Object -First 1 } 120 'app main window'
   Register-HarnessWindow $script:window|Out-Null;WaitFor {(@(Texts) -contains 'Start here')} 120 'Home rendered'|Out-Null
   if($run -eq 1){Save 'app-runtimeconfig.json' ([IO.File]::ReadAllText((Get-HarnessLongPath (Join-Path $install 'app\RooIndustries.OptimizationSuite.App.runtimeconfig.json')))|ConvertFrom-Json);try{Save 'diagnostic-pipes.json' @{pid=$script:app.Id;matching=@([IO.Directory]::GetFiles('\\.\pipe\')|Where-Object {$_ -like ('*dotnet-diagnostic-'+$script:app.Id+'*')})}}catch{Save 'diagnostic-pipes.json' @{pid=$script:app.Id;error=$_.Exception.Message}}}
   Start-Sleep 60;Sample $run 'initial-Home-60s' 60

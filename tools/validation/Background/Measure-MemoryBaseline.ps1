@@ -74,7 +74,7 @@ try{
   $script:runClock=[Diagnostics.Stopwatch]::StartNew();Log ('RUN START '+$run)
   $script:app=Start-Process $exe -PassThru;$script:receipt=New-OwnedProcess $script:app
   Save 'owned-processes.json' @{app=$script:receipt.Identity;helpers=@($script:ownedHelpers|ForEach-Object {$_.Identity})}
-  $script:window=WaitFor { $condition=[Windows.Automation.PropertyCondition]::new($A::ProcessIdProperty,$script:app.Id);@($A::RootElement.FindAll($TS::Children,$condition)|Where-Object {$_.Current.Name -like 'Roo Industries*' -and $_.Current.NativeWindowHandle -ne 0})|Select-Object -First 1 } 120 'app main window'
+  $script:window=WaitFor { $condition=[Windows.Automation.PropertyCondition]::new($A::ProcessIdProperty,$script:app.Id);@($A::RootElement.FindAll($TS::Children,$condition)|Where-Object {($_.Current.Name -like 'Performance Tuning Utility*' -or $_.Current.Name -like 'Roo Industries*') -and $_.Current.NativeWindowHandle -ne 0})|Select-Object -First 1 } 120 'app main window'
   [Roo20MemoryNative]::SetWindowPos([IntPtr]::new($script:window.Current.NativeWindowHandle),[IntPtr]::new(-1),0,0,0,0,0x43)|Out-Null
   [Roo20MemoryNative]::SetForegroundWindow([IntPtr]::new($script:window.Current.NativeWindowHandle))|Out-Null
   try{$script:window.SetFocus()}catch{}

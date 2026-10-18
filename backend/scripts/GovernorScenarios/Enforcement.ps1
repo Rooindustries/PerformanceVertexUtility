@@ -68,7 +68,7 @@ function Test-ScenarioReassert {
     Assert ((Read-Field $probe 'cpuPriority') -eq 'Idle') 'After three put-backs within ten minutes the governor steps back for that field'
     $cpu=@(Get-Open $probe.Id|Where-Object {$_.field -eq 'cpuPriority'})
     Note 'steppedBack' $cpu
-    Assert ($cpu.Count -eq 1 -and $cpu[0].status -eq 'conflict' -and $cpu[0].errorKind -eq 'keepsChanging' -and $cpu[0].error -eq 'This app keeps changing it back, so Roo Industries stepped back.') 'The stepped-back field says the app keeps changing it back'
+    Assert ($cpu.Count -eq 1 -and $cpu[0].status -eq 'conflict' -and $cpu[0].errorKind -eq 'keepsChanging' -and $cpu[0].error -eq 'This app keeps changing it back, so the Governor stepped back.') 'The stepped-back field says the app keeps changing it back'
     if($FinalPriority -ne 'Idle'){Set-Field $probe 'cpuPriority' $FinalPriority}
     Set-Field $probe 'ioPriority' 0
     Assert ($null -ne (Wait-Field $probe 'ioPriority' 1 6)) 'The other field of the same app is still enforced'

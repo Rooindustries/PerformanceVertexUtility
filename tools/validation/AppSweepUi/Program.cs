@@ -738,7 +738,7 @@ if (args is [] or ["responses"] or ["cleanup"] or ["race"])
         await cleanup.PreviewRemovalCommand.ExecuteAsync(null);
     }
     bool RouteBlocked() => !cleanup.RemovalPathReviewed && !cleanup.CanReviewRemovalAction && cleanup.PrimaryRemovalButtonLabel == "Use Remove apps"
-        && cleanup.ApplyApprovalSummary == "Roo Industries can't run this app's remover. Use Remove apps to remove it.";
+        && cleanup.ApplyApprovalSummary == "Can't run this app's remover. Use Remove apps to remove it.";
     const string goneLine = "\"C:\\Program Files\\Gone\\uninstall.exe\" /S";
     await CheckRoute(new UninstallCommand { CommandType = "registry-uninstall-string", RawCommand = goneLine, CommandLine = goneLine, ExecutableSha256 = null, ExecutableState = "missing" });
     Check(RouteBlocked() && cleanup.OfficialPreviewState.Contains("remover file is missing", StringComparison.Ordinal), "A remover whose file is missing is blocked and says the file is missing");

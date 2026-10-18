@@ -116,7 +116,7 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
     public string ApplyApprovalSummary => !HasSelection
         ? "Pick an app first."
         : RemovalRouteBlocked
-            ? "Roo Industries can't run this app's remover. Use Remove apps to remove it."
+            ? "Can't run this app's remover. Use Remove apps to remove it."
             : !RemovalPathReviewed
                 ? "Check the removal route first."
                 : !LeftoverScanCompleted
@@ -131,10 +131,10 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
     public string RemovalPanelLabel => "ROO INDUSTRIES REMOVER";
     public string RemovalPathHeadline => SelectedHasOfficialRemover
         ? "Use the app path first"
-        : "Use the Roo Industries removal route";
+        : "Use the built-in removal route";
     public string RemovalPathHelp => SelectedHasOfficialRemover
-        ? "Roo Industries checks the app's own remover, then scans what it leaves behind."
-        : "Some apps do not publish a Windows removal command. Roo Industries can still build the run from traces and leftovers.";
+        ? "Checks the app's own remover, then scans what it leaves behind."
+        : "Some apps do not publish a Windows removal command. The run can still be built from traces and leftovers.";
 
     private readonly List<InstalledApp> _allApps = new();
     private readonly Dictionary<string, string> _cleanupRecoveryByApp = new(StringComparer.Ordinal);
@@ -242,15 +242,15 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
 
         InstallLocation = string.IsNullOrWhiteSpace(value.InstallLocation) ? "Not recorded" : value.InstallLocation;
         OfficialCommand = string.IsNullOrWhiteSpace(value.UninstallString)
-            ? "Roo Industries route. The app did not publish its own remover, so the cleanup run starts from traces and leftovers."
+            ? "Built-in route. The app did not publish its own remover, so the cleanup run starts from traces and leftovers."
             : value.UninstallString;
 
         LeftoverState = "Run a leftover scan. Nothing is removed.";
         OfficialPreviewState = SelectedHasOfficialRemover
             ? "Ready to check the app's own remover."
-            : "Roo Industries route selected. Scan leftovers next.";
+            : "Built-in route selected. Scan leftovers next.";
         CleanupPlanState = "Scan leftovers, then build the removal list.";
-        RemovalPlanState = "Build the list to see exactly what Roo Industries will ask to remove.";
+        RemovalPlanState = "Build the list to see exactly what this app will ask to remove.";
         RemovalPlanDetail = null;
         CleanupExecutionState = "Apply is locked until review is done.";
         CleanupExecutionDetail = "Check the route, scan leftovers, build the list, then approve the exact run.";
@@ -309,9 +309,9 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
             }
             if (command is null)
             {
-                OfficialPreviewState = "Roo Industries route selected. No app remover is needed to keep building the plan.";
+                OfficialPreviewState = "Built-in route selected. No app remover is needed to keep building the plan.";
                 SelectedHasOfficialRemover = false;
-                OfficialCommand = "Roo Industries route. The cleanup run starts from app traces and leftovers.";
+                OfficialCommand = "Built-in route. The cleanup run starts from app traces and leftovers.";
                 PrimaryRemovalButtonLabel = "Plan removal";
                 RemovalPathReviewed = true;
                 return;
@@ -323,7 +323,7 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
                 OfficialCommand = command.RawCommand;
                 OfficialPreviewState = command.CommandType == "appx-package-removal-preview"
                     ? "Use Remove apps to remove this app."
-                    : "Couldn't check this path: its remover doesn't point to one exact file, so Roo Industries won't run it. Use Remove apps to remove this app.";
+                    : "Couldn't check this path: its remover doesn't point to one exact file, so it won't be run. Use Remove apps to remove this app.";
                 BlockRemovalRoute();
                 return;
             }
@@ -333,8 +333,8 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
                 SelectedHasOfficialRemover = false;
                 OfficialCommand = command.CommandLine;
                 OfficialPreviewState = command.ExecutableState == "missing"
-                    ? "Couldn't check this path: the remover file is missing, so Roo Industries won't run it. Use Remove apps to remove this app."
-                    : "Couldn't check this path: the remover file can't be read, so Roo Industries won't run it. Use Remove apps to remove this app.";
+                    ? "Couldn't check this path: the remover file is missing, so it won't be run. Use Remove apps to remove this app."
+                    : "Couldn't check this path: the remover file can't be read, so it won't be run. Use Remove apps to remove this app.";
                 BlockRemovalRoute();
                 return;
             }
@@ -342,13 +342,13 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
             SelectedHasOfficialRemover = IsVendorRemover(command);
             OfficialCommand = !string.IsNullOrWhiteSpace(command.CommandLine)
                 ? command.CommandLine
-                : "Roo Industries route. The cleanup run starts from app traces and leftovers.";
+                : "Built-in route. The cleanup run starts from app traces and leftovers.";
             PrimaryRemovalButtonLabel = SelectedHasOfficialRemover ? "Check path" : "Plan removal";
             OfficialPreviewState = command.Blocked
                 ? "This route needs review, but it does not stop the cleanup plan."
                 : SelectedHasOfficialRemover
-                    ? "Path checked. Roo Industries has not run it."
-                    : "Roo Industries route checked. Nothing has run.";
+                    ? "Path checked. It has not been run."
+                    : "Built-in route checked. Nothing has run.";
             RemovalPathReviewed = true;
         }
         catch (Exception error)
@@ -509,7 +509,7 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
         var generation = _selectionGeneration;
         ScanBusy = true;
         CleanupExecutionState = "Running final check...";
-        CleanupExecutionDetail = "Roo Industries is checking the reviewed route and removal list. Nothing will be removed.";
+        CleanupExecutionDetail = "Checking the reviewed route and removal list. Nothing will be removed.";
         try
         {
             var result = await App.Live.RequestUninstallCleanupApplyResultAsync(app.AppId!, RemoverPathApproved, CleanupListApproved, false);
@@ -651,9 +651,9 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
 
         RemovalPlanState = commandCount > 0
             ? "Run ready: app remover first, then " + cleanupCount.ToString(CultureInfo.InvariantCulture) + " cleanup item" + (cleanupCount == 1 ? "" : "s") + "."
-            : "Run ready: Roo Industries cleanup route with " + cleanupCount.ToString(CultureInfo.InvariantCulture) + " item" + (cleanupCount == 1 ? "" : "s") + ".";
+            : "Run ready: built-in cleanup route with " + cleanupCount.ToString(CultureInfo.InvariantCulture) + " item" + (cleanupCount == 1 ? "" : "s") + ".";
 
-        var runnerLine = runnerReady ? "Roo Industries has a runner for this route." : "This route needs one more engine check.";
+        var runnerLine = runnerReady ? "The app has a runner for this route." : "This route needs one more engine check.";
         var gateLine = gateCount > 0
             ? gateCount.ToString(CultureInfo.InvariantCulture) + " safety check" + (gateCount == 1 ? "" : "s") + " still need proof before real cleanup."
             : "No safety checks are blocking this run.";
@@ -762,7 +762,7 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
             {
                 FinalCheckPassed = ExtractBool(root, "summary", "approvalReady");
                 CleanupExecutionState = FinalCheckPassed ? "Final check passed." : "The reviewed inputs need attention.";
-                CleanupExecutionDetail = (rooIndustriesRoute ? "Roo Industries can use its own route for this app. " : string.Empty)
+                CleanupExecutionDetail = (rooIndustriesRoute ? "The built-in route can handle this app. " : string.Empty)
                     + cleanupItems.ToString(CultureInfo.InvariantCulture) + " file/folder target" + (cleanupItems == 1 ? "" : "s") + " checked. Nothing was removed.";
                 SetSelectedRecovery(expectedAppId);
                 return;

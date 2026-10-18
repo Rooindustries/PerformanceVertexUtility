@@ -8,7 +8,7 @@ Backend ownership covers reliability, safety, Windows integration, data contract
 
 Frontend ownership covers the UI and UX implementation: layout, interaction design, visual polish, responsiveness, page composition, and product feel.
 
-The split should let the frontend be built as a professional Roo Industries WinUI experience without requiring UI code to guess how system actions work, while backend code keeps risky Windows behavior deterministic, reversible, tested, and documented.
+The split should let the frontend be built as a professional WinUI experience without requiring UI code to guess how system actions work, while backend code keeps risky Windows behavior deterministic, reversible, tested, and documented.
 
 ## Backend Owns
 
@@ -97,7 +97,7 @@ The split should let the frontend be built as a professional Roo Industries WinU
 
 ### Visual Design
 
-- Roo Industries Blue and Blackout Gold theme application.
+- Blue and Blackout Gold theme application.
 - Manrope font usage.
 - Logo placement.
 - Splash/loading polish.

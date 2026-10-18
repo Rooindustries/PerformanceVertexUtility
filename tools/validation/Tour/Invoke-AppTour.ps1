@@ -58,7 +58,7 @@ function Action([string]$Kind,[string]$Selector,$Element=$null,[double]$Value=0)
   'section' {$parent=FindId 'WindowsTweakSections';$target=Unique $parent '' $Selector $CT::ListItem;$patternName='SelectionItemPattern.Select'}
   'simple' {if($Selector -cne 'SimpleModeToggle'){throw 'Toggle is not allowed'};$target=FindId $Selector;$patternName='TogglePattern.Toggle'}
   'theme' {if($Selector -cne 'ThemePicker'){throw 'ComboBox is not allowed'};$target=FindId $Selector;$patternName='ExpandCollapsePattern.Expand'}
-  'theme-choice' {if($Selector -notin 'Roo Industries Blue','Blackout Gold'){throw 'Theme is not allowed'};$parent=FindId 'ThemePicker';$target=Unique $parent '' $Selector $CT::ListItem;$patternName='SelectionItemPattern.Select'}
+  'theme-choice' {if($Selector -notin 'Blue','Blackout Gold'){throw 'Theme is not allowed'};$parent=FindId 'ThemePicker';$target=Unique $parent '' $Selector $CT::ListItem;$patternName='SelectionItemPattern.Select'}
   'firmware' {if($Selector -cne 'OpenFirmware'){throw 'Button is not allowed'};$target=FindId $Selector;$patternName='InvokePattern.Invoke'}
   'back' {if($Selector -cne ([string][char]0x2190+' Tools')){throw 'Button is not allowed'};$target=Unique $parent '' $Selector $CT::Button;$patternName='InvokePattern.Invoke'}
   'scroll' {

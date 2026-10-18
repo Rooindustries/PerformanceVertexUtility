@@ -146,7 +146,7 @@ function Select-Readme($Window) {
     if($lists.Count -ne 1){throw 'Native README checklist missing or ambiguous'}
     $hwnd=$lists[0].Current.NativeWindowHandle;$windowHandle=$Window.Current.NativeWindowHandle;$processId=$Window.Current.ProcessId
     $items=@([BlackwellReadmeControls]::ReadChecks($windowHandle,$hwnd,$processId));$guide=@($items|Where-Object {$_.role -eq 44 -and $_.name -match '^Read the beta tester guide$'})
-    if($guide.Count -ne 1 -or @($items|Where-Object {$_.role -ne 44 -or ($_.name -notmatch '^Read the beta tester guide$' -and $_.name -notmatch '^(Launch|Open) Roo Industries ')}).Count){throw 'Native README checklist differs; refuse input'}
+    if($guide.Count -ne 1 -or @($items|Where-Object {$_.role -ne 44 -or ($_.name -notmatch '^Read the beta tester guide$' -and $_.name -notmatch '^(Launch|Open) (Performance Tuning Utility|Roo Industries) ')}).Count){throw 'Native README checklist differs; refuse input'}
     foreach($item in $items){Assert-Wizard $Window;[BlackwellReadmeControls]::SetChecked($windowHandle,$hwnd,$processId,$item.index,($item.index -eq $guide[0].index))}
     $after=@([BlackwellReadmeControls]::ReadChecks($windowHandle,$hwnd,$processId))
     $steps.Add(@{action='native README checklist confirmed';items=$after;observedUtc=[DateTime]::UtcNow.ToString('o')})
@@ -342,7 +342,7 @@ try {
             if($case.finishInvoked -and $notepads.Count -gt 1){$case.error='Ambiguous matching native README starts; refuse ownership.';break}
             if($case.finishInvoked){Start-Sleep -Milliseconds 50;continue}
             $desktopRoot=[Windows.Automation.AutomationElement]::RootElement
-            $windows=@($desktopRoot.FindAll([Windows.Automation.TreeScope]::Children,[Windows.Automation.Condition]::TrueCondition)|Where-Object {$_.Current.ProcessId -gt 0 -and $before -notcontains $_.Current.ProcessId -and $_.Current.Name -match 'Roo Industries' -and $_.Current.Name -match 'Setup'})
+            $windows=@($desktopRoot.FindAll([Windows.Automation.TreeScope]::Children,[Windows.Automation.Condition]::TrueCondition)|Where-Object {$_.Current.ProcessId -gt 0 -and $before -notcontains $_.Current.ProcessId -and $_.Current.Name -match '(Performance Tuning Utility|Roo Industries)' -and $_.Current.Name -match 'Setup'})
             if($windows.Count -gt 1){throw 'Ambiguous installer windows; refuse input'}
             if($windows.Count -eq 1){
                 $window=$windows[0];$wp=Get-Process -Id $window.Current.ProcessId -ErrorAction Stop

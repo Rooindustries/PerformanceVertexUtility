@@ -26,7 +26,7 @@ This document records which tools from `Utilities.zip` should become app feature
 | WPD | Used | Manual launcher/reference; native safe privacy toggles in app. |
 | Revo Uninstaller | Used, but wants replacement | Native bulk uninstaller module. |
 | DeviceCleanup | Used | Native dead-device cleanup module plus optional launcher. |
-| UserDiag | Used; wants sales CTA | Separate diagnostics section with rooindustries.com plan recommendation. |
+| UserDiag | Used | Separate diagnostics section. |
 | Autoruns | Not used; user wants explanation | Advanced startup inspector, education, manual launch only. |
 | AffTool / intPolicy | Research only | Read-only interrupt/affinity policy status first; no blind apply. |
 | MSI Utility v3 | Used for MSI mode awareness | Read-only MSI mode/status detector first; apply later only with restore/export proof. |
@@ -113,7 +113,7 @@ Inputs:
 - Installed GPU driver version.
 - CPU, chipset, network adapter, motherboard/laptop model.
 - Installed games.
-- Known-good driver metadata maintained by Roo Industries.
+- Known-good driver metadata maintained in this repo.
 - Benchmark results per game/profile/driver.
 
 Outputs:
@@ -147,14 +147,12 @@ Required metadata shape:
 - Score by average FPS, 1% lows, frametime consistency, input latency proxy, crash rate, and visual issues.
 - Publish top five tested profiles as selectable options.
 
-## UserDiag CTA Concept
+## Diagnostics summary
 
 After UserDiag or native diagnostics:
 
 - Summarize CPU, GPU, RAM, storage, thermals, driver age, startup load, and obvious bottlenecks.
-- Match the client to an offer tier.
-- Show CTA: `Based on your CPU/GPU/RAM and detected bottlenecks, the XYZ plan on rooindustries.com may improve performance for this PC.`
-- Keep the CTA transparent: it must be a recommendation, not a fake warning.
+- Show only findings. The app doesn't recommend paid services.
 
 ## Autoruns Explanation
 

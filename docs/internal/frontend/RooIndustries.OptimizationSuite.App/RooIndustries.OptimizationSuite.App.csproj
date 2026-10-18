@@ -7,9 +7,9 @@
     <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
     <RootNamespace>RooIndustries.OptimizationSuite</RootNamespace>
     <AssemblyName>RooIndustries.OptimizationSuite.App</AssemblyName>
-    <Title>Roo Industries Optimization Suite</Title>
-    <Product>Roo Industries Optimization Suite</Product>
-    <Company>Roo Industries</Company>
+    <Title>Performance Tuning Utility</Title>
+    <Product>Performance Tuning Utility</Product>
+    <Company>Performance Tuning Utility</Company>
     <Version>0.11.1-beta</Version>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <ApplicationManifest>app.manifest</ApplicationManifest>

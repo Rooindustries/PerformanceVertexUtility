@@ -34,7 +34,7 @@ public sealed class PreparingWindow : IDisposable
         var scale = Math.Max(1.0, GetDpiForSystem() / 96.0);
         int Scaled(int value) => (int)Math.Round(value * scale);
         var width = Scaled(460); var height = Scaled(190);
-        var window = CreateWindowEx(ExTopmost | ExToolWindow, "#32770", "Roo Industries Optimization Suite", WsPopup | WsCaption, (GetSystemMetrics(0) - width) / 2, (GetSystemMetrics(1) - height) / 2, width, height, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
+        var window = CreateWindowEx(ExTopmost | ExToolWindow, "#32770", "Performance Tuning Utility", WsPopup | WsCaption, (GetSystemMetrics(0) - width) / 2, (GetSystemMetrics(1) - height) / 2, width, height, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
         if (window == IntPtr.Zero) return;
         var font = GetStockObject(DefaultGuiFont);
         var heading = CreateWindowEx(0, "STATIC", "Preparing your saved settings", WsChild | WsVisible | SsCenter, Scaled(16), Scaled(18), width - Scaled(48), Scaled(24), window, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);

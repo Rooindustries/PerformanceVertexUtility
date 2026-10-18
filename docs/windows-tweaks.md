@@ -1,6 +1,6 @@
 # Windows settings
 
-Roo Industries combines source controls from O&O ShutUp10, Chris Titus Tech
+The app combines source controls from O&O ShutUp10, Chris Titus Tech
 WinUtil, FSOS-X Dash and WPD into a shared catalog. The current development
 catalog contains 1,035 setting resources and 1,271 presets derived from 632
 version/control records. These are catalog counts, not a claim that every

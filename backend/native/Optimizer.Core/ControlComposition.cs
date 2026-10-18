@@ -73,7 +73,7 @@ public static class ControlComposition
             if (before.All(claim => !P(claim)) && after.All(claim => !P(claim)))
                 return requested.Length > 0 ? (after[0].Desired, null, left, null) : (current.Value, held.RestoreValue, left, held.Applied);
             if (requested.Any(claim => !P(claim))) throw new InvalidDataException("Restore individual policy fields before replacing the complete policy.");
-            if (snapshot && requested.Length > 0) throw new InvalidDataException("Windows Security changed exploit protection settings that Roo Industries manages. Use Undo on those settings first, then apply again.");
+            if (snapshot && requested.Length > 0) throw new InvalidDataException("Windows Security changed exploit protection settings that this app manages. Use Undo on those settings first, then apply again.");
             var cleared = Revert(current.Value, baseline, reverting);
             var value = Assign(cleared, kept.Where(Intact).Concat(requested));
             if (requested.Length == 0) return (value, held.RestoreValue, left, Revert(held.Applied, baseline, Free(held.Applied, F(released), F(after))));

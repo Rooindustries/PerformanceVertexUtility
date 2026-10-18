@@ -182,7 +182,7 @@ function Read-Control($address){
             $value=$values
         }
         'firewall-blocklist' {
-            if($address.property -ne 'rule' -or $address.target -notmatch '^RooIndustries-Block-[a-f0-9]{16,32}$'){throw 'An exact Roo Industries firewall rule identity is required.'}
+            if($address.property -ne 'rule' -or $address.target -notmatch '^RooIndustries-Block-[a-f0-9]{16,32}$'){throw 'An exact firewall rule identity from this app is required.'}
             $policy=New-Object -ComObject HNetCfg.FwPolicy2
             $rules=@($policy.Rules | Where-Object {$_.Name -ceq $address.target})
             if($rules.Count -gt 1){throw 'More than one firewall rule uses this identity.'}

@@ -1,4 +1,4 @@
-Roo Industries Optimization Suite {Version}
+Performance Tuning Utility {Version}
 Beta tester guide
 
 Thanks for testing! This is a beta. Please read this once before you start.
@@ -9,7 +9,7 @@ Thanks for testing! This is a beta. Please read this once before you start.
 - Run RooIndustries-OptimizationSuite-{Version}-setup.exe and follow the steps.
 - You don't need to install anything else. .NET and the Windows App SDK are
   already inside the app.
-- Open it from the Start menu: Roo Industries Optimization Suite.
+- Open it from the Start menu: Performance Tuning Utility.
 - Windows asks "Do you want to allow this app to make changes?" every time you
   open it. Click Yes. The app needs administrator rights to change Windows
   settings and to save your undo information.
@@ -24,7 +24,8 @@ The beta isn't signed yet, so Windows doesn't recognize it. When you run the
 setup file:
 - Click "More info".
 - Click "Run anyway".
-Only do this for a setup file you got directly from Roo Industries. You can
+Only do this for a setup file you got directly from the person who gave you
+the beta. You can
 check the file with the SHA256 value we sent you: open PowerShell and run
   Get-FileHash .\RooIndustries-OptimizationSuite-{Version}-setup.exe
 and compare the result.
@@ -124,28 +125,28 @@ Use "Report a bug" in the app menu (next to Settings). It fills in your PC
 specs for you. Add your Discord or email if you want a reply, describe what
 happened, then press "Attach logs" and send.
 
-What gets sent to Roo Industries: the specs shown in the form, your
+What gets sent to the developers: the specs shown in the form, your
 description, your contact if you gave one, the app's logs and a short list of
 which tweaks are applied. Your Windows username, PC name and user folder paths
 are removed first, and no serial numbers are collected.
 
 If this beta can't send reports online, or sending fails, press "Save report
 to a file" instead, then "Open folder", and send that zip file to the
-Roo Industries contact who gave you the beta.
+person who gave you the beta.
 
 
 10. Updating and uninstalling
 -----------------------------
 From this version on, the app updates itself. It checks for a new beta when
 it opens and every few hours after that, downloads it in the background and
-checks that it really comes from Roo Industries. When it's ready, you see
+checks that it really comes from the developers. When it's ready, you see
 "Version ... is ready to install". Press Install now: the app closes, updates
 and opens again by itself, usually within a minute. You don't need to
 download or run a setup file again. You can also check by hand, or turn off
 automatic downloads, in Settings > Updates. The app never installs an update
 while a game session or the timer setting is running; stop them first.
 
-The installer takes care of the Roo Industries Governor (the part that keeps
+The installer takes care of the Governor (the part that keeps
 your saved process rules on). When you install a new beta, it pauses the
 governor, gives your apps their old settings back, updates the files and then
 starts the governor again. When you uninstall, it stops the governor, gives
@@ -176,9 +177,9 @@ After that, what carries over and what does not:
 Before you install a new beta or uninstall, still stop a running game session
 and turn off the timer setting. Otherwise Windows may keep some files in use.
 
-To uninstall, open Settings > Apps > Installed apps > Roo Industries
-Optimization Suite > Uninstall, or use "Uninstall Roo Industries Optimization
-Suite" in the Start menu. Remember to undo your tweaks first if you want them
+To uninstall, open Settings > Apps > Installed apps > Performance Tuning
+Utility > Uninstall, or use "Uninstall Performance Tuning Utility" in the
+Start menu. Remember to undo your tweaks first if you want them
 gone.
 
 Programs the app opens for you (tool installers, web pages, folders) also run

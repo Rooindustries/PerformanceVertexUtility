@@ -438,7 +438,7 @@ public static class SecondAccountNative {
                 if ($app.process.HasExited) { throw ('B app exited with ' + $app.process.ExitCode) }
                 @($a::RootElement.FindAll([Windows.Automation.TreeScope]::Children,
                     [Windows.Automation.PropertyCondition]::new($a::ProcessIdProperty, $app.Identity.pid)) |
-                    Where-Object { $_.Current.NativeWindowHandle -ne 0 -and $_.Current.Name -like 'Roo Industries*' })[0]
+                    Where-Object { $_.Current.NativeWindowHandle -ne 0 -and ($_.Current.Name -like 'Performance Tuning Utility*' -or $_.Current.Name -like 'Roo Industries*') })[0]
             } 60 ('UIA access to B main window for ' + $Name)
             $dashboard = WaitFor { $window.FindFirst([Windows.Automation.TreeScope]::Descendants,
                 [Windows.Automation.PropertyCondition]::new($a::NameProperty, 'Start here')) } 60 ('B dashboard for ' + $Name)

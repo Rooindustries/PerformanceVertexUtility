@@ -88,7 +88,7 @@ public static class CustomTweaks
         var read = FileAccessControl.Read(address);
         var definition = new TweakDefinition("ownership." + read.Id[..16].ToLowerInvariant(), "File ownership: " + Path.GetFileName(path), "File permissions",
             "Set this item's owner to the current Windows user and add a non-inheriting Full Control entry. Existing deny entries still apply. Child items stay unchanged.", 10240, 26200, ["*"], "none",
-            [new("take", "Take ownership", [], Controls: [new(address, ControlValues.From(new { takeOwnership = true }))])], [new("Roo Industries", "selected file", read.Identity)], Advanced: true);
+            [new("take", "Take ownership", [], Controls: [new(address, ControlValues.From(new { takeOwnership = true }))])], [new("Built-in", "selected file", read.Identity)], Advanced: true);
         using var guard = OperationFiles.Lock(Store); var current = Read();
         var updated = current with { Entries = current.Entries.Where(entry => entry.Id != definition.Id).Append(definition).ToArray() };
         if (updated.Entries.Length > 200) throw new InvalidDataException("Restore unused file-permission profiles before adding another ownership entry.");

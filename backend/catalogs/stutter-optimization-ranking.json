@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "catalogId": "stutter-optimization-ranking",
-  "product": "LeanClientOptimizer",
+  "product": "Performance Tuning Utility",
   "targetScenario": {
     "name": "16 GB RAM Overwatch + OBS + Discord stutter reduction",
     "game": "Overwatch",
@@ -53,7 +53,7 @@
       "role": "manual utility and native replacement reference"
     },
     {
-      "sourceProduct": "LeanClientOptimizer performance target",
+      "sourceProduct": "Performance Tuning Utility performance target",
       "sourceKind": "product-target",
       "path": "docs/performance-target.md",
       "role": "target scenario and scoring order"
@@ -296,7 +296,7 @@
     {
       "rank": 9,
       "optimizationId": "winutil-safe-tweak-normalization",
-      "title": "Normalize WinUtil tweaks into safe, reversible Roo Industries actions",
+      "title": "Normalize WinUtil tweaks into safe, reversible app actions",
       "sourceProducts": [
         "Chris Titus WinUtil"
       ],
@@ -312,7 +312,7 @@
         "normalize each tweak to preview/apply/rollback metadata",
         "label target impact such as RAM, startup, GameDVR, background apps, network, power, or cosmetics",
         "keep advanced and preset members opt-in until individually audited",
-        "preserve LeanClientOptimizer protected services and registry patterns"
+        "preserve the app's protected services and registry patterns"
       ],
       "firstSlice": "Add read-only normalized WinUtil entries with target-impact tags and reject/default-off flags for risky advanced tweaks.",
       "risk": "medium",
@@ -401,7 +401,7 @@
   "deprioritizedForThisTarget": [
     {
       "item": "WinUtil themes and navigation",
-      "reason": "No stutter relevance; preserve Roo Industries branding and app shell."
+      "reason": "No stutter relevance; preserve the app's branding and shell."
     },
     {
       "item": "Generic app install catalogs",

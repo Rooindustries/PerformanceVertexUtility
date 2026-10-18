@@ -4,7 +4,7 @@
 
 [Setup]
 AppId={{5A0C6E44-3D75-4C8B-A3F2-9E1B7C2D4F10}
-AppName=Roo Industries setup process check
+AppName=Performance Tuning Utility setup process check
 AppVersion=0
 CreateAppDir=no
 Uninstallable=no
