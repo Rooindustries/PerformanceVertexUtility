@@ -214,6 +214,35 @@ def path_lint_negative_controls():
     return results
 
 
+def public_surface_negative_controls():
+    check = runpy.run_path(str(Path(__file__).with_name('check_public_surface.py')))['check']
+    sid = 'S-1-5-21-'
+    users = 'C:\\Users\\'
+    computer = '$env:COMPUTER' + 'NAME'
+    cases = {
+        'real account SID': ({'a.ps1': "$s='" + sid + "1234567890-1234567890-1234567890-1001'"}, ['a.ps1:1: account SID']),
+        'fake account SIDs': ({'a.ps1': sid + '1-2-3-1001 ' + sid + '111-222-333-1002 ' + sid + '111111111-222222222-333333333-1001'}, []),
+        'user folder name': ({'a.json': '"' + users.replace('\\', '\\\\') + 'jdoe\\\\x"\n' + users + 'jdoe\nC:/Users/' + 'jdoe/x'}, ['a.json:1: user folder name', 'a.json:2: user folder name', 'a.json:3: user folder name']),
+        'placeholder user folders': ({'a.txt': users + 'Public\\x ' + users + 'Default User\\x ' + users + 'Client\\x ' + users + 'John Smith\\x' + ' ' + users + "J'+[char]0xFC"}, []),
+        'home folder name': ({'a.sh': '/home/' + 'jdoe/x\n/Users/' + 'jdoe/y'}, ['a.sh:1: home folder name', 'a.sh:2: home folder name']),
+        'placeholder home folders': ({'a.sh': '/home/' + 'runner/x /Users/' + 'example/y'}, []),
+        'tailnet address': ({'a.md': '100.' + '101.2.3\n100.' + '63.1.1 100.' + '128.1.1'}, ['a.md:1: tailnet address']),
+        'private network address': ({'a.md': '192.' + '168.1.20\n10.' + '0.19041.1'}, ['a.md:1: private network address']),
+        'tailnet host name': ({'a.md': 'box.tail1234.ts' + '.net'}, ['a.md:1: tailnet host name']),
+        'email address': ({'a.txt': 'ok\nok\njdoe@' + 'gmail.com\nme@example.com GetTickCount@kernel32.dll'}, ['a.txt:3: email address']),
+        'computer name literal': ({'a.ps1': 'if(' + computer + " -cne 'PC-1'){}\nif('PC-1' -ieq " + computer + '){}\nif(' + computer + ' -cne $ExpectedMachine){}' + "\nparam([string]$Expected" + "Machine='PC-1')\nparam([string]$Expected" + "Computer='')"}, ['a.ps1:1: computer name literal', 'a.ps1:2: computer name literal', 'a.ps1:4: computer name literal']),
+        'remote host literal': ({'a.py': 'w.inv' + "oke('test-pc', m, s)\n" + 'HO' + "ST = 'test-pc'\nhost = 'must-not-connect.invalid' if x else args.host\nw.inv" + "oke(args.host, m, s)" + "\nself.inv" + "oke('& ' + w.ps_literal(x), timeout=5)", 'a.ps1': 'w.inv' + "oke('test-pc', m, s)"}, ['a.py:1: remote host literal', 'a.py:2: remote host literal']),
+    }
+    results = {}
+    for label, (files, expected) in cases.items():
+        with tempfile.TemporaryDirectory() as folder:
+            temporary = Path(folder)
+            for relative, source in files.items():
+                (temporary / relative).write_text(source, encoding='utf-8')
+            results[label] = sorted(check(temporary)) == sorted(expected)
+    return results
+
+
 def validate(root: Path, contracts_only: bool = False):
     failures = []
     failures.extend(code_loading_failures(root))
@@ -230,6 +259,10 @@ def validate(root: Path, contracts_only: bool = False):
         for label, passed in path_lint_negative_controls().items():
             if not passed:
                 failures.append(f'Negative control failed: {label} did not match the path lint result')
+        failures.extend(runpy.run_path(str(Path(__file__).with_name('check_public_surface.py')))['check'](root))
+        for label, passed in public_surface_negative_controls().items():
+            if not passed:
+                failures.append(f'Negative control failed: {label} did not match the public surface check result')
     documents = {}
     for folder in ('backend/contracts', 'backend/samples', 'backend/profiles', 'backend/uninstall', 'backend/catalogs', 'backend/capabilities', 'modules'):
         for path in sorted((root / folder).rglob('*.json')):
