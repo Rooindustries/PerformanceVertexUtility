@@ -35,6 +35,7 @@ $unknown = @(@($TestName) + @($ExcludeTestName) | Where-Object { $_ -notin $allT
 if ($unknown.Count -gt 0) { throw ('Unknown tests: ' + ($unknown -join ', ')) }
 $testScripts = @($allTestScripts | Where-Object { ($TestName.Count -eq 0 -or $_.Name -in $TestName) -and $_.Name -notin $ExcludeTestName })
 $testScripts = @(for ($index = 0; $index -lt $testScripts.Count; $index++) { if ($index % $ShardCount -eq $ShardIndex) { $testScripts[$index] } })
+if ($testScripts.Count -eq 0) { throw 'No backend suites match the selection.' }
 $parseErrors = @()
 $parsedFiles = 0
 foreach ($file in @((Get-ChildItem (Join-Path $repoRoot 'backend') -Filter '*.ps1' -Recurse -File),(Get-ChildItem (Join-Path $repoRoot 'tools') -Filter '*.ps1' -Recurse -File),(Get-Item (Join-Path $repoRoot 'LeanClientOptimizer.ps1'))) | ForEach-Object { $_ }) {
