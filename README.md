@@ -104,6 +104,6 @@ See [desktop controls](docs/optimization-controls.md#desktop-workflows) for CPU 
 
 ## Credits
 
-This app is built on other people's work. [CREDITS.md](CREDITS.md) lists every project, tool, library and font it draws from, with links and licenses.
+This app is built on other people's work. [CREDITS.md](CREDITS.md) lists the projects, tools, libraries and fonts it draws from, with links and licenses.
 
 Made and maintained by Roo Industries.
