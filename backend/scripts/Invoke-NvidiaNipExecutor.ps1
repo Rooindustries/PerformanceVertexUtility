@@ -79,7 +79,32 @@ function Write-NvidiaRollbackManifest {
     }
 }
 
+function Assert-NvidiaPathsWithoutReparsePoint {
+    param([string[]]$Paths)
+    foreach ($path in @($Paths)) {
+        if ([string]::IsNullOrWhiteSpace($path)) { continue }
+        $fullPath = Resolve-RooIndustriesPath $path $path
+        $item = $null
+        try { $item = Get-Item -LiteralPath $fullPath -Force -ErrorAction Stop }
+        catch [System.Management.Automation.ItemNotFoundException] {}
+        if ($null -ne $item -and (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -or $item.LinkType -eq 'HardLink')) {
+            throw 'The export, rollback manifest and output paths must not go through a junction, symbolic link or hard link. Nothing was changed.'
+        }
+        for ($directory = [IO.DirectoryInfo]::new($fullPath).Parent; $null -ne $directory; $directory = $directory.Parent) {
+            $attributes = $directory.Attributes
+            if ([int]$attributes -ne -1 -and ($attributes -band [IO.FileAttributes]::ReparsePoint)) {
+                throw 'The export, rollback manifest and output paths must not go through a junction, symbolic link or hard link. Nothing was changed.'
+            }
+        }
+    }
+}
+
 try {
+    $requestedOutputPath = $OutputPath
+    $OutputPath = ''
+    Assert-NvidiaPathsWithoutReparsePoint @($ExportPath, $RollbackManifestPath, $requestedOutputPath)
+    $requestedPaths = @(@($ExportPath, $RollbackManifestPath, $requestedOutputPath) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | ForEach-Object { (Resolve-RooIndustriesPath $_ $_).TrimEnd('\', '/').ToUpperInvariant() })
+    if (@($requestedPaths | Select-Object -Unique).Count -ne $requestedPaths.Count) { throw 'The export, rollback manifest and output paths must be three different files. Nothing was changed.' }
     $persistedRollbackManifest = $null
     $resolvedRequestedRollbackManifestPath = $null
     $rollbackManifestBound = $false
@@ -113,6 +138,12 @@ try {
 
     $commands = Get-RooIndustriesPropertyValue $preview 'commands' $null
     $rollbackManifest = if ($Operation -eq 'Restore' -and $null -ne $persistedRollbackManifest) { $persistedRollbackManifest } else { Get-RooIndustriesPropertyValue $preview 'rollbackManifest' $null }
+    $manifestExportReference = [string](Get-RooIndustriesPropertyValue $rollbackManifest 'exportPath' '')
+    Assert-NvidiaPathsWithoutReparsePoint @($ExportPath, $manifestExportReference, $RollbackManifestPath, $requestedOutputPath)
+    $exportPaths = @(@($ExportPath, $manifestExportReference) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | ForEach-Object { (Resolve-RooIndustriesPath $_ $_).TrimEnd('\', '/').ToUpperInvariant() } | Select-Object -Unique)
+    $resolvedPaths = @($exportPaths) + @(@($RollbackManifestPath, $requestedOutputPath) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | ForEach-Object { (Resolve-RooIndustriesPath $_ $_).TrimEnd('\', '/').ToUpperInvariant() })
+    if (@($resolvedPaths | Select-Object -Unique).Count -ne $resolvedPaths.Count) { throw 'The export, rollback manifest and output paths must be three different files. Nothing was changed.' }
+    $OutputPath = $requestedOutputPath
     if ($Operation -eq 'Restore') {
         $effectiveRestoreExportPath = if ([string]::IsNullOrWhiteSpace($ExportPath)) { [string](Get-RooIndustriesPropertyValue $rollbackManifest 'exportPath' '') } else { $ExportPath }
         $restorePreview = (& (Join-Path $PSScriptRoot 'Restore-NvidiaNipProfile.ps1') `
@@ -146,40 +177,57 @@ try {
     $sequence = New-Object System.Collections.Generic.List[object]
     $status = if ($canExecute) { 'success' } elseif ($ConfirmApply -or $executeRequested) { 'blocked' } else { 'preview' }
     $exportCompleted = $false
+    $exportRefused = $false
     $importCompleted = $false
 
     if ($canExecute -and $Operation -eq 'Apply') {
         $exportCommand = Get-RooIndustriesPropertyValue $commands 'exportCurrentProfile' $null
-        $exportResult = Invoke-NvidiaExecutorCommand -Command $exportCommand -Mode $ExecutorMode -MockShim $MockNvpiShimPath -Timeout $TimeoutSeconds
-        $exportCompleted = ((-not [bool](Get-RooIndustriesPropertyValue $exportResult 'timedOut' $false)) -and [int](Get-RooIndustriesPropertyValue $exportResult 'exitCode' -1) -eq 0)
-        $sequence.Add([pscustomobject]@{
-            order = 1
-            operation = 'export'
-            command = $exportCommand
-            result = $exportResult
-            completed = $exportCompleted
-        }) | Out-Null
-        if ($exportCompleted) {
-            Write-NvidiaRollbackManifest -Manifest $rollbackManifest -Path $RollbackManifestPath -ExportCompleted $true -ImportAttempted $true -ImportCompleted $false -RealExecution ($ExecutorMode -eq 'Real')
-            $importCommand = Get-RooIndustriesPropertyValue $commands 'importCandidateProfile' $null
-            $importResult = Invoke-NvidiaExecutorCommand -Command $importCommand -Mode $ExecutorMode -MockShim $MockNvpiShimPath -Timeout $TimeoutSeconds
-            $importCompleted = ((-not [bool](Get-RooIndustriesPropertyValue $importResult 'timedOut' $false)) -and [int](Get-RooIndustriesPropertyValue $importResult 'exitCode' -1) -eq 0)
-            $sequence.Add([pscustomobject]@{
-                order = 2
-                operation = 'import'
-                command = $importCommand
-                result = $importResult
-                completed = $importCompleted
-            }) | Out-Null
-            if (-not $importCompleted) { $status = 'failed' }
-        } else {
+        $exportTarget = [string]@(Get-RooIndustriesPropertyArray $exportCommand 'arguments')[2]
+        $resolvedExportTarget = if ([string]::IsNullOrWhiteSpace($exportTarget)) { '' } else { Resolve-RooIndustriesPath $exportTarget $exportTarget }
+        if ([string]::IsNullOrWhiteSpace($exportTarget) -or (Test-Path -LiteralPath $resolvedExportTarget)) {
+            $exportRefused = $true
             $status = 'failed'
             $sequence.Add([pscustomobject]@{
-                order = 2
+                order = 1
                 operation = 'import'
                 skipped = $true
-                reason = 'Export failed or timed out; import was not attempted.'
+                reason = 'The rollback export path already exists, so an older file cannot stand in for this export. Choose a new export path; import was not attempted.'
             }) | Out-Null
+        } else {
+            $exportResult = Invoke-NvidiaExecutorCommand -Command $exportCommand -Mode $ExecutorMode -MockShim $MockNvpiShimPath -Timeout $TimeoutSeconds
+            $exportFileReady = (Test-Path -LiteralPath $resolvedExportTarget -PathType Leaf) -and (Get-Item -LiteralPath $resolvedExportTarget -Force).Length -gt 0
+            $exportProcessSucceeded = ((-not [bool](Get-RooIndustriesPropertyValue $exportResult 'timedOut' $false)) -and [int](Get-RooIndustriesPropertyValue $exportResult 'exitCode' -1) -eq 0)
+            $exportCompleted = $exportProcessSucceeded -and $exportFileReady
+            $sequence.Add([pscustomobject]@{
+                order = 1
+                operation = 'export'
+                command = $exportCommand
+                result = $exportResult
+                completed = $exportCompleted
+                exportFileVerified = $exportFileReady
+            }) | Out-Null
+            if ($exportCompleted) {
+                Write-NvidiaRollbackManifest -Manifest $rollbackManifest -Path $RollbackManifestPath -ExportCompleted $true -ImportAttempted $true -ImportCompleted $false -RealExecution ($ExecutorMode -eq 'Real')
+                $importCommand = Get-RooIndustriesPropertyValue $commands 'importCandidateProfile' $null
+                $importResult = Invoke-NvidiaExecutorCommand -Command $importCommand -Mode $ExecutorMode -MockShim $MockNvpiShimPath -Timeout $TimeoutSeconds
+                $importCompleted = ((-not [bool](Get-RooIndustriesPropertyValue $importResult 'timedOut' $false)) -and [int](Get-RooIndustriesPropertyValue $importResult 'exitCode' -1) -eq 0)
+                $sequence.Add([pscustomobject]@{
+                    order = 2
+                    operation = 'import'
+                    command = $importCommand
+                    result = $importResult
+                    completed = $importCompleted
+                }) | Out-Null
+                if (-not $importCompleted) { $status = 'failed' }
+            } else {
+                $status = 'failed'
+                $sequence.Add([pscustomobject]@{
+                    order = 2
+                    operation = 'import'
+                    skipped = $true
+                    reason = if ($exportProcessSucceeded) { 'Export finished without writing a usable rollback file; import was not attempted.' } else { 'Export failed or timed out; import was not attempted.' }
+                }) | Out-Null
+            }
         }
     } elseif ($canExecute -and $Operation -eq 'Restore') {
         $restoreCommand = Get-RooIndustriesPropertyValue $restorePreview 'command' $null
@@ -195,7 +243,7 @@ try {
         if (-not $importCompleted) { $status = 'failed' }
     }
 
-    if ($Operation -eq 'Apply' -and $canExecute -and -not [string]::IsNullOrWhiteSpace($RollbackManifestPath)) {
+    if ($Operation -eq 'Apply' -and $canExecute -and -not $exportRefused -and -not [string]::IsNullOrWhiteSpace($RollbackManifestPath)) {
         $resolvedRollbackManifestPath = Resolve-RooIndustriesPath $RollbackManifestPath $RollbackManifestPath
         Write-NvidiaRollbackManifest -Manifest $rollbackManifest -Path $resolvedRollbackManifestPath -ExportCompleted $exportCompleted -ImportAttempted (@($sequence | Where-Object { $_.operation -eq 'import' -and -not $_.skipped }).Count -gt 0) -ImportCompleted $importCompleted -RealExecution ($ExecutorMode -eq 'Real')
     } elseif ($Operation -eq 'Restore' -and $rollbackManifestBound) {
@@ -221,9 +269,9 @@ try {
         rollbackManifest = $rollbackManifest
         rollbackManifestPath = $resolvedRollbackManifestPath
         summary = [pscustomobject]@{
-            willRunNvpi = ($canExecute -and $ExecutorMode -eq 'Real')
-            willRunMockShim = ($canExecute -and $ExecutorMode -eq 'Mock')
-            realNvpiInvoked = ($canExecute -and $ExecutorMode -eq 'Real')
+            willRunNvpi = ($canExecute -and -not $exportRefused -and $ExecutorMode -eq 'Real')
+            willRunMockShim = ($canExecute -and -not $exportRefused -and $ExecutorMode -eq 'Mock')
+            realNvpiInvoked = ($canExecute -and -not $exportRefused -and $ExecutorMode -eq 'Real')
             exportAttempted = @($runs | Where-Object { $_.operation -eq 'export' }).Count -gt 0
             exportCompleted = $exportCompleted
             importAttempted = @($runs | Where-Object { $_.operation -in @('import','restore-import') -and -not $_.skipped }).Count -gt 0
