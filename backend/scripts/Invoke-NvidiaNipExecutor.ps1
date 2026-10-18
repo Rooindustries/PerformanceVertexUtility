@@ -80,6 +80,10 @@ function Write-NvidiaRollbackManifest {
 }
 
 try {
+    $requestedOutputPath = $OutputPath
+    $OutputPath = ''
+    $requestedPaths = @(@($ExportPath, $RollbackManifestPath, $requestedOutputPath) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | ForEach-Object { (Resolve-RooIndustriesPath $_ $_).TrimEnd('\', '/').ToUpperInvariant() })
+    if (@($requestedPaths | Select-Object -Unique).Count -ne $requestedPaths.Count) { throw 'The export, rollback manifest and output paths must be three different files. Nothing was changed.' }
     $persistedRollbackManifest = $null
     $resolvedRequestedRollbackManifestPath = $null
     $rollbackManifestBound = $false
@@ -113,6 +117,10 @@ try {
 
     $commands = Get-RooIndustriesPropertyValue $preview 'commands' $null
     $rollbackManifest = if ($Operation -eq 'Restore' -and $null -ne $persistedRollbackManifest) { $persistedRollbackManifest } else { Get-RooIndustriesPropertyValue $preview 'rollbackManifest' $null }
+    $effectiveExportPath = if ([string]::IsNullOrWhiteSpace($ExportPath)) { [string](Get-RooIndustriesPropertyValue $rollbackManifest 'exportPath' '') } else { $ExportPath }
+    $resolvedPaths = @(@($effectiveExportPath, $RollbackManifestPath, $requestedOutputPath) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | ForEach-Object { (Resolve-RooIndustriesPath $_ $_).TrimEnd('\', '/').ToUpperInvariant() })
+    if (@($resolvedPaths | Select-Object -Unique).Count -ne $resolvedPaths.Count) { throw 'The export, rollback manifest and output paths must be three different files. Nothing was changed.' }
+    $OutputPath = $requestedOutputPath
     if ($Operation -eq 'Restore') {
         $effectiveRestoreExportPath = if ([string]::IsNullOrWhiteSpace($ExportPath)) { [string](Get-RooIndustriesPropertyValue $rollbackManifest 'exportPath' '') } else { $ExportPath }
         $restorePreview = (& (Join-Path $PSScriptRoot 'Restore-NvidiaNipProfile.ps1') `

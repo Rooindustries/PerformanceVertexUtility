@@ -167,6 +167,45 @@ try {
         Add-Failure 'NVIDIA NIP mock executor did not prove no-auto-apply and hidden invocation'
     }
 
+    $logCountBeforeCollisions = @(Read-MockLog $successLog).Count
+    $collisionPath = Join-Path $tempRoot 'colliding-export-and-manifest.nip'
+    $exportManifestCollision = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipExecutor.ps1') -ExecutorMode Mock -MockNvpiShimPath $successShim -HardwareInventoryPath $nvidiaHardware -ExportPath $collisionPath -RollbackManifestPath $collisionPath -ConfirmApply -UserApproved -BenchmarkEvidenceAttached)
+    $evidence.cases['export-manifest-path-collision'] = $exportManifestCollision
+    if ($exportManifestCollision.status -eq 'failed' -and @($exportManifestCollision.errors).Count -eq 1 -and
+        $exportManifestCollision.errors[0].message -eq 'The export, rollback manifest and output paths must be three different files. Nothing was changed.' -and
+        -not (Test-Path -LiteralPath $collisionPath) -and @(Read-MockLog $successLog).Count -eq $logCountBeforeCollisions) {
+        Add-Pass 'Colliding export and manifest paths are refused before creating a file or invoking the mock shim'
+    } else { Add-Failure 'Colliding export and manifest paths must be refused before creating a file or invoking the mock shim' }
+
+    $manifestHashBeforeCollision = (Get-FileHash -LiteralPath $rollbackPath -Algorithm SHA256).Hash
+    $outputManifestCollision = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipExecutor.ps1') -ExecutorMode Mock -MockNvpiShimPath $successShim -HardwareInventoryPath $nvidiaHardware -ExportPath $exportPath -RollbackManifestPath $rollbackPath -OutputPath $rollbackPath -ConfirmApply -UserApproved -BenchmarkEvidenceAttached)
+    $manifestHashAfterCollision = (Get-FileHash -LiteralPath $rollbackPath -Algorithm SHA256).Hash
+    $evidence.cases['output-manifest-path-collision'] = [pscustomobject]@{ result = $outputManifestCollision; manifestSha256Before = $manifestHashBeforeCollision; manifestSha256After = $manifestHashAfterCollision }
+    if ($outputManifestCollision.status -eq 'failed' -and @($outputManifestCollision.errors).Count -eq 1 -and
+        $outputManifestCollision.errors[0].message -eq 'The export, rollback manifest and output paths must be three different files. Nothing was changed.' -and
+        $manifestHashAfterCollision -eq $manifestHashBeforeCollision -and @(Read-MockLog $successLog).Count -eq $logCountBeforeCollisions) {
+        Add-Pass 'Colliding output and manifest paths print the refusal and preserve the earlier manifest bytes without invoking the mock shim'
+    } else { Add-Failure 'Colliding output and manifest paths must print the refusal and preserve the earlier manifest bytes without invoking the mock shim' }
+
+    $invalidExportPath = $tempRoot + [char]0 + 'invalid'
+    $invalidPathCollision = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipExecutor.ps1') -ExecutorMode Mock -MockNvpiShimPath $successShim -HardwareInventoryPath $nvidiaHardware -ExportPath $invalidExportPath -RollbackManifestPath $rollbackPath -OutputPath $rollbackPath -ConfirmApply -UserApproved -BenchmarkEvidenceAttached)
+    $evidence.cases['invalid-path-with-output-manifest-collision'] = $invalidPathCollision
+    if ($invalidPathCollision.status -eq 'failed' -and @($invalidPathCollision.errors).Count -eq 1 -and
+        (Get-FileHash -LiteralPath $rollbackPath -Algorithm SHA256).Hash -eq $manifestHashBeforeCollision -and
+        @(Read-MockLog $successLog).Count -eq $logCountBeforeCollisions) {
+        Add-Pass 'Path normalization failure prints the error and preserves a colliding manifest without invoking the mock shim'
+    } else { Add-Failure 'Path normalization failure must print the error and preserve a colliding manifest without invoking the mock shim' }
+
+    $exportHashBeforeCollision = (Get-FileHash -LiteralPath $exportPath -Algorithm SHA256).Hash
+    $inheritedExportCollision = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipExecutor.ps1') -Operation Restore -ExecutorMode Mock -MockNvpiShimPath $successShim -HardwareInventoryPath $nvidiaHardware -RollbackManifestPath $rollbackPath -OutputPath $exportPath -ConfirmApply -UserApproved)
+    $exportHashAfterCollision = (Get-FileHash -LiteralPath $exportPath -Algorithm SHA256).Hash
+    $evidence.cases['output-inherited-export-path-collision'] = [pscustomobject]@{ result = $inheritedExportCollision; exportSha256Before = $exportHashBeforeCollision; exportSha256After = $exportHashAfterCollision }
+    if ($inheritedExportCollision.status -eq 'failed' -and @($inheritedExportCollision.errors).Count -eq 1 -and
+        $inheritedExportCollision.errors[0].message -eq 'The export, rollback manifest and output paths must be three different files. Nothing was changed.' -and
+        $exportHashAfterCollision -eq $exportHashBeforeCollision -and @(Read-MockLog $successLog).Count -eq $logCountBeforeCollisions) {
+        Add-Pass 'An output path colliding with the export inherited during restore is refused without changing export bytes or invoking the mock shim'
+    } else { Add-Failure 'An output path colliding with the export inherited during restore must be refused without changing export bytes or invoking the mock shim' }
+
     $rollbackHash = (Get-FileHash -LiteralPath $rollbackPath -Algorithm SHA256).Hash
     $exportHash = (Get-FileHash -LiteralPath $exportPath -Algorithm SHA256).Hash
     $reused = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipExecutor.ps1') -ExecutorMode Mock -MockNvpiShimPath $successShim -HardwareInventoryPath $nvidiaHardware -ExportPath $exportPath -RollbackManifestPath $rollbackPath -ConfirmApply -UserApproved -BenchmarkEvidenceAttached)
