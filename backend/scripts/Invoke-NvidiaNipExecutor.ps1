@@ -79,9 +79,30 @@ function Write-NvidiaRollbackManifest {
     }
 }
 
+function Assert-NvidiaPathsWithoutReparsePoint {
+    param([string[]]$Paths)
+    foreach ($path in @($Paths)) {
+        if ([string]::IsNullOrWhiteSpace($path)) { continue }
+        $fullPath = Resolve-RooIndustriesPath $path $path
+        $item = $null
+        try { $item = Get-Item -LiteralPath $fullPath -Force -ErrorAction Stop }
+        catch [System.Management.Automation.ItemNotFoundException] {}
+        if ($null -ne $item -and ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+            throw 'The export, rollback manifest and output paths must not go through a junction or symbolic link. Nothing was changed.'
+        }
+        for ($directory = [IO.DirectoryInfo]::new($fullPath).Parent; $null -ne $directory; $directory = $directory.Parent) {
+            $attributes = $directory.Attributes
+            if ([int]$attributes -ne -1 -and ($attributes -band [IO.FileAttributes]::ReparsePoint)) {
+                throw 'The export, rollback manifest and output paths must not go through a junction or symbolic link. Nothing was changed.'
+            }
+        }
+    }
+}
+
 try {
     $requestedOutputPath = $OutputPath
     $OutputPath = ''
+    Assert-NvidiaPathsWithoutReparsePoint @($ExportPath, $RollbackManifestPath, $requestedOutputPath)
     $requestedPaths = @(@($ExportPath, $RollbackManifestPath, $requestedOutputPath) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | ForEach-Object { (Resolve-RooIndustriesPath $_ $_).TrimEnd('\', '/').ToUpperInvariant() })
     if (@($requestedPaths | Select-Object -Unique).Count -ne $requestedPaths.Count) { throw 'The export, rollback manifest and output paths must be three different files. Nothing was changed.' }
     $persistedRollbackManifest = $null
@@ -117,8 +138,10 @@ try {
 
     $commands = Get-RooIndustriesPropertyValue $preview 'commands' $null
     $rollbackManifest = if ($Operation -eq 'Restore' -and $null -ne $persistedRollbackManifest) { $persistedRollbackManifest } else { Get-RooIndustriesPropertyValue $preview 'rollbackManifest' $null }
-    $effectiveExportPath = if ([string]::IsNullOrWhiteSpace($ExportPath)) { [string](Get-RooIndustriesPropertyValue $rollbackManifest 'exportPath' '') } else { $ExportPath }
-    $resolvedPaths = @(@($effectiveExportPath, $RollbackManifestPath, $requestedOutputPath) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | ForEach-Object { (Resolve-RooIndustriesPath $_ $_).TrimEnd('\', '/').ToUpperInvariant() })
+    $manifestExportReference = [string](Get-RooIndustriesPropertyValue $rollbackManifest 'exportPath' '')
+    Assert-NvidiaPathsWithoutReparsePoint @($ExportPath, $manifestExportReference, $RollbackManifestPath, $requestedOutputPath)
+    $exportPaths = @(@($ExportPath, $manifestExportReference) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | ForEach-Object { (Resolve-RooIndustriesPath $_ $_).TrimEnd('\', '/').ToUpperInvariant() } | Select-Object -Unique)
+    $resolvedPaths = @($exportPaths) + @(@($RollbackManifestPath, $requestedOutputPath) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | ForEach-Object { (Resolve-RooIndustriesPath $_ $_).TrimEnd('\', '/').ToUpperInvariant() })
     if (@($resolvedPaths | Select-Object -Unique).Count -ne $resolvedPaths.Count) { throw 'The export, rollback manifest and output paths must be three different files. Nothing was changed.' }
     $OutputPath = $requestedOutputPath
     if ($Operation -eq 'Restore') {

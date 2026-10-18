@@ -206,6 +206,45 @@ try {
         Add-Pass 'An output path colliding with the export inherited during restore is refused without changing export bytes or invoking the mock shim'
     } else { Add-Failure 'An output path colliding with the export inherited during restore must be refused without changing export bytes or invoking the mock shim' }
 
+    $replacementExportPath = Join-Path $tempRoot 'replacement-export.nip'
+    [IO.File]::WriteAllText($replacementExportPath, 'Replacement export fixture')
+    $replacementExportCollision = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipExecutor.ps1') -Operation Restore -ExecutorMode Mock -MockNvpiShimPath $successShim -HardwareInventoryPath $nvidiaHardware -ExportPath $replacementExportPath -RollbackManifestPath $rollbackPath -OutputPath $exportPath -ConfirmApply -UserApproved)
+    $evidence.cases['output-original-export-with-replacement'] = $replacementExportCollision
+    if ($replacementExportCollision.status -eq 'failed' -and @($replacementExportCollision.errors).Count -eq 1 -and
+        $replacementExportCollision.errors[0].message -eq 'The export, rollback manifest and output paths must be three different files. Nothing was changed.' -and
+        (Get-FileHash -LiteralPath $exportPath -Algorithm SHA256).Hash -eq $exportHashBeforeCollision -and
+        @(Read-MockLog $successLog).Count -eq $logCountBeforeCollisions) {
+        Add-Pass 'An explicit replacement export cannot let refusal output overwrite the original manifest export'
+    } else { Add-Failure 'An explicit replacement export must not let refusal output overwrite the original manifest export' }
+
+    $manifestAlias = Join-Path $tempRoot 'manifest-alias'
+    $manifestJunctionCreated = $false
+    try {
+        New-Item -ItemType Junction -Path $manifestAlias -Target $tempRoot | Out-Null
+        $manifestJunctionCreated = $true
+        $junctionOutputPath = Join-Path $manifestAlias (Split-Path $rollbackPath -Leaf)
+        $junctionCollision = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipExecutor.ps1') -ExecutorMode Mock -MockNvpiShimPath $successShim -HardwareInventoryPath $nvidiaHardware -ExportPath $exportPath -RollbackManifestPath $rollbackPath -OutputPath $junctionOutputPath -ConfirmApply -UserApproved -BenchmarkEvidenceAttached)
+        $evidence.cases['output-junction-to-manifest'] = $junctionCollision
+        if ($junctionCollision.status -eq 'failed' -and @($junctionCollision.errors).Count -eq 1 -and
+            $junctionCollision.errors[0].message -eq 'The export, rollback manifest and output paths must not go through a junction or symbolic link. Nothing was changed.' -and
+            (Get-FileHash -LiteralPath $rollbackPath -Algorithm SHA256).Hash -eq $manifestHashBeforeCollision -and
+            @(Read-MockLog $successLog).Count -eq $logCountBeforeCollisions) {
+            Add-Pass 'An output path through a junction is refused without changing the earlier manifest or invoking the mock shim'
+        } else { Add-Failure 'An output path through a junction must be refused without changing the earlier manifest or invoking the mock shim' }
+    } finally {
+        if ($manifestJunctionCreated) { [IO.Directory]::Delete($manifestAlias) }
+    }
+
+    $matchingOutputPath = Join-Path $tempRoot 'matching-restore-preview.json'
+    $matchingRestore = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipExecutor.ps1') -Operation Restore -HardwareInventoryPath $nvidiaHardware -ExportPath $exportPath -RollbackManifestPath $rollbackPath -OutputPath $matchingOutputPath)
+    $savedMatchingRestore = Get-Content -LiteralPath $matchingOutputPath -Raw | ConvertFrom-Json
+    $evidence.cases['matching-explicit-and-manifest-export'] = $matchingRestore
+    if ($matchingRestore.status -eq 'preview' -and @($matchingRestore.errors).Count -eq 0 -and $savedMatchingRestore.status -eq 'preview' -and
+        (Get-FileHash -LiteralPath $exportPath -Algorithm SHA256).Hash -eq $exportHashBeforeCollision -and
+        @(Read-MockLog $successLog).Count -eq $logCountBeforeCollisions) {
+        Add-Pass 'Matching explicit and manifest export references still allow a restore preview with a separate output file'
+    } else { Add-Failure 'Matching explicit and manifest export references must still allow a restore preview with a separate output file' }
+
     $rollbackHash = (Get-FileHash -LiteralPath $rollbackPath -Algorithm SHA256).Hash
     $exportHash = (Get-FileHash -LiteralPath $exportPath -Algorithm SHA256).Hash
     $reused = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipExecutor.ps1') -ExecutorMode Mock -MockNvpiShimPath $successShim -HardwareInventoryPath $nvidiaHardware -ExportPath $exportPath -RollbackManifestPath $rollbackPath -ConfirmApply -UserApproved -BenchmarkEvidenceAttached)
