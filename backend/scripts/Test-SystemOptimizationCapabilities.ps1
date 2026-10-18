@@ -182,6 +182,9 @@ function Test-DetectionRule {
             }
             Write-Host "INFO detection $capabilityId windows-feature target=$target state=$state error=$errorText"
         }
+        'windows-feature-query' {
+            Write-Host "INFO detection $capabilityId windows-feature-query target=$target result=aggregator-runtime"
+        }
         default {
             Add-Failure "$capabilityId uses unsupported detection method: $method"
         }
@@ -250,7 +253,7 @@ $allowedRisk = @('safe', 'low', 'medium', 'high', 'critical')
 $allowedPreviewStatus = @('implemented', 'not-implemented')
 $allowedApplyStatus = @('live', 'fixture-proven', 'allowlist-shim', 'helper-contract', 'preview-only', 'not-implemented')
 $allowedRestoreStatus = @('live', 'fixture-proven', 'manifest-ready', 'not-applicable', 'not-implemented')
-$allowedDetectionMethod = @('builtin', 'file-exists', 'registry-key', 'registry-value', 'service-exists', 'command-on-path', 'hardware-gpu-vendor', 'windows-feature')
+$allowedDetectionMethod = @('builtin', 'file-exists', 'registry-key', 'registry-value', 'service-exists', 'command-on-path', 'hardware-gpu-vendor', 'windows-feature', 'windows-feature-query')
 $allowedUnavailableReason = @('tool-not-present', 'hardware-not-present', 'requires-admin-token', 'requires-helper-manifest', 'helper-packaging-pending', 'blocked-by-acl', 'cli-unsupported', 'not-safely-executable-yet')
 $allowedFrontendTabs = @('Game Tune', 'Clean Junk', 'Drivers & Settings', 'Live Feel', 'Windows settings')
 $allowedLiveCapabilityIds = @(

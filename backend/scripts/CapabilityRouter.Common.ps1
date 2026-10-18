@@ -356,6 +356,35 @@ function Resolve-RooIndustriesDetectionRule {
                 }
             }
         }
+        'windows-feature-query' {
+            try {
+                $featureCommand = Get-Command -Name Get-WindowsOptionalFeature -ErrorAction SilentlyContinue
+                if ($null -eq $featureCommand) {
+                    throw 'Get-WindowsOptionalFeature command not available'
+                }
+
+                $listed = @(Get-WindowsOptionalFeature -Online -ErrorAction Stop | Select-Object -First 1)
+                $passed = ($listed.Count -gt 0)
+                $evidence = [pscustomobject]@{
+                    query = $target
+                    featuresListed = [bool]$passed
+                    error = $null
+                }
+            } catch {
+                $passed = $false
+                $message = $_.Exception.Message
+                $reason = if ($message -match 'elevation|access is denied') {
+                    'requires-admin-token: Get-WindowsOptionalFeature -Online needs an administrators-group token'
+                } else {
+                    "windows-feature-query-failed: $message"
+                }
+                $evidence = [pscustomobject]@{
+                    query = $target
+                    featuresListed = $false
+                    error = $message
+                }
+            }
+        }
         default {
             $passed = $false
             $reason = "unsupported-detection-method: $method"
@@ -393,7 +422,7 @@ function Get-RooIndustriesUnavailableReason {
     }) | Select-Object -First 1
     if ($toolFileFailure) { return 'tool-not-present' }
 
-    $windowsFeatureFailure = @($failedRules | Where-Object { [string]$_.method -eq 'windows-feature' -and -not [string]::IsNullOrWhiteSpace([string]$_.reason) }) | Select-Object -First 1
+    $windowsFeatureFailure = @($failedRules | Where-Object { [string]$_.method -in @('windows-feature', 'windows-feature-query') -and -not [string]::IsNullOrWhiteSpace([string]$_.reason) }) | Select-Object -First 1
     if ($windowsFeatureFailure) { return [string]$windowsFeatureFailure.reason }
 
     $staticReason = Get-PropertyValue $Capability 'unavailableReason' $null

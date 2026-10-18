@@ -4836,7 +4836,8 @@
                       "service-exists",
                       "command-on-path",
                       "hardware-gpu-vendor",
-                      "windows-feature"
+                      "windows-feature",
+                      "windows-feature-query"
                     ]
                   },
                   "target": {

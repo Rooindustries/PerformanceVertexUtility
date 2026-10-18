@@ -140,6 +140,9 @@ function Test-DetectionRule {
                 Add-Pass "Detection windows-feature for $CapabilityId target=$target query-error=$($_.Exception.Message)"
             }
         }
+        'windows-feature-query' {
+            Add-Check (-not [string]::IsNullOrWhiteSpace($target)) "Detection windows-feature-query for $CapabilityId target=$target is syntactically valid" "Detection windows-feature-query for $CapabilityId target is empty"
+        }
         default {
             Add-Pass "Detection $method for $CapabilityId target=$target is syntactically valid"
         }
@@ -180,7 +183,7 @@ if ($null -ne $fragment) {
     $previewStatuses = @('implemented', 'not-implemented')
     $applyStatuses = @('live', 'fixture-proven', 'allowlist-shim', 'helper-contract', 'preview-only', 'not-implemented')
     $restoreStatuses = @('live', 'fixture-proven', 'manifest-ready', 'not-applicable', 'not-implemented')
-    $detectionMethods = @('builtin', 'file-exists', 'registry-key', 'registry-value', 'service-exists', 'command-on-path', 'hardware-gpu-vendor', 'windows-feature')
+    $detectionMethods = @('builtin', 'file-exists', 'registry-key', 'registry-value', 'service-exists', 'command-on-path', 'hardware-gpu-vendor', 'windows-feature', 'windows-feature-query')
     $unavailableReasons = @('tool-not-present', 'hardware-not-present', 'requires-admin-token', 'requires-helper-manifest', 'helper-packaging-pending', 'blocked-by-acl', 'cli-unsupported', 'not-safely-executable-yet')
     $allowedLiveCapabilityIds = @()
 
