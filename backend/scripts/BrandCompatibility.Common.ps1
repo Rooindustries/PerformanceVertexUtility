@@ -74,10 +74,10 @@ function Test-RooIndustriesWrittenAfterProtection([string]$Path) {
 
 function Get-RooIndustriesUserFolder {
     param([switch]$Roaming,[string]$Sid=([Security.Principal.WindowsIdentity]::GetCurrent().User.Value),[string]$Profile=([Environment]::GetFolderPath('UserProfile')))
-    $problem="Roo Industries could not use this Windows user's AppData folder settings. Choose an existing local folder on a fixed drive outside Windows and the app's install folder."
+    $problem="The app could not use this Windows user's AppData folder settings. Choose an existing local folder on a fixed drive outside Windows and the app's install folder."
     if($Profile -notmatch '^[A-Za-z]:\\' -or -not [IO.Directory]::Exists($Profile)){throw $problem}
     $hive=Get-Item -LiteralPath ('Registry::HKEY_USERS\'+$Sid) -ErrorAction SilentlyContinue
-    if(-not $hive){throw "Roo Industries could not read that Windows user's folder settings."}
+    if(-not $hive){throw "The app could not read that Windows user's folder settings."}
     $key=Get-Item -LiteralPath ('Registry::HKEY_USERS\'+$Sid+'\Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders') -ErrorAction SilentlyContinue
     $name=if($Roaming){'AppData'}else{'Local AppData'}
     $raw=if($key){$key.GetValue($name,$null,'DoNotExpandEnvironmentNames')}else{$null}
@@ -152,15 +152,15 @@ function Get-RooIndustriesLocalDataRoot {
         }
         $parent=Get-RooIndustriesDataRootMarkerName $LocalData
         foreach($marked in $roots){
-            if((Get-RooIndustriesDataRootMarkerName (Split-Path $marked -Parent)) -ine $parent){throw "This Windows user's AppData folder setting changed or names several protected folders. Roo Industries kept the existing data. Restore the folder setting before opening the app again."}
+            if((Get-RooIndustriesDataRootMarkerName (Split-Path $marked -Parent)) -ine $parent){throw "This Windows user's AppData folder setting changed or names several protected folders. The app kept the existing data. Restore the folder setting before opening the app again."}
             try {
                 if(-not (Test-Path -LiteralPath $marked -PathType Container)){throw 'The marked data folder is missing.'}
                 Assert-RooIndustriesProtectedFolder $marked
-            } catch {throw ('Roo Industries kept the existing data because its protected folder is missing or damaged. Open the Roo Industries app once as an administrator to repair it. '+$_.Exception.Message)}
+            } catch {throw ('The app kept the existing data because its protected folder is missing or damaged. Open the app once as an administrator to repair it. '+$_.Exception.Message)}
         }
     }
     $legacy=Join-Path $LocalData $script:RooIndustriesLegacyIdentity.dataFolder
-    if(Test-RooIndustriesDataRootMigrationInFlight $LocalData $script:RooIndustriesLegacyIdentity.dataFolder){throw 'Roo Industries is preparing your saved settings. Try again in a moment.'}
+    if(Test-RooIndustriesDataRootMigrationInFlight $LocalData $script:RooIndustriesLegacyIdentity.dataFolder){throw 'The app is preparing your saved settings. Try again in a moment.'}
     $current=Join-Path $LocalData 'RooIndustriesOptimizationSuite'
     $root=if((Test-Path -LiteralPath $legacy -PathType Container) -and -not ((Test-RooIndustriesDataRootMarked $current) -and -not (Test-RooIndustriesDataRootMarked $legacy))){$legacy}else{$current}
     if($Protected){Assert-RooIndustriesProtectedFolder $root}
@@ -185,7 +185,7 @@ function New-RooIndustriesElevatedTaskAction {
     $windows=[Environment]::GetFolderPath('Windows')
     if($null -ne ($problem=Get-RooIndustriesLaunchProblem $windows -Bare:(-not $windows.Contains(' ')))){throw ('Cannot register the elevated task because the Windows folder '+$problem+'.')}
     $launcher=Join-Path $script:RooIndustriesScriptsRoot 'Start-RooIndustriesHelper.cmd'
-    if(-not (Test-Path -LiteralPath $launcher -PathType Leaf)){throw 'Roo Industries files are missing or damaged. Install the app again.'}
+    if(-not (Test-Path -LiteralPath $launcher -PathType Leaf)){throw 'App files are missing or damaged. Install the app again.'}
     $parts=@($Executable)+@($ArgumentList)
     if($parts.Count -gt 4){throw 'The clean launcher starts a program with at most three arguments.'}
     foreach($part in $parts){if($null -ne ($problem=Get-RooIndustriesLaunchProblem $part)){throw ('Cannot register the elevated task because "'+$part+'" '+$problem+'.')}}
@@ -199,7 +199,7 @@ function Get-RooIndustriesDevelopmentDotNet {
     param([Parameter(Mandatory=$true)][string]$HostDirectory)
     $options=$null
     try {$options=(Get-Content -LiteralPath (Join-Path $HostDirectory 'Optimizer.Host.runtimeconfig.json') -Raw -ErrorAction Stop|ConvertFrom-Json).runtimeOptions} catch {}
-    if(-not $options -or (-not $options.framework -and -not $options.frameworks)){throw 'Roo Industries files are missing or damaged. Install the app again.'}
+    if(-not $options -or (-not $options.framework -and -not $options.frameworks)){throw 'App files are missing or damaged. Install the app again.'}
     $candidate=Join-Path $env:USERPROFILE '.dotnet\dotnet.exe'
     if(Test-Path -LiteralPath $candidate){return $candidate}
     return (Get-Command dotnet.exe -ErrorAction Stop).Source

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "product": "LeanClientOptimizer",
+  "product": "Performance Vertex Utility",
   "modules": [
     {
       "id": "M2-safe-registry",

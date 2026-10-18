@@ -10,7 +10,7 @@ public partial class SettingsViewModel : PageViewModelBase
     [ObservableProperty] private string _selectedThemeId;
     [ObservableProperty] private bool _reducedEffects;
     [ObservableProperty] private bool _simpleMode;
-    [ObservableProperty] private string? _productName = "Roo Industries Optimization Suite";
+    [ObservableProperty] private string? _productName = "Performance Vertex Utility";
     [ObservableProperty] private string? _versionText = "Version " + App.VersionText;
 
     public IReadOnlyList<ThemeOption> Themes => App.Theme.Options;

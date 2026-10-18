@@ -187,7 +187,7 @@
                                                            "none"
                                                        ],
                                      "restoreBackupRequirement":  "Not applicable because this updater is excluded from default integration.",
-                                     "integrationPlan":  "Exclude from default driver strategy. Prefer Roo Industries hardware-gated recommendations and manual driver packages.",
+                                     "integrationPlan":  "Exclude from default driver strategy. Prefer hardware-gated recommendations and manual driver packages.",
                                      "lengthBytes":  33267856,
                                      "compressedLengthBytes":  33183912
                                  },

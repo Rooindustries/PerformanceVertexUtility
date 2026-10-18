@@ -10,7 +10,7 @@ Initial planning context is kept outside the public repo under ignored internal 
 
 ## Product Direction
 
-Lean Client Optimizer is moving from a PowerShell benchmark-and-rollback harness into a WinUI desktop app.
+Performance Vertex Utility is moving from a PowerShell benchmark-and-rollback harness into a WinUI desktop app.
 
 The target shell should follow the Windows Settings app pattern:
 
@@ -20,9 +20,9 @@ The target shell should follow the Windows Settings app pattern:
 - Settings-style rows, status chips, module cards, detail pages, dialogs, and confirmation flows.
 - Responsive behavior that keeps the navigation usable in narrow windows.
 
-Use the Roo Industries brand layer already captured in this repo:
+Use the brand layer already captured in this repo:
 
-- Default theme: Roo Industries Blue.
+- Default theme: Blue.
 - Alternate theme: Blackout Gold.
 - Font: Manrope Variable.
 - Static logo in navigation.
@@ -35,7 +35,7 @@ Use the Roo Industries brand layer already captured in this repo:
 - Keep benchmarking separate from the main app shell, but allow it as an internal provider workflow.
 - Build native replacements for Process Lasso-style priority/profile management and Revo-style bulk uninstall cleanup instead of bypassing third-party licensing.
 - DDU, NVCleanstall, OOSU10, WPD, driver installers, and destructive cleanup flows remain manual or confirmation-gated.
-- Implement the Chris Titus Tech Windows Utility feature set as a source-backed catalog, routed through Roo Industries preview, confirmation, backup, and rollback flows instead of remote script execution.
+- Implement the Chris Titus Tech Windows Utility feature set as a source-backed catalog, routed through the app's preview, confirmation, backup, and rollback flows instead of remote script execution.
 - Driver recommendations should be hardware-aware and game-aware, with tested game-logo tags.
 - NVIDIA Profile Inspector should start from `framesync.nip`, then later score candidate `.nip` profiles and expose the top tested options.
 
@@ -45,7 +45,7 @@ Use the Roo Industries brand layer already captured in this repo:
 - `modules/tweak_manifest.json`: Safe, optional, device-specific, and advanced optimization modules.
 - `modules/utilities_manifest.json`: Tool catalog and integration policy for `vendor/Utilities.zip`.
 - `modules/telemetry_providers.json`: Visual/system/frame telemetry provider contract.
-- `modules/brand_manifest.json`: App-facing Roo Industries theme, logo, and font contract.
+- `modules/brand_manifest.json`: App-facing theme, logo, and font contract.
 - `modules/winutil_manifest.json`: Chris Titus WinUtil source catalog and safety mapping.
 - `docs/*.md`: Implementation notes that should guide the app UI and safety model.
 - `assets/brand/roo-industries`: Brand assets copied from Roo Industries sources.

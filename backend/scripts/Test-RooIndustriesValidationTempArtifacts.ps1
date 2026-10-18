@@ -89,9 +89,9 @@ Add-Pass 'Temp artifact audit validation did not launch frontend, NVPI, Revo, FS
 
 Write-Host ''
 if ($failures.Count -eq 0) {
-    Write-Host "PASS Roo Industries validation temp artifact audit completed. $($passes.Count) checks passed."
+    Write-Host "PASS Validation temp artifact audit completed. $($passes.Count) checks passed."
     exit 0
 }
 
-Write-Host "FAIL Roo Industries validation temp artifact audit failed. $($failures.Count) failure(s), $($passes.Count) pass(es)."
+Write-Host "FAIL Validation temp artifact audit failed. $($failures.Count) failure(s), $($passes.Count) pass(es)."
 exit 1

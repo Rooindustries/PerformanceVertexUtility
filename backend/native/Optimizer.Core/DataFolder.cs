@@ -14,7 +14,7 @@ public static class DataFolder
     public const string SuspendKey = @"SOFTWARE\RooIndustries\OptimizationSuite\SuspendedForMove";
 
     public static readonly ProtectedFolder Kind = new("app's data folder", "open the app again (its saved settings and undo history will be lost)",
-        "The app's data folder could not be protected yet because Windows would not let the app move it. Something has a file inside it open: a File Explorer window showing the folder, a game launcher or another Roo Industries task. Close those or restart Windows, then open the app again.",
+        "The app's data folder could not be protected yet because Windows would not let the app move it. Something has a file inside it open: a File Explorer window showing the folder, a game launcher or another task from this app. Close those or restart Windows, then open the app again.",
         OperationsFolder.NotAdministrator, true, [], Quiesce, Skip, Companions);
 
     private static readonly object Gate = new();
@@ -28,11 +28,11 @@ public static class DataFolder
     internal static void WriteRecoveryNotice(string root, string? keptAt)
     {
         var message = keptAt is null
-            ? "The earlier data folder was gone, so Roo Industries started fresh. Its saved rules and undo history are no longer available."
-            : "The earlier data folder was damaged, so Roo Industries started fresh. Its saved rules and undo history were not loaded. The old folder was kept at: " + keptAt;
+            ? "The earlier data folder was gone, so the app started fresh. Its saved rules and undo history are no longer available."
+            : "The earlier data folder was damaged, so the app started fresh. Its saved rules and undo history were not loaded. The old folder was kept at: " + keptAt;
         using var lease = PolicyRootLease.Acquire(root, Kind, deep: false);
         File.WriteAllBytes(Path.Combine(root, "data-root-recovery.json"), JsonSerializer.SerializeToUtf8Bytes(new Recovery(message), Json));
-        if (lease.Moved) throw new UnauthorizedAccessException("The data folder moved while Roo Industries wrote its recovery notice.");
+        if (lease.Moved) throw new UnauthorizedAccessException("The data folder moved while the app wrote its recovery notice.");
     }
 
     public static string? RecoveryNotice(string root)

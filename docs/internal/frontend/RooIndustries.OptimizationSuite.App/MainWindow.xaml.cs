@@ -41,7 +41,7 @@ public sealed partial class MainWindow : Window
     public MainWindow(string navTag, bool onSettings, string? ownershipPath = null)
     {
         InitializeComponent();
-        Title = "Roo Industries Optimization Suite Beta";
+        Title = "Performance Vertex Utility Beta";
         _pendingTag = navTag;
         _pendingSettings = onSettings;
         _currentTag = navTag;

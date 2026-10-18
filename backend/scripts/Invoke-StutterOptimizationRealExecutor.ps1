@@ -151,7 +151,7 @@ try {
                     $import = Invoke-PowerCfg @('/import', $exportPath, $tempGuid)
                     $sequence.Add([pscustomobject]@{ order = 3; step = 'power-import-temp'; importPath = $exportPath; temporarySchemeGuid = $tempGuid; result = $import; completed = ($import.exitCode -eq 0 -and -not $import.timedOut) }) | Out-Null
                     if ($import.exitCode -ne 0 -or $import.timedOut) { throw 'Could not import temporary power scheme from exported .pow file.' }
-                    $rename = Invoke-PowerCfg @('/changename', $tempGuid, 'Roo Industries Temporary Validation Plan')
+                    $rename = Invoke-PowerCfg @('/changename', $tempGuid, 'Performance Vertex Utility temporary plan')
                     $sequence.Add([pscustomobject]@{ order = 4; step = 'power-rename-temp'; result = $rename; completed = ($rename.exitCode -eq 0 -and -not $rename.timedOut) }) | Out-Null
                     $select = Invoke-PowerCfg @('/setactive', $tempGuid)
                     $sequence.Add([pscustomobject]@{ order = 5; step = 'power-select-temp'; result = $select; completed = ($select.exitCode -eq 0 -and -not $select.timedOut) }) | Out-Null

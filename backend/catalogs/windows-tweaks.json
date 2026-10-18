@@ -15033,7 +15033,7 @@
       "id": "windows.b3ed2a21f895b89b",
       "name": "Multi-Plane Overlay (MPO): Overlay Test Mode",
       "category": "Desktop and File Explorer",
-      "description": "Roo Industries will not apply this together with Multi-Plane Overlay (MPO): Disable Overlays. Together they crashed Counter-Strike 2 during map loads on an AMD Radeon RX 9070 XT in Roo Industries testing (the graphics driver reset). Either one alone ran without crashing. Value meanings have not been verified. Review the exact target and value before applying.",
+      "description": "The app will not apply this together with Multi-Plane Overlay (MPO): Disable Overlays. Together they crashed Counter-Strike 2 during map loads on an AMD Radeon RX 9070 XT in our testing (the graphics driver reset). Either one alone ran without crashing. Value meanings have not been verified. Review the exact target and value before applying.",
       "minimumBuild": 10240,
       "maximumBuild": 26200,
       "editions": [
@@ -21998,7 +21998,7 @@
       "id": "windows.afc9a1a923dc6c65",
       "name": "Multi-Plane Overlay (MPO): Disable Overlays",
       "category": "Gaming and display",
-      "description": "Roo Industries will not apply this together with Multi-Plane Overlay (MPO): Overlay Test Mode. Together they crashed Counter-Strike 2 during map loads on an AMD Radeon RX 9070 XT in Roo Industries testing (the graphics driver reset). Either one alone ran without crashing. Value meanings have not been verified. Review the exact target and value before applying.",
+      "description": "The app will not apply this together with Multi-Plane Overlay (MPO): Overlay Test Mode. Together they crashed Counter-Strike 2 during map loads on an AMD Radeon RX 9070 XT in our testing (the graphics driver reset). Either one alone ran without crashing. Value meanings have not been verified. Review the exact target and value before applying.",
       "minimumBuild": 10240,
       "maximumBuild": 26200,
       "editions": [
@@ -95025,7 +95025,7 @@
           "optionId": "choice-950ca1b1a0b488e2"
         }
       ],
-      "reason": "Together they crashed Counter-Strike 2 during map loads on an AMD Radeon RX 9070 XT in Roo Industries testing (the graphics driver reset). Either one alone ran without crashing."
+      "reason": "Together they crashed Counter-Strike 2 during map loads on an AMD Radeon RX 9070 XT in our testing (the graphics driver reset). Either one alone ran without crashing."
     }
   ]
 }

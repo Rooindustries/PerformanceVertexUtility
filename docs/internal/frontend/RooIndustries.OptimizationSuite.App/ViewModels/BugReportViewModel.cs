@@ -132,7 +132,7 @@ public partial class BugReportViewModel : ObservableObject
             switch (outcome.Status)
             {
                 case BugSendStatus.Sent:
-                    Status = "Thanks! Your report was sent to Roo Industries.";
+                    Status = "Thanks! Your report was sent to the developers.";
                     Description = "";
                     Contact = "";
                     _attachment = null;
@@ -148,7 +148,7 @@ public partial class BugReportViewModel : ObservableObject
                     ShowSave = true;
                     break;
                 case BugSendStatus.Offline:
-                    Status = "Couldn't reach Roo Industries. Check your internet connection and try again, or save the report to a file and send it yourself.";
+                    Status = "Couldn't send the report. Check your internet connection and try again, or save the report to a file and send it yourself.";
                     ShowSave = true;
                     break;
                 case BugSendStatus.NotConfigured:
@@ -184,7 +184,7 @@ public partial class BugReportViewModel : ObservableObject
         {
             var report = Report();
             SavedPath = await Task.Run(() => _service.SaveReport(report, attachment));
-            Status = "Saved " + Path.GetFileName(SavedPath) + ". Select Open folder, then send that file to Roo Industries.";
+            Status = "Saved " + Path.GetFileName(SavedPath) + ". Select Open folder, then send that file to the developers.";
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidOperationException or InvalidDataException)
         {

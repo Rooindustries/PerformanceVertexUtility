@@ -772,7 +772,7 @@ public partial class WindowsTweaksViewModel : ObservableObject
         if (value.ValueKind is System.Text.Json.JsonValueKind.True or System.Text.Json.JsonValueKind.False) return Switch(address.Property, value.GetBoolean());
         if (address.Kind == "service" && address.Property == "startup") return value.GetInt32() switch { 0 => "Boot", 1 => "System", 2 => "Automatic", 3 => "Manual", 4 => "Disabled", _ => value.ToString() };
         if (address.Kind == "hibernation") return value.GetProperty("mode").GetString() + " · Fast Startup " + (value.GetProperty("fastStartup").ValueKind == System.Text.Json.JsonValueKind.Null ? "not configured" : value.GetProperty("fastStartup").GetUInt32() == 0 ? "off" : "on");
-        if (address.Kind == "hosts") return value.GetProperty("block").ValueKind == System.Text.Json.JsonValueKind.Null ? "No Roo Industries hosts block" : "Reviewed hosts block present";
+        if (address.Kind == "hosts") return value.GetProperty("block").ValueKind == System.Text.Json.JsonValueKind.Null ? "No hosts block from this app" : "Reviewed hosts block present";
         if (address.Kind is "file-acl" or "file-ownership")
         {
             var acl = new RawAcl(Convert.FromBase64String(value.GetProperty("dacl").GetString()!), 0);

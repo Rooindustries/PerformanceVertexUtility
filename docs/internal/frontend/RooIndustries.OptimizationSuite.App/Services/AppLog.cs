@@ -12,7 +12,7 @@ public static class AppLog
     private static readonly object Gate = new();
     private static bool _enabled;
 
-    public const string MissingFiles = "Some app files are missing. Extract the full Roo Industries folder again, then reopen the app.";
+    public const string MissingFiles = "Some app files are missing. Extract the full app folder again, then reopen the app.";
     public const string Failed = "Something went wrong. Details were saved to the app log (Settings, Open logs folder).";
     public const string TimedOut = "This took too long and was stopped. Try again. If you were changing something, check Undo changes first.";
 

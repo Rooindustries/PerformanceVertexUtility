@@ -1,6 +1,6 @@
-# Roo Industries Optimization Suite
+# Performance Vertex Utility
 
-Roo Industries Optimization Suite is a Windows performance and cleanup tool focused on smooth gameplay under memory pressure. It is being built around safe previews, backups, rollback, process-profile tuning, uninstall cleanup, driver/profile recommendations, and practical system diagnostics.
+Performance Vertex Utility is a free, open-source Windows performance and cleanup tool focused on smooth gameplay under memory pressure. It is being built around safe previews, backups, rollback, process-profile tuning, uninstall cleanup, driver/profile recommendations, and practical system diagnostics.
 
 The repository contains a WinUI desktop app, a PowerShell backend, native Windows helpers, and the original benchmark-and-rollback harness. Backend execution and the desktop share versioned contracts and explicit preview, approval, and recovery paths.
 

@@ -9,7 +9,7 @@ public static class OperationsFolder
     public static string EarlierBackup(string path) => "This backup was made by an earlier version of the app, before its data folder was protected, so it can't be restored automatically. Its files are kept at " + Path.GetDirectoryName(Path.GetFullPath(path)) + ".";
 
     public static readonly ProtectedFolder Kind = new("app's recovery folder", "try again (its undo history will be lost)",
-        "A running game session or another Roo Industries task is using the app's recovery folder, so it could not be protected yet. Close the game's launcher or restart Windows, then try again.",
+        "A running game session or another task from this app is using its recovery folder, so it could not be protected yet. Close the game's launcher or restart Windows, then try again.",
         NotAdministrator, true, [], Quiesce, Skip);
 
     public static string DefaultRoot => Path.Combine(BrandCompatibility.LocalDataRoot, "operations");

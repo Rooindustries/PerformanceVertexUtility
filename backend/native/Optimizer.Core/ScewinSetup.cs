@@ -61,7 +61,7 @@ public sealed class ScewinSetup
             await _extract(extractor, engine, engineDirectory, "app/Lib/SCEWIN", cancellation).ConfigureAwait(false);
             var scewinRoot = Path.Combine(engineDirectory, "app", "Lib", "SCEWIN");
             var versions = Directory.GetDirectories(scewinRoot);
-            if (versions.Length != 1) throw new InvalidDataException("The downloaded SCEWIN package has an unexpected layout. Update Roo Industries and try again.");
+            if (versions.Length != 1) throw new InvalidDataException("The downloaded SCEWIN package has an unexpected layout. Update the app and try again.");
             cancellation.ThrowIfCancellationRequested();
             progress?.Report("Verifying SCEWIN and driver signatures…");
             var package = await Task.Run(() => ScewinProvider.Inspect(versions[0]), cancellation).ConfigureAwait(false);
@@ -87,7 +87,7 @@ public sealed class ScewinSetup
         if (response.RequestMessage?.RequestUri?.Scheme is { } scheme && scheme != "https")
             throw new InvalidDataException("The SCEWIN download redirected to an insecure connection.");
         if (response.Content.Headers.ContentLength is { } length && length != source.Length)
-            throw new InvalidDataException("The SCEWIN download changed. Update Roo Industries to use the new package.");
+            throw new InvalidDataException("The SCEWIN download changed. Update the app to use the new package.");
         try
         {
             await using var input = await response.Content.ReadAsStreamAsync(cancellation);
@@ -121,14 +121,14 @@ public sealed class ScewinSetup
         using var zip = ZipFile.OpenRead(archive);
         var entries = zip.Entries.Where(select).ToArray();
         if (entries.Length != 1 || entries[0].Length <= 0 || entries[0].Length > 1073741824)
-            throw new InvalidDataException("The SCEWIN archive has missing, duplicate or oversized components. Update Roo Industries and try again.");
+            throw new InvalidDataException("The SCEWIN archive has missing, duplicate or oversized components. Update the app and try again.");
         entries[0].ExtractToFile(destination);
     }
 
     private static string SingleFile(string directory, string pattern)
     {
         var files = Directory.GetFiles(directory, pattern);
-        return files.Length == 1 ? files[0] : throw new InvalidDataException("The SCEWIN archive has an unexpected layout. Update Roo Industries and try again.");
+        return files.Length == 1 ? files[0] : throw new InvalidDataException("The SCEWIN archive has an unexpected layout. Update the app and try again.");
     }
 
     private static async Task ExtractInstallerAsync(string extractor, string installer, string directory, string include, CancellationToken cancellation)

@@ -93,7 +93,7 @@ function Attach{
   $windows=@($A::RootElement.FindAll($TS::Children,[Windows.Automation.PropertyCondition]::new($A::ProcessIdProperty,$script:app.Id)))
   if($Part -eq 'p5'){
    foreach($dialog in $windows|Where-Object {$_.Current.ClassName -eq '#32770'}){
-    $message=$dialog.FindFirst($TS::Descendants,[Windows.Automation.PropertyCondition]::new($A::NameProperty,'The earlier data folder was gone, so Roo Industries started fresh. Its saved rules and undo history are no longer available.'))
+    $message=$dialog.FindFirst($TS::Descendants,[Windows.Automation.PropertyCondition]::new($A::NameProperty,'The earlier data folder was gone, so the app started fresh. Its saved rules and undo history are no longer available.'))
     if($message){$script:window=$dialog;Save 'as-found-missing-data-notice.json' @{pid=$script:app.Id;message=$message.Current.Name};Shot 'as-found-missing-data-notice';Activate (ByNameControl 'OK' $CT::Button)}
    }
   }
@@ -164,7 +164,7 @@ if($outcome.status -eq 'failed'){exit 1}
   CollectStarts
   foreach($win in @($A::RootElement.FindAll($TS::Children,[Windows.Automation.Condition]::TrueCondition))){
    if($win.Current.NativeWindowHandle -notin $existingWindows){Assert-HarnessSmartScreen $win $directory}
-   if($win.Current.ClassName -eq 'TWizardForm' -and $win.Current.Name -like '*Roo Industries*'){
+   if($win.Current.ClassName -eq 'TWizardForm' -and ($win.Current.Name -like '*Performance Vertex Utility*' -or $win.Current.Name -like '*Roo Industries*')){
     $setupOwned=Test-OwnedDescendant ([int]$win.Current.ProcessId) -Ancestor $shellOwned -PassThru
     if(-not$setupOwned){throw 'Wizard belongs to a non-owned setup; retained.'}
     if($win.Current.ProcessId -notin @($script:setupReceipts.Identity.pid)){$script:setupReceipts.Add($setupOwned)}

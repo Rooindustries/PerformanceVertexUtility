@@ -176,7 +176,7 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
         if (!CanRunProcessAction) return;
         ActionBusy = true;
         ActionTitle = "Checking plan";
-        ActionDetail = "Reading the current process list and checking what Roo Industries can safely tune.";
+        ActionDetail = "Reading the current process list and checking what the app can safely tune.";
         try
         {
             var response = await App.Live.PreviewProcessProfileResultAsync(preset: ProcessPreset);
@@ -193,7 +193,7 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
                 return;
             }
             ActionTitle = "Plan ready";
-            ActionDetail = SummarizeProcessAction(response.Value, "Check is ready. Roo Industries found the processes it can tune without changing anything.");
+            ActionDetail = SummarizeProcessAction(response.Value, "Check is ready. Found the processes the app can tune without changing anything.");
         }
         finally
         {
@@ -207,7 +207,7 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
         if (!CanApplyProcessProfile) return;
         ActionBusy = true;
         ActionTitle = "Applying for this session";
-        ActionDetail = "Roo Industries is applying reversible process controls to this session.";
+        ActionDetail = "Applying reversible process controls to this session.";
         try
         {
             var response = await App.Live.ApplyProcessProfileResultAsync(preset: ProcessPreset);
@@ -249,7 +249,7 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
             if (status == "success" && recovery is not null)
             {
                 ActionTitle = "Process priorities applied";
-                ActionDetail = SummarizeProcessAction(response.Value, "Roo Industries applied the reviewed process controls.");
+                ActionDetail = SummarizeProcessAction(response.Value, "Applied the reviewed process controls.");
                 return;
             }
             ActionTitle = "Process priorities need attention";
@@ -280,7 +280,7 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
 
         ActionBusy = true;
         ActionTitle = "Restoring";
-        ActionDetail = "Roo Industries is putting changed process controls back to their previous state.";
+        ActionDetail = "Putting changed process controls back to their previous state.";
         try
         {
             var response = await App.Live.RestoreProcessProfileResultAsync(recovery);
@@ -330,7 +330,7 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
         if (ActionBusy) return;
         ActionBusy = true;
         MatchTuneStatus = "Checking game priorities";
-        MatchTuneDetail = "Roo Industries is checking the match profile without changing process priority.";
+        MatchTuneDetail = "Checking the match profile without changing process priority.";
         try
         {
             var response = await App.Live.RunGameTuneSessionResultAsync(false, 3, 1);
@@ -342,7 +342,7 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
                 return;
             }
             MatchTuneStatus = "Game priorities checked";
-            MatchTuneDetail = SummarizeSessionAction(response.Value, "Roo Industries checked the game priority settings. Nothing changed.");
+            MatchTuneDetail = SummarizeSessionAction(response.Value, "Checked the game priority settings. Nothing changed.");
         }
         finally
         {
@@ -356,13 +356,13 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
         if (!CanStartMatchTune)
         {
             MatchTuneStatus = "Start a game first";
-            MatchTuneDetail = "Roo Industries can check the plan anytime, but game priority only applies once a foreground game is detected.";
+            MatchTuneDetail = "The app can check the plan anytime, but game priority only applies once a foreground game is detected.";
             return;
         }
 
         ActionBusy = true;
         MatchTuneStatus = "Starting game priorities";
-        MatchTuneDetail = "For a short match run, Roo Industries can raise the game and leave streaming apps unchanged.";
+        MatchTuneDetail = "For a short match run, the app can raise the game and leave streaming apps unchanged.";
         try
         {
             var response = await App.Live.RunGameTuneSessionResultAsync(true, 12, 2);
@@ -376,7 +376,7 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
                 return;
             }
             MatchTuneStatus = SessionStatusTitle(response.Value, "Game priorities finished");
-            MatchTuneDetail = SummarizeSessionAction(response.Value, "Roo Industries ran the game priorities and wrote a restore point when anything changed.");
+            MatchTuneDetail = SummarizeSessionAction(response.Value, "Ran the game priorities and wrote a restore point when anything changed.");
             SetMatchTuneRestore(observedRecovery);
             RestoreHint = MatchTuneRestoreAvailable ? "Session restore is available" : "No verified game-session backup";
         }
@@ -392,7 +392,7 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
         if (!CanRestoreMatchTune)
         {
             MatchTuneStatus = "Nothing to restore";
-            MatchTuneDetail = "Run game priority first. Restore appears after Roo Industries writes a session backup.";
+            MatchTuneDetail = "Run game priority first. Restore appears after the app writes a session backup.";
             MatchTuneRestoreAvailable = false;
             return;
         }
@@ -408,7 +408,7 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
 
         ActionBusy = true;
         MatchTuneStatus = "Restoring game priorities";
-        MatchTuneDetail = "Roo Industries is putting game-session process controls back.";
+        MatchTuneDetail = "Putting game-session process controls back.";
         try
         {
             var response = await App.Live.RestoreGameTuneSessionResultAsync(evidence.SessionId, evidence.SessionPath, evidence.BackupManifestPath);
@@ -455,7 +455,7 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
                 return;
             }
             GovernorStatus = "Background limits checked";
-            GovernorDetail = SummarizeSessionAction(response.Value, "Roo Industries checked the background limit settings. Nothing changed.");
+            GovernorDetail = SummarizeSessionAction(response.Value, "Checked the background limit settings. Nothing changed.");
         }
         finally
         {
@@ -469,7 +469,7 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
         if (!CanStartGovernor) return;
         ActionBusy = true;
         GovernorStatus = "Watching background load";
-        GovernorDetail = "Roo Industries is watching for short CPU spikes and can restrain noisy background apps.";
+        GovernorDetail = "The app is watching for short CPU spikes and can restrain noisy background apps.";
         try
         {
             var response = await App.Live.RunProcessGovernorSessionResultAsync(true, 12, 2, 250);
@@ -483,7 +483,7 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
                 return;
             }
             GovernorStatus = SessionStatusTitle(response.Value, "Background limits finished");
-            GovernorDetail = SummarizeSessionAction(response.Value, "Roo Industries ran the background limits and restored priorities after CPU use dropped.");
+            GovernorDetail = SummarizeSessionAction(response.Value, "Ran the background limits and restored priorities after CPU use dropped.");
             SetGovernorRestore(observedRecovery);
         }
         finally
@@ -498,7 +498,7 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
         if (!CanRestoreGovernor)
         {
             GovernorStatus = "Nothing to restore";
-            GovernorDetail = "Start background limits first. Restore appears after Roo Industries writes a session backup.";
+            GovernorDetail = "Start background limits first. Restore appears after the app writes a session backup.";
             GovernorRestoreAvailable = false;
             return;
         }
@@ -514,7 +514,7 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
 
         ActionBusy = true;
         GovernorStatus = "Restoring background limits";
-        GovernorDetail = "Roo Industries is putting restrained apps back to their previous controls.";
+        GovernorDetail = "Putting restrained apps back to their previous controls.";
         try
         {
             var response = await App.Live.RestoreProcessGovernorSessionResultAsync(evidence.SessionId, evidence.SessionPath, evidence.BackupManifestPath);

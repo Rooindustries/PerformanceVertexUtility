@@ -189,7 +189,7 @@ public sealed class LiveDataService
             release.Wait();
             gate.Dispose();
             release.Dispose();
-        }) { IsBackground = true, Name = "Roo Industries governor gate" };
+        }) { IsBackground = true, Name = "Governor gate" };
         owner.Start();
         return entered.Task;
     }
