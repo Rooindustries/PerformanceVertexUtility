@@ -26,7 +26,9 @@ try {
         $scratch=Join-Path (Split-Path ([IO.Path]::GetFullPath($QueueJournalPath)) -Parent) ('leftover-discovery-'+[guid]::NewGuid().ToString('N'))
         [IO.Directory]::CreateDirectory($scratch)|Out-Null
         $inventoryPath=Join-Path $scratch 'inventory.json';$scanPath=Join-Path $scratch 'scan.json'
-        $current=@(Get-RooIndustriesUninstallPropertyArray (Get-RooIndustriesInstalledAppInventory '') 'apps' | Where-Object {[string](Get-RooIndustriesUninstallPropertyValue $_ 'appId' '') -cne $AppId})
+        $live=Get-RooIndustriesInstalledAppInventory ''
+        if($live.complete -ne $true){throw ('The installed app list could not be read completely, so folders shared with other apps cannot be ruled out. Nothing was scanned. '+(@($live.errors) -join ' ')).Trim()}
+        $current=@(Get-RooIndustriesUninstallPropertyArray $live 'apps' | Where-Object {[string](Get-RooIndustriesUninstallPropertyValue $_ 'appId' '') -cne $AppId})
         Write-RooIndustriesOperationJson @{schemaVersion=1;apps=@(@($entry.appSnapshot)+$current)} $inventoryPath
         $scan=(& (Join-Path $PSScriptRoot 'Preview-LeftoverScan.ps1') -AppId $AppId -InventoryPath $inventoryPath -OutputPath $scanPath)|ConvertFrom-Json
         if(@($scan.errors).Count -gt 0){throw (@($scan.errors|ForEach-Object {$_.message}) -join ' ')}
