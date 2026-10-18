@@ -157,7 +157,7 @@ function New-Classification {
             $defaults.allowedExecutionMode = 'excluded-never-run'
             $defaults.hardwareGates = @('none')
             $defaults.restoreBackupRequirement = 'Not applicable because this updater is excluded from default integration.'
-            $defaults.integrationPlan = 'Exclude from default driver strategy. Prefer Roo Industries hardware-gated recommendations and manual driver packages.'
+            $defaults.integrationPlan = 'Exclude from default driver strategy. Prefer hardware-gated recommendations and manual driver packages.'
             $defaults.executionClass = 'excluded'
             break
         }
@@ -577,7 +577,7 @@ function New-Classification {
             $defaults.allowedExecutionMode = 'manual-launcher-only'
             $defaults.hardwareGates = @('windows')
             $defaults.restoreBackupRequirement = 'Not required for manual diagnostic launch; native diagnostics should keep report artifacts user-visible.'
-            $defaults.integrationPlan = 'Separate diagnostics section with transparent Roo Industries plan recommendation after findings.'
+            $defaults.integrationPlan = 'Separate diagnostics section.'
             $defaults.executionClass = 'manual-launcher'
             break
         }

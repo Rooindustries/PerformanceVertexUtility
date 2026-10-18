@@ -3702,7 +3702,7 @@
             "operation": "follow-system",
             "gate": "WinUtil theme button in Auto mode",
             "systemMutation": false,
-            "nativeEquivalent": "Refresh Roo Industries theme only if following Windows theme",
+            "nativeEquivalent": "Refresh the app theme only if following Windows theme",
             "method": "application-theme"
           }
         ],
@@ -3741,7 +3741,7 @@
             "operation": "follow-system",
             "gate": "WinUtil theme button in Auto mode",
             "systemMutation": false,
-            "nativeEquivalent": "Refresh Roo Industries theme only if following Windows theme",
+            "nativeEquivalent": "Refresh the app theme only if following Windows theme",
             "method": "application-theme"
           }
         ]
@@ -6726,7 +6726,7 @@
       "notes": [
         "Upstream DNS helper has no automatic partial rollback. DHCP reset is not previous-state restoration.",
         "Source invokes Set-DnsClientServerAddress first with IPv4 list and then IPv6 list using the same InterfaceIndex and no AddressFamily selector; verify resulting dual-stack behavior rather than assuming both lists persist.",
-        "Roo Industries binds active default-route interfaces and stages their DNS registry configuration for restart. Global encrypted-DNS registration uses Windows DNS Client APIs. Restore replays original values and provider records; DHCP is a separate choice and does not delete shared DoH registrations.",
+        "The app binds active default-route interfaces and stages their DNS registry configuration for restart. Global encrypted-DNS registration uses Windows DNS Client APIs. Restore replays original values and provider records; DHCP is a separate choice and does not delete shared DoH registrations.",
         "Mullvad announced its public DNS service ends on2026-11-02; do not select these providers after that date."
       ],
       "requirements": [

@@ -215,7 +215,7 @@
       "allowedExecutionMode": "manual-launcher-only",
       "hardwareGates": ["windows"],
       "restoreBackupRequirement": "Not required for manual diagnostic launch; native diagnostics should keep report artifacts user-visible.",
-      "integrationPlan": "Keep as separate diagnostic section. After diagnostics, show a plan recommendation CTA based on CPU/GPU/RAM/storage findings and matching services on rooindustries.com.",
+      "integrationPlan": "Keep as separate diagnostic section.",
       "risk": "medium"
     },
     {

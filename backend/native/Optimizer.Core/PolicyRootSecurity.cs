@@ -17,7 +17,7 @@ public readonly record struct SkipDecision(string Reason, bool Keep = true);
 public sealed record ProtectedFolder(string Label, string Restart, string Busy, string NotAdministrator, bool KeepUntrusted, string[] ShallowNames,
     Func<string, Action?>? Quiesce = null, Func<string, bool, SkipDecision?>? Skip = null, Func<string, (string Source, string Destination)[]>? Companions = null)
 {
-    public static readonly ProtectedFolder Rules = new("saved rules folder", "save your rules again", "Stop the Roo Industries Governor before protecting its saved rules folder.",
+    public static readonly ProtectedFolder Rules = new("saved rules folder", "save your rules again", "Stop the Governor before protecting its saved rules folder.",
         PolicyRootSecurity.NotAdministrator, false, ["rules", "governor.json", "worker-request.json", "host.json"]);
 }
 
@@ -97,7 +97,7 @@ public static class PolicyRootSecurity
         {
             if (EntryExists(repair.KeptAt!))
             {
-                if (EntryExists(root)) throw new IOException("Both folders exist during the pending data folder repair. Roo Industries kept them for review.");
+                if (EntryExists(root)) throw new IOException("Both folders exist during the pending data folder repair. The app kept them for review.");
             }
             else if (EntryExists(root))
             {
@@ -110,12 +110,12 @@ public static class PolicyRootSecurity
         }
         var created = !EntryExists(root);
         if (created) CreateSecured(root, user, DataFolder.Kind);
-        else if (Problem(root, DataFolder.Kind, deep: false) is not null) throw new UnauthorizedAccessException("The new data folder changed during its pending repair. Roo Industries kept both folders for review.");
+        else if (Problem(root, DataFolder.Kind, deep: false) is not null) throw new UnauthorizedAccessException("The new data folder changed during its pending repair. The app kept both folders for review.");
         using var lease = PolicyRootLease.Acquire(root, DataFolder.Kind, deep: false);
         if (created) Pause("repair-created");
         Mark(marker, user);
         DataFolder.WriteRecoveryNotice(root, repair.KeptAt is { } retained && EntryExists(retained) ? retained : null);
-        if (lease.Moved) throw new UnauthorizedAccessException("The new data folder moved during its repair. Roo Industries kept both folders for review.");
+        if (lease.Moved) throw new UnauthorizedAccessException("The new data folder moved during its repair. The app kept both folders for review.");
         key.DeleteValue(pendingName, false); key.Flush();
         return true;
     }

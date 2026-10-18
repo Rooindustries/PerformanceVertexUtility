@@ -105,7 +105,7 @@ try {
         }
         warnings = @()
         errors = @()
-        logs = @((New-RooIndustriesLog 'Roo Industries validation temp artifact audit completed.'))
+        logs = @((New-RooIndustriesLog 'Validation temp artifact audit completed.'))
     }
     Write-RooIndustriesJsonOutput $result $OutputPath
 } catch {
@@ -119,7 +119,7 @@ try {
         artifacts = @()
         summary = [pscustomobject]@{ artifactCount = 0; deletedCount = 0 }
         errors = @((New-RooIndustriesIssue 'VALIDATION_TEMP_AUDIT_FAILED' $_.Exception.Message 'error' 'backend.validationTempArtifacts' $ArtifactRoot $true 'Check artifact root and retry.' $null))
-        logs = @((New-RooIndustriesLog 'Roo Industries validation temp artifact audit failed.' 'error'))
+        logs = @((New-RooIndustriesLog 'Validation temp artifact audit failed.' 'error'))
     }
     Write-RooIndustriesJsonOutput $errorResult $OutputPath
     exit 1

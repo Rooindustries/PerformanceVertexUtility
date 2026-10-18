@@ -21,9 +21,9 @@ static class GovernorChecks
     private const string Stays = "The governor stopped and won't start again by itself. Press Start governor to start it.";
     private const string Unknown = "The governor stopped. Press Start governor to start it.";
     private const string Retry = " Press Put settings back to try again.";
-    private const string SignedIn = "Roo Industries Governor is running. It keeps your rules active when this app is closed and starts when you sign in.";
-    private const string NoSignIn = "Roo Industries Governor is running and keeps your rules active when this app is closed, but it won't start when you sign in. Press Start governor to fix that.";
-    private const string UnknownSignIn = "Roo Industries Governor is running and keeps your rules active when this app is closed. Roo Industries couldn't confirm it starts when you sign in. Press Start governor to set that up again.";
+    private const string SignedIn = "The Governor is running. It keeps your rules active when this app is closed and starts when you sign in.";
+    private const string NoSignIn = "The Governor is running and keeps your rules active when this app is closed, but it won't start when you sign in. Press Start governor to fix that.";
+    private const string UnknownSignIn = "The Governor is running and keeps your rules active when this app is closed. The app couldn't confirm it starts when you sign in. Press Start governor to set that up again.";
     private const string RepairNote = " · press Start governor in Games > Processes";
     private const string Sid = "S-1-5-21-1-2-3-1001";
     private static readonly string Install = OperatingSystem.IsWindows() ? @"C:\Fixture\Install" : "/fixture/install";
@@ -74,7 +74,7 @@ static class GovernorChecks
         await panel.RefreshRulesCommand.ExecuteAsync(null);
         var history = new RestoreLogsViewModel();
         await history.InitializeAsync();
-        var undo = history.RestoreRows.Single(row => row.Label == "Roo Industries Governor");
+        var undo = history.RestoreRows.Single(row => row.Label == "Governor");
         var view = new[]
             {
                 "State: " + panel.GovernorState, "Headline: " + panel.GovernorHeadline, "Detail: " + panel.GovernorDetail,
@@ -199,7 +199,7 @@ static class GovernorChecks
             "Detail: 2 rules are on.", "Buttons: pause=True start=False");
         Expect(check, view, "Per-field mix: the applied field stays visible, only failed fields say unavailable, the stepped-back field says it keeps changing back, a denial is recognised by its recorded kind, not by its wording (an NTSTATUS text without the word denied still says unavailable, and an error text that mentions 'denied' is not treated as a denial)",
             "Rule Chrome rule: Now: chrome.exe (100) · CPU priority High | chrome.exe (100) · I/O priority unavailable · " + Denied
-            + " | chrome.exe (100) · GPU priority · This app keeps changing it back, so Roo Industries stepped back. | chrome.exe (100) · Memory priority unavailable · " + Denied
+            + " | chrome.exe (100) · GPU priority · This app keeps changing it back, so the Governor stepped back. | chrome.exe (100) · Memory priority unavailable · " + Denied
             + " | chrome.exe (100) · Priority boost stepped back · Fixture policy denied this change");
         Expect(check, view, "Other account: a matching process under another Windows account says so instead of 'not running'",
             "Rule Game rule: Now: game.exe (200) · Running under another Windows account, so this rule doesn't control it.");
@@ -229,7 +229,7 @@ static class GovernorChecks
         view = await View(Snapshot(true, [rule], new(null, null, "'n' is an invalid start of a value.")));
         Expect(check, view, "Paused with an unreadable governor state never claims the settings were put back",
             "State: notResponding", "Headline: Not responding",
-            "Detail: Paused, but Roo Industries couldn't read the governor's state, so it can't confirm the old settings were put back: 'n' is an invalid start of a value.",
+            "Detail: Paused, but the app couldn't read the governor's state, so it can't confirm the old settings were put back: 'n' is an invalid start of a value.",
             "Undo: Not responding · open Games > Processes (medium)");
         var hungPause = Host("running", [Instance(chrome, "cpuPriority", "active")]);
         view = await View(Snapshot(true, [rule], new(hungPause, true, "The worker heartbeat is stale; it may be busy or unresponsive.")));
@@ -332,12 +332,12 @@ static class GovernorChecks
             "State: off", "Detail: ", "Rule Chrome rule: Now: Off", "Undo: Off · no rules are on (neutral)");
         view = await View(Snapshot(false, [off], new(failed, true, null)));
         Expect(check, view, "Off rule with a failed restore on a running process says which setting could not be put back, and history says 'could not be put back'",
-            "State: off", "Detail: 1 app still has a setting Roo Industries could not put back.",
+            "State: off", "Detail: 1 app still has a setting the app could not put back.",
             "Rule Chrome rule: Now: Off | chrome.exe (100) · CPU priority could not be put back · " + Denied, "Undo: Off · 1 app still has saved settings (medium)",
             "History: chrome · Chrome rule · a setting could not be put back");
         view = await View(Snapshot(false, [off], new(null, null, "This operation belongs to another PC or Windows user.")));
         Expect(check, view, "No rules on with an unreadable governor state stays off but does not claim every app got its settings back",
-            "State: off", "Detail: Roo Industries couldn't read the governor's last state, so it can't confirm every app got its old settings back: This operation belongs to another PC or Windows user.",
+            "State: off", "Detail: The app couldn't read the governor's last state, so it can't confirm every app got its old settings back: This operation belongs to another PC or Windows user.",
             "Undo: Off · the governor's last state could not be read (medium)");
     }
 
@@ -515,7 +515,7 @@ static class GovernorChecks
         var failed = Host("stoppedWithConflicts", [Instance(chrome, "cpuPriority", "conflict", "denied", "Access is denied.")]);
         var (view, panel) = await Show(Snapshot(false, [off], new(failed, false, null)));
         Expect(check, view, "Off with a failed restore and no worker running offers Put settings back",
-            "Detail: 1 app still has a setting Roo Industries could not put back." + Retry, "Undo: Off · 1 app still has saved settings · put them back in Games > Processes (medium)");
+            "Detail: 1 app still has a setting the app could not put back." + Retry, "Undo: Off · 1 app still has saved settings · put them back in Games > Processes (medium)");
         check(panel.RetryAvailable && panel.CanRetryRestore, "The Put settings back button is shown and enabled");
         App.Operations.RetryRestore = () =>
         {
@@ -666,7 +666,7 @@ static class GovernorChecks
         Expect(check, await Live(idle, new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "game.exe" }), "A running rule whose image is missing from the process list says the app is not running", "Rule Chrome rule: Now: The app is not running right now.");
         Expect(check, await Live(idle, new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Chrome.EXE" }), "A running rule whose app is in the process list but has no record says it was not applied, not that the app is not running",
             "Rule Chrome rule: Now: The app is running, but this rule hasn't been applied to it.");
-        Expect(check, await Live(idle), "A running rule with no process list never claims the app is not running", "Rule Chrome rule: Now: Roo Industries can't tell whether the app is running right now.");
+        Expect(check, await Live(idle), "A running rule with no process list never claims the app is not running", "Rule Chrome rule: Now: Can't tell whether the app is running right now.");
         Expect(check, await Live(Host("running", [Instance(chrome, "cpuPriority", "active")])), "An active record whose journal could not be read says it can't confirm, not that it is starting",
             "Rule Chrome rule: Now: chrome.exe (100) · CPU priority couldn't be confirmed");
         var other = Instance(chrome, "cpuPriority", "active");
@@ -771,7 +771,7 @@ static class GovernorChecks
             build.Invoke(history, [gameRecovery, governorRecovery, games, windowValue, snapshot]);
             var headline = history.RestoreHeadline;
             var rows = history.RestoreRows.ToArray();
-            var governor = rows.Single(row => row.Label == "Roo Industries Governor").Value;
+            var governor = rows.Single(row => row.Label == "Governor").Value;
             var nothing = headline == "No Windows or process settings to restore.";
             var worker = snapshot?.Worker;
             var unreadable = windowValue is null || gameRecovery is null || governorRecovery is null || games.Any(game => game.Worker.State is null || game.Worker.HostRunning is null) || snapshot is null
@@ -836,7 +836,7 @@ static class GovernorChecks
             snapshot = GovernorProbe.Read(root);
             (view, _) = await Show(snapshot);
             check(snapshot.Worker.HostRunning is null && snapshot.ScheduledTask is null && view.Contains("State: notResponding")
-                    && view.Any(line => line.StartsWith("Detail: Paused, but Roo Industries couldn't read the governor's state, so it can't confirm the old settings were put back", StringComparison.Ordinal)),
+                    && view.Any(line => line.StartsWith("Detail: Paused, but the app couldn't read the governor's state, so it can't confirm the old settings were put back", StringComparison.Ordinal)),
                 "Real snapshot: a damaged host.json while paused never says the settings were put back");
             File.Delete(store.SettingsPath);
             snapshot = GovernorProbe.Read(root);

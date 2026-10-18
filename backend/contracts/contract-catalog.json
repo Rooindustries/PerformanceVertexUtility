@@ -440,7 +440,7 @@
       "name": "validation temp artifact audit",
       "definitionRef": "roo-industries-backend-contracts.schema.json#/$defs/actionEnvelope",
       "workflow": "backend validation hygiene",
-      "summary": "Read-only by default audit of old Roo Industries validation artifacts under temp, with explicit cleanup flag and protected active roots.",
+      "summary": "Read-only by default audit of old validation artifacts under temp, with explicit cleanup flag and protected active roots.",
       "status": "draft"
     },
     {

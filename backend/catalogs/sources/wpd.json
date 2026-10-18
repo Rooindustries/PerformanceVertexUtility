@@ -6786,7 +6786,7 @@
       "extraWriteIfMissing": "HKLM\\Software\\Microsoft\\Windows NT\\CurrentVersion\\SystemRestore\\SystemRestorePointCreationFrequency DWORD=0",
       "nativeDecision": "Reuse existing backup provider and disclose any frequency-setting change."
     },
-    "ownedRuleIdentity": "Use Roo Industries IDs; do not remove WPD or unrelated rules by substring."
+    "ownedRuleIdentity": "Use this app's rule IDs; do not remove WPD or unrelated rules by substring."
   },
   "otherFeatures": [
     {

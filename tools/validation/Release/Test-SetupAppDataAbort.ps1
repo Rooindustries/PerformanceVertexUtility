@@ -121,7 +121,7 @@ $wrapper
             Check ($exit -eq 0 -and $report -match '(?m)^returned=1' -and $report -match '(?m)^result=\r?$' -and $report -match '(?m)^suspended=1' -and $calls -match '(?m)^Suspend\r?$') 'Valid AppData reaches the real Suspend and marks GovernorSuspended' $report
             Check ($payload -ceq 'replacement payload' -and $calls -match '(?m)^Resume\r?$') 'Valid AppData installs the fixture payload and resumes after install' $calls
         }else{
-            Check ($exit -ne 0 -and $report -match '(?m)^returned=1' -and $report -match "(?m)^result=Roo Industries needs this Windows user's AppData folder.* No files were changed\.") ($case+' PrepareToInstall returns the refusal and stops installation') $report
+            Check ($exit -ne 0 -and $report -match '(?m)^returned=1' -and $report -match "(?m)^result=The app needs this Windows user's AppData folder.* No files were changed\.") ($case+' PrepareToInstall returns the refusal and stops installation') $report
             Check ($payload -ceq 'original payload' -and $report -match '(?m)^suspended=0' -and $calls -eq '') ($case+' keeps the existing file and never suspends or resumes') ($payload+' '+$calls)
         }
     }

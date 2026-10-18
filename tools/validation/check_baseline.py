@@ -243,6 +243,37 @@ def public_surface_negative_controls():
     return results
 
 
+def product_name_negative_controls():
+    check = runpy.run_path(str(Path(__file__).with_name('check_product_name.py')))['check']
+    name = 'Ro' + 'o Industries'
+    location = 'tools/validation/product-name-exceptions.json'
+    shipped = 'backend/scripts/Shipped.ps1'
+    kept = "'" + name + " kept'"
+    exception = {'text': kept, 'files': [shipped], 'reason': 'fixture'}
+    cases = {
+        'product name in shipped text': ([], {shipped: name + ' checked it'}, [f'{shipped}:1: product name in shipped text']),
+        'website in shipped text': ([], {shipped: 'rooindustries' + '.com'}, [f'{shipped}:1: product name in shipped text']),
+        'product name in a test script': ([], {'backend/scripts/Test-Shipped.ps1': name + ' fixture'}, []),
+        'product name outside shipped folders': ([], {'docs/notes.md': name}, []),
+        'listed exception': ([exception], {shipped: kept}, []),
+        'another product name on an excepted line': ([exception], {shipped: kept + ' ' + name}, [f'{shipped}:1: product name in shipped text']),
+        'stale exception': ([exception], {shipped: 'unchanged'}, [f'{location}: stale exception {kept!r} in {shipped}']),
+        'empty exception reason': ([dict(exception, reason='')], {shipped: kept}, [f'{location}: exception {kept!r} has an empty reason']),
+    }
+    results = {}
+    for label, (exceptions, files, expected) in cases.items():
+        with tempfile.TemporaryDirectory() as folder:
+            temporary = Path(folder)
+            manifest = temporary / location
+            manifest.parent.mkdir(parents=True)
+            manifest.write_text(json.dumps({'exceptions': exceptions}), encoding='utf-8')
+            for relative, source in files.items():
+                (temporary / relative).parent.mkdir(parents=True, exist_ok=True)
+                (temporary / relative).write_text(source, encoding='utf-8')
+            results[label] = check(temporary) == expected
+    return results
+
+
 def validate(root: Path, contracts_only: bool = False):
     failures = []
     failures.extend(code_loading_failures(root))
@@ -263,6 +294,10 @@ def validate(root: Path, contracts_only: bool = False):
         for label, passed in public_surface_negative_controls().items():
             if not passed:
                 failures.append(f'Negative control failed: {label} did not match the public surface check result')
+        failures.extend(runpy.run_path(str(Path(__file__).with_name('check_product_name.py')))['check'](root))
+        for label, passed in product_name_negative_controls().items():
+            if not passed:
+                failures.append(f'Negative control failed: {label} did not match the product name check result')
     documents = {}
     for folder in ('backend/contracts', 'backend/samples', 'backend/profiles', 'backend/uninstall', 'backend/catalogs', 'backend/capabilities', 'modules'):
         for path in sorted((root / folder).rglob('*.json')):

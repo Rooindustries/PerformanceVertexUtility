@@ -97,7 +97,7 @@ public partial class MonitoringViewModel : PageViewModelBase
 
         StutterBusy = true;
         StutterActionTitle = "Checking timer and cache settings";
-        StutterActionDetail = "Roo Industries is reading the plan. No timer, power, cache, or service setting changes from this.";
+        StutterActionDetail = "Reading the plan. No timer, power, cache, or service setting changes from this.";
         try
         {
             var response = await App.Live.PreviewStutterOptimizationResultAsync();
@@ -108,7 +108,7 @@ public partial class MonitoringViewModel : PageViewModelBase
                 return;
             }
             StutterActionTitle = "Settings reviewed";
-            StutterActionDetail = SummarizeStutterAction(response.Value, "Roo Industries checked the timer and cache settings. Nothing changed.");
+            StutterActionDetail = SummarizeStutterAction(response.Value, "Checked the timer and cache settings. Nothing changed.");
         }
         finally
         {
@@ -127,8 +127,8 @@ public partial class MonitoringViewModel : PageViewModelBase
         StutterBusy = true;
         StutterActionTitle = "Running latency session";
         StutterActionDetail = LatencySessionApproved
-            ? "Roo Industries is asking Windows for a short timer session. It restores when the helper exits."
-            : "Approval is still missing, so Roo Industries will stop before changing the timer.";
+            ? "Asking Windows for a short timer session. It restores when the helper exits."
+            : "Approval is still missing, so the app will stop before changing the timer.";
         try
         {
             var response = await App.Live.CheckTimerResolutionResultAsync(LatencySessionApproved);
@@ -158,8 +158,8 @@ public partial class MonitoringViewModel : PageViewModelBase
         StutterBusy = true;
         StutterActionTitle = "Preparing cache cleanup";
         StutterActionDetail = ShaderCacheApproved
-            ? "Roo Industries is checking the shader-cache plan, backup path, and restore path."
-            : "Approval is still missing, so Roo Industries will stop before touching cache files.";
+            ? "Checking the shader-cache plan, backup path, and restore path."
+            : "Approval is still missing, so the app will stop before touching cache files.";
         try
         {
             var response = await App.Live.CheckShaderCacheCleanupResultAsync(ShaderCacheApproved);
@@ -194,7 +194,7 @@ public partial class MonitoringViewModel : PageViewModelBase
         if (!ValidShaderBackup(_lastShaderRollbackPath))
         {
             StutterActionTitle = "No cache restore yet";
-            StutterActionDetail = "Roo Industries only restores shader cache after a cleanup run writes a rollback file.";
+            StutterActionDetail = "The app only restores shader cache after a cleanup run writes a rollback file.";
             ShaderRestoreAvailable = false;
             ShaderRestoreHint = "No rollback file yet.";
             return;
@@ -202,7 +202,7 @@ public partial class MonitoringViewModel : PageViewModelBase
 
         StutterBusy = true;
         StutterActionTitle = "Restoring shader cache";
-        StutterActionDetail = "Roo Industries is reading the rollback file and putting cache files back.";
+        StutterActionDetail = "Reading the rollback file and putting cache files back.";
         try
         {
             var response = await App.Live.RestoreShaderCacheCleanupResultAsync(_lastShaderRollbackPath!);

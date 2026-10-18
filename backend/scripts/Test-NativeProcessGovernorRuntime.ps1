@@ -81,7 +81,7 @@ function Get-BackendScriptHostProcesses {
         $commandLine = [string]$proc.CommandLine
         if ([string]::IsNullOrWhiteSpace($commandLine)) { continue }
         if ([int]$proc.ProcessId -eq $PID) { continue }
-        if ($commandLine -like '*LeanClientOptimizer*backend*scripts*') {
+        if ($commandLine -like '*LeanClientOptimizer*backend*scripts*' -or $commandLine -like '*PerformanceVertexUtility*backend*scripts*') {
             $items.Add([pscustomobject]@{
                 processId = [int]$proc.ProcessId
                 name = [string]$proc.Name

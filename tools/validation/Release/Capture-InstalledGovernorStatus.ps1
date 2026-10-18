@@ -34,7 +34,7 @@ public static class RooIndustriesGovernorCaptureWindow {
 $checks=[Collections.Generic.List[object]]::new()
 $script:App=$null;$script:AppReceipt=$null;$script:Win=$null;$script:cleanupFailed=$false
 $passed=$false;$failure=$null;$headline=$null;$detail=$null;$shot=$null;$appHash=$null;$captureBounds=$null;$windowHandle=[IntPtr]::Zero
-$expected='Roo Industries Governor is running. It keeps your rules active when this app is closed and starts when you sign in.'
+$expected='The Governor is running. It keeps your rules active when this app is closed and starts when you sign in.'
 $leasePath=Join-Path $RunRoot 'recovery\epoch-installed\lease.json';$leaseHash=(Read-HandoffJson $leasePath).hash
 $cleanupPath=Join-Path $Source 'tools\validation\LoadTimes\Test-ElevatedLaunchers.ps1'
 function Check([bool]$Ok,[string]$Name){$checks.Add(@{passed=$Ok;check=$Name});if(-not$Ok){throw $Name};'PASS '+$Name}
@@ -63,7 +63,7 @@ try{
     $script:App=Start-Process -FilePath $exe -PassThru
     $script:AppReceipt=New-OwnedProcess $script:App
     if(-not$script:AppReceipt -or $script:AppReceipt.Identity.imagePath -ine [RooIndustriesValidationOwnership.Native]::Canonical($exe)){throw 'Installed capture app identity unavailable'}
-    $script:Win=WaitFor { @([Windows.Automation.AutomationElement]::RootElement.FindAll([Windows.Automation.TreeScope]::Children,[Windows.Automation.PropertyCondition]::new([Windows.Automation.AutomationElement]::ProcessIdProperty,$script:App.Id))|Where-Object {$_.Current.NativeWindowHandle -ne 0 -and $_.Current.Name -like 'Roo Industries*'})[0] } 60 'owned app window'
+    $script:Win=WaitFor { @([Windows.Automation.AutomationElement]::RootElement.FindAll([Windows.Automation.TreeScope]::Children,[Windows.Automation.PropertyCondition]::new([Windows.Automation.AutomationElement]::ProcessIdProperty,$script:App.Id))|Where-Object {$_.Current.NativeWindowHandle -ne 0 -and ($_.Current.Name -like 'Performance Vertex Utility*' -or $_.Current.Name -like 'Roo Industries*')})[0] } 60 'owned app window'
     $windowHandle=[IntPtr]::new($script:Win.Current.NativeWindowHandle);Assert-Window
     $nav=WaitFor {$script:Win.FindFirst([Windows.Automation.TreeScope]::Descendants,[Windows.Automation.AndCondition]::new([Windows.Automation.PropertyCondition]::new([Windows.Automation.AutomationElement]::NameProperty,'Games'),[Windows.Automation.PropertyCondition]::new([Windows.Automation.AutomationElement]::ControlTypeProperty,[Windows.Automation.ControlType]::ListItem)))} 60 'Games navigation'
     $nav.GetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern).Select()

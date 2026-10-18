@@ -513,9 +513,9 @@ public sealed class ProcessPolicyStore
 public sealed class ProcessPolicyHost
 {
     public const int TerminalHistory = 50;
-    public const string KeepsChanging = "This app keeps changing it back, so Roo Industries stepped back.";
+    public const string KeepsChanging = "This app keeps changing it back, so the Governor stepped back.";
     public const string OtherAccount = "Running under another Windows account, so this rule doesn't control it.";
-    public const string ForeignRecord = "This record points at a process of another Windows account, so Roo Industries did not change it.";
+    public const string ForeignRecord = "This record points at a process of another Windows account, so the Governor did not change it.";
     public const string TopologyChanged = "CPU topology changed; review the saved hard-affinity selection.";
     public const string PathUnreadable = "Its program path could not be read, so this rule cannot be applied to it.";
     private const long Recheck = 2000, ReassertWindow = 600000, RuleReadGrace = 10000;
@@ -1147,13 +1147,13 @@ public sealed class ProcessPolicyHost
         try
         {
             if (_excluded(new RunningProcess(running.ProcessId, running.CreationTimeFileTimeUtc, running.ImageName)))
-                return _gates[key] = new("excluded", "Roo Industries never changes this app because Windows or security software depends on it.", null, null);
+                return _gates[key] = new("excluded", "This app is never changed because Windows or security software depends on it.", null, null);
             _processOpens++;
             using var target = new ProcessTarget(running.ProcessId);
             var identity = target.Identity();
             if (identity.CreationTimeFileTimeUtc != running.CreationTimeFileTimeUtc) return new("ended", null, null, null);
             if (target.UserSid() != _state.Owner.UserSid) return _gates[key] = new("otherAccount", OtherAccount, identity, null);
-            if (_excluded(identity)) return _gates[key] = new("excluded", "Roo Industries never changes this app because Windows or security software depends on it.", identity, null);
+            if (_excluded(identity)) return _gates[key] = new("excluded", "This app is never changed because Windows or security software depends on it.", identity, null);
             try { target.RequireUnprotected(); }
             catch (InvalidOperationException error) { return _gates[key] = new("protected", error.Message, identity, null); }
             var topology = CpuSelection.Fingerprint(target.Topology());
@@ -1361,7 +1361,7 @@ public sealed class ProcessPolicyHost
                     catch (Exception) { }
                 }
                 while (!_stop.Wait(3000));
-            }) { IsBackground = true, Name = "Roo Industries Governor heartbeat" };
+            }) { IsBackground = true, Name = "Governor heartbeat" };
             _thread.Start();
         }
 
