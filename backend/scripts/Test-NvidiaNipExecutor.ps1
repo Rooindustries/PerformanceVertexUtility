@@ -175,6 +175,7 @@ try {
     $restoreGates = @($restorePreview.gates | Where-Object { $_.gateId -in @('rollback-manifest-bound', 'rollback-export-present') })
     $evidence.cases['reused-success'] = [pscustomobject]@{ result = $reused; restorePreview = $restorePreview; manifestSha256Before = $rollbackHash; manifestSha256After = $rollbackHashAfter; exportSha256Before = $exportHash; exportSha256After = (Get-FileHash -LiteralPath $exportPath -Algorithm SHA256).Hash }
     if ($reused.status -eq 'failed' -and $null -eq $reused.rollbackManifestPath -and
+        $reused.summary.willRunMockShim -eq $false -and $reused.summary.realNvpiInvoked -eq $false -and
         @($reused.executionSequence).Count -eq 1 -and $reused.executionSequence[0].skipped -and
         $reused.executionSequence[0].reason -eq 'The rollback export path already exists, so an older file cannot stand in for this export. Choose a new export path; import was not attempted.' -and
         $rollbackHashAfter -eq $rollbackHash -and (Get-FileHash -LiteralPath $exportPath -Algorithm SHA256).Hash -eq $exportHash -and
@@ -223,6 +224,7 @@ try {
         $olderHashAfter = (Get-FileHash -LiteralPath $olderFile -Algorithm SHA256).Hash
         $evidence.cases['existing-' + $existingType] = [pscustomobject]@{ result = $result; log = $entries; manifestExists = $manifestExists; exportType = $existingType; olderHashBefore = $olderHash; olderHashAfter = $olderHashAfter }
         if ($result.status -eq 'failed' -and $result.summary.exportAttempted -eq $false -and $result.summary.exportCompleted -eq $false -and
+            $result.summary.willRunMockShim -eq $false -and $result.summary.realNvpiInvoked -eq $false -and
             $result.summary.importAttempted -eq $false -and $result.summary.importCompleted -eq $false -and $entries.Count -eq 0 -and
             [IO.File]::ReadAllText($olderFile) -eq 'older export' -and $olderHashAfter -eq $olderHash -and
             -not $manifestExists -and $null -eq $result.rollbackManifestPath -and

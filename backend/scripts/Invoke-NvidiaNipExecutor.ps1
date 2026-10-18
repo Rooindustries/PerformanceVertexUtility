@@ -238,9 +238,9 @@ try {
         rollbackManifest = $rollbackManifest
         rollbackManifestPath = $resolvedRollbackManifestPath
         summary = [pscustomobject]@{
-            willRunNvpi = ($canExecute -and $ExecutorMode -eq 'Real')
-            willRunMockShim = ($canExecute -and $ExecutorMode -eq 'Mock')
-            realNvpiInvoked = ($canExecute -and $ExecutorMode -eq 'Real')
+            willRunNvpi = ($canExecute -and -not $exportRefused -and $ExecutorMode -eq 'Real')
+            willRunMockShim = ($canExecute -and -not $exportRefused -and $ExecutorMode -eq 'Mock')
+            realNvpiInvoked = ($canExecute -and -not $exportRefused -and $ExecutorMode -eq 'Real')
             exportAttempted = @($runs | Where-Object { $_.operation -eq 'export' }).Count -gt 0
             exportCompleted = $exportCompleted
             importAttempted = @($runs | Where-Object { $_.operation -in @('import','restore-import') -and -not $_.skipped }).Count -gt 0
