@@ -46,7 +46,7 @@ try {
     $resolvedBackupRoot = if ([string]::IsNullOrWhiteSpace($BackupRoot)) {
         if ([string]::IsNullOrWhiteSpace($resolvedRoot)) { $null } else {
             $cacheFolder = $resolvedRoot.TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
-            Join-Path (Split-Path $cacheFolder -Parent) ((Split-Path $cacheFolder -Leaf) + '.roo-industries-shader-backup-' + [guid]::NewGuid().ToString('N'))
+            Join-Path (Split-Path $cacheFolder -Parent) ((Split-Path $cacheFolder -Leaf) + '.shader-cache-backup-' + [guid]::NewGuid().ToString('N'))
         }
     } else {
         [System.IO.Path]::GetFullPath($BackupRoot)
@@ -58,7 +58,8 @@ try {
         (New-RooIndustriesStutterGate 'disposable-fixture-flag' 'Disposable fixture apply allowed' $true ([bool]$AllowDisposableFixtureApply) 'Shader cache deletion is allowed only for disposable temp fixtures.' $null),
         (New-RooIndustriesStutterGate 'fixture-root-temp' 'Shader cache root is inside temp' $true $rootIsTemp 'Fixture shader cache root must be under the OS temp path.' ([pscustomobject]@{ shaderCacheRoot = $resolvedRoot })),
         (New-RooIndustriesStutterGate 'fixture-items-present' 'Shader cache fixture items present' $true ($items.Count -gt 0) 'Fixture apply needs at least one file target.' ([pscustomobject]@{ itemCount = $items.Count })),
-        (New-RooIndustriesStutterGate 'backup-root-outside-cache' 'Backup folder is outside the shader cache' $true (-not (Test-RooIndustriesStutterPathInsideRoot $resolvedBackupRoot $resolvedRoot)) 'Backups must be stored outside the shader cache folder so a later cleanup cannot pick them up.' ([pscustomobject]@{ backupRoot = $resolvedBackupRoot }))
+        (New-RooIndustriesStutterGate 'backup-root-outside-cache' 'Backup folder is outside the shader cache' $true (-not (Test-RooIndustriesStutterPathInsideRoot $resolvedBackupRoot $resolvedRoot)) 'Backups must be stored outside the shader cache folder so a later cleanup cannot pick them up.' ([pscustomobject]@{ backupRoot = $resolvedBackupRoot })),
+        (New-RooIndustriesStutterGate 'backup-root-new' 'Backup folder is new or empty' $true ([string]::IsNullOrWhiteSpace($resolvedBackupRoot) -or -not (Test-Path -LiteralPath $resolvedBackupRoot) -or @(Get-ChildItem -LiteralPath $resolvedBackupRoot -Force).Count -eq 0) 'Choose a new or empty backup folder so earlier backups and their restore file stay intact.' ([pscustomobject]@{ backupRoot = $resolvedBackupRoot }))
     )
     $blockingGateCount = @($gates | Where-Object { $_.blocking }).Count
     $canApply = ($blockingGateCount -eq 0)
