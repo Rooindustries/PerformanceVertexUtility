@@ -1,5 +1,5 @@
-function Initialize-HistoricalBlackwell([string]$Frame,[string]$Runner) {
-    if($env:COMPUTERNAME -cne 'CS2-GEN4' -or [Security.Principal.WindowsIdentity]::GetCurrent().User.Value -cne 'S-1-5-21-1846494563-3099854232-4004002307-1001'){throw 'Wrong historical machine or SID'}
+function Initialize-HistoricalBlackwell([string]$Frame,[string]$Runner,[string]$ExpectedMachine,[string]$ExpectedUserSid) {
+    if(-not $ExpectedMachine -or -not $ExpectedUserSid -or $env:COMPUTERNAME -cne $ExpectedMachine -or [Security.Principal.WindowsIdentity]::GetCurrent().User.Value -cne $ExpectedUserSid){throw 'Wrong historical machine or SID'}
     if(-not[Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)){throw 'Recovery requires administrator token'}
     $script:backup=[IO.Path]::GetFullPath($Frame)
     if($backup -cnotmatch '^C:\\ProgramData\\RooRecoveryBlackwell-[a-f0-9]{32}$'){throw 'Unexpected historical frame'}

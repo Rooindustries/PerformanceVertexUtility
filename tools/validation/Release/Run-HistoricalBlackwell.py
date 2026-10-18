@@ -14,13 +14,10 @@ ROOT = Path(__file__).resolve().parents[3]
 SPEC = importlib.util.spec_from_file_location('historical_windows_ssh', ROOT / 'tools/validation/windows_ssh.py')
 WIN = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(WIN)
-HOST = 'blackwell-lan'
-MACHINE = 'CS2-GEN4'
-SID = 'S-1-5-21-1846494563-3099854232-4004002307-1001'
 
 
 def invoke(script):
-    return WIN.invoke(HOST, MACHINE, f"if([Security.Principal.WindowsIdentity]::GetCurrent().User.Value -cne '{SID}'){{throw 'Wrong SID'}}\n" + script, timeout=900)
+    return WIN.invoke(HOST, MACHINE, f"if([Security.Principal.WindowsIdentity]::GetCurrent().User.Value -cne {WIN.ps_literal(SID)}){{throw 'Wrong SID'}}\n" + script, timeout=900)
 
 
 def prepare():
@@ -58,7 +55,7 @@ def prepare():
 def refresh(receipt_path):
     receipt = json.loads(Path(receipt_path).read_text())
     frame = receipt['frame']
-    if not re.fullmatch(r'C:\\ProgramData\\RooRecoveryBlackwell-[a-f0-9]{32}', frame):
+    if not re.fullmatch(r'C:\\ProgramData\\RooRecoveryBlackwell-[a-f0-9]{32}', frame) or receipt['machine'] != MACHINE or receipt['sid'] != SID:
         raise ValueError('Wrong existing frame')
     directory = 'code-' + uuid.uuid4().hex
     script = WIN.REMOTE_GUARDS + f"\nNew-ProtectedFrame {WIN.ps_literal(frame + '/' + directory)}\n"
@@ -89,7 +86,7 @@ def run(receipt_path, phase, capture_hash='', stage_hash='', seconds=300):
             raise ValueError('Invalid bound hash')
     run_id = phase.lower() + '-' + uuid.uuid4().hex
     code_path = frame + '/' + receipt.get('codeDir', '')
-    command = f"$ErrorActionPreference='Stop';$ProgressPreference='SilentlyContinue';try{{& {WIN.ps_literal(code_path + '/' + ('Test-HistoricalBlackwell.ps1' if phase in ('Test', 'TestPrepared') else 'Probe-HistoricalBlackwell.ps1' if phase == 'Probe' else 'Invoke-HistoricalBlackwell.ps1'))} -Frame {WIN.ps_literal(frame)} -Runner {WIN.ps_literal(frame + '/runner.ps1')}"
+    command = f"$ErrorActionPreference='Stop';$ProgressPreference='SilentlyContinue';try{{& {WIN.ps_literal(code_path + '/' + ('Test-HistoricalBlackwell.ps1' if phase in ('Test', 'TestPrepared') else 'Probe-HistoricalBlackwell.ps1' if phase == 'Probe' else 'Invoke-HistoricalBlackwell.ps1'))} -Frame {WIN.ps_literal(frame)} -Runner {WIN.ps_literal(frame + '/runner.ps1')} -ExpectedMachine {WIN.ps_literal(MACHINE)} -ExpectedUserSid {WIN.ps_literal(SID)}"
     if phase == 'TestPrepared':
         command += ' -PreparedPrivateOnly'
     if phase not in ('Test', 'TestPrepared', 'Probe'):
@@ -121,12 +118,16 @@ def run(receipt_path, phase, capture_hash='', stage_hash='', seconds=300):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
+    parser.add_argument('--host', required=True)
+    parser.add_argument('--expected-machine', required=True)
+    parser.add_argument('--expected-sid', required=True)
     parser.add_argument('phase', choices=['prepare', 'refresh', 'Capture', 'Stage', 'Verify', 'Diagnose', 'Test', 'TestPrepared', 'Probe'])
     parser.add_argument('--receipt')
     parser.add_argument('--capture-hash', default='')
     parser.add_argument('--stage-hash', default='')
     parser.add_argument('--seconds', type=int, default=300)
     args = parser.parse_args()
+    HOST, MACHINE, SID = args.host, args.expected_machine, args.expected_sid
     if args.phase == 'prepare':
         prepare()
     elif args.phase == 'refresh':

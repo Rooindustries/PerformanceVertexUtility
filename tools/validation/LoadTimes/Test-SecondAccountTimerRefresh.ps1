@@ -6,7 +6,8 @@ param(
     [Parameter(Mandatory)][string]$NewInstaller,
     [Parameter(Mandatory)][ValidatePattern('^[0-9A-Fa-f]{64}$')][string]$NewInstallerSha256,
     [string]$Source = (Split-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) -Parent),
-    [string]$Exe = 'C:\Program Files\Roo Industries\Optimization Suite\app\RooIndustries.OptimizationSuite.App.exe'
+    [string]$Exe = 'C:\Program Files\Roo Industries\Optimization Suite\app\RooIndustries.OptimizationSuite.App.exe',
+    [Parameter(Mandatory)][string]$ExpectedMachine
 )
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
@@ -102,7 +103,7 @@ function Resolve-Sid([string]$Value) {
 }
 
 try {
-    Require ($env:OS -ceq 'Windows_NT' -and $env:COMPUTERNAME -ceq 'SERVI-WINDOWS-D') 'the scenario is running only on optimizer-9070' $env:COMPUTERNAME
+    Require ($env:OS -ceq 'Windows_NT' -and $env:COMPUTERNAME -ceq $ExpectedMachine) "the scenario is running only on $ExpectedMachine" $env:COMPUTERNAME
     Require ([Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) 'the main account is elevated'
     $script:EnableLUA = (Get-ItemProperty -LiteralPath 'Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name EnableLUA -ErrorAction Stop).EnableLUA
     Require ($script:EnableLUA -in 0, 1) 'EnableLUA is recorded as 0 or 1' ('EnableLUA=' + $script:EnableLUA)

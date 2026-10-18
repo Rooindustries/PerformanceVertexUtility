@@ -1,7 +1,7 @@
-param([Parameter(Mandatory=$true)][string]$Frame,[Parameter(Mandatory=$true)][string]$Repo,[Parameter(Mandatory=$true)][string]$Dotnet)
+param([Parameter(Mandatory=$true)][string]$Frame,[Parameter(Mandatory=$true)][string]$Repo,[Parameter(Mandatory=$true)][string]$Dotnet,[Parameter(Mandatory)][string]$ExpectedMachine,[Parameter(Mandatory)][string]$ExpectedUserSid)
 $ErrorActionPreference='Stop'
 $i=[Security.Principal.WindowsIdentity]::GetCurrent()
-if($env:COMPUTERNAME -ine 'SERVI-WINDOWS-D' -or $i.User.Value -cne 'S-1-5-21-2864832615-2000329836-3074386272-1001' -or -not[Security.Principal.WindowsPrincipal]::new($i).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)){throw 'Native target identity differs'}
+if($env:COMPUTERNAME -ine $ExpectedMachine -or $i.User.Value -cne $ExpectedUserSid -or -not[Security.Principal.WindowsPrincipal]::new($i).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)){throw 'Native target identity differs'}
 if($Frame -notmatch '^C:\\RooBuild\\roo-industries-fixture-cleanup-[a-f0-9]{32}$'){throw 'Fresh fixture frame required'}
 $project=Join-Path $Repo 'tools\validation\ProtectedSessions\ProtectedSessions.csproj'
 $out=Join-Path $Frame 'bin'

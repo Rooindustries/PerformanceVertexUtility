@@ -1,5 +1,6 @@
+param([Parameter(Mandatory)][string]$UserSid)
 $ErrorActionPreference='Stop'
-$sid='S-1-5-21-2864832615-2000329836-3074386272-1001'
+$sid=$UserSid
 $dir=Join-Path ([IO.Path]::GetTempPath()) 'roo-industries-governor-restart'
 [IO.Directory]::CreateDirectory($dir)|Out-Null
 $conhost=Join-Path $env:SystemRoot 'System32\conhost.exe'

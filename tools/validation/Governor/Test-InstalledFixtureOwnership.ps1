@@ -1,10 +1,10 @@
-param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutDir,[ValidateSet('checks','exit1','exception','arguments','wait')][string]$Mode='checks',[string]$Value='')
+param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutDir,[ValidateSet('checks','exit1','exception','arguments','wait')][string]$Mode='checks',[string]$Value='',[Parameter(Mandatory)][string]$ExpectedMachine)
 $ErrorActionPreference='Stop'
 if($Mode -eq 'wait'){Start-Sleep -Seconds 5;'PASS private delayed child';exit 0}
 if($Mode -eq 'exit1'){'PASS child creates done but exits one';exit 1}
 if($Mode -eq 'exception'){throw 'Exact child exception fixture'}
 if($Mode -eq 'arguments'){if($Value -cne "space and O'Brien"){throw ('Argument changed: '+$Value)};'PASS exact arguments';exit 0}
-if($env:COMPUTERNAME -cne 'CS2-GEN4'){throw 'Wrong fixture computer'}
+if($env:COMPUTERNAME -cne $ExpectedMachine){throw 'Wrong fixture computer'}
 $frame='C:\Windows\Temp\roo-industries-percent-folders'
 if([IO.File]::ReadAllText((Join-Path $frame 'fixture-owner.txt')).Trim() -cne 'Roo Industries percent folders owned scratch'){throw 'Wrong private fixture parent'}
 if(-not [IO.Path]::GetFullPath($OutDir).StartsWith($frame+'\',[StringComparison]::OrdinalIgnoreCase) -or (Test-Path -LiteralPath $OutDir)){throw 'Fresh private fixture required'}

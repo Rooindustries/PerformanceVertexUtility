@@ -1,4 +1,4 @@
-param([Parameter(Mandatory)][string]$Runner,[Parameter(Mandatory)][string]$Evidence,[string]$ExpectedMachine='CS2-GEN4')
+param([Parameter(Mandatory)][string]$Runner,[Parameter(Mandatory)][string]$Evidence,[Parameter(Mandatory)][string]$ExpectedMachine)
 $ErrorActionPreference='Stop'
 if($env:COMPUTERNAME -cne $ExpectedMachine){throw 'Wrong fixture computer'}
 if(Test-Path -LiteralPath $Evidence){throw 'Retain prior evidence and use a new path'}

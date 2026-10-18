@@ -1,7 +1,7 @@
-param([string]$ExpectedComputer='SERVI-WINDOWS-D')
+param([Parameter(Mandatory)][string]$ExpectedMachine)
 $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
-if($env:COMPUTERNAME -ine $ExpectedComputer -or $ExpectedComputer -ine 'SERVI-WINDOWS-D'){throw 'Unexpected Windows target; audit stopped.'}
+if($env:COMPUTERNAME -ine $ExpectedMachine){throw 'Unexpected Windows target; audit stopped.'}
 $cpu=@(Get-CimInstance Win32_Processor|ForEach-Object Name)
 $gpu=@(Get-CimInstance Win32_VideoController|ForEach-Object Name)
 if(($cpu -join '|') -notmatch 'i5-14600K' -or ($gpu -join '|') -notmatch 'RX 9070 XT'){throw 'Unexpected hardware; audit stopped.'}

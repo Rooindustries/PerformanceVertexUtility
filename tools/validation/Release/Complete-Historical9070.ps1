@@ -1,7 +1,7 @@
-param([ValidateSet('Stage','Restore','Finalize','Verify')][string]$Phase='Stage')
+param([ValidateSet('Stage','Restore','Finalize','Verify')][string]$Phase='Stage',[Parameter(Mandatory)][string]$ExpectedMachine)
 $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
-if($env:COMPUTERNAME -ine 'SERVI-WINDOWS-D'){throw 'Wrong historical recovery target'}
+if($env:COMPUTERNAME -ine $ExpectedMachine){throw 'Wrong historical recovery target'}
 $local=[Environment]::GetFolderPath('LocalApplicationData')
 $frame='C:\ProgramData\RooRecovery9070'
 $backup=Join-Path $local 'roo-industries-backup'
