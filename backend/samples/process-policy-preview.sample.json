@@ -104,7 +104,7 @@
       "displayName": "Discord.exe",
       "processId": 4520,
       "processName": "Discord.exe",
-      "executablePath": "C:\\Users\\serviroo\\AppData\\Local\\Discord\\app\\Discord.exe",
+      "executablePath": "C:\\Users\\Client\\AppData\\Local\\Discord\\app\\Discord.exe",
       "currentPriorityClass": "Normal",
       "proposedPriorityClass": "Normal",
       "currentAffinityMask": 255,
