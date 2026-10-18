@@ -62,6 +62,9 @@ try {
     $backups = @(Get-RooIndustriesUninstallPropertyArray $manifest 'fileBackups' | Where-Object { (Get-RooIndustriesUninstallPropertyValue $_ 'copied' $true) -eq $true })
     $escapedTargets = @($backups | Where-Object { -not (Test-CleanupRestorePathInsideRoot ([string](Get-RooIndustriesUninstallPropertyValue $_ 'source' '')) $fixtureRoot) })
     $missingBackups = @($backups | Where-Object { -not (Test-Path -LiteralPath ([string](Get-RooIndustriesUninstallPropertyValue $_ 'backupPath' ''))) })
+    $conflicts = @($backups | Where-Object { Test-Path -LiteralPath ([string]$_.backupPath) } | ForEach-Object {
+        Get-RooIndustriesCleanupRestoreConflicts ([string]$_.backupPath) ([string]$_.source) ([string]$_.type)
+    })
     if ($realSystemRollback) {
         $backupRoot = [string](Get-RooIndustriesUninstallPropertyValue $manifest 'backupRoot' '')
         $allowlist = @(Get-RooIndustriesUninstallPropertyArray $manifest 'exactTargetAllowlist')
@@ -78,7 +81,8 @@ try {
             (New-CleanupRestoreGate 'explicit-user-approval' 'Explicit restore approval captured' $true ([bool]$UserApproved) 'Restoring real cleanup targets requires explicit user approval.' $null),
             (New-CleanupRestoreGate 'written-after-protection' 'Backup was made after the data folder was protected' $true (Test-RooIndustriesWrittenAfterProtection $manifestPath) ("This backup was made by an earlier version of the app, before its data folder was protected, so it can't be restored automatically. Its files are kept at "+(Split-Path $manifestPath -Parent)+'.') $null),
             (New-CleanupRestoreGate 'approved-restore-paths' 'Restore uses approved targets and backup storage' $true ($invalidBackups.Count -eq 0) 'Targets must match the saved allowlist; backups must stay inside the saved root without reparse paths.' $null),
-            (New-CleanupRestoreGate 'backup-files-present' 'Backup files are present' $true ($missingBackups.Count -eq 0) 'Every backup referenced by the rollback manifest must exist.' ([pscustomobject]@{ missingBackupCount = $missingBackups.Count }))
+            (New-CleanupRestoreGate 'backup-files-present' 'Backup files are present' $true ($missingBackups.Count -eq 0) 'Every backup referenced by the rollback manifest must exist.' ([pscustomobject]@{ missingBackupCount = $missingBackups.Count })),
+            (New-CleanupRestoreGate 'restore-destinations-unchanged' 'Restore targets are unchanged since cleanup' $true ($conflicts.Count -eq 0) 'Some cleanup targets changed after cleanup, so nothing was restored. Move or rename the changed items listed here, then restore again.' ([pscustomobject]@{ conflictCount = $conflicts.Count; conflicts = @($conflicts | Select-Object -First 20) }))
         )
     } else {
         $gates = @(
@@ -86,7 +90,8 @@ try {
             (New-CleanupRestoreGate 'disposable-fixture-flag' 'Disposable fixture restore allowed' $true ([bool]$AllowDisposableFixtureApply) 'Cleanup restore is allowed only for disposable temp fixtures.' $null),
             (New-CleanupRestoreGate 'fixture-root-temp' 'Fixture root is inside temp' $true $fixtureRootInTemp 'Fixture restore root must be under the OS temp path.' ([pscustomobject]@{ fixtureRoot = $fixtureRoot })),
             (New-CleanupRestoreGate 'restore-targets-inside-fixture' 'Restore targets stay inside fixture root' $true ($escapedTargets.Count -eq 0) 'Every restore target must resolve inside the disposable fixture root.' ([pscustomobject]@{ escapedTargetCount = $escapedTargets.Count })),
-            (New-CleanupRestoreGate 'backup-files-present' 'Backup files are present' $true ($missingBackups.Count -eq 0) 'Every backup referenced by the rollback manifest must exist.' ([pscustomobject]@{ missingBackupCount = $missingBackups.Count }))
+            (New-CleanupRestoreGate 'backup-files-present' 'Backup files are present' $true ($missingBackups.Count -eq 0) 'Every backup referenced by the rollback manifest must exist.' ([pscustomobject]@{ missingBackupCount = $missingBackups.Count })),
+            (New-CleanupRestoreGate 'restore-destinations-unchanged' 'Restore targets are unchanged since cleanup' $true ($conflicts.Count -eq 0) 'Some cleanup targets changed after cleanup, so nothing was restored. Move or rename the changed items listed here, then restore again.' ([pscustomobject]@{ conflictCount = $conflicts.Count; conflicts = @($conflicts | Select-Object -First 20) }))
         )
     }
     $blockingGateCount = @($gates | Where-Object { $_.blocking }).Count
@@ -102,9 +107,14 @@ try {
             $restoreStarted = $true
             Ensure-RooIndustriesUninstallDirectory (Split-Path $target -Parent)
             if ($type -eq 'folder') {
-                Copy-RooIndustriesCleanupRestoreTree $source $target
+                $alreadyPresent = Copy-RooIndustriesCleanupRestoreTree $source $target
             } else {
-                Copy-Item -LiteralPath $source -Destination $target -Force
+                $alreadyPresent = Test-Path -LiteralPath $target
+                if ($alreadyPresent) {
+                    if (-not (Test-RooIndustriesCleanupSameFile $source $target)) { throw "Restore target changed after cleanup: $target" }
+                } else {
+                    [IO.File]::Copy($source, $target, $false)
+                }
             }
             $restored.Add([pscustomobject]@{
                 itemId = [string](Get-RooIndustriesUninstallPropertyValue $backup 'itemId' '')
@@ -112,6 +122,7 @@ try {
                 backupPath = $source
                 target = $target
                 restored = $true
+                alreadyPresent = $alreadyPresent
             }) | Out-Null
         }
     }

@@ -84,16 +84,63 @@ function Test-RooIndustriesCleanupReparsePath {
     return $false
 }
 
+function Test-RooIndustriesCleanupSameFile {
+    param([string]$Left, [string]$Right)
+    if (-not (Test-Path -LiteralPath $Left -PathType Leaf) -or -not (Test-Path -LiteralPath $Right -PathType Leaf)) { return $false }
+    if ((Get-Item -LiteralPath $Left -Force).Length -ne (Get-Item -LiteralPath $Right -Force).Length) { return $false }
+    return (Get-FileHash -LiteralPath $Left -Algorithm SHA256).Hash -eq (Get-FileHash -LiteralPath $Right -Algorithm SHA256).Hash
+}
+
+function Get-RooIndustriesCleanupRestoreConflicts {
+    param([string]$Source, [string]$Target, [string]$Type)
+    if ($Type -eq 'file') {
+        if (Test-Path -LiteralPath $Target -PathType Container) {
+            [pscustomobject]@{ target = $Target; reason = 'A folder now exists where this file was.' }
+        } elseif ((Test-Path -LiteralPath $Target -PathType Leaf) -and -not (Test-RooIndustriesCleanupSameFile $Source $Target)) {
+            [pscustomobject]@{ target = $Target; reason = 'This file changed after cleanup.' }
+        }
+    } elseif ($Type -eq 'folder') {
+        if (Test-Path -LiteralPath $Target -PathType Leaf) {
+            [pscustomobject]@{ target = $Target; reason = 'A file now exists where this folder was.' }
+            return
+        }
+        $sourceRoot = [IO.Path]::GetFullPath($Source).TrimEnd('\', '/')
+        foreach ($child in Get-ChildItem -LiteralPath $Source -Force -Recurse) {
+            $relative = $child.FullName.Substring($sourceRoot.Length).TrimStart('\', '/')
+            $destination = Join-Path $Target $relative
+            if ($child.PSIsContainer) {
+                if (Test-Path -LiteralPath $destination -PathType Leaf) {
+                    [pscustomobject]@{ target = $destination; reason = 'A file now exists where this folder was.' }
+                }
+            } else {
+                Get-RooIndustriesCleanupRestoreConflicts $child.FullName $destination 'file'
+            }
+        }
+    }
+}
+
 function Copy-RooIndustriesCleanupRestoreTree {
     param([string]$Source, [string]$Target)
     if ((Test-RooIndustriesCleanupReparsePath $Source) -or (Test-RooIndustriesCleanupReparsePath $Target)) { throw 'Restore encountered a reparse path.' }
+    if (Test-Path -LiteralPath $Target -PathType Leaf) { throw "Restore target changed after cleanup: $Target" }
+    $alreadyPresent = Test-Path -LiteralPath $Target -PathType Container
     Ensure-RooIndustriesUninstallDirectory $Target
     foreach ($child in Get-ChildItem -LiteralPath $Source -Force) {
         if ($child.Attributes -band [System.IO.FileAttributes]::ReparsePoint) { throw 'Restore encountered a reparse path.' }
         $destination = Join-Path $Target $child.Name
-        if ($child.PSIsContainer) { Copy-RooIndustriesCleanupRestoreTree $child.FullName $destination }
-        else { Copy-Item -LiteralPath $child.FullName -Destination $destination -Force }
+        if ($child.PSIsContainer) {
+            if (-not (Copy-RooIndustriesCleanupRestoreTree $child.FullName $destination)) { $alreadyPresent = $false }
+        } else {
+            if (Test-RooIndustriesCleanupReparsePath $destination) { throw 'Restore encountered a reparse path.' }
+            if (Test-Path -LiteralPath $destination) {
+                if (-not (Test-RooIndustriesCleanupSameFile $child.FullName $destination)) { throw "Restore target changed after cleanup: $destination" }
+            } else {
+                [IO.File]::Copy($child.FullName, $destination, $false)
+                $alreadyPresent = $false
+            }
+        }
     }
+    return $alreadyPresent
 }
 
 function Ensure-RooIndustriesUninstallDirectory {
