@@ -113,6 +113,12 @@ try {
     if($null -eq (Wait-Until {$null -ne (Read-Controls $first)} 15)){throw 'The probe did not become readable.'}
     $original=Read-Controls $first
     $snapshot=Core 'process-status' @{processId=$first.Id}
+    $closed=Start-Probe
+    $closedId=$closed.Id
+    $closed.Kill();$closed.WaitForExit();$closed.Dispose()
+    $closedMessage=$null
+    try {Core 'process-status' @{processId=$closedId}|Out-Null} catch {$closedMessage=$_.Exception.Message}
+    Assert ($closedMessage -eq 'The target process has exited.') 'Reading an app that has closed reports that it exited instead of a raw Windows error'
     $topology=@($snapshot.topology|Sort-Object group,index)
     $sha=[Security.Cryptography.SHA256]::Create()
     try {$topologyHash=([BitConverter]::ToString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes((($topology|ForEach-Object {''+$_.group+':'+$_.index+':'+$_.core+':'+$_.cache+':'+$_.numa+':'+$_.efficiency}) -join ';'))))).Replace('-','')}

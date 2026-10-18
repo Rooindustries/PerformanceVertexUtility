@@ -69,7 +69,8 @@ public sealed class ProcessTarget : IDisposable
         // D3DKMT priority queries require SET_INFORMATION on the tested Windows runtime.
         if ((readControls ?? []).Contains("gpuPriority")) _access |= 0x0200;
         _pid = processId;
-        _handle = CpuApi.OpenWithoutPrivileges(_access, processId);
+        try { _handle = CpuApi.OpenWithoutPrivileges(_access, processId); }
+        catch (CpuFailure error) when (error.Api == "OpenProcess" && error.NativeErrorCode == 87) { throw new ProcessEndedException(); }
         try { EnsureRunning(); }
         catch { _handle.Dispose(); throw; }
     }
