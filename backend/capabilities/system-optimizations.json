@@ -446,7 +446,7 @@
           },
           {
             "method": "windows-feature",
-            "target": "Microsoft-Hyper-V-All"
+            "target": "NetFx3"
           }
         ],
         "notes": "Maps WinUtil feature/fix groups and the FSOS-X Dash Windows toggle library only as catalog targets; no DISM or SFC runner exists here."
