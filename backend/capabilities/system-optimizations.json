@@ -445,8 +445,8 @@
             "target": "dism.exe"
           },
           {
-            "method": "windows-feature",
-            "target": "Microsoft-Hyper-V-All"
+            "method": "windows-feature-query",
+            "target": "optional-features"
           }
         ],
         "notes": "Maps WinUtil feature/fix groups and the Gaming toggles Windows toggle library only as catalog targets; no DISM or SFC runner exists here."

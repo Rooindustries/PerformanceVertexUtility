@@ -125,6 +125,14 @@ function Invoke-DetectionRule {
             Write-Host "DETECT $CapabilityId windows-feature $target => aggregator-runtime"
             Add-Pass "$CapabilityId Windows feature detection target accepted"
         }
+        'windows-feature-query' {
+            if ([string]::IsNullOrWhiteSpace($target)) {
+                Add-Failure "$CapabilityId Windows feature query detection target is empty"
+            } else {
+                Write-Host "DETECT $CapabilityId windows-feature-query $target => aggregator-runtime"
+                Add-Pass "$CapabilityId Windows feature query detection target accepted"
+            }
+        }
         'builtin' {
             Write-Host "DETECT $CapabilityId builtin $target => assumed-present"
             Add-Pass "$CapabilityId builtin detection target accepted"
@@ -144,7 +152,7 @@ $allowedRiskLevels = @('safe', 'low', 'medium', 'high', 'critical')
 $allowedPreviewStatuses = @('implemented', 'not-implemented')
 $allowedApplyStatuses = @('live', 'fixture-proven', 'allowlist-shim', 'helper-contract', 'preview-only', 'not-implemented')
 $allowedRestoreStatuses = @('live', 'fixture-proven', 'manifest-ready', 'not-applicable', 'not-implemented')
-$allowedDetectionMethods = @('builtin', 'file-exists', 'registry-key', 'registry-value', 'service-exists', 'command-on-path', 'hardware-gpu-vendor', 'windows-feature')
+$allowedDetectionMethods = @('builtin', 'file-exists', 'registry-key', 'registry-value', 'service-exists', 'command-on-path', 'hardware-gpu-vendor', 'windows-feature', 'windows-feature-query')
 $allowedUnavailableReasons = @('tool-not-present', 'hardware-not-present', 'requires-admin-token', 'requires-helper-manifest', 'helper-packaging-pending', 'blocked-by-acl', 'cli-unsupported', 'not-safely-executable-yet')
 $allowedFrontendTabs = @('Game Tune', 'Clean Junk', 'Drivers & Settings', 'Live Feel')
 $allowedLiveCapabilityIds = @(
