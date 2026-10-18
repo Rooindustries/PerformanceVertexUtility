@@ -169,6 +169,51 @@ def branding_negative_controls():
     return results
 
 
+def path_lint_failures(root: Path):
+    update = root / 'tools/validation/Update'
+    if not (update / 'run_harness_checks.py').is_file():
+        return []
+    lint_tree = runpy.run_path(str(update / 'run_harness_checks.py'))['lint_tree']
+    failures = []
+    for folder in ('Update', 'Tour'):
+        try:
+            lint_tree(root / 'tools/validation' / folder)
+        except RuntimeError as error:
+            failures.append(f'Path lint tools/validation/{folder}: {error}')
+    return failures
+
+
+def path_lint_negative_controls():
+    lint_tree = runpy.run_path(str(Path(__file__).with_name('Update') / 'run_harness_checks.py'))['lint_tree']
+    target = 'tools/validation/Update/x.ps1'
+    line = 'Remove-' + 'Item -LiteralPath $x'
+    entry = {'file': target, 'line': 1, 'text': line, 'reason': 'fixture'}
+    cases = {
+        'forbidden token': ({target: line}, None, True),
+        'clean file': ({target: '$x = 1'}, None, False),
+        'allowlisted line': ({target: line}, [entry], False),
+        'allowlist entry without a reason': ({target: line}, [dict(entry, reason='')], True),
+        'allowlist entry for another line': ({target: '$x = 1\n' + line}, [entry], True),
+    }
+    results = {}
+    for label, (files, allowlist, should_fail) in cases.items():
+        with tempfile.TemporaryDirectory() as folder:
+            temporary = Path(folder)
+            stubs = {'tools/validation/windows_ssh.py': '', 'tools/validation/LoadTimes/CleanupOwnership.Common.ps1': ''}
+            for relative, source in {**stubs, **files}.items():
+                (temporary / relative).parent.mkdir(parents=True, exist_ok=True)
+                (temporary / relative).write_text(source, encoding='utf-8')
+            if allowlist is not None:
+                (temporary / 'tools/validation/path-lint-allowlist.json').write_text(json.dumps(allowlist), encoding='utf-8')
+            try:
+                lint_tree(temporary / 'tools/validation/Update')
+                failed = False
+            except RuntimeError as error:
+                failed = target in str(error)
+            results[label] = failed == should_fail
+    return results
+
+
 def validate(root: Path, contracts_only: bool = False):
     failures = []
     failures.extend(code_loading_failures(root))
@@ -181,6 +226,10 @@ def validate(root: Path, contracts_only: bool = False):
         for label, passed in branding_negative_controls().items():
             if not passed:
                 failures.append(f'Negative control failed: {label} did not match the branding check result')
+        failures.extend(path_lint_failures(root))
+        for label, passed in path_lint_negative_controls().items():
+            if not passed:
+                failures.append(f'Negative control failed: {label} did not match the path lint result')
     documents = {}
     for folder in ('backend/contracts', 'backend/samples', 'backend/profiles', 'backend/uninstall', 'backend/catalogs', 'backend/capabilities', 'modules'):
         for path in sorted((root / folder).rglob('*.json')):
