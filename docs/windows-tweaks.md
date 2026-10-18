@@ -2,7 +2,7 @@
 
 Roo Industries combines source controls from O&O ShutUp10, Chris Titus Tech
 WinUtil, Gaming toggles and WPD into a shared catalog. The current development
-catalog contains 1,035 setting resources and 1,271 presets derived from 632
+catalog contains 1,026 setting resources and 1,255 presets derived from 632
 version/control records. These are catalog counts, not a claim that every
 upstream action or visible Windows effect has been verified.
 

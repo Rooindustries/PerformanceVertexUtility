@@ -73,6 +73,10 @@ def check(root):
         if feature['status'] == 'shared-preset' and feature.get('implementation') not in preset_ids:
             failures.append('A grouped source feature must reference a real preset: ' + feature['id'])
     failures.extend(label_failures(root, catalog))
+    stated = re.search(r'catalog contains ([\d,]+) setting resources and ([\d,]+) presets derived from ([\d,]+)\s+version/control records', (root / 'docs/windows-tweaks.md').read_text())
+    actual_counts = (len(settings), len(catalog['presets']), len(coverage['records']))
+    if stated and tuple(int(value.replace(',', '')) for value in stated.groups()) != actual_counts:
+        failures.append('docs/windows-tweaks.md states catalog counts ' + ', '.join(stated.groups()) + ' but the catalog has ' + ', '.join(format(value, ',') for value in actual_counts))
     return failures
 
 
