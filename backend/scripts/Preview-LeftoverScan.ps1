@@ -102,8 +102,10 @@ function New-PathCandidate {
         [string]$ItemSeed
     )
     $expanded = Resolve-RooIndustriesEnvironmentPath $Path
+    $finalPath = Get-RooIndustriesFinalPath $expanded
     $sharedOwners = @($script:LeftoverPeerInstallLocations | Where-Object {
-        Test-LeftoverPathOverlap $expanded $_.path
+        (Test-LeftoverPathOverlap $expanded $_.path) -or
+            ($finalPath -and $_.finalPath -and (Test-LeftoverPathOverlap $finalPath $_.finalPath))
     } | ForEach-Object { $_.displayName } | Select-Object -Unique)
     $protected = (Test-RooIndustriesProtectedPath $expanded $Rules) -or $sharedOwners.Count -gt 0
     if ($sharedOwners.Count -gt 0) { $Reason = 'Also used by ' + ($sharedOwners -join ', ') + ', so it is left alone.' }
@@ -191,7 +193,8 @@ function Add-TaskCandidates {
 
 try {
     $inventory = Get-RooIndustriesInstalledAppInventory $InventoryPath
-    if ((Get-RooIndustriesUninstallPropertyValue $inventory 'complete' $true) -ne $true) { throw ('The installed app list could not be read completely, so folders shared with other apps cannot be ruled out. Nothing was scanned. ' + (@(Get-RooIndustriesUninstallPropertyArray $inventory 'errors') -join ' ')).Trim() }
+    $completeProperty = $inventory.PSObject.Properties['complete']
+    if ($null -ne $completeProperty -and ($completeProperty.Value -isnot [bool] -or $completeProperty.Value -ne $true)) { throw ('The installed app list could not be read completely, so folders shared with other apps cannot be ruled out. Nothing was scanned. ' + (@(Get-RooIndustriesUninstallPropertyArray $inventory 'errors') -join ' ')).Trim() }
     $policy = Read-RooIndustriesUninstallPolicy $PolicyPath
     $protectedCatalog = Read-RooIndustriesProtectedAppsCatalog $ProtectedAppsPath
     $rules = Read-RooIndustriesLeftoverRules $RulesPath
@@ -201,9 +204,11 @@ try {
         [string](Get-RooIndustriesUninstallPropertyValue $_ 'appId' '') -ne $AppId -and
         -not [string]::IsNullOrWhiteSpace(([string](Get-RooIndustriesUninstallPropertyValue $_ 'installLocation' '')).Trim().Trim('"'))
     } | ForEach-Object {
+        $peerPath = Resolve-RooIndustriesEnvironmentPath (([string](Get-RooIndustriesUninstallPropertyValue $_ 'installLocation' '')).Trim().Trim('"'))
         [pscustomobject]@{
             displayName = [string](Get-RooIndustriesUninstallPropertyValue $_ 'displayName' (Get-RooIndustriesUninstallPropertyValue $_ 'appId' ''))
-            path = Resolve-RooIndustriesEnvironmentPath (([string](Get-RooIndustriesUninstallPropertyValue $_ 'installLocation' '')).Trim().Trim('"'))
+            path = $peerPath
+            finalPath = Get-RooIndustriesFinalPath $peerPath
         }
     })
 

@@ -95,6 +95,24 @@ try {
         Add-Pass 'Incomplete inventory refuses direct scans and manifest rescans without writing a cleanup selection or changing peer bytes'
     } else { Add-Failure 'Incomplete inventory must refuse direct scans and manifest rescans without writing a cleanup selection or changing peer bytes' }
 
+    foreach ($invalidComplete in @(
+        [pscustomobject]@{ name = 'null'; value = $null },
+        [pscustomobject]@{ name = 'string'; value = 'true' },
+        [pscustomobject]@{ name = 'number'; value = 1 }
+    )) {
+        $invalidCompletePath = Join-Path $tempRoot ('complete-' + $invalidComplete.name + '-inventory.json')
+        $invalidCompleteScanPath = Join-Path $tempRoot ('complete-' + $invalidComplete.name + '-scan.json')
+        [pscustomobject]@{ schemaVersion = 1; complete = $invalidComplete.value; errors = @(); apps = @($apps[0]) } | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $invalidCompletePath -Encoding UTF8
+        $invalidCompleteScan = ((& (Join-Path $PSScriptRoot 'Preview-LeftoverScan.ps1') -AppId 'fixture:a' -InventoryPath $invalidCompletePath -OutputPath $invalidCompleteScanPath) -join [Environment]::NewLine) | ConvertFrom-Json
+        $savedInvalidCompleteScan = Get-Content -LiteralPath $invalidCompleteScanPath -Raw | ConvertFrom-Json
+        $evidence.scans['complete-' + $invalidComplete.name] = $invalidCompleteScan
+        if (@($invalidCompleteScan.errors).Count -eq 1 -and
+            $invalidCompleteScan.errors[0].message -eq 'The installed app list could not be read completely, so folders shared with other apps cannot be ruled out. Nothing was scanned.' -and
+            @($invalidCompleteScan.items).Count -eq 0 -and @($savedInvalidCompleteScan.items).Count -eq 0 -and $savedInvalidCompleteScan.summary.defaultSelectedCount -eq 0) {
+            Add-Pass "Inventory complete=$($invalidComplete.name) is refused without writing a cleanup selection"
+        } else { Add-Failure "Inventory complete=$($invalidComplete.name) must be refused without writing a cleanup selection" }
+    }
+
     $scanA = Read-OwnershipScan 'fixture:a' 'a'
     $sharedItem = @($scanA.items | Where-Object { $_.target -eq $shared })
     if ($sharedItem.Count -eq 1 -and $sharedItem[0].protected -and -not $sharedItem[0].defaultSelected -and
@@ -145,6 +163,34 @@ try {
         @($distinctItem[0].metadata.sharedOwners | Where-Object { $null -ne $_ }).Count -eq 0) {
         Add-Pass 'Scan D keeps its distinct folder default selected with the invalid G peer present'
     } else { Add-Failure 'Scan D must keep its distinct folder default selected with the invalid G peer present' }
+
+    if ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT) {
+        $realRoot = Join-Path $tempRoot 'real'
+        $realShared = Join-Path $realRoot 'Shared'
+        $aliasRoot = Join-Path $tempRoot 'alias'
+        [IO.Directory]::CreateDirectory($realShared) | Out-Null
+        $junctionCreated = $false
+        try {
+            New-Item -ItemType Junction -Path $aliasRoot -Target $realRoot -ErrorAction Stop | Out-Null
+            $junctionCreated = $true
+            $junctionInventoryPath = Join-Path $tempRoot 'junction-inventory.json'
+            [pscustomobject]@{ schemaVersion = 1; complete = $true; apps = @(
+                [pscustomobject]@{ appId = 'fixture:a'; displayName = 'App A'; sourceType = 'registry'; risk = 'low'; protected = $false; installLocation = $realShared },
+                [pscustomobject]@{ appId = 'fixture:b'; displayName = 'App B'; sourceType = 'registry'; risk = 'low'; protected = $false; installLocation = (Join-Path $aliasRoot 'Shared') }
+            ) } | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $junctionInventoryPath -Encoding UTF8
+            $junctionScan = ((& (Join-Path $PSScriptRoot 'Preview-LeftoverScan.ps1') -AppId 'fixture:a' -InventoryPath $junctionInventoryPath -RulesPath $rulesPath) -join [Environment]::NewLine) | ConvertFrom-Json
+            $junctionItem = @($junctionScan.items | Where-Object { $_.target -eq $realShared })
+            $evidence.scans['junction-alias'] = $junctionScan
+            if (@($junctionScan.errors).Count -eq 0 -and $junctionItem.Count -eq 1 -and $junctionItem[0].protected -and
+                -not $junctionItem[0].defaultSelected -and @($junctionItem[0].metadata.sharedOwners) -contains 'App B') {
+                Add-Pass 'A peer installed through a junction protects the real shared folder from default selection'
+            } else { Add-Failure 'A peer installed through a junction must protect the real shared folder from default selection' }
+        } finally {
+            if ($junctionCreated) { [IO.Directory]::Delete($aliasRoot) }
+        }
+    } else {
+        Write-Host 'SKIP Shared-folder junction resolution requires Windows.'
+    }
 
     $peerName = 'App B shared ownership fixture ' + [guid]::NewGuid().ToString('N')
     $peerKeyPath = 'Software\Microsoft\Windows\CurrentVersion\Uninstall\' + [guid]::NewGuid().ToString('N')

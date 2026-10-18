@@ -30,6 +30,40 @@ function Resolve-RooIndustriesUninstallPath {
     return [System.IO.Path]::GetFullPath((Join-Path (Get-Location) $Path))
 }
 
+function Get-RooIndustriesFinalPath {
+    param([string]$Path)
+    $handle = $null
+    try {
+        if ([string]::IsNullOrWhiteSpace($Path) -or -not (Test-Path -LiteralPath $Path -ErrorAction Stop)) { return $null }
+        if (-not ('RooIndustries.FinalPathName' -as [type])) {
+            Add-Type -Namespace RooIndustries -Name FinalPathName -ErrorAction Stop -MemberDefinition @'
+[System.Runtime.InteropServices.DllImport("kernel32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode, SetLastError = true, ExactSpelling = true)]
+public static extern Microsoft.Win32.SafeHandles.SafeFileHandle CreateFileW(string path, uint desiredAccess, uint shareMode, System.IntPtr securityAttributes, uint creationDisposition, uint flagsAndAttributes, System.IntPtr templateFile);
+[System.Runtime.InteropServices.DllImport("kernel32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode, SetLastError = true, ExactSpelling = true)]
+public static extern uint GetFinalPathNameByHandleW(Microsoft.Win32.SafeHandles.SafeFileHandle handle, System.Text.StringBuilder path, uint length, uint flags);
+'@
+        }
+        $fullPath = (Get-Item -LiteralPath $Path -Force -ErrorAction Stop).FullName
+        $handle = [RooIndustries.FinalPathName]::CreateFileW($fullPath, 0, 7, [IntPtr]::Zero, 3, 0x02000000, [IntPtr]::Zero)
+        if ($null -eq $handle -or $handle.IsInvalid) { return $null }
+        $buffer = New-Object System.Text.StringBuilder 512
+        while ($true) {
+            $length = [RooIndustries.FinalPathName]::GetFinalPathNameByHandleW($handle, $buffer, [uint32]$buffer.Capacity, 0)
+            if ($length -eq 0) { return $null }
+            if ($length -lt $buffer.Capacity) { break }
+            $buffer.Capacity = [int]$length + 1
+        }
+        $finalPath = $buffer.ToString()
+        if ($finalPath.StartsWith('\\?\UNC\', [StringComparison]::OrdinalIgnoreCase)) { $finalPath = '\\' + $finalPath.Substring(8) }
+        elseif ($finalPath.StartsWith('\\?\', [StringComparison]::OrdinalIgnoreCase)) { $finalPath = $finalPath.Substring(4) }
+        return $finalPath.TrimEnd('\')
+    } catch {
+        return $null
+    } finally {
+        if ($null -ne $handle) { $handle.Dispose() }
+    }
+}
+
 function Read-RooIndustriesUninstallJsonFile {
     param([string]$Path)
     if (-not (Test-Path -LiteralPath $Path)) {
