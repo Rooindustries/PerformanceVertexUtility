@@ -71,7 +71,7 @@ function Get-OfficialCommandPreview {
         $warnings.Add((New-RooIndustriesUninstallIssue 'REMOVAL_REVIEW_REQUIRED' 'This app route needs review before it can run.' 'warning' 'apps.officialUninstall' ([string](Get-RooIndustriesUninstallPropertyValue $App 'appId' '')) $true 'Review the exact app, route, and cleanup list before applying anything.' $null)) | Out-Null
     }
     if ([string]::IsNullOrWhiteSpace([string]$rawCommand)) {
-        $warnings.Add((New-RooIndustriesUninstallIssue 'ROO_INDUSTRIES_ROUTE_REQUIRED' 'The app did not publish its own removal command. Roo Industries can still build the run from app traces and leftovers.' 'warning' 'apps.officialUninstall' ([string](Get-RooIndustriesUninstallPropertyValue $App 'appId' '')) $false 'Scan leftovers and build the Roo Industries removal run before applying anything.' $null)) | Out-Null
+        $warnings.Add((New-RooIndustriesUninstallIssue 'ROO_INDUSTRIES_ROUTE_REQUIRED' 'The app did not publish its own removal command. The run can still be built from app traces and leftovers.' 'warning' 'apps.officialUninstall' ([string](Get-RooIndustriesUninstallPropertyValue $App 'appId' '')) $false 'Scan leftovers and build the removal run before applying anything.' $null)) | Out-Null
     }
 
     return [pscustomobject]@{
@@ -144,7 +144,7 @@ try {
             executionAllowedCount = 0
             willRunUninstallers = $false
         }
-        warnings = @((New-RooIndustriesUninstallIssue 'REMOVAL_PATH_PREVIEW_ONLY' 'Removal path metadata was returned without executing commands.' 'info' 'apps.officialUninstall' $null $false 'Review the path, scan leftovers, and build the Roo Industries removal plan before apply.' $null))
+        warnings = @((New-RooIndustriesUninstallIssue 'REMOVAL_PATH_PREVIEW_ONLY' 'Removal path metadata was returned without executing commands.' 'info' 'apps.officialUninstall' $null $false 'Review the path, scan leftovers, and build the removal plan before apply.' $null))
         errors = @($errors.ToArray())
         logs = @((New-RooIndustriesUninstallLog 'Removal path preview completed without command execution.'))
     }

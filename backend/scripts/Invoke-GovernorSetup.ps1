@@ -201,7 +201,7 @@ function Get-RawRegistryValue([string]$Key,[string]$Name){
     foreach($line in $output){
         if([string]$line -match ('^\s*'+[regex]::Escape($Name)+'\s+(REG_[A-Z0-9_]+)\s*(.*)$')){return @{present=$true;kind=$Matches[1];value=$Matches[2]}}
     }
-    throw "Roo Industries could not read that Windows user's folder settings."
+    throw "The app could not read that Windows user's folder settings."
 }
 
 function Get-UserLocalFolder([string]$Sid){
@@ -316,10 +316,10 @@ $me=(Get-CurrentUser).sid
 $script:RooIndustriesInstallRoot=$appRootPath
 if($full){
     $common=Join-Path $PSScriptRoot 'BrandCompatibility.Common.ps1'
-    if(Test-Path -LiteralPath $common -PathType Leaf){. $common;$script:SetupCommonLoaded=$true;$localAppData=Get-RooIndustriesLocalAppData}else{$script:SchedulerOnly=$true;$localAppData=Get-UserLocalFolder $me;if(-not $localAppData){throw "Roo Industries could not use this Windows user's AppData folder settings."}}
+    if(Test-Path -LiteralPath $common -PathType Leaf){. $common;$script:SetupCommonLoaded=$true;$localAppData=Get-RooIndustriesLocalAppData}else{$script:SchedulerOnly=$true;$localAppData=Get-UserLocalFolder $me;if(-not $localAppData){throw "The app could not use this Windows user's AppData folder settings."}}
 }else{
     $localAppData=Get-UserLocalFolder $me
-    if(-not $localAppData){throw "Roo Industries could not use this Windows user's AppData folder settings."}
+    if(-not $localAppData){throw "The app could not use this Windows user's AppData folder settings."}
 }
 $listed=@(Get-ListedGovernorNames)
 $visible=$null
@@ -487,7 +487,7 @@ function Stop-Leftovers($Tasks){
         }
         $clock=[Diagnostics.Stopwatch]::StartNew()
         while(@(Get-Workers).Count -gt 0 -and $clock.Elapsed.TotalSeconds -lt 10){Start-Sleep -Milliseconds 200}
-        if(@(Get-Workers).Count -gt 0 -and $script:WorkersKnown){throw 'A Roo Industries Governor process is still running from the app folder.'}
+        if(@(Get-Workers).Count -gt 0 -and $script:WorkersKnown){throw 'A Governor process is still running from the app folder.'}
     } finally {
         foreach($process in $opened.Values){$process.Dispose()}
     }

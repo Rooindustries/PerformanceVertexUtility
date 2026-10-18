@@ -332,7 +332,7 @@ try{
     Activate (WaitFor {ByName 'Blackout Gold'} 15 'gold theme');Start-Sleep 1;Attach;Settings
     if(([IO.File]::ReadAllText((Get-HarnessLongPath (Join-Path $data 'settings.json')))|ConvertFrom-Json).downloadUpdatesAutomatically -ne '0'){throw 'Theme change overwrote automatic download preference'}
     $theme=ById 'ThemePicker';$theme.GetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern).Expand()
-    Activate (WaitFor {ByName 'Roo Industries Blue'} 15 'blue theme');Start-Sleep 1;Attach;Settings
+    Activate (WaitFor {ByName 'Blue'} 15 'blue theme');Start-Sleep 1;Attach;Settings
    }
    if($Scenario -in @('feed-down','slow-feed','close-during-check','malformed-feed','bad-signature','wrong-product','wrong-channel','same-version','cache-cleanup','older-version','tampered','tampered-size','manual-download','ready','transport-error','manual-timeout')){Click 'UpdateCheckButton'}
    if($ManualRetry -and $Scenario -in 'transport-error','tampered','tampered-size'){WaitStatus "Version $NextVersion is available" 60|Out-Null;Click 'UpdateDownloadButton'}
@@ -366,7 +366,7 @@ try{
      $prior=$script:app.Id;Click 'UpdateInstallButton';WaitFor {ByName 'Install'} 60 'confirmation'|Out-Null;Shot 'confirmation';Start-ProcessTrace -Anchor $script:owned|Out-Null;$script:smartScreenBefore=@($A::RootElement.FindAll($TS::Children,[Windows.Automation.Condition]::TrueCondition)|ForEach-Object {$_.Current.NativeWindowHandle});$script:installPressed=[DateTime]::UtcNow;Assert-HarnessInstallStart $exe;Activate (ByName 'Install')
       WaitFor {CollectOwnedStarts;if($script:app.HasExited){return $true};if((StatusText) -like "Couldn't install the update.*"){throw (StatusText)}} 90 'old app exits'|Out-Null
      if($Scenario -eq 'copy-failure'){
-      $script:window=WaitFor {$A::RootElement.FindAll($TS::Children,[Windows.Automation.Condition]::TrueCondition)|Where-Object {$_.Current.Name -like '*Setup*Roo Industries*' -and $_.Current.ClassName -eq 'TWizardForm'}|ForEach-Object {Register-HarnessWindow $_}|Select-Object -First 1} 180 'interactive recovery setup'
+      $script:window=WaitFor {$A::RootElement.FindAll($TS::Children,[Windows.Automation.Condition]::TrueCondition)|Where-Object {($_.Current.Name -like '*Setup*Performance Vertex Utility*' -or $_.Current.Name -like '*Setup*Roo Industries*') -and $_.Current.ClassName -eq 'TWizardForm'}|ForEach-Object {Register-HarnessWindow $_}|Select-Object -First 1} 180 'interactive recovery setup'
       $setup=Get-Process -Id $script:window.Current.ProcessId;$script:setupReceipts.Add((Test-OwnedDescendant $setup.Id -PassThru))
       Save 'missing-executable.json' @{exists=(Test-HarnessPath $exe -PathType Leaf);destinationIsDirectory=(Test-HarnessPath $exe -PathType Container);installedVersion=Version;setupPid=$script:window.Current.ProcessId;processStarts=@(ProcessStarts)}
       if(Test-HarnessPath $exe -PathType Leaf){throw 'Copy-failure fixture did not remove the old executable'}

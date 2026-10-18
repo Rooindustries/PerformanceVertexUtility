@@ -24,7 +24,7 @@ static partial class DataFolderChecks
             var script = "$ErrorActionPreference='Stop';. " + H.Quote(common) + ";Get-RooIndustriesLocalDataRoot -LocalData " + H.Quote(parent);
             var result = H.Run(Path.Combine(Environment.SystemDirectory, @"WindowsPowerShell\v1.0\powershell.exe"), "-NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand " + Convert.ToBase64String(Encoding.Unicode.GetBytes(script)));
             Console.WriteLine("MEASURE scriptMigration " + result.Output);
-            check(result.Exit != 0 && result.Output.Contains("Roo Industries is preparing your saved settings. Try again in a moment.", StringComparison.Ordinal), "The PowerShell twin refuses to create a partial current root during migration");
+            check(result.Exit != 0 && result.Output.Contains("The app is preparing your saved settings. Try again in a moment.", StringComparison.Ordinal), "The PowerShell twin refuses to create a partial current root during migration");
             check(!Directory.Exists(Path.Combine(parent, "RooIndustriesOptimizationSuite")), "No partial current data root was created during the migration");
         }
         finally { H.Delete(parent); }

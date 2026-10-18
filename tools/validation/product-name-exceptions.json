@@ -1,0 +1,259 @@
+{
+  "exceptions": [
+    {
+      "text": "productName = 'Roo Industries Optimization Suite'",
+      "files": [
+        "backend/scripts/Get-CleanupToolFacts.ps1",
+        "backend/scripts/Get-DriverHardwareSummary.ps1",
+        "backend/scripts/Get-InstalledAppInventory.ps1",
+        "backend/scripts/Get-ProcessControlCapabilityFacts.ps1",
+        "backend/scripts/Get-ProcessInventory.ps1",
+        "backend/scripts/Get-RooIndustriesCapabilityRegistry.ps1",
+        "backend/scripts/Get-RooIndustriesUtilitiesInventory.ps1",
+        "backend/scripts/Get-SystemOptimizationFacts.ps1",
+        "backend/scripts/Get-UtilitiesBundleInventory.ps1",
+        "backend/scripts/Invoke-TimerResolutionSession.ps1",
+        "backend/scripts/Measure-ProcessControlFootprint.ps1"
+      ],
+      "reason": "Contract product identity in backend JSON results. Saved files and the contract schema compare it, so the visible app name is set elsewhere."
+    },
+    {
+      "text": "ProductName = 'Roo Industries Optimization Suite'",
+      "files": [
+        "backend/scripts/NvidiaNip.Common.ps1",
+        "backend/scripts/ProcessProfile.Common.ps1",
+        "backend/scripts/StutterOptimization.Common.ps1",
+        "backend/scripts/UninstallCleanup.Common.ps1"
+      ],
+      "reason": "Contract product identity in backend JSON results. Saved files and the contract schema compare it, so the visible app name is set elsewhere."
+    },
+    {
+      "text": "ProductName = \"Roo Industries Optimization Suite\"",
+      "files": [
+        "backend/native/ProcessGovernor/RooIndustriesProcessGovernor.cs"
+      ],
+      "reason": "Contract product identity in governor JSON results. Saved files and the contract schema compare it, so the visible app name is set elsewhere."
+    },
+    {
+      "text": "\"productName\": \"Roo Industries Optimization Suite\"",
+      "files": [
+        "backend/capabilities/drivers-gpu-tools.json",
+        "backend/catalogs/nvidia-profile-inspector-nip-catalog.json",
+        "backend/contracts/contract-catalog.json",
+        "backend/profiles/background-demotion.profile.json",
+        "backend/profiles/game-session.profile.json",
+        "backend/profiles/lightweight-governor-budget.profile.json",
+        "backend/profiles/persistent-policy.profile.json",
+        "backend/profiles/probalance-governor.profile.json",
+        "backend/profiles/protected-processes.json",
+        "backend/uninstall/leftover-scan-rules.json",
+        "backend/uninstall/protected-apps.json",
+        "backend/uninstall/uninstall-policy.json"
+      ],
+      "reason": "Contract product identity in shipped catalogs and profiles. The contract schema compares it, so the visible app name is set elsewhere."
+    },
+    {
+      "text": "\"productName\":  \"Roo Industries Optimization Suite\"",
+      "files": [
+        "backend/catalogs/utilities-bundle-catalog.json"
+      ],
+      "reason": "Contract product identity in shipped catalogs. The contract schema compares it, so the visible app name is set elsewhere."
+    },
+    {
+      "text": "\"const\": \"Roo Industries Optimization Suite\"",
+      "files": [
+        "backend/contracts/roo-industries-backend-contracts.schema.json"
+      ],
+      "reason": "Contract schema constant for the product identity that saved backend files carry."
+    },
+    {
+      "text": "https://rooindustries.com/schemas/optimization-suite/backend-contracts.schema.json",
+      "files": [
+        "backend/contracts/roo-industries-backend-contracts.schema.json"
+      ],
+      "reason": "Schema identifier that contract documents reference; it is never shown in the app."
+    },
+    {
+      "text": "# BEGIN Roo Industries Adobe hosts",
+      "files": [
+        "backend/native/Optimizer.Core/HostsBlock.cs"
+      ],
+      "reason": "Marker already written into users' hosts files. The app finds and removes its block by these exact bytes."
+    },
+    {
+      "text": "# END Roo Industries Adobe hosts",
+      "files": [
+        "backend/native/Optimizer.Core/HostsBlock.cs"
+      ],
+      "reason": "Marker already written into users' hosts files. The app finds and removes its block by these exact bytes."
+    },
+    {
+      "text": "\"Roo Industries settings \"",
+      "files": [
+        "backend/native/Optimizer.Core/RestorePoints.cs"
+      ],
+      "reason": "Restore point description stored in saved restore plans and compared when a plan is read back."
+    },
+    {
+      "text": "\"Roo Industries timer request at Windows sign-in\"",
+      "files": [
+        "backend/native/Optimizer.Core/TimerStartupControl.cs"
+      ],
+      "reason": "Description of the timer task already registered on users' PCs; the app compares it to find its own task."
+    },
+    {
+      "text": "Grouping -cne 'Roo Industries'",
+      "files": [
+        "backend/native/Optimizer.Core/WindowsControls.ps1"
+      ],
+      "reason": "Firewall rule group of rules already on users' PCs; checked before the app changes or removes a rule."
+    },
+    {
+      "text": "Grouping='Roo Industries'",
+      "files": [
+        "backend/native/Optimizer.Core/WindowsControls.ps1"
+      ],
+      "reason": "Firewall rule group of rules already on users' PCs; checked before the app changes or removes a rule."
+    },
+    {
+      "text": "Description='Roo Industries selected address block list'",
+      "files": [
+        "backend/native/Optimizer.Core/WindowsControls.ps1"
+      ],
+      "reason": "Firewall rule description of rules already on users' PCs."
+    },
+    {
+      "text": "'Roo Industries process rules'",
+      "files": [
+        "backend/scripts/Invoke-GovernorSetup.ps1"
+      ],
+      "reason": "Governor task description prefix; setup matches it to find existing Governor tasks."
+    },
+    {
+      "text": "Roo Industries Governor setup recovery",
+      "files": [
+        "backend/scripts/Invoke-GovernorSetup.ps1"
+      ],
+      "reason": "Description of the setup recovery task, captured and registered again by setup."
+    },
+    {
+      "text": "'Roo Industries process rules | '",
+      "files": [
+        "backend/scripts/Invoke-ProcessPolicyWorker.ps1"
+      ],
+      "reason": "Governor task description prefix that setup and the app match to find existing tasks."
+    },
+    {
+      "text": "\"Roo Industries process rules | \"",
+      "files": [
+        "docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/GovernorProbe.cs"
+      ],
+      "reason": "Governor task description prefix that setup and the app match to find existing tasks."
+    },
+    {
+      "text": "'Roo Industries Protected Session '",
+      "files": [
+        "backend/scripts/Invoke-ProtectedGameSession.ps1"
+      ],
+      "reason": "Protected session task name; scenarios and cleanup find these tasks by this prefix."
+    },
+    {
+      "text": "'Roo Industries protected game session | '",
+      "files": [
+        "backend/scripts/Invoke-ProtectedGameSession.ps1"
+      ],
+      "reason": "Protected session task description that cleanup matches."
+    },
+    {
+      "text": "\"Take ownership with Roo Industries\"",
+      "files": [
+        "backend/catalogs/windows-tweaks.json"
+      ],
+      "reason": "Explorer menu caption the app writes to the registry. Applied state compares this value, so renaming it needs a migration."
+    },
+    {
+      "text": "Roo Industries has read-only counters",
+      "files": [
+        "backend/capabilities/system-optimizations.json"
+      ],
+      "reason": "Capability research note tied to the FSOS-X comparison, which waits on a separate decision about that content."
+    },
+    {
+      "text": "through Roo Industries's temporary",
+      "files": [
+        "backend/capabilities/system-optimizations.json"
+      ],
+      "reason": "Capability research note tied to the FSOS-X comparison, which waits on a separate decision about that content."
+    },
+    {
+      "text": "Roo Industries proves only disposable fixture",
+      "files": [
+        "backend/capabilities/system-optimizations.json"
+      ],
+      "reason": "Capability research note tied to the FSOS-X comparison, which waits on a separate decision about that content."
+    },
+    {
+      "text": "C:\\Program Files\\Roo Industries\\Optimization Suite",
+      "files": [
+        "tools/release/README-BETA.txt"
+      ],
+      "reason": "Actual install folder, kept so existing installs upgrade in place."
+    },
+    {
+      "text": "AppCopyright=Roo Industries",
+      "files": [
+        "tools/release/RooIndustries.OptimizationSuite.iss"
+      ],
+      "reason": "Copyright holder notice, the same as in the LICENSE."
+    },
+    {
+      "text": "DefaultDirName={autopf}\\Roo Industries\\Optimization Suite",
+      "files": [
+        "tools/release/RooIndustries.OptimizationSuite.iss"
+      ],
+      "reason": "Install folder kept so upgrades and the validation tools find the app."
+    },
+    {
+      "text": "\"{autoprograms}\\Roo Industries\\Roo Industries Optimization Suite.lnk\"",
+      "files": [
+        "tools/release/RooIndustries.OptimizationSuite.iss"
+      ],
+      "reason": "Removes the old Start menu shortcut on upgrade."
+    },
+    {
+      "text": "\"{autoprograms}\\Roo Industries\\Uninstall Roo Industries Optimization Suite.lnk\"",
+      "files": [
+        "tools/release/RooIndustries.OptimizationSuite.iss"
+      ],
+      "reason": "Removes the old Start menu shortcut on upgrade."
+    },
+    {
+      "text": "\"{autoprograms}\\Roo Industries\\Beta tester guide.lnk\"",
+      "files": [
+        "tools/release/RooIndustries.OptimizationSuite.iss"
+      ],
+      "reason": "Removes the old Start menu shortcut on upgrade."
+    },
+    {
+      "text": "\"{autoprograms}\\Roo Industries\"",
+      "files": [
+        "tools/release/RooIndustries.OptimizationSuite.iss"
+      ],
+      "reason": "Removes the old Start menu folder on upgrade when it is empty."
+    },
+    {
+      "text": "\"{autodesktop}\\Roo Industries Optimization Suite.lnk\"",
+      "files": [
+        "tools/release/RooIndustries.OptimizationSuite.iss"
+      ],
+      "reason": "Removes the old desktop shortcut on upgrade."
+    },
+    {
+      "text": "Name: \"{autopf}\\Roo Industries\"",
+      "files": [
+        "tools/release/RooIndustries.OptimizationSuite.iss"
+      ],
+      "reason": "Removes the install folder's parent when it is empty."
+    }
+  ]
+}

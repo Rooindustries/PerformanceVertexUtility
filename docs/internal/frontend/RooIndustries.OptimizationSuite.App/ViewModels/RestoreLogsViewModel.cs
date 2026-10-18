@@ -82,7 +82,7 @@ public partial class RestoreLogsViewModel : PageViewModelBase
             governorRecovery == true ? "Backed up · restorable" : governorRecovery == false ? "No restraint backup recorded" : "Status unavailable",
             governorRecovery == true ? "safe" : governorRecovery == false ? "neutral" : "medium"));
         RestoreRows.Add(new StatusLine(
-            "Roo Industries Governor",
+            "Governor",
             rulesState switch
             {
                 "running" => "Running · " + GovernorDisplay.Count(changedApps) + " changed · pause it in Games > Processes to put settings back" + signInNote,

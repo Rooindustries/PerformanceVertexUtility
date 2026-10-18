@@ -83,7 +83,7 @@ internal static class GovernorClaims
         var labels = ProcessTarget.ControlNames.Where(name => doubt.Fields.Contains(name) && fields.Contains(name)).Select(name => Labels[name]);
         var reason = doubt.Reason.Trim();
         GovernorLog.Write(Path.Combine(dataRoot, "process-rules"), "Refused a rule change because " + doubt.Path + " could not be read (" + reason + ").");
-        return new InvalidOperationException("Roo Industries could not read " + doubt.Path + " (" + reason + "), so it cannot tell whether " + doubt.Feature + " still changes " + string.Join(", ", labels) +
+        return new InvalidOperationException("The app could not read " + doubt.Path + " (" + reason + "), so it cannot tell whether " + doubt.Feature + " still changes " + string.Join(", ", labels) +
             ". Wait for it to finish or undo the " + doubt.Feature + " change in the app. If that file is damaged or its app is gone, delete it, then try again.");
     }
 

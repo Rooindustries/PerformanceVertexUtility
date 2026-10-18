@@ -60,7 +60,7 @@ function WaitFor([scriptblock]$probe, [double]$seconds, [string]$what) {
 }
 function Find-MainWindow([int]$procId) {
     $c = [Windows.Automation.PropertyCondition]::new($A::ProcessIdProperty, $procId)
-    @($A::RootElement.FindAll($TS::Children, $c) | Where-Object { $_.Current.NativeWindowHandle -ne 0 -and $_.Current.Name -like 'Roo Industries*' })[0]
+    @($A::RootElement.FindAll($TS::Children, $c) | Where-Object { $_.Current.NativeWindowHandle -ne 0 -and ($_.Current.Name -like 'Performance Vertex Utility*' -or $_.Current.Name -like 'Roo Industries*') })[0]
 }
 function Get-Descendants([int]$root) {
     $all = @(Get-CimInstance Win32_Process -Property ProcessId, ParentProcessId)

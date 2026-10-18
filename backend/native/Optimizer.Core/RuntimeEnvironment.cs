@@ -74,7 +74,7 @@ public static class RuntimeEnvironment
         var buffer = new System.Text.StringBuilder(size);
         if (!GetUserProfileDirectory(identity.Token, buffer, ref size)) throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
         var profile = buffer.ToString();
-        if (!Path.IsPathFullyQualified(profile) || !Directory.Exists(profile)) throw new InvalidOperationException("Roo Industries could not read this Windows user's profile folder.");
+        if (!Path.IsPathFullyQualified(profile) || !Directory.Exists(profile)) throw new InvalidOperationException("The app could not read this Windows user's profile folder.");
         return profile;
     });
     private static readonly Lazy<string> Local = new(() => UserFolder(System.Security.Principal.WindowsIdentity.GetCurrent().User!.Value, Profile, false));
@@ -90,7 +90,7 @@ public static class RuntimeEnvironment
     internal static string UserFolder(string sid, string profile, bool roaming)
     {
         using var users = RegistryKey.OpenBaseKey(RegistryHive.Users, RegistryView.Registry64);
-        using var hive = users.OpenSubKey(sid) ?? throw new InvalidOperationException("Roo Industries could not read that Windows user's folder settings.");
+        using var hive = users.OpenSubKey(sid) ?? throw new InvalidOperationException("The app could not read that Windows user's folder settings.");
         using var key = hive.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders");
         var name = roaming ? "AppData" : "Local AppData";
         var value = key?.GetValue(name, null, RegistryValueOptions.DoNotExpandEnvironmentNames);
@@ -144,10 +144,10 @@ public static class RuntimeEnvironment
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or System.Security.SecurityException) { }
         if (!Release && BrandCompatibility.EnvironmentValue("ROO_INDUSTRIES_UI_EXE") is { } development && Path.IsPathFullyQualified(development) && development.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) && File.Exists(development)) return development;
-        throw new InvalidDataException("The Roo Industries ownership-review app is missing, damaged, or outside a protected install folder. Install the app again.");
+        throw new InvalidDataException("The ownership-review app is missing, damaged, or outside a protected install folder. Install the app again.");
     }
 
-    private static InvalidOperationException FolderSettingsProblem() => new("Roo Industries could not use this Windows user's AppData folder settings. Choose an existing local folder on a fixed drive outside Windows and the app's install folder.");
+    private static InvalidOperationException FolderSettingsProblem() => new("The app could not use this Windows user's AppData folder settings. Choose an existing local folder on a fixed drive outside Windows and the app's install folder.");
 
     public static Dictionary<string, string> ChildEnvironment() => Build(null);
 
@@ -307,6 +307,6 @@ public static class RuntimeEnvironment
             ? Prefixed().Where(name => !(Pinned.Contains(name, StringComparer.OrdinalIgnoreCase) && Environment.GetEnvironmentVariable(name) == "0"))
             : DevelopmentCodeLoading.Concat(DevelopmentClearOnly.Where(name => !DeveloperNames.Contains(name, StringComparer.OrdinalIgnoreCase))).Concat(Pinned.Where(BadPin)).Where(Set);
         var names = present.Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(name => name, StringComparer.OrdinalIgnoreCase).ToArray();
-        if (names.Length > 0) throw new InvalidOperationException("Roo Industries will not run with these .NET settings in its environment: " + string.Join(", ", names) + ". Remove them and sign in again.");
+        if (names.Length > 0) throw new InvalidOperationException("The app will not run with these .NET settings in its environment: " + string.Join(", ", names) + ". Remove them and sign in again.");
     }
 }

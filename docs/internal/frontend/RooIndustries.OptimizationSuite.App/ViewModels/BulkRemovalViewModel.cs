@@ -317,7 +317,7 @@ public partial class BulkRemovalViewModel : ObservableObject
             SelectionSummary = "Select applications to remove."; ApplyLabel = "Remove selected apps";
             Status = "Pick the apps to remove.";
             Detail = interrupted
-                ? "The last list was cleared. One removal stopped while its remover was starting, so Roo Industries can't tell whether it ran. Check that app before removing it again."
+                ? "The last list was cleared. One removal stopped while its remover was starting, so the app can't tell whether it ran. Check that app before removing it again."
                 : "The last list was cleared. Apps already removed stay removed. Pick any app again to try once more.";
             await LoadAppsAsync();
         }

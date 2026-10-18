@@ -241,7 +241,7 @@ def encode(out, capture, hold, accepted):
             if root.resolve() == extracted.resolve():
                 folder = root / 'tour' / relative
                 shutil.rmtree(folder)
-    lines = ['# Roo Industries Optimization Suite ' + capture['version'] + ' tour', '',
+    lines = ['# Performance Vertex Utility ' + capture['version'] + ' tour', '',
              'The installer upgrades published 0.11.0. Pass A uses the original theme in Simple mode; B uses advanced mode; C uses Blackout Gold in advanced mode. App images contain only their 1600×1000 DWM frame bounds.', '',
              'The accepted installer clip and first Home shot are retained separately; reused-installer-media.json binds those files to their original receipt. This run silently upgrades the candidate over 0.11.0 before the UIA-only app tour.', '', '## Media', '']
     lines += ['- [' + path + '](' + path + '): ' + description for path, description in listing]

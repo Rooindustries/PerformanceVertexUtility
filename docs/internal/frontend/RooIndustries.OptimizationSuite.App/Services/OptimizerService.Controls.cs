@@ -68,7 +68,7 @@ public sealed partial class OptimizerService
             var megabytes = data.GetProperty("bytes").GetInt64() / (1024 * 1024);
             return phase switch
             {
-                "waiting" => "Another Roo Industries window is preparing the saved settings. Waiting for it to finish.",
+                "waiting" => "Another window of this app is preparing the saved settings. Waiting for it to finish.",
                 "finishing" or "switching" => "Finishing up (" + files.ToString("N0") + " files)",
                 "merging" => "Merging changes made while this was running",
                 _ => "Copied " + files.ToString("N0") + " files (" + megabytes.ToString("N0") + " MB)",

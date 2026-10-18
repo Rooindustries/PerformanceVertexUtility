@@ -2,7 +2,7 @@
     <StackPanel Spacing="16">
     <Border Style="{StaticResource CardBorderStyle}" Background="{StaticResource RooIndustriesSurfaceCardBrush}" BorderBrush="{StaticResource RooIndustriesBorderBrush}" AutomationProperties.AutomationId="GovernorCard">
         <StackPanel Spacing="10">
-            <TextBlock Text="Roo Industries Governor" FontSize="22" FontWeight="SemiBold" Foreground="{StaticResource RooIndustriesTextPrimaryBrush}" />
+            <TextBlock Text="Governor" FontSize="22" FontWeight="SemiBold" Foreground="{StaticResource RooIndustriesTextPrimaryBrush}" />
             <TextBlock Text="{x:Bind ViewModel.GovernorHeadline, Mode=OneWay}" FontWeight="SemiBold" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextPrimaryBrush}" AutomationProperties.AutomationId="GovernorStatus" />
             <TextBlock Text="{x:Bind ViewModel.GovernorDetail, Mode=OneWay}" FontSize="12" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" AutomationProperties.AutomationId="GovernorDetail" />
             <views:AdaptivePanel MinColumnWidth="170" MaxColumns="4" Compact="True">
@@ -107,7 +107,7 @@
                     <CheckBox Content="Require the reviewed executable file hash" IsChecked="{x:Bind ViewModel.PinExecutable, Mode=TwoWay}" IsEnabled="{x:Bind ViewModel.CanEdit, Mode=OneWay}" />
                     <TextBlock Text="{x:Bind ViewModel.RuleBlocker, Mode=OneWay}" Visibility="{x:Bind ViewModel.HasRuleBlocker, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" TextWrapping="Wrap" FontSize="12" Foreground="{StaticResource RooIndustriesTextMutedBrush}" AutomationProperties.AutomationId="ProcessRuleBlocker" />
                     <Button Content="Save rule" Command="{x:Bind ViewModel.SaveRuleCommand}" IsEnabled="{x:Bind ViewModel.CanSaveRule, Mode=OneWay}" AutomationProperties.AutomationId="ProcessSaveRule" />
-                    <TextBlock Text="The Roo Industries Governor keeps your rules on after you close the app. Turn a rule off or delete it to give the app its old settings back." TextWrapping="Wrap" FontSize="12" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                    <TextBlock Text="The Governor keeps your rules on after you close the app. Turn a rule off or delete it to give the app its old settings back." TextWrapping="Wrap" FontSize="12" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                     <ComboBox Header="Existing rules" ItemsSource="{x:Bind ViewModel.Rules}" SelectedItem="{x:Bind ViewModel.SelectedRule, Mode=TwoWay}" HorizontalAlignment="Stretch" AutomationProperties.AutomationId="ProcessRulesList" />
                     <TextBlock Text="{x:Bind ViewModel.RuleDetail, Mode=OneWay}" FontSize="12" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                     <views:AdaptivePanel MinColumnWidth="170" MaxColumns="4" Compact="True">

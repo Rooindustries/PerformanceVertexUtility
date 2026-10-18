@@ -116,7 +116,7 @@ function Test-ScenarioForeignRecord {
     $null=Wait-Until {$script:foreign=@(Get-Records $system.Id|Where-Object {$_.status -ne 'active'});$script:foreign.Count -gt 0} 15 500
     $record=@($script:foreign)[0]
     Note 'foreignRecord' ([ordered]@{record=$record;memoryPriority=[RooIndustriesGovernorScenarioOracle]::Memory($system.Handle)})
-    Assert ($null -ne $record -and $record.status -eq 'conflict' -and $record.error -eq 'This record points at a process of another Windows account, so Roo Industries did not change it.') 'A saved record that points at another account''s process is refused before any write'
+    Assert ($null -ne $record -and $record.status -eq 'conflict' -and $record.error -eq 'This record points at a process of another Windows account, so the Governor did not change it.') 'A saved record that points at another account''s process is refused before any write'
     Assert ([RooIndustriesGovernorScenarioOracle]::Memory($system.Handle) -eq 3) 'The other account''s process keeps its value'
 }
 
@@ -196,7 +196,7 @@ function Test-ScenarioMigrationBusy {
     try {Core 'policy-secure'|Out-Null} catch {$failure=$_.Exception.Message}
     $folders=@(Get-ChildItem -LiteralPath $script:policyParent -Directory|ForEach-Object {$_.Name})
     Note 'migrationBusy' ([ordered]@{failure=$failure;folders=$folders})
-    Assert ($null -ne $failure -and $failure -like 'Stop the Roo Industries Governor before protecting its saved rules folder.*') 'A migration that cannot move the earlier folder away says so'
+    Assert ($null -ne $failure -and $failure -like 'Stop the Governor before protecting its saved rules folder.*') 'A migration that cannot move the earlier folder away says so'
     $kept=@($folders|Where-Object {$_ -ne 'process-rules'})
     $copy=if($kept.Count -eq 1 -and $kept[0] -like 'process-rules.secure-*'){Join-Path $script:policyParent $kept[0]}else{$null}
     $copyId=if($copy -and (Test-Path -LiteralPath (Join-Path $copy '.migrating'))){(Get-Content -LiteralPath (Join-Path $copy '.migrating') -Raw|ConvertFrom-Json).id}else{$null}

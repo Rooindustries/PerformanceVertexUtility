@@ -72,22 +72,22 @@ public sealed record DamagedRuleChoice(string RuleId, string Reason)
 
 public static class GovernorDisplay
 {
-    public const string Running = "Roo Industries Governor is running. It keeps your rules active when this app is closed and starts when you sign in.";
+    public const string Running = "The Governor is running. It keeps your rules active when this app is closed and starts when you sign in.";
     public const string Paused = "Paused";
     public const string Pausing = "Pausing";
     public const string Stopped = "Stopped";
     public const string NotResponding = "Not responding";
-    public const string Off = "Roo Industries Governor is off. Save a rule to turn it on.";
+    public const string Off = "The Governor is off. Save a rule to turn it on.";
     public const string Denied = "Windows denied access to this setting for this app";
     public const string StoppedRestarts = "The governor stopped. It starts again by itself within a minute, or press Start governor.";
     public const string StoppedStays = "The governor stopped and won't start again by itself. Press Start governor to start it.";
     public const string StoppedUnknown = "The governor stopped. Press Start governor to start it.";
     public static string StoppedFailed(int code) => "The governor stopped and its last automatic start failed (error 0x" + code.ToString("X8") + "), so it may not start again by itself. Press Start governor to start it.";
-    public const string RunningNoSignIn = "Roo Industries Governor is running and keeps your rules active when this app is closed, but it won't start when you sign in. Press Start governor to fix that.";
-    public const string RunningUnconfirmed = "Roo Industries Governor is running and keeps your rules active when this app is closed. Roo Industries couldn't confirm it starts when you sign in. Press Start governor to set that up again.";
+    public const string RunningNoSignIn = "The Governor is running and keeps your rules active when this app is closed, but it won't start when you sign in. Press Start governor to fix that.";
+    public const string RunningUnconfirmed = "The Governor is running and keeps your rules active when this app is closed. The app couldn't confirm it starts when you sign in. Press Start governor to set that up again.";
     public const string NotRunningApp = "The app is not running right now.";
     public const string NotYetApplied = "The app is running, but this rule hasn't been applied to it.";
-    public const string AppUnknown = "Roo Industries can't tell whether the app is running right now.";
+    public const string AppUnknown = "Can't tell whether the app is running right now.";
     public const string PausedRule = "Not applied right now because the governor is paused.";
     public const string StoppedRule = "Not applied right now because the governor is stopped.";
     public const string AttentionRule = "Not checked right now because the governor needs attention.";
@@ -158,8 +158,8 @@ public static class GovernorDisplay
                 ? "Your rules are saved but not used. Some apps kept a setting the governor could not put back." + retry
                 : LeftAsSet(snapshot).Length > 0 ? "Your rules are saved but not used. " + ProcessControlEngine.LeftAsSet
                 : "Your rules are saved but not used. The apps got their old settings back.") + " Press Start governor to use your rules again.",
-            "off" => worker.HostRunning is null ? "Roo Industries couldn't read the governor's last state, so it can't confirm every app got its old settings back" + Reason(worker.Error) + "."
-                : Kept(snapshot) > 0 ? StillHave(Kept(snapshot)) + " a setting Roo Industries could not put back." + retry
+            "off" => worker.HostRunning is null ? "The app couldn't read the governor's last state, so it can't confirm every app got its old settings back" + Reason(worker.Error) + "."
+                : Kept(snapshot) > 0 ? StillHave(Kept(snapshot)) + " a setting the app could not put back." + retry
                 : Changed(snapshot) == 0 ? LeftAsSet(snapshot).Length > 0 ? ProcessControlEngine.LeftAsSet : ""
                 : worker.HostRunning == true ? "Putting the old settings back for " + Count(Changed(snapshot)) + "."
                 : StillHave(Changed(snapshot)) + " rule settings that were not put back.",
@@ -167,7 +167,7 @@ public static class GovernorDisplay
                 + (snapshot.ScheduledTask is null ? StoppedUnknown : snapshot.ScheduledTask.LastStartFailed && snapshot.ScheduledTask is { Registered: true, Enabled: true, RestartsEveryMinute: true } ? StoppedFailed(snapshot.ScheduledTask.LastResult)
                     : snapshot.ScheduledTask.Restarts ? StoppedRestarts : StoppedStays),
             _ => worker.HostRunning is null && summary.Paused
-                    ? "Paused, but Roo Industries couldn't read the governor's state, so it can't confirm the old settings were put back" + Reason(worker.Error) + "."
+                    ? "Paused, but the app couldn't read the governor's state, so it can't confirm the old settings were put back" + Reason(worker.Error) + "."
                 : worker.HostRunning == true && worker.Error is not null && summary.Paused
                     ? "Paused, but the governor is not answering, so the old settings may not be back yet. Press Pause governor to stop it and put them back."
                 : summary.SecurityProblem is { } problem && problem != "missing" ? "The rules folder is not protected: " + problem + ". Press Start governor to repair it."
@@ -299,7 +299,7 @@ public partial class ProcessControlsViewModel : ObservableObject
     [ObservableProperty] private string _status = "Choose an application to inspect its controls.";
     [ObservableProperty] private string _detail = "Changes use Windows process controls. Applications that deny access remain unchanged.";
     [ObservableProperty] private string _reviewSummary = "";
-    [ObservableProperty] private string _governorHeadline = "Checking the Roo Industries Governor…";
+    [ObservableProperty] private string _governorHeadline = "Checking the Governor…";
     [ObservableProperty] private string _governorDetail = "";
     [ObservableProperty] private string _governorState = "unknown";
     [ObservableProperty] private bool _retryAvailable;
@@ -588,11 +588,11 @@ public partial class ProcessControlsViewModel : ObservableObject
             if ((await App.Operations.ReadGovernorAsync()).Summary.SecurityProblem is not (null or "missing")) await App.Operations.PolicyWorkerAsync("Sync");
             var saved = await App.Operations.SaveRuleAsync(rule);
             _editingRuleId = saved.RuleId;
-            Status = "Rule saved. Starting the Roo Industries Governor…";
+            Status = "Rule saved. Starting the Governor…";
             var registration = await App.Operations.PolicyWorkerAsync("Sync");
             await RefreshRulesAsync();
             Status = registration.Paused ? "Rule saved. The governor is paused, so press Start governor to use it." : "Rule saved and on.";
-            Detail = "The Roo Industries Governor keeps this rule on after you close the app. If another app changes the same setting, Roo Industries puts it back up to three times and then steps back for that app.";
+            Detail = "The Governor keeps this rule on after you close the app. If another app changes the same setting, the Governor puts it back up to three times and then steps back for that app.";
             Invalidate();
         }
         catch (Exception error) { Status = "Saved rules need attention."; Detail = error.Message; await TryRefreshRulesAsync(); }
@@ -783,7 +783,7 @@ public partial class ProcessControlsViewModel : ObservableObject
             await App.Operations.PolicyWorkerAsync("Sync");
             await RefreshRulesAsync();
             Status = "Damaged rule removed.";
-            Detail = "Roo Industries deleted the damaged rule file. Your other rules are unchanged.";
+            Detail = "Deleted the damaged rule file. Your other rules are unchanged.";
         }
         catch (Exception error) { Status = "Couldn't remove the damaged rule."; Detail = error.Message; await TryRefreshRulesAsync(); }
         finally { Busy = false; }

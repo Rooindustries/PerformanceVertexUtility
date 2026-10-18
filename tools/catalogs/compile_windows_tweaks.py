@@ -520,7 +520,7 @@ def compile_catalog():
                         effects.append(dict(base, method='registry-value', name='MUIVerb', data=caption))
                         effects.append(dict(base, method='registry-value', name='MultiSelectModel', data='Single'))
                         effects.append(dict(base, path=base['path'] + '\\command', name='', method='menu-command' if enabled else 'registry-value', formula=formula))
-                    covered['compatibility'] = 'Register only Roo Industries menu values. Power and startup entries open Windows review dialogs; ownership opens the app review before changing one selected item. Restore preserves unrelated menus.'
+                    covered['compatibility'] = 'Register only menu values owned by this app. Power and startup entries open Windows review dialogs; ownership opens the app review before changing one selected item. Restore preserves unrelated menus.'
                 if record['id'] == 'global-timer-resolution':
                     effects = [effect for effect in effects if effect.get('method') not in ('conditional', 'scheduled-task', 'process-stop')]
                     effects.append({'method': 'native', 'kind': 'timer', 'target': 'system', 'property': 'half-millisecond', 'value': direction == 'enabled'})
@@ -680,7 +680,7 @@ def compile_catalog():
                 raise ValueError('An incompatible-settings rule names a setting or choice that is not in the catalog: ' + item['settingId'])
         for item in selections:
             others = ', '.join(by_id[other['settingId']]['name'] for other in selections if other is not item)
-            note = 'Roo Industries will not apply this together with ' + others + '. ' + rule['reason']
+            note = 'The app will not apply this together with ' + others + '. ' + rule['reason']
             if note not in by_id[item['settingId']]['description']:
                 by_id[item['settingId']]['description'] = note + ' ' + by_id[item['settingId']]['description']
         pairs = {(item['settingId'], item['optionId']) for item in selections}

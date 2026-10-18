@@ -112,7 +112,7 @@ var
 
 procedure RefuseSetupUserFolder;
 begin
-  SetupFolderRefusal := 'Roo Industries needs this Windows user''s AppData folder on a local fixed drive, in an existing folder that is not a link and is outside Windows and the app''s install folder. Restore the AppData folder setting, then run setup again.';
+  SetupFolderRefusal := 'The app needs this Windows user''s AppData folder on a local fixed drive, in an existing folder that is not a link and is outside Windows and the app''s install folder. Restore the AppData folder setting, then run setup again.';
   Log(SetupFolderRefusal);
   RaiseException(SetupFolderRefusal);
 end;
