@@ -18,7 +18,7 @@ $checks=[Collections.Generic.List[object]]::new()
 $measurements=[ordered]@{}
 Add-Type @'
 using System; using System.Runtime.InteropServices; using System.Security.Principal;
-public static class RooGovernorBaselineToken {
+public static class RooIndustriesGovernorBaselineToken {
     [DllImport("advapi32.dll", SetLastError=true)] static extern bool OpenProcessToken(IntPtr process,uint access,out IntPtr token);
     [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr handle);
     public static string Sid(IntPtr process) { IntPtr token; if(!OpenProcessToken(process,8,out token)) throw new System.ComponentModel.Win32Exception(); try { using(var identity=new WindowsIdentity(token)) return identity.User.Value; } finally { CloseHandle(token); } }
@@ -29,7 +29,7 @@ function Capture([string]$Name,[Diagnostics.Process]$Process){
     $receipt=New-OwnedProcess $Process
     if(-not $receipt){throw 'Owned fixture identity could not be held'}
     $receipts.Add($receipt)
-    $receipt.Identity|Add-Member -NotePropertyName userSid -NotePropertyValue ([RooGovernorBaselineToken]::Sid($receipt.handle))
+    $receipt.Identity|Add-Member -NotePropertyName userSid -NotePropertyValue ([RooIndustriesGovernorBaselineToken]::Sid($receipt.handle))
     if($null -eq (Wait-Until {$null -ne (Read-Controls $Process)} 10)){throw 'All eight fixture controls were not observable'}
     $measurements[$Name]=[ordered]@{identity=$receipt.Identity;controls=(Read-Controls $Process)}
     return $receipt
@@ -91,7 +91,7 @@ try {
             $receipt=Capture $case $probe
             $measurements[$case].atReturn=$immediate
             $before=$measurements[$case].controls
-            Check ($receipt.Identity.pid -eq $probe.Id -and $receipt.Identity.imagePath -ieq [RooValidationOwnership.Native]::Canonical($fixturePath) -and $receipt.Identity.creationTimeFileTimeUtc -ceq $probe.StartTime.ToUniversalTime().ToFileTimeUtc().ToString() -and $receipt.Identity.userSid -ceq [Security.Principal.WindowsIdentity]::GetCurrent().User.Value) ($case+': PID creation image and token agree')
+            Check ($receipt.Identity.pid -eq $probe.Id -and $receipt.Identity.imagePath -ieq [RooIndustriesValidationOwnership.Native]::Canonical($fixturePath) -and $receipt.Identity.creationTimeFileTimeUtc -ceq $probe.StartTime.ToUniversalTime().ToFileTimeUtc().ToString() -and $receipt.Identity.userSid -ceq [Security.Principal.WindowsIdentity]::GetCurrent().User.Value) ($case+': PID creation image and token agree')
             if($case -like 'deny*'){
                 Start-Sleep -Seconds 3
                 $after=Read-Controls $probe
@@ -102,7 +102,7 @@ try {
         $exited=[Collections.Generic.List[object]]::new()
         for($index=0;$index -lt 40;$index++){
             $instant=Start-Probe $path '0' -NoWait
-            $id=$instant.Id;$created=[RooValidationOwnership.Native]::Created($instant.Handle).ToString()
+            $id=$instant.Id;$created=[RooIndustriesValidationOwnership.Native]::Created($instant.Handle).ToString()
             $finished=$instant.WaitForExit(10000)
             $exited.Add([ordered]@{pid=$id;creationTimeFileTimeUtc=$created;waitCompleted=$finished;exited=$instant.HasExited})
         }
@@ -112,14 +112,14 @@ try {
         $ast=[Management.Automation.Language.Parser]::ParseFile((Join-Path $repoRoot 'backend\scripts\GovernorScenarios\Scenario.Common.ps1'),[ref]$tokens,[ref]$errors)
         if($errors.Count){throw 'Fixture common source failed native PowerShell parsing'}
         $oracle=@($ast.FindAll({param($node) $node -is [Management.Automation.Language.StringConstantExpressionAst] -and $node.Value.Contains('public static class RooIndustriesGovernorScenarioOracle')},$true))[0].Value
-        $faulted=$oracle.Replace('RooIndustriesGovernorScenarioOracle','RooGovernorBaselineFault').Replace('public static Process Start(', 'public static int FailedPid; public static long FailedCreation; public static Process Start(').Replace('SetIo(created.Process, 2);','FailedPid=(int)created.ProcessId; FailedCreation=nativeTime; SetIo(created.Process, 2);').Replace('SetMemory(created.Process, 5);','SetMemory(created.Process, 99);')
+        $faulted=$oracle.Replace('RooIndustriesGovernorScenarioOracle','RooIndustriesGovernorBaselineFault').Replace('public static Process Start(', 'public static int FailedPid; public static long FailedCreation; public static Process Start(').Replace('SetIo(created.Process, 2);','FailedPid=(int)created.ProcessId; FailedCreation=nativeTime; SetIo(created.Process, 2);').Replace('SetMemory(created.Process, 5);','SetMemory(created.Process, 99);')
         Add-Type -TypeDefinition $faulted
         $failure=$null
-        try{$unexpected=[RooGovernorBaselineFault]::Start($path,'120');$script:probes.Add($unexpected)}catch{$failure=$_.Exception;while($failure.InnerException){$failure=$failure.InnerException}}
+        try{$unexpected=[RooIndustriesGovernorBaselineFault]::Start($path,'120');$script:probes.Add($unexpected)}catch{$failure=$_.Exception;while($failure.InnerException){$failure=$failure.InnerException}}
         $surviving=$false;$candidate=$null
-        try{$candidate=Get-Process -Id ([RooGovernorBaselineFault]::FailedPid) -ErrorAction SilentlyContinue;if($candidate){$surviving=[RooValidationOwnership.Native]::Created($candidate.Handle) -eq [RooGovernorBaselineFault]::FailedCreation -and -not $candidate.HasExited}}finally{if($candidate){$candidate.Dispose()}}
-        $measurements.initializationFailure=[ordered]@{processId=[RooGovernorBaselineFault]::FailedPid;creationTimeFileTimeUtc=[RooGovernorBaselineFault]::FailedCreation.ToString();errorCode=$failure.NativeErrorCode;exactProcessAlive=$surviving}
-        Check ($failure.NativeErrorCode -eq 87 -and [RooGovernorBaselineFault]::FailedPid -gt 0 -and -not $surviving) 'Native invalid memory priority after creation stops the exact suspended fixture'
+        try{$candidate=Get-Process -Id ([RooIndustriesGovernorBaselineFault]::FailedPid) -ErrorAction SilentlyContinue;if($candidate){$surviving=[RooIndustriesValidationOwnership.Native]::Created($candidate.Handle) -eq [RooIndustriesGovernorBaselineFault]::FailedCreation -and -not $candidate.HasExited}}finally{if($candidate){$candidate.Dispose()}}
+        $measurements.initializationFailure=[ordered]@{processId=[RooIndustriesGovernorBaselineFault]::FailedPid;creationTimeFileTimeUtc=[RooIndustriesGovernorBaselineFault]::FailedCreation.ToString();errorCode=$failure.NativeErrorCode;exactProcessAlive=$surviving}
+        Check ($failure.NativeErrorCode -eq 87 -and [RooIndustriesGovernorBaselineFault]::FailedPid -gt 0 -and -not $surviving) 'Native invalid memory priority after creation stops the exact suspended fixture'
     }
     }
 }finally{

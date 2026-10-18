@@ -141,7 +141,7 @@ function Stop-AfterInstall {
     Get-CimInstance Win32_Process -ErrorAction Stop|Where-Object {$_.ExecutablePath -ieq (Join-Path $app 'app\RooIndustries.OptimizationSuite.App.exe') -and (Get-RecoveryProcessOwner $_) -ceq $s.sid}|ForEach-Object {Stop-ProcessRow $_}
 }
 function Get-VerificationInvocationTask {
-    $variable=Get-Variable RooVerificationInvocationContext -Scope Global -ErrorAction SilentlyContinue
+    $variable=Get-Variable RooIndustriesVerificationInvocationContext -Scope Global -ErrorAction SilentlyContinue
     if(-not$variable){return $null}
     $context=$variable.Value
     if(-not$context -or $context.protocol -cne 'roo-industries-verification-invocation/v1' -or -not$context.run -or -not$context.taskName -or -not$context.task -or -not$context.wrapper){throw 'Missing verification invocation context'}
@@ -159,13 +159,13 @@ function Get-VerificationInvocationTask {
         $native=New-OwnedProcess $parent
         if(-not$native -or $native.Identity.creationTimeFileTimeUtc -cne $wrapper.creationTimeFileTimeUtc -or $native.Identity.imagePath -cne $wrapper.imagePath){throw 'Verification invocation native parent identity differs'}
         $system=[Environment]::SystemDirectory
-        if($wrapper.imagePath -cne [RooValidationOwnership.Native]::Canonical((Join-Path $system 'WindowsPowerShell\v1.0\powershell.exe'))){throw 'Verification wrapper image differs'}
+        if($wrapper.imagePath -cne [RooIndustriesValidationOwnership.Native]::Canonical((Join-Path $system 'WindowsPowerShell\v1.0\powershell.exe'))){throw 'Verification wrapper image differs'}
         Assert-OwnedTaskUnchanged $task
         $xml=[xml]$task.xml;$ns=[Xml.XmlNamespaceManager]::new($xml.NameTable);$ns.AddNamespace('t',$xml.DocumentElement.NamespaceURI)
         $actions=@($xml.SelectNodes('/t:Task/t:Actions/t:Exec',$ns))
         if($actions.Count -ne 1 -or @($xml.SelectNodes('/t:Task/t:Actions/*',$ns)).Count -ne 1){throw 'Verification invocation task actions differ'}
         $action=$actions[0]
-        if($action.WorkingDirectory -cne $context.run -or [RooValidationOwnership.Native]::Canonical([string]$action.Command) -cne [RooValidationOwnership.Native]::Canonical((Join-Path $system 'conhost.exe'))){throw 'Verification invocation task frame differs'}
+        if($action.WorkingDirectory -cne $context.run -or [RooIndustriesValidationOwnership.Native]::Canonical([string]$action.Command) -cne [RooIndustriesValidationOwnership.Native]::Canonical((Join-Path $system 'conhost.exe'))){throw 'Verification invocation task frame differs'}
         $pattern='^--headless "'+[regex]::Escape((Join-Path $system 'WindowsPowerShell\v1.0\powershell.exe'))+'" (-NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand [A-Za-z0-9+/=]+)$'
         if([string]$action.Arguments -cnotmatch $pattern){throw 'Verification invocation task command differs'}
         $suffix=$Matches[1]
@@ -227,7 +227,7 @@ function ConvertTo-RecoveryNativePath([string]$Path) { Assert-PlainRecoveryPath 
 function Read-RecoveryJson([string]$Path) { $v=[IO.File]::ReadAllText((ConvertTo-RecoveryNativePath $Path))|ConvertFrom-Json;return $v }
 function Get-RecoveryNames { @('RooIndustriesOptimizationSuite','RooOptimizationSuite','RooIndustriesOptimizationSuite.Timer') }
 function Initialize-RecoveryNative {
-    if('RooVerificationRecovery.Native' -as [type]){return}
+    if('RooIndustriesVerificationRecovery.Native' -as [type]){return}
     $temp=$backup+'.native-temp-'+[Guid]::NewGuid().ToString('N')
     New-SealedDirectory $temp
     $oldTemp=$env:TEMP;$oldTmp=$env:TMP
@@ -237,7 +237,7 @@ function Initialize-RecoveryNative {
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
-namespace RooVerificationRecovery {
+namespace RooIndustriesVerificationRecovery {
  public static class Native {
   [DllImport("advapi32.dll",EntryPoint="SetFileSecurityW",CharSet=CharSet.Unicode,SetLastError=true)] public static extern bool Set(string p,uint i,byte[] d);
   [StructLayout(LayoutKind.Sequential)] struct Luid { public uint Low; public int High; }
@@ -315,10 +315,10 @@ function Assert-RecoveryEvidenceParent {
 }
 function New-SealedDirectory([string]$Path) {
     $nativePath=Assert-PlainRecoveryPath $Path -PassThru
-    if(-not('RooVerificationDirectoryCreator' -as [type])){
-        $assembly=[AppDomain]::CurrentDomain.DefineDynamicAssembly([Reflection.AssemblyName]::new('RooVerificationDirectoryCreator'),[Reflection.Emit.AssemblyBuilderAccess]::Run)
+    if(-not('RooIndustriesVerificationDirectoryCreator' -as [type])){
+        $assembly=[AppDomain]::CurrentDomain.DefineDynamicAssembly([Reflection.AssemblyName]::new('RooIndustriesVerificationDirectoryCreator'),[Reflection.Emit.AssemblyBuilderAccess]::Run)
         $module=$assembly.DefineDynamicModule('Native')
-        $type=$module.DefineType('RooVerificationDirectoryCreator',[Reflection.TypeAttributes]::Public)
+        $type=$module.DefineType('RooIndustriesVerificationDirectoryCreator',[Reflection.TypeAttributes]::Public)
         $method=$type.DefinePInvokeMethod('Create','kernel32.dll','CreateDirectoryW',[Reflection.MethodAttributes]'Public, Static, PinvokeImpl',[Reflection.CallingConventions]::Standard,[int],[type[]]@([string],[IntPtr]),[Runtime.InteropServices.CallingConvention]::Winapi,[Runtime.InteropServices.CharSet]::Unicode)
         $method.SetImplementationFlags([Reflection.MethodImplAttributes]::PreserveSig)
         $type.CreateType()|Out-Null
@@ -334,7 +334,7 @@ function New-SealedDirectory([string]$Path) {
         [Runtime.InteropServices.Marshal]::WriteInt32($attributes,0,$size)
         [Runtime.InteropServices.Marshal]::WriteIntPtr($attributes,$offset,$descriptor)
         [Runtime.InteropServices.Marshal]::WriteInt32($attributes,($offset+[IntPtr]::Size),0)
-        if([RooVerificationDirectoryCreator]::Create($nativePath,$attributes) -eq 0){throw ('Exclusive sealed directory creation failed: '+$Path)}
+        if([RooIndustriesVerificationDirectoryCreator]::Create($nativePath,$attributes) -eq 0){throw ('Exclusive sealed directory creation failed: '+$Path)}
     } finally {[Runtime.InteropServices.Marshal]::FreeHGlobal($attributes);[Runtime.InteropServices.Marshal]::FreeHGlobal($descriptor)}
     Assert-SealedRecovery $Path
 }
@@ -368,7 +368,7 @@ function Get-RecoveryRows([string]$Path) {
         $i=$q.Dequeue();$i.Refresh()
         if(-not$i.Exists -or [int]$i.Attributes -eq -1){throw ('Recovery entry cannot be read: '+$i.FullName)}
         if($i.Attributes -band [IO.FileAttributes]::ReparsePoint){throw ('Cannot copy reparse point: '+$i.FullName)}
-        if(@([RooVerificationRecovery.Native]::Streams($i.FullName)|Where-Object {$_ -cne '::$DATA'}).Count){throw ('Named alternate streams require a separate audited capture: '+$i.FullName)}
+        if(@([RooIndustriesVerificationRecovery.Native]::Streams($i.FullName)|Where-Object {$_ -cne '::$DATA'}).Count){throw ('Named alternate streams require a separate audited capture: '+$i.FullName)}
         $acl=Get-Acl -LiteralPath $i.FullName -Audit -ErrorAction Stop
         if([Security.AccessControl.RawSecurityDescriptor]::new($acl.GetSecurityDescriptorBinaryForm(),0).SystemAcl -ne $null){throw ('Audit ACL requires a separate audited capture: '+$i.FullName)}
         $rows.Add([pscustomobject][ordered]@{relative=$i.FullName.Substring($base.FullName.Length);directory=[bool]$i.PSIsContainer;length=$(if($i.PSIsContainer){0}else{$i.Length});creation=$i.CreationTimeUtc.Ticks.ToString();write=$i.LastWriteTimeUtc.Ticks.ToString();attributes=[int]$i.Attributes;sha256=$(if($i.PSIsContainer){''}else{(Get-FileHash -LiteralPath $i.FullName -Algorithm SHA256 -ErrorAction Stop).Hash});sddl=$acl.Sddl;control=[int][Security.AccessControl.RawSecurityDescriptor]::new($acl.GetSecurityDescriptorBinaryForm(),0).ControlFlags;descriptor=[Convert]::ToBase64String($acl.GetSecurityDescriptorBinaryForm())})
@@ -571,7 +571,7 @@ function Restore-RecoveryDescriptors($Rows,[string]$TargetPath,[switch]$Seal) {
         $sddl=if($Seal){'O:BAG:BAD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;RC;;;OW)'}else{[string]$r.sddl}
         if(-not $Seal -and $r.descriptor){$bytes=[Convert]::FromBase64String([string]$r.descriptor)}else{$raw=[Security.AccessControl.RawSecurityDescriptor]::new($sddl);if(-not $Seal){$raw.SetFlags([Security.AccessControl.ControlFlags][int]$r.control)};$bytes=New-Object byte[] $raw.BinaryLength;$raw.GetBinaryForm($bytes,0)}
         $info=if($Seal){[uint32]2147483655}else{[uint32]7}
-        if(-not[RooVerificationRecovery.Native]::Exact((ConvertTo-RecoveryNativePath ($TargetPath+$r.relative)),$info,$bytes)){throw ('Native descriptor restore failed: '+[Runtime.InteropServices.Marshal]::GetLastWin32Error())}
+        if(-not[RooIndustriesVerificationRecovery.Native]::Exact((ConvertTo-RecoveryNativePath ($TargetPath+$r.relative)),$info,$bytes)){throw ('Native descriptor restore failed: '+[Runtime.InteropServices.Marshal]::GetLastWin32Error())}
     }
 }
 function Restore-Folder([string]$Name,$Plan) {
@@ -974,7 +974,7 @@ function Get-RecoveryCompanions($Scope,$Lease) {
             Assert-RecoveryEqual (Recovery-Lines $rows -DataOnly) (Recovery-Lines @(Get-RecoveryRows $saved) -DataOnly) 'companion sealed baseline'
             $baselineRoot=@($rows|Where-Object relative -ceq '')
             if($baselineRoot.Count -ne 1 -or -not$baselineRoot[0].directory){throw 'Original root directory row is missing'}
-            $native=[RooVerificationRecovery.Native]::DirectoryMetadata((ConvertTo-RecoveryNativePath $candidate))
+            $native=[RooIndustriesVerificationRecovery.Native]::DirectoryMetadata((ConvertTo-RecoveryNativePath $candidate))
             if($native.Creation -ne [DateTime]::new([long]$baselineRoot[0].creation,[DateTimeKind]::Utc).ToFileTimeUtc()){throw 'Companion native creation differs from original root'}
             $write=[DateTime]::FromFileTimeUtc($native.Write);$start=[DateTime]::Parse($m.Started).ToUniversalTime()
             if($write -lt $start -or $write -lt [DateTime]::Parse($Lease.startUtc).ToUniversalTime() -or $write -gt [DateTime]::UtcNow){throw 'Companion native last-write is outside migration lease'}
@@ -1028,7 +1028,7 @@ function Register-RecoveryMigrationArtifacts([DateTime]$StartedUtc) {
     $identity=$state.probeIdentity;$fileIdentity=$state.probeFileIdentity
     if(-not$identity -or -not$identity.pid -or -not$identity.creationTimeFileTimeUtc -or -not$identity.imagePath -or -not$fileIdentity){throw 'Migration artifact has no native ownership receipt'}
     $created=[DateTime]::FromFileTimeUtc([long]$identity.creationTimeFileTimeUtc);if($created -lt $StartedUtc -or $created -gt [DateTime]::UtcNow){throw 'Migration probe creation is outside its exact action interval'}
-    if($fileIdentity.path -ine [IO.Path]::GetFullPath($image) -or $identity.imagePath -ine [RooValidationOwnership.Native]::Canonical($image)){throw 'Migration receipt has the wrong probe image'}
+    if($fileIdentity.path -ine [IO.Path]::GetFullPath($image) -or $identity.imagePath -ine [RooIndustriesValidationOwnership.Native]::Canonical($image)){throw 'Migration receipt has the wrong probe image'}
     $opened=Open-OwnedProbe $fileIdentity;try{if($opened.Identity.hash -cne (Get-FileHash -LiteralPath (Join-Path ([Environment]::GetFolderPath('System')) 'PING.EXE')).Hash){throw 'Migration probe does not match its scenario source image'}}finally{$opened.Dispose()}
     $process=Get-Process -Id ([int]$identity.pid) -ErrorAction Stop
     try{$actual=New-OwnedProcess $process;if($actual.Identity.creationTimeFileTimeUtc -cne [string]$identity.creationTimeFileTimeUtc -or $actual.Identity.imagePath -ine [string]$identity.imagePath){throw 'Migration artifact does not identify the live native probe'}}finally{$process.Dispose()}

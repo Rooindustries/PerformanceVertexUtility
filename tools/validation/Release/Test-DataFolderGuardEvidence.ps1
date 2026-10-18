@@ -17,7 +17,7 @@ Add-Type -TypeDefinition @'
 using System;
 using System.Runtime.InteropServices;
 using Microsoft.Win32.SafeHandles;
-namespace RooGuardEvidence {
+namespace RooIndustriesGuardEvidence {
  public static class Native {
   [DllImport("kernel32.dll",EntryPoint="CreateFileW",CharSet=CharSet.Unicode,SetLastError=true)]
   static extern SafeFileHandle Open(string path,uint access,uint share,IntPtr security,uint creation,uint flags,IntPtr template);
@@ -27,7 +27,7 @@ namespace RooGuardEvidence {
 '@
 $heldDirectory=Join-Path $root 'held-directory';[IO.Directory]::CreateDirectory($heldDirectory)|Out-Null
 [IO.Directory]::SetLastWriteTimeUtc($heldDirectory,[DateTime]::UtcNow.AddMinutes(-5))
-$held=[RooGuardEvidence.Native]::Hold($heldDirectory)
+$held=[RooIndustriesGuardEvidence.Native]::Hold($heldDirectory)
 if($held.IsInvalid){$held.Dispose();throw 'Private directory could not be held open'}
 $originalHash=(Get-FileHash -LiteralPath $path).Hash;$results=[Collections.Generic.List[object]]::new();$failure=$null;$removed=$false
 try {

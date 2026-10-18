@@ -107,9 +107,9 @@ function Preserve-MovedTree([string]$manifestName,[string]$path,[bool]$seal){
  Save-Json (Join-Path $frame ($manifestName+'.sealed-manifest.json')) @(Rows $path)
 }
 function Restore-OriginalAcl([string]$source,[string]$target){
- if(-not ('RooHistoricalRecovery.Security' -as [type])){
+ if(-not ('RooIndustriesHistoricalRecovery.Security' -as [type])){
   $temp=Join-Path $frame 'native-probe-temp';[IO.Directory]::CreateDirectory($temp)|Out-Null;$oldTemp=$env:TEMP;$oldTmp=$env:TMP
-  try{$env:TEMP=$temp;$env:TMP=$temp;Add-Type -Namespace RooHistoricalRecovery -Name Security -MemberDefinition '[System.Runtime.InteropServices.DllImport("advapi32.dll",EntryPoint="SetFileSecurityW",CharSet=System.Runtime.InteropServices.CharSet.Unicode,SetLastError=true)] public static extern bool Restore(string file,uint info,byte[] descriptor);'}finally{$env:TEMP=$oldTemp;$env:TMP=$oldTmp}
+  try{$env:TEMP=$temp;$env:TMP=$temp;Add-Type -Namespace RooIndustriesHistoricalRecovery -Name Security -MemberDefinition '[System.Runtime.InteropServices.DllImport("advapi32.dll",EntryPoint="SetFileSecurityW",CharSet=System.Runtime.InteropServices.CharSet.Unicode,SetLastError=true)] public static extern bool Restore(string file,uint info,byte[] descriptor);'}finally{$env:TEMP=$oldTemp;$env:TMP=$oldTmp}
  }
  $expected=@(Rows $source);$actual=@(Rows $target);$by=@{};foreach($r in $actual){$by[$r.relative]=$r}
  if($expected.Count -ne $actual.Count){throw 'Staged tree has an unexpected item count'}
@@ -118,7 +118,7 @@ function Restore-OriginalAcl([string]$source,[string]$target){
   foreach($field in 'directory','length','lastWriteUtc','attributes','sha256'){if([string]$a.$field -cne [string]$r.$field){throw ('Staged '+$field+' changed')}}
   if($a.sddl -cne $r.sddl -and $a.sddl -cne $r.sddl.Replace('D:','D:AI')){throw 'Staged permissions changed beyond the known auto-inheritance flag'}
  }
- foreach($r in $expected){$from=Join-Path $source $r.relative.TrimStart('\');$to=Join-Path $target $r.relative.TrimStart('\');$acl=Get-Acl -LiteralPath $from -Audit;if(@($acl.GetAuditRules($true,$true,[Security.Principal.SecurityIdentifier])).Count){throw 'Original has an unexpected audit ACL'};if(-not[RooHistoricalRecovery.Security]::Restore($to,7,$acl.GetSecurityDescriptorBinaryForm())){throw ('Could not restore original descriptor: '+[Runtime.InteropServices.Marshal]::GetLastWin32Error())}}
+ foreach($r in $expected){$from=Join-Path $source $r.relative.TrimStart('\');$to=Join-Path $target $r.relative.TrimStart('\');$acl=Get-Acl -LiteralPath $from -Audit;if(@($acl.GetAuditRules($true,$true,[Security.Principal.SecurityIdentifier])).Count){throw 'Original has an unexpected audit ACL'};if(-not[RooIndustriesHistoricalRecovery.Security]::Restore($to,7,$acl.GetSecurityDescriptorBinaryForm())){throw ('Could not restore original descriptor: '+[Runtime.InteropServices.Marshal]::GetLastWin32Error())}}
 }
 function Read-OriginalState {
  $txt=[IO.File]::ReadAllText((Join-Path $frame 'original-backup\tweak-state.reg'));$m=[regex]::Match($txt,'(?ms)^"State"=hex:(.*?)(?=\r?\n\r?\n|\z)');if(-not$m.Success){throw 'Saved State binary missing'}

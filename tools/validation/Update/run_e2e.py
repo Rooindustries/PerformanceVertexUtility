@@ -19,7 +19,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 
 ROOT = Path(__file__).resolve().parents[3]
-OUT = ROOT / "artifacts/roo-20/ota"
+OUT = ROOT / "artifacts/ota-e2e"
 HOST = None
 MACHINE = None
 FEED = None

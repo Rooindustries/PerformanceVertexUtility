@@ -131,8 +131,8 @@ for name, profile, script, newline in cases:
     wire = base64.b64encode((guard + script).encode()).decode() + ('\n' if newline or line_framing else '')
     controller_script = scope + f". {p(helper)};$frame={p(frame)};$token={p(token)};$evaluated={p(evaluated_path)};" + r'''
 $held=@{};$rows=@();$lower=[DateTime]::UtcNow.ToFileTimeUtc();$deadline=[DateTime]::UtcNow.AddSeconds(14)
-$expected=[RooValidationOwnership.Native]::Canonical((Join-Path ([Environment]::SystemDirectory) 'WindowsPowerShell\v1.0\powershell.exe'))
-$outerImage=[RooValidationOwnership.Native]::Canonical((Join-Path ([Environment]::SystemDirectory) 'cmd.exe'))
+$expected=[RooIndustriesValidationOwnership.Native]::Canonical((Join-Path ([Environment]::SystemDirectory) 'WindowsPowerShell\v1.0\powershell.exe'))
+$outerImage=[RooIndustriesValidationOwnership.Native]::Canonical((Join-Path ([Environment]::SystemDirectory) 'cmd.exe'))
 $childSuffix=' -NoProfile -NonInteractive -OutputFormat Text -ExecutionPolicy Bypass -EncodedCommand '+$token
 [Console]::Out.WriteLine('READY');[Console]::Out.Flush()
 try {

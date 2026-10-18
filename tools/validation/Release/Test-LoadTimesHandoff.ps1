@@ -67,7 +67,7 @@ Copy-Item -LiteralPath $ResourcePath -Destination (Join-Path $OutDir 'persistent
  $reuseContext=New-PrivateProcessLedger $bad 'reused-pid';$reuseLedger=Read-HandoffLedger $reuseContext -Prune
  Check (@($reuseLedger.entries).Count -eq 0 -and @((Read-HandoffJson $reuseContext.ledgerPath).value.entries).Count -eq 0) 'different-creation process row is pruned from the retained ledger'
  Check (-not(Test-HandoffProcess $reuseLedger $p) -and (Get-HandoffResourceState 'process' $owned.Identity) -ceq 'live') 'reused PID is neither adopted nor stopped'
- $imageChanged=$owned.Identity|ConvertTo-Json|ConvertFrom-Json;$imageChanged.imagePath=[RooValidationOwnership.Native]::Canonical((Join-Path $PSHOME 'powershell.exe'))
+ $imageChanged=$owned.Identity|ConvertTo-Json|ConvertFrom-Json;$imageChanged.imagePath=[RooIndustriesValidationOwnership.Native]::Canonical((Join-Path $PSHOME 'powershell.exe'))
  Refuses {Get-HandoffResourceState 'process' $imageChanged} 'same-creation process with different image is refused'
  $imageContext=New-PrivateProcessLedger $imageChanged 'changed-image'
  Refuses {Read-HandoffLedger $imageContext -Prune} 'same-creation different-image ledger row is refused at the boundary'

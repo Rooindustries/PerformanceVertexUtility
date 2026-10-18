@@ -11,7 +11,7 @@ Add-Type -AssemblyName UIAutomationClient,UIAutomationTypes,System.Drawing,Syste
 Add-Type @'
 using System;
 using System.Runtime.InteropServices;
-public static class RooMemoryNative {
+public static class RooIndustriesMemoryNative {
  [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h,int mode);
  [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
@@ -20,10 +20,10 @@ public static class RooMemoryNative {
  [DllImport("ntdll.dll")] public static extern int NtSetInformationProcess(IntPtr h,int kind,ref int value,int size);
 }
 '@
-[RooMemoryNative]::SetProcessDPIAware()|Out-Null
+[RooIndustriesMemoryNative]::SetProcessDPIAware()|Out-Null
 $self=[Diagnostics.Process]::GetCurrentProcess();$self.PriorityClass='Normal';[uint32]$m=5;[int]$io=2
-if(-not[RooMemoryNative]::SetProcessInformation($self.Handle,0,[ref]$m,4)){throw 'Could not normalize evidence process memory priority'}
-if([RooMemoryNative]::NtSetInformationProcess($self.Handle,33,[ref]$io,4) -ne 0){throw 'Could not normalize evidence process I/O priority'}
+if(-not[RooIndustriesMemoryNative]::SetProcessInformation($self.Handle,0,[ref]$m,4)){throw 'Could not normalize evidence process memory priority'}
+if([RooIndustriesMemoryNative]::NtSetInformationProcess($self.Handle,33,[ref]$io,4) -ne 0){throw 'Could not normalize evidence process I/O priority'}
 $install='C:\Program Files\Roo Industries\Optimization Suite'
 $exe=Join-Path $install 'app\RooIndustries.OptimizationSuite.App.exe'
 $A=[Windows.Automation.AutomationElement];$TS=[Windows.Automation.TreeScope];$CT=[Windows.Automation.ControlType]
@@ -140,13 +140,13 @@ try{
   Sample $run 'post-reopen-Home-15s' 15
   for($i=$beforeRows;$i -lt $script:rows.Count;$i++){$script:extraRows.Add($script:rows[$i])}
   $script:extraSamples.Add($script:samples[$beforeSamples]);$script:rows.RemoveRange($beforeRows,$script:rows.Count-$beforeRows);$script:samples.RemoveAt($beforeSamples)
-  [RooMemoryNative]::ShowWindow([IntPtr]::new($script:window.Current.NativeWindowHandle),6)|Out-Null;Log 'MINIMIZE';Start-Sleep 60;Sample $run 'minimized-60s' 60 'minimized'
-  [RooMemoryNative]::ShowWindow([IntPtr]::new($script:window.Current.NativeWindowHandle),9)|Out-Null;Start-Sleep 3
+  [RooIndustriesMemoryNative]::ShowWindow([IntPtr]::new($script:window.Current.NativeWindowHandle),6)|Out-Null;Log 'MINIMIZE';Start-Sleep 60;Sample $run 'minimized-60s' 60 'minimized'
+  [RooIndustriesMemoryNative]::ShowWindow([IntPtr]::new($script:window.Current.NativeWindowHandle),9)|Out-Null;Start-Sleep 3
   $focusWindow=[Windows.Forms.Form]::new();$focusWindow.Text='Roo Industries evidence focus window';$focusWindow.Width=500;$focusWindow.Height=150;$focusWindow.TopMost=$true
   try{
-   Assert-HarnessHostLease;$focusWindow.Show();$focusWindow.Activate();[RooMemoryNative]::SetForegroundWindow($focusWindow.Handle)|Out-Null;[Windows.Forms.Application]::DoEvents()
+   Assert-HarnessHostLease;$focusWindow.Show();$focusWindow.Activate();[RooIndustriesMemoryNative]::SetForegroundWindow($focusWindow.Handle)|Out-Null;[Windows.Forms.Application]::DoEvents()
    Register-HarnessWindow ($A::FromHandle($focusWindow.Handle))|Out-Null
-   if([RooMemoryNative]::GetForegroundWindow() -ne $focusWindow.Handle){throw 'Evidence window did not take focus'};Log 'FOCUS LOST to owned evidence window'
+   if([RooIndustriesMemoryNative]::GetForegroundWindow() -ne $focusWindow.Handle){throw 'Evidence window did not take focus'};Log 'FOCUS LOST to owned evidence window'
    Start-Sleep 10;Sample $run 'unfocused-10s' 10 'unfocused';Start-Sleep 30;Sample $run 'unfocused-40s' 40 'unfocused'
   }finally{$focusWindow.Close();$focusWindow.Dispose()}
   Stop-OwnedValidationApp $script:app $script:receipt;Stop-HarnessProcess $script:receipt;Log ('RUN STOP '+$run)

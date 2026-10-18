@@ -1,4 +1,4 @@
-# Background apps and ROO-20 desktop checks
+# Background apps and desktop checks
 
 The placement calculation can fail by reversing efficiency classes, omitting a
 third efficiency tier, assuming AMD cache indexes are contiguous or limited to
@@ -37,10 +37,10 @@ Run from the repository worktree on Linux. Stage a fresh source frame after
 changing source or a check; its receipt binds the interactive task to that frame.
 
 ```sh
-python3 -I tools/validation/windows_ssh.py --host <test-pc> --expected-machine <COMPUTERNAME> upload --directory roo-industries-roo20-background --parent 'C:\RooBuild' --include-frontend > artifacts/roo-20/background/intel-frame.json
-python3 -I tools/validation/Background/run_e2e.py --machine intel --host <test-pc> --expected-machine <COMPUTERNAME> --receipt artifacts/roo-20/background/intel-frame.json --scenario build --arguments '{"FeedUrl":"https://<feed-host>:8460/ota-e2e/beta.json"}'
-python3 -I tools/validation/Background/run_e2e.py --machine intel --host <test-pc> --expected-machine <COMPUTERNAME> --receipt artifacts/roo-20/background/intel-frame.json --scenario install
-python3 -I tools/validation/Background/run_e2e.py --machine intel --host <test-pc> --expected-machine <COMPUTERNAME> --receipt artifacts/roo-20/background/intel-frame.json --scenario presets
+python3 -I tools/validation/windows_ssh.py --host <test-pc> --expected-machine <COMPUTERNAME> upload --directory roo-industries-background --parent 'C:\RooBuild' --include-frontend > artifacts/background/intel-frame.json
+python3 -I tools/validation/Background/run_e2e.py --machine intel --host <test-pc> --expected-machine <COMPUTERNAME> --receipt artifacts/background/intel-frame.json --scenario build --arguments '{"FeedUrl":"https://<feed-host>:8460/ota-e2e/beta.json"}'
+python3 -I tools/validation/Background/run_e2e.py --machine intel --host <test-pc> --expected-machine <COMPUTERNAME> --receipt artifacts/background/intel-frame.json --scenario install
+python3 -I tools/validation/Background/run_e2e.py --machine intel --host <test-pc> --expected-machine <COMPUTERNAME> --receipt artifacts/background/intel-frame.json --scenario presets
 ```
 
 Build-Merged.ps1 parses the PowerShell scripts, runs the synthetic topology cases,
@@ -64,12 +64,12 @@ After collecting the memory directory, verify its CSV/JSON agreement, waits and
 totals and compare it with the frozen baseline summary:
 
 ```sh
-python3 -I tools/validation/Background/summarize_memory.py artifacts/roo-20/memory-baseline-0.11.0 --baseline-summary artifacts/roo-20/memory-baseline-0.10.0/summary.json
+python3 -I tools/validation/Background/summarize_memory.py artifacts/background/memory-baseline-0.11.0 --baseline-summary artifacts/background/memory-baseline-0.10.0/summary.json
 ```
 
 ```sh
-python3 -I tools/validation/windows_ssh.py --host <test-pc> --expected-machine <COMPUTERNAME> upload --directory roo-industries-roo20-background --parent 'C:\RooBuild' > artifacts/roo-20/background/amd-frame.json
-python3 -I tools/validation/Background/run_e2e.py --machine amd --host <test-pc> --expected-machine <COMPUTERNAME> --receipt artifacts/roo-20/background/amd-frame.json --scenario presets
+python3 -I tools/validation/windows_ssh.py --host <test-pc> --expected-machine <COMPUTERNAME> upload --directory roo-industries-background --parent 'C:\RooBuild' > artifacts/background/amd-frame.json
+python3 -I tools/validation/Background/run_e2e.py --machine amd --host <test-pc> --expected-machine <COMPUTERNAME> --receipt artifacts/background/amd-frame.json --scenario presets
 ```
 
 Each driver writes JSON evidence, records owned PID/start-time identities, restores

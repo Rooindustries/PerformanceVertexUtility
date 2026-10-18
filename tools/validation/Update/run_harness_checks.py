@@ -66,7 +66,7 @@ def load(name, path):
 
 def frozen_inputs(path=None):
     common = Path(subprocess.check_output(['git', 'rev-parse', '--path-format=absolute', '--git-common-dir'], cwd=ROOT, text=True).strip()).parent
-    candidates = [path] if path else [common / 'artifacts/roo-29/p2-real-0.10/p0', common / 'artifacts/roo-29/p0']
+    candidates = [path] if path else [common / 'artifacts/shipped/p2-real-0.10/p0', common / 'artifacts/shipped/p0']
     for candidate in candidates:
         if candidate and all((candidate / name).is_file() for name in ('live-feed.json', 'verified-release.json')):
             return candidate.resolve()
@@ -176,7 +176,7 @@ def main():
         refused('changed local harness rejects frame reuse', lambda: windows.verify_local_source(args.host, args.expected_machine, receipt), 'stage a fresh frame')
     finally:
         path.write_bytes(original)
-    parse = ". " + windows.ps_literal(receipt['stagingPath'] + r'\tools\validation\Update\Harness.Common.ps1') + ";$errors=@();$files=@(Get-HarnessTree " + windows.ps_literal(receipt['stagingPath'] + r'\tools\validation\Update') + " -FilesOnly|Where-Object {[IO.Path]::GetExtension($_.FullName) -ieq '.ps1'});foreach($file in $files){$t=$null;$e=$null;[Management.Automation.Language.Parser]::ParseInput([IO.File]::ReadAllText($file.LongPath),[ref]$t,[ref]$e)|Out-Null;$errors+=@($e)};Add-Type -Path (Get-HarnessToolPath " + windows.ps_literal(receipt['stagingPath'] + r'\tools\validation\Update\HarnessTrace.cs') + ") -ReferencedAssemblies System.dll,System.Management.dll;@{files=$files.Count;errors=$errors.Count;detail=$errors;traceCompiled=[bool]('RooHarnessProcessTrace' -as [type])}|ConvertTo-Json -Depth 10;if($errors.Count){throw 'Parse failed'}"
+    parse = ". " + windows.ps_literal(receipt['stagingPath'] + r'\tools\validation\Update\Harness.Common.ps1') + ";$errors=@();$files=@(Get-HarnessTree " + windows.ps_literal(receipt['stagingPath'] + r'\tools\validation\Update') + " -FilesOnly|Where-Object {[IO.Path]::GetExtension($_.FullName) -ieq '.ps1'});foreach($file in $files){$t=$null;$e=$null;[Management.Automation.Language.Parser]::ParseInput([IO.File]::ReadAllText($file.LongPath),[ref]$t,[ref]$e)|Out-Null;$errors+=@($e)};Add-Type -Path (Get-HarnessToolPath " + windows.ps_literal(receipt['stagingPath'] + r'\tools\validation\Update\HarnessTrace.cs') + ") -ReferencedAssemblies System.dll,System.Management.dll;@{files=$files.Count;errors=$errors.Count;detail=$errors;traceCompiled=[bool]('RooIndustriesHarnessProcessTrace' -as [type])}|ConvertTo-Json -Depth 10;if($errors.Count){throw 'Parse failed'}"
     result = windows.invoke(args.host, args.expected_machine, parse)
     (args.out_dir / 'powershell-parse.json').write_text(result.stdout)
     try:

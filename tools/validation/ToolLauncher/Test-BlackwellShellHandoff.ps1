@@ -26,7 +26,7 @@ function Native-Check([string]$Mode,[string]$Label) {
     $output|Set-Content -LiteralPath (Join-Path $Evidence ($Label+'.log')) -Encoding UTF8
     if(Test-Path -LiteralPath $json){$row=Get-Content -Raw -LiteralPath $json|ConvertFrom-Json;$row|Add-Member -NotePropertyName label -NotePropertyValue $Label;$row|Add-Member -NotePropertyName separateProcess -NotePropertyValue (Get-OwnedRegistryField $key 'SeparateProcess');$rows.Add($row)
         $p=Get-Process -Id $row.probe.pid -ErrorAction SilentlyContinue
-        if($p){$native=New-OwnedProcess $p;if($native -and $native.Identity.creationTimeFileTimeUtc -ceq $row.probe.creationTimeFileTimeUtc -and $native.Identity.imagePath -ieq [RooValidationOwnership.Native]::Canonical($probe)){$owned.Add($native);[void]$p.WaitForExit(5000)}}
+        if($p){$native=New-OwnedProcess $p;if($native -and $native.Identity.creationTimeFileTimeUtc -ceq $row.probe.creationTimeFileTimeUtc -and $native.Identity.imagePath -ieq [RooIndustriesValidationOwnership.Native]::Canonical($probe)){$owned.Add($native);[void]$p.WaitForExit(5000)}}
         if($Mode -ne 'temp' -and $row.probe.integrity -in 'High','System'){throw ('HIGH TOKEN: '+$Label+' '+$row.probe.integrity+'; retained '+$json)}
     }
     if($code -ne 0 -or -not(Test-Path -LiteralPath $json)){throw ('Native '+$Label+' failed with exit '+$code)}

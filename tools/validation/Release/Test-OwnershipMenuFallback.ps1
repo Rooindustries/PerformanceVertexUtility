@@ -25,7 +25,7 @@ $fallback=@($ast.FindAll({param($n)$n -is [Management.Automation.Language.TrySta
 if($fallback.Count -ne 1){throw 'Ownership fallback finally seam changed'}
 $fallbackBlock=[scriptblock]::Create(($fallback[0].Finally.Statements.Extent.Text -join "`n"))
 $privateMapping = @'
-public static class RooPrivateOwnershipMount {
+public static class RooIndustriesPrivateOwnershipMount {
  static Microsoft.Win32.RegistryKey root;
  public static void Mount(string path) {
   if(root!=null||!System.Text.RegularExpressions.Regex.IsMatch(path,@"^Software\\RooIndustriesTweakTests\\[a-f0-9]{32}$"))throw new System.InvalidOperationException("Private hive scope differs.");
@@ -44,18 +44,18 @@ public static class RooPrivateOwnershipMount {
 $openSeam='RegistryKey key=RegistryKey.OpenBaseKey(hive,RegistryView.Registry64);'
 $restoreSeam='new IntPtr(unchecked((int)0x80000002)),path'
 if([regex]::Matches($nativeCode,[regex]::Escape($openSeam)).Count -ne 1 -or [regex]::Matches($nativeCode,[regex]::Escape($restoreSeam)).Count -ne 1){throw 'Ownership native State handle seam changed'}
-$nativeCode=$nativeCode.Replace($openSeam,'RegistryKey key=hive==RegistryHive.LocalMachine ? RooPrivateOwnershipMount.OpenMachine() : RegistryKey.OpenBaseKey(hive,RegistryView.Registry64);').Replace($restoreSeam,'RooPrivateOwnershipMount.MachineHandle,path')
+$nativeCode=$nativeCode.Replace($openSeam,'RegistryKey key=hive==RegistryHive.LocalMachine ? RooIndustriesPrivateOwnershipMount.OpenMachine() : RegistryKey.OpenBaseKey(hive,RegistryView.Registry64);').Replace($restoreSeam,'RooIndustriesPrivateOwnershipMount.MachineHandle,path')
 Add-Type ($nativeCode+"`n"+$privateMapping)
 function Open-ClassesKey([string]$Path){
  $logical='Software\Classes\';$privatePrefix=$fixtureRegistryRoot+'\Menus\'
  if($Path.StartsWith($logical,[StringComparison]::OrdinalIgnoreCase)){$Path=$privatePrefix+$Path}
  if(-not$Path.StartsWith($privatePrefix,[StringComparison]::OrdinalIgnoreCase)){throw 'Private menu seam refused an outside address'}
- [RooInstalledOwnershipProof]::Open([Microsoft.Win32.RegistryHive]::CurrentUser,$Path)
+ [RooIndustriesInstalledOwnershipProof]::Open([Microsoft.Win32.RegistryHive]::CurrentUser,$Path)
 }
 function Own-MenuStamp {
  $key=Open-ClassesKey $commandKey
  if(-not$key){return @{missing=$true}}
- try{[uint32]$type=0;$bytes=[RooInstalledOwnershipProof]::Read($key,'',[ref]$type);@{missing=$false;type=$type;length=$bytes.Length;sha256=[RooInstalledOwnershipProof]::Hash($bytes)}}finally{$key.Dispose()}
+ try{[uint32]$type=0;$bytes=[RooIndustriesInstalledOwnershipProof]::Read($key,'',[ref]$type);@{missing=$false;type=$type;length=$bytes.Length;sha256=[RooIndustriesInstalledOwnershipProof]::Hash($bytes)}}finally{$key.Dispose()}
 }
 function Preview-Apply([string]$Id,[string]$Setting){
  $path=Join-Path $private ([Guid]::NewGuid().ToString('N')+'.json')
@@ -104,13 +104,13 @@ try{
   foreach($setting in $catalog.settings){foreach($option in $setting.options){foreach($change in $option.changes){if($change.address.hive -cne 'CurrentUser' -or -not$change.address.keyPath.StartsWith('Software\Classes\',[StringComparison]::OrdinalIgnoreCase)){throw 'Fixture catalog contains an outside assignment'};$change.address.keyPath=$fixtureRegistryRoot+'\Menus\'+$change.address.keyPath}}}
   [IO.File]::WriteAllText((Join-Path $catalogFolder 'windows-tweaks.json'),($catalog|ConvertTo-Json -Depth 64),[Text.UTF8Encoding]::new($false))
   $baselineProfile='baseline-'+[Guid]::NewGuid().ToString('N');$null=Preview-Apply $baselineProfile $foldersId
-  [RooPrivateOwnershipMount]::Mount($fixtureRegistryRoot)
+  [RooIndustriesPrivateOwnershipMount]::Mount($fixtureRegistryRoot)
   try{
    Proof ((Get-FileHash -LiteralPath $hostExe -Algorithm SHA256).Hash -ceq $hostHash) ($caseName+': State-only private binding keeps the SHA256 provider available')
    $stateKey='Recovery';$profile='rf3-'+[Guid]::NewGuid().ToString('N');$menu='Software\Classes\*\shell\RooIndustries.TakeOwnership';$commandKey=$fixtureRegistryRoot+'\Menus\'+$menu+'\command'
    $beforeBytes=State-Bytes;$before=State-Object $beforeBytes;$menus=Menu-Rows;$ownedBytes=$null;$applyAttempted=$false;$undoCompleted=$false;$stateRestored=$false;$cleanupFailure=$null;$originalFailure='Injected private lost apply response'
-   $k=[RooInstalledOwnershipProof]::Open([Microsoft.Win32.RegistryHive]::LocalMachine,$stateKey)
-   try{$stateDescriptor=$k.GetAccessControl().GetSecurityDescriptorSddlForm([Security.AccessControl.AccessControlSections]'Access, Owner, Group');$stateOther=[RooInstalledOwnershipProof]::OtherValues($k)}finally{$k.Dispose()}
+   $k=[RooIndustriesInstalledOwnershipProof]::Open([Microsoft.Win32.RegistryHive]::LocalMachine,$stateKey)
+   try{$stateDescriptor=$k.GetAccessControl().GetSecurityDescriptorSddlForm([Security.AccessControl.AccessControlSections]'Access, Owner, Group');$stateOther=[RooIndustriesInstalledOwnershipProof]::OtherValues($k)}finally{$k.Dispose()}
    $context=@{storeId=$before.context.storeId};$result=[ordered]@{apply=$null;undo=$null}
    $applyPath=Join-Path $private 'apply.json';$plan=Call-Host 'tweak-preview' @{profileId=$profile;selections=@(@{settingId=$filesId;optionId=$choice});outputPath=$applyPath}
    $applyHash=(Get-FileHash -LiteralPath $applyPath -Algorithm SHA256).Hash;$result.apply=@{operationId=$plan.operationId;reviewHash=$applyHash}
@@ -142,7 +142,7 @@ try{
     Proof ((Stamp $afterBytes).sha256 -ceq $stateAtFallback.sha256 -and $afterBytes.Length -eq $stateAtFallback.length -and (Same-Object (Menu-Rows) $menusAtFallback) -and (Same-Object (Own-MenuStamp) $ownMenuAtFallback)) ($caseName+': foreign State and menu data remain unchanged')
    }
    $cases.Add(@{name=$caseName;privateRegistryRoot=$fixtureRegistryRoot;ownProfile=$profile;foreignProfile=$foreignId;beforeState=(Stamp $beforeBytes);stateAtFallback=$stateAtFallback;afterState=(Stamp $afterBytes);ownMenuAtFallback=$ownMenuAtFallback;ownMenuAfter=(Own-MenuStamp);undoCompleted=$undoCompleted;stateRestored=$stateRestored;cleanupRefusal=$cleanupFailure;receiptSha256=$receiptHash;receiptPath=$receipt;privatePayloadsRetained=$true})
-  }finally{[RooPrivateOwnershipMount]::Unmount()}
+  }finally{[RooIndustriesPrivateOwnershipMount]::Unmount()}
  }
 }catch{$proofChecks.Add(@{passed=$false;check=$_.Exception.Message});'FAIL '+($_.Exception.Message)}
 $summary=@{phase='rf3-ownership-fallback-private';machine=$env:COMPUTERNAME;passed=($cases.Count -eq 4 -and @($proofChecks|Where-Object {-not$_.passed}).Count -eq 0);checks=$proofChecks.ToArray();cases=$cases.ToArray();privateRoot=$privateRoot;realStateAccessed=$false;installedProductUsed=$false;harnessSha256=(Get-FileHash -LiteralPath $harness).Hash;hostProgramSha256=(Get-FileHash -LiteralPath $programSource).Hash;fixtureProgramSha256=(Get-FileHash -LiteralPath $fixtureProgram).Hash;durationSeconds=([DateTime]::UtcNow-$started).TotalSeconds}

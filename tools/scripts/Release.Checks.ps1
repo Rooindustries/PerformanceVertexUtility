@@ -1,9 +1,9 @@
-if (-not ('RooReleasePathNative' -as [type])) {
+if (-not ('RooIndustriesReleasePathNative' -as [type])) {
     Add-Type @'
 using System;
 using System.Text;
 using System.Runtime.InteropServices;
-public static class RooReleasePathNative {
+public static class RooIndustriesReleasePathNative {
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)] static extern uint GetFullPathNameW(string lpFileName, uint nBufferLength, StringBuilder lpBuffer, IntPtr lpFilePart);
     public static string FullPath(string path) {
         var buffer = new StringBuilder(32768);
@@ -18,13 +18,13 @@ public static class RooReleasePathNative {
 function ConvertTo-ReleaseExtendedPath([string]$Path) {
     if ($Path.StartsWith('\\?\', [StringComparison]::Ordinal)) { return $Path }
     $plain = $Path.Replace('/', '\')
-    $stream = ''; $offset = [RooReleasePathNative]::StreamOffset($plain)
+    $stream = ''; $offset = [RooIndustriesReleasePathNative]::StreamOffset($plain)
     if ($offset -ge 0) {
         $stream = $plain.Substring($offset)
         if ($stream.Substring(1) -cnotmatch '^[^\\/:*?"<>|]+(:\$DATA)?$') { throw ('Invalid stream name; refused: ' + $Path) }
         $plain = $plain.Substring(0, $offset)
     }
-    $plain = [RooReleasePathNative]::FullPath($plain)
+    $plain = [RooIndustriesReleasePathNative]::FullPath($plain)
     if ($plain.StartsWith('\\', [StringComparison]::Ordinal)) { return '\\?\UNC\' + $plain.Substring(2) + $stream }
     return '\\?\' + $plain + $stream
 }
@@ -32,7 +32,7 @@ function ConvertTo-ReleaseExtendedPath([string]$Path) {
 function Get-ReleaseToolPath([string]$Path) {
     $long = ConvertTo-ReleaseExtendedPath $Path
     $plain = if ($long.StartsWith('\\?\UNC\', [StringComparison]::OrdinalIgnoreCase)) { '\\' + $long.Substring(8) } else { $long.Substring(4) }
-    if ([RooReleasePathNative]::StreamOffset($plain) -ge 0) { throw 'stream paths are .NET-only; cmdlets take -Stream separately' }
+    if ([RooIndustriesReleasePathNative]::StreamOffset($plain) -ge 0) { throw 'stream paths are .NET-only; cmdlets take -Stream separately' }
     if ($plain.Length -ge 260) { throw ('Path reaches the 260-character tool limit; use a shorter frame: ' + $plain) }
     return $plain
 }

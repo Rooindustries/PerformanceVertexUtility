@@ -62,7 +62,7 @@ function Report-UnownedLoadTimesResources {
     }
     foreach ($process in @(Get-Process RooIndustries.OptimizationSuite.*, Optimizer.Host, DismHost -ErrorAction SilentlyContinue | Where-Object { $_.Path -and $_.Path.StartsWith($appDir + '\', [StringComparison]::OrdinalIgnoreCase) })) {
         $expected = @($persistent.processes | Where-Object { [int]$_.pid -eq $process.Id })
-        if ($expected.Count -eq 1) { try { $handle=$process.Handle; if ([RooValidationOwnership.Native]::Created($handle).ToString() -ceq [string]$expected[0].creationTimeFileTimeUtc -and [RooValidationOwnership.Native]::Image($handle) -ieq $expected[0].imagePath) { continue } } catch {} }
+        if ($expected.Count -eq 1) { try { $handle=$process.Handle; if ([RooIndustriesValidationOwnership.Native]::Created($handle).ToString() -ceq [string]$expected[0].creationTimeFileTimeUtc -and [RooIndustriesValidationOwnership.Native]::Image($handle) -ieq $expected[0].imagePath) { continue } } catch {} }
         if($ledger -and (Test-HandoffProcess $ledger $process)){continue}
         "RESULT CLEANUP NEEDED: retained installed process $($process.Id) without a matching completed-child receipt"
     }

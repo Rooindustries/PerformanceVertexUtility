@@ -235,8 +235,8 @@ public static class SecondAccountNative {
         $receipt = [pscustomobject]@{
             process = $process; handle = $launch.process; native = $launch; name = $Name
             Identity = [pscustomobject]@{
-                pid = $launch.pid; creationTimeFileTimeUtc = [RooValidationOwnership.Native]::Created($launch.process).ToString()
-                imagePath = [RooValidationOwnership.Native]::Image($launch.process)
+                pid = $launch.pid; creationTimeFileTimeUtc = [RooIndustriesValidationOwnership.Native]::Created($launch.process).ToString()
+                imagePath = [RooIndustriesValidationOwnership.Native]::Image($launch.process)
             }
         }
         $script:Processes.Add($receipt)
@@ -375,7 +375,7 @@ public static class SecondAccountNative {
         $owned = New-OwnedProcess $process
         if (-not $owned) { throw 'B timer helper exited before its identity could be retained.' }
         if ($owned.Identity.creationTimeFileTimeUtc -cne [string]$session.creationTime -or
-            $owned.Identity.imagePath -ine [RooValidationOwnership.Native]::Canonical($hostExe) -or
+            $owned.Identity.imagePath -ine [RooIndustriesValidationOwnership.Native]::Canonical($hostExe) -or
             [SecondAccountNative]::ProcessSid($owned.handle) -cne $script:AccountSid -or $process.StartTime.ToUniversalTime() -lt $StartedAfter -or
             $args.Count -ne 3 -or $args[0] -ine $hostExe -or $args[1] -cne ('--timer-' + $LaunchKind) -or $row.ExecutablePath -ine $hostExe -or
             ($LaunchKind -ceq 'worker' -and $args[2] -ine (Join-Path $script:ControlRoot 'launch.json'))) {
@@ -412,7 +412,7 @@ public static class SecondAccountNative {
                 $current = Get-CimInstance Win32_Process -Filter ('ProcessId=' + $row.ProcessId) -ErrorAction Stop
                 if (-not $current -or $current.CreationDate -ne $row.CreationDate -or
                     $current.ExecutablePath -ine $row.ExecutablePath -or $current.ParentProcessId -ne $row.ParentProcessId -or
-                    $current.CommandLine -cne $row.CommandLine -or $owned.Identity.imagePath -ine [RooValidationOwnership.Native]::Canonical($row.ExecutablePath) -or
+                    $current.CommandLine -cne $row.CommandLine -or $owned.Identity.imagePath -ine [RooIndustriesValidationOwnership.Native]::Canonical($row.ExecutablePath) -or
                     [SecondAccountNative]::ProcessSid($owned.handle) -cne $script:AccountSid) {
                     $process.Dispose(); throw 'App child native creation or SID changed; retained.'
                 }

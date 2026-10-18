@@ -56,7 +56,7 @@ if($Mode -eq 'large-worker'){
 }
 [IO.Directory]::CreateDirectory($OutDir)|Out-Null
 if($Mode -eq 'direct'){
-    Assert ($null -eq (Get-Variable RooVerificationInvocationContext -Scope Global -ErrorAction SilentlyContinue)) 'Direct fixture unexpectedly wrapped'
+    Assert ($null -eq (Get-Variable RooIndustriesVerificationInvocationContext -Scope Global -ErrorAction SilentlyContinue)) 'Direct fixture unexpectedly wrapped'
     $foreign=Get-Content -Raw (Join-Path $OutDir 'foreign-task.json')|ConvertFrom-Json
     $state=Get-MachineState
     Assert ($state.tasks -ccontains ($foreign.path+$foreign.name)) 'Direct SSH call hid foreign task'
@@ -67,14 +67,14 @@ if($Mode -eq 'direct'){
 }
 if($Mode -eq 'capture'){
     $state=Get-MachineState
-    $own=if($global:RooVerificationInvocationContext){$global:RooVerificationInvocationContext.task.name}else{Split-Path $OutDir -Leaf}
+    $own=if($global:RooIndustriesVerificationInvocationContext){$global:RooIndustriesVerificationInvocationContext.task.name}else{Split-Path $OutDir -Leaf}
     $state|ConvertTo-Json -Depth 10|Set-Content -LiteralPath (Join-Path $OutDir 'machine-state.json')
     Assert ($state.tasks -cnotcontains ('\'+$own)) 'Current real wrapper was captured in its own baseline'
     'PASS actual-machine-state-capture'
     exit 0
 }
 if($Mode -eq 'contexts'){
-    $saved=Get-Variable RooVerificationInvocationContext -Scope Global -ErrorAction SilentlyContinue
+    $saved=Get-Variable RooIndustriesVerificationInvocationContext -Scope Global -ErrorAction SilentlyContinue
     Assert ($null -ne $saved) 'Missing bootstrap invocation context'
     $original=$saved.Value
     $foreign=Get-Content -Raw (Join-Path $OutDir 'foreign-task.json')|ConvertFrom-Json
@@ -84,48 +84,48 @@ if($Mode -eq 'contexts'){
         Assert ($state.tasks -ccontains ($foreign.path+$foreign.name)) 'Foreign GUID wrapper hidden'
         Assert ($state.tasks -cnotcontains ($original.task.path+$original.task.name)) 'Current wrapper included'
         $results.Add('verified-current-only')
-        $global:RooVerificationInvocationContext=$null
+        $global:RooIndustriesVerificationInvocationContext=$null
         Refuses {Get-MachineState} 'missing explicit context';$results.Add('missing-context-refuses')
         foreach($field in 'task','wrapper'){
             $bad=$original|ConvertTo-Json -Depth 15|ConvertFrom-Json
-            $bad.$field=$null;$global:RooVerificationInvocationContext=$bad
+            $bad.$field=$null;$global:RooIndustriesVerificationInvocationContext=$bad
             Refuses {Get-MachineState} ('missing '+$field);$results.Add('missing-'+$field+'-refuses')
         }
-        $bad=$original|ConvertTo-Json -Depth 15|ConvertFrom-Json;$bad.task=$foreign;$global:RooVerificationInvocationContext=$bad
+        $bad=$original|ConvertTo-Json -Depth 15|ConvertFrom-Json;$bad.task=$foreign;$global:RooIndustriesVerificationInvocationContext=$bad
         Refuses {Get-MachineState} 'foreign task context';$results.Add('foreign-task-refuses')
         foreach($field in 'pid','creationTimeFileTimeUtc','imagePath'){
             $bad=$original|ConvertTo-Json -Depth 15|ConvertFrom-Json
-            switch($field){'pid'{$bad.wrapper.pid=$PID};'creationTimeFileTimeUtc'{$bad.wrapper.creationTimeFileTimeUtc=([long]$bad.wrapper.creationTimeFileTimeUtc+1).ToString()};'imagePath'{$bad.wrapper.imagePath=[RooValidationOwnership.Native]::Canonical((Join-Path ([Environment]::SystemDirectory) 'cmd.exe'))}}
-            $global:RooVerificationInvocationContext=$bad;Refuses {Get-MachineState} ('substituted parent '+$field);$results.Add('parent-'+$field+'-refuses')
+            switch($field){'pid'{$bad.wrapper.pid=$PID};'creationTimeFileTimeUtc'{$bad.wrapper.creationTimeFileTimeUtc=([long]$bad.wrapper.creationTimeFileTimeUtc+1).ToString()};'imagePath'{$bad.wrapper.imagePath=[RooIndustriesValidationOwnership.Native]::Canonical((Join-Path ([Environment]::SystemDirectory) 'cmd.exe'))}}
+            $global:RooIndustriesVerificationInvocationContext=$bad;Refuses {Get-MachineState} ('substituted parent '+$field);$results.Add('parent-'+$field+'-refuses')
             $retained=Join-Path $original.run 'wrapper.json';$text=[IO.File]::ReadAllText($retained)
             try{
                 [IO.File]::WriteAllText($retained,(ConvertTo-Json -InputObject $bad.wrapper -Compress))
                 Refuses {Get-MachineState} ('native substituted parent '+$field);$results.Add('native-parent-'+$field+'-refuses')
             }finally{[IO.File]::WriteAllText($retained,$text)}
         }
-        $bad=$original|ConvertTo-Json -Depth 15|ConvertFrom-Json;$bad.task.xml=$bad.task.xml.Replace('Roo Industries validation ownership','substituted ownership');$global:RooVerificationInvocationContext=$bad
+        $bad=$original|ConvertTo-Json -Depth 15|ConvertFrom-Json;$bad.task.xml=$bad.task.xml.Replace('Roo Industries validation ownership','substituted ownership');$global:RooIndustriesVerificationInvocationContext=$bad
         Refuses {Get-MachineState} 'changed task XML';$results.Add('task-xml-refuses')
-        $bad=$original|ConvertTo-Json -Depth 15|ConvertFrom-Json;$bad.task.sddl='changed';$global:RooVerificationInvocationContext=$bad
+        $bad=$original|ConvertTo-Json -Depth 15|ConvertFrom-Json;$bad.task.sddl='changed';$global:RooIndustriesVerificationInvocationContext=$bad
         Refuses {Get-MachineState} 'changed task SDDL';$results.Add('task-sddl-refuses')
-        $global:RooVerificationInvocationContext=$original
+        $global:RooIndustriesVerificationInvocationContext=$original
         $originalInvoke=(Get-Item Function:Invoke-Native).ScriptBlock
         try{
             function Invoke-Native([string]$File,[string[]]$Arguments,[string[]]$Stdin=@()){
                 $result=& $originalInvoke $File $Arguments $Stdin
-                $global:RooVerificationInvocationContext=$original|ConvertTo-Json -Depth 15|ConvertFrom-Json
-                $global:RooVerificationInvocationContext.task.sddl='changed after initial verification'
+                $global:RooIndustriesVerificationInvocationContext=$original|ConvertTo-Json -Depth 15|ConvertFrom-Json
+                $global:RooIndustriesVerificationInvocationContext.task.sddl='changed after initial verification'
                 return $result
             }
             Refuses {Get-MachineState} 'context changes after initial proof';$results.Add('context-change-during-capture-refuses')
-        }finally{Set-Item Function:Invoke-Native $originalInvoke;$global:RooVerificationInvocationContext=$original}
-        Remove-Variable RooVerificationInvocationContext -Scope Global
+        }finally{Set-Item Function:Invoke-Native $originalInvoke;$global:RooIndustriesVerificationInvocationContext=$original}
+        Remove-Variable RooIndustriesVerificationInvocationContext -Scope Global
         $direct=Get-MachineState
         Assert ($direct.tasks -ccontains ($foreign.path+$foreign.name) -and $direct.tasks -ccontains ($original.task.path+$original.task.name)) 'Direct unwrapped capture excluded a discovered task'
         $results.Add('direct-unwrapped-includes-all')
         Assert-OwnedTaskUnchanged $foreign
         $results|ConvertTo-Json|Set-Content (Join-Path $OutDir 'context-checks.json')
         'PASS exact-context-cases '+$results.Count
-    }finally{$global:RooVerificationInvocationContext=$original}
+    }finally{$global:RooIndustriesVerificationInvocationContext=$original}
     exit 0
 }
 $fixture='SOFTWARE\RooIndustriesPreflightFixture_'+[Guid]::NewGuid().ToString('N')

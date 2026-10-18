@@ -20,7 +20,7 @@ function Run([string[]]$Arguments,[string]$Label){
  foreach($name in @($psi.EnvironmentVariables.Keys)){if($name -match '^(DOTNET_|COMPlus_|CORECLR_|COR_|COREHOST_)'){$psi.EnvironmentVariables.Remove($name)}}
  $p=[Diagnostics.Process]::Start($psi)
  try{
-  $handle=$p.Handle;$id=[ordered]@{pid=$p.Id;creationTimeFileTimeUtc=[RooValidationOwnership.Native]::Created($handle).ToString();image=[RooValidationOwnership.Native]::Image($handle)};$stdout=$p.StandardOutput.ReadToEndAsync();$stderr=$p.StandardError.ReadToEndAsync()
+  $handle=$p.Handle;$id=[ordered]@{pid=$p.Id;creationTimeFileTimeUtc=[RooIndustriesValidationOwnership.Native]::Created($handle).ToString();image=[RooIndustriesValidationOwnership.Native]::Image($handle)};$stdout=$p.StandardOutput.ReadToEndAsync();$stderr=$p.StandardError.ReadToEndAsync()
   if(-not$p.WaitForExit(300000)){$p.Kill();$p.WaitForExit();throw 'Owned native trust proof timed out'}
   [IO.File]::WriteAllText((Join-Path $OutDir ($Label+'.log')),$stdout.Result+"`n"+$stderr.Result,[Text.UTF8Encoding]::new($false));$invocations.Add(@{label=$Label;identity=$id;status='completed';exit=$p.ExitCode})
   if($p.ExitCode -ne 0){throw ('Native trust '+$Label+' failed; see retained log')}
