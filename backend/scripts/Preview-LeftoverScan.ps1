@@ -191,6 +191,7 @@ function Add-TaskCandidates {
 
 try {
     $inventory = Get-RooIndustriesInstalledAppInventory $InventoryPath
+    if ((Get-RooIndustriesUninstallPropertyValue $inventory 'complete' $true) -ne $true) { throw ('The installed app list could not be read completely, so folders shared with other apps cannot be ruled out. Nothing was scanned. ' + (@(Get-RooIndustriesUninstallPropertyArray $inventory 'errors') -join ' ')).Trim() }
     $policy = Read-RooIndustriesUninstallPolicy $PolicyPath
     $protectedCatalog = Read-RooIndustriesProtectedAppsCatalog $ProtectedAppsPath
     $rules = Read-RooIndustriesLeftoverRules $RulesPath

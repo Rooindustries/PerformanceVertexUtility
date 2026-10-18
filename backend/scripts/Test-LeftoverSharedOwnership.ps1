@@ -77,6 +77,24 @@ try {
     $evidence.inventory = $inventory
     $evidence.scriptSha256 = (Get-FileHash -LiteralPath (Join-Path $PSScriptRoot 'Preview-LeftoverScan.ps1') -Algorithm SHA256).Hash
 
+    $incompleteInventoryPath = Join-Path $tempRoot 'incomplete-inventory.json'
+    $incompleteScanPath = Join-Path $tempRoot 'incomplete-scan.json'
+    $incompleteInventory = [pscustomobject]@{ schemaVersion = 1; complete = $false; errors = @('appx failed'); apps = @($apps[0]) }
+    $incompleteInventory | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $incompleteInventoryPath -Encoding UTF8
+    $incompleteScan = ((& (Join-Path $PSScriptRoot 'Preview-LeftoverScan.ps1') -AppId 'fixture:a' -InventoryPath $incompleteInventoryPath -RulesPath $rulesPath -OutputPath $incompleteScanPath) -join [Environment]::NewLine) | ConvertFrom-Json
+    $savedIncompleteScan = Get-Content -LiteralPath $incompleteScanPath -Raw | ConvertFrom-Json
+    $incompleteManifest = ((& (Join-Path $PSScriptRoot 'New-CleanupDeletionManifest.ps1') -AppId 'fixture:a' -InventoryPath $incompleteInventoryPath -PolicyPath $policyPath) -join [Environment]::NewLine) | ConvertFrom-Json
+    $evidence.scans['incomplete-inventory'] = $incompleteScan
+    $evidence.incompleteInventory = $incompleteInventory
+    $evidence.incompleteManifest = $incompleteManifest
+    if (@($incompleteScan.errors).Count -eq 1 -and $incompleteScan.errors[0].code -eq 'LEFTOVER_SCAN_PREVIEW_FAILED' -and
+        $incompleteScan.errors[0].message -eq 'The installed app list could not be read completely, so folders shared with other apps cannot be ruled out. Nothing was scanned. appx failed' -and
+        @($incompleteScan.items).Count -eq 0 -and @($savedIncompleteScan.items).Count -eq 0 -and $savedIncompleteScan.summary.defaultSelectedCount -eq 0 -and
+        @($incompleteManifest.errors).Count -eq 0 -and @($incompleteManifest.items).Count -eq 0 -and @($incompleteManifest.rollback.fileBackupRequirements).Count -eq 0 -and
+        (Get-FileHash -LiteralPath $peerFile -Algorithm SHA256).Hash -eq $peerHash) {
+        Add-Pass 'Incomplete inventory refuses direct scans and manifest rescans without writing a cleanup selection or changing peer bytes'
+    } else { Add-Failure 'Incomplete inventory must refuse direct scans and manifest rescans without writing a cleanup selection or changing peer bytes' }
+
     $scanA = Read-OwnershipScan 'fixture:a' 'a'
     $sharedItem = @($scanA.items | Where-Object { $_.target -eq $shared })
     if ($sharedItem.Count -eq 1 -and $sharedItem[0].protected -and -not $sharedItem[0].defaultSelected -and
