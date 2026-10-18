@@ -99,3 +99,9 @@ Linux is the development host. Windows compilation and runtime checks run from i
 The desktop project is under `docs/internal/frontend/RooIndustries.OptimizationSuite.App`. Build it with `tools/scripts/Build-Frontend.ps1`; the .NET 8 SDK is required. Building does not launch the app. Capture and inspect screenshots whenever the app is launched for a UI check.
 
 See [desktop controls](docs/optimization-controls.md#desktop-workflows) for CPU selection, queued app removal, separate leftover cleanup, and recovery.
+
+## Credits
+
+This app is built on other people's work. [CREDITS.md](CREDITS.md) lists every project, tool, library and font it draws from, with links and licenses.
+
+Made and maintained by Roo Industries.
