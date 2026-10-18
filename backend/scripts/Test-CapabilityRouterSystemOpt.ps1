@@ -487,12 +487,12 @@ try {
             Add-Check (Test-PathUnderRoot ([string](Get-PropertyValue $deleted 'path' '')) $shaderCacheRoot) 'Shader cache deleted item stayed under fixture root' "Shader cache deleted item escaped fixture root: $([string](Get-PropertyValue $deleted 'path' ''))"
         }
         foreach ($backup in @((Get-PathValue $shaderApply.json 'evidence.rollback.backupRecords'))) {
-            Add-Check (Test-PathUnderRoot ([string](Get-PropertyValue $backup 'backupPath' '')) $shaderCacheRoot) 'Shader cache backup stayed under fixture root' "Shader cache backup escaped fixture root: $([string](Get-PropertyValue $backup 'backupPath' ''))"
+            Add-Check ((Test-PathUnderRoot ([string](Get-PropertyValue $backup 'backupPath' '')) $shaderTempRoot) -and -not (Test-PathUnderRoot ([string](Get-PropertyValue $backup 'backupPath' '')) $shaderCacheRoot)) 'Shader cache backup stayed in the temp fixture, outside the cache' "Shader cache backup is outside the temp fixture or inside the cache: $([string](Get-PropertyValue $backup 'backupPath' ''))"
         }
 
         $rollbackManifestPath = [string](Get-PathValue $shaderApply.json 'evidence.rollback.rollbackManifestPath')
         Add-Check (-not [string]::IsNullOrWhiteSpace($rollbackManifestPath)) 'Shader cache fixture apply emitted rollback manifest path' 'Shader cache fixture apply did not emit rollback manifest path'
-        Add-Check (Test-PathUnderRoot $rollbackManifestPath $shaderCacheRoot) 'Shader cache rollback manifest stayed under fixture root' "Shader cache rollback manifest escaped fixture root: $rollbackManifestPath"
+        Add-Check ((Test-PathUnderRoot $rollbackManifestPath $shaderTempRoot) -and -not (Test-PathUnderRoot $rollbackManifestPath $shaderCacheRoot)) 'Shader cache rollback manifest stayed in the temp fixture, outside the cache' "Shader cache rollback manifest is outside the temp fixture or inside the cache: $rollbackManifestPath"
         Add-Check (Test-Path -LiteralPath $rollbackManifestPath -PathType Leaf) 'Shader cache rollback manifest exists' 'Shader cache rollback manifest missing'
 
         if (-not [string]::IsNullOrWhiteSpace($rollbackManifestPath)) {
