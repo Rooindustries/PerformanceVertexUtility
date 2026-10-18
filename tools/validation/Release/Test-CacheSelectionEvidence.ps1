@@ -15,13 +15,13 @@ using System.Windows.Controls;
 using System.Windows.Automation;
 using System.Windows.Interop;
 using System.Windows.Threading;
-public sealed class RooCacheSelectionFixture : IDisposable {
+public sealed class RooIndustriesCacheSelectionFixture : IDisposable {
     readonly ManualResetEvent ready = new ManualResetEvent(false);
     readonly Thread thread;
     Window window;
     Exception error;
     public IntPtr Handle;
-    public RooCacheSelectionFixture() {
+    public RooIndustriesCacheSelectionFixture() {
         thread = new Thread(() => {
             try {
                 window = new Window { Title = "Roo Industries private selection proof", Width = 340, Height = 200, ShowActivated = false };
@@ -70,7 +70,7 @@ try{
  $assignment=$function.Find({param($n)$n -is [Management.Automation.Language.AssignmentStatementAst] -and $n.Left -is [Management.Automation.Language.VariableExpressionAst] -and $n.Left.VariablePath.UserPath -ceq 'selected'},$true)
  if($errors -or -not$assignment){throw 'Actual selection extraction missing or malformed'}
  $script:selectionExpression=$assignment.Right.Extent.Text
- $fixture=[RooCacheSelectionFixture]::new()
+ $fixture=[RooIndustriesCacheSelectionFixture]::new()
  $root=[Windows.Automation.AutomationElement]::FromHandle($fixture.Handle)
  Check ($root.Current.ProcessId -eq $PID) 'live private WPF window belongs to this native proof process'
  $history=$root.FindFirst([Windows.Automation.TreeScope]::Descendants,[Windows.Automation.PropertyCondition]::new([Windows.Automation.AutomationElement]::AutomationIdProperty,'PrivateSelectionList'))

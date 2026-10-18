@@ -7,7 +7,7 @@ $directory=Join-Path $OutRoot 'fix-round';[IO.Directory]::CreateDirectory($direc
 $utf8=[Text.UTF8Encoding]::new($false);$owned=[Collections.Generic.List[object]]::new();$jobs=[Collections.Generic.List[IntPtr]]::new()
 function Save([string]$name,$value){[IO.File]::WriteAllText((Join-Path $directory ($name+'.json')),($value|ConvertTo-Json -Depth 40),$utf8)}
 function Fixture([string]$name){$path=Join-Path $directory ($name+'.exe');Copy-Item "$env:SystemRoot\System32\PING.EXE" $path;$p=Start-Process $path -ArgumentList '-t 127.0.0.1' -WindowStyle Hidden -PassThru;$owned.Add((New-OwnedProcess $p));return $p}
-function Read($p){$p.Refresh();@{pid=$p.Id;name=$p.ProcessName;path=$p.Path;startTimeUtc=$p.StartTime.ToUniversalTime().ToString('o');priorityClass=[string]$p.PriorityClass;affinityMask=$p.ProcessorAffinity.ToInt64();ioPriority=[RooBackgroundOracle]::Io($p);memoryPriority=[RooBackgroundOracle]::Memory($p)}}
+function Read($p){$p.Refresh();@{pid=$p.Id;name=$p.ProcessName;path=$p.Path;startTimeUtc=$p.StartTime.ToUniversalTime().ToString('o');priorityClass=[string]$p.PriorityClass;affinityMask=$p.ProcessorAffinity.ToInt64();ioPriority=[RooIndustriesBackgroundOracle]::Io($p);memoryPriority=[RooIndustriesBackgroundOracle]::Memory($p)}}
 function Equal($a,$b,[string[]]$fields=@('priorityClass','affinityMask','ioPriority','memoryPriority')){foreach($field in $fields){if([string]$a.$field -cne [string]$b.$field){throw ($field+': '+$a.$field+' != '+$b.$field)}}}
 function Backend([string]$name,[hashtable]$params,[string]$evidence){$raw=& (Join-Path $Source ('backend\scripts\'+$name+'.ps1')) @params;$value=$raw|ConvertFrom-Json;Save $evidence $value;if(@($value.errors).Count){throw ($evidence+': '+($value.errors|ConvertTo-Json -Depth 10 -Compress))};return $value}
 function Profile($p,[string]$name){$v=Get-Content -Raw (Join-Path $Source 'backend\profiles\game-session.profile.json')|ConvertFrom-Json;$v.profileId='roo20-fix-'+$name;$v.protectedCatalogPath=Join-Path $Source 'backend\profiles\protected-processes.json';$v.foregroundGame.processNames=@('RooFixtureAbsentGame.exe');$v.targetGames=@();$v.rules=@([pscustomobject]@{ruleId='fixture-background';enabled=$true;match=@{processNames=@($p.ProcessName+'.exe')};action=@{actionType='setPriority';priorityClass='BelowNormal'};risk='low'});return $v}
@@ -15,9 +15,9 @@ function Governor($p,[string]$name){$v=Get-Content -Raw (Join-Path $Source 'back
 function StartGovernor($p,$profile,[string]$name){Save ($name+'-profile') $profile;return (Backend 'Start-ProcessGovernorSession' @{ProfilePath=(Join-Path $directory ($name+'-profile.json'));StateRoot=(Join-Path $directory ($name+'-state'));ConfirmApply=$true;MaxDurationSeconds=3;PollIntervalSeconds=1;SampleIntervalMilliseconds=250} ($name+'-start'))}
 try {
  foreach($flow in 'placement','game','governor'){
-  $p=Fixture ('RooFixtureUpdater'+$flow);$pinned=if($flow -eq 'governor'){0x20}else{0x4000};$job=[RooBackgroundOracle]::PinPriority($p,$pinned);$jobs.Add($job)
-  [RooBackgroundOracle]::SetIo($p,2);[RooBackgroundOracle]::SetMemory($p,3)
-  if($flow -eq 'placement'){[RooBackgroundOracle]::SetIo($p,1)}
+  $p=Fixture ('RooFixtureUpdater'+$flow);$pinned=if($flow -eq 'governor'){0x20}else{0x4000};$job=[RooIndustriesBackgroundOracle]::PinPriority($p,$pinned);$jobs.Add($job)
+  [RooIndustriesBackgroundOracle]::SetIo($p,2);[RooIndustriesBackgroundOracle]::SetMemory($p,3)
+  if($flow -eq 'placement'){[RooIndustriesBackgroundOracle]::SetIo($p,1)}
   $before=Read $p;Save ($flow+'-before') $before;if($before.priorityClass -ne $(if($flow -eq 'governor'){'Normal'}else{'BelowNormal'})){throw 'The job did not pin the decisive input'}
   $profile=Profile $p $flow
   switch($flow){
@@ -31,7 +31,7 @@ try {
   $snapshot=@($manifest.snapshots|Where-Object processId -eq $p.Id)|Select-Object -Last 1
   $cpu=@($snapshot.controlChanges|Where-Object control -eq 'priorityClass')|Select-Object -Last 1
   if($cpu.outcome -ne 'failed'){throw ($flow+' still owns the failed CPU control')}
-  [RooBackgroundOracle]::ChangeJobPriority($job,0);$p.PriorityClass='AboveNormal';$external=Read $p;Save ($flow+'-external') $external
+  [RooIndustriesBackgroundOracle]::ChangeJobPriority($job,0);$p.PriorityClass='AboveNormal';$external=Read $p;Save ($flow+'-external') $external
   switch($flow){
    'placement' {$restore=Backend 'Restore-ProcessProfileBackup' @{BackupPath=$backup;ConfirmApply=$true} 'placement-restore'}
    'game' {$restore=Backend 'Stop-GameTuneSession' @{BackupPath=$backup;ConfirmApply=$true} 'game-restore'}
@@ -39,7 +39,7 @@ try {
   }
   $restored=Read $p;Save ($flow+'-restored') $restored;Equal $restored $before @('affinityMask','ioPriority','memoryPriority');if($restored.priorityClass -ne 'AboveNormal'){throw ($flow+' overwrote a CPU priority it did not apply')}
  }
- $p=Fixture 'RooFixtureWebHelperConflict';$p.PriorityClass='Normal';[RooBackgroundOracle]::SetIo($p,2);[RooBackgroundOracle]::SetMemory($p,5)
+ $p=Fixture 'RooFixtureWebHelperConflict';$p.PriorityClass='Normal';[RooIndustriesBackgroundOracle]::SetIo($p,2);[RooIndustriesBackgroundOracle]::SetMemory($p,5)
  $before=Read $p;Save 'conflict-before' $before;$start=StartGovernor $p (Governor $p 'conflict') 'conflict';Save 'conflict-applied' (Read $p)
  $p.PriorityClass='AboveNormal';Save 'conflict-external' (Read $p)
  $stop=Backend 'Stop-ProcessGovernorSession' @{BackupPath=$start.backup.location;ConfirmApply=$true} 'conflict-stop'
@@ -52,4 +52,4 @@ try {
  $stop=Backend 'Stop-ProcessGovernorSession' @{BackupPath=$start.backup.location;ConfirmApply=$true} 'identity-correct-stop';Save 'identity-restored' (Read $p)
  Save 'done' @{status='passed';flows=@('placement','game','governor');externalConflict=$true;startTimeMismatch=$true;savedStartTime=$savedStart;machine=$env:COMPUTERNAME}
 } catch {Save 'failure' @{error=$_.Exception.ToString();stack=$_.ScriptStackTrace};throw}
-finally {foreach($receipt in $owned){Stop-OwnedProcess $receipt};foreach($job in $jobs){[RooBackgroundOracle]::CloseHandle($job)|Out-Null};Save 'cleanup' @($owned|ForEach-Object {@{pid=$_.Identity.pid;exited=$_.Process.HasExited}})}
+finally {foreach($receipt in $owned){Stop-OwnedProcess $receipt};foreach($job in $jobs){[RooIndustriesBackgroundOracle]::CloseHandle($job)|Out-Null};Save 'cleanup' @($owned|ForEach-Object {@{pid=$_.Identity.pid;exited=$_.Process.HasExited}})}

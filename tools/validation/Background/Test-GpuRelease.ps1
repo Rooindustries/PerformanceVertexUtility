@@ -13,8 +13,8 @@ try {
  $signal=Join-Path $directory 'gpu.signal';$child=Join-Path $directory 'RooFixtureChild.exe';Copy-Item "$env:SystemRoot\System32\PING.EXE" $child
  $process=Start-Process $exe -ArgumentList ('"'+$signal+'" "'+$child+'" --gpu') -WindowStyle Hidden -PassThru;$owned.Add((New-OwnedProcess $process))
  $until=[DateTime]::UtcNow.AddSeconds(20);while(-not(Test-Path ($signal+'.gpu-ready')) -and [DateTime]::UtcNow -lt $until){Start-Sleep -Milliseconds 100};if(-not(Test-Path ($signal+'.gpu-ready'))){throw 'GPU device not ready'}
- $process.PriorityClass='Normal';[RooBackgroundOracle]::SetIo($process,2);[RooBackgroundOracle]::SetMemory($process,5)
- $original=[RooBackgroundOracle]::Gpu($process);Save 'before' @{pid=$process.Id;gpu=$original}
+ $process.PriorityClass='Normal';[RooIndustriesBackgroundOracle]::SetIo($process,2);[RooIndustriesBackgroundOracle]::SetMemory($process,5)
+ $original=[RooIndustriesBackgroundOracle]::Gpu($process);Save 'before' @{pid=$process.Id;gpu=$original}
  if($original -ne 2){throw 'Expected Normal GPU original'}
  $profile=Get-Content -Raw (Join-Path $Source 'backend\profiles\probalance-governor.profile.json')|ConvertFrom-Json
  $profile.profileId='roo20-gpu-release';$profile.protectedCatalogPath=Join-Path $Source 'backend\profiles\protected-processes.json'
@@ -28,7 +28,7 @@ try {
  $backup=Get-Content -Raw $apply.backup.location|ConvertFrom-Json;Save 'backup' $backup
  foreach($snapshot in $backup.snapshots){if($snapshot.originalGpuPriority -ne 'Normal'){throw 'Re-restraint captured a lowered GPU original'}}
  $stop=Backend 'Stop-ProcessGovernorSession' @{BackupPath=$apply.backup.location;ConfirmApply=$true} 'stop'
- $actual=[RooBackgroundOracle]::Gpu($process);if($actual -ne $original){throw 'Final GPU restore differs from independent original'}
+ $actual=[RooIndustriesBackgroundOracle]::Gpu($process);if($actual -ne $original){throw 'Final GPU restore differs from independent original'}
  . (Join-Path $Source 'backend\scripts\ProcessPolicy.Common.ps1')
  $policy=Get-Content -Raw (Join-Path $Source 'backend\profiles\persistent-policy.profile.json')|ConvertFrom-Json
  $policy.policy.rules=@([pscustomobject]@{ruleId='gpu-only';enabled=$true;match=@{processNames=@('RooFixtureUpdaterGpu.exe')};controls=@{gpuPriority='BelowNormal'}})

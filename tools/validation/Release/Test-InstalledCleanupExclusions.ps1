@@ -148,9 +148,9 @@ try{
             $restoredDocument=Read-RooIndustriesOperationJson $policy -ExpectedSha256 $ownedRevision
             Assert-Lists $restoredDocument.data.exclusions $original.exclusions
             if(@($original.exclusions.paths).Count -or @($original.exclusions.registry).Count){throw 'Absent original policy had nonempty exclusions'}
-            $handle=[RooValidationOwnership.Native]::CreateFile($policy,0,7,[IntPtr]::Zero,3,0x00200000,[IntPtr]::Zero)
-            try{if($handle.IsInvalid){throw 'Restored policy identity unavailable'};$fileId=[RooValidationOwnership.Native]::FileId($handle)}finally{$handle.Dispose()}
-            $ownedFile=[RooValidationOwnership.ProbeFile]::Open($policy,$fileId,$ownedRevision.ToUpperInvariant())
+            $handle=[RooIndustriesValidationOwnership.Native]::CreateFile($policy,0,7,[IntPtr]::Zero,3,0x00200000,[IntPtr]::Zero)
+            try{if($handle.IsInvalid){throw 'Restored policy identity unavailable'};$fileId=[RooIndustriesValidationOwnership.Native]::FileId($handle)}finally{$handle.Dispose()}
+            $ownedFile=[RooIndustriesValidationOwnership.ProbeFile]::Open($policy,$fileId,$ownedRevision.ToUpperInvariant())
             try{$ownedFile.Remove()}finally{$ownedFile.Dispose()}
         }finally{$lock.Dispose()}
     }

@@ -20,7 +20,7 @@ try {
     $setup=Start-Process -FilePath $Installer -ArgumentList ('/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /LOG="'+$log+'"') -PassThru
     $handle=$setup.Handle
     $owned=New-OwnedProcess $setup
-    $result.process=if($owned){$owned.Identity}else{[pscustomobject]@{pid=$setup.Id;creationTimeFileTimeUtc=[RooValidationOwnership.Native]::Created($handle).ToString();imagePath=[RooValidationOwnership.Native]::Image($handle)}}
+    $result.process=if($owned){$owned.Identity}else{[pscustomobject]@{pid=$setup.Id;creationTimeFileTimeUtc=[RooIndustriesValidationOwnership.Native]::Created($handle).ToString();imagePath=[RooIndustriesValidationOwnership.Native]::Image($handle)}}
     while(-not $setup.WaitForExit(0)){
         if($clock.Elapsed.TotalSeconds -ge $TimeoutSeconds){$result.status='timeout';throw ('Installer exceeded '+$TimeoutSeconds+' seconds')}
         foreach($root in $roots){foreach($dir in @(Get-ChildItem -LiteralPath $root -Directory -Filter 'is-*.tmp' -Force -ErrorAction SilentlyContinue)){if(-not $before.ContainsKey($dir.FullName) -and -not $seen.Contains($dir.FullName)){try {$seen[$dir.FullName]=Describe $dir.FullName} catch {}}}}

@@ -20,9 +20,9 @@ function Fixture([string]$Name,[string]$Text='untouched'){
 }
 function CacheLifecycle([string]$Clean,[string]$Version){
  $path=Join-Path $Clean $Version
- [RooHarnessWindow]::CreateDirectory((Get-HarnessLongPath $path));$before=Register-HarnessCache $Version;Remove-HarnessDirectory $path
+ [RooIndustriesHarnessWindow]::CreateDirectory((Get-HarnessLongPath $path));$before=Register-HarnessCache $Version;Remove-HarnessDirectory $path
  if((Register-HarnessCache $Version) -or (Get-HarnessEntryById $before.id).state -cne 'removed'){throw 'App-deleted cache identity was not retired.'}
- [RooHarnessWindow]::CreateDirectory((Get-HarnessLongPath $path));$after=Register-HarnessCache $Version
+ [RooIndustriesHarnessWindow]::CreateDirectory((Get-HarnessLongPath $path));$after=Register-HarnessCache $Version
  if($after.id -ceq $before.id -or $after.identity.creationTimeFileTimeUtc -ceq $before.identity.creationTimeFileTimeUtc){throw 'Recreated cache reused the earlier identity.'}
  Remove-HarnessEntry $after;Passed 'app-deleted cache retires before a later download creates it' @{before=$before.id;after=$after.id;version=$Version}
 }
@@ -78,12 +78,12 @@ function CloseLongFrame($Fixture){
  return $closed
 }
 function PathNormalizationChecks{
- if(-not('RooPathOracle' -as [type])){
+ if(-not('RooIndustriesPathOracle' -as [type])){
   Add-Type @'
 using System;
 using System.Runtime.InteropServices;
 using Microsoft.Win32.SafeHandles;
-public static class RooPathOracle {
+public static class RooIndustriesPathOracle {
  [DllImport("kernel32.dll",CharSet=CharSet.Unicode,SetLastError=true)] static extern SafeFileHandle CreateFileW(string path,uint access,uint share,IntPtr security,uint creation,uint flags,IntPtr template);
  [DllImport("kernel32.dll",CharSet=CharSet.Unicode,SetLastError=true)] static extern bool CreateDirectoryW(string path,IntPtr security);
  public static void Directory(string path){if(!CreateDirectoryW(path,IntPtr.Zero))throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());}
@@ -103,7 +103,7 @@ public static class RooPathOracle {
    if($size -eq 'long'){
     foreach($segment in @(('p'*80),('q'*80),('r'*80))){
      $parent=$parent+'\'+$segment;$literal='\\?\'+$parent
-     [RooPathOracle]::Directory($literal)
+     [RooIndustriesPathOracle]::Directory($literal)
      Add-HarnessEntry 'folder' (Get-HarnessFolderIdentity $literal) 'normalization-fixture' 'invocation'|Out-Null
     }
    }
@@ -111,12 +111,12 @@ public static class RooPathOracle {
    $leaf=if($size -eq 'long'){'target.txt'}else{'identity.txt'}
    $file=Join-Path $parent $leaf;$canonical='\\?\'+$file
    if($size -eq 'long'){
-    $handle=[RooPathOracle]::Create($canonical);$streamWriter=[IO.FileStream]::new($handle,[IO.FileAccess]::ReadWrite)
+    $handle=[RooIndustriesPathOracle]::Create($canonical);$streamWriter=[IO.FileStream]::new($handle,[IO.FileAccess]::ReadWrite)
     try{$bytes=[Text.Encoding]::UTF8.GetBytes($nonce+' '+$size);$streamWriter.Write($bytes,0,$bytes.Length);$streamWriter.Flush($true)}finally{$streamWriter.Dispose()}
     Register-HarnessFile $canonical 'normalization-file' 'invocation'|Out-Null
    }else{New-HarnessText $file ($nonce+' '+$size) 'normalization-file'|Out-Null}
-   $canonicalHandle=[RooPathOracle]::Open($canonical)
-   try{$canonicalId=[RooValidationOwnership.Native]::FileId($canonicalHandle)}finally{$canonicalHandle.Dispose()}
+   $canonicalHandle=[RooIndustriesPathOracle]::Open($canonical)
+   try{$canonicalId=[RooIndustriesValidationOwnership.Native]::FileId($canonicalHandle)}finally{$canonicalHandle.Dispose()}
    if($size -eq 'long' -and $file.Length -lt 300){throw 'The native normalization fixture did not reach 300 characters.'}
    $relative=$file.Substring($base.Length+1)
    $forms=@(
@@ -134,15 +134,15 @@ public static class RooPathOracle {
     $value=@{size=$size;form=$form.name;input=$form.path;length=$form.path.Length;expected=$file;normalized=$null;plainFileId=$null;extendedFileId=$null;error=$null}
     try{
      $value.normalized=Get-HarnessLongPath $form.path
-     if($size -eq 'short'){$plain=[RooPathOracle]::Open($form.path);try{$value.plainFileId=[RooValidationOwnership.Native]::FileId($plain)}finally{$plain.Dispose()}}
-     $extended=[RooPathOracle]::Open($value.normalized)
-     try{$value.extendedFileId=[RooValidationOwnership.Native]::FileId($extended)}finally{$extended.Dispose()}
+     if($size -eq 'short'){$plain=[RooIndustriesPathOracle]::Open($form.path);try{$value.plainFileId=[RooIndustriesValidationOwnership.Native]::FileId($plain)}finally{$plain.Dispose()}}
+     $extended=[RooIndustriesPathOracle]::Open($value.normalized)
+     try{$value.extendedFileId=[RooIndustriesValidationOwnership.Native]::FileId($extended)}finally{$extended.Dispose()}
      $value.expectedFileId=$canonicalId;$value.canonicalLiteral=$canonical
      if(($size -eq 'short' -and $value.plainFileId -cne $value.extendedFileId) -or $value.expectedFileId -cne $value.extendedFileId){throw 'Windows plain and normalized extended paths opened different file IDs.'}
      Passed ('Windows normalization '+$size+' '+$form.name) $value
      if($size -eq 'long' -and $normalizers.Contains('release')){
-      $releasePath=& $normalizers.release $form.path;$value.releaseNormalized=$releasePath;$releaseHandle=[RooPathOracle]::Open($releasePath)
-      try{$releaseId=[RooValidationOwnership.Native]::FileId($releaseHandle)}finally{$releaseHandle.Dispose()}
+      $releasePath=& $normalizers.release $form.path;$value.releaseNormalized=$releasePath;$releaseHandle=[RooIndustriesPathOracle]::Open($releasePath)
+      try{$releaseId=[RooIndustriesValidationOwnership.Native]::FileId($releaseHandle)}finally{$releaseHandle.Dispose()}
       if($releaseId -cne $canonicalId){throw 'Release normalization opened a different file ID.'}
       Passed ('Release normalization long '+$form.name) @{input=$form.path;normalized=$releasePath;canonicalLiteral=$canonical;expectedFileId=$canonicalId;actualFileId=$releaseId}
      }
@@ -154,13 +154,13 @@ public static class RooPathOracle {
    }
    $stream=$file+':Zone.Identifier';$text="[ZoneTransfer]`r`nZoneId=3`r`n"
    if($size -eq 'long'){
-    $literalStream=$canonical+':Zone.Identifier';$handle=[RooPathOracle]::Create($literalStream);$streamWriter=[IO.FileStream]::new($handle,[IO.FileAccess]::ReadWrite)
+    $literalStream=$canonical+':Zone.Identifier';$handle=[RooIndustriesPathOracle]::Create($literalStream);$streamWriter=[IO.FileStream]::new($handle,[IO.FileAccess]::ReadWrite)
     try{$bytes=[Text.Encoding]::UTF8.GetBytes($text);$streamWriter.Write($bytes,0,$bytes.Length);$streamWriter.Flush($true)}finally{$streamWriter.Dispose()}
     Register-HarnessFile $literalStream 'normalization-stream' 'invocation'|Out-Null
    }else{New-HarnessText $stream $text 'normalization-stream'|Out-Null}
    if([IO.File]::ReadAllText((Get-HarnessLongPath $stream)) -cne $text -or [IO.File]::ReadAllText((Get-HarnessLongPath ($stream+':$DATA'))) -cne $text){throw 'The ADS contents were not preserved.'}
-   $plain=[RooPathOracle]::Open($(if($size -eq 'long'){$canonical+':Zone.Identifier'}else{$stream}));$extended=[RooPathOracle]::Open((Get-HarnessLongPath $stream))
-   try{if([RooValidationOwnership.Native]::FileId($plain) -cne [RooValidationOwnership.Native]::FileId($extended)){throw 'ADS file IDs differ'}}finally{$plain.Dispose();$extended.Dispose()}
+   $plain=[RooIndustriesPathOracle]::Open($(if($size -eq 'long'){$canonical+':Zone.Identifier'}else{$stream}));$extended=[RooIndustriesPathOracle]::Open((Get-HarnessLongPath $stream))
+   try{if([RooIndustriesValidationOwnership.Native]::FileId($plain) -cne [RooIndustriesValidationOwnership.Native]::FileId($extended)){throw 'ADS file IDs differ'}}finally{$plain.Dispose();$extended.Dispose()}
    $streamInfo=$null
    if($size -eq 'short'){$streamInfo=Get-Item -LiteralPath (Get-HarnessToolPath $file) -Stream Zone.Identifier;if($streamInfo.Stream -cne 'Zone.Identifier' -or $streamInfo.Length -ne [Text.Encoding]::UTF8.GetByteCount($text)){throw 'The independent PowerShell ADS readback differs.'}}
    Passed ('Windows normalization '+$size+' Zone.Identifier ADS and explicit DATA') @{path=$stream;length=$stream.Length;bytes=[Text.Encoding]::UTF8.GetByteCount($text);providerStream=$(if($streamInfo){$streamInfo.Stream}else{$null});fileIdsMatch=$true}
@@ -169,13 +169,13 @@ public static class RooPathOracle {
    if($size -eq 'long'){
     Rejected 'tool boundary long canonical path refused' {Get-HarnessToolPath $canonical} {Test-HarnessPath $canonical}
     if($rows[$rows.Count-1].observed -notlike 'Path reaches the 260-character tool limit;*'){throw 'Long canonical path was refused for the wrong reason.'}
-    $baseHandle=[RooPathOracle]::Open($canonical)
-    try{if([RooValidationOwnership.Native]::FileId($baseHandle) -cne $canonicalId){throw 'ADS write changed the base file identity.'}}finally{$baseHandle.Dispose()}
+    $baseHandle=[RooIndustriesPathOracle]::Open($canonical)
+    try{if([RooIndustriesValidationOwnership.Native]::FileId($baseHandle) -cne $canonicalId){throw 'ADS write changed the base file identity.'}}finally{$baseHandle.Dispose()}
     if($normalizers.Contains('release')){
      $releaseStream=& $normalizers.release $stream
      if([IO.File]::ReadAllText($releaseStream) -cne $text){throw 'Release ADS round-trip differs.'}
-     $releaseHandle=[RooPathOracle]::Open($releaseStream)
-     try{if([RooValidationOwnership.Native]::FileId($releaseHandle) -cne $canonicalId){throw 'Release ADS file ID differs.'}}finally{$releaseHandle.Dispose()}
+     $releaseHandle=[RooIndustriesPathOracle]::Open($releaseStream)
+     try{if([RooIndustriesValidationOwnership.Native]::FileId($releaseHandle) -cne $canonicalId){throw 'Release ADS file ID differs.'}}finally{$releaseHandle.Dispose()}
      Passed 'Release normalization long Zone.Identifier ADS' @{path=$stream;canonicalLiteral=$canonical;bytes=[Text.Encoding]::UTF8.GetByteCount($text);baseFileId=$canonicalId}
      Rejected 'release tool boundary long canonical path refused' {Get-ReleaseToolPath $canonical} {Test-HarnessPath $canonical}
      if($rows[$rows.Count-1].observed -notlike 'Path reaches the 260-character tool limit;*'){throw 'Release canonical path was refused for the wrong reason.'}
@@ -236,7 +236,7 @@ public static class ToolFixture {
  $owned=Start-OwnedProcess -FilePath $assembly -WorkingDirectory (Get-HarnessLongPath $tools) -ArgumentList ('record "'+(Get-HarnessLongPath $output)+'"') -Purpose tool-fixture
  try{if(-not$owned.process.WaitForExit(10000) -or $owned.process.ExitCode -ne 0){throw 'Tool fixture process failed'};Register-HarnessFile $output 'tool-result'|Out-Null;if([IO.File]::ReadAllText((Get-HarnessLongPath $output)) -ine $tools){throw 'Child working directory or argument path differs'};Passed 'tool boundary Start-Process normal working directory and argument' $tools}finally{Stop-HarnessProcess $owned}
  $command=Start-OwnedProcess -FilePath powershell.exe -ArgumentList '-NoProfile -NonInteractive -Command "exit 0"' -Purpose named-tool
- try{if(-not$command.process.WaitForExit(10000) -or $command.process.ExitCode -ne 0 -or $command.Identity.imagePath -ine [RooValidationOwnership.Native]::Canonical((Get-Command powershell.exe -CommandType Application).Source)){throw 'Named tool resolution differs'};Passed 'tool boundary resolves a command name before its path guard' $command.Identity.imagePath}finally{Stop-HarnessProcess $command}
+ try{if(-not$command.process.WaitForExit(10000) -or $command.process.ExitCode -ne 0 -or $command.Identity.imagePath -ine [RooIndustriesValidationOwnership.Native]::Canonical((Get-Command powershell.exe -CommandType Application).Source)){throw 'Named tool resolution differs'};Passed 'tool boundary resolves a command name before its path guard' $command.Identity.imagePath}finally{Stop-HarnessProcess $command}
  $signature=Get-AuthenticodeSignature -LiteralPath (Get-HarnessToolPath $assembly)
  Passed 'tool boundary Get-AuthenticodeSignature normal path' ([string]$signature.Status)
  $beforeLocation=Get-Location
@@ -431,7 +431,7 @@ end;
  $parent=Split-Path $nested -Parent;Ensure-HarnessOutputDirectory $parent
  $entries=@(Get-HarnessEntries|Where-Object {$_.kind -eq 'folder' -and $_.identity.path -in @($nested,$parent) -and $_.state -eq 'active'})
  if($entries.Count -ne 2 -or -not($entries|Where-Object {$_.identity.path -ieq $parent}).metadata.emptyOnly){throw 'Recursive output creation left an unrecorded ancestor or broad parent cleanup.'}
- try{[RooHarnessWindow]::CreateDirectory((Get-HarnessLongPath $parent));throw 'Atomic directory creation adopted an existing path.'}catch{if($_.Exception.Message -like '*adopted an existing*'){throw}}
+ try{[RooIndustriesHarnessWindow]::CreateDirectory((Get-HarnessLongPath $parent));throw 'Atomic directory creation adopted an existing path.'}catch{if($_.Exception.Message -like '*adopted an existing*'){throw}}
  Passed 'nested output records every created ancestor' @{folders=$entries.identity.path;parentCleanup='empty-only';existingNativeCreate='refused'}
  $projectRoot=Fixture 'foreign-build-folder';New-HarnessText (Join-Path $projectRoot 'Example.csproj') '<Project/>' 'project-fixture'|Out-Null
  $script:Harness=$foreign.scope;$foreignBin=Join-Path $projectRoot 'bin';New-HarnessDirectory $foreignBin 'foreign-build'|Out-Null;New-HarnessText (Join-Path $foreignBin 'keep.txt') 'foreign build output'|Out-Null;$script:Harness=$main
@@ -494,7 +494,7 @@ end;
  Add-Type @'
 using System;
 using System.Runtime.InteropServices;
-public static class RooSuspendedShell {
+public static class RooIndustriesSuspendedShell {
  [StructLayout(LayoutKind.Sequential,CharSet=CharSet.Unicode)] struct StartInfo {public int cb; public string reserved,desktop,title; public int x,y,cx,cy,charsX,charsY,fill,flags; public short show,reserved2;public IntPtr data,input,output,error;}
  [StructLayout(LayoutKind.Sequential)] struct Info {public IntPtr process,thread;public int pid,tid;}
  [DllImport("kernel32.dll",CharSet=CharSet.Unicode,SetLastError=true)] static extern bool CreateProcess(string image,string command,IntPtr a,IntPtr b,bool inherit,int flags,IntPtr env,string directory,ref StartInfo start,out Info info);
@@ -505,12 +505,12 @@ public static class RooSuspendedShell {
  foreach($switch in '-ec','/enc','-e'){
   $value=if($switch -eq '-e'){'%%%invalid%%%'}else{[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes('Start-Sleep 60 # '+$root))}
   $shell=Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
-  $id=[RooSuspendedShell]::Start($shell,($switch+' '+$value));$ownedShell=Register-HarnessStartedProcess (Get-Process -Id $id) 'encoded-shell-fixture'
+  $id=[RooIndustriesSuspendedShell]::Start($shell,($switch+' '+$value));$ownedShell=Register-HarnessStartedProcess (Get-Process -Id $id) 'encoded-shell-fixture'
   try{Rejected ('R5 live suspended powershell '+$switch+' refuses frame clear') {Assert-HarnessFrameIdle $root} {Test-HarnessPath (Join-Path $root 'keep.txt')};if($rows[$rows.Count-1].observed -notlike 'Encoded PowerShell runner*'){throw 'The encoded fixture was refused by a different guard.'}}finally{Stop-HarnessProcess $ownedShell}
  }
  $payload=[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($root))
  $pwsh=Get-Command pwsh.exe -ErrorAction SilentlyContinue
- if($pwsh){$id=[RooSuspendedShell]::Start($pwsh.Source,('--encodedcommand '+$payload));$ownedShell=Register-HarnessStartedProcess (Get-Process -Id $id) 'encoded-pwsh-fixture';try{Rejected 'R5 live suspended pwsh encoded command refuses frame clear' {Assert-HarnessFrameIdle $root} {Test-HarnessPath (Join-Path $root 'keep.txt')}}finally{Stop-HarnessProcess $ownedShell}}
+ if($pwsh){$id=[RooIndustriesSuspendedShell]::Start($pwsh.Source,('--encodedcommand '+$payload));$ownedShell=Register-HarnessStartedProcess (Get-Process -Id $id) 'encoded-pwsh-fixture';try{Rejected 'R5 live suspended pwsh encoded command refuses frame clear' {Assert-HarnessFrameIdle $root} {Test-HarnessPath (Join-Path $root 'keep.txt')}}finally{Stop-HarnessProcess $ownedShell}}
  if(-not(Test-HarnessEncodedReference 'pwsh.exe' ('pwsh.exe --encodedcommand '+$payload) $root) -or -not(Test-HarnessEncodedReference 'PWSH.EXE' 'pwsh.exe /encodedarguments %%%' $root) -or -not(Test-HarnessEncodedReference 'pwsh.exe' 'pwsh.exe -e' $root)){throw 'pwsh or malformed encoded argument was missed'}
  Passed 'R5 pwsh decoder and malformed/missing values refuse' @{standIn=(-not[bool]$pwsh);image='pwsh.exe';switches=@('--encodedcommand','/encodedarguments','-e');refused=$true}
  $long=LongFrame $false

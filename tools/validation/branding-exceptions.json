@@ -1,0 +1,751 @@
+{
+  "exceptions": [
+    {
+      "text": "# RooShipped-fixture",
+      "files": [
+        "tools/validation/Update/Invoke-HarnessChecks.ps1"
+      ],
+      "reason": "Hosts-file marker in the ownership fixture; cleanup compares the exact marker bytes."
+    },
+    {
+      "text": "%ROO_F10_NOPE%",
+      "files": [
+        "tools/validation/RedirectedFolders/Fixture.cs"
+      ],
+      "reason": "Literal environment-variable reference stored in registry fixture values; restoration checks compare the original unexpanded bytes."
+    },
+    {
+      "text": "%ROO_HISTORICAL_ABSENT%",
+      "files": [
+        "tools/validation/Release/Test-HistoricalBlackwell.ps1"
+      ],
+      "reason": "Literal environment-variable reference stored in registry fixture values; restoration checks compare the original unexpanded bytes."
+    },
+    {
+      "text": "%ROO_RAW%",
+      "files": [
+        "tools/validation/LoadTimes/Test-CleanupOwnership.ps1"
+      ],
+      "reason": "Literal environment-variable reference stored in registry fixture values; restoration checks compare the original unexpanded bytes."
+    },
+    {
+      "text": "%SystemRoot%\\RooF10\\Local",
+      "files": [
+        "tools/validation/RedirectedFolders/Fixture.cs"
+      ],
+      "reason": "Windows system-directory path fixture stored as a registry AppData value; keep the exact input to the redirected-folder refusal."
+    },
+    {
+      "text": "'Roo'",
+      "files": [
+        "tools/validation/Governor/Test-GovernorInstalled.ps1"
+      ],
+      "reason": "Legacy governor task description brand selected when the discovered task uses the legacy policy-task prefix; it is compared with the persisted Description."
+    },
+    {
+      "text": "'roo'",
+      "files": [
+        "tools/validation/Memory/run_memory.py"
+      ],
+      "reason": "Case-folded legacy scheduled-task name matcher; narrowing it to the current brand would skip older host tasks."
+    },
+    {
+      "text": "*RooShipped*",
+      "files": [
+        "tools/validation/Memory/Memory.Common.ps1"
+      ],
+      "reason": "Existing firewall-rule description matcher used by before/after host-state audits."
+    },
+    {
+      "text": "C:\\ProgramData\\RooHistoricalLive-",
+      "files": [
+        "tools/validation/Release/Test-HistoricalBlackwell.ps1"
+      ],
+      "reason": "Private on-disk historical recovery folder whose identity is used by later preparation and rollback steps."
+    },
+    {
+      "text": "C:\\ProgramData\\RooRecoveryBlackwell-",
+      "files": [
+        "tools/validation/Release/Test-HistoricalBlackwell.ps1"
+      ],
+      "reason": "Historical recovery frame path stored in the sealed receipt; readers require this exact ProgramData path prefix."
+    },
+    {
+      "text": "C:\\RooBuild",
+      "files": [
+        "tools/validation/Background/README.md",
+        "tools/validation/Governor/Test-PolicyPermissionProbe.ps1",
+        "tools/validation/Governor/Test-SetupTempAclContract.ps1",
+        "tools/validation/Memory/Memory.Common.ps1",
+        "tools/validation/Memory/run_memory.py",
+        "tools/validation/Release/Invoke-BlackwellEpochRecovery.ps1",
+        "tools/validation/Release/Test-SourceReadBoundary.py",
+        "tools/validation/Tour/run_tour.py",
+        "tools/validation/Update/Clear-UpdateFrame.ps1",
+        "tools/validation/Update/Harness.Common.ps1",
+        "tools/validation/Update/Invoke-HarnessChecks.ps1",
+        "tools/validation/Update/Invoke-TraceOwnershipChecks.ps1",
+        "tools/validation/Update/README.md",
+        "tools/validation/Update/run_e2e.py",
+        "tools/validation/Update/run_harness_checks.py",
+        "tools/validation/Update/run_manual_install.py",
+        "tools/validation/Update/run_shipped.py",
+        "tools/validation/Update/run_trace_checks.py"
+      ],
+      "reason": "Windows harness staging and host-lease root; existing frames, cleanup ownership and path-length guards depend on this exact path spelling, including its source escaping."
+    },
+    {
+      "text": "C:\\\\ProgramData\\\\RooRecoveryBlackwell-",
+      "files": [
+        "tools/validation/Release/Analyze-HistoricalBlackwell.py",
+        "tools/validation/Release/HistoricalBlackwell.Common.ps1",
+        "tools/validation/Release/Run-HistoricalBlackwell.py"
+      ],
+      "reason": "Historical recovery frame path stored in the sealed receipt; readers require this exact ProgramData path prefix."
+    },
+    {
+      "text": "C:\\\\RooBuild",
+      "files": [
+        "tools/validation/Background/README.md",
+        "tools/validation/Governor/Test-PolicyPermissionProbe.ps1",
+        "tools/validation/Governor/Test-SetupTempAclContract.ps1",
+        "tools/validation/ProtectedSessions/Test-FixtureCleanup.ps1",
+        "tools/validation/Release/Test-ProtectedFixtureRegistry.ps1",
+        "tools/validation/Release/Test-RecoveryLongPaths.ps1",
+        "tools/validation/Release/Test-RecoveryTaskDiscovery.ps1",
+        "tools/validation/Release/Test-SourceReadBoundary.py",
+        "tools/validation/Release/Test-WindowsSshInlineLimit.py",
+        "tools/validation/Update/Clear-UpdateFrame.ps1",
+        "tools/validation/Update/Harness.Common.ps1"
+      ],
+      "reason": "Windows harness staging and host-lease root; existing frames, cleanup ownership and path-length guards depend on this exact path spelling, including its source escaping."
+    },
+    {
+      "text": "C:\\\\RooFixture",
+      "files": [
+        "tools/validation/Release/Test-FinalModesSequence.py"
+      ],
+      "reason": "Root directory for the final-mode Windows fixture; the path is persisted in frame and recovery receipts."
+    },
+    {
+      "text": "Downloads\\RooTest-Shipped-",
+      "files": [
+        "tools/validation/Update/Invoke-ShippedScenario.ps1"
+      ],
+      "reason": "Downloads-directory prefix used by shipped-scenario fixtures and retained host cleanup evidence."
+    },
+    {
+      "text": "Games\\Roo",
+      "files": [
+        "tools/validation/Governor/Test-GovernorSetupFallbacks.ps1"
+      ],
+      "reason": "On-disk game-root fixture used in ownership and setup-fallback requests; preserve the exact persisted path."
+    },
+    {
+      "text": "Local\\RooTrace-",
+      "files": [
+        "tools/validation/Update/Invoke-TraceOwnershipChecks.ps1"
+      ],
+      "reason": "Named local event prefix passed across trace-fixture processes to coordinate ownership checks."
+    },
+    {
+      "text": "ROO_CCD_TEST_COMPUTER",
+      "files": [
+        "tools/validation/Update/run_shipped.py"
+      ],
+      "reason": "Existing caller-provided environment variable read by the harness; preserve the external configuration name and its documented usage."
+    },
+    {
+      "text": "ROO_CCD_TEST_SSH_HOST",
+      "files": [
+        "tools/validation/Update/run_shipped.py"
+      ],
+      "reason": "Existing caller-provided environment variable read by the harness; preserve the external configuration name and its documented usage."
+    },
+    {
+      "text": "ROO_HARNESS_NONCE",
+      "files": [
+        "tools/validation/Memory/Build-Memory.ps1",
+        "tools/validation/Memory/HeapProbe/Program.cs",
+        "tools/validation/Update/Build-ReleaseCandidate.ps1",
+        "tools/validation/Update/Build-ShippedAlpha.ps1",
+        "tools/validation/Update/Invoke-ShippedScenario.ps1",
+        "tools/validation/Update/Invoke-UpdateFixture.ps1",
+        "tools/validation/Update/UpdateProbe/Program.cs",
+        "tools/validation/windows_ssh.py"
+      ],
+      "reason": "Harness nonce environment variable passed to child processes and read by the memory heap probe to bind their receipts to the owning invocation."
+    },
+    {
+      "text": "ROO_ISCC_EXE",
+      "files": [
+        "tools/validation/RedirectedFolders/Test-RedirectedSetup.ps1"
+      ],
+      "reason": "Existing caller-provided environment variable read by the harness; preserve the external configuration name and its documented usage."
+    },
+    {
+      "text": "ROO_TEST_*",
+      "files": [
+        "tools/validation/Update/run_e2e.py"
+      ],
+      "reason": "Wildcard spelling in the diagnostic for the existing ROO_TEST_* environment configuration contract."
+    },
+    {
+      "text": "ROO_TEST_COMPUTER",
+      "files": [
+        "tools/validation/Background/run_e2e.py",
+        "tools/validation/RedirectedFolders/Test-RedirectedSetup.ps1",
+        "tools/validation/Release/Test-BlackwellInteractiveReadme.ps1",
+        "tools/validation/Update/Clear-UpdateFrame.ps1",
+        "tools/validation/Update/README.md",
+        "tools/validation/Update/run_e2e.py",
+        "tools/validation/Update/run_shipped.py"
+      ],
+      "reason": "Existing caller-provided environment variable read by the harness; preserve the external configuration name and its documented usage."
+    },
+    {
+      "text": "ROO_TEST_KVM_URL",
+      "files": [
+        "tools/validation/Release/Test-BlackwellInteractiveReadme.ps1"
+      ],
+      "reason": "Existing caller-provided environment variable read by the harness; preserve the external configuration name and its documented usage."
+    },
+    {
+      "text": "ROO_TEST_SSH_HOST",
+      "files": [
+        "tools/validation/Background/run_e2e.py",
+        "tools/validation/Update/README.md",
+        "tools/validation/Update/run_e2e.py",
+        "tools/validation/Update/run_shipped.py"
+      ],
+      "reason": "Existing caller-provided environment variable read by the harness; preserve the external configuration name and its documented usage."
+    },
+    {
+      "text": "ROO_TEST_UPDATE_FEED",
+      "files": [
+        "tools/validation/Background/Build-Merged.ps1",
+        "tools/validation/Background/README.md",
+        "tools/validation/Update/README.md",
+        "tools/validation/Update/run_e2e.py",
+        "tools/validation/Update/run_shipped.py"
+      ],
+      "reason": "Existing caller-provided environment variable read by the harness; preserve the external configuration name and its documented usage."
+    },
+    {
+      "text": "ROO_UPDATE_SIGNING_KEY",
+      "files": [
+        "tools/validation/Update/README.md",
+        "tools/validation/Update/run_e2e.py",
+        "tools/validation/Update/run_shipped.py"
+      ],
+      "reason": "Existing caller-provided environment variable read by the harness; preserve the external configuration name and its documented usage."
+    },
+    {
+      "text": "Roo Optimization Suite",
+      "files": [
+        "tools/validation/Release/Get-FixRound9070EndState.ps1"
+      ],
+      "reason": "Legacy uninstall-registry DisplayName queried by historical end-state inspection."
+    },
+    {
+      "text": "Roo Protected Session ",
+      "files": [
+        "tools/validation/Governor/Fixtures/BrandCompatibility.0.9.0-beta.ps1",
+        "tools/validation/LoadTimes/Test-ElevatedLaunchers.ps1",
+        "tools/validation/Release/Invoke-IntegrationVerification.ps1"
+      ],
+      "reason": "Legacy protected-session scheduled-task prefix; discovery and cleanup must find tasks created by earlier versions."
+    },
+    {
+      "text": "Roo process rules",
+      "files": [
+        "tools/validation/Release/Invoke-IntegrationVerification.ps1"
+      ],
+      "reason": "Legacy scheduled-task description component parsed from existing task XML during recovery."
+    },
+    {
+      "text": "Roo process rules | ",
+      "files": [
+        "tools/validation/Governor/Fixtures/BrandCompatibility.0.9.0-beta.ps1"
+      ],
+      "reason": "Legacy scheduled-task description prefix from BrandCompatibility; older governor tasks must still match."
+    },
+    {
+      "text": "Roo protected game session",
+      "files": [
+        "tools/validation/Governor/Fixtures/BrandCompatibility.0.9.0-beta.ps1",
+        "tools/validation/Release/Invoke-IntegrationVerification.ps1"
+      ],
+      "reason": "Legacy protected-session task description component; recovery validates existing task XML against this spelling."
+    },
+    {
+      "text": "Roo*OptimizationSuite*",
+      "files": [
+        "tools/validation/LoadTimes/Test-SecondAccountTimerRefresh.ps1"
+      ],
+      "reason": "Existing data-directory discovery wildcard includes both current and legacy installation names."
+    },
+    {
+      "text": "Roo*Probe*",
+      "files": [
+        "tools/validation/Release/Restore-Historical9070.ps1"
+      ],
+      "reason": "Legacy image-file-execution-options registry key-name matcher used to inspect retained probe state."
+    },
+    {
+      "text": "RooF2_",
+      "files": [
+        "tools/validation/LoadTimes/Test-SecondAccountTimerRefresh.ps1"
+      ],
+      "reason": "Temporary Windows account-name prefix used by second-account fixtures; existing account cleanup and identity receipts must keep their original name."
+    },
+    {
+      "text": "RooFixtureAbsentGame.exe",
+      "files": [
+        "tools/validation/Background/Test-FixRound.ps1"
+      ],
+      "reason": "On-disk fixture executable/process identity used by process profiles, UI selection and ownership or restoration readbacks; the harness may find an earlier run by this image name."
+    },
+    {
+      "text": "RooFixtureChild.exe",
+      "files": [
+        "tools/validation/Background/Test-GpuRelease.ps1",
+        "tools/validation/Background/Test-Review2.ps1"
+      ],
+      "reason": "On-disk fixture executable/process identity used by process profiles, UI selection and ownership or restoration readbacks; the harness may find an earlier run by this image name."
+    },
+    {
+      "text": "RooFixtureDenied",
+      "files": [
+        "tools/validation/Background/Invoke-DesktopScenario.ps1"
+      ],
+      "reason": "On-disk fixture executable/process identity used by process profiles, UI selection and ownership or restoration readbacks; the harness may find an earlier run by this image name."
+    },
+    {
+      "text": "RooFixtureGame",
+      "files": [
+        "tools/validation/Background/Invoke-BackgroundScenario.ps1",
+        "tools/validation/Background/Invoke-DesktopScenario.ps1",
+        "tools/validation/Background/Test-Review2.ps1",
+        "tools/validation/Update/Invoke-ShippedScenario.ps1"
+      ],
+      "reason": "On-disk fixture executable/process identity used by process profiles, UI selection and ownership or restoration readbacks; the harness may find an earlier run by this image name."
+    },
+    {
+      "text": "RooFixtureLauncher",
+      "files": [
+        "tools/validation/Background/Invoke-DesktopScenario.ps1",
+        "tools/validation/Background/REVIEW2.md",
+        "tools/validation/Background/Test-Review2.ps1"
+      ],
+      "reason": "On-disk fixture executable/process identity used by process profiles, UI selection and ownership or restoration readbacks; the harness may find an earlier run by this image name."
+    },
+    {
+      "text": "RooFixtureOwnedUpdater.exe",
+      "files": [
+        "tools/validation/Background/Test-MemoryOwnership.ps1"
+      ],
+      "reason": "On-disk fixture executable/process identity used by process profiles, UI selection and ownership or restoration readbacks; the harness may find an earlier run by this image name."
+    },
+    {
+      "text": "RooFixturePriority",
+      "files": [
+        "tools/validation/Background/Invoke-DesktopScenario.ps1"
+      ],
+      "reason": "On-disk fixture executable/process identity used by process profiles, UI selection and ownership or restoration readbacks; the harness may find an earlier run by this image name."
+    },
+    {
+      "text": "RooFixtureQueryOnly",
+      "files": [
+        "tools/validation/Background/Test-Review2.ps1"
+      ],
+      "reason": "On-disk fixture executable/process identity used by process profiles, UI selection and ownership or restoration readbacks; the harness may find an earlier run by this image name."
+    },
+    {
+      "text": "RooFixtureUpdater",
+      "files": [
+        "tools/validation/Background/Invoke-BackgroundScenario.ps1",
+        "tools/validation/Background/Test-FixRound.ps1",
+        "tools/validation/Background/Test-RecoverySlot.ps1",
+        "tools/validation/Background/Test-Review2.ps1",
+        "tools/validation/Update/Invoke-ShippedScenario.ps1"
+      ],
+      "reason": "On-disk fixture executable/process identity used by process profiles, UI selection and ownership or restoration readbacks; the harness may find an earlier run by this image name."
+    },
+    {
+      "text": "RooFixtureUpdaterAuto.exe",
+      "files": [
+        "tools/validation/Background/Test-GovernorAutoRestore.ps1"
+      ],
+      "reason": "On-disk fixture executable/process identity used by process profiles, UI selection and ownership or restoration readbacks; the harness may find an earlier run by this image name."
+    },
+    {
+      "text": "RooFixtureUpdaterClosedUi",
+      "files": [
+        "tools/validation/Background/Invoke-DesktopScenario.ps1"
+      ],
+      "reason": "On-disk fixture executable/process identity used by process profiles, UI selection and ownership or restoration readbacks; the harness may find an earlier run by this image name."
+    },
+    {
+      "text": "RooFixtureUpdaterGpu.exe",
+      "files": [
+        "tools/validation/Background/Test-GpuRelease.ps1"
+      ],
+      "reason": "On-disk fixture executable/process identity used by process profiles, UI selection and ownership or restoration readbacks; the harness may find an earlier run by this image name."
+    },
+    {
+      "text": "RooFixtureWebHelper",
+      "files": [
+        "tools/validation/Background/Invoke-BackgroundScenario.ps1",
+        "tools/validation/Background/Test-RecoverySlot.ps1",
+        "tools/validation/Background/Test-Review2.ps1",
+        "tools/validation/Update/Invoke-ShippedScenario.ps1"
+      ],
+      "reason": "On-disk fixture executable/process identity used by process profiles, UI selection and ownership or restoration readbacks; the harness may find an earlier run by this image name."
+    },
+    {
+      "text": "RooFixtureWebHelperConflict",
+      "files": [
+        "tools/validation/Background/Test-FixRound.ps1"
+      ],
+      "reason": "On-disk fixture executable/process identity used by process profiles, UI selection and ownership or restoration readbacks; the harness may find an earlier run by this image name."
+    },
+    {
+      "text": "RooFixtureWebHelperIdentity.exe",
+      "files": [
+        "tools/validation/Background/Test-GovernorRestoreIdentity.ps1"
+      ],
+      "reason": "On-disk fixture executable/process identity used by process profiles, UI selection and ownership or restoration readbacks; the harness may find an earlier run by this image name."
+    },
+    {
+      "text": "RooFixtureWebHelperUi",
+      "files": [
+        "tools/validation/Background/Invoke-DesktopScenario.ps1"
+      ],
+      "reason": "On-disk fixture executable/process identity used by process profiles, UI selection and ownership or restoration readbacks; the harness may find an earlier run by this image name."
+    },
+    {
+      "text": "RooHarnessFixture.props",
+      "files": [
+        "tools/validation/Update/run_harness_checks.py"
+      ],
+      "reason": "Temporary root MSBuild property file whose exact name is passed through source-boundary checks."
+    },
+    {
+      "text": "RooHarnessGame.exe",
+      "files": [
+        "tools/validation/Update/Invoke-HarnessChecks.ps1"
+      ],
+      "reason": "Fixture executable path and process image recorded or queried by the harness; preserve the host-visible name."
+    },
+    {
+      "text": "RooMemoryApp.exe",
+      "files": [
+        "tools/validation/Memory/Invoke-SamplingChecks.ps1"
+      ],
+      "reason": "Fixture executable path and process image recorded or queried by the harness; preserve the host-visible name."
+    },
+    {
+      "text": "RooMemoryHelper.exe",
+      "files": [
+        "tools/validation/Memory/Invoke-SamplingChecks.ps1"
+      ],
+      "reason": "Fixture executable path and process image recorded or queried by the harness; preserve the host-visible name."
+    },
+    {
+      "text": "RooOptimizationSuite",
+      "files": [
+        "tools/validation/Background/Measure-MemoryBaseline.ps1",
+        "tools/validation/Governor/Fixtures/BrandCompatibility.0.9.0-beta.ps1",
+        "tools/validation/Governor/Test-GovernorFixtureBaseline.ps1",
+        "tools/validation/Governor/Test-GovernorInstalled.ps1",
+        "tools/validation/Governor/Test-GovernorSetupFallbacks.ps1",
+        "tools/validation/LoadTimes/Test-SecondAccountTimerRefresh.ps1",
+        "tools/validation/LoadTimes/Test-UpgradeMigration.ps1",
+        "tools/validation/Memory/Measure-Memory.ps1",
+        "tools/validation/Memory/Memory.Common.ps1",
+        "tools/validation/Memory/run_memory.py",
+        "tools/validation/Release/Capture-Historical9070.ps1",
+        "tools/validation/Release/Complete-Historical9070.ps1",
+        "tools/validation/Release/Get-FixRound9070EndState.ps1",
+        "tools/validation/Release/HistoricalBlackwell.Common.ps1",
+        "tools/validation/Release/Invoke-IntegrationVerification.ps1",
+        "tools/validation/Release/Restore-Historical9070.ps1",
+        "tools/validation/Release/Test-HistoricalBlackwell.ps1",
+        "tools/validation/Release/Test-RecoveryLongPaths.ps1",
+        "tools/validation/SetupMigration/Test-SetupMigration.ps1",
+        "tools/validation/Update/Collect-RestartEvidence.ps1",
+        "tools/validation/Update/Harness.Common.ps1",
+        "tools/validation/Update/Invoke-ShippedScenario.ps1",
+        "tools/validation/Update/Invoke-UpdateScenario.ps1",
+        "tools/validation/Update/run_shipped.py"
+      ],
+      "reason": "Legacy data directory, registry root, process image and scheduled-task prefix from BrandCompatibility; migration, ownership and historical recovery must recognize the existing identities."
+    },
+    {
+      "text": "RooRecovery9070",
+      "files": [
+        "tools/validation/Release/Capture-Historical9070.ps1",
+        "tools/validation/Release/Complete-Historical9070.ps1"
+      ],
+      "reason": "Historical ProgramData recovery directory shared by capture and completion; existing retained recovery evidence uses this name."
+    },
+    {
+      "text": "RooShipped-",
+      "files": [
+        "tools/validation/Update/Invoke-ShippedScenario.ps1"
+      ],
+      "reason": "Firewall ownership nonce and hosts-file marker prefix recorded by shipped-scenario cleanup; existing records must match unchanged."
+    },
+    {
+      "text": "RooSourceBoundary_",
+      "files": [
+        "tools/validation/Release/Test-SourceReadBoundary.py"
+      ],
+      "reason": "Scheduled-task name prefix for the source-read boundary fixture; task ownership and cleanup must keep its host-visible identity."
+    },
+    {
+      "text": "RooTest-*",
+      "files": [
+        "tools/validation/Memory/Memory.Common.ps1"
+      ],
+      "reason": "Existing firewall-rule name matcher used by before/after host-state audits."
+    },
+    {
+      "text": "RooTest-ShippedOffline-",
+      "files": [
+        "tools/validation/Update/Invoke-HarnessChecks.ps1",
+        "tools/validation/Update/Invoke-ShippedScenario.ps1"
+      ],
+      "reason": "Firewall-rule name prefix shared by shipped scenarios and harness ownership checks; preserve existing rule discovery and cleanup."
+    },
+    {
+      "text": "RooTester",
+      "files": [
+        "tools/validation/Update/Invoke-ShippedScenario.ps1"
+      ],
+      "reason": "Process-image prefix used to collect the existing tester fixture and its descendants from host process-start events."
+    },
+    {
+      "text": "RooTesterGame.exe",
+      "files": [
+        "tools/validation/Update/Invoke-ShippedScenario.ps1"
+      ],
+      "reason": "Fixture executable path and process image recorded or queried by the harness; preserve the host-visible name."
+    },
+    {
+      "text": "RooTraceCpuLoad",
+      "files": [
+        "tools/validation/Update/Invoke-TraceLoad.ps1"
+      ],
+      "reason": "On-disk trace fixture executable and its compiled entry-point type share this identity; retained conservatively together because later trace and cleanup runs may read the existing image."
+    },
+    {
+      "text": "RooTraceForeignParent.exe",
+      "files": [
+        "tools/validation/Update/Invoke-TraceOwnershipChecks.ps1"
+      ],
+      "reason": "Fixture executable path and process image recorded or queried by the harness; preserve the host-visible name."
+    },
+    {
+      "text": "RooTraceParent",
+      "files": [
+        "tools/validation/Update/Invoke-TraceOwnershipChecks.ps1"
+      ],
+      "reason": "On-disk trace fixture executable and its compiled entry-point type share this identity; retained conservatively together because later trace and cleanup runs may read the existing image."
+    },
+    {
+      "text": "RooTraceSharedChild.exe",
+      "files": [
+        "tools/validation/Update/Invoke-TraceOwnershipChecks.ps1"
+      ],
+      "reason": "Fixture executable path and process image recorded or queried by the harness; preserve the host-visible name."
+    },
+    {
+      "text": "Software\\RooHistoricalBlackwellPrepared-",
+      "files": [
+        "tools/validation/Release/Test-HistoricalBlackwell.ps1"
+      ],
+      "reason": "Private registry fixture root; retained so later inspection and restoration continue to find the same host registry identity."
+    },
+    {
+      "text": "Software\\RooHistoricalBlackwellRestore-",
+      "files": [
+        "tools/validation/Release/Test-HistoricalBlackwell.ps1"
+      ],
+      "reason": "Private registry fixture root; retained so later inspection and restoration continue to find the same host registry identity."
+    },
+    {
+      "text": "Software\\RooHistoricalBlackwellValidation-",
+      "files": [
+        "tools/validation/Release/Test-HistoricalBlackwell.ps1"
+      ],
+      "reason": "Private registry fixture root; retained so later inspection and restoration continue to find the same host registry identity."
+    },
+    {
+      "text": "\\\\127.0.0.1\\roo-f10-none",
+      "files": [
+        "tools/validation/RedirectedFolders/Fixture.cs"
+      ],
+      "reason": "UNC share-name fixture stored in AppData registry values; preserve the exact unavailable-network-folder input."
+    },
+    {
+      "text": "^Roo|^Optimizer\\.",
+      "files": [
+        "tools/validation/Release/Restore-Historical9070.ps1"
+      ],
+      "reason": "Existing process-image discovery expression includes legacy executables as well as current ones during historical recovery."
+    },
+    {
+      "text": "roo-blackwell-private-state-",
+      "files": [
+        "tools/validation/Release/Analyze-HistoricalBlackwell.py"
+      ],
+      "reason": "On-disk temporary file or directory prefix used by harness evidence or restoration; retained conservatively because earlier-run artifacts can outlive the creating process."
+    },
+    {
+      "text": "roo-blackwell-readme-",
+      "files": [
+        "tools/validation/Release/Test-BlackwellInteractiveReadme.ps1"
+      ],
+      "reason": "On-disk temporary file or directory prefix used by harness evidence or restoration; retained conservatively because earlier-run artifacts can outlive the creating process."
+    },
+    {
+      "text": "roo-blackwell-shell-",
+      "files": [
+        "tools/validation/ToolLauncher/Test-BlackwellShellHandoff.ps1"
+      ],
+      "reason": "On-disk temporary file or directory prefix used by harness evidence or restoration; retained conservatively because earlier-run artifacts can outlive the creating process."
+    },
+    {
+      "text": "roo-blackwell-uac-approval/v1",
+      "files": [
+        "tools/validation/Release/Test-BlackwellInteractiveReadme.ps1"
+      ],
+      "reason": "Versioned protocol identifier serialized in an on-disk ledger, handoff or approval receipt and checked by later runs; preserve its existing wire spelling."
+    },
+    {
+      "text": "roo-cache-check",
+      "files": [
+        "tools/validation/Release/Analyze-HistoricalBlackwell.py"
+      ],
+      "reason": "Legacy profile identifier in historical state snapshots; read-only analysis must recognize the existing recorded profile IDs."
+    },
+    {
+      "text": "roo-f12-",
+      "files": [
+        "tools/validation/SetupMigration/run.py"
+      ],
+      "reason": "On-disk temporary file or directory prefix used by harness evidence or restoration; retained conservatively because earlier-run artifacts can outlive the creating process."
+    },
+    {
+      "text": "roo-harness-ledger/v1",
+      "files": [
+        "tools/validation/Update/Invoke-HarnessChecks.ps1",
+        "tools/validation/Update/Invoke-TraceOwnershipChecks.ps1",
+        "tools/validation/windows_ssh.py"
+      ],
+      "reason": "Versioned protocol identifier serialized in an on-disk ledger, handoff or approval receipt and checked by later runs; preserve its existing wire spelling."
+    },
+    {
+      "text": "roo-key-fixture.pem",
+      "files": [
+        "tools/validation/Update/run_harness_checks.py"
+      ],
+      "reason": "Temporary signing-key fixture path passed to archive/source-upload refusal checks."
+    },
+    {
+      "text": "roo-loadtimes-completed/v1",
+      "files": [
+        "tools/validation/LoadTimes/Invoke-LoadTimesProducer.ps1",
+        "tools/validation/LoadTimes/LoadTimesHandoff.Common.ps1"
+      ],
+      "reason": "Versioned protocol identifier serialized in an on-disk ledger, handoff or approval receipt and checked by later runs; preserve its existing wire spelling."
+    },
+    {
+      "text": "roo-loadtimes-ledger/v1",
+      "files": [
+        "tools/validation/LoadTimes/LoadTimesHandoff.Common.ps1",
+        "tools/validation/Release/Test-LoadTimesHandoff.ps1"
+      ],
+      "reason": "Versioned protocol identifier serialized in an on-disk ledger, handoff or approval receipt and checked by later runs; preserve its existing wire spelling."
+    },
+    {
+      "text": "roo-loadtimes-producer/v1",
+      "files": [
+        "tools/validation/LoadTimes/LoadTimesHandoff.Common.ps1"
+      ],
+      "reason": "Versioned protocol identifier serialized in an on-disk ledger, handoff or approval receipt and checked by later runs; preserve its existing wire spelling."
+    },
+    {
+      "text": "roo-migration-check",
+      "files": [
+        "tools/validation/Release/Analyze-HistoricalBlackwell.py"
+      ],
+      "reason": "Legacy profile identifier in historical state snapshots; read-only analysis must recognize the existing recorded profile IDs."
+    },
+    {
+      "text": "roo-ota-write-",
+      "files": [
+        "tools/validation/Update/Invoke-UpdateFixture.ps1"
+      ],
+      "reason": "On-disk temporary file or directory prefix used by harness evidence or restoration; retained conservatively because earlier-run artifacts can outlive the creating process."
+    },
+    {
+      "text": "roo-owned-wizard-fixture",
+      "files": [
+        "tools/validation/Update/Invoke-HarnessChecks.ps1"
+      ],
+      "reason": "Installer fixture output directory written into the compiled setup configuration; preserve the host-visible setup path."
+    },
+    {
+      "text": "roo-private-sentinel-",
+      "files": [
+        "tools/validation/ProtectedSessions/FixtureCleanupChecks.cs"
+      ],
+      "reason": "Private sentinel identifier passed in a child-process command line; the fixture checks process ancestry and command identity across processes."
+    },
+    {
+      "text": "roo-restore-current",
+      "files": [
+        "tools/validation/Release/Complete-Historical9070.ps1"
+      ],
+      "reason": "On-disk legacy/current restore-staging directory used by historical recovery; retained evidence and later cleanup require its exact name."
+    },
+    {
+      "text": "roo-restore-legacy",
+      "files": [
+        "tools/validation/Release/Complete-Historical9070.ps1"
+      ],
+      "reason": "On-disk legacy/current restore-staging directory used by historical recovery; retained evidence and later cleanup require its exact name."
+    },
+    {
+      "text": "roo-unreachable-",
+      "files": [
+        "tools/validation/Update/check_windows_transport.py"
+      ],
+      "reason": "On-disk temporary file or directory prefix used by harness evidence or restoration; retained conservatively because earlier-run artifacts can outlive the creating process."
+    },
+    {
+      "text": "roo-verification-evidence-",
+      "files": [
+        "tools/validation/Release/Test-VerificationEvidence.py"
+      ],
+      "reason": "On-disk temporary file or directory prefix used by harness evidence or restoration; retained conservatively because earlier-run artifacts can outlive the creating process."
+    },
+    {
+      "text": "roo-windows-frame-",
+      "files": [
+        "tools/validation/windows_ssh.py"
+      ],
+      "reason": "On-disk temporary file or directory prefix used by harness evidence or restoration; retained conservatively because earlier-run artifacts can outlive the creating process."
+    },
+    {
+      "text": "zeroRooOrFrameProcesses",
+      "files": [
+        "tools/validation/Memory/run_memory.py"
+      ],
+      "reason": "Published cleanup-receipt field written to JSON; existing measurement artifacts and consumers retain this key."
+    }
+  ]
+}

@@ -413,7 +413,7 @@ def main():
     parser.add_argument('--innoextract', type=Path)
     parser.add_argument('--p1-from-scenario', help='Resume the all journey on its existing receipt after an environmental or harness interruption; completed builds and contracts stay frozen.')
     parser.add_argument('--p1-extras-from', choices=['contracts', 'transport-http', 'transport-disconnect', 'settings-readonly', 'timer-ready', 'timer-read-failure', 'manual-timeout'])
-    parser.add_argument('--out-dir', type=Path, default=ROOT / 'artifacts/roo-29')
+    parser.add_argument('--out-dir', type=Path, default=ROOT / 'artifacts/shipped')
     args = parser.parse_args()
     if not args.host or not args.expected_machine:
         parser.error('--host and --expected-machine (or ROO_TEST_SSH_HOST / ROO_TEST_COMPUTER) are required.')

@@ -69,8 +69,8 @@ function Get-HandoffResourceState([ValidateSet('process','task')][string]$Kind,$
         try{$process=Get-Process -Id ([int]$Resource.pid) -ErrorAction Stop}catch{if($_.FullyQualifiedErrorId -like 'NoProcessFoundForGivenId,*'){return 'gone'};throw}
         try{
             $handle=$process.Handle
-            if([RooValidationOwnership.Native]::Created($handle).ToString() -cne [string]$Resource.creationTimeFileTimeUtc){return 'gone'}
-            if([RooValidationOwnership.Native]::Image($handle) -cne [string]$Resource.imagePath){throw 'Handoff live process identity changed'}
+            if([RooIndustriesValidationOwnership.Native]::Created($handle).ToString() -cne [string]$Resource.creationTimeFileTimeUtc){return 'gone'}
+            if([RooIndustriesValidationOwnership.Native]::Image($handle) -cne [string]$Resource.imagePath){throw 'Handoff live process identity changed'}
             if($process.HasExited){return 'gone'}
             return 'live'
         }finally{$process.Dispose()}
@@ -101,7 +101,7 @@ function Get-HandoffProducer($Context,[string]$Scenario) {
     $completion=Read-HandoffJson (Join-Path $dir 'completed-child.json');$c=$completion.value
     Assert-HandoffFields $c @('protocol','scenario','status','exit','identity','requestHash','childHash','resourcesHash','startedUtc','completedUtc')
     if($c.protocol -cne 'roo-loadtimes-completed/v1' -or $c.scenario -cne $Scenario -or $c.status -cne 'completed' -or $c.exit -ne 0 -or $c.requestHash -cne $request.hash -or $c.childHash -cne $child.hash -or (Handoff-Json $c.identity) -cne (Handoff-Json $child.value)){throw 'Handoff native completed-child receipt differs'}
-    if([string]$c.identity.pid -notmatch '^[1-9][0-9]*$' -or [string]$c.identity.creationTimeFileTimeUtc -notmatch '^[1-9][0-9]*$' -or $c.identity.imagePath -cne [RooValidationOwnership.Native]::Canonical((Join-Path $PSHOME 'powershell.exe')) -or [DateTime]::Parse($c.completedUtc).ToUniversalTime() -lt [DateTime]::FromFileTimeUtc([long]$c.identity.creationTimeFileTimeUtc) -or [DateTime]::Parse($c.startedUtc).ToUniversalTime() -gt [DateTime]::FromFileTimeUtc([long]$c.identity.creationTimeFileTimeUtc)){throw 'Handoff native child identity/time invalid'}
+    if([string]$c.identity.pid -notmatch '^[1-9][0-9]*$' -or [string]$c.identity.creationTimeFileTimeUtc -notmatch '^[1-9][0-9]*$' -or $c.identity.imagePath -cne [RooIndustriesValidationOwnership.Native]::Canonical((Join-Path $PSHOME 'powershell.exe')) -or [DateTime]::Parse($c.completedUtc).ToUniversalTime() -lt [DateTime]::FromFileTimeUtc([long]$c.identity.creationTimeFileTimeUtc) -or [DateTime]::Parse($c.startedUtc).ToUniversalTime() -gt [DateTime]::FromFileTimeUtc([long]$c.identity.creationTimeFileTimeUtc)){throw 'Handoff native child identity/time invalid'}
     if(-not(Test-Path -LiteralPath (Join-Path $dir ($Scenario+'.done')))){throw 'Handoff producer done marker missing'}
     $resources=Read-HandoffJson (Join-Path $dir 'persistent-resources.json')
     Assert-HandoffFields $resources.value @('scenario','tasks','processes')

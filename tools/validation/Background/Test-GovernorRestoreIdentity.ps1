@@ -5,10 +5,10 @@ Add-Type -Path (Join-Path $Source 'tools\validation\Background\Oracle.cs')
 $directory=Join-Path $OutRoot 'restore-identity';[IO.Directory]::CreateDirectory($directory)|Out-Null
 $utf8=[Text.UTF8Encoding]::new($false);$p=$null;$owned=$null
 function Save([string]$name,$value){[IO.File]::WriteAllText((Join-Path $directory ($name+'.json')),($value|ConvertTo-Json -Depth 40),$utf8)}
-function Read{$p.Refresh();@{pid=$p.Id;priorityClass=[string]$p.PriorityClass;affinityMask=$p.ProcessorAffinity.ToInt64();ioPriority=[RooBackgroundOracle]::Io($p);memoryPriority=[RooBackgroundOracle]::Memory($p)}}
+function Read{$p.Refresh();@{pid=$p.Id;priorityClass=[string]$p.PriorityClass;affinityMask=$p.ProcessorAffinity.ToInt64();ioPriority=[RooIndustriesBackgroundOracle]::Io($p);memoryPriority=[RooIndustriesBackgroundOracle]::Memory($p)}}
 try{
- $path=Join-Path $directory 'RooFixtureWebHelperIdentity.exe';Copy-Item "$env:SystemRoot\System32\PING.EXE" $path;$p=Start-Process $path -ArgumentList '-t 127.0.0.1' -WindowStyle Hidden -PassThru;$owned=New-OwnedProcess $p;$p.PriorityClass='BelowNormal';[RooBackgroundOracle]::SetIo($p,1);[RooBackgroundOracle]::SetMemory($p,2)
- $p.PriorityClass='Normal';[RooBackgroundOracle]::SetIo($p,2);[RooBackgroundOracle]::SetMemory($p,5)
+ $path=Join-Path $directory 'RooFixtureWebHelperIdentity.exe';Copy-Item "$env:SystemRoot\System32\PING.EXE" $path;$p=Start-Process $path -ArgumentList '-t 127.0.0.1' -WindowStyle Hidden -PassThru;$owned=New-OwnedProcess $p;$p.PriorityClass='BelowNormal';[RooIndustriesBackgroundOracle]::SetIo($p,1);[RooIndustriesBackgroundOracle]::SetMemory($p,2)
+ $p.PriorityClass='Normal';[RooIndustriesBackgroundOracle]::SetIo($p,2);[RooIndustriesBackgroundOracle]::SetMemory($p,5)
  $profile=Get-Content -Raw (Join-Path $Source 'backend\profiles\probalance-governor.profile.json')|ConvertFrom-Json;$profile.profileId='roo20-reopen-identity';$profile.protectedCatalogPath=Join-Path $Source 'backend\profiles\protected-processes.json';$profile.governor.candidateSelectors=@([pscustomobject]@{ruleId='fixture';enabled=$true;match=@{processNames=@($p.ProcessName+'.exe')}})
  $profile.governor.thresholds.totalCpuPressureThresholdPercent=0;$profile.governor.thresholds.perProcessCpuThresholdPercent=0;$profile.governor.thresholds.timeOverThresholdSeconds=0;$profile.governor.thresholds.minimumRestraintSeconds=120;Save 'profile' $profile
  $raw=& (Join-Path $Source 'backend\scripts\Start-ProcessGovernorSession.ps1') -ProfilePath (Join-Path $directory 'profile.json') -StateRoot (Join-Path $directory 'state') -ConfirmApply -MaxDurationSeconds 3 -PollIntervalSeconds 1 -SampleIntervalMilliseconds 250;$start=$raw|ConvertFrom-Json;Save 'start' $start

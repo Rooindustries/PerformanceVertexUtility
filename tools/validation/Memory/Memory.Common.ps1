@@ -1,11 +1,11 @@
 . (Get-HarnessToolPath (Join-Path $PSScriptRoot '..\Update\Harness.Common.ps1'))
 . (Get-HarnessToolPath (Join-Path $PSScriptRoot '..\..\..\backend\scripts\BrandCompatibility.Common.ps1'))
-if(-not('RooMemoryRegistry' -as [type])){
+if(-not('RooIndustriesMemoryRegistry' -as [type])){
  Add-Type @'
 using System;
 using System.Runtime.InteropServices;
 using Microsoft.Win32;
-public static class RooMemoryRegistry {
+public static class RooIndustriesMemoryRegistry {
  [DllImport("advapi32.dll",CharSet=CharSet.Unicode)] static extern int RegQueryValueEx(IntPtr key,string name,IntPtr reserved,out uint type,byte[] data,ref uint size);
  [DllImport("advapi32.dll",CharSet=CharSet.Unicode)] static extern int RegSetValueEx(IntPtr key,string name,uint reserved,uint type,byte[] data,uint size);
  public static byte[] Read(RegistryKey key,string name){uint type,size=0;int error=RegQueryValueEx(key.Handle.DangerousGetHandle(),name,IntPtr.Zero,out type,null,ref size);if(error!=0)throw new System.ComponentModel.Win32Exception(error);var bytes=new byte[size];error=RegQueryValueEx(key.Handle.DangerousGetHandle(),name,IntPtr.Zero,out type,bytes,ref size);if(error!=0)throw new System.ComponentModel.Win32Exception(error);return bytes;}
@@ -20,11 +20,11 @@ function Get-MemoryRawRegistry{
   while($pending.Count){
    $path=$pending.Pop();$key=[Microsoft.Win32.Registry]::LocalMachine.OpenSubKey($path)
    if(-not$key){$rows.Add(@{hive='LocalMachine';path=$path;exists=$false;values=@()});continue}
-   try{$values=@(foreach($name in @($key.GetValueNames()|Sort-Object)){@{name=$name;kind=[int]$key.GetValueKind($name);rawBase64=[Convert]::ToBase64String([RooMemoryRegistry]::Read($key,$name))}});$rows.Add(@{hive='LocalMachine';path=$path;exists=$true;values=$values});foreach($name in @($key.GetSubKeyNames()|Sort-Object)){$pending.Push($path+'\'+$name)}}finally{$key.Dispose()}
+   try{$values=@(foreach($name in @($key.GetValueNames()|Sort-Object)){@{name=$name;kind=[int]$key.GetValueKind($name);rawBase64=[Convert]::ToBase64String([RooIndustriesMemoryRegistry]::Read($key,$name))}});$rows.Add(@{hive='LocalMachine';path=$path;exists=$true;values=$values});foreach($name in @($key.GetSubKeyNames()|Sort-Object)){$pending.Push($path+'\'+$name)}}finally{$key.Dispose()}
   }
  }
  $path='Software\Microsoft\Windows\CurrentVersion\Themes\Personalize';$key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($path)
- try{$values=@(if($key -and $key.GetValueNames() -contains 'EnableTransparency'){@{name='EnableTransparency';kind=[int]$key.GetValueKind('EnableTransparency');rawBase64=[Convert]::ToBase64String([RooMemoryRegistry]::Read($key,'EnableTransparency'))}});$rows.Add(@{hive='CurrentUser';path=$path;exists=[bool]$key;values=$values})}finally{if($key){$key.Dispose()}}
+ try{$values=@(if($key -and $key.GetValueNames() -contains 'EnableTransparency'){@{name='EnableTransparency';kind=[int]$key.GetValueKind('EnableTransparency');rawBase64=[Convert]::ToBase64String([RooIndustriesMemoryRegistry]::Read($key,'EnableTransparency'))}});$rows.Add(@{hive='CurrentUser';path=$path;exists=[bool]$key;values=$values})}finally{if($key){$key.Dispose()}}
  return @($rows)
 }
 function Get-MemorySnapshot{
@@ -89,8 +89,8 @@ function Restore-MemoryRegistry($Before,$Current){
    foreach($value in $row.values){
     $actual=@($now.values|Where-Object name -CEQ $value.name);if($actual.Count -ne 1){throw 'As-found registry value disappeared; retained for review'}
     if($actual[0].rawBase64 -ceq $value.rawBase64 -and $actual[0].kind -eq $value.kind){continue}
-    if([Convert]::ToBase64String([RooMemoryRegistry]::Read($key,$value.name)) -cne $actual[0].rawBase64 -or [int]$key.GetValueKind($value.name) -ne $actual[0].kind){throw 'Registry changed after snapshot; retained'}
-    [RooMemoryRegistry]::Write($key,$value.name,[uint32]$value.kind,[Convert]::FromBase64String($value.rawBase64));$changes.Add(@{hive=$row.hive;path=$row.path;name=$value.name})
+    if([Convert]::ToBase64String([RooIndustriesMemoryRegistry]::Read($key,$value.name)) -cne $actual[0].rawBase64 -or [int]$key.GetValueKind($value.name) -ne $actual[0].kind){throw 'Registry changed after snapshot; retained'}
+    [RooIndustriesMemoryRegistry]::Write($key,$value.name,[uint32]$value.kind,[Convert]::FromBase64String($value.rawBase64));$changes.Add(@{hive=$row.hive;path=$row.path;name=$value.name})
    }
   }finally{$key.Dispose()}
  }

@@ -111,7 +111,7 @@ try {
  $auditParent=Join-Path $backup 'audited';New-SealedDirectory $auditParent
  $audit=(Join-Path $auditParent 'RooOptimizationSuite')+$relative;[IO.Directory]::CreateDirectory((Extended ([IO.Path]::GetDirectoryName($audit))))|Out-Null;[IO.File]::WriteAllText((Extended $audit),'retained audit')
  $raw=[Security.AccessControl.RawSecurityDescriptor]::new('O:BAG:BAD:P(A;;FA;;;SY)(A;;FA;;;BA)S:(AU;SAFA;FA;;;WD)');$descriptor=New-Object byte[] $raw.BinaryLength;$raw.GetBinaryForm($descriptor,0)
- Require ([RooVerificationRecovery.Native]::Exact((Extended $audit),[uint32]7,$descriptor)) 'real-audit-acl-fixture-created'
+ Require ([RooIndustriesVerificationRecovery.Native]::Exact((Extended $audit),[uint32]7,$descriptor)) 'real-audit-acl-fixture-created'
  Refuses {Get-RecoveryRows $auditParent} 'Audit ACL' 'audit-acl-still-refused'
  Require (@(@($adsFile,$link,$writer,$audit,$missing)|Where-Object {$_.Length -lt 260}).Count -eq 0) 'every-negative-fixture-uses-a-long-path'
  ExactRaw $original @(RawRows $source) 'original-and-foreign-sentinel-readonly-unchanged'

@@ -8,10 +8,10 @@ $nonce=Initialize-HarnessInvocation $(if($HelpersOnly -and $EvidenceName){$Evide
 Ensure-HarnessOutputDirectory $OutRoot
 . (Get-HarnessToolPath (Join-Path $Source 'backend\scripts\BrandCompatibility.Common.ps1'))
 Add-Type -AssemblyName UIAutomationClient,UIAutomationTypes,System.Drawing,System.Windows.Forms
-if(-not('RooUpdateUi' -as [type])){Add-Type @'
+if(-not('RooIndustriesUpdateUi' -as [type])){Add-Type @'
 using System;
 using System.Runtime.InteropServices;
-public static class RooUpdateUi {
+public static class RooIndustriesUpdateUi {
  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr window);
  [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr window,int mode);
  [DllImport("user32.dll")] public static extern IntPtr GetWindowLongPtr(IntPtr window,int index);
@@ -24,13 +24,13 @@ public static class RooUpdateUi {
  [DllImport("user32.dll",SetLastError=true)] public static extern bool PostMessage(IntPtr window,uint message,IntPtr w,IntPtr l);
 }
 '@}
-if(-not('RooUpdateCacheLock' -as [type])){Add-Type @'
+if(-not('RooIndustriesUpdateCacheLock' -as [type])){Add-Type @'
 using System;
 using System.IO;
 using System.Threading;
-public sealed class RooUpdateCacheLock : IDisposable {
+public sealed class RooIndustriesUpdateCacheLock : IDisposable {
  readonly object gate = new object(); FileStream file; Timer timer; DateTime released;
- public RooUpdateCacheLock(string path) { file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read); }
+ public RooIndustriesUpdateCacheLock(string path) { file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read); }
  public DateTime ReleasedAtUtc { get { lock(gate) return released; } }
  public void Arm(DateTime birth, int seconds) {
   if(seconds <= 0) throw new ArgumentOutOfRangeException("seconds");
@@ -40,7 +40,7 @@ public sealed class RooUpdateCacheLock : IDisposable {
  public void Dispose() { lock(gate) { if(timer != null) { timer.Dispose(); timer = null; } Release(); } }
 }
 '@}
-[RooUpdateUi]::SetProcessDPIAware()|Out-Null
+[RooIndustriesUpdateUi]::SetProcessDPIAware()|Out-Null
 $install='C:\Program Files\Roo Industries\Optimization Suite'
 $exe=if($FixtureExe){$FixtureExe}else{Join-Path $install 'app\RooIndustries.OptimizationSuite.App.exe'}
 $hostExe=Join-Path $install 'backend\bin\optimizer\Optimizer.Host.exe'
@@ -69,15 +69,15 @@ function Activate($element){
   $expander=[Windows.Automation.TreeWalker]::ControlViewWalker.GetParent($expander)
  }
  if($element.Current.ClassName -eq 'Button' -and $element.Current.ControlType -eq $CT::Pane){
-  $handle=[IntPtr]::new($element.Current.NativeWindowHandle);$parent=[RooUpdateUi]::GetParent($handle)
-  [int]$owner=0;[RooUpdateUi]::GetWindowThreadProcessId($parent,[ref]$owner)|Out-Null
+  $handle=[IntPtr]::new($element.Current.NativeWindowHandle);$parent=[RooIndustriesUpdateUi]::GetParent($handle)
+  [int]$owner=0;[RooIndustriesUpdateUi]::GetWindowThreadProcessId($parent,[ref]$owner)|Out-Null
   if($owner -ne $element.Current.ProcessId){throw 'Button parent belongs to another process.'}
   [IntPtr]$result=[IntPtr]::Zero
-  if(-not[RooUpdateUi]::SendMessageTimeout($parent,0x111,[IntPtr]::new([RooUpdateUi]::GetDlgCtrlID($handle)),$handle,3,2000,[ref]$result)){throw 'Native dialog button refused input.'}
+  if(-not[RooIndustriesUpdateUi]::SendMessageTimeout($parent,0x111,[IntPtr]::new([RooIndustriesUpdateUi]::GetDlgCtrlID($handle)),$handle,3,2000,[ref]$result)){throw 'Native dialog button refused input.'}
   return
  }
  if($element.Current.NativeWindowHandle -and ($element.Current.ControlType -in @($CT::Button,$CT::CheckBox) -or $element.Current.ClassName -in @('TNewButton','Button'))){
-  if([RooUpdateUi]::PostMessage([IntPtr]::new($element.Current.NativeWindowHandle),0xF5,[IntPtr]::Zero,[IntPtr]::Zero)){return}
+  if([RooIndustriesUpdateUi]::PostMessage([IntPtr]::new($element.Current.NativeWindowHandle),0xF5,[IntPtr]::Zero,[IntPtr]::Zero)){return}
   throw ('Native button refused input, Win32 '+[Runtime.InteropServices.Marshal]::GetLastWin32Error())
  }
  throw ('Control cannot be activated: '+$element.Current.Name+' '+$element.Current.ControlType.ProgrammaticName)
@@ -90,11 +90,11 @@ function WaitStatus([string]$expected,[int]$seconds=100){WaitFor {$text=StatusTe
 function Shot([string]$name){
  Register-HarnessWindow $script:window|Out-Null
  $handle=[IntPtr]::new($script:window.Current.NativeWindowHandle)
- $wasTopmost=([RooUpdateUi]::GetWindowLongPtr($handle,-20).ToInt64() -band 8) -ne 0
+ $wasTopmost=([RooIndustriesUpdateUi]::GetWindowLongPtr($handle,-20).ToInt64() -band 8) -ne 0
  $bitmap=$null;$graphics=$null
  try{
-  [RooUpdateUi]::ShowWindow($handle,9)|Out-Null
-  if(-not[RooUpdateUi]::SetWindowPos($handle,[IntPtr]::new(-1),0,0,0,0,0x53)){throw 'Screenshot window could not be raised.'}
+  [RooIndustriesUpdateUi]::ShowWindow($handle,9)|Out-Null
+  if(-not[RooIndustriesUpdateUi]::SetWindowPos($handle,[IntPtr]::new(-1),0,0,0,0,0x53)){throw 'Screenshot window could not be raised.'}
   Start-Sleep -Milliseconds 300
   $r=$script:window.Current.BoundingRectangle
   $bitmap=[Drawing.Bitmap]::new([int]$r.Width,[int]$r.Height);$graphics=[Drawing.Graphics]::FromImage($bitmap)
@@ -103,7 +103,7 @@ function Shot([string]$name){
   try{$bitmap.Save($stream,[Drawing.Imaging.ImageFormat]::Png)}finally{$stream.Dispose()};Register-HarnessFile $path 'screenshot'|Out-Null
  }finally{
   if($graphics){$graphics.Dispose()};if($bitmap){$bitmap.Dispose()}
-  [RooUpdateUi]::SetWindowPos($handle,[IntPtr]::new($(if($wasTopmost){-1}else{-2})),0,0,0,0,0x13)|Out-Null
+  [RooIndustriesUpdateUi]::SetWindowPos($handle,[IntPtr]::new($(if($wasTopmost){-1}else{-2})),0,0,0,0,0x13)|Out-Null
  }
 }
 function Core([string]$action,[hashtable]$fields){Assert-HarnessHostLease;$request=@{schemaVersion=1;repoRoot=$install;confirm=$true};foreach($name in $fields.Keys){$request[$name]=$fields[$name]};Save ('request-'+$action+'.json') $request;$result=Invoke-HarnessHost $hostExe $action $request;if($result.status -ne 'completed'){throw ($action+': '+($result|ConvertTo-Json -Depth 40))};return $result.data}
@@ -154,7 +154,7 @@ function CacheLockRaces{
   $folderEntry=New-HarnessDirectory $folder 'installed-cache-lock' 'invocation'
   $file=Join-Path $folder 'owned-lock.txt';$fileEntry=New-HarnessText $file ($nonce+' '+$seconds) 'installed-cache-lock' 'invocation'
   $cacheEntry=Register-HarnessCache $ExpectedVersion
-  $script:cacheLock=[RooUpdateCacheLock]::new((Get-HarnessLongPath $file))
+  $script:cacheLock=[RooIndustriesUpdateCacheLock]::new((Get-HarnessLongPath $file))
   try{
    Launch $script:cacheLock $seconds;Settings
    $birth=[DateTime]::FromFileTimeUtc([long]$script:owned.Identity.creationTimeFileTimeUtc)
@@ -270,9 +270,9 @@ try{
      if(-not$guideCleared -and (ByNameControl 'Finish' $CT::Button)){
       $list=$win.FindFirst($TS::Descendants,[Windows.Automation.PropertyCondition]::new($A::ClassNameProperty,'TNewCheckListBox'))
       if($list){[IntPtr]$result=[IntPtr]::Zero;$handle=[IntPtr]::new($list.Current.NativeWindowHandle)
-       [RooUpdateUi]::SendMessageTimeout($handle,0x186,[IntPtr]::Zero,[IntPtr]::Zero,3,3000,[ref]$result)|Out-Null
-       [RooUpdateUi]::SendMessageTimeout($handle,0x100,[IntPtr]::new(32),[IntPtr]::Zero,3,3000,[ref]$result)|Out-Null
-       [RooUpdateUi]::SendMessageTimeout($handle,0x101,[IntPtr]::new(32),[IntPtr]::Zero,3,3000,[ref]$result)|Out-Null
+       [RooIndustriesUpdateUi]::SendMessageTimeout($handle,0x186,[IntPtr]::Zero,[IntPtr]::Zero,3,3000,[ref]$result)|Out-Null
+       [RooIndustriesUpdateUi]::SendMessageTimeout($handle,0x100,[IntPtr]::new(32),[IntPtr]::Zero,3,3000,[ref]$result)|Out-Null
+       [RooIndustriesUpdateUi]::SendMessageTimeout($handle,0x101,[IntPtr]::new(32),[IntPtr]::Zero,3,3000,[ref]$result)|Out-Null
        $guideCleared=$true
       }
      }
@@ -377,7 +377,7 @@ try{
         $list=$script:window.FindFirst($TS::Descendants,[Windows.Automation.PropertyCondition]::new($A::ClassNameProperty,'TNewCheckListBox'))
         if(-not$list){throw 'Recovery Finish checkboxes are unavailable'}
         $handle=[IntPtr]::new($list.Current.NativeWindowHandle);[IntPtr]$result=[IntPtr]::Zero
-        foreach($index in 0,1){[RooUpdateUi]::SendMessageTimeout($handle,0x186,[IntPtr]::new($index),[IntPtr]::Zero,3,3000,[ref]$result)|Out-Null;[RooUpdateUi]::SendMessageTimeout($handle,0x100,[IntPtr]::new(32),[IntPtr]::Zero,3,3000,[ref]$result)|Out-Null;[RooUpdateUi]::SendMessageTimeout($handle,0x101,[IntPtr]::new(32),[IntPtr]::Zero,3,3000,[ref]$result)|Out-Null}
+        foreach($index in 0,1){[RooIndustriesUpdateUi]::SendMessageTimeout($handle,0x186,[IntPtr]::new($index),[IntPtr]::Zero,3,3000,[ref]$result)|Out-Null;[RooIndustriesUpdateUi]::SendMessageTimeout($handle,0x100,[IntPtr]::new(32),[IntPtr]::Zero,3,3000,[ref]$result)|Out-Null;[RooIndustriesUpdateUi]::SendMessageTimeout($handle,0x101,[IntPtr]::new(32),[IntPtr]::Zero,3,3000,[ref]$result)|Out-Null}
         Save 'recovery-finish-choices.json' @{readGuide=$false;openApp=$true;source='Inno [Run] defaults: checked guide at index 0, unchecked app at index 1'};Shot 'recovery-finish-open-app';$guideCleared=$true
        }
        foreach($name in 'Finish','Install','Next >','Next'){$button=ByNameControl $name $CT::Button;if($button -and $button.Current.IsEnabled){Activate $button;Start-Sleep -Milliseconds 500;break}}

@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Management;
 
-public sealed class RooHarnessProcessTrace : IDisposable
+public sealed class RooIndustriesHarnessProcessTrace : IDisposable
 {
     public sealed class StartRecord
     {
@@ -17,7 +17,7 @@ public sealed class RooHarnessProcessTrace : IDisposable
     volatile bool stopping;
     volatile string error;
     public string Error { get { return error; } }
-    public RooHarnessProcessTrace(string traceNonce)
+    public RooIndustriesHarnessProcessTrace(string traceNonce)
     {
         this.traceNonce = traceNonce;
         watcher = new ManagementEventWatcher(new ManagementScope("\\\\.\\root\\cimv2"),

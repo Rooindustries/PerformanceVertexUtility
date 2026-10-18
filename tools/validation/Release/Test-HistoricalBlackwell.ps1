@@ -21,9 +21,9 @@ $refused=$false;try{Assert-RecoveryEqual (Recovery-Lines $before) (Recovery-Line
 if(-not$refused){throw 'Damaged stage was accepted'}
 $reg=Join-Path $test 'original.reg'
 [IO.File]::WriteAllText($reg,"Windows Registry Editor Version 5.00`r`n`r`n[HKEY_LOCAL_MACHINE\SOFTWARE\wrong]`r`n`"State`"=hex:09,09`r`n`r`n[HKEY_LOCAL_MACHINE\SOFTWARE\expected]`r`n`"State`"=hex:00,01,02,\`r`n  03,ff`r`n`"After`"=dword:00000001`r`n",[Text.Encoding]::Unicode)
-$bytes=[RooHistoricalBlackwell.Export]::State($reg,'HKEY_LOCAL_MACHINE\SOFTWARE\expected')
+$bytes=[RooIndustriesHistoricalBlackwell.Export]::State($reg,'HKEY_LOCAL_MACHINE\SOFTWARE\expected')
 if((Hash-HistoricalBytes $bytes) -cne (Hash-HistoricalBytes ([byte[]](0,1,2,3,255)))){throw 'Section boundary/continued binary parser failed'}
-$missing=$false;try{[RooHistoricalBlackwell.Export]::State($reg,'HKEY_LOCAL_MACHINE\SOFTWARE\absent')|Out-Null}catch{$missing=$true}
+$missing=$false;try{[RooIndustriesHistoricalBlackwell.Export]::State($reg,'HKEY_LOCAL_MACHINE\SOFTWARE\absent')|Out-Null}catch{$missing=$true}
 if(-not$missing){throw 'Missing section was accepted'}
 Assert-RecoveryEqual (Recovery-Lines $before) (Recovery-Lines @(Get-RecoveryRows $source)) 'private source unchanged'
 $proof=@{protocol='blackwell-private-recovery-check/v1';frame=$test;exactClone=$true;damagedStageRefused=$true;wrongSectionRefused=$true;continuedBinaryExact=$true;sourceUnchanged=$true;liveMutation=$false}
@@ -65,12 +65,12 @@ $key=[Microsoft.Win32.Registry]::CurrentUser.CreateSubKey($privateKey)
 try{
     $security=[Security.AccessControl.RegistrySecurity]::new();$security.SetSecurityDescriptorSddlForm('O:BAG:BAD:P(A;;KA;;;SY)(A;;KA;;;BA)');$key.SetAccessControl($security)
     $large=New-Object byte[] 6879461;$large[0]=1;$large[$large.Length-1]=255
-    [RooHistoricalBlackwell.Raw]::Write($key,'Binary',3,$large)
-    $raw=[RooHistoricalBlackwell.Raw]::Read($key,'Binary');if($raw.Kind -ne 3 -or $raw.Bytes.Length -ne $large.Length -or (Hash-HistoricalBytes $raw.Bytes) -cne (Hash-HistoricalBytes $large)){throw 'Large private raw binary roundtrip differs'}
+    [RooIndustriesHistoricalBlackwell.Raw]::Write($key,'Binary',3,$large)
+    $raw=[RooIndustriesHistoricalBlackwell.Raw]::Read($key,'Binary');if($raw.Kind -ne 3 -or $raw.Bytes.Length -ne $large.Length -or (Hash-HistoricalBytes $raw.Bytes) -cne (Hash-HistoricalBytes $large)){throw 'Large private raw binary roundtrip differs'}
     Save-HistoricalBinary (Join-Path $test 'large-registry.bin') $raw.Bytes
-    [RooHistoricalBlackwell.Raw]::Write($key,'None',0,[byte[]]::new(0));$none=[RooHistoricalBlackwell.Raw]::Read($key,'None');if($none.Kind -ne 0 -or $none.Bytes.Length -ne 0){throw 'Empty REG_NONE differs'}
-    $expand=[Text.Encoding]::Unicode.GetBytes('%ROO_HISTORICAL_ABSENT%'+[char]0);[RooHistoricalBlackwell.Raw]::Write($key,'Expand',2,$expand)
-    $roundtrip=[RooHistoricalBlackwell.Raw]::Read($key,'Expand');if($roundtrip.Kind -ne 2 -or (Hash-HistoricalBytes $roundtrip.Bytes) -cne (Hash-HistoricalBytes $expand)){throw 'Literal expandable string bytes differ'}
+    [RooIndustriesHistoricalBlackwell.Raw]::Write($key,'None',0,[byte[]]::new(0));$none=[RooIndustriesHistoricalBlackwell.Raw]::Read($key,'None');if($none.Kind -ne 0 -or $none.Bytes.Length -ne 0){throw 'Empty REG_NONE differs'}
+    $expand=[Text.Encoding]::Unicode.GetBytes('%ROO_HISTORICAL_ABSENT%'+[char]0);[RooIndustriesHistoricalBlackwell.Raw]::Write($key,'Expand',2,$expand)
+    $roundtrip=[RooIndustriesHistoricalBlackwell.Raw]::Read($key,'Expand');if($roundtrip.Kind -ne 2 -or (Hash-HistoricalBytes $roundtrip.Bytes) -cne (Hash-HistoricalBytes $expand)){throw 'Literal expandable string bytes differ'}
     if($key.GetValue('Expand',$null,[Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames) -cne '%ROO_HISTORICAL_ABSENT%'){throw 'Literal expandable string changed'}
     Save-RecoveryJson (Join-Path $test 'registry-proof.json') @{privateKey=$privateKey;largeBinaryExact=$true;emptyNoneExact=$true;expandRawExact=$true;privateProductKeysUntouched=$true}
 }finally{$key.Dispose()}
@@ -131,29 +131,29 @@ foreach($case in $cases){
     $markerNames=@();$i=0
     foreach($suffix in @('','\PROCESS-RULES','\OPERATIONS')){
         $name=$live.ToUpperInvariant()+$suffix;$markerNames+=$name;$markerNames+=($name+'|protected-at')
-        [RooHistoricalBlackwell.Raw]::Write($k,$name,1,[Text.Encoding]::Unicode.GetBytes($sid+[char]0))
-        [RooHistoricalBlackwell.Raw]::Write($k,($name+'|protected-at'),11,[BitConverter]::GetBytes($ticks[$i]));$i++
+        [RooIndustriesHistoricalBlackwell.Raw]::Write($k,$name,1,[Text.Encoding]::Unicode.GetBytes($sid+[char]0))
+        [RooIndustriesHistoricalBlackwell.Raw]::Write($k,($name+'|protected-at'),11,[BitConverter]::GetBytes($ticks[$i]));$i++
     }
     for($i=0;$i -lt 42;$i++){
         $name=(Join-Path $caseRoot ('foreign-fixture-'+$i+'\operations')).ToUpperInvariant()
-        [RooHistoricalBlackwell.Raw]::Write($k,$name,1,[Text.Encoding]::Unicode.GetBytes($sid+[char]0))
-        [RooHistoricalBlackwell.Raw]::Write($k,($name+'|protected-at'),11,[BitConverter]::GetBytes([long](134353323197027994+$i)))
+        [RooIndustriesHistoricalBlackwell.Raw]::Write($k,$name,1,[Text.Encoding]::Unicode.GetBytes($sid+[char]0))
+        [RooIndustriesHistoricalBlackwell.Raw]::Write($k,($name+'|protected-at'),11,[BitConverter]::GetBytes([long](134353323197027994+$i)))
     }
-    [RooHistoricalBlackwell.Raw]::Write($k,($live.ToUpperInvariant()+'.SIBLING'),3,[byte[]](7,8,9))
-    [RooHistoricalBlackwell.Raw]::Write($k,'OTHER-SID',1,[Text.Encoding]::Unicode.GetBytes('S-1-5-18'+[char]0));$k.Dispose()
+    [RooIndustriesHistoricalBlackwell.Raw]::Write($k,($live.ToUpperInvariant()+'.SIBLING'),3,[byte[]](7,8,9))
+    [RooIndustriesHistoricalBlackwell.Raw]::Write($k,'OTHER-SID',1,[Text.Encoding]::Unicode.GetBytes('S-1-5-18'+[char]0));$k.Dispose()
     $empty=$hive.CreateSubKey($markerKey+'\empty');$empty.Dispose()
-    $k=$hive.CreateSubKey($stateKey);[RooHistoricalBlackwell.Raw]::Write($k,'State',3,[byte[]](5,6,7,8,255));$k.Dispose()
+    $k=$hive.CreateSubKey($stateKey);[RooIndustriesHistoricalBlackwell.Raw]::Write($k,'State',3,[byte[]](5,6,7,8,255));$k.Dispose()
     $registry=@(Get-HistoricalRegistry @($privateRoot) -Hive $hive)
     $markerRows=@(New-HistoricalMarkerPlan $registry $live $markerKey $sid)
     $state=@($registry|Where-Object {$_.key -ceq $stateKey -and $_.name -ceq 'State'})[0]
     $plan=[pscustomobject]@{Frame=$caseRoot;Live=$live;Stage=$originalStage;StageRows=$originalRows;NowRows=$liveRows;RegistryRoots=@($privateRoot);StateKey=$stateKey;MarkerKey=$markerKey;RegistryRows=$registry;MarkerRows=$markerRows;OriginalStateFile=$originalFile;OriginalState=@{kind=3;hash=(Hash-HistoricalBytes ([byte[]](0,1,2,3,255)));length=5};ExpectedState=$state;CaptureHash=('A'*64);StageHash=('B'*64)}
     $k=$hive.OpenSubKey($markerKey,$true)
     switch($case){
-        'changed-sid' {[RooHistoricalBlackwell.Raw]::Write($k,$markerNames[0],1,[Text.Encoding]::Unicode.GetBytes('S-1-5-18'+[char]0))}
-        'changed-kind' {[RooHistoricalBlackwell.Raw]::Write($k,$markerNames[0],2,[Text.Encoding]::Unicode.GetBytes($sid+[char]0))}
-        'changed-qword' {[RooHistoricalBlackwell.Raw]::Write($k,$markerNames[1],11,[BitConverter]::GetBytes([long]134353323197027995))}
-        'same-name-foreign' {[RooHistoricalBlackwell.Raw]::Write($k,$markerNames[0],3,[byte[]](99,0,255))}
-        'extra-marker' {[RooHistoricalBlackwell.Raw]::Write($k,($live.ToUpperInvariant()+'\UNKNOWN'),1,[Text.Encoding]::Unicode.GetBytes($sid+[char]0))}
+        'changed-sid' {[RooIndustriesHistoricalBlackwell.Raw]::Write($k,$markerNames[0],1,[Text.Encoding]::Unicode.GetBytes('S-1-5-18'+[char]0))}
+        'changed-kind' {[RooIndustriesHistoricalBlackwell.Raw]::Write($k,$markerNames[0],2,[Text.Encoding]::Unicode.GetBytes($sid+[char]0))}
+        'changed-qword' {[RooIndustriesHistoricalBlackwell.Raw]::Write($k,$markerNames[1],11,[BitConverter]::GetBytes([long]134353323197027995))}
+        'same-name-foreign' {[RooIndustriesHistoricalBlackwell.Raw]::Write($k,$markerNames[0],3,[byte[]](99,0,255))}
+        'extra-marker' {[RooIndustriesHistoricalBlackwell.Raw]::Write($k,($live.ToUpperInvariant()+'\UNKNOWN'),1,[Text.Encoding]::Unicode.GetBytes($sid+[char]0))}
     };$k.Dispose()
     $beforeRegistry=@(Get-HistoricalRegistry @($privateRoot) -Hive $hive)
     $failure='';try{Invoke-HistoricalActivation $plan $hive}catch{$failure=$_.Exception.Message}
@@ -239,7 +239,7 @@ foreach($row in @($capture.registry|Where-Object {($_.key -ceq 'SOFTWARE\RooIndu
     $key=$hive.CreateSubKey($copy.key)
     try{
         if($row.kind -ceq '<key>'){$security=[Security.AccessControl.RegistrySecurity]::new();$security.SetSecurityDescriptorSddlForm($row.sddl);$key.SetAccessControl($security);$copy.sddl=$key.GetAccessControl().GetSecurityDescriptorSddlForm([Security.AccessControl.AccessControlSections]'Access, Owner, Group')}
-        else{$rawFile=Join-Path (Join-Path $Frame 'registry-asnow') $row.file;Assert-FileHash $rawFile $row.sha256;$bytes=[IO.File]::ReadAllBytes($rawFile);if($bytes.Length -ne $row.length){throw 'Prepared raw registry value length differs'};[RooHistoricalBlackwell.Raw]::Write($key,$copy.name,[uint32]$row.kind,$bytes)}
+        else{$rawFile=Join-Path (Join-Path $Frame 'registry-asnow') $row.file;Assert-FileHash $rawFile $row.sha256;$bytes=[IO.File]::ReadAllBytes($rawFile);if($bytes.Length -ne $row.length){throw 'Prepared raw registry value length differs'};[RooIndustriesHistoricalBlackwell.Raw]::Write($key,$copy.name,[uint32]$row.kind,$bytes)}
     }finally{$key.Dispose()}
     $expectedPrivate+=$copy
 }

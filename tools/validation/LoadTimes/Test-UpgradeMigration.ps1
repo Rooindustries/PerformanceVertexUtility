@@ -94,7 +94,7 @@ function Timer-Ownership($Task, [string]$ControlRoot, [string]$SessionPath, [Dat
     $process = Get-Process -Id $state.processId -ErrorAction Stop
     try {
         $owned = New-OwnedProcess $process
-        if ($owned.Identity.creationTimeFileTimeUtc -cne [string]$state.creationTime -or $owned.Identity.imagePath -ine [RooValidationOwnership.Native]::Canonical($hostExe) -or $process.StartTime.ToUniversalTime() -lt $StartedAfter) { throw 'Timer worker native identity differs from its session receipt; retained.' }
+        if ($owned.Identity.creationTimeFileTimeUtc -cne [string]$state.creationTime -or $owned.Identity.imagePath -ine [RooIndustriesValidationOwnership.Native]::Canonical($hostExe) -or $process.StartTime.ToUniversalTime() -lt $StartedAfter) { throw 'Timer worker native identity differs from its session receipt; retained.' }
         [pscustomobject]@{task=$taskReceipt;process=$owned.Identity;sessionPath=$SessionPath;sessionSha256=(Get-FileHash -LiteralPath $SessionPath -Algorithm SHA256).Hash}
     } finally { $process.Dispose() }
 }
@@ -299,7 +299,7 @@ function Open-App {
 function Read-MigrationProbeOwnership($State) {
     if (-not $State.probeIdentity -or -not $State.probeFileIdentity -or -not $State.probeIdentity.creationTimeFileTimeUtc) { throw 'Migration ownership receipt is missing; resources retained.' }
     if ([int]$State.probeId -ne [int]$State.probeIdentity.pid -or [IO.Path]::GetFullPath($State.probeFileIdentity.path) -ine [IO.Path]::GetFullPath($ProbePath)) { throw 'Migration ownership fields disagree; resources retained.' }
-    if ($State.probeIdentity.imagePath -ine [RooValidationOwnership.Native]::Canonical($ProbePath)) { throw 'Migration image ownership differs; resources retained.' }
+    if ($State.probeIdentity.imagePath -ine [RooIndustriesValidationOwnership.Native]::Canonical($ProbePath)) { throw 'Migration image ownership differs; resources retained.' }
     [pscustomobject]@{probeIdentity=$State.probeIdentity;probeFileIdentity=$State.probeFileIdentity}
 }
 

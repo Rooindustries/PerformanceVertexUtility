@@ -24,7 +24,7 @@ public static class RooTraceCpuLoad {
   Add-Type @'
 using System;
 using System.Runtime.InteropServices;
-public static class RooTraceLoadPlacement {
+public static class RooIndustriesTraceLoadPlacement {
  [StructLayout(LayoutKind.Sequential)] public struct Power { public uint Version,ControlMask,StateMask; }
  [DllImport("kernel32.dll",SetLastError=true)] static extern bool GetProcessDefaultCpuSets(IntPtr process,uint[] ids,uint count,out uint required);
  [DllImport("kernel32.dll",SetLastError=true)] static extern bool SetProcessDefaultCpuSets(IntPtr process,IntPtr ids,uint count);
@@ -38,13 +38,13 @@ public static class RooTraceLoadPlacement {
   $cores=[Environment]::ProcessorCount
   if($cores -gt 63){throw 'The all-core load fixture requires one processor group.'}
   $load=Start-OwnedProcess -FilePath $image -ArgumentList $cores.ToString() -Purpose trace-load -Lifetime run
-  $before=$load.process.ProcessorAffinity.ToInt64();$setsBefore=[RooTraceLoadPlacement]::CpuSets($load.handle);$powerBefore=[RooTraceLoadPlacement]::ReadPower($load.handle);$priorityBefore=[string]$load.process.PriorityClass
-  [RooTraceLoadPlacement]::Configure($load.handle);$load.process.PriorityClass=[Diagnostics.ProcessPriorityClass]::BelowNormal
+  $before=$load.process.ProcessorAffinity.ToInt64();$setsBefore=[RooIndustriesTraceLoadPlacement]::CpuSets($load.handle);$powerBefore=[RooIndustriesTraceLoadPlacement]::ReadPower($load.handle);$priorityBefore=[string]$load.process.PriorityClass
+  [RooIndustriesTraceLoadPlacement]::Configure($load.handle);$load.process.PriorityClass=[Diagnostics.ProcessPriorityClass]::BelowNormal
   $mask=([long]1 -shl $cores)-1
   $load.process.ProcessorAffinity=[IntPtr]::new($mask)
   $after=$load.process.ProcessorAffinity.ToInt64()
   if($after -ne $mask){throw 'The CPU load did not receive the full processor mask.'}
-  Write-HarnessResult $directory 'load.json' @{identity=$load.Identity;cores=$cores;beforeMask=$before;mask=$after;threads=$cores;cpuSetsBefore=$setsBefore;cpuSetsAfter=[RooTraceLoadPlacement]::CpuSets($load.handle);powerBefore=$powerBefore;powerAfter=[RooTraceLoadPlacement]::ReadPower($load.handle);priorityBefore=$priorityBefore;priorityAfter=[string]$load.process.PriorityClass}|Out-Null
+  Write-HarnessResult $directory 'load.json' @{identity=$load.Identity;cores=$cores;beforeMask=$before;mask=$after;threads=$cores;cpuSetsBefore=$setsBefore;cpuSetsAfter=[RooIndustriesTraceLoadPlacement]::CpuSets($load.handle);powerBefore=$powerBefore;powerAfter=[RooIndustriesTraceLoadPlacement]::ReadPower($load.handle);priorityBefore=$priorityBefore;priorityAfter=[string]$load.process.PriorityClass}|Out-Null
  }else{
   $entries=@(Get-HarnessEntries|Where-Object {$_.kind -eq 'process' -and $_.purpose -eq 'trace-load' -and $_.state -eq 'active'})
   if($entries.Count -ne 1){throw 'Expected exactly one owned load process'}

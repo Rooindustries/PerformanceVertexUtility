@@ -1,9 +1,9 @@
 . (Join-Path $PSScriptRoot '..\LoadTimes\CleanupOwnership.Common.ps1')
-if(-not ('RooHarnessWindow' -as [type])){
+if(-not ('RooIndustriesHarnessWindow' -as [type])){
  Add-Type @'
 using System;
 using System.Runtime.InteropServices;
-public static class RooHarnessWindow {
+public static class RooIndustriesHarnessWindow {
  [DllImport("kernel32.dll",CharSet=CharSet.Unicode,SetLastError=true)] static extern bool CreateDirectoryW(string path,IntPtr security);
  public static void CreateDirectory(string path) { if(!CreateDirectoryW(path,IntPtr.Zero))throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error()); }
  [DllImport("user32.dll")] public static extern bool IsWindow(IntPtr h);
@@ -18,13 +18,13 @@ public static class RooHarnessWindow {
 function Get-HarnessLongPath([string]$Path){
  if($Path.StartsWith('\\?\',[StringComparison]::Ordinal)){return $Path}
  $plain=$Path.Replace('/','\')
- $stream='';$offset=[RooValidationOwnership.Native]::StreamOffset($plain)
+ $stream='';$offset=[RooIndustriesValidationOwnership.Native]::StreamOffset($plain)
  if($offset -ge 0){
   $stream=$plain.Substring($offset)
   if($stream.Substring(1) -cnotmatch '^[^\\/:*?"<>|]+(:\$DATA)?$'){throw ('Invalid stream name; refused: '+$Path)}
   $plain=$plain.Substring(0,$offset)
  }
- $plain=[RooValidationOwnership.Native]::FullPath($plain)
+ $plain=[RooIndustriesValidationOwnership.Native]::FullPath($plain)
  if($plain.StartsWith('\\',[StringComparison]::Ordinal)){return '\\?\UNC\'+$plain.Substring(2)+$stream}
  return '\\?\'+$plain+$stream
 }
@@ -35,11 +35,11 @@ function Get-HarnessPlainPath([string]$Path){
 }
 function Get-HarnessToolPath([string]$Path){
  $plain=Get-HarnessPlainPath $Path
- if([RooValidationOwnership.Native]::StreamOffset($plain) -ge 0){throw 'stream paths are .NET-only; cmdlets take -Stream separately'}
+ if([RooIndustriesValidationOwnership.Native]::StreamOffset($plain) -ge 0){throw 'stream paths are .NET-only; cmdlets take -Stream separately'}
  if($plain.Length -ge 260){throw ('Path reaches the 260-character tool limit; use a shorter frame: '+$plain)}
  return $plain
 }
-function Get-HarnessToolArguments([string]$Arguments){[RooValidationOwnership.Native]::ToolArguments($Arguments)}
+function Get-HarnessToolArguments([string]$Arguments){[RooIndustriesValidationOwnership.Native]::ToolArguments($Arguments)}
 function Test-HarnessPath([string]$Path,[ValidateSet('Any','Leaf','Container')][string]$PathType='Any'){
  if($Path -match '^(HKLM|HKCU|Cert):'){if($PathType -eq 'Any'){return Test-Path -LiteralPath $Path};return Test-Path -LiteralPath $Path -PathType $PathType}
  $long=Get-HarnessLongPath $Path
@@ -54,7 +54,7 @@ function Get-HarnessItem([string]$Path,[switch]$Force){
  $directory=[bool]($attributes -band [IO.FileAttributes]::Directory)
  $parent=[IO.Path]::GetDirectoryName($plain.TrimEnd('\'))
  $target=$null
- if($attributes -band [IO.FileAttributes]::ReparsePoint){$target=@([RooValidationOwnership.Native]::JunctionTarget($long))}
+ if($attributes -band [IO.FileAttributes]::ReparsePoint){$target=@([RooIndustriesValidationOwnership.Native]::JunctionTarget($long))}
  [pscustomobject]@{FullName=$plain;LongPath=$long;Name=[IO.Path]::GetFileName($plain.TrimEnd('\'));Extension=[IO.Path]::GetExtension($plain);DirectoryName=$parent;Directory=if($parent){[IO.DirectoryInfo]::new((Get-HarnessLongPath $parent))}else{$null};Target=$target;PSIsContainer=$directory;IsDirectory=$directory;Attributes=$attributes;Length=if($directory){0}else{[IO.FileInfo]::new($long).Length};CreationTimeUtc=[IO.File]::GetCreationTimeUtc($long);LastWriteTimeUtc=[IO.File]::GetLastWriteTimeUtc($long);VersionInfo=if(-not$directory -and [IO.Path]::GetExtension($plain) -in '.exe','.dll'){[Diagnostics.FileVersionInfo]::GetVersionInfo($long)}else{$null}}
 }
 function Get-HarnessChildren([string]$Path,[switch]$File,[switch]$Directory,[string]$Filter='*',[switch]$Force,[string]$ErrorAction='Stop'){
@@ -135,8 +135,8 @@ function Open-HarnessRun([string]$FrameRoot,[string]$FrameId,[string]$ManifestSh
  Invoke-HarnessLedger {param($ledger) $null} -NoWrite|Out-Null
 }
 function Initialize-HarnessInvocation([string]$Scenario,[string]$Scope){
- if(-not$global:RooVerificationInvocationContext -or -not$global:RooVerificationInvocationContext.frame){throw 'A verified windows_ssh interactive invocation is required.'}
- $context=$global:RooVerificationInvocationContext;$frame=$context.frame
+ if(-not$global:RooIndustriesVerificationInvocationContext -or -not$global:RooIndustriesVerificationInvocationContext.frame){throw 'A verified windows_ssh interactive invocation is required.'}
+ $context=$global:RooIndustriesVerificationInvocationContext;$frame=$context.frame
  if(-not$script:Harness -or $script:Harness.Nonce -cne $context.nonce){Open-HarnessRun $frame.runRoot $frame.frameId $frame.manifestSha256 $context.nonce}
  $script:Harness.Scenario=$Scenario;$script:Harness.Scope=$Scope
  Invoke-HarnessLedger {param($ledger)
@@ -178,7 +178,7 @@ function Assert-HarnessHostLease{
  }
  $entry=@(Get-HarnessEntries|Where-Object {$_.kind -eq 'file' -and $_.purpose -eq 'host-lease' -and $_.identity.path -ieq $path -and $_.state -eq 'active' -and $_.nonce -ceq $lease.nonce})
  if($entry.Count -ne 1){throw 'Host lease is not in this frame creation ledger; retained.'}
- $probe=[RooValidationOwnership.ProbeFile]::Open((Get-HarnessLongPath $path),$entry[0].identity.id,$entry[0].identity.hash)
+ $probe=[RooIndustriesValidationOwnership.ProbeFile]::Open((Get-HarnessLongPath $path),$entry[0].identity.id,$entry[0].identity.hash)
  try{$verified=$probe.ReadText()|ConvertFrom-Json;if($verified.frameId -cne $script:Harness.FrameId -or $verified.nonce -cne $lease.nonce){throw 'Host lease identity changed; retained.'}}finally{$probe.Dispose()}
 }
 function Assert-HarnessInstallStart([string]$Image){Assert-HarnessHostLease;Assert-NoForeignInstance $Image}
@@ -198,16 +198,16 @@ function Start-ProcessTrace($Anchor=$null){
  if(-not$script:Harness -or $script:Harness.ReadOnly){throw 'Process trace needs a writable verified invocation.'}
  if($Anchor){$known=Get-HarnessProcess ([int]$Anchor.Identity.pid);if(-not$known -or $known.Identity.creationTimeFileTimeUtc -cne $Anchor.Identity.creationTimeFileTimeUtc -or $known.Identity.imagePath -ine $Anchor.Identity.imagePath){throw 'Trace anchor is not in this creation ledger; retained.'}}
  if($script:Harness.Trace){return $script:Harness.Trace}
- if(-not$global:RooHarnessTraces){$global:RooHarnessTraces=@{}}
+ if(-not$global:RooIndustriesHarnessTraces){$global:RooIndustriesHarnessTraces=@{}}
  $key=$script:Harness.FrameId+':'+$script:Harness.Nonce
- if($global:RooHarnessTraces.ContainsKey($key)){$script:Harness.Trace=$global:RooHarnessTraces[$key];return $script:Harness.Trace}
+ if($global:RooIndustriesHarnessTraces.ContainsKey($key)){$script:Harness.Trace=$global:RooIndustriesHarnessTraces[$key];return $script:Harness.Trace}
  $invocation=Invoke-HarnessLedger {param($ledger) @($ledger.invocations|Where-Object nonce -CEQ $script:Harness.Nonce)|Select-Object -First 1} -NoWrite
  if(-not$invocation){throw 'Process trace has no invocation window.'}
- if(-not('RooHarnessProcessTrace' -as [type])){Add-Type -Path (Get-HarnessToolPath (Join-Path $PSScriptRoot 'HarnessTrace.cs')) -ReferencedAssemblies System.dll,System.Management.dll}
+ if(-not('RooIndustriesHarnessProcessTrace' -as [type])){Add-Type -Path (Get-HarnessToolPath (Join-Path $PSScriptRoot 'HarnessTrace.cs')) -ReferencedAssemblies System.dll,System.Management.dll}
  $traceNonce=[Guid]::NewGuid().ToString('N');$started=[DateTime]::UtcNow
- $receiver=[RooHarnessProcessTrace]::new($traceNonce)
+ $receiver=[RooIndustriesHarnessProcessTrace]::new($traceNonce)
  $script:Harness.Trace=@{Receiver=$receiver;Nonce=$traceNonce;Start=[DateTime]::Parse($invocation.startedAtUtc).ToUniversalTime();Subscribed=$started;Stopped=$false}
- $global:RooHarnessTraces[$key]=$script:Harness.Trace
+ $global:RooIndustriesHarnessTraces[$key]=$script:Harness.Trace
  Invoke-HarnessLedger {param($ledger) $i=@($ledger.invocations|Where-Object nonce -CEQ $script:Harness.Nonce)[0];$i|Add-Member trace ([pscustomobject]@{nonce=$traceNonce;subscribedAtUtc=$started.ToString('o')}) -Force}|Out-Null
  return $script:Harness.Trace
 }
@@ -236,7 +236,7 @@ function Get-HarnessBirthMatch($Events,[int]$ProcessId,[long]$NativeBirth){
 function Register-HarnessTraceRefusal([int]$ProcessId,[string]$Reason,$Events){
  $births=@(foreach($id in @(@($Events|ForEach-Object {$_.identity.processId})+@($ProcessId)|Select-Object -Unique)){
   $p=Get-Process -Id $id -ErrorAction SilentlyContinue
-  if($p){try{$birth=[RooValidationOwnership.Native]::Created($p.Handle);@{pid=$id;nativeBirth=$birth.ToString();lagsMs=@($Events|Where-Object {$_.identity.processId -eq $id}|ForEach-Object {([long]$_.identity.timeCreatedFileTimeUtc-$birth)/10000.0})}}catch{@{pid=$id;nativeBirth=$null;error=$_.Exception.Message}}finally{$p.Dispose()}}
+  if($p){try{$birth=[RooIndustriesValidationOwnership.Native]::Created($p.Handle);@{pid=$id;nativeBirth=$birth.ToString();lagsMs=@($Events|Where-Object {$_.identity.processId -eq $id}|ForEach-Object {([long]$_.identity.timeCreatedFileTimeUtc-$birth)/10000.0})}}catch{@{pid=$id;nativeBirth=$null;error=$_.Exception.Message}}finally{$p.Dispose()}}
   else{@{pid=$id;nativeBirth=$null;absent=$true}}
  })
  Add-HarnessEntry 'trace-refusal' @{processId=$ProcessId;reason=$Reason;candidates=$births} 'trace-refusal'|Out-Null
@@ -269,7 +269,7 @@ function Test-TracedDescendant([int]$ProcessId,[switch]$PassThru,$Ancestor=$null
    if($Ancestor){$owned=@($owned|Where-Object {$_.identity.pid -eq $Ancestor.Identity.pid -and $_.identity.creationTimeFileTimeUtc -ceq $Ancestor.Identity.creationTimeFileTimeUtc})}
    foreach($entry in $owned){
     $held=if($script:Harness.Handles.ContainsKey($parentId)){$script:Harness.Handles[$parentId]}else{Get-HarnessProcess $parentId}
-    if(-not$held -or $held.Identity.creationTimeFileTimeUtc -cne $entry.identity.creationTimeFileTimeUtc -or [RooValidationOwnership.Native]::Created($held.handle).ToString() -cne $entry.identity.creationTimeFileTimeUtc){continue}
+    if(-not$held -or $held.Identity.creationTimeFileTimeUtc -cne $entry.identity.creationTimeFileTimeUtc -or [RooIndustriesValidationOwnership.Native]::Created($held.handle).ToString() -cne $entry.identity.creationTimeFileTimeUtc){continue}
     if([long]$entry.identity.creationTimeFileTimeUtc -lt $trace.Subscribed.ToFileTimeUtc() -and $held.process.HasExited){continue}
     $rootEvents=@($events|Where-Object {$_.identity.processId -eq $parentId -and [long]$_.identity.timeCreatedFileTimeUtc -le [long]$cursor.identity.timeCreatedFileTimeUtc}|Sort-Object {[long]$_.identity.timeCreatedFileTimeUtc} -Descending)
     if($rootEvents.Count){
@@ -297,7 +297,7 @@ function Test-TracedDescendant([int]$ProcessId,[switch]$PassThru,$Ancestor=$null
   $birthMatch=Get-HarnessBirthMatch $traceEvents $ProcessId $birth;$matching=@($birthMatch.matches|Where-Object {$_.identity.processName -ieq [IO.Path]::GetFileName($receipt.Identity.imagePath)})
   if(-not$birthMatch.unique -or $matching.Count -ne 1){return Register-HarnessTraceRefusal $ProcessId 'Native birth is outside the interval or ambiguous' $candidates}
   $valid=@($proofs|Where-Object {$_.candidate.id -ceq $matching[0].id})
-  if($valid.Count -ne 1 -or [long]$valid[0].root.identity.creationTimeFileTimeUtc -gt $birth -or [RooValidationOwnership.Native]::Created($receipt.handle) -ne $birth -or $process.HasExited){return Register-HarnessTraceRefusal $ProcessId 'Parent proof or retained native identity changed' $candidates}
+  if($valid.Count -ne 1 -or [long]$valid[0].root.identity.creationTimeFileTimeUtc -gt $birth -or [RooIndustriesValidationOwnership.Native]::Created($receipt.handle) -ne $birth -or $process.HasExited){return Register-HarnessTraceRefusal $ProcessId 'Parent proof or retained native identity changed' $candidates}
   $proof=@{kind='trace';traceNonce=$trace.Nonce;eventIds=@($valid[0].chain|ForEach-Object {$_.identity.eventNonce});root=$valid[0].root.identity;nativeBirth=$birth.ToString();eventTime=$matching[0].identity.timeCreatedFileTimeUtc;lagMs=$birthMatch.lagMs;windowStart=$trace.Start.ToString('o');windowEnd=[DateTime]::FromFileTimeUtc($end).ToString('o')}
   $entry=Add-HarnessEntry 'process' $receipt.Identity 'descendant' 'invocation' @{ownershipProof=$proof}
   Invoke-HarnessLedger {param($ledger) $record=@($ledger.entries|Where-Object id -CEQ $entry.id)[0];if(-not$record.metadata){$record.metadata=[pscustomobject]@{}};$record.metadata|Add-Member ownershipProof ([pscustomobject]$proof) -Force}|Out-Null
@@ -308,7 +308,7 @@ function Test-TracedDescendant([int]$ProcessId,[switch]$PassThru,$Ancestor=$null
 }
 function Register-HarnessStartedProcess($Process,[string]$Purpose='',[string]$Lifetime='invocation'){
  $handle=$Process.Handle
- $receipt=[pscustomobject]@{process=$Process;handle=$handle;Identity=[pscustomobject]@{pid=$Process.Id;creationTimeFileTimeUtc=[RooValidationOwnership.Native]::Created($handle).ToString();imagePath=[RooValidationOwnership.Native]::Image($handle)}}
+ $receipt=[pscustomobject]@{process=$Process;handle=$handle;Identity=[pscustomobject]@{pid=$Process.Id;creationTimeFileTimeUtc=[RooIndustriesValidationOwnership.Native]::Created($handle).ToString();imagePath=[RooIndustriesValidationOwnership.Native]::Image($handle)}}
  $entry=Add-HarnessEntry 'process' $receipt.Identity $Purpose $Lifetime
  $receipt|Add-Member LedgerId $entry.id;$receipt|Add-Member Nonce $script:Harness.Nonce
  $script:Harness.Handles[[int]$receipt.Identity.pid]=$receipt
@@ -336,7 +336,7 @@ function Get-HarnessExplorerBroker{
   [int]$hwnd=0
   $desktop=$shell.Windows().FindWindowSW(0,$null,8,[ref]$hwnd,1)
   if(-not$desktop -or -not$hwnd){throw 'Desktop Explorer dispatch is unavailable.'}
-  [int]$owner=0;[RooHarnessWindow]::GetWindowThreadProcessId([IntPtr]::new($hwnd),[ref]$owner)|Out-Null
+  [int]$owner=0;[RooIndustriesHarnessWindow]::GetWindowThreadProcessId([IntPtr]::new($hwnd),[ref]$owner)|Out-Null
   $process=Get-CimInstance Win32_Process -Filter ('ProcessId='+$owner)
   if(-not$process -or [IO.Path]::GetFileName($process.ExecutablePath) -ine 'explorer.exe'){throw 'Desktop shell is not Explorer.'}
   return @{shell=$shell;dispatch=$desktop.Document.Application;explorer=$process}
@@ -378,7 +378,7 @@ function Test-OwnedDescendant([int]$ProcessId,[switch]$PassThru,$Ancestor=$null)
    $created=$cim.CreationDate.ToUniversalTime().ToFileTimeUtc()
    if($childTime -and $created -gt $childTime){return $false}
    if($cursor -eq $ancestorId){
-    if([RooValidationOwnership.Native]::Created($Ancestor.handle).ToString() -cne $Ancestor.Identity.creationTimeFileTimeUtc -or [Math]::Abs([long]$Ancestor.Identity.creationTimeFileTimeUtc-$created) -gt 10){return $false}
+    if([RooIndustriesValidationOwnership.Native]::Created($Ancestor.handle).ToString() -cne $Ancestor.Identity.creationTimeFileTimeUtc -or [Math]::Abs([long]$Ancestor.Identity.creationTimeFileTimeUtc-$created) -gt 10){return $false}
     $reached=$true;break
    }
    $childTime=$created;$cursor=[int]$cim.ParentProcessId
@@ -392,7 +392,7 @@ function Test-OwnedDescendant([int]$ProcessId,[switch]$PassThru,$Ancestor=$null)
   if($ProcessId -le 4 -or $seen.ContainsKey($ProcessId)){return $false};$seen[$ProcessId]=$true
   if($script:Harness.Handles.ContainsKey($ProcessId)){
    $held=$script:Harness.Handles[$ProcessId]
-   if([RooValidationOwnership.Native]::Created($held.handle).ToString() -cne $held.Identity.creationTimeFileTimeUtc){return $false}
+   if([RooIndustriesValidationOwnership.Native]::Created($held.handle).ToString() -cne $held.Identity.creationTimeFileTimeUtc){return $false}
    $live=Get-CimInstance Win32_Process -Filter ('ProcessId='+$ProcessId) -ErrorAction SilentlyContinue
    if($live -and [Math]::Abs([long]$held.Identity.creationTimeFileTimeUtc-$live.CreationDate.ToUniversalTime().ToFileTimeUtc()) -gt 10){return $false}
    if($childTime -and [long]$held.Identity.creationTimeFileTimeUtc -gt $childTime){return $false}
@@ -436,16 +436,16 @@ function New-HarnessDirectory([string]$Path,[string]$Purpose='',[string]$Lifetim
  Get-HarnessFolderIdentity $parent|Out-Null
  $leaf=$null
  while($missing.Count){
-  $next=$missing.Pop();[RooHarnessWindow]::CreateDirectory((Get-HarnessLongPath $next))
+  $next=$missing.Pop();[RooIndustriesHarnessWindow]::CreateDirectory((Get-HarnessLongPath $next))
   $entry=Add-HarnessEntry 'folder' (Get-HarnessFolderIdentity $next) $Purpose $Lifetime $(if($next -ine $full){@{emptyOnly=$true}}else{$null})
   if($next -ieq $full){$leaf=$entry}
  }
  return $leaf
 }
 function Register-HarnessFile([string]$Path,[string]$Purpose='',[string]$Lifetime='run',$Metadata=$null){
- $handle=[RooValidationOwnership.Native]::CreateFile((Get-HarnessLongPath $Path),[uint32]2147483648,7,[IntPtr]::Zero,3,0x00200000,[IntPtr]::Zero)
- try{$id=[RooValidationOwnership.Native]::FileId($handle)}finally{$handle.Dispose()}
- $probe=[RooValidationOwnership.ProbeFile]::Open((Get-HarnessLongPath $Path),$id,(Get-HarnessFileSha256 $Path));$probe.Identity.path=(Get-HarnessPlainPath $Path)
+ $handle=[RooIndustriesValidationOwnership.Native]::CreateFile((Get-HarnessLongPath $Path),[uint32]2147483648,7,[IntPtr]::Zero,3,0x00200000,[IntPtr]::Zero)
+ try{$id=[RooIndustriesValidationOwnership.Native]::FileId($handle)}finally{$handle.Dispose()}
+ $probe=[RooIndustriesValidationOwnership.ProbeFile]::Open((Get-HarnessLongPath $Path),$id,(Get-HarnessFileSha256 $Path));$probe.Identity.path=(Get-HarnessPlainPath $Path)
  try{return Add-HarnessEntry 'file' $probe.Identity $Purpose $Lifetime $Metadata}finally{$probe.Dispose()}
 }
 function New-HarnessEvidenceDirectory([string]$OutRoot,[string]$Name){
@@ -455,7 +455,7 @@ function New-HarnessEvidenceDirectory([string]$OutRoot,[string]$Name){
  return $path
 }
 function Copy-HarnessFile([string]$Source,[string]$Destination,[string]$Purpose='fixture',[string]$Lifetime='run'){
- $probe=[RooValidationOwnership.ProbeFile]::Copy((Get-HarnessLongPath $Source),(Get-HarnessLongPath $Destination));$probe.Identity.path=(Get-HarnessPlainPath $Destination)
+ $probe=[RooIndustriesValidationOwnership.ProbeFile]::Copy((Get-HarnessLongPath $Source),(Get-HarnessLongPath $Destination));$probe.Identity.path=(Get-HarnessPlainPath $Destination)
  try{return Add-HarnessEntry 'file' $probe.Identity $Purpose $Lifetime}finally{$probe.Dispose()}
 }
 function Get-HarnessEntryById([string]$Id){$rows=@(Get-HarnessEntries|Where-Object id -CEQ $Id);if($rows.Count -ne 1){throw 'Creation ledger entry is missing or ambiguous.'};return $rows[0]}
@@ -480,7 +480,7 @@ function Assert-HarnessNewSmartScreen($Before,[string]$Directory){
  }
 }
 function New-HarnessText([string]$Path,[string]$Text,[string]$Purpose='',[string]$Lifetime='run'){
- $probe=[RooValidationOwnership.ProbeFile]::Text((Get-HarnessLongPath $Path),$Text);$probe.Identity.path=(Get-HarnessPlainPath $Path)
+ $probe=[RooIndustriesValidationOwnership.ProbeFile]::Text((Get-HarnessLongPath $Path),$Text);$probe.Identity.path=(Get-HarnessPlainPath $Path)
  try{return Add-HarnessEntry 'file' $probe.Identity $Purpose $Lifetime}finally{$probe.Dispose()}
 }
 function Write-HarnessResult([string]$Directory,[string]$Name,$Value){
@@ -495,13 +495,13 @@ function Write-HarnessResult([string]$Directory,[string]$Name,$Value){
 function Read-HarnessResult([string]$Path,[string]$Nonce){
  $entry=@(Get-HarnessEntries|Where-Object {$_.kind -eq 'file' -and $_.purpose -eq 'result' -and $_.identity.path -ieq $Path -and $_.nonce -ceq $Nonce -and $_.state -eq 'active'})
  if($entry.Count -ne 1){throw 'Result is not bound to the requested invocation nonce.'}
- $probe=[RooValidationOwnership.ProbeFile]::Open((Get-HarnessLongPath $entry[0].identity.path),$entry[0].identity.id,$entry[0].identity.hash)
+ $probe=[RooIndustriesValidationOwnership.ProbeFile]::Open((Get-HarnessLongPath $entry[0].identity.path),$entry[0].identity.id,$entry[0].identity.hash)
  try{$value=$probe.ReadText()|ConvertFrom-Json;if($value.nonce -cne $Nonce){throw 'Result content nonce differs.'};return $value.data}finally{$probe.Dispose()}
 }
 function Read-HarnessInputText([string]$Path){
  $entry=@(Get-HarnessEntries|Where-Object {$_.kind -eq 'file' -and $_.identity.path -ieq $Path -and $_.state -eq 'active'})
  if($entry.Count -ne 1){throw 'Input file is not in this run creation ledger; retained.'}
- $probe=[RooValidationOwnership.ProbeFile]::Open((Get-HarnessLongPath $entry[0].identity.path),$entry[0].identity.id,$entry[0].identity.hash)
+ $probe=[RooIndustriesValidationOwnership.ProbeFile]::Open((Get-HarnessLongPath $entry[0].identity.path),$entry[0].identity.id,$entry[0].identity.hash)
  try{return $probe.ReadText()}finally{$probe.Dispose()}
 }
 function Read-HarnessLatestResult([string]$Name,[string]$Scenario='', [string]$Nonce=''){
@@ -540,17 +540,17 @@ function Remove-HarnessEntry($Entry){
    }
    'task'{Remove-OwnedTask $Entry.identity}
    'window'{
-    if([RooHarnessWindow]::IsWindow([IntPtr]::new([long]$Entry.identity.hwnd))){[int]$owner=0;[RooHarnessWindow]::GetWindowThreadProcessId([IntPtr]::new([long]$Entry.identity.hwnd),[ref]$owner)|Out-Null;if($owner -ne $Entry.identity.ownerPid){throw 'Window owner changed; retained.'};$held=Get-HarnessProcess $owner;if(-not$held){throw 'Window owner is no longer an owned process; retained.'};if($held.Identity.creationTimeFileTimeUtc -cne $Entry.identity.ownerCreationTime){throw 'Window process identity changed; retained.'}}
+    if([RooIndustriesHarnessWindow]::IsWindow([IntPtr]::new([long]$Entry.identity.hwnd))){[int]$owner=0;[RooIndustriesHarnessWindow]::GetWindowThreadProcessId([IntPtr]::new([long]$Entry.identity.hwnd),[ref]$owner)|Out-Null;if($owner -ne $Entry.identity.ownerPid){throw 'Window owner changed; retained.'};$held=Get-HarnessProcess $owner;if(-not$held){throw 'Window owner is no longer an owned process; retained.'};if($held.Identity.creationTimeFileTimeUtc -cne $Entry.identity.ownerCreationTime){throw 'Window process identity changed; retained.'}}
    }
    'file'{if([IO.File]::Exists((Get-HarnessLongPath $Entry.identity.path))){
     $identity=$Entry.identity
     if(-not$identity.id){
-     $handle=[RooValidationOwnership.Native]::CreateFile((Get-HarnessLongPath $identity.path),[uint32]2147483648,7,[IntPtr]::Zero,3,0x00200000,[IntPtr]::Zero)
-     try{$id=[RooValidationOwnership.Native]::FileId($handle)}finally{$handle.Dispose()}
+     $handle=[RooIndustriesValidationOwnership.Native]::CreateFile((Get-HarnessLongPath $identity.path),[uint32]2147483648,7,[IntPtr]::Zero,3,0x00200000,[IntPtr]::Zero)
+     try{$id=[RooIndustriesValidationOwnership.Native]::FileId($handle)}finally{$handle.Dispose()}
      if($id.Split(':')[-1] -cne $identity.creationTimeFileTimeUtc){throw 'File creation identity changed; retained.'}
      $identity=@{path=$identity.path;id=$id;hash=$identity.hash}
     }
-    $probe=[RooValidationOwnership.ProbeFile]::Open((Get-HarnessLongPath $identity.path),$identity.id,$identity.hash);try{Remove-OwnedProbe $probe}finally{$probe.Dispose()}
+    $probe=[RooIndustriesValidationOwnership.ProbeFile]::Open((Get-HarnessLongPath $identity.path),$identity.id,$identity.hash);try{Remove-OwnedProbe $probe}finally{$probe.Dispose()}
    }}
    {$_ -in 'folder','cache'}{
     if(Test-HarnessPath $Entry.identity.path -PathType Container){
@@ -578,7 +578,7 @@ function Complete-HarnessInvocation([string]$Status,[switch]$Cleanup){
   $traceIds=@($entries|Where-Object kind -EQ 'trace'|ForEach-Object {$_.id})
   if($traceIds.Count){Invoke-HarnessLedger {param($ledger) foreach($id in $traceIds){(@($ledger.entries|Where-Object id -CEQ $id)[0]).state='removed'}}|Out-Null}
  }
- if($script:Harness.Trace){try{$script:Harness.Trace.Receiver.Dispose()}catch{$errors.Add($_.Exception.Message)}; $global:RooHarnessTraces.Remove($script:Harness.FrameId+':'+$script:Harness.Nonce);$script:Harness.Trace=$null}
+ if($script:Harness.Trace){try{$script:Harness.Trace.Receiver.Dispose()}catch{$errors.Add($_.Exception.Message)}; $global:RooIndustriesHarnessTraces.Remove($script:Harness.FrameId+':'+$script:Harness.Nonce);$script:Harness.Trace=$null}
  $failed=@(Get-HarnessEntries|Where-Object {$_.nonce -ceq $script:Harness.Nonce -and $_.state -eq 'error'})
  $previous=Invoke-HarnessLedger {param($ledger) (@($ledger.invocations|Where-Object nonce -CEQ $script:Harness.Nonce)[0]).status} -NoWrite
  if($errors.Count -or $failed.Count -or $previous -eq 'fail'){$Status='fail'}

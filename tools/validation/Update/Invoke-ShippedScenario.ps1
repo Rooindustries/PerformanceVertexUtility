@@ -43,7 +43,7 @@ function Receipt{
 function Test-OwnedProcess($ownedProcess){
  if(-not$ownedProcess -or -not$ownedProcess.process -or $ownedProcess.process.HasExited){return $false}
  if(-not$ownedProcess.handle){throw ('Incomplete process ownership receipt: '+$ownedProcess.GetType().FullName+'; fields '+($ownedProcess.PSObject.Properties.Name -join ',')+'; '+$MyInvocation.PositionMessage)}
- return [RooValidationOwnership.Native]::Created($ownedProcess.handle).ToString() -eq $ownedProcess.Identity.creationTimeFileTimeUtc
+ return [RooIndustriesValidationOwnership.Native]::Created($ownedProcess.handle).ToString() -eq $ownedProcess.Identity.creationTimeFileTimeUtc
 }
 function Check([string]$name,$observed,[bool]$passed,[string]$evidence='receipt.json'){
  $script:checks.Add(@{check=$name;observed=$observed;status=if($passed){'pass'}else{'fail'};evidence=$evidence})
@@ -324,7 +324,7 @@ function GovernorVerified{
  Check 'governor enabled and running from new install' @{before=$script:governorBeforeUpgrade;after=$governor} ((Test-ShippedGovernorReplacement $script:governorBeforeUpgrade $governor) -and $governor.status.hostRunning -eq $true -and $governor.path -ieq $hostExe -and $governor.sha256 -ieq $hostHash -and @($governor.tasks|Where-Object enabled).Count -gt 0) 'governor-readback.json'
 }
 function ShippedFixtureRead($Process){
- $Process.Refresh();@{pid=$Process.Id;name=$Process.ProcessName;path=$Process.Path;startTimeUtc=$Process.StartTime.ToUniversalTime().ToString('o');priorityClass=[string]$Process.PriorityClass;affinityMask=$Process.ProcessorAffinity.ToInt64();ioPriority=[RooBackgroundOracle]::Io($Process);memoryPriority=[RooBackgroundOracle]::Memory($Process)}
+ $Process.Refresh();@{pid=$Process.Id;name=$Process.ProcessName;path=$Process.Path;startTimeUtc=$Process.StartTime.ToUniversalTime().ToString('o');priorityClass=[string]$Process.PriorityClass;affinityMask=$Process.ProcessorAffinity.ToInt64();ioPriority=[RooIndustriesBackgroundOracle]::Io($Process);memoryPriority=[RooIndustriesBackgroundOracle]::Memory($Process)}
 }
 function ShippedProfileCall([string]$Script,[hashtable]$Arguments){
  $raw=& (Get-HarnessToolPath (Join-Path $install ('backend\scripts\'+$Script+'.ps1'))) @Arguments
@@ -340,7 +340,7 @@ function SavedRuleReadback{
   for($attempt=1;$attempt -le 3;$attempt++){
    $ownedProcess=Start-HarnessExplorerProcess $seed.fixturePath '-t 127.0.0.1' 'saved-rule-fixture';$script:fixtures.Add($ownedProcess)
    $explorerLaunch=$ownedProcess.ExplorerLaunchUtc;$parent=$ownedProcess.ExplorerParent;$p=$ownedProcess.process
-   $p.Refresh();$before=@{pid=$p.Id;priorityClass=[string]$p.PriorityClass;affinity=$p.ProcessorAffinity.ToInt64();ioPriority=[RooBackgroundOracle]::Io($p);memoryPriority=[RooBackgroundOracle]::Memory($p)}
+   $p.Refresh();$before=@{pid=$p.Id;priorityClass=[string]$p.PriorityClass;affinity=$p.ProcessorAffinity.ToInt64();ioPriority=[RooIndustriesBackgroundOracle]::Io($p);memoryPriority=[RooIndustriesBackgroundOracle]::Memory($p)}
    $cim=Get-CimInstance Win32_Process -Filter ('ProcessId='+$p.Id)
    $parent=Get-CimInstance Win32_Process -Filter ('ProcessId='+$cim.ParentProcessId)
    if([IO.Path]::GetFileName($parent.ExecutablePath) -ine 'explorer.exe'){throw 'Fixture was not launched by desktop Explorer.'}
@@ -350,7 +350,7 @@ function SavedRuleReadback{
    Save 'saved-rule-launch-attempts.json' @($attempts+@($row))
    Check 'fresh game starts with all three controls different from the rule' $row $distinct 'saved-rule-launch-attempts.json'
    $until=[DateTime]::UtcNow.AddSeconds(60)
-   do{$p.Refresh();$after=@{pid=$p.Id;priorityClass=[string]$p.PriorityClass;affinity=$p.ProcessorAffinity.ToInt64();ioPriority=[RooBackgroundOracle]::Io($p);memoryPriority=[RooBackgroundOracle]::Memory($p)};if($after.priorityClass -eq 'High' -and $after.affinity -eq 3 -and $after.memoryPriority -eq 2){break};Start-Sleep -Milliseconds 250}while([DateTime]::UtcNow -lt $until)
+   do{$p.Refresh();$after=@{pid=$p.Id;priorityClass=[string]$p.PriorityClass;affinity=$p.ProcessorAffinity.ToInt64();ioPriority=[RooIndustriesBackgroundOracle]::Io($p);memoryPriority=[RooIndustriesBackgroundOracle]::Memory($p)};if($after.priorityClass -eq 'High' -and $after.affinity -eq 3 -and $after.memoryPriority -eq 2){break};Start-Sleep -Milliseconds 250}while([DateTime]::UtcNow -lt $until)
    $row.after=$after;$attempts+=@($row);Save 'saved-rule-launch-attempts.json' $attempts
    Save 'saved-rule-independent-readback.json' @{before=$before;after=$after;expected=$seed.controls;parent=$row.parent;attempts=$attempts;governor=$governor}
    Check 'fresh game receives saved controls' $after ($after.priorityClass -eq 'High' -and $after.affinity -eq 3 -and $after.memoryPriority -eq 2) 'saved-rule-independent-readback.json'
@@ -600,7 +600,7 @@ try{
    Activate (ByName $guides.guides[0].title);Shot 'memory-guide-expanded'
    Check 'Memory guides render' @{found=$found.Count;titles=@($found.title)} ($found.Count -eq 7) 'memory-guide-expanded.png'
    $processId=$script:app.Id
-   [RooUpdateUi]::ShowWindow([IntPtr]::new($script:window.Current.NativeWindowHandle),6)|Out-Null;Start-Sleep 10
+   [RooIndustriesUpdateUi]::ShowWindow([IntPtr]::new($script:window.Current.NativeWindowHandle),6)|Out-Null;Start-Sleep 10
    $samples=(Get-Counter '\Process(*)\ID Process','\Process(*)\Working Set - Private').CounterSamples
    $instances=@($samples|Where-Object {$_.Path -like '*\id process' -and [int]$_.CookedValue -eq $processId}|Select-Object -ExpandProperty InstanceName)
    $private=@($samples|Where-Object {$_.Path -like '*\working set - private' -and $_.InstanceName -in $instances}|Select-Object -ExpandProperty CookedValue)
@@ -619,7 +619,7 @@ try{
    $profilePath=Join-Path $directory ('profile-'+$nonce+'.json');New-HarnessText $profilePath ($profile|ConvertTo-Json -Depth 40) 'background-profile'|Out-Null
    $state=Join-Path $script:Harness.Root ('pf-'+$nonce);New-HarnessDirectory $state 'background-state'|Out-Null
    foreach($preset in 'lower','placement'){
-    foreach($fixture in @($fixtureProcesses|Where-Object ProcessName -in 'RooFixtureUpdater','RooFixtureWebHelper')){$fixture.PriorityClass='AboveNormal';[RooBackgroundOracle]::SetIo($fixture,1);[RooBackgroundOracle]::SetMemory($fixture,3)}
+    foreach($fixture in @($fixtureProcesses|Where-Object ProcessName -in 'RooFixtureUpdater','RooFixtureWebHelper')){$fixture.PriorityClass='AboveNormal';[RooIndustriesBackgroundOracle]::SetIo($fixture,1);[RooIndustriesBackgroundOracle]::SetMemory($fixture,3)}
     $originals=@($fixtureProcesses|ForEach-Object {ShippedFixtureRead $_});Save ($preset+'-before.json') $originals
     $preview=ShippedProfileCall 'Preview-ProcessProfile' @{ProfilePath=$profilePath;Preset=$preset};Save ($preset+'-preview.json') $preview
     $apply=ShippedProfileCall 'Apply-ProcessProfile' @{ProfilePath=$profilePath;Preset=$preset;StateRoot=$state;ConfirmApply=$true};Save ($preset+'-apply.json') $apply

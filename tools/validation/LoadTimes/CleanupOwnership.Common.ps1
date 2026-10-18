@@ -1,4 +1,4 @@
-if(-not ('RooValidationOwnership.Native' -as [type])) {
+if(-not ('RooIndustriesValidationOwnership.Native' -as [type])) {
 Add-Type @'
 using System;
 using System.IO;
@@ -7,7 +7,7 @@ using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using Microsoft.Win32.SafeHandles;
-namespace RooValidationOwnership {
+namespace RooIndustriesValidationOwnership {
  public static class Native {
   [DllImport("kernel32.dll",SetLastError=true)] static extern bool GetProcessTimes(IntPtr h,out long c,out long e,out long k,out long u);
   [DllImport("kernel32.dll",CharSet=CharSet.Unicode,SetLastError=true)] static extern bool QueryFullProcessImageName(IntPtr h,int f,StringBuilder p,ref int n);
@@ -66,24 +66,24 @@ namespace RooValidationOwnership {
 }
 '@
 }
-function Copy-OwnedProbe([string]$Source,[string]$Path) { [RooValidationOwnership.ProbeFile]::Copy($Source,$Path) }
-function New-OwnedTextFile([string]$Path,[string]$Text) { [RooValidationOwnership.ProbeFile]::Text($Path,$Text) }
-function Rename-OwnedFile([string]$Path,[string]$Destination) { [RooValidationOwnership.ProbeFile]::Rename($Path,$Destination) }
+function Copy-OwnedProbe([string]$Source,[string]$Path) { [RooIndustriesValidationOwnership.ProbeFile]::Copy($Source,$Path) }
+function New-OwnedTextFile([string]$Path,[string]$Text) { [RooIndustriesValidationOwnership.ProbeFile]::Text($Path,$Text) }
+function Rename-OwnedFile([string]$Path,[string]$Destination) { [RooIndustriesValidationOwnership.ProbeFile]::Rename($Path,$Destination) }
 function Restore-OwnedFile($Receipt) { if($Receipt){$Receipt.Restore()} }
-function Open-OwnedProbe($Identity) { [RooValidationOwnership.ProbeFile]::Open($Identity.path,$Identity.id,$Identity.hash) }
+function Open-OwnedProbe($Identity) { [RooIndustriesValidationOwnership.ProbeFile]::Open($Identity.path,$Identity.id,$Identity.hash) }
 function Remove-OwnedProbe($Receipt) { if($Receipt){$Receipt.Remove()} }
 function New-OwnedProcess($Process) {
     if($Process.HasExited){return $null}
     try {
         $handle=$Process.Handle
-        [pscustomobject]@{process=$Process;handle=$handle;Identity=[pscustomobject]@{pid=$Process.Id;creationTimeFileTimeUtc=[RooValidationOwnership.Native]::Created($handle).ToString();imagePath=[RooValidationOwnership.Native]::Image($handle)}}
+        [pscustomobject]@{process=$Process;handle=$handle;Identity=[pscustomobject]@{pid=$Process.Id;creationTimeFileTimeUtc=[RooIndustriesValidationOwnership.Native]::Created($handle).ToString();imagePath=[RooIndustriesValidationOwnership.Native]::Image($handle)}}
     } catch {if($Process.HasExited){return $null};throw}
 }
 
 function Stop-OwnedProcess($Receipt) {
     if(-not$Receipt){return}
     if($Receipt.process.HasExited){return}
-    [RooValidationOwnership.Native]::Stop($Receipt.handle,[long]$Receipt.Identity.creationTimeFileTimeUtc,$Receipt.Identity.imagePath)
+    [RooIndustriesValidationOwnership.Native]::Stop($Receipt.handle,[long]$Receipt.Identity.creationTimeFileTimeUtc,$Receipt.Identity.imagePath)
 }
 function Stop-OwnedProcessIdentity($Identity) {
     if(-not$Identity -or -not$Identity.creationTimeFileTimeUtc -or -not$Identity.imagePath){throw 'Incomplete process ownership receipt; retained'}
@@ -93,7 +93,7 @@ function Stop-OwnedProcessIdentity($Identity) {
     try{
         try {$handle=$p.Handle} catch {if($p.HasExited){return};throw}
         if($null -eq $handle -or $handle -eq [IntPtr]::Zero){if($p.HasExited){return};throw 'Live process has no native handle; retained'}
-        [RooValidationOwnership.Native]::Stop($handle,[long]$Identity.creationTimeFileTimeUtc,$Identity.imagePath)
+        [RooIndustriesValidationOwnership.Native]::Stop($handle,[long]$Identity.creationTimeFileTimeUtc,$Identity.imagePath)
     }finally{$p.Dispose()}
 }
 function Get-OwnedRegistryField($Key,[string]$Name) {
@@ -166,7 +166,7 @@ function Register-OwnedProbeTask([string]$Name,[string]$Execute,[string]$Argumen
     $definition.RegistrationInfo.Description='Roo Industries validation ownership '+[Guid]::NewGuid().ToString('N')
     $definition.Principal.UserId=$UserId;$definition.Principal.LogonType=$LogonType;$definition.Principal.RunLevel=1
     $definition.Settings.ExecutionTimeLimit='PT'+$Minutes+'M';$definition.Settings.DisallowStartIfOnBatteries=$false;$definition.Settings.StopIfGoingOnBatteries=$false
-    $action=$definition.Actions.Create(0);$action.Path=[RooValidationOwnership.Native]::Tool($Execute);$action.Arguments=[RooValidationOwnership.Native]::ToolArguments($Arguments);$action.WorkingDirectory=[RooValidationOwnership.Native]::Tool($Directory)
+    $action=$definition.Actions.Create(0);$action.Path=[RooIndustriesValidationOwnership.Native]::Tool($Execute);$action.Arguments=[RooIndustriesValidationOwnership.Native]::ToolArguments($Arguments);$action.WorkingDirectory=[RooIndustriesValidationOwnership.Native]::Tool($Directory)
     $task=$folder.RegisterTaskDefinition($Name,$definition,2,$UserId,$null,$LogonType,$null)
     [pscustomobject]@{name=$Name;path='\';xml=$task.Xml;sddl=$task.GetSecurityDescriptor(7)}
 }

@@ -19,7 +19,7 @@ Add-Type -AssemblyName UIAutomationClient,UIAutomationTypes,System.Windows.Forms
 Add-Type @'
 using System;
 using System.Runtime.InteropServices;
-public static class RooGovernorCaptureWindow {
+public static class RooIndustriesGovernorCaptureWindow {
     [StructLayout(LayoutKind.Sequential)] public struct Rect { public int Left,Top,Right,Bottom; }
     [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
     [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h,int state);
@@ -30,7 +30,7 @@ public static class RooGovernorCaptureWindow {
     [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h,out Rect bounds);
 }
 '@
-[RooGovernorCaptureWindow]::SetProcessDPIAware()|Out-Null
+[RooIndustriesGovernorCaptureWindow]::SetProcessDPIAware()|Out-Null
 $checks=[Collections.Generic.List[object]]::new()
 $script:App=$null;$script:AppReceipt=$null;$script:Win=$null;$script:cleanupFailed=$false
 $passed=$false;$failure=$null;$headline=$null;$detail=$null;$shot=$null;$appHash=$null;$captureBounds=$null;$windowHandle=[IntPtr]::Zero
@@ -48,8 +48,8 @@ function Assert-Epoch {
 }
 function Assert-Window {
     $windowPid=[uint32]0
-    [RooGovernorCaptureWindow]::GetWindowThreadProcessId($script:windowHandle,[ref]$windowPid)|Out-Null
-    if($script:App.HasExited -or $windowPid -ne $script:App.Id -or $script:Win.Current.ProcessId -ne $script:App.Id -or [RooValidationOwnership.Native]::Created($script:App.Handle).ToString() -cne $script:AppReceipt.Identity.creationTimeFileTimeUtc -or [RooValidationOwnership.Native]::Image($script:App.Handle) -ine $script:AppReceipt.Identity.imagePath){throw 'Held app/window identity changed'}
+    [RooIndustriesGovernorCaptureWindow]::GetWindowThreadProcessId($script:windowHandle,[ref]$windowPid)|Out-Null
+    if($script:App.HasExited -or $windowPid -ne $script:App.Id -or $script:Win.Current.ProcessId -ne $script:App.Id -or [RooIndustriesValidationOwnership.Native]::Created($script:App.Handle).ToString() -cne $script:AppReceipt.Identity.creationTimeFileTimeUtc -or [RooIndustriesValidationOwnership.Native]::Image($script:App.Handle) -ine $script:AppReceipt.Identity.imagePath){throw 'Held app/window identity changed'}
 }
 try{
     Assert-Epoch
@@ -62,7 +62,7 @@ try{
     $appHash=(Get-FileHash -LiteralPath $exe).Hash
     $script:App=Start-Process -FilePath $exe -PassThru
     $script:AppReceipt=New-OwnedProcess $script:App
-    if(-not$script:AppReceipt -or $script:AppReceipt.Identity.imagePath -ine [RooValidationOwnership.Native]::Canonical($exe)){throw 'Installed capture app identity unavailable'}
+    if(-not$script:AppReceipt -or $script:AppReceipt.Identity.imagePath -ine [RooIndustriesValidationOwnership.Native]::Canonical($exe)){throw 'Installed capture app identity unavailable'}
     $script:Win=WaitFor { @([Windows.Automation.AutomationElement]::RootElement.FindAll([Windows.Automation.TreeScope]::Children,[Windows.Automation.PropertyCondition]::new([Windows.Automation.AutomationElement]::ProcessIdProperty,$script:App.Id))|Where-Object {$_.Current.NativeWindowHandle -ne 0 -and $_.Current.Name -like 'Roo Industries*'})[0] } 60 'owned app window'
     $windowHandle=[IntPtr]::new($script:Win.Current.NativeWindowHandle);Assert-Window
     $nav=WaitFor {$script:Win.FindFirst([Windows.Automation.TreeScope]::Descendants,[Windows.Automation.AndCondition]::new([Windows.Automation.PropertyCondition]::new([Windows.Automation.AutomationElement]::NameProperty,'Games'),[Windows.Automation.PropertyCondition]::new([Windows.Automation.AutomationElement]::ControlTypeProperty,[Windows.Automation.ControlType]::ListItem)))} 60 'Games navigation'
@@ -74,14 +74,14 @@ try{
     $headline=$status.Current.Name;$detail=(ById 'GovernorDetail').Current.Name
     Check ($headline -ceq $expected -and $headline -notmatch "couldn't confirm|won't start") 'installed governor headline confirms running and starts when you sign in'
     Assert-Window
-    [RooGovernorCaptureWindow]::ShowWindow($windowHandle,3)|Out-Null
-    if(-not[RooGovernorCaptureWindow]::SetWindowPos($windowHandle,[IntPtr]::new(-1),0,0,0,0,0x0043)){throw 'Owned window front placement failed'}
-    [RooGovernorCaptureWindow]::SetForegroundWindow($windowHandle)|Out-Null
+    [RooIndustriesGovernorCaptureWindow]::ShowWindow($windowHandle,3)|Out-Null
+    if(-not[RooIndustriesGovernorCaptureWindow]::SetWindowPos($windowHandle,[IntPtr]::new(-1),0,0,0,0,0x0043)){throw 'Owned window front placement failed'}
+    [RooIndustriesGovernorCaptureWindow]::SetForegroundWindow($windowHandle)|Out-Null
     $script:Win.SetFocus()
     Start-Sleep -Milliseconds 500
-    Check ([RooGovernorCaptureWindow]::GetForegroundWindow() -eq $windowHandle) 'only the held app HWND is foreground before capture'
-    $bounds=[RooGovernorCaptureWindow+Rect]::new()
-    if(-not[RooGovernorCaptureWindow]::GetWindowRect($windowHandle,[ref]$bounds)){throw 'Owned window bounds unavailable'}
+    Check ([RooIndustriesGovernorCaptureWindow]::GetForegroundWindow() -eq $windowHandle) 'only the held app HWND is foreground before capture'
+    $bounds=[RooIndustriesGovernorCaptureWindow+Rect]::new()
+    if(-not[RooIndustriesGovernorCaptureWindow]::GetWindowRect($windowHandle,[ref]$bounds)){throw 'Owned window bounds unavailable'}
     $screen=[Windows.Forms.SystemInformation]::VirtualScreen
     $bounds.Left=[Math]::Max($bounds.Left,$screen.Left);$bounds.Top=[Math]::Max($bounds.Top,$screen.Top)
     $bounds.Right=[Math]::Min($bounds.Right,$screen.Right);$bounds.Bottom=[Math]::Min($bounds.Bottom,$screen.Bottom)
@@ -91,7 +91,7 @@ try{
     try{
         $graphics.CopyFromScreen($bounds.Left,$bounds.Top,0,0,$bitmap.Size)
         Assert-Window
-        if([RooGovernorCaptureWindow]::GetForegroundWindow() -ne $windowHandle -or (ById 'GovernorStatus').Current.Name -cne $headline){throw 'Owned window/status changed during capture'}
+        if([RooIndustriesGovernorCaptureWindow]::GetForegroundWindow() -ne $windowHandle -or (ById 'GovernorStatus').Current.Name -cne $headline){throw 'Owned window/status changed during capture'}
         $shot=Join-Path $OutDir 'governor-sign-in-confirmed.png';$bitmap.Save($shot,[Drawing.Imaging.ImageFormat]::Png)
     }finally{$graphics.Dispose();$bitmap.Dispose()}
     $captureBounds=@{left=$bounds.Left;top=$bounds.Top;width=$width;height=$height}
@@ -103,7 +103,7 @@ try{
     $failure=[string]$_
     $checks.Add(@{passed=$false;check='governor status capture refused'});'FAIL governor status capture refused'
 }finally{
-    if($windowHandle -ne [IntPtr]::Zero){[RooGovernorCaptureWindow]::SetWindowPos($windowHandle,[IntPtr]::new(-2),0,0,0,0,0x0003)|Out-Null}
+    if($windowHandle -ne [IntPtr]::Zero){[RooIndustriesGovernorCaptureWindow]::SetWindowPos($windowHandle,[IntPtr]::new(-2),0,0,0,0,0x0003)|Out-Null}
     if($script:AppReceipt){try{Stop-RooIndustriesApp;Check (-not$script:cleanupFailed) 'owned capture app and its held direct children exited'}catch{$passed=$false;$failure=[string]$_;$checks.Add(@{passed=$false;check='capture app cleanup refused'});'FAIL capture app cleanup refused'}}
     if($script:cleanupFailed){$passed=$false}
     $image=if($shot){@{name=[IO.Path]::GetFileName($shot);sha256=(Get-FileHash -LiteralPath $shot).Hash;bytes=(Get-Item -LiteralPath $shot).Length}}else{$null}
