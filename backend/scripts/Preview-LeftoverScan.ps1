@@ -10,6 +10,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'UninstallCleanup.Common.ps1')
+$script:LeftoverPeerInstallLocations = @()
 
 function Get-MatchingKnownRules {
     param(
@@ -80,6 +81,18 @@ function Add-UniqueLeftoverItem {
     $Items.Add($Item) | Out-Null
 }
 
+function Test-LeftoverPathOverlap {
+    param([string]$Path, [string]$Other)
+    if ([string]::IsNullOrWhiteSpace($Path) -or [string]::IsNullOrWhiteSpace($Other)) { return $false }
+    try { return (Test-RooIndustriesCleanupPathWithin $Path $Other) -or (Test-RooIndustriesCleanupPathWithin $Other $Path) }
+    catch {
+        $left = $Path.TrimEnd('\', '/'); $right = $Other.TrimEnd('\', '/')
+        return $left.Equals($right, [StringComparison]::OrdinalIgnoreCase) -or
+            $left.StartsWith($right + '\', [StringComparison]::OrdinalIgnoreCase) -or
+            $right.StartsWith($left + '\', [StringComparison]::OrdinalIgnoreCase)
+    }
+}
+
 function New-PathCandidate {
     param(
         [object]$Rules,
@@ -89,7 +102,13 @@ function New-PathCandidate {
         [string]$ItemSeed
     )
     $expanded = Resolve-RooIndustriesEnvironmentPath $Path
-    $protected = Test-RooIndustriesProtectedPath $expanded $Rules
+    $finalPath = Get-RooIndustriesFinalPath $expanded
+    $sharedOwners = @($script:LeftoverPeerInstallLocations | Where-Object {
+        (Test-LeftoverPathOverlap $expanded $_.path) -or
+            ($finalPath -and $_.finalPath -and (Test-LeftoverPathOverlap $finalPath $_.finalPath))
+    } | ForEach-Object { $_.displayName } | Select-Object -Unique)
+    $protected = (Test-RooIndustriesProtectedPath $expanded $Rules) -or $sharedOwners.Count -gt 0
+    if ($sharedOwners.Count -gt 0) { $Reason = 'Also used by ' + ($sharedOwners -join ', ') + ', so it is left alone.' }
     $exists = if ([string]::IsNullOrWhiteSpace($expanded)) { $false } else { Test-Path -LiteralPath $expanded -ErrorAction SilentlyContinue }
     return New-RooIndustriesLeftoverItem `
         -ItemId ("folder:" + (ConvertTo-RooIndustriesStableId $ItemSeed)) `
@@ -101,7 +120,7 @@ function New-PathCandidate {
         -DefaultSelected (-not $protected) `
         -Protected $protected `
         -Reason $Reason `
-        -Metadata ([pscustomobject]@{ existsNow = $exists; previewOnly = $true })
+        -Metadata ([pscustomobject]@{ existsNow = $exists; previewOnly = $true; sharedOwners = @($sharedOwners) })
 }
 
 function Add-ServiceCandidates {
@@ -174,11 +193,24 @@ function Add-TaskCandidates {
 
 try {
     $inventory = Get-RooIndustriesInstalledAppInventory $InventoryPath
+    $completeProperty = $inventory.PSObject.Properties['complete']
+    if ($null -ne $completeProperty -and ($completeProperty.Value -isnot [bool] -or $completeProperty.Value -ne $true)) { throw ('The installed app list could not be read completely, so folders shared with other apps cannot be ruled out. Nothing was scanned. ' + (@(Get-RooIndustriesUninstallPropertyArray $inventory 'errors') -join ' ')).Trim() }
     $policy = Read-RooIndustriesUninstallPolicy $PolicyPath
     $protectedCatalog = Read-RooIndustriesProtectedAppsCatalog $ProtectedAppsPath
     $rules = Read-RooIndustriesLeftoverRules $RulesPath
     $app = Find-RooIndustriesInstalledApp $inventory $AppId
     if ($null -eq $app) { throw "App id not found in inventory: $AppId" }
+    $script:LeftoverPeerInstallLocations = @(Get-RooIndustriesUninstallPropertyArray $inventory 'apps' | Where-Object {
+        [string](Get-RooIndustriesUninstallPropertyValue $_ 'appId' '') -ne $AppId -and
+        -not [string]::IsNullOrWhiteSpace(([string](Get-RooIndustriesUninstallPropertyValue $_ 'installLocation' '')).Trim().Trim('"'))
+    } | ForEach-Object {
+        $peerPath = Resolve-RooIndustriesEnvironmentPath (([string](Get-RooIndustriesUninstallPropertyValue $_ 'installLocation' '')).Trim().Trim('"'))
+        [pscustomobject]@{
+            displayName = [string](Get-RooIndustriesUninstallPropertyValue $_ 'displayName' (Get-RooIndustriesUninstallPropertyValue $_ 'appId' ''))
+            path = $peerPath
+            finalPath = Get-RooIndustriesFinalPath $peerPath
+        }
+    })
 
     $classification = Get-RooIndustriesAppClassification $app $protectedCatalog $policy
     $knownRules = @(Get-MatchingKnownRules $app $rules)
