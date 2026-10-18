@@ -146,6 +146,7 @@ try {
     $sequence = New-Object System.Collections.Generic.List[object]
     $status = if ($canExecute) { 'success' } elseif ($ConfirmApply -or $executeRequested) { 'blocked' } else { 'preview' }
     $exportCompleted = $false
+    $exportRefused = $false
     $importCompleted = $false
 
     if ($canExecute -and $Operation -eq 'Apply') {
@@ -153,6 +154,7 @@ try {
         $exportTarget = [string]@(Get-RooIndustriesPropertyArray $exportCommand 'arguments')[2]
         $resolvedExportTarget = if ([string]::IsNullOrWhiteSpace($exportTarget)) { '' } else { Resolve-RooIndustriesPath $exportTarget $exportTarget }
         if ([string]::IsNullOrWhiteSpace($exportTarget) -or (Test-Path -LiteralPath $resolvedExportTarget)) {
+            $exportRefused = $true
             $status = 'failed'
             $sequence.Add([pscustomobject]@{
                 order = 1
@@ -210,7 +212,7 @@ try {
         if (-not $importCompleted) { $status = 'failed' }
     }
 
-    if ($Operation -eq 'Apply' -and $canExecute -and -not [string]::IsNullOrWhiteSpace($RollbackManifestPath)) {
+    if ($Operation -eq 'Apply' -and $canExecute -and -not $exportRefused -and -not [string]::IsNullOrWhiteSpace($RollbackManifestPath)) {
         $resolvedRollbackManifestPath = Resolve-RooIndustriesPath $RollbackManifestPath $RollbackManifestPath
         Write-NvidiaRollbackManifest -Manifest $rollbackManifest -Path $resolvedRollbackManifestPath -ExportCompleted $exportCompleted -ImportAttempted (@($sequence | Where-Object { $_.operation -eq 'import' -and -not $_.skipped }).Count -gt 0) -ImportCompleted $importCompleted -RealExecution ($ExecutorMode -eq 'Real')
     } elseif ($Operation -eq 'Restore' -and $rollbackManifestBound) {

@@ -167,6 +167,21 @@ try {
         Add-Failure 'NVIDIA NIP mock executor did not prove no-auto-apply and hidden invocation'
     }
 
+    $rollbackHash = (Get-FileHash -LiteralPath $rollbackPath -Algorithm SHA256).Hash
+    $exportHash = (Get-FileHash -LiteralPath $exportPath -Algorithm SHA256).Hash
+    $reused = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipExecutor.ps1') -ExecutorMode Mock -MockNvpiShimPath $successShim -HardwareInventoryPath $nvidiaHardware -ExportPath $exportPath -RollbackManifestPath $rollbackPath -ConfirmApply -UserApproved -BenchmarkEvidenceAttached)
+    $rollbackHashAfter = (Get-FileHash -LiteralPath $rollbackPath -Algorithm SHA256).Hash
+    $restorePreview = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipExecutor.ps1') -Operation Restore -HardwareInventoryPath $nvidiaHardware -ExportPath $exportPath -RollbackManifestPath $rollbackPath)
+    $restoreGates = @($restorePreview.gates | Where-Object { $_.gateId -in @('rollback-manifest-bound', 'rollback-export-present') })
+    $evidence.cases['reused-success'] = [pscustomobject]@{ result = $reused; restorePreview = $restorePreview; manifestSha256Before = $rollbackHash; manifestSha256After = $rollbackHashAfter; exportSha256Before = $exportHash; exportSha256After = (Get-FileHash -LiteralPath $exportPath -Algorithm SHA256).Hash }
+    if ($reused.status -eq 'failed' -and $null -eq $reused.rollbackManifestPath -and
+        @($reused.executionSequence).Count -eq 1 -and $reused.executionSequence[0].skipped -and
+        $reused.executionSequence[0].reason -eq 'The rollback export path already exists, so an older file cannot stand in for this export. Choose a new export path; import was not attempted.' -and
+        $rollbackHashAfter -eq $rollbackHash -and (Get-FileHash -LiteralPath $exportPath -Algorithm SHA256).Hash -eq $exportHash -and
+        @(Read-MockLog $successLog).Count -eq 2 -and $restoreGates.Count -eq 2 -and @($restoreGates | Where-Object { -not $_.satisfied -or $_.blocking }).Count -eq 0) {
+        Add-Pass 'Refusing a reused successful export preserves its manifest bytes and both restore gates'
+    } else { Add-Failure 'Refusing a reused successful export must preserve its manifest bytes and both restore gates' }
+
     foreach ($behavior in @('ExportNoFile', 'ExportEmpty')) {
         $caseRoot = Join-Path $tempRoot $behavior
         [IO.Directory]::CreateDirectory($caseRoot) | Out-Null
@@ -204,13 +219,13 @@ try {
         $olderHash = (Get-FileHash -LiteralPath $olderFile -Algorithm SHA256).Hash
         $result = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipExecutor.ps1') -ExecutorMode Mock -MockNvpiShimPath $shimPath -HardwareInventoryPath $nvidiaHardware -ExportPath $caseExportPath -RollbackManifestPath $caseRollbackPath -ConfirmApply -UserApproved -BenchmarkEvidenceAttached)
         $entries = @(Read-MockLog $logPath)
-        $manifest = Get-Content -LiteralPath $caseRollbackPath -Raw | ConvertFrom-Json
+        $manifestExists = Test-Path -LiteralPath $caseRollbackPath
         $olderHashAfter = (Get-FileHash -LiteralPath $olderFile -Algorithm SHA256).Hash
-        $evidence.cases['existing-' + $existingType] = [pscustomobject]@{ result = $result; log = $entries; manifest = $manifest; exportType = $existingType; olderHashBefore = $olderHash; olderHashAfter = $olderHashAfter }
+        $evidence.cases['existing-' + $existingType] = [pscustomobject]@{ result = $result; log = $entries; manifestExists = $manifestExists; exportType = $existingType; olderHashBefore = $olderHash; olderHashAfter = $olderHashAfter }
         if ($result.status -eq 'failed' -and $result.summary.exportAttempted -eq $false -and $result.summary.exportCompleted -eq $false -and
             $result.summary.importAttempted -eq $false -and $result.summary.importCompleted -eq $false -and $entries.Count -eq 0 -and
             [IO.File]::ReadAllText($olderFile) -eq 'older export' -and $olderHashAfter -eq $olderHash -and
-            $manifest.exportCompleted -eq $false -and $manifest.importAttempted -eq $false -and $manifest.importCompleted -eq $false -and
+            -not $manifestExists -and $null -eq $result.rollbackManifestPath -and
             @($result.executionSequence).Count -eq 1 -and $result.executionSequence[0].order -eq 1 -and $result.executionSequence[0].operation -eq 'import' -and
             $result.executionSequence[0].skipped -eq $true -and $result.executionSequence[0].reason -eq 'The rollback export path already exists, so an older file cannot stand in for this export. Choose a new export path; import was not attempted.') {
             Add-Pass "NVIDIA NIP executor preserves an existing export $existingType without running export or import"
