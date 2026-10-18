@@ -32,6 +32,7 @@ The public repository should look like a professional engineering project: inten
 
 - One logical change per commit.
 - Commit messages should describe product or engineering behavior, not the tool used to create it.
+- `python tools/validation/check_baseline.py` fails on personal and test-machine identifiers: real account SIDs, user and home folder names, tailnet and private network addresses, personal email addresses, and literal computer or SSH host names in harness code. Tests and samples use placeholders such as `C:\Users\Client`, `S-1-5-21-111111111-222222222-333333333-1001` and `<test-pc>`; real test-PC values are passed as arguments.
 - Before pushing, run a public-surface scan:
 
 ```powershell
