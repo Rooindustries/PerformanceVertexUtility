@@ -40,7 +40,10 @@ try {
     $catalog = Read-RooIndustriesNvidiaNipCatalog $CatalogPath
     $profile = Get-RooIndustriesNvidiaNipProfile $catalog $ProfileId
     $profileName = [string](Get-RooIndustriesPropertyValue $profile 'profileNameInNip' (Get-RooIndustriesPropertyValue $profile 'name' 'Base Profile'))
-    $resolvedNvpi = if ([string]::IsNullOrWhiteSpace($NvpiExecutablePath)) { '' } else { Resolve-RooIndustriesPath $NvpiExecutablePath $NvpiExecutablePath }
+    if ([string]::IsNullOrWhiteSpace($NvpiExecutablePath)) {
+        $NvpiExecutablePath = [string](Get-RooIndustriesPropertyValue (Get-RooIndustriesPropertyValue $catalog 'toolAsset' $null) 'archivePath' 'Utilities\Other\NVPI\nvidiaProfileInspector.exe')
+    }
+    $resolvedNvpi = Resolve-RooIndustriesPath $NvpiExecutablePath $NvpiExecutablePath
     $toolExists = (-not [string]::IsNullOrWhiteSpace($resolvedNvpi) -and (Test-Path -LiteralPath $resolvedNvpi -PathType Leaf))
 
     $createdProbeRoot = $false
