@@ -124,7 +124,14 @@ try {
     } else {
         Add-Failure 'Shader cache real-path readiness did not preserve files or expose planner proof'
     }
-    $shaderDelete = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-StutterOptimizationRealExecutor.ps1') -OptimizationId shader-cache-cleanup -ShaderCacheRoot $shaderCacheRoot -ConfirmApply -AllowRealSystemExecution -UserApproved)
+    $unapprovedDelete = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-StutterOptimizationRealExecutor.ps1') -OptimizationId shader-cache-cleanup -ShaderCacheRoot $shaderCacheRoot -ConfirmApply -AllowRealSystemExecution)
+    $approvalGate = @($unapprovedDelete.gates | Where-Object { $_.gateId -eq 'explicit-user-approval' })
+    if ($unapprovedDelete.status -eq 'blocked' -and $approvalGate.Count -eq 1 -and $approvalGate[0].blocking -and $unapprovedDelete.capabilities.approvalGatedDeletePathExecuted -eq $false -and (Test-Path -LiteralPath $shaderFile)) {
+        Add-Pass 'Shader cache real executor keeps files when explicit approval is missing'
+    } else {
+        Add-Failure 'Shader cache real executor deleted files without explicit approval'
+    }
+    $shaderDelete =ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-StutterOptimizationRealExecutor.ps1') -OptimizationId shader-cache-cleanup -ShaderCacheRoot $shaderCacheRoot -ConfirmApply -AllowRealSystemExecution -UserApproved)
     $rollbackPath = [string]$shaderDelete.capabilities.rollbackManifestPath
     if ($shaderDelete.status -eq 'success' -and $shaderDelete.capabilities.approvalGatedDeletePathExecuted -eq $true -and (Test-Path -LiteralPath $rollbackPath) -and -not (Test-Path -LiteralPath $shaderFile)) {
         Add-Pass 'Shader cache real executor validates approval-gated delete path on temp cache root'
