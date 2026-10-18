@@ -156,7 +156,7 @@ public partial class RestoreLogsViewModel : PageViewModelBase
                 Path.GetFileNameWithoutExtension(state.Preview.GamePath), GameSessionDisplay.Title(game.Worker), GameSessionDisplay.Restored(game.Worker) ? "Done" : "Review", "neutral"));
         }
 
-        foreach (var entry in (windows?.State?.History ?? []).Reverse())
+        foreach (var entry in (windows?.State?.History ?? []).AsEnumerable().Reverse())
             HistoryRows.Add(new AuditRow(entry.AtUtc.ToLocalTime().ToString("g"), "Windows settings", "neutral", entry.ProfileId,
                 (entry.Changes.Length + (entry.Controls?.Length ?? 0)) + " value changes", windows!.State!.Profiles.Any(profile => profile.Id == entry.ProfileId) ? "Review profile" : "No active profile", "neutral"));
         OnPropertyChanged(nameof(HasHistory));
