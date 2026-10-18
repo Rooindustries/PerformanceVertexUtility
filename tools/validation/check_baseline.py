@@ -194,6 +194,7 @@ def path_lint_negative_controls():
         'allowlisted line': ({target: line}, [entry], False),
         'allowlist entry without a reason': ({target: line}, [dict(entry, reason='')], True),
         'allowlist entry for another line': ({target: '$x = 1\n' + line}, [entry], True),
+        'build output ignored': ({target: '$x = 1', 'tools/validation/Update/bin/Release/x.dll': line, 'tools/validation/Update/obj/x.ps1': line}, None, False),
     }
     results = {}
     for label, (files, allowlist, should_fail) in cases.items():
@@ -209,7 +210,7 @@ def path_lint_negative_controls():
                 lint_tree(temporary / 'tools/validation/Update')
                 failed = False
             except RuntimeError as error:
-                failed = target in str(error)
+                failed = any(relative in str(error) for relative in files)
             results[label] = failed == should_fail
     return results
 
