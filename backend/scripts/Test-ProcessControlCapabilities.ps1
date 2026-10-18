@@ -81,7 +81,7 @@ try {
     $enumPreviewStatus = @('implemented','not-implemented')
     $enumApplyStatus = @('live','fixture-proven','allowlist-shim','helper-contract','preview-only','not-implemented')
     $enumRestoreStatus = @('live','fixture-proven','manifest-ready','not-applicable','not-implemented')
-    $enumDetectionMethod = @('builtin','file-exists','registry-key','registry-value','service-exists','command-on-path','hardware-gpu-vendor','windows-feature')
+    $enumDetectionMethod = @('builtin','file-exists','registry-key','registry-value','service-exists','command-on-path','hardware-gpu-vendor','windows-feature','windows-feature-query')
     $enumUnavailableReason = @('tool-not-present','hardware-not-present','requires-admin-token','requires-helper-manifest','helper-packaging-pending','blocked-by-acl','cli-unsupported','not-safely-executable-yet')
     $enumFrontendTab = @('Game Tune','Clean Junk','Drivers & Settings','Live Feel')
 
