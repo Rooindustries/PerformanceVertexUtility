@@ -1,8 +1,12 @@
+param([string]$EvidencePath = '')
+
 $ErrorActionPreference = 'Stop'
 
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..\..')
 $failures = New-Object System.Collections.Generic.List[string]
 $passes = New-Object System.Collections.Generic.List[string]
+$evidence = [ordered]@{ schemaVersion = 1; test = 'nvidia-probe-path'; cases = [ordered]@{} }
+if ([string]::IsNullOrWhiteSpace($EvidencePath)) { $EvidencePath = Join-Path $repoRoot 'artifacts\validation\nvidia-probe-path.json' }
 
 function Add-Pass {
     param([string]$Message)
@@ -98,6 +102,33 @@ try {
         Add-Failure 'NVIDIA capability probe did not prove real hidden help/export capability'
     }
 
+    $catalog = Get-Content -LiteralPath (Join-Path $repoRoot 'backend\catalogs\nvidia-profile-inspector-nip-catalog.json') -Raw | ConvertFrom-Json
+    $catalog.toolAsset.archivePath = $shimExe
+    $catalogPath = Join-Path $tempRoot 'catalog.json'
+    $catalog | ConvertTo-Json -Depth 24 | Set-Content -LiteralPath $catalogPath -Encoding UTF8
+    $catalogExportPath = Join-Path $tempRoot 'catalog-export.nip'
+    $catalogProbe = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipCapabilityProbe.ps1') -CatalogPath $catalogPath -ExportPath $catalogExportPath -AllowReadOnlyNvpiProbe -PreserveProbeArtifacts)
+    $toolGate = @($catalogProbe.gates | Where-Object { $_.gateId -eq 'nvpi-tool-exists' })
+    $evidence.cases['catalog-tool'] = $catalogProbe
+    if ($catalogProbe.status -eq 'success' -and $toolGate.Count -eq 1 -and $toolGate[0].satisfied -eq $true -and -not $toolGate[0].blocking -and
+        $catalogProbe.nvpiExecutablePath -eq $shimExe -and @($catalogProbe.executionSequence).Count -eq 2 -and
+        $catalogProbe.executionSequence[0].probe -eq 'help' -and $catalogProbe.executionSequence[1].probe -eq 'export-current-profile' -and
+        $catalogProbe.capabilities.realNvpiHelpProbeAttempted -eq $true -and $catalogProbe.capabilities.realNvpiExportProbeAttempted -eq $true -and
+        $catalogProbe.capabilities.realNvpiImportAttempted -eq $false -and (Test-Path -LiteralPath $catalogExportPath -PathType Leaf)) {
+        Add-Pass 'NVIDIA capability probe uses the catalog tool path when no executable override is supplied'
+    } else { Add-Failure 'NVIDIA capability probe must use the catalog tool path when no executable override is supplied' }
+
+    $catalog.toolAsset.archivePath = Join-Path $tempRoot 'missing-nvpi.exe'
+    $catalog | ConvertTo-Json -Depth 24 | Set-Content -LiteralPath $catalogPath -Encoding UTF8
+    $missingCatalogProbe = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipCapabilityProbe.ps1') -CatalogPath $catalogPath -ExportPath (Join-Path $tempRoot 'missing-export.nip') -AllowReadOnlyNvpiProbe)
+    $toolGate = @($missingCatalogProbe.gates | Where-Object { $_.gateId -eq 'nvpi-tool-exists' })
+    $evidence.cases['missing-catalog-tool'] = $missingCatalogProbe
+    if ($missingCatalogProbe.status -eq 'approval-or-input-required' -and $toolGate.Count -eq 1 -and $toolGate[0].blocking -eq $true -and
+        $toolGate[0].satisfied -eq $false -and @($missingCatalogProbe.executionSequence).Count -eq 0 -and
+        $missingCatalogProbe.summary.processRunnerInvoked -eq $false -and $missingCatalogProbe.capabilities.realNvpiImportAttempted -eq $false) {
+        Add-Pass 'NVIDIA capability probe blocks a missing catalog tool without running any process'
+    } else { Add-Failure 'NVIDIA capability probe must block a missing catalog tool without running any process' }
+
     $outsidePath = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) ('roo-industries-rejected-export-' + [guid]::NewGuid().ToString('N') + '.nip')
     $blockedPath = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipCapabilityProbe.ps1') -NvpiExecutablePath $shimExe -ExportPath $outsidePath -AllowReadOnlyNvpiProbe)
     $tempGate = @($blockedPath.gates | Where-Object { $_.gateId -eq 'export-path-temp' }) | Select-Object -First 1
@@ -138,6 +169,13 @@ if ($stateBefore -eq $stateAfter -and $stateAfter -eq 0) {
 }
 
 Add-Pass 'NVIDIA capability probe validation did not invoke real NVPI import'
+
+$evidence.scriptSha256 = (Get-FileHash -LiteralPath (Join-Path $PSScriptRoot 'Invoke-NvidiaNipCapabilityProbe.ps1') -Algorithm SHA256).Hash
+$evidence.passes = @($passes.ToArray()); $evidence.failures = @($failures.ToArray())
+$evidence.stateBefore = $stateBefore; $evidence.stateAfter = $stateAfter; $evidence.fixturesRemoved = -not (Test-Path -LiteralPath $tempRoot)
+[IO.Directory]::CreateDirectory((Split-Path ([IO.Path]::GetFullPath($EvidencePath)) -Parent)) | Out-Null
+$evidence | ConvertTo-Json -Depth 32 | Set-Content -LiteralPath $EvidencePath -Encoding UTF8
+Write-Host "Evidence: $EvidencePath"
 
 Write-Host ''
 if ($failures.Count -eq 0) {
