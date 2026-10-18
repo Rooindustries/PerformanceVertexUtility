@@ -1,11 +1,13 @@
 param(
     [Parameter(Mandatory=$true)][string]$Frame,
-    [ValidateSet('before','after')][string]$Scenario='after'
+    [ValidateSet('before','after')][string]$Scenario='after',
+    [Parameter(Mandatory)][string]$ExpectedMachine,
+    [Parameter(Mandatory)][string]$ExpectedUserSid
 )
 $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
 $identity=[Security.Principal.WindowsIdentity]::GetCurrent()
-if($env:COMPUTERNAME -cne 'CS2-GEN4' -or $identity.User.Value -cne 'S-1-5-21-1846494563-3099854232-4004002307-1001' -or -not [Security.Principal.WindowsPrincipal]::new($identity).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)){throw 'Unexpected fixture machine, SID or token'}
+if($env:COMPUTERNAME -cne $ExpectedMachine -or $identity.User.Value -cne $ExpectedUserSid -or -not [Security.Principal.WindowsPrincipal]::new($identity).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)){throw 'Unexpected fixture machine, SID or token'}
 if($Frame -notmatch '^C:\\RooBuild\\[0-9a-f]{32}$'){throw 'Fixture frame must be a new GUID child of C:\RooBuild'}
 foreach($path in 'C:\RooBuild',$Frame){
     $item=Get-Item -LiteralPath $path -Force

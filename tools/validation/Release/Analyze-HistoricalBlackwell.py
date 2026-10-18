@@ -12,10 +12,13 @@ SPEC = importlib.util.spec_from_file_location('win', ROOT / 'tools/validation/wi
 WIN = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(WIN)
 parser = argparse.ArgumentParser()
+parser.add_argument('--host', required=True)
+parser.add_argument('--expected-machine', required=True)
+parser.add_argument('--expected-sid', required=True)
 parser.add_argument('--receipt', required=True)
 args = parser.parse_args()
 receipt = json.loads(Path(args.receipt).read_text())
-if receipt['machine'] != 'CS2-GEN4' or receipt['sid'] != 'S-1-5-21-1846494563-3099854232-4004002307-1001' or not re.fullmatch(r'C:\\ProgramData\\RooRecoveryBlackwell-[a-f0-9]{32}', receipt['frame']):
+if receipt['machine'] != args.expected_machine or receipt['sid'] != args.expected_sid or not re.fullmatch(r'C:\\ProgramData\\RooRecoveryBlackwell-[a-f0-9]{32}', receipt['frame']):
     raise ValueError('Wrong historical snapshot receipt')
 FRAME = receipt['frame'].replace('\\', '/')
 APPROVED = {'roo-industries-cache-check', 'roo-industries-migration-check', 'roo-industries-migration-timer', 'roo-industries-migration-blocker', 'roo-migration-check', 'roo-cache-check'}
@@ -30,7 +33,7 @@ with tempfile.TemporaryDirectory(prefix='roo-blackwell-private-state-') as direc
     decoded = {}
     for name, relative in [('original', 'original-state.bin'), ('asnow', 'registry-asnow/value-0000.bin')]:
         path = Path(directory) / name
-        subprocess.run(['scp', *WIN.SSH_OPTIONS, 'blackwell-lan:' + FRAME + '/' + relative, str(path)], capture_output=True, check=True)
+        subprocess.run(['scp', *WIN.SSH_OPTIONS, args.host + ':' + FRAME + '/' + relative, str(path)], capture_output=True, check=True)
         path.chmod(0o600)
         data = path.read_bytes()
         if hashlib.sha256(data).hexdigest().upper() != EXPECTED[name]:

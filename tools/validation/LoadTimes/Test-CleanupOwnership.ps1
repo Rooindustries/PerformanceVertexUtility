@@ -1,7 +1,7 @@
-param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutDir,[string[]]$Only=@())
+param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutDir,[string[]]$Only=@(),[Parameter(Mandatory)][string]$ExpectedMachine)
 $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
-if($env:COMPUTERNAME -cne 'CS2-GEN4'){throw 'Wrong fixture computer'}
+if($env:COMPUTERNAME -cne $ExpectedMachine){throw 'Wrong fixture computer'}
 $frame='C:\Windows\Temp\roo-industries-percent-folders'
 if([IO.File]::ReadAllText((Join-Path $frame 'fixture-owner.txt')) -cne "Roo Industries percent folders owned scratch`r`n"){throw 'Wrong fixture owner'}
 foreach($p in @($frame,(Split-Path $frame -Parent),'C:\Windows','C:\')){if((Get-Item -LiteralPath $p).Attributes -band [IO.FileAttributes]::ReparsePoint){throw 'Reparse ancestry'}}

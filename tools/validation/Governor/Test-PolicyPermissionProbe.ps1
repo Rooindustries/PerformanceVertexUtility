@@ -1,7 +1,7 @@
-param([Parameter(Mandatory=$true)][string]$Frame,[Parameter(Mandatory=$true)][string]$Script,[Parameter(Mandatory=$true)][string]$Helper,[switch]$Before)
+param([Parameter(Mandatory=$true)][string]$Frame,[Parameter(Mandatory=$true)][string]$Script,[Parameter(Mandatory=$true)][string]$Helper,[switch]$Before,[Parameter(Mandatory)][string]$ExpectedMachine,[Parameter(Mandatory)][string]$ExpectedUserSid)
 $ErrorActionPreference='Stop'
 $identity=[Security.Principal.WindowsIdentity]::GetCurrent()
-if($env:COMPUTERNAME -cne 'CS2-GEN4' -or $identity.User.Value -cne 'S-1-5-21-1846494563-3099854232-4004002307-1001' -or -not [Security.Principal.WindowsPrincipal]::new($identity).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)){throw 'Fixture identity differs'}
+if($env:COMPUTERNAME -cne $ExpectedMachine -or $identity.User.Value -cne $ExpectedUserSid -or -not [Security.Principal.WindowsPrincipal]::new($identity).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)){throw 'Fixture identity differs'}
 if($Frame -cnotmatch '^C:\\RooBuild\\policy-permission-[a-f0-9]{32}$'){throw 'Private frame differs'}
 foreach($p in @('C:\RooBuild',$Frame)){$i=Get-Item -LiteralPath $p;if($i.Attributes -band [IO.FileAttributes]::ReparsePoint){throw 'Reparse frame'};$a=Get-Acl -LiteralPath $p;if($a.GetOwner([Security.Principal.SecurityIdentifier]).Value -notin 'S-1-5-32-544','S-1-5-18'){throw 'Frame owner differs'};foreach($r in $a.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])){if($r.AccessControlType -eq 'Allow' -and $r.IdentityReference.Value -notin 'S-1-5-32-544','S-1-5-18' -and ([long]$r.FileSystemRights -band 0x500D0156)){throw 'Frame has an untrusted writer'}}}
 $env:TEMP=$Frame;$env:TMP=$Frame

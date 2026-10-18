@@ -15,8 +15,14 @@ w = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(w)
 p = w.ps_literal
 parser = argparse.ArgumentParser()
+parser.add_argument('--host', required=True)
+parser.add_argument('--expected-machine', required=True)
+parser.add_argument('--expected-sid', required=True)
+parser.add_argument('--second-sid', required=True)
 parser.add_argument('--out', required=True, type=Path)
 args = parser.parse_args()
+if args.second_sid == args.expected_sid:
+    parser.error('--second-sid must differ from --expected-sid')
 args.out.mkdir(parents=True, exist_ok=False)
 
 def cleanup_execution(execution, helper_path, out):
@@ -39,7 +45,7 @@ try {
 }finally{foreach($r in $held){$r.Dispose()};$directory.Dispose()}
 """
     (out / 'execution-cleanup.ps1').write_text(cleanup)
-    result = w.invoke('optimizer-9070', 'SERVI-WINDOWS-D', cleanup, timeout=w.CLEANUP_TIMEOUT)
+    result = w.invoke(args.host, args.expected_machine, cleanup, timeout=w.CLEANUP_TIMEOUT)
     (out / 'execution-cleanup.json').write_text(result.stdout)
     return json.loads(result.stdout.strip().splitlines()[-1])
 
@@ -137,8 +143,8 @@ while(-not[IO.File]::Exists((Join-Path $output 'release-child.txt')) -and [DateT
 '''
 
 REMOTE = r'''
-$expected='S-1-5-21-2864832615-2000329836-3074386272-1001'
-if($env:COMPUTERNAME -cne 'SERVI-WINDOWS-D' -or [Security.Principal.WindowsIdentity]::GetCurrent().User.Value -cne $expected){throw 'Native fixture target differs'}
+$expected=__EXPECTED_SID__
+if($env:COMPUTERNAME -cne __EXPECTED_MACHINE__ -or [Security.Principal.WindowsIdentity]::GetCurrent().User.Value -cne $expected){throw 'Native fixture target differs'}
 if(-not[Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)){throw 'Elevated staging required'}
 __GUARDS__
 . __PARENT_HELPER__
@@ -163,7 +169,7 @@ $sourceReceipts=@();$generatedDirs=@();$helperReceipt=$null;$childScriptReceipt=
 try {
  Assert-ProtectedFrame $frame;$dirs.Add([SourceBoundary.DirectoryReceipt]::new($frame))
  $results.scopeRefusals=[ordered]@{}
- foreach($sid in 'S-1-5-21-2864832615-2000329836-3074386272-1002','not-a-sid',''){
+ foreach($sid in __SECOND_SID__,'not-a-sid',''){
   $candidate=Join-Path $frame ('refused-'+[Guid]::NewGuid().ToString('N'));$refused=$false
   try{New-ProtectedFrame $candidate $sid}catch{$refused=$true}
   $results.scopeRefusals[$sid]=($refused -and -not[IO.Directory]::Exists($candidate))
@@ -258,25 +264,25 @@ helper_file.write_text(parent_helper)
 execution = 'C:\\RooBuild\\roo-industries-source-boundary-execution-' + uuid.uuid4().hex
 helper_path = execution + '\\ownership.ps1'
 (args.out / 'frame.json').write_text(json.dumps({'frame': frame, 'execution': execution, 'helperHash': hashlib.sha256(helper_file.read_bytes()).hexdigest()}, indent=2))
-w.invoke('optimizer-9070', 'SERVI-WINDOWS-D', w.REMOTE_GUARDS + "\nif([Security.Principal.WindowsIdentity]::GetCurrent().User.Value -cne 'S-1-5-21-2864832615-2000329836-3074386272-1001'){throw 'Target SID differs'};New-ProtectedFrame " + p(frame) + ';New-ProtectedFrame ' + p(execution))
-subprocess.run(['scp', *w.SSH_OPTIONS, str(helper_file), 'optimizer-9070:' + helper_path.replace('\\', '/')], check=True, capture_output=True)
-script = REMOTE.replace('__GUARDS__', w.REMOTE_GUARDS).replace('__FRAME__', p(frame)).replace('__PARENT_HELPER__', p(helper_path))
+w.invoke(args.host, args.expected_machine, w.REMOTE_GUARDS + "\nif([Security.Principal.WindowsIdentity]::GetCurrent().User.Value -cne " + p(args.expected_sid) + "){throw 'Target SID differs'};New-ProtectedFrame " + p(frame) + ';New-ProtectedFrame ' + p(execution))
+subprocess.run(['scp', *w.SSH_OPTIONS, str(helper_file), args.host + ':' + helper_path.replace('\\', '/')], check=True, capture_output=True)
+script = REMOTE.replace('__EXPECTED_SID__', p(args.expected_sid)).replace('__EXPECTED_MACHINE__', p(args.expected_machine)).replace('__SECOND_SID__', p(args.second_sid)).replace('__GUARDS__', w.REMOTE_GUARDS).replace('__FRAME__', p(frame)).replace('__PARENT_HELPER__', p(helper_path))
 script = script.replace('. ' + p(helper_path), "if((Get-FileHash -LiteralPath " + p(helper_path) + " -Algorithm SHA256).Hash -ine '" + hashlib.sha256(helper_file.read_bytes()).hexdigest() + "'){throw 'Fixture helper bytes differ'}; . " + p(helper_path), 1)
 for key, value in {'__ASSEMBLY__': ASSEMBLY, '__CHILD__': CHILD}.items():
     script = script.replace(key, p(value))
 (args.out / 'native.ps1').write_text(script)
-(args.out / 'input.json').write_text(json.dumps({'host': 'optimizer-9070', 'machine': 'SERVI-WINDOWS-D', 'sourceToolHash': hashlib.sha256((ROOT / 'tools/validation/windows_ssh.py').read_bytes()).hexdigest()}, indent=2))
+(args.out / 'input.json').write_text(json.dumps({'host': args.host, 'machine': args.expected_machine, 'sourceToolHash': hashlib.sha256((ROOT / 'tools/validation/windows_ssh.py').read_bytes()).hexdigest()}, indent=2))
 started = time.monotonic()
 try:
-    subprocess.run(['scp', *w.SSH_OPTIONS, str(args.out / 'native.ps1'), 'optimizer-9070:' + (execution + '\\native.ps1').replace('\\', '/')], check=True, capture_output=True)
+    subprocess.run(['scp', *w.SSH_OPTIONS, str(args.out / 'native.ps1'), args.host + ':' + (execution + '\\native.ps1').replace('\\', '/')], check=True, capture_output=True)
     task_name = 'RooSourceBoundary_' + uuid.uuid4().hex
     wrapper = "$ErrorActionPreference='Stop';if((Get-FileHash -LiteralPath " + p(execution + '\\native.ps1') + " -Algorithm SHA256).Hash -ine '" + hashlib.sha256((args.out / 'native.ps1').read_bytes()).hexdigest() + "'){throw 'Native fixture bytes differ'};& " + p(execution + '\\native.ps1') + " | Set-Content -LiteralPath " + p(execution + '\\result.json')
     entry = args.out / 'entry.ps1'
     entry.write_text(wrapper)
-    subprocess.run(['scp', *w.SSH_OPTIONS, str(entry), 'optimizer-9070:' + (execution + '\\entry.ps1').replace('\\', '/')], check=True, capture_output=True)
-    setup = w.REMOTE_GUARDS + "\nif((Get-FileHash -LiteralPath " + p(helper_path) + " -Algorithm SHA256).Hash -ine '" + hashlib.sha256(helper_file.read_bytes()).hexdigest() + "'){throw 'Task helper bytes differ'};. " + p(helper_path) + ";$name=" + p(task_name) + ";$run=" + p(execution) + ";$system=[Environment]::SystemDirectory;$r=$null;try{if((Get-FileHash -LiteralPath (Join-Path $run 'entry.ps1') -Algorithm SHA256).Hash -ine '" + hashlib.sha256(entry.read_bytes()).hexdigest() + "'){throw 'Task entry bytes differ'};$r=Register-OwnedProbeTask $name (Join-Path $system 'conhost.exe') ('--headless \"'+(Join-Path $system 'WindowsPowerShell\\v1.0\\powershell.exe')+'\" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"'+(Join-Path $run 'entry.ps1')+'\"') $system 'S-1-5-21-2864832615-2000329836-3074386272-1001' 3 3;$r|ConvertTo-Json -Depth 8|Set-Content -LiteralPath (Join-Path $run 'task.json');Assert-OwnedTaskUnchanged $r;[void](Get-OwnedTaskFolder '\\').GetTask($name).Run($null);$deadline=[DateTime]::UtcNow.AddSeconds(100);while(-not[IO.File]::Exists((Join-Path $run 'result.json')) -and [DateTime]::UtcNow -lt $deadline){Start-Sleep -Milliseconds 100};if(-not[IO.File]::Exists((Join-Path $run 'result.json'))){throw 'Native scheduled fixture timeout'};Get-Content -Raw -LiteralPath (Join-Path $run 'result.json')}finally{if($r){Remove-OwnedTask $r;Assert-OwnedTaskAbsent $r.name}}"
+    subprocess.run(['scp', *w.SSH_OPTIONS, str(entry), args.host + ':' + (execution + '\\entry.ps1').replace('\\', '/')], check=True, capture_output=True)
+    setup = w.REMOTE_GUARDS + "\nif((Get-FileHash -LiteralPath " + p(helper_path) + " -Algorithm SHA256).Hash -ine '" + hashlib.sha256(helper_file.read_bytes()).hexdigest() + "'){throw 'Task helper bytes differ'};. " + p(helper_path) + ";$name=" + p(task_name) + ";$run=" + p(execution) + ";$system=[Environment]::SystemDirectory;$r=$null;try{if((Get-FileHash -LiteralPath (Join-Path $run 'entry.ps1') -Algorithm SHA256).Hash -ine '" + hashlib.sha256(entry.read_bytes()).hexdigest() + "'){throw 'Task entry bytes differ'};$r=Register-OwnedProbeTask $name (Join-Path $system 'conhost.exe') ('--headless \"'+(Join-Path $system 'WindowsPowerShell\\v1.0\\powershell.exe')+'\" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"'+(Join-Path $run 'entry.ps1')+'\"') $system " + p(args.expected_sid) + " 3 3;$r|ConvertTo-Json -Depth 8|Set-Content -LiteralPath (Join-Path $run 'task.json');Assert-OwnedTaskUnchanged $r;[void](Get-OwnedTaskFolder '\\').GetTask($name).Run($null);$deadline=[DateTime]::UtcNow.AddSeconds(100);while(-not[IO.File]::Exists((Join-Path $run 'result.json')) -and [DateTime]::UtcNow -lt $deadline){Start-Sleep -Milliseconds 100};if(-not[IO.File]::Exists((Join-Path $run 'result.json'))){throw 'Native scheduled fixture timeout'};Get-Content -Raw -LiteralPath (Join-Path $run 'result.json')}finally{if($r){Remove-OwnedTask $r;Assert-OwnedTaskAbsent $r.name}}"
     (args.out / 'task-setup.ps1').write_text(setup)
-    result = w.invoke('optimizer-9070', 'SERVI-WINDOWS-D', setup, timeout=300)
+    result = w.invoke(args.host, args.expected_machine, setup, timeout=300)
     (args.out / 'stdout.txt').write_text(result.stdout)
     (args.out / 'stderr.txt').write_text(result.stderr)
     evidence = json.loads(result.stdout.strip().splitlines()[-1])

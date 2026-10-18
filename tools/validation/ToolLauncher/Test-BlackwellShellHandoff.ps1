@@ -1,6 +1,6 @@
-param([Parameter(Mandatory)][string]$Evidence,[string]$DotNetPath=$env:ROO_INDUSTRIES_DOTNET_EXE)
+param([Parameter(Mandatory)][string]$Evidence,[string]$DotNetPath=$env:ROO_INDUSTRIES_DOTNET_EXE,[Parameter(Mandatory)][string]$ExpectedMachine)
 $ErrorActionPreference='Stop'
-if($env:COMPUTERNAME -cne 'CS2-GEN4'){throw 'This check is authorized only on Blackwell'}
+if($env:COMPUTERNAME -cne $ExpectedMachine){throw 'This check is authorized only on Blackwell'}
 if(-not([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)){throw 'An elevated desktop parent is required'}
 $root=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\..'))
 . (Join-Path $root 'tools\validation\LoadTimes\CleanupOwnership.Common.ps1')

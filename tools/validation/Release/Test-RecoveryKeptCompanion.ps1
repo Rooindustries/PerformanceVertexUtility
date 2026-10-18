@@ -1,6 +1,6 @@
-param([Parameter(Mandatory)][string]$Runner,[Parameter(Mandatory)][string]$Evidence)
+param([Parameter(Mandatory)][string]$Runner,[Parameter(Mandatory)][string]$Evidence,[Parameter(Mandatory)][string]$ExpectedMachine)
 $ErrorActionPreference='Stop'
-if($env:COMPUTERNAME -cne 'CS2-GEN4'){throw 'Blackwell-only private fixture proof'}
+if($env:COMPUTERNAME -cne $ExpectedMachine){throw 'Blackwell-only private fixture proof'}
 if(Test-Path -LiteralPath $Evidence){throw 'Retain existing evidence'}
 $tokens=$null;$errors=$null;$ast=[Management.Automation.Language.Parser]::ParseFile($Runner,[ref]$tokens,[ref]$errors)
 if($errors.Count){throw ($errors|Out-String)}

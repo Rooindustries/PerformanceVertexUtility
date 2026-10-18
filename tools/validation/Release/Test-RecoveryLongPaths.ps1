@@ -1,7 +1,7 @@
-param([Parameter(Mandatory=$true)][string]$Runner,[Parameter(Mandatory=$true)][string]$Frame,[ValidatePattern('^[a-z0-9-]+$')][string]$RunName='proof',[ValidatePattern('^[a-z0-9]{8}$')][string]$CloneName='recovery')
+param([Parameter(Mandatory=$true)][string]$Runner,[Parameter(Mandatory=$true)][string]$Frame,[ValidatePattern('^[a-z0-9-]+$')][string]$RunName='proof',[ValidatePattern('^[a-z0-9]{8}$')][string]$CloneName='recovery',[Parameter(Mandatory)][string]$ExpectedMachine,[Parameter(Mandatory)][string]$ExpectedUserSid)
 $ErrorActionPreference='Stop'
 $clock=[Diagnostics.Stopwatch]::StartNew()
-if($env:COMPUTERNAME -cne 'SERVI-WINDOWS-D' -or [Security.Principal.WindowsIdentity]::GetCurrent().User.Value -cne 'S-1-5-21-2864832615-2000329836-3074386272-1001'){throw 'Wrong native fixture target'}
+if($env:COMPUTERNAME -cne $ExpectedMachine -or [Security.Principal.WindowsIdentity]::GetCurrent().User.Value -cne $ExpectedUserSid){throw 'Wrong native fixture target'}
 if($Frame -cnotmatch '^C:\\RooBuild\\roo-industries-final-run-[a-f0-9]{32}$'){throw 'Not a private GUID fixture'}
 $tokens=$null;$errors=$null;$ast=[Management.Automation.Language.Parser]::ParseFile($Runner,[ref]$tokens,[ref]$errors)
 if($errors.Count){throw 'Runner does not parse'}

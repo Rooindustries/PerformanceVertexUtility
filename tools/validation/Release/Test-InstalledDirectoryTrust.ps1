@@ -1,4 +1,4 @@
-param([Parameter(Mandatory=$true)][string]$Source,[Parameter(Mandatory=$true)][string]$OutDir,[Parameter(Mandatory=$true)][string[]]$Directories,[string]$ExpectedMachine='SERVI-WINDOWS-D')
+param([Parameter(Mandatory=$true)][string]$Source,[Parameter(Mandatory=$true)][string]$OutDir,[Parameter(Mandatory=$true)][string[]]$Directories,[Parameter(Mandatory)][string]$ExpectedMachine)
 $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
 . (Join-Path $Source 'tools\validation\LoadTimes\CleanupOwnership.Common.ps1')

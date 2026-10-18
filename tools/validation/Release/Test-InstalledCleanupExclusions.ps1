@@ -4,7 +4,7 @@ param(
     [Parameter(Mandatory)][string]$OutDir,
     [Parameter(Mandatory)][string]$PrivateDir,
     [Parameter(Mandatory)][string]$ExpectedScriptSha256,
-    [string]$ExpectedMachine='SERVI-WINDOWS-D',
+    [Parameter(Mandatory)][string]$ExpectedMachine,
     [string]$InstallRoot='C:\Program Files\Roo Industries\Optimization Suite'
 )
 $ErrorActionPreference='Stop'

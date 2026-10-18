@@ -1,7 +1,7 @@
-param([switch]$AfterFixtures)
+param([switch]$AfterFixtures,[Parameter(Mandatory)][string]$ExpectedMachine)
 $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
-if($env:COMPUTERNAME -ine 'SERVI-WINDOWS-D'){throw 'Wrong recovery target'}
+if($env:COMPUTERNAME -ine $ExpectedMachine){throw 'Wrong recovery target'}
 $local=[Environment]::GetFolderPath('LocalApplicationData')
 $programData=[Environment]::GetFolderPath('CommonApplicationData')
 $backup=Join-Path $local 'roo-industries-backup'
