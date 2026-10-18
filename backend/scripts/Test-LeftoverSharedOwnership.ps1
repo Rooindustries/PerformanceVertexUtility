@@ -1,6 +1,7 @@
 param([string]$EvidencePath = '')
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'BulkUninstall.Common.ps1')
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $failures = New-Object System.Collections.Generic.List[string]
 $passes = New-Object System.Collections.Generic.List[string]
@@ -126,6 +127,37 @@ try {
         @($distinctItem[0].metadata.sharedOwners | Where-Object { $null -ne $_ }).Count -eq 0) {
         Add-Pass 'Scan D keeps its distinct folder default selected with the invalid G peer present'
     } else { Add-Failure 'Scan D must keep its distinct folder default selected with the invalid G peer present' }
+
+    $peerName = 'App B shared ownership fixture ' + [guid]::NewGuid().ToString('N')
+    $peerKeyPath = 'Software\Microsoft\Windows\CurrentVersion\Uninstall\' + [guid]::NewGuid().ToString('N')
+    $peerRegistered = $false
+    try {
+        $peerKey = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey($peerKeyPath)
+        $peerRegistered = $true
+        try {
+            $peerKey.SetValue('DisplayName', $peerName, [Microsoft.Win32.RegistryValueKind]::String)
+            $peerKey.SetValue('InstallLocation', $shared, [Microsoft.Win32.RegistryValueKind]::String)
+        } finally { $peerKey.Dispose() }
+        $journalPath = Join-Path $tempRoot 'removal-journal.json'
+        Write-RooIndustriesOperationJson @{
+            schemaVersion = 1; kind = 'bulk-uninstall-journal'
+            plan = @{
+                owner = Get-RooIndustriesOperationOwner; fixtureRoot = $tempRoot
+                entries = @(@{ appId = 'fixture:a'; displayName = 'App A'; protected = $false; appSnapshot = $apps[0]
+                    identity = @{ kind = 'fixture'; presencePath = (Join-Path $tempRoot 'removed-a.present') } })
+            }
+            entries = @(@{ appId = 'fixture:a'; state = 'removed'; registrationAbsent = $true })
+        } $journalPath
+        $removalScan = ((& (Join-Path $PSScriptRoot 'Invoke-RemovalLeftovers.ps1') -Action Scan -QueueJournalPath $journalPath -AppId 'fixture:a') -join [Environment]::NewLine) | ConvertFrom-Json
+        $removalItem = @($removalScan.data.items | Where-Object { $_.target -eq $shared })
+        $evidence.scans['post-removal-live-peer'] = $removalScan
+        $evidence.removalScriptSha256 = (Get-FileHash -LiteralPath (Join-Path $PSScriptRoot 'Invoke-RemovalLeftovers.ps1') -Algorithm SHA256).Hash
+        if ($removalScan.status -eq 'preview' -and @($removalScan.errors).Count -eq 0 -and $removalItem.Count -eq 1 -and
+            $removalItem[0].protected -and -not $removalItem[0].defaultSelected -and
+            @($removalItem[0].metadata.sharedOwners) -contains $peerName -and (Get-FileHash -LiteralPath $peerFile -Algorithm SHA256).Hash -eq $peerHash) {
+            Add-Pass 'Post-removal scan protects the removed app folder shared with a currently installed HKCU peer'
+        } else { Add-Failure 'Post-removal scan must protect the removed app folder shared with a currently installed HKCU peer' }
+    } finally { if ($peerRegistered) { [Microsoft.Win32.Registry]::CurrentUser.DeleteSubKeyTree($peerKeyPath, $false) } }
 } catch {
     Add-Failure "Leftover shared ownership validation failed: $($_.Exception.Message)"
 } finally {

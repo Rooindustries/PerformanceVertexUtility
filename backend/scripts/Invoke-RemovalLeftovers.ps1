@@ -26,7 +26,8 @@ try {
         $scratch=Join-Path (Split-Path ([IO.Path]::GetFullPath($QueueJournalPath)) -Parent) ('leftover-discovery-'+[guid]::NewGuid().ToString('N'))
         [IO.Directory]::CreateDirectory($scratch)|Out-Null
         $inventoryPath=Join-Path $scratch 'inventory.json';$scanPath=Join-Path $scratch 'scan.json'
-        Write-RooIndustriesOperationJson @{schemaVersion=1;apps=@($entry.appSnapshot)} $inventoryPath
+        $current=@(Get-RooIndustriesUninstallPropertyArray (Get-RooIndustriesInstalledAppInventory '') 'apps' | Where-Object {[string](Get-RooIndustriesUninstallPropertyValue $_ 'appId' '') -cne $AppId})
+        Write-RooIndustriesOperationJson @{schemaVersion=1;apps=@(@($entry.appSnapshot)+$current)} $inventoryPath
         $scan=(& (Join-Path $PSScriptRoot 'Preview-LeftoverScan.ps1') -AppId $AppId -InventoryPath $inventoryPath -OutputPath $scanPath)|ConvertFrom-Json
         if(@($scan.errors).Count -gt 0){throw (@($scan.errors|ForEach-Object {$_.message}) -join ' ')}
         if($Action -eq 'Scan') {$result.data=$scan;$result.status='preview'}
