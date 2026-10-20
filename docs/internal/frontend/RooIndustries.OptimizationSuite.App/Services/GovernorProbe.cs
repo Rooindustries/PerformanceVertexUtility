@@ -131,7 +131,17 @@ public static class GovernorProbe
         var unknown = false;
         foreach (var process in running.Values.Where(process => string.Equals(process.ImageName, name, StringComparison.OrdinalIgnoreCase)))
         {
-            if (ProcessSnapshot.ImagePath(process.ProcessId) is not { } path) { unknown = true; continue; }
+            string? path;
+            try
+            {
+                using var target = new ProcessTarget(process.ProcessId);
+                var identity = target.Identity();
+                if (identity.CreationTimeFileTimeUtc != process.CreationTimeFileTimeUtc) continue;
+                path = identity.ExecutablePath;
+            }
+            catch (ProcessEndedException) { continue; }
+            catch (Exception) { path = ProcessSnapshot.ImagePath(process.ProcessId); }
+            if (path is null) { unknown = true; continue; }
             if (string.Equals(path, executablePath, StringComparison.OrdinalIgnoreCase)) return true;
         }
         return unknown ? null : false;
