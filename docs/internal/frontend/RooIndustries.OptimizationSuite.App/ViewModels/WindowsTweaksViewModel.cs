@@ -224,8 +224,8 @@ public partial class WindowsTweakRow : ObservableObject
         if (status is { Error: null, ConfiguredChoices.Length: 0, Controls: [{ Address.Kind: "service" } service] } && ServiceState(service) is { } state) Current = state;
         if (status is { Error: null, ConfiguredChoices.Length: 0, Controls: [{ Address.Kind: "mitigations", Value.ValueKind: System.Text.Json.JsonValueKind.Object } policy] } && MitigationFields(Definition) is { Length: > 0 } fields
             && fields.All(field => policy.Value.TryGetProperty(field, out var value) && (value.ValueKind == System.Text.Json.JsonValueKind.String && value.GetString() == "NOTSET" || value.ValueKind == System.Text.Json.JsonValueKind.False)) && NoRawPolicy(policy.Value)) Current = "Windows default";
-        if (Current == "Custom value" && status is { Error: null, Controls: null or [] } && status.Observations.Where(read => read.Value is not null).ToArray() is [var first, ..] found
-            && found.All(read => TweakRead.SameValue(read.Value, first.Value)) && RegistryText(first.Value!) is { } value) Current = "Custom value: " + value;
+        if (Current == "Custom value" && status is { Error: null, Controls: null or [] } && status.Observations is [var first, ..] found
+            && found.All(read => read.Value is not null && TweakRead.SameValue(read.Value, first.Value)) && RegistryText(first.Value!) is { } value) Current = "Custom value: " + value;
         if (Detail.Contains("Office installation", StringComparison.Ordinal)) Detail = "Office was not detected. You can save this choice before installing it.";
         else if (Detail.StartsWith("No choice applies", StringComparison.Ordinal)) Detail = "This Windows or app version does not use this setting. You can keep a saved choice for a matching installation.";
         else if (Detail.Contains("Win32 1060", StringComparison.Ordinal)) Detail = "This Windows service is not installed.";
