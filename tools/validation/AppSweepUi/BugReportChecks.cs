@@ -190,6 +190,7 @@ static class BugReportChecks
                 "Log text already redacted when it was written stays the same when the bug report redacts it again");
             var plain = new BugRedactor(null, "user", "PC").Redact("<user> signed in and user left on PC with <pc-name> and <sid>");
             check(plain == "<user> signed in and <user> left on <pc-name> with <pc-name> and <sid>", "An account named like a placeholder never turns a redacted name into <<user>>");
+            RedactorBoundaries(check, root, logs, specs);
 
             var longText = "@everyone " + new string('x', 10_000);
             var payload = BugReportService.BuildPayload(Report(longText, "<@123> me@example.com",
@@ -293,6 +294,66 @@ static class BugReportChecks
         {
             Directory.Delete(root, recursive: true);
         }
+    }
+
+    public static void RedactorBoundaries(Action<bool, string> check, string root, string logs, BugSpec[] specs)
+    {
+        var own = new BugRedactor(@"C:\Users\John Smith", "John Smith", "PC");
+        check(own.Redact(@"Skipped C:\Users\John Smith: Access is denied.") == "Skipped %USERPROFILE%: Access is denied.",
+            "A colon after the current profile keeps the complete denial message without a surname");
+        check(JsonSerializer.Deserialize<string>(own.Redact(JsonSerializer.Serialize(@"C:\Users\John Smith: denied"))) == "%USERPROFILE%: denied",
+            "A JSON-escaped current profile followed by a colon has no name suffix");
+        var other = new BugRedactor(@"C:\Users\Alice", "Alice", "GAMER-PC", ["John Smith", "Bob"]);
+        foreach (var name in new[] { "John Smith", "Bob" })
+        {
+            var path = @"C:\Users\" + name + ": denied";
+            check(other.Redact(path) == @"C:\Users\<user>: denied"
+                && JsonSerializer.Deserialize<string>(other.Redact(JsonSerializer.Serialize(path))) == @"C:\Users\<user>: denied",
+                "A plain or JSON-escaped " + name + " profile before a colon keeps no surname or last letter");
+        }
+        check(other.Redact(@"C:\Users\Bob and D:\Games") == @"C:\Users\<user> and D:\Games",
+            "Redacting a profile before another drive keeps the adjacent drive and readable context");
+        var sender = new FakeSender();
+        var service = new BugReportService(null, sender, Path.Combine(root, "boundary-reports"), logs, other);
+        var prefixes = new[] { "\n", "\t", "\r\n" };
+        var errors = prefixes.SelectMany(prefix => new[] { prefix + @"C:\Users\Bob\x: denied", prefix + @"C:\Users\John Smith\x: denied", prefix + @"C:\Users\Alice\x: denied" }).ToArray();
+        var expected = prefixes.SelectMany(prefix => new[] { prefix + @"C:\Users\<user>\x: denied", prefix + @"C:\Users\<user>\x: denied", prefix + @"%USERPROFILE%\x: denied" }).ToArray();
+        var tweakState = BugReportService.TweakSummaryJson([], false, null, errors);
+        check(errors.All(error => tweakState.Contains(JsonSerializer.Serialize(error)[1..^1], StringComparison.Ordinal)),
+            "The attachment fixture serializes newline, tab and carriage-return prefixes before the profile paths");
+        var attachment = service.CreateAttachment(specs, tweakState);
+        using (var zip = ZipFile.OpenRead(attachment.FilePath))
+        {
+            var summary = Read(zip, "tweak-state.json");
+            using var document = JsonDocument.Parse(summary);
+            var actual = document.RootElement.GetProperty("lastErrors").EnumerateArray().Select(error => error.GetString()).ToArray();
+            check(actual.SequenceEqual(expected) && !summary.Contains("Bob", StringComparison.Ordinal) && !summary.Contains("Smith", StringComparison.Ordinal),
+                "The attached JSON redacts all nine serialized-prefix paths and preserves every separator and denial message");
+        }
+        check(sender.Calls.Count == 0, "Profile-boundary attachment checks never send a report");
+        var unknown = new BugRedactor(null, null, null);
+        foreach (var name in new[] { "Public-Bob", "Default.Carol" })
+        {
+            var path = @"C:\Users\" + name + @"\x";
+            check(unknown.Redact(path) == @"C:\Users\<user>\x"
+                && JsonSerializer.Deserialize<string>(unknown.Redact(JsonSerializer.Serialize(path))) == @"C:\Users\<user>\x",
+                "An unknown " + name + " folder is private in plain and serialized paths");
+        }
+        foreach (var path in new[] { @"C:\Users\Public\Desktop", @"C:\Users\Default User\x" })
+        {
+            check(unknown.Redact(path) == path && unknown.Redact(JsonSerializer.Serialize(path)) == JsonSerializer.Serialize(path),
+                "The shared folder " + path + " stays readable in plain and serialized paths");
+        }
+        var placeholders = new BugRedactor(null, "user", "PC");
+        const string canonical = "<user> <user> <pc-name> <sid>";
+        var shielded = placeholders.Redact("<USER> user <PC-NAME> <SID>");
+        check(shielded == canonical && placeholders.Redact(shielded) == canonical,
+            "Mixed-case identity placeholders stay canonical and stable for an account named user");
+        const string controls = "Text \u0001 \u0002 \u0003 remains readable.";
+        const string escapedControls = @"Text \u0001 \u0002 \u0003 remains readable.";
+        var escaped = placeholders.Redact(controls);
+        check(escaped == escapedControls && placeholders.Redact(escaped) == escapedControls,
+            "Literal sentinel controls become readable escapes and remain stable without false identity labels");
     }
 
     private static string Read(ZipArchive zip, string name)
