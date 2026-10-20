@@ -21,6 +21,14 @@ static class CatalogIntegrationChecks
         var malformed = JsonNode.Parse(document.RootElement.GetRawText())!;
         malformed["switches"]!["extensions"]!["Params"]!["Script"] = "unreviewed";
         reject(() => CustomTweaks.ParseConstructor(JsonSerializer.SerializeToElement(malformed)), "Unknown constructor parameters cannot become hidden commands");
+        foreach (var edition in new[] { "ProfessionalEducation", "ProfessionalEducationN", "ProfessionalWorkstationN", "EnterpriseSN" })
+        {
+            var editionStore = FileTweakStore.Create(Path.Combine(root, "edition-" + edition + ".json"), 26200, edition);
+            var wanted = new Dictionary<string, string> { ["privacy.activity-feed"] = "disabled", ["windows.98769dae8591ceca"] = "choice-95a6ed84299d0109" };
+            var settings = catalog.Settings.Where(setting => wanted.ContainsKey(setting.Id)).ToArray();
+            var statuses = new TweakEngine(catalog with { Settings = settings, Presets = [], Incompatible = null }, editionStore).Detect().Settings;
+            check(settings.Length == 2 && statuses.All(status => status.Supported && status.AvailableChoices?.Contains(wanted[status.Id]) == true), "Activity history and Cloud search can be turned off on " + edition + " like on Pro");
+        }
         var path = Path.Combine(root, "product-gates.json"); var store = FileTweakStore.Create(path);
         var fixture = OperationFiles.Read<TweakFixture>(path); OperationFiles.Write(path, fixture with { EdgeMajor = 87 });
         var address = new RegistryAddress("CurrentUser", "Registry64", @"Software\RooIndustriesProductFixture", "value", "Choice");
