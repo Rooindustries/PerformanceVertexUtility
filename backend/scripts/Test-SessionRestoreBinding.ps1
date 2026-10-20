@@ -76,7 +76,21 @@ try {
         Write-Json $retry.BackupPath $retryBackup
         $failedRestore = Invoke-Stop $script $retry.SessionId $retry.SessionPath $retry.BackupPath (Join-Path $tempRoot "$kind-incomplete.json") -Confirm
         $retrySaved = Get-Content -LiteralPath $retry.SessionPath -Raw | ConvertFrom-Json
-        Add-Check ($failedRestore.Json.result.status -eq 'failed' -and $failedRestore.Json.restorable -and $retrySaved.restorable -and $failedRestore.Json.result.changedItems.Count -eq 0) "$kind incomplete restore preserves its recovery record without changing a process" "$kind incomplete restore discarded recovery evidence"
+        if ($kind -eq 'game') {
+            Add-Check ($failedRestore.Json.result.status -eq 'rolledBack' -and -not $failedRestore.Json.restorable -and -not $retrySaved.restorable -and $failedRestore.Json.result.changedItems.Count -eq 0 -and @($failedRestore.Json.skippedItems | Where-Object { $_.outcome -eq 'alreadyClosed' }).Count -eq 1) "$kind restore of an app that already closed finishes without changing a process" "$kind restore of an app that already closed did not finish"
+        } else {
+            Add-Check ($failedRestore.Json.result.status -eq 'failed' -and $failedRestore.Json.restorable -and $retrySaved.restorable -and $failedRestore.Json.result.changedItems.Count -eq 0) "$kind incomplete restore preserves its recovery record without changing a process" "$kind incomplete restore discarded recovery evidence"
+        }
+        $runner = Get-Process -Id $PID
+        $unverified = New-SessionFixture $tempRoot $kind "$kind-unverified" "$kind-unverified-profile"
+        $unverifiedBackup = Get-Content -LiteralPath $unverified.BackupPath -Raw | ConvertFrom-Json
+        $unverifiedBackup.snapshots = @([pscustomobject]@{ processId=$PID; processName=$runner.ProcessName; executablePath=$runner.Path; originalPriorityClass='Normal'; processStartTimeUtc='not-recorded' })
+        Write-Json $unverified.BackupPath $unverifiedBackup
+        $priorityBefore = [string]$runner.PriorityClass
+        $unverifiedRestore = Invoke-Stop $script $unverified.SessionId $unverified.SessionPath $unverified.BackupPath (Join-Path $tempRoot "$kind-unverified.json") -Confirm
+        $unverifiedSaved = Get-Content -LiteralPath $unverified.SessionPath -Raw | ConvertFrom-Json
+        $runner.Refresh()
+        Add-Check ($unverifiedRestore.Json.result.status -eq 'failed' -and $unverifiedRestore.Json.restorable -and $unverifiedSaved.restorable -and $unverifiedRestore.Json.result.changedItems.Count -eq 0 -and [string]$runner.PriorityClass -eq $priorityBefore) "$kind incomplete restore of a running app it can't verify keeps its recovery record without changing it" "$kind incomplete restore of an unverified running app discarded recovery evidence or changed it"
         $confirmedOutput = Join-Path $tempRoot "$kind-confirmed.json"
         $confirmed = Invoke-Stop $script $a.SessionId $a.SessionPath $a.BackupPath $confirmedOutput -Confirm
         $saved = Get-Content -LiteralPath $a.SessionPath -Raw | ConvertFrom-Json
