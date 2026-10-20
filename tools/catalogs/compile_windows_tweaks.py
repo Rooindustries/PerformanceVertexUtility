@@ -566,7 +566,7 @@ def compile_catalog():
                         if requirements: gate['requirements'] = requirements
                     matching_constraint = next((item for item in record.get('effectConstraints', []) if item.get('identity', {}).get('hive') == effect.get('hive') and item.get('identity', {}).get('path', '').casefold() == effect.get('path', '').casefold() and item.get('identity', {}).get('name', '').casefold() == effect.get('name', '').casefold()), None)
                     if matching_constraint and 'All' not in matching_constraint['supportedEditions']:
-                        editions = {'Pro': ['Professional', 'ProfessionalN', 'ProfessionalEducation', 'ProfessionalWorkstation'], 'Enterprise': ['Enterprise', 'EnterpriseS', 'EnterpriseN'], 'Education': ['Education', 'EducationN'], 'IoT': ['IoTEnterprise', 'IoTEnterpriseS'], 'Server': ['ServerStandard', 'ServerDatacenter']}
+                        editions = {'Pro': ['Professional', 'ProfessionalN', 'ProfessionalEducation', 'ProfessionalEducationN', 'ProfessionalWorkstation', 'ProfessionalWorkstationN'], 'Enterprise': ['Enterprise', 'EnterpriseS', 'EnterpriseN', 'EnterpriseSN'], 'Education': ['Education', 'EducationN'], 'IoT': ['IoTEnterprise', 'IoTEnterpriseS'], 'Server': ['ServerStandard', 'ServerDatacenter']}
                         allowed = [edition for group in matching_constraint['supportedEditions'] for edition in editions.get(group, [group])]
                         for gate in option_gates: gate['editions'] = allowed if '*' in gate['editions'] else sorted(set(gate['editions']).intersection(allowed))
                         option_gates = [gate for gate in option_gates if gate['editions']]
