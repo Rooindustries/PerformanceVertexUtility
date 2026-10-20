@@ -191,27 +191,33 @@ static class AliasOwnershipChecks
             check(GetShortPathName(target, shortName, (uint)shortName.Capacity) != 0 && !string.Equals(target, shortName.ToString(), StringComparison.OrdinalIgnoreCase) && shortName.ToString().Contains('~'), "Fixture has an actual 8.3 alias");
             CheckPeer(check, root, shortName.ToString(), "actual-8dot3-alias", true);
 
-            var unreadable = Directory.CreateDirectory(Path.Combine(root, "unreadable-peer"));
+            var opaque = Directory.CreateDirectory(Path.Combine(root, "opaque-peer"));
+            var unreadable = Directory.CreateDirectory(Path.Combine(opaque.FullName, "unreadable-peer"));
             var hidden = Path.Combine(unreadable.FullName, "alias");
             links.Add(hidden); Junction(hidden, target);
+            var opaqueSecurity = opaque.GetAccessControl();
+            var opaqueDenied = opaque.GetAccessControl();
+            opaqueDenied.AddAccessRule(new FileSystemAccessRule(WindowsIdentity.GetCurrent().User!, FileSystemRights.ListDirectory | FileSystemRights.Traverse, AccessControlType.Deny));
             var security = unreadable.GetAccessControl();
             var denied = unreadable.GetAccessControl();
             denied.AddAccessRule(new FileSystemAccessRule(WindowsIdentity.GetCurrent().User!, FileSystemRights.ReadAttributes | FileSystemRights.ListDirectory, InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit, PropagationFlags.None, AccessControlType.Deny));
+            using var opaqueHandle = CreateFile(opaque.FullName, 0x100080, 7, IntPtr.Zero, 3, 0x02300000, IntPtr.Zero);
+            check(!opaqueHandle.IsInvalid, "Permission fixture retains its disposable parent metadata handle");
             try
             {
                 unreadable.SetAccessControl(denied);
+                opaque.SetAccessControl(opaqueDenied);
                 PrivilegeChecks.WithoutPrivileges(() =>
                 {
-                    using var parent = CreateFile(root, 0x100080, 7, IntPtr.Zero, 3, 0x02300000, IntPtr.Zero);
                     var method = typeof(FileLease).GetMethod("OpenMetadataChild", BindingFlags.Static | BindingFlags.NonPublic)!;
                     var deniedOpen = false;
-                    try { using var opened = (SafeFileHandle)method.Invoke(null, [parent, unreadable.Name])!; }
+                    try { using var opened = (SafeFileHandle)method.Invoke(null, [opaqueHandle, unreadable.Name])!; }
                     catch (TargetInvocationException error) when (error.InnerException is Win32Exception { NativeErrorCode: 5 }) { deniedOpen = true; }
                     check(deniedOpen, "The resolver's actual parent-relative metadata open refuses the unreadable ancestor");
                     CheckPeer(check, root, hidden, "unreadable-ancestor", false);
                 }, "SeBackupPrivilege", "SeRestorePrivilege", "SeChangeNotifyPrivilege");
             }
-            finally { unreadable.SetAccessControl(security); }
+            finally { opaque.SetAccessControl(opaqueSecurity); unreadable.SetAccessControl(security); }
 
             var retarget = Path.Combine(root, "retarget-peer");
             links.Add(retarget); Junction(retarget, elsewhere);
