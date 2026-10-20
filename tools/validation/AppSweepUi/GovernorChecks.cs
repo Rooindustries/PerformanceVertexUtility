@@ -582,6 +582,11 @@ static class GovernorChecks
         await panel.RetryRestoreCommand.ExecuteAsync(null);
         check(panel.RetryAvailable && panel.Status == "Some settings still could not be put back." && panel.Detail == "Where another program changed a setting afterwards, that program's value was kept.",
             "Put settings back says a setting was left as another program set it even while another setting is still held" + " | got: " + panel.Status + " " + panel.Detail);
+
+        (view, panel) = await Show(Snapshot(false, [off], new(Host("stopped", [Instance(chrome, "cpuPriority", "active")]), false, null)));
+        Expect(check, view, "Off after an interrupted removal with a setting still changed tells you to press Put settings back",
+            "Detail: 1 app still has rule settings that were not put back." + Retry);
+        check(panel.RetryAvailable && panel.CanRetryRestore, "Off after an interrupted removal with a setting still changed offers Put settings back");
     }
 
     private static string Under(string root, params string[] names) => root + string.Concat(names.Select(name => Path.DirectorySeparatorChar + name));
