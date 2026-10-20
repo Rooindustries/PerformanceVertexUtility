@@ -18,6 +18,12 @@ function Set-ChangeBreakpoint($p,[string]$Command,[string]$Value){
  $race=@{done=$false;process=$p;value=$Value}
  return Set-PSBreakpoint -Command $Command -Action ({if(-not$race.done){$race.done=$true;$race.process.PriorityClass=$race.value}}.GetNewClosure())
 }
+function Set-ChangeLineBreakpoint($p,[string]$Script,[string]$Value){
+ $line=@(Select-String -LiteralPath $Script -Pattern '^\s*\$entryControlChanges = @\(')
+ if($line.Count -ne 1){throw ('Expected one restore control-change line in '+$Script+', found '+$line.Count)}
+ $race=@{done=$false;process=$p;value=$Value}
+ return Set-PSBreakpoint -Script $Script -Line $line[0].LineNumber -Action ({if(-not$race.done){$race.done=$true;$race.process.PriorityClass=$race.value}}.GetNewClosure())
+}
 
 function Invoke-GameScenario([string]$name,[ValidateSet('before','race','back')][string]$Mode){
  $directory=Join-Path $OutRoot $name;[IO.Directory]::CreateDirectory($directory)|Out-Null
@@ -44,14 +50,16 @@ function Invoke-GameScenario([string]$name,[ValidateSet('before','race','back')]
    $preview=& (Join-Path $Source 'backend\scripts\Stop-GameTuneSession.ps1') -SessionPath $start.sessionPath|ConvertFrom-Json;Save $directory 'preview' $preview
    $entry=@($preview.preview|Where-Object processId -eq $p.Id)|Select-Object -First 1
    if(-not$entry -or @($entry.controlChanges|Where-Object control -eq 'priorityClass').Count -or @($entry.leftAsSet|Where-Object {$_.control -eq 'priorityClass' -and $_.currentValue -eq 'BelowNormal'}).Count -ne 1){throw 'Game Tune undo preview still proposes overwriting the priority another program set'}
-   if($Mode -eq 'back'){$breakpoint=Set-ChangeBreakpoint $p 'Confirm-RooIndustriesLeftAsSet' 'AboveNormal'}
+   if($Mode -eq 'back'){$breakpoint=Set-ChangeLineBreakpoint $p (Join-Path $Source 'backend\scripts\Stop-GameTuneSession.ps1') 'AboveNormal'}
   }
   $undo=& (Join-Path $Source 'backend\scripts\Stop-GameTuneSession.ps1') -SessionPath $start.sessionPath -ConfirmApply|ConvertFrom-Json;Save $directory 'undo' $undo
-  if($breakpoint){Remove-PSBreakpoint $breakpoint;$breakpoint=$null}
+  $breakpointHits=0;if($breakpoint){$breakpointHits=$breakpoint.HitCount;Remove-PSBreakpoint $breakpoint;$breakpoint=$null}
   $status=& (Join-Path $Source 'backend\scripts\Get-GameTuneSessionStatus.ps1') -SessionPath $start.sessionPath|ConvertFrom-Json;Save $directory 'status' $status
   $after=Read-Fixture $p
   if($Mode -eq 'back'){
    Save $directory 'undo-first' $undo;Save $directory 'status-first' $status
+   Save $directory 'readback-first' @{breakpointHitCount=$breakpointHits;process=$after}
+   if($breakpointHits -le 0){throw 'Game Tune changed-back breakpoint did not run'}
    if($after.priorityClass -ne 'AboveNormal'){throw ('Game Tune changed-back undo wrote the priority: '+$after.priorityClass)}
    if($after.affinityMask -ne $before.affinityMask){throw ('Game Tune undo did not restore the affinity it changed: '+$after.affinityMask+' instead of '+$before.affinityMask)}
    if(@($undo.result.leftAsSetItems|Where-Object control -eq 'priorityClass').Count){throw 'Game Tune undo claimed it left a priority that changed back'}
@@ -92,13 +100,15 @@ function Invoke-ProfileScenario([string]$name,[ValidateSet('before','race','back
   foreach($fixture in $kept,$untouched){if((Read-Fixture $fixture.process).priorityClass -ne 'AboveNormal'){throw ('The profile did not raise fixture '+$fixture.process.Id)}}
   if($Mode -eq 'race'){$breakpoint=Set-ChangeBreakpoint $kept.process 'Invoke-RooIndustriesProcessControlChange' 'BelowNormal'}else{
    $kept.process.PriorityClass='BelowNormal'
-   if($Mode -eq 'back'){$breakpoint=Set-ChangeBreakpoint $kept.process 'Confirm-RooIndustriesLeftAsSet' 'AboveNormal'}
+   if($Mode -eq 'back'){$breakpoint=Set-ChangeLineBreakpoint $kept.process (Join-Path $Source 'backend\scripts\Restore-ProcessProfileBackup.ps1') 'AboveNormal'}
   }
   $undo=& (Join-Path $Source 'backend\scripts\Restore-ProcessProfileBackup.ps1') -BackupPath $apply.backup.location -ConfirmApply|ConvertFrom-Json;Save $directory 'undo' $undo
-  if($breakpoint){Remove-PSBreakpoint $breakpoint;$breakpoint=$null}
+  $breakpointHits=0;if($breakpoint){$breakpointHits=$breakpoint.HitCount;Remove-PSBreakpoint $breakpoint;$breakpoint=$null}
   $keptAfter=Read-Fixture $kept.process;$untouchedAfter=Read-Fixture $untouched.process
   if($Mode -eq 'back'){
    Save $directory 'undo-first' $undo
+   Save $directory 'readback-first' @{breakpointHitCount=$breakpointHits;kept=$keptAfter;untouched=$untouchedAfter}
+   if($breakpointHits -le 0){throw 'Profile changed-back breakpoint did not run'}
    if($keptAfter.priorityClass -ne 'AboveNormal'){throw ('Profile changed-back restore wrote the priority: '+$keptAfter.priorityClass)}
    if($untouchedAfter.priorityClass -ne 'Normal'){throw ('Profile restore did not put back the untouched priority: '+$untouchedAfter.priorityClass)}
    if(@($undo.result.leftAsSetItems|Where-Object processId -eq $kept.process.Id).Count){throw 'Profile restore claimed it left a priority that changed back'}
