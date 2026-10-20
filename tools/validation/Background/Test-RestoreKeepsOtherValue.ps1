@@ -1,0 +1,71 @@
+param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutRoot)
+$ErrorActionPreference='Stop'
+. (Join-Path $Source 'tools\validation\LoadTimes\CleanupOwnership.Common.ps1')
+$utf8=[Text.UTF8Encoding]::new($false)
+function Save([string]$directory,[string]$name,$value){[IO.File]::WriteAllText((Join-Path $directory ($name+'.json')),($value|ConvertTo-Json -Depth 40),$utf8)}
+function Start-Fixture([string]$directory,[string]$name){
+ $path=Join-Path $directory ($name+'.exe');Copy-Item "$env:SystemRoot\System32\PING.EXE" $path
+ $p=Start-Process $path -ArgumentList '-t 127.0.0.1' -WindowStyle Hidden -PassThru;$owned=New-OwnedProcess $p
+ $p.PriorityClass='Normal';$p.Refresh()
+ return [pscustomobject]@{process=$p;owned=$owned}
+}
+function Read-Fixture($p){$p.Refresh();return [pscustomobject]@{priorityClass=[string]$p.PriorityClass;affinityMask=$p.ProcessorAffinity.ToInt64()}}
+function Test-LeftItem($result,[int]$processId,[string]$control,[string]$value){
+ $items=@($result.result.leftAsSetItems|Where-Object {$_.processId -eq $processId -and $_.control -eq $control -and [string]$_.currentValue -eq $value})
+ return $items.Count -eq 1 -and [string]$result.result.summary -like '*Left as another program set it*'
+}
+
+$failures=New-Object System.Collections.Generic.List[string]
+$gameDirectory=Join-Path $OutRoot 'game';[IO.Directory]::CreateDirectory($gameDirectory)|Out-Null
+$game=$null
+try{
+ $game=Start-Fixture $gameDirectory 'KeepValueGame';$p=$game.process;$before=Read-Fixture $p
+ $affinity=if(($before.affinityMask -band 1) -eq 1 -and $before.affinityMask -ne 1){1}elseif(($before.affinityMask -band 2) -eq 2){2}else{throw 'The fixture needs at least two CPUs to change its affinity'}
+ $profile=[pscustomobject]@{
+  schemaVersion=1;productName='Roo Industries Optimization Suite';profileId='keep-other-value-game';name='Keep another program value';profileKind='process-controls';risk='medium'
+  protectedCatalogPath=(Join-Path $Source 'backend\profiles\protected-processes.json')
+  foregroundGame=[pscustomobject]@{ruleId='keep-value-game';processNames=@($p.ProcessName+'.exe');priorityClass='AboveNormal';affinityMask=[int64]$affinity;reason='Validate that undo keeps a value another program set.';reasonCodes=@('LIVE_VALIDATION')}
+  targetGames=@();protectedCompanions=@();protectedPreviewProcessNames=@();safeCandidates=@();rules=@()
+  rollbackPolicy=[pscustomobject]@{supported=$true;scope='process-controls';stateRoot=(Join-Path $gameDirectory 'state');restoreOriginalPriorityClass=$true}
+  safety=[pscustomobject]@{confirmedApplyChanges=@('PriorityClass','Affinity');continuousEnforcement=$true;runtimeService=$false}
+ }
+ Save $gameDirectory 'profile' $profile
+ $start=& (Join-Path $Source 'backend\scripts\Start-GameTuneSession.ps1') -ProfilePath (Join-Path $gameDirectory 'profile.json') -TargetGameProcessName ($p.ProcessName+'.exe') -PollIntervalSeconds 1 -MaxDurationSeconds 1 -StateRoot (Join-Path $gameDirectory 'state') -ConfirmApply|ConvertFrom-Json;Save $gameDirectory 'start' $start
+ $applied=Read-Fixture $p
+ if($applied.priorityClass -ne 'AboveNormal' -or $applied.affinityMask -ne $affinity){throw ('Game Tune did not apply priority and affinity to the fixture: '+$applied.priorityClass+' '+$applied.affinityMask)}
+ $p.PriorityClass='BelowNormal'
+ $preview=& (Join-Path $Source 'backend\scripts\Stop-GameTuneSession.ps1') -SessionPath $start.sessionPath|ConvertFrom-Json;Save $gameDirectory 'preview' $preview
+ $entry=@($preview.preview|Where-Object processId -eq $p.Id)|Select-Object -First 1
+ if(-not$entry -or @($entry.controlChanges|Where-Object control -eq 'priorityClass').Count -or @($entry.leftAsSet|Where-Object {$_.control -eq 'priorityClass' -and $_.currentValue -eq 'BelowNormal'}).Count -ne 1){throw 'Game Tune undo preview still proposes overwriting the priority another program set'}
+ $undo=& (Join-Path $Source 'backend\scripts\Stop-GameTuneSession.ps1') -SessionPath $start.sessionPath -ConfirmApply|ConvertFrom-Json;Save $gameDirectory 'undo' $undo
+ $status=& (Join-Path $Source 'backend\scripts\Get-GameTuneSessionStatus.ps1') -SessionPath $start.sessionPath|ConvertFrom-Json;Save $gameDirectory 'status' $status
+ $after=Read-Fixture $p
+ if($after.priorityClass -ne 'BelowNormal'){throw ('Game Tune undo overwrote the priority another program set: '+$after.priorityClass)}
+ if($after.affinityMask -ne $before.affinityMask){throw ('Game Tune undo did not restore the affinity it changed: '+$after.affinityMask+' instead of '+$before.affinityMask)}
+ if(-not(Test-LeftItem $undo $p.Id 'priorityClass' 'BelowNormal')){throw 'Game Tune undo did not name the priority it left as another program set it'}
+ if($undo.status -ne 'completed' -or $undo.result.status -ne 'rolledBack' -or $undo.restorable -or $status.restorable){throw ('Game Tune undo did not finish: '+$undo.status+' '+$undo.result.status+' restorable '+$undo.restorable+' session '+$status.status)}
+ Save $gameDirectory 'done' @{passed=$true;kept='priorityClass BelowNormal';restored='affinityMask'}
+} catch {Save $gameDirectory 'failure' @{error=$_.Exception.ToString();stack=$_.ScriptStackTrace};$failures.Add('game: '+$_.Exception.Message)|Out-Null}
+finally{if($game){Stop-OwnedProcess $game.owned}}
+
+$profileDirectory=Join-Path $OutRoot 'profile';[IO.Directory]::CreateDirectory($profileDirectory)|Out-Null
+$kept=$null;$untouched=$null
+try{
+ $kept=Start-Fixture $profileDirectory 'KeepValueKept';$untouched=Start-Fixture $profileDirectory 'KeepValueSame'
+ $profile=Get-Content -Raw (Join-Path $Source 'backend\profiles\game-session.profile.json')|ConvertFrom-Json;$profile.profileId='keep-other-value-profile';$profile.protectedCatalogPath=Join-Path $Source 'backend\profiles\protected-processes.json'
+ $profile.foregroundGame.processNames=@('KeepValueAbsentGame.exe');$profile.targetGames=@()
+ $profile.rules=@([pscustomobject]@{ruleId='keep-value-background';enabled=$true;match=@{processNames=@($kept.process.ProcessName+'.exe',$untouched.process.ProcessName+'.exe')};action=@{actionType='setPriority';priorityClass='BelowNormal'};risk='low'})
+ Save $profileDirectory 'profile' $profile
+ $apply=& (Join-Path $Source 'backend\scripts\Apply-ProcessProfile.ps1') -ProfilePath (Join-Path $profileDirectory 'profile.json') -StateRoot (Join-Path $profileDirectory 'state') -ConfirmApply|ConvertFrom-Json;Save $profileDirectory 'apply' $apply
+ foreach($fixture in $kept,$untouched){if((Read-Fixture $fixture.process).priorityClass -ne 'BelowNormal'){throw ('The profile did not lower '+$fixture.process.ProcessName)}}
+ $kept.process.PriorityClass='High'
+ $undo=& (Join-Path $Source 'backend\scripts\Restore-ProcessProfileBackup.ps1') -BackupPath $apply.backup.location -ConfirmApply|ConvertFrom-Json;Save $profileDirectory 'undo' $undo
+ $keptAfter=Read-Fixture $kept.process;$untouchedAfter=Read-Fixture $untouched.process
+ if($keptAfter.priorityClass -ne 'High'){throw ('Profile restore overwrote the priority another program set: '+$keptAfter.priorityClass)}
+ if($untouchedAfter.priorityClass -ne 'Normal'){throw ('Profile restore did not put back the untouched priority: '+$untouchedAfter.priorityClass)}
+ if(-not(Test-LeftItem $undo $kept.process.Id 'priorityClass' 'High')){throw 'Profile restore did not name the priority it left as another program set it'}
+ if($undo.status -ne 'success' -or $undo.result.restorePendingCount -ne 0){throw ('Profile restore did not finish: '+$undo.status+' pending '+$undo.result.restorePendingCount)}
+ Save $profileDirectory 'done' @{passed=$true;kept='priorityClass High';restored='priorityClass Normal'}
+} catch {Save $profileDirectory 'failure' @{error=$_.Exception.ToString();stack=$_.ScriptStackTrace};$failures.Add('profile: '+$_.Exception.Message)|Out-Null}
+finally{foreach($fixture in $kept,$untouched){if($fixture){Stop-OwnedProcess $fixture.owned}}}
+if($failures.Count){throw ($failures -join '; ')}
