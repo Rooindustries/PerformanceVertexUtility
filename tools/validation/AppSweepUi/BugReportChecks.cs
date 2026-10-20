@@ -161,36 +161,37 @@ static class BugReportChecks
             check(!others.Contains("Bob", StringComparison.Ordinal) && !others.Contains("Carol", StringComparison.Ordinal)
                 && others.Contains(@"C:\Users\Public\Desktop", StringComparison.Ordinal) && others.Contains(@"C:\Users\Default User\x", StringComparison.Ordinal),
                 "Other accounts' profile folders are redacted while shared Windows folders stay readable");
-            var known = new BugRedactor(@"C:\Users\Alice", "Alice", "GAMER-PC", ["John Smith", "O'Connor", "Client", "Fixture", "Public", "Default User"]);
+            var known = new BugRedactor(@"C:\Users\Alice", "Alice", "GAMER-PC");
             var otherNames = known.Redact(@"C:\Users\John Smith\AppData and C:\Users\O'Connor\Desktop and {""p"":""C:\\Users\\John Smith\\x"",""q"":""C:\\Users\\O\u0027Connor\\y""} and 'C:\Users\Client' or C:/Users/Fixture/z");
             check(!otherNames.Contains("Smith", StringComparison.Ordinal) && !otherNames.Contains("Connor", StringComparison.Ordinal)
                 && !otherNames.Contains("Client", StringComparison.Ordinal) && !otherNames.Contains("Fixture", StringComparison.Ordinal)
                 && otherNames.Contains(@"C:\Users\<user>\AppData", StringComparison.Ordinal) && otherNames.Contains(@"C:\\Users\\<user>\\y", StringComparison.Ordinal)
-                && otherNames.Contains(@"'C:\Users\<user>' or C:/Users/<user>/z", StringComparison.Ordinal),
+                && otherNames.Contains(@"'C:\Users\<user> C:/Users/<user>/z", StringComparison.Ordinal),
                 "Other accounts on this PC are fully redacted even with spaces or apostrophes in their folder names");
             var context = known.Redact(@"Cannot access 'C:\Users\Client' while checking 'AppData\Local\fixture.log'. Scanning C:\Users\Fixture for leftovers in AppData\Local and C:\Users\Public\Desktop");
-            check(context == @"Cannot access 'C:\Users\<user>' while checking 'AppData\Local\fixture.log'. Scanning C:\Users\<user> for leftovers in AppData\Local and C:\Users\Public\Desktop",
-                "Redacting another account keeps the rest of the log line and shared folders readable");
+            check(context == @"Cannot access 'C:\Users\<user>\Local\fixture.log'. Scanning C:\Users\<user>\Local and C:\Users\Public\Desktop",
+                "Redacting an ambiguous profile consumes uncertain prose and keeps context beyond hard delimiters");
             var edges = known.Redact(@"Scanning (C:\Users\John Smith), C:\Users\O'Connor. Done");
-            check(edges == @"Scanning (C:\Users\<user>), C:\Users\<user>. Done", "A profile name followed by punctuation is fully redacted");
-            var prefixOther = new BugRedactor(@"C:\Users\Alice", "Alice", "PC", ["Client", "Client two"]).Redact(@"C:\Users\Client two\AppData and C:\Users\Client\Desktop");
-            var prefixOwn = new BugRedactor(@"C:\Users\Client", "Client", "PC", ["Client", "Client two"]).Redact(@"C:\Users\Client two\AppData and C:\Users\Client\Desktop");
-            var prefixLonger = new BugRedactor(@"C:\Users\Client two", "Client two", "PC", ["Client", "Client two"]).Redact(@"C:\Users\Client two\AppData and C:\Users\Client\Desktop");
-            var prefixUser = new BugRedactor(@"C:\Users\jsmith", "Client", "PC", ["jsmith", "Client two"]).Redact(@"C:\Users\Client two\AppData");
+            check(edges == @"Scanning (C:\Users\<user>), C:\Users\<user>", "A profile name followed by ambiguous prose is fully redacted");
+            var prefixOther = new BugRedactor(@"C:\Users\Alice", "Alice", "PC").Redact(@"C:\Users\Client two\AppData and C:\Users\Client\Desktop");
+            var prefixOwn = new BugRedactor(@"C:\Users\Client", "Client", "PC").Redact(@"C:\Users\Client two\AppData and C:\Users\Client\Desktop");
+            var prefixLonger = new BugRedactor(@"C:\Users\Client two", "Client two", "PC").Redact(@"C:\Users\Client two\AppData and C:\Users\Client\Desktop");
+            var prefixUser = new BugRedactor(@"C:\Users\jsmith", "Client", "PC").Redact(@"C:\Users\Client two\AppData");
             check(prefixOther == @"C:\Users\<user>\AppData and C:\Users\<user>\Desktop" && prefixOwn == @"C:\Users\<user>\AppData and %USERPROFILE%\Desktop"
                 && prefixLonger == @"%USERPROFILE%\AppData and C:\Users\<user>\Desktop" && prefixUser == @"C:\Users\<user>\AppData",
                 "Account names that start with another account's name are redacted whole, whichever account is signed in");
-            var escapedOwn = new BugRedactor(@"C:\Users\Client o'Connor", "Client o'Connor", "PC", ["Client", "Client o'Connor"]).Redact(@"{""p"":""C:\\Users\\Client o\u0027Connor\\x"",""q"":""C:\\Users\\Client\\y""}");
-            var caseVariant = new BugRedactor(@"C:\Users\Alice", "Alice", "PC", ["José Smith"]).Redact(@"{""p"":""C:\\Users\\JOS\u00C9 SMITH\\x""}");
+            var escapedOwn = new BugRedactor(@"C:\Users\Client o'Connor", "Client o'Connor", "PC").Redact(@"{""p"":""C:\\Users\\Client o\u0027Connor\\x"",""q"":""C:\\Users\\Client\\y""}");
+            var caseVariant = new BugRedactor(@"C:\Users\Alice", "Alice", "PC").Redact(@"{""p"":""C:\\Users\\JOS\u00C9 SMITH\\x""}");
             check(escapedOwn == @"{""p"":""%USERPROFILE%\\x"",""q"":""C:\\Users\\<user>\\y""}" && caseVariant == @"{""p"":""C:\\Users\\<user>\\x""}",
                 "JSON-escaped and differently cased account names are matched on their decoded text");
-            var unusual = new BugRedactor(@"C:\Users\Alice", "Alice", "PC", ["李", " John Smith"]).Redact(JsonSerializer.Serialize(new { p = @"C:\Users\" + "李" + @"\x" }) + @" C:\Users\ John Smith\AppData");
+            var unusual = new BugRedactor(@"C:\Users\Alice", "Alice", "PC").Redact(JsonSerializer.Serialize(new { p = @"C:\Users\" + "李" + @"\x" }) + @" C:\Users\ John Smith\AppData");
             check(unusual == @"{""p"":""C:\\Users\\<user>\\x""} C:\Users\<user>\AppData", "One-letter and space-led account folder names are redacted as Windows stores them");
             check(known.Redact(edges) == edges && known.Redact(otherNames) == otherNames && known.Redact(context) == context,
                 "Log text already redacted when it was written stays the same when the bug report redacts it again");
             var plain = new BugRedactor(null, "user", "PC").Redact("<user> signed in and user left on PC with <pc-name> and <sid>");
             check(plain == "<user> signed in and <user> left on <pc-name> with <pc-name> and <sid>", "An account named like a placeholder never turns a redacted name into <<user>>");
             RedactorBoundaries(check, root, logs, specs);
+            await RedactorComponentsAsync(check, root, logs);
 
             var longText = "@everyone " + new string('x', 10_000);
             var payload = BugReportService.BuildPayload(Report(longText, "<@123> me@example.com",
@@ -303,7 +304,7 @@ static class BugReportChecks
             "A colon after the current profile keeps the complete denial message without a surname");
         check(JsonSerializer.Deserialize<string>(own.Redact(JsonSerializer.Serialize(@"C:\Users\John Smith: denied"))) == "%USERPROFILE%: denied",
             "A JSON-escaped current profile followed by a colon has no name suffix");
-        var other = new BugRedactor(@"C:\Users\Alice", "Alice", "GAMER-PC", ["John Smith", "Bob"]);
+        var other = new BugRedactor(@"C:\Users\Alice", "Alice", "GAMER-PC");
         foreach (var name in new[] { "John Smith", "Bob" })
         {
             var path = @"C:\Users\" + name + ": denied";
@@ -311,8 +312,8 @@ static class BugReportChecks
                 && JsonSerializer.Deserialize<string>(other.Redact(JsonSerializer.Serialize(path))) == @"C:\Users\<user>: denied",
                 "A plain or JSON-escaped " + name + " profile before a colon keeps no surname or last letter");
         }
-        check(other.Redact(@"C:\Users\Bob and D:\Games") == @"C:\Users\<user> and D:\Games",
-            "Redacting a profile before another drive keeps the adjacent drive and readable context");
+        check(other.Redact(@"C:\Users\Bob and D:\Games") == @"C:\Users\<user> D:\Games",
+            "Redacting an ambiguous profile keeps the adjacent drive outside the private component");
         var sender = new FakeSender();
         var service = new BugReportService(null, sender, Path.Combine(root, "boundary-reports"), logs, other);
         var prefixes = new[] { "\n", "\t", "\r\n" };
@@ -354,6 +355,137 @@ static class BugReportChecks
         var escaped = placeholders.Redact(controls);
         check(escaped == escapedControls && placeholders.Redact(escaped) == escapedControls,
             "Literal sentinel controls become readable escapes and remain stable without false identity labels");
+    }
+
+    public static async Task RedactorComponentsAsync(Action<bool, string> check, string root, string logs)
+    {
+        void Exact(BugRedactor redactor, string input, string expected)
+        {
+            foreach (var serialized in new[] { false, true })
+            {
+                var source = serialized ? JsonSerializer.Serialize(input) : input;
+                var actual = redactor.Redact(source);
+                try
+                {
+                    var decoded = serialized ? JsonSerializer.Deserialize<string>(actual) : actual;
+                    check(decoded == expected && redactor.Redact(actual) == actual,
+                        "Complete component " + (serialized ? "JSON " : "plain ") + JsonSerializer.Serialize(input) + " => " + JsonSerializer.Serialize(decoded));
+                }
+                catch (JsonException error)
+                {
+                    check(false, "Invalid redacted JSON for " + JsonSerializer.Serialize(input) + ": " + error.Message);
+                }
+            }
+        }
+        var other = new BugRedactor(@"C:\Users\Alice", "Alice", "GAMER-PC");
+        var bob = new BugRedactor(@"C:\Users\Bob", "Bob", "GAMER-PC");
+        var transports = new List<(BugRedactor Redactor, string Input, string Expected)>
+        {
+            (other, @"D:\Users\John Smith\file", @"D:\Users\<user>\file"),
+            (bob, @"D:\Users\Bob.Smith\x", @"D:\Users\<user>\x"),
+            (other, @"Cannot find path 'C:\Users\Bob\x'", @"Cannot find path 'C:\Users\<user>\x'"),
+            (other, @"'C:\Users\O'Connor", @"'C:\Users\<user>"),
+            (other, @"C:\Users\John Sm...", @"C:\Users\<user>..."),
+        };
+        foreach (var drive in new[] { "C", "D" })
+        foreach (var separator in new[] { ".", "-", ",", ";", "=", "@", "#", "!", "$", "~", "(", ")", "[", "{", "%20", " ", "'" })
+        foreach (var (tail, remaining) in new[] { (@"\x", @"\x"), ("", ""), (": denied", ": denied"), (" finished.", ".") })
+            Exact(bob, drive + @":\Users\Bob" + separator + "Smith" + tail, drive + @":\Users\<user>" + remaining);
+        foreach (var prefix in new[] { @"\u0027", @"\u0022", @"\u003C", @"\u0026" })
+            transports.Add((other, "x" + prefix + @"C:\\Users\\Bob\\x", "x" + prefix + @"C:\\Users\\<user>\\x"));
+        foreach (var name in new[] { "Public,", "Default'", "!!!" })
+            transports.Add((other, @"C:\Users\" + name + @"\x", @"C:\Users\<user>" + (name == "!!!" ? "" : name[^1].ToString()) + @"\x"));
+        foreach (var shared in new[] { @"C:\Users\Public\Desktop", @"C:\Users\Default User\x" })
+            Exact(other, shared, shared);
+        foreach (var name in new[] { "Alice!", "!!!" })
+            Exact(new BugRedactor(@"C:\Users\" + name, name, "GAMER-PC"), @"C:\Users\" + name + @"\x", @"%USERPROFILE%\x");
+        var own = new BugRedactor(@"C:\Users\Émile", "Émile", "GAMER-PC");
+        var nested = @"C:\Users\Émile\x";
+        for (var depth = 0; depth <= 5; depth++)
+        {
+            var actual = own.Redact(nested);
+            try
+            {
+                var decoded = actual;
+                for (var level = 0; level < depth; level++) decoded = JsonSerializer.Deserialize<string>(decoded)!;
+                check(decoded == @"%USERPROFILE%\x" && own.Redact(actual) == actual,
+                    "An exact accented own component maps safely through JSON depth " + depth + ": " + actual);
+            }
+            catch (JsonException error)
+            {
+                check(false, "Nested own profile JSON depth " + depth + " is invalid: " + error.Message);
+            }
+            nested = JsonSerializer.Serialize(nested);
+        }
+        var jsonCases = new[]
+        {
+            (other, @"""C:\\Users\\Bob\u005cx""", @"""C:\\Users\\<user>\u005cx"""),
+            (other, @"""C:\\Users\\Bob\u0022: denied""", @"""C:\\Users\\<user>\u0022: denied"""),
+            (other, @"""C:\\Users\\Bob\u003e: denied""", @"""C:\\Users\\<user>\u003e: denied"""),
+            (other, @"""C:\\Users\\O\u0027Connor\\x""", @"""C:\\Users\\<user>\\x"""),
+            (new BugRedactor(@"N:\Users\Alice", "Alice", "GAMER-PC"), @"""\n:\\Users\\Alice\\x""", @"""\n:\\Users\\<user>\\x"""),
+            (other, @"""\u003C:\\Users\\Alice\\x""", @"""\u003C:\\Users\\<user>\\x"""),
+        };
+        transports.AddRange(jsonCases);
+        foreach (var (redactor, input, expected) in transports)
+        {
+            Exact(redactor, input, expected);
+            var sender = new FakeSender { Result = new(false, 404) };
+            var service = new BugReportService(Webhook, sender, Path.Combine(root, "component-" + Guid.NewGuid().ToString("N")), logs, redactor);
+            BugSpec[] specs = [new("cpu", "Processor", input)];
+            var attachment = service.CreateAttachment(specs, BugReportService.TweakSummaryJson([], false, null, [input]));
+            using (var zip = ZipFile.OpenRead(attachment.FilePath))
+            {
+                try
+                {
+                    using var summary = JsonDocument.Parse(Read(zip, "tweak-state.json"));
+                    using var values = JsonDocument.Parse(Read(zip, "specs.json"));
+                    var error = summary.RootElement.GetProperty("lastErrors")[0].GetString();
+                    check(error == expected && values.RootElement.GetProperty("specs").GetProperty("cpu").GetString() == expected,
+                        "Attachment component privacy and valid JSON for " + JsonSerializer.Serialize(input));
+                    if (input.StartsWith('"'))
+                    {
+                        using var original = JsonDocument.Parse(input);
+                        using var redacted = JsonDocument.Parse(error!);
+                        using var expectedValue = JsonDocument.Parse(expected);
+                        check(redacted.RootElement.GetString() == expectedValue.RootElement.GetString(),
+                            "An attached serialized error remains valid inner JSON for " + JsonSerializer.Serialize(input));
+                    }
+                }
+                catch (JsonException error)
+                {
+                    check(false, "Attachment JSON is invalid for " + JsonSerializer.Serialize(input) + ": " + error.Message);
+                }
+            }
+            var report = new BugReport("fixture", specs, "fixture#1", input);
+            var outcome = await service.SendAsync(report, attachment);
+            using (var payload = JsonDocument.Parse(sender.Calls.Single().Payload))
+            {
+                var embed = payload.RootElement.GetProperty("embeds")[0];
+                var fields = embed.GetProperty("fields").EnumerateArray().ToArray();
+                check(outcome.Status == BugSendStatus.Rejected && sender.Calls.Count == 1
+                    && embed.GetProperty("description").GetString() == expected && fields[0].GetProperty("value").GetString() == expected
+                    && fields[1].GetProperty("value").GetString() == "fixture#1",
+                    "A fake send redacts the complete typed description and specs for " + JsonSerializer.Serialize(input));
+            }
+            using var saved = ZipFile.OpenRead(service.SaveReport(report, attachment));
+            check(Read(saved, "report.txt").Contains("What went wrong:" + Environment.NewLine + expected + Environment.NewLine, StringComparison.Ordinal),
+                "A saved report redacts the complete typed description for " + JsonSerializer.Serialize(input));
+        }
+        var cut = new string('x', 2000 - @"C:\Users\John Sm".Length - 3) + @"C:\Users\John Smith\file";
+        var truncated = BugReportService.Truncate(cut, 2000);
+        var truncatedSender = new FakeSender();
+        var truncatedService = new BugReportService(null, truncatedSender, Path.Combine(root, "truncated-component"), logs, other);
+        var truncatedAttachment = truncatedService.CreateAttachment([], BugReportService.TweakSummaryJson([], false, null, [cut]));
+        using (var zip = ZipFile.OpenRead(truncatedAttachment.FilePath))
+        {
+            using var summary = JsonDocument.Parse(Read(zip, "tweak-state.json"));
+            var actual = summary.RootElement.GetProperty("lastErrors")[0].GetString();
+            check(truncated.EndsWith(@"C:\Users\John Sm...", StringComparison.Ordinal) && actual == other.Redact(truncated)
+                && actual!.EndsWith(@"C:\Users\<user>...", StringComparison.Ordinal) && !actual.Contains("John", StringComparison.Ordinal) && !actual.Contains("Sm", StringComparison.Ordinal),
+                "A profile cut at the 2000-character summary boundary keeps no partial account name");
+        }
+        check(truncatedSender.Calls.Count == 0, "Truncated component attachment checks never send a report");
     }
 
     private static string Read(ZipArchive zip, string name)
