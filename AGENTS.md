@@ -20,7 +20,7 @@ Catalog settings list the editions and builds they apply to: Home (Core), Pro, E
 
 ### 4. No telemetry
 
-The app sends no usage data. It goes online only to check for updates, to download a tool the user picks, and to send a bug report when the user clicks Send. In this codebase "telemetry" means local performance readings.
+The app sends no usage data. It goes online only to check for updates and download them (automatic downloads can be turned off), to download a tool the user picks, and to send a bug report when the user clicks Send. In this codebase "telemetry" means local performance readings.
 
 ### 5. Windows PowerShell 5.1
 
