@@ -482,10 +482,12 @@ try {
     } else {
         Add-Failure "Managed csc worker did not prove targeted enumeration for exact-name policy: targetedPolls=$($nativeMeasure.targetedEnumerationPollCount) fullPolls=$($nativeMeasure.fullEnumerationPollCount)"
     }
-    if ([double]$nativeMeasure.footprint.averageCpuPercent -le [double]$previousManagedCscBaseline.averageCpuPercent -and [double]$nativeMeasure.footprint.cpuTimeDeltaSeconds -le [double]$previousManagedCscBaseline.cpuTimeDeltaSeconds) {
-        Add-Pass "Managed csc worker CPU overhead improved versus previous baseline: avgCpu $($nativeMeasure.footprint.averageCpuPercent) <= $($previousManagedCscBaseline.averageCpuPercent), cpuDelta $($nativeMeasure.footprint.cpuTimeDeltaSeconds) <= $($previousManagedCscBaseline.cpuTimeDeltaSeconds)"
+    $cscCpuRate = [math]::Round([double]$nativeMeasure.footprint.cpuTimeDeltaSeconds / [double]$nativeMeasure.footprint.elapsedRuntimeSeconds, 4)
+    $baselineCpuRate = [math]::Round([double]$previousManagedCscBaseline.cpuTimeDeltaSeconds / [double]$previousManagedCscBaseline.elapsedRuntimeSeconds, 4)
+    if ($cscCpuRate -le $baselineCpuRate -and [double]$nativeMeasure.footprint.cpuTimeDeltaSeconds -le [double]$previousManagedCscBaseline.cpuTimeDeltaSeconds) {
+        Add-Pass "Managed csc worker CPU overhead improved versus previous baseline: CPU seconds per second $cscCpuRate <= $baselineCpuRate, cpuDelta $($nativeMeasure.footprint.cpuTimeDeltaSeconds) <= $($previousManagedCscBaseline.cpuTimeDeltaSeconds)"
     } else {
-        Add-Failure "Managed csc worker CPU overhead regressed versus previous baseline: avgCpu $($nativeMeasure.footprint.averageCpuPercent) > $($previousManagedCscBaseline.averageCpuPercent) or cpuDelta $($nativeMeasure.footprint.cpuTimeDeltaSeconds) > $($previousManagedCscBaseline.cpuTimeDeltaSeconds)"
+        Add-Failure "Managed csc worker CPU overhead regressed versus previous baseline: CPU seconds per second $cscCpuRate > $baselineCpuRate or cpuDelta $($nativeMeasure.footprint.cpuTimeDeltaSeconds) > $($previousManagedCscBaseline.cpuTimeDeltaSeconds)"
     }
 
     $residentOut = Join-Path $tempRoot 'powershell-resident-output.json'
