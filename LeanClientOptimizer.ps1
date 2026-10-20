@@ -284,7 +284,7 @@ function Invoke-SmokeTest {
         $dns = Resolve-DnsName 'www.microsoft.com' -ErrorAction Stop | Select-Object -First 1
         Add-Result 'dns' ($null -ne $dns) 'www.microsoft.com resolves'
     } catch { Add-Result 'dns' $false $_.Exception.Message }
-    $bluetooth = @(Get-PnpDevice -Class Bluetooth -PresentOnly -Status OK -ErrorAction SilentlyContinue).Count -gt 0
+    try { $bluetooth = @(Get-PnpDevice -Class Bluetooth -PresentOnly -Status OK -ErrorAction SilentlyContinue).Count -gt 0 } catch { $bluetooth = $true }
     foreach ($svcName in @('WlanSvc','bthserv','WinDefend','BFE','mpssvc','WpnService')) {
         if ($svcName -eq 'bthserv' -and -not $bluetooth) { continue }
         $svc = Get-Service -Name $svcName -ErrorAction SilentlyContinue
