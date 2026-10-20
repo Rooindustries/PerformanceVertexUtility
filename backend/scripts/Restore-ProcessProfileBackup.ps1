@@ -102,31 +102,32 @@ function New-RollbackPreviewEntry {
         'Restore original process controls captured before apply.'
     }
     $leftAsSet = @()
+    $alreadyOriginal = @()
     $controlChanges = New-Object System.Collections.Generic.List[object]
     if (-not $blocked) {
-        if (($restoresAll -or $recorded -contains 'priorityClass') -and -not [string]::IsNullOrWhiteSpace($originalPriority) -and (Test-RooIndustriesPriorityAllowed $originalPriority -Restoring) -and [string]$currentPriority -ne [string]$originalPriority) {
+        if (($restoresAll -or $recorded -contains 'priorityClass') -and -not [string]::IsNullOrWhiteSpace($originalPriority) -and (Test-RooIndustriesPriorityAllowed $originalPriority -Restoring)) {
             $controlChanges.Add((New-RooIndustriesControlChange 'priorityClass' $currentPriority $originalPriority 'restorePriority' 'Restore original process priority.')) | Out-Null
         }
-        if (($restoresAll -or $recorded -contains 'affinityMask') -and $null -ne $originalAffinityMask -and (Test-RooIndustriesAffinityMaskAllowed $originalAffinityMask) -and [string]$currentAffinityMask -ne [string]$originalAffinityMask) {
+        if (($restoresAll -or $recorded -contains 'affinityMask') -and $null -ne $originalAffinityMask -and (Test-RooIndustriesAffinityMaskAllowed $originalAffinityMask)) {
             $controlChanges.Add((New-RooIndustriesControlChange 'affinityMask' $currentAffinityMask ([int64]$originalAffinityMask) 'restoreAffinity' 'Restore original CPU affinity.')) | Out-Null
         }
-        if (($restoresAll -or $recorded -contains 'ioPriority') -and -not [string]::IsNullOrWhiteSpace([string]$originalIoPriority) -and (Test-RooIndustriesIoPriorityAllowed $originalIoPriority -Restoring) -and [string]$currentIoPriority -ne [string]$originalIoPriority) {
+        if (($restoresAll -or $recorded -contains 'ioPriority') -and -not [string]::IsNullOrWhiteSpace([string]$originalIoPriority) -and (Test-RooIndustriesIoPriorityAllowed $originalIoPriority -Restoring)) {
             $controlChanges.Add((New-RooIndustriesControlChange 'ioPriority' $currentIoPriority $originalIoPriority 'restoreIoPriority' 'Restore original I/O priority.')) | Out-Null
         }
-        if (($restoresAll -or $recorded -contains 'memoryPriority') -and -not [string]::IsNullOrWhiteSpace([string]$originalMemoryPriority) -and (Test-RooIndustriesMemoryPriorityAllowed $originalMemoryPriority) -and [string]$currentMemoryPriority -ne [string]$originalMemoryPriority) {
+        if (($restoresAll -or $recorded -contains 'memoryPriority') -and -not [string]::IsNullOrWhiteSpace([string]$originalMemoryPriority) -and (Test-RooIndustriesMemoryPriorityAllowed $originalMemoryPriority)) {
             $controlChanges.Add((New-RooIndustriesControlChange 'memoryPriority' $currentMemoryPriority $originalMemoryPriority 'restoreMemoryPriority' 'Restore original memory priority.')) | Out-Null
         }
-        if (($restoresAll -or $recorded -contains 'gpuPriority') -and -not [string]::IsNullOrWhiteSpace([string]$originalGpuPriority) -and (Test-RooIndustriesGpuPriorityAllowed $originalGpuPriority) -and [string]$currentGpuPriority -ne [string]$originalGpuPriority) {
+        if (($restoresAll -or $recorded -contains 'gpuPriority') -and -not [string]::IsNullOrWhiteSpace([string]$originalGpuPriority) -and (Test-RooIndustriesGpuPriorityAllowed $originalGpuPriority)) {
             if ([bool](Get-RooIndustriesPropertyValue $currentState 'gpuPriorityAvailable' $false)) {
                 $controlChanges.Add((New-RooIndustriesControlChange 'gpuPriority' $currentGpuPriority $originalGpuPriority 'restoreGpuPriority' 'Restore original GPU scheduling priority.')) | Out-Null
             } else {
-                $blocked = $true
-                $reason = 'GPU scheduling priority is unavailable for this restore target.'
-                $controlChanges.Add((New-RooIndustriesControlChange 'gpuPriority' $currentGpuPriority $originalGpuPriority 'restoreGpuPriority' 'GPU scheduling priority is unavailable for this restore target.' $true $reason)) | Out-Null
+                $gpuReason = 'GPU scheduling priority is unavailable for this restore target.'
+                $controlChanges.Add((New-RooIndustriesControlChange 'gpuPriority' $currentGpuPriority $originalGpuPriority 'restoreGpuPriority' 'GPU scheduling priority is unavailable for this restore target.' $true $gpuReason)) | Out-Null
             }
         }
-        $split = Split-RooIndustriesLeftAsSetRestoreChanges $Snapshot @($controlChanges.ToArray())
+        $split = Split-RooIndustriesLeftAsSetRestoreChanges $Snapshot @($controlChanges.ToArray()) $currentState
         $leftAsSet = @($split.leftAsSet)
+        $alreadyOriginal = @($split.alreadyOriginal)
         $controlChanges = New-Object System.Collections.Generic.List[object]
         foreach ($change in @($split.changes)) { $controlChanges.Add($change) | Out-Null }
         foreach ($left in $leftAsSet) {
@@ -142,8 +143,7 @@ function New-RollbackPreviewEntry {
             $reason = if ($leftAsSet.Count -gt 0) { $script:RooIndustriesLeftAsSet } else { 'Process already matches the process profile backup.' }
         }
     }
-    $restorePlan = Get-RooIndustriesApplicableProcessControlChanges @($controlChanges.ToArray()) $currentState
-    $applicableControlChanges = @(Get-RooIndustriesPropertyArray $restorePlan 'changes')
+    $applicableControlChanges = @($controlChanges.ToArray() | Where-Object { -not $_.blocked })
     $proposedAction = if ($blocked -or $applicableControlChanges.Count -eq 0) { 'noChange' } elseif ($applicableControlChanges.Count -eq 1 -and [string](Get-RooIndustriesPropertyValue $applicableControlChanges[0] 'control' '') -eq 'priorityClass') { 'restorePriority' } else { 'restoreProcessControls' }
 
     return [pscustomobject]@{
@@ -170,6 +170,7 @@ function New-RollbackPreviewEntry {
         proposedAction = $proposedAction
         controlChanges = @($controlChanges.ToArray())
         leftAsSet = @($leftAsSet)
+        alreadyOriginal = @($alreadyOriginal)
         ruleId = [string](Get-RooIndustriesPropertyValue $Snapshot 'ruleId' '')
         reason = $reason
         instanceEnded = [bool](Get-RooIndustriesPropertyValue $Candidate 'instanceEnded' $false)
@@ -280,9 +281,14 @@ try {
                 $skipped.Add((New-RestoreSkippedItem $entry $identity.blockedReason @(Get-RooIndustriesPreviewControlChanges $entry) 'exited')) | Out-Null
                 continue
             }
-            $entryControlChanges = @(Get-RooIndustriesPreviewControlChanges $entry | Where-Object { -not [bool](Get-RooIndustriesPropertyValue $_ 'blocked' $false) })
+            $entryControlChanges = @(Get-RooIndustriesPreviewControlChanges $entry)
             $appliedControls = New-Object System.Collections.Generic.List[object]
             $failedControls = New-Object System.Collections.Generic.List[string]
+            foreach ($check in @(Get-RooIndustriesPropertyArray $entry 'alreadyOriginal')) {
+                $verification = Confirm-RooIndustriesOriginalRestore $live $check
+                if (-not $verification.confirmed) { $failedControls.Add([string]$check.control + ': ' + $script:RooIndustriesLeftAsSetChangedBack) | Out-Null }
+                elseif ($null -ne $verification.leftAsSet) { $leftAsSetItems.Add((New-RooIndustriesLeftAsSetItem $entry $verification.leftAsSet)) | Out-Null }
+            }
             foreach ($left in @(Get-RooIndustriesPropertyArray $entry 'leftAsSet')) {
                 $kept = Confirm-RooIndustriesLeftAsSet $live $left
                 if ($null -ne $kept) { $leftAsSetItems.Add((New-RooIndustriesLeftAsSetItem $entry $kept)) | Out-Null } else { $failedControls.Add([string]$left.control + ': ' + $script:RooIndustriesLeftAsSetChangedBack) | Out-Null }
@@ -290,6 +296,10 @@ try {
             if ($entryControlChanges.Count -eq 0 -and $failedControls.Count -eq 0) { continue }
             try {
                 foreach ($change in $entryControlChanges) {
+                    if ([bool](Get-RooIndustriesPropertyValue $change 'blocked' $false)) {
+                        $failedControls.Add([string]$change.control + ': ' + [string]$change.blockedReason) | Out-Null
+                        continue
+                    }
                     try {
                         Invoke-RooIndustriesProcessControlChange $live $change
                         $appliedControls.Add($change) | Out-Null

@@ -440,6 +440,13 @@
         },
         "instanceEnded": {
           "type": "boolean"
+        },
+        "alreadyOriginal": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
         }
       }
     },
@@ -2191,6 +2198,13 @@
           "type": "array",
           "items": {
             "$ref": "#/$defs/issueModel"
+          }
+        },
+        "leftAsSetItems": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
           }
         }
       }

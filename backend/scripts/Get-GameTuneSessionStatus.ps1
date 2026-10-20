@@ -33,6 +33,7 @@ try {
                 restoredItemCount = 0
                 pollCount = 0
             }
+            leftAsSetItems = @()
             latestLogs = @()
             warnings = @((New-RooIndustriesIssue 'GAME_TUNE_SESSION_NOT_FOUND' 'No Game Tune session state was found.' 'warning' 'performance.gameTune' $resolvedStateRoot $false 'Start a confirmed session or provide a session path.' $null))
             errors = @()
@@ -91,6 +92,7 @@ try {
         changedItems = @(Get-RooIndustriesPropertyArray $session 'changedItems')
         skippedItems = @(Get-RooIndustriesPropertyArray $session 'skippedItems')
         restoredItems = @(Get-RooIndustriesPropertyArray $session 'restoredItems')
+        leftAsSetItems = @(Get-RooIndustriesPropertyArray $session 'leftAsSetItems')
         latestLogs = @($latestLogs.ToArray())
         warnings = @(Get-RooIndustriesPropertyArray $session 'warnings')
         errors = @(Get-RooIndustriesPropertyArray $session 'errors')
@@ -119,6 +121,7 @@ try {
             restoredItemCount = 0
             pollCount = 0
         }
+        leftAsSetItems = @()
         latestLogs = @()
         warnings = @()
         errors = @((New-RooIndustriesIssue 'GAME_TUNE_STATUS_FAILED' $_.Exception.Message 'error' 'performance.gameTune' $SessionPath $true 'Check the session state path and retry.' $null))

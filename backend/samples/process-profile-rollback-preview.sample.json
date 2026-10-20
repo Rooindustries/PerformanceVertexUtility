@@ -53,7 +53,8 @@
       "proposedMemoryPriority": 5,
       "gpuPriorityAvailable": false,
       "gpuPriorityStatus": -1073741811,
-      "instanceEnded": false
+      "instanceEnded": false,
+      "alreadyOriginal": []
     },
     {
       "previewId": "rollback-battle-net-6480",
@@ -100,7 +101,8 @@
       "proposedMemoryPriority": null,
       "gpuPriorityAvailable": false,
       "gpuPriorityStatus": null,
-      "instanceEnded": false
+      "instanceEnded": false,
+      "alreadyOriginal": []
     }
   ],
   "backup": {

@@ -703,7 +703,8 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
     {
         if (root.ValueKind != JsonValueKind.Object) return string.Empty;
         var isPreview = root.TryGetProperty("dryRun", out var dryRun) && dryRun.ValueKind == JsonValueKind.True;
-        var result = root.TryGetProperty("result", out var value) && value.ValueKind == JsonValueKind.Object ? value : default;
+        var isGameStatus = !isPreview && ExtractString(root, "actionId") == "performance.gameTune.sessionStatus";
+        var result = isGameStatus ? root : root.TryGetProperty("result", out var value) && value.ValueKind == JsonValueKind.Object ? value : default;
         JsonElement items;
         if (isPreview)
         {
@@ -712,7 +713,11 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
         }
         else if (result.ValueKind == JsonValueKind.Object)
         {
-            if (!result.TryGetProperty("changedItems", out items)) result.TryGetProperty("restoredItems", out items);
+            if (isGameStatus)
+            {
+                if (!result.TryGetProperty("restoredItems", out items)) result.TryGetProperty("changedItems", out items);
+            }
+            else if (!result.TryGetProperty("changedItems", out items)) result.TryGetProperty("restoredItems", out items);
         }
         else root.TryGetProperty("changedItems", out items);
         var lines = new List<string>();
@@ -848,7 +853,8 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
             var restored = ExtractInt(root, "summary", "restoredItemCount") ?? CountArray(root, "restoredItems") ?? CountArray(root, "result", "restoredItems") ?? 0;
             var skipped = ExtractInt(root, "summary", "skippedItemCount") ?? CountArray(root, "skippedItems") ?? CountArray(root, "result", "skippedItems") ?? 0;
             var polls = ExtractInt(root, "summary", "pollCount") ?? CountArray(root, "polls") ?? 0;
-            if (changed > 0 || restored > 0 || skipped > 0 || polls > 0)
+            var kept = CountArray(root, "leftAsSetItems") ?? CountArray(root, "result", "leftAsSetItems") ?? 0;
+            if (changed > 0 || restored > 0 || skipped > 0 || polls > 0 || kept > 0)
             {
                 var label = status switch
                 {
@@ -863,7 +869,7 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
                     changed.ToString(CultureInfo.InvariantCulture) + " changed, " +
                     restored.ToString(CultureInfo.InvariantCulture) + " restored, " +
                     skipped.ToString(CultureInfo.InvariantCulture) + " skipped across " +
-                    polls.ToString(CultureInfo.InvariantCulture) + " checks.";
+                    polls.ToString(CultureInfo.InvariantCulture) + " checks." + SummarizeControls(root);
             }
 
             if (!string.IsNullOrWhiteSpace(issue)) return issue!;

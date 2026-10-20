@@ -59,7 +59,8 @@
       "currentMemoryPriority": 5,
       "proposedMemoryPriority": 5,
       "gpuPriorityAvailable": false,
-      "gpuPriorityStatus": -1073741811
+      "gpuPriorityStatus": -1073741811,
+      "alreadyOriginal": []
     }
   ],
   "changedItems": [],

@@ -1101,13 +1101,7 @@ function Get-RooIndustriesProcessControlReadback {
 
 function Get-RooIndustriesRestorableProcessControls {
     param($Snapshot, $CurrentState)
-    foreach ($change in @(Get-RooIndustriesPropertyArray $Snapshot 'controlChanges')) {
-        $outcome = [string](Get-RooIndustriesPropertyValue $change 'outcome' '')
-        if ($outcome -eq 'failed') { continue }
-        $control = [string](Get-RooIndustriesPropertyValue $change 'control' '')
-        if ($outcome -eq 'pending' -and -not (Test-RooIndustriesControlValueEqual $control (Get-RooIndustriesControlStateValue $CurrentState $control) (Get-RooIndustriesPropertyValue $change 'proposedValue' $null))) { continue }
-        $change
-    }
+    Get-RooIndustriesPropertyArray $Snapshot 'controlChanges'
 }
 
 $script:RooIndustriesLeftAsSet = 'Left as another program set it.'
@@ -1116,9 +1110,11 @@ $script:RooIndustriesLeftAsSetChangedBack = 'Undo couldn''t confirm another prog
 
 function Get-RooIndustriesAppliedControlValue {
     param($Snapshot, [string]$Control)
-    $recorded = @(Get-RooIndustriesPropertyArray $Snapshot 'controlChanges' | Where-Object { [string](Get-RooIndustriesPropertyValue $_ 'control' '') -eq $Control -and [string](Get-RooIndustriesPropertyValue $_ 'outcome' '') -ne 'failed' })
-    if ($recorded.Count -gt 0) { return [pscustomobject]@{ known = $true; value = Get-RooIndustriesPropertyValue $recorded[-1] 'proposedValue' $null } }
-    if ($null -ne $Snapshot.PSObject.Properties['controlChanges']) { return [pscustomobject]@{ known = $false; value = $null } }
+    $recorded = @(Get-RooIndustriesPropertyArray $Snapshot 'controlChanges' | Where-Object { [string](Get-RooIndustriesPropertyValue $_ 'control' '') -eq $Control })
+    if ($recorded.Count -gt 0) {
+        $value = Get-RooIndustriesPropertyValue $recorded[-1] 'proposedValue' $null
+        if (-not [string]::IsNullOrWhiteSpace([string]$value)) { return [pscustomobject]@{ known = $true; value = $value } }
+    }
     $field = switch ($Control) { 'priorityClass' { 'PriorityClass' } 'affinityMask' { 'AffinityMask' } 'ioPriority' { 'IoPriority' } 'memoryPriority' { 'MemoryPriority' } 'gpuPriority' { 'GpuPriority' } default { $null } }
     foreach ($prefix in 'applied', 'proposed') {
         if ($null -eq $field) { break }
@@ -1129,20 +1125,50 @@ function Get-RooIndustriesAppliedControlValue {
 }
 
 function Split-RooIndustriesLeftAsSetRestoreChanges {
-    param($Snapshot, [object[]]$Changes)
+    param($Snapshot, [object[]]$Changes, $CurrentState)
     $restore = New-Object System.Collections.Generic.List[object]
     $left = New-Object System.Collections.Generic.List[object]
+    $original = New-Object System.Collections.Generic.List[object]
+    $seen = @{}
     foreach ($change in @(Get-RooIndustriesArray $Changes)) {
         $control = [string](Get-RooIndustriesPropertyValue $change 'control' '')
+        if ($seen.ContainsKey($control)) { continue }
+        $seen[$control] = $true
         $current = Get-RooIndustriesPropertyValue $change 'currentValue' $null
         $applied = Get-RooIndustriesAppliedControlValue $Snapshot $control
-        if (-not [bool](Get-RooIndustriesPropertyValue $change 'blocked' $false) -and $applied.known -and -not [string]::IsNullOrWhiteSpace([string]$current) -and -not (Test-RooIndustriesControlValueEqual $control $current $applied.value)) {
-            $left.Add([pscustomobject]@{ control = $control; currentValue = $current; appliedValue = $applied.value; originalValue = Get-RooIndustriesPropertyValue $change 'proposedValue' $null; outcome = 'leftAsSet'; reason = $script:RooIndustriesLeftAsSet }) | Out-Null
+        $savedOriginal = Get-RooIndustriesPropertyValue $change 'proposedValue' $null
+        $validationReason = Get-RooIndustriesControlChangeValidationReason $change $CurrentState
+        $readable = -not [string]::IsNullOrWhiteSpace([string]$current) -and [string]::IsNullOrWhiteSpace($validationReason)
+        if ($readable -and (Test-RooIndustriesControlValueEqual $control $current $savedOriginal)) {
+            $original.Add([pscustomobject]@{ control = $control; originalValue = $savedOriginal; appliedValue = $applied.value; appliedKnown = $applied.known }) | Out-Null
             continue
+        }
+        if ($readable -and $applied.known -and -not (Test-RooIndustriesControlValueEqual $control $current $applied.value)) {
+            $left.Add([pscustomobject]@{ control = $control; currentValue = $current; appliedValue = $applied.value; originalValue = $savedOriginal; outcome = 'leftAsSet'; reason = $script:RooIndustriesLeftAsSet }) | Out-Null
+            continue
+        }
+        if (-not $readable) {
+            $change.blocked = $true
+            $change.blockedReason = if (-not [string]::IsNullOrWhiteSpace($validationReason)) { $validationReason } else { $script:RooIndustriesLeftAsSetChangedBack }
         }
         $restore.Add($change) | Out-Null
     }
-    return [pscustomobject]@{ changes = @($restore.ToArray()); leftAsSet = @($left.ToArray()) }
+    return [pscustomobject]@{ changes = @($restore.ToArray()); leftAsSet = @($left.ToArray()); alreadyOriginal = @($original.ToArray()) }
+}
+
+function Confirm-RooIndustriesOriginalRestore {
+    param([System.Diagnostics.Process]$Process, $Check)
+    $unconfirmed = [pscustomobject]@{ confirmed = $false; leftAsSet = $null }
+    $control = [string](Get-RooIndustriesPropertyValue $Check 'control' '')
+    try { $now = Get-RooIndustriesProcessControlReadback $Process $control } catch { return $unconfirmed }
+    if ([string]::IsNullOrWhiteSpace([string]$now)) { return $unconfirmed }
+    $original = Get-RooIndustriesPropertyValue $Check 'originalValue' $null
+    if (Test-RooIndustriesControlValueEqual $control $now $original) { return [pscustomobject]@{ confirmed = $true; leftAsSet = $null } }
+    $applied = Get-RooIndustriesPropertyValue $Check 'appliedValue' $null
+    if ([bool](Get-RooIndustriesPropertyValue $Check 'appliedKnown' $false) -and -not (Test-RooIndustriesControlValueEqual $control $now $applied)) {
+        return [pscustomobject]@{ confirmed = $true; leftAsSet = [pscustomobject]@{ control = $control; currentValue = $now; appliedValue = $applied; originalValue = $original; outcome = 'leftAsSet'; reason = $script:RooIndustriesLeftAsSet } }
+    }
+    return $unconfirmed
 }
 
 function Get-RooIndustriesRestoreLeftAsSet {

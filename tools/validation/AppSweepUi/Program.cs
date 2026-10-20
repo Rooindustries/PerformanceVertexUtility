@@ -178,6 +178,62 @@ if (args is [] or ["restore-summary"] or ["restore-summary", _])
             && !game.MatchTuneDetail.Contains("BelowNormal", StringComparison.Ordinal), "Confirmed game details certify the fresh Idle value only");
         Verify(game.MatchTuneDetail.Contains("Peer: CPU AboveNormal → Normal", StringComparison.Ordinal) && !game.MatchTuneDetail.Contains("Realtime", StringComparison.Ordinal),
             "Confirmed game details ignore malformed entries and explicitly failed controls without hiding the restored peer");
+        App.Live.Classification = new ProcessClassification { Processes = [new ProcessItem { Name = "Target", Category = "foregroundGame" }] };
+        App.Live.GameTuneStatusError = App.Live.GovernorStatusError = null;
+        foreach (var retained in new[] { false, true })
+        {
+            File.WriteAllText(sessionPath, JsonSerializer.Serialize(new { sessionId = "summary-session", profileId = "summary-game", dryRun = false,
+                restorable = retained, backupManifestPath = sessionBackup }));
+            App.Live.GameTuneStatusText = JsonSerializer.Serialize(new { actionId = "performance.gameTune.sessionStatus", dryRun = false,
+                status = retained ? "restorable" : "completed", sessionId = "summary-session", profileId = "summary-game", sessionPath,
+                backupManifestPath = sessionBackup, restorable = retained, active = false, completed = !retained, failed = false,
+                summary = new { changedItemCount = 1, restoredItemCount = 1, skippedItemCount = retained ? 1 : 0, pollCount = 1 },
+                changedItems = new[] { new { processName = "StaleApply", appliedControls = new[] {
+                    new { control = "priorityClass", currentValue = "Normal", proposedValue = "AboveNormal", outcome = "applied" } } } },
+                restoredItems = restored, leftAsSetItems = kept, skippedItems = retained ? skipped : [], latestLogs = Array.Empty<object>(), preview });
+            var reopened = new PerformanceProfilesViewModel();
+            await reopened.ReloadAsync();
+            Capture("game-reopen-" + retained, App.Live.GameTuneStatusText, reopened);
+            Verify(reopened.MatchTuneDetail.Contains("Target: CPU Idle (left as another program set it)", StringComparison.Ordinal)
+                && reopened.MatchTuneDetail.Contains("Peer: CPU AboveNormal → Normal", StringComparison.Ordinal)
+                && !reopened.MatchTuneDetail.Contains("StaleApply", StringComparison.Ordinal) && !reopened.MatchTuneDetail.Contains("BelowNormal", StringComparison.Ordinal),
+                "Reopened game status renders persisted kept and restored controls only: " + retained);
+            Verify(reopened.MatchTuneRestoreAvailable == retained && (!retained || reopened.MatchTuneDetail.Contains(reason, StringComparison.Ordinal)),
+                "Reopened game status retains exact recovery and per-control failure: " + retained);
+            await reopened.ReloadAsync();
+            Verify(reopened.MatchTuneDetail.Contains("CPU Idle (left as another program set it)", StringComparison.Ordinal),
+                "Repeated public Reload keeps the certified external value: " + retained);
+        }
+        App.Live.GameTuneStatusText = JsonSerializer.Serialize(new { actionId = "performance.gameTune.sessionStatus", dryRun = false, status = "completed",
+            sessionId = "summary-session", profileId = "summary-game", sessionPath, backupManifestPath = sessionBackup, restorable = false,
+            summary = new { changedItemCount = 0, restoredItemCount = 0, skippedItemCount = 0, pollCount = 0 },
+            leftAsSetItems = kept, restoredItems = Array.Empty<object>(), latestLogs = Array.Empty<object>() });
+        var keptOnly = new PerformanceProfilesViewModel();
+        await keptOnly.ReloadAsync();
+        Capture("game-reopen-kept-only", App.Live.GameTuneStatusText, keptOnly);
+        Verify(keptOnly.MatchTuneDetail.Contains("Target: CPU Idle (left as another program set it)", StringComparison.Ordinal) && !keptOnly.MatchTuneRestoreAvailable,
+            "Kept-only legacy session status names its persisted result without logs or counts");
+        if (Environment.GetEnvironmentVariable("ROO_RESTORE_BACKEND_ARTIFACTS") is { Length: > 0 } backendArtifacts)
+        foreach (var partial in new[] { false, true })
+        {
+            var scenario = partial ? "game-applied-AboveNormal-AboveNormal-gpu" : "game-pending-BelowNormal-BelowNormal";
+            App.Live.GameTuneStatusText = File.ReadAllText(Path.Combine(backendArtifacts, scenario, "status-first.json"));
+            var recordedSession = Path.Combine(backendArtifacts, scenario, "session.json");
+            var afterRetry = File.ReadAllText(recordedSession);
+            try
+            {
+                File.WriteAllText(recordedSession, File.ReadAllText(Path.Combine(backendArtifacts, scenario, "session-first.json")));
+                var reopened = new PerformanceProfilesViewModel();
+                await reopened.ReloadAsync();
+                Capture("game-real-backend-status-" + partial, App.Live.GameTuneStatusText, reopened);
+                Verify(partial
+                    ? reopened.MatchTuneRestoreAvailable && reopened.MatchTuneDetail.Contains("Target: CPU AboveNormal → Normal", StringComparison.Ordinal)
+                        && reopened.MatchTuneDetail.Contains("GPU", StringComparison.Ordinal) && !reopened.MatchTuneDetail.Contains("GPU High → Normal", StringComparison.Ordinal)
+                    : !reopened.MatchTuneRestoreAvailable && reopened.MatchTuneDetail.Contains("Target: CPU BelowNormal (left as another program set it)", StringComparison.Ordinal),
+                    "Public Reload consumes the unmodified real backend status with simulated process I/O: " + partial);
+            }
+            finally { File.WriteAllText(recordedSession, afterRetry); }
+        }
     }
     finally
     {
