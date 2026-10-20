@@ -35,7 +35,7 @@ public sealed class BugRedactor
 {
     private readonly (Regex Pattern, string Replacement)[] _rules;
 
-    public BugRedactor(string? profilePath, string? userName, string? machineName)
+    public BugRedactor(string? profilePath, string? userName, string? machineName, IEnumerable<string>? otherProfiles = null)
     {
         var rules = new List<(Regex, string)>();
         var profile = profilePath?.TrimEnd('\\', '/');
@@ -51,12 +51,19 @@ public sealed class BugRedactor
             var escaped = JsonEncodedText.Encode(value).ToString();
             if (escaped != value) rules.Add((Word(escaped), replacement));
         }
+        foreach (var name in (otherProfiles ?? []).Select(name => name.Trim()).Where(name => name.Length >= 2 && !SharedProfiles.Contains(name)).Distinct(StringComparer.OrdinalIgnoreCase))
+            foreach (var form in new[] { name, JsonEncodedText.Encode(name).ToString() }.Distinct())
+                rules.Add((new Regex(ProfileRoot + Regex.Escape(form) + @"(?![^\\/""'\s])", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant), "<user>"));
         rules.Add((OtherProfiles, "<user>"));
         rules.Add((new Regex(@"S-1-5-21(-\d+){3,4}", RegexOptions.CultureInvariant), "<sid>"));
         _rules = rules.ToArray();
     }
 
-    public static BugRedactor Current() => new(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), Environment.UserName, Environment.MachineName);
+    public static BugRedactor Current()
+    {
+        var profile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        return new(profile, Environment.UserName, Environment.MachineName, ProfileNames(Path.GetDirectoryName(profile.TrimEnd('\\', '/'))));
+    }
 
     public string Redact(string text)
     {
@@ -64,7 +71,15 @@ public sealed class BugRedactor
         return text;
     }
 
-    private static readonly Regex OtherProfiles = new(@"(?<=\b[A-Za-z]:(?:\\{1,2}|/)Users(?:\\{1,2}|/))(?!(?:Public|Default|Default User|All Users)(?:[\\/""]|$))(?:(?:[^\\/""\[\]:;|=,+*?<>\r\n]|\\u[0-9A-Fa-f]{4})+(?=[\\/])|[^\\/""'\s]+)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    private static string[] ProfileNames(string? root)
+    {
+        try { return string.IsNullOrEmpty(root) ? [] : Directory.GetDirectories(root).Select(Path.GetFileName).OfType<string>().ToArray(); }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException) { return []; }
+    }
+
+    private const string ProfileRoot = @"(?<=\b[A-Za-z]:(?:\\{1,2}|/)Users(?:\\{1,2}|/))";
+    private static readonly HashSet<string> SharedProfiles = new(["Public", "Default", "Default User", "All Users"], StringComparer.OrdinalIgnoreCase);
+    private static readonly Regex OtherProfiles = new(ProfileRoot + @"(?!(?:Public|Default|Default User|All Users)(?:[\\/""]|$))[^\\/""'\s]+", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     private static Regex Word(string value)
         => new(@"(?<![\p{L}\p{N}_])" + Regex.Escape(value) + @"(?![\p{L}\p{N}_])", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
