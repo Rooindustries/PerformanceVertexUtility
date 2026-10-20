@@ -540,6 +540,22 @@ static class FreshnessChecks
             if (!passed) Console.WriteLine("  simple mode lists [" + string.Join(", ", simple) + "], lacking " + (absent is null ? "missing" : absent.CanRetry + "/" + absent.UnavailableHere + "/" + absent.Detail) + ", failing " + (failed is null ? "missing" : failed.CanRetry + "/" + failed.Current + "/" + failed.Detail));
             return passed;
         });
+        await Scenario("A mitigation row whose fields Windows leaves at its default says Windows default instead of Custom value", async () =>
+        {
+            const string dep = "windows.05719d3bbe469a81", cfg = "windows.6eec44b714e4d017";
+            var policy = new ControlAddress("mitigations", "system", "policy");
+            TweakDefinition Mitigation(string id, string field, string value) => new(id, id, "Security", "Fixture", 10240, 26200, ["*"], "none",
+                [new("set", "Set", [], Controls: [new(policy, ControlValues.From(new Dictionary<string, object> { [field] = value, [field.Split('.')[0] + ".Override" + field.Split('.')[0]] = false }), true)])], [new("Fixture", "fixture", "isolated UI validation")], null, false);
+            var current = new TweakControlRead(policy, "mitigations:system", "fixture-policy", ControlValues.From(new Dictionary<string, object> { ["Dep.Enable"] = "NOTSET", ["Dep.OverrideDep"] = false, ["Cfg.Enable"] = "ON", ["Cfg.OverrideCfg"] = false }), "System mitigations");
+            var fixture = new Fixture(Path.Combine(root, "mitigation-default"), new TweakCatalog(1, "mitigations", [Mitigation(dep, "Dep.Enable", "ON"), Mitigation(cfg, "Cfg.Enable", "OFF")], [])) { Missing = false };
+            fixture.TransformStatus = inspection => inspection with { Settings = inspection.Settings.Select(status => status with { Supported = true, Error = null, ConfiguredChoices = [], AvailableChoices = ["set"], Controls = [current] }).ToArray() };
+            App.Operations = fixture; var model = new WindowsTweaksViewModel(); await model.ShowAsync();
+            model.ShowAdvanced = true;
+            var values = model.Rows.ToDictionary(row => row.Id, row => row.Current);
+            var passed = values.GetValueOrDefault(dep) == "Windows default" && values.GetValueOrDefault(cfg) == "Custom value";
+            if (!passed) Console.WriteLine("  current values: " + string.Join(", ", values.Select(item => item.Key + "=" + item.Value)));
+            return passed;
+        });
         await Scenario("A service row whose state isn't one of its choices shows that state instead of Custom value", async () =>
         {
             const string startup = "windows.3f496f83e2c4f002", running = "windows.63bc2ce4fde98aee", matched = "windows.78f9bc6062713ff5";
