@@ -569,6 +569,19 @@ static class GovernorChecks
         await panel.RetryRestoreCommand.ExecuteAsync(null);
         check(!panel.RetryAvailable && panel.Status == "The old settings are back.",
             "An older left-as-set record for the same app and setting does not change a fully successful Put settings back" + " | got: " + panel.Status);
+
+        var cpuHeld = Instance(chrome, "cpuPriority", "conflict", "denied", "Access is denied.");
+        var ioHeld = Instance(chrome, "ioPriority", "conflict", "denied", "Access is denied.");
+        var cpuLeft = Instance(chrome, "cpuPriority", "restored", "leftAsSet", ProcessControlEngine.LeftAsSet);
+        (view, panel) = await Show(Snapshot(false, [off], new(Host("stoppedWithConflicts", [cpuHeld, ioHeld]), false, null)));
+        App.Operations.RetryRestore = () =>
+        {
+            App.Operations.Governor = Snapshot(false, [off], new(Host("stoppedWithConflicts", [cpuLeft, ioHeld]), false, null));
+            return Task.FromResult(Host("stoppedWithConflicts", [cpuLeft, ioHeld]));
+        };
+        await panel.RetryRestoreCommand.ExecuteAsync(null);
+        check(panel.RetryAvailable && panel.Status == "Some settings still could not be put back." && panel.Detail == "Where another program changed a setting afterwards, that program's value was kept.",
+            "Put settings back says a setting was left as another program set it even while another setting is still held" + " | got: " + panel.Status + " " + panel.Detail);
     }
 
     private static string Under(string root, params string[] names) => root + string.Concat(names.Select(name => Path.DirectorySeparatorChar + name));
