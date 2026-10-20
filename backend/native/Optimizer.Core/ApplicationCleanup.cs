@@ -5,13 +5,7 @@ public sealed record CleanupContext(string Source, CleanupAuthority Authority, C
     CleanupApplication[] Peers, bool InventoryComplete)
 {
     public string InventoryHash => OperationFiles.Hash(System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(
-        Peers.OrderBy(app => app.AppId, StringComparer.Ordinal).Select(app =>
-        {
-            var resolved = string.IsNullOrWhiteSpace(app.InstallLocation)
-                ? (Walk: NativeFiles.PathWalk.Absent, Path: (string?)null)
-                : NativeFiles.ResolvedPath(RuntimeEnvironment.ExpandUserVariables(app.InstallLocation));
-            return new { Application = app, resolved.Walk, resolved.Path };
-        }).ToArray(), OperationFiles.Json));
+        Peers.OrderBy(app => app.AppId, StringComparer.Ordinal).ToArray(), OperationFiles.Json));
 
     public void Verify()
     {
@@ -81,7 +75,7 @@ public sealed class ApplicationCleanup(Func<CleanupContext> currentContext,
         CleanupAuthority Authority()
         {
             Exclusions().RequireAllowed(selection);
-            return VerifyContext(context.Source, context.Application.AppId, context.Authority.ProviderIdentityHash, inventoryHash).Authority;
+            return VerifyContext(context.Source, context.Application.AppId, context.Authority.ProviderIdentityHash, inventoryHash, selection).Authority;
         }
         var registryTargets = selection.Where(item => item.Registry is not null).Select(item => item.Registry!).ToArray();
         var fileTargets = selection.Where(item => item.Registry is null).Select(item => item.Target).ToArray();
@@ -130,7 +124,7 @@ public sealed class ApplicationCleanup(Func<CleanupContext> currentContext,
         CleanupAuthority Authority()
         {
             Exclusions().RequireAllowed(preview.Selection);
-            return VerifyContext(preview.Source, preview.AppId, preview.ProviderIdentityHash, preview.InventoryHash).Authority;
+            return VerifyContext(preview.Source, preview.AppId, preview.ProviderIdentityHash, preview.InventoryHash, preview.Selection).Authority;
         }
         try
         {
@@ -228,13 +222,15 @@ public sealed class ApplicationCleanup(Func<CleanupContext> currentContext,
 
     private CleanupExclusionMatcher Exclusions() => new(currentExclusions?.Invoke() ?? CleanupExclusions.Empty);
 
-    private CleanupContext VerifyContext(string source, string appId, string identityHash, string? inventoryHash)
+    private CleanupContext VerifyContext(string source, string appId, string identityHash, string? inventoryHash, LeftoverCandidate[]? selection = null)
     {
         var current = currentContext();
         current.Verify();
         current.Authority.Verify(appId, identityHash);
         if (!string.Equals(source, current.Source, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("The cleanup belongs to another removal workflow.");
         if (inventoryHash is not null && current.InventoryHash != inventoryHash) throw new InvalidDataException("Installed app ownership changed after review. Scan leftovers again.");
+        var paths = selection?.Where(item => item.Registry is null).Select(item => item.Target).ToArray();
+        if (paths is { Length: > 0 }) new LeftoverDiscovery(current.Application, current.Peers).RequireFileOwnership(paths);
         return current;
     }
 

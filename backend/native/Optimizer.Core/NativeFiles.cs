@@ -61,11 +61,11 @@ internal static class NativeFiles
         return new((FileAttributes)information.Attributes, ((long)information.SizeHigh << 32) | information.SizeLow, information.Write, information.Links, information.Creation);
     }
 
-    public static string? FinalPath(SafeFileHandle handle)
+    public static string? FinalPath(SafeFileHandle handle, uint flags = 0)
     {
         var buffer = new StringBuilder(1024);
-        var length = GetFinalPathNameByHandle(handle, buffer, (uint)buffer.Capacity, 0);
-        if (length >= buffer.Capacity) { buffer = new StringBuilder((int)length + 1); length = GetFinalPathNameByHandle(handle, buffer, (uint)buffer.Capacity, 0); }
+        var length = GetFinalPathNameByHandle(handle, buffer, (uint)buffer.Capacity, flags);
+        if (length >= buffer.Capacity) { buffer = new StringBuilder((int)length + 1); length = GetFinalPathNameByHandle(handle, buffer, (uint)buffer.Capacity, flags); }
         return length == 0 || length >= buffer.Capacity ? null : buffer.ToString();
     }
 
@@ -179,74 +179,103 @@ internal static class NativeFiles
 
     public static (PathWalk Walk, string? Path) ResolvedPath(string path)
     {
-        path = path.Replace('/', '\\');
-        if ((path.StartsWith(@"\\?\", StringComparison.Ordinal) || path.StartsWith(@"\??\", StringComparison.Ordinal)) && !path[4..].StartsWith(@"UNC\", StringComparison.OrdinalIgnoreCase)) path = path[4..];
-        if (path.Contains('\0')) return (PathWalk.Unknown, null);
         var links = 0;
         try
         {
-            var (walk, physical) = Walk(path, ref links);
-            if (walk != PathWalk.Local) return (walk, null);
-            using var handle = Open(physical, ReadAttributes | Synchronize, ShareAll, BackupSemantics | NoRecallAnonymous);
-            return FinalPath(handle) is { } final ? (PathWalk.Local, Normalize(final)) : (PathWalk.Unknown, null);
+            var (walk, handle) = Walk(path, ref links);
+            using (handle)
+                return handle is null ? (walk == PathWalk.Absent && links != 0 ? PathWalk.Unknown : walk, null) : FinalPath(handle) is { } final ? (PathWalk.Local, Normalize(final)) : (PathWalk.Unknown, null);
         }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException) { return (PathWalk.Unknown, null); }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException or Win32Exception) { return (PathWalk.Unknown, null); }
     }
 
-    private static (PathWalk Walk, string Physical) Walk(string path, ref int links)
+    private static (PathWalk Walk, SafeFileHandle? Handle) Walk(string path, ref int links)
     {
-        var root = LocalRoot(path);
-        if (root != PathWalk.Local) return (root, path);
+        path = path.Replace('/', '\\');
+        if (path.StartsWith(@"\\?\", StringComparison.Ordinal) || path.StartsWith(@"\??\", StringComparison.Ordinal)) path = path[4..];
+        if (path.Contains('\0')) return (PathWalk.Unknown, null);
+        var (state, root) = LocalRoot(path);
+        if (root is null) return (state, null);
         path = Path.GetFullPath(path);
-        var current = path[..3];
-        foreach (var part in path[3..].Split('\\', StringSplitOptions.RemoveEmptyEntries))
-        {
-            current = Path.Combine(current, part);
-            FileAttributes attributes;
-            try { attributes = File.GetAttributes(current); }
-            catch (Exception error) when (error is FileNotFoundException or DirectoryNotFoundException) { return (PathWalk.Absent, current); }
-            catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException) { return (PathWalk.Unknown, current); }
-            if ((attributes & FileAttributes.ReparsePoint) == 0) continue;
-            string? target;
-            try { target = ((attributes & FileAttributes.Directory) != 0 ? new DirectoryInfo(current) : (FileSystemInfo)new FileInfo(current)).LinkTarget; }
-            catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException) { return (PathWalk.Unknown, current); }
-            if (target is null) return (PathWalk.Unknown, current);
-            if (++links > 16) return (PathWalk.Unknown, current);
-            target = target.Replace('/', '\\');
-            if (target.StartsWith(@"\\?\", StringComparison.Ordinal) || target.StartsWith(@"\??\", StringComparison.Ordinal)) target = target[4..];
-            if (target.StartsWith("Volume{", StringComparison.OrdinalIgnoreCase)) return (PathWalk.Unknown, current);
-            if (target.StartsWith(@"UNC\", StringComparison.OrdinalIgnoreCase)) return (PathWalk.OffComputer, current);
-            if (!Path.IsPathFullyQualified(target))
-            {
-                if (Path.IsPathRooted(target)) return (PathWalk.Unknown, current);
-                target = Path.Combine(Path.GetDirectoryName(current)!, target);
-            }
-            var (inner, physical) = Walk(target, ref links);
-            if (inner != PathWalk.Local) return (inner, physical);
-            current = physical;
-        }
-        return (PathWalk.Local, current);
+        return WalkLocal(root, path[3..], ref links);
     }
 
-    private static PathWalk LocalRoot(string path)
+    private static (PathWalk Walk, SafeFileHandle? Handle) WalkLocal(string root, string relative, ref int links)
     {
-        if (path.StartsWith(@"\\", StringComparison.Ordinal) || path.StartsWith(@"UNC\", StringComparison.OrdinalIgnoreCase)) return PathWalk.OffComputer;
-        if (path.Length < 3 || !char.IsAsciiLetter(path[0]) || path[1] != ':' || path[2] != '\\') return PathWalk.Unknown;
-        var device = new StringBuilder(32768);
-        if (QueryDosDevice(path[..2], device, (uint)device.Capacity) == 0) return PathWalk.Unknown;
-        var mapping = device.ToString();
-        const string local = @"\Device\HarddiskVolume";
-        if (!mapping.StartsWith(local, StringComparison.OrdinalIgnoreCase) || mapping.Length == local.Length || !mapping[local.Length..].All(char.IsAsciiDigit)) return PathWalk.Unknown;
+        SafeFileHandle? current = Open(root, ReadAttributes | Synchronize, ShareAll, BackupSemantics | OpenReparsePoint | NoRecallAnonymous);
         try
         {
-            return new DriveInfo(path[..3]).DriveType switch
+            foreach (var part in relative.Split('\\', StringSplitOptions.RemoveEmptyEntries))
             {
-                DriveType.Fixed => PathWalk.Local,
-                DriveType.Removable or DriveType.CDRom or DriveType.Network or DriveType.Ram => PathWalk.OffComputer,
-                _ => PathWalk.Unknown,
+                SafeFileHandle? child;
+                try { child = FileLease.OpenMetadataChild(current, part); }
+                catch (Win32Exception error) when (error.NativeErrorCode is 2 or 3) { return (PathWalk.Absent, null); }
+                try
+                {
+                    if (Info(child).IsLink)
+                    {
+                        if (++links > 16 || LinkTarget(child) is not { } link) return (PathWalk.Unknown, null);
+                        var resolved = link.Relative ? WalkRelative(current, link.Target, ref links) : Walk(link.Target, ref links);
+                        if (resolved.Handle is null) return resolved;
+                        child.Dispose(); child = resolved.Handle;
+                    }
+                    current.Dispose(); current = child; child = null;
+                }
+                finally { child?.Dispose(); }
+            }
+            var result = current; current = null;
+            return (PathWalk.Local, result);
+        }
+        finally { current?.Dispose(); }
+    }
+
+    private static (PathWalk Walk, SafeFileHandle? Handle) WalkRelative(SafeFileHandle parent, string target, ref int links)
+    {
+        if (Path.IsPathRooted(target)) return (PathWalk.Unknown, null);
+        var native = FinalPath(parent, 2);
+        const string prefix = @"\Device\HarddiskVolume";
+        if (native is null || !native.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) return (PathWalk.Unknown, null);
+        var separator = native.IndexOf('\\', prefix.Length);
+        if (separator <= prefix.Length || !native[prefix.Length..separator].All(char.IsAsciiDigit)) return (PathWalk.Unknown, null);
+        var relative = Path.GetFullPath(@"C:\" + native[(separator + 1)..] + "\\" + target)[3..];
+        return WalkLocal(@"\\?\GLOBALROOT" + native[..(separator + 1)], relative, ref links);
+    }
+
+    private static (string Target, bool Relative)? LinkTarget(SafeFileHandle handle)
+    {
+        var data = new byte[16384];
+        if (!DeviceIoControl(handle, 0x900A8, IntPtr.Zero, 0, data, (uint)data.Length, out var length, IntPtr.Zero) || length < 16) return null;
+        var tag = BitConverter.ToUInt32(data, 0);
+        var start = tag == 0xA0000003 ? 16 : tag == 0xA000000C ? 20 : 0;
+        var size = BitConverter.ToUInt16(data, 4) + 8;
+        if (start == 0 || size < start || size > length) return null;
+        var offset = BitConverter.ToUInt16(data, 8);
+        var count = BitConverter.ToUInt16(data, 10);
+        var flags = tag == 0xA000000C ? BitConverter.ToUInt32(data, 16) : 0;
+        if ((offset & 1) != 0 || count == 0 || (count & 1) != 0 || start + offset + count > size || flags > 1) return null;
+        return (new string(MemoryMarshal.Cast<byte, char>(data.AsSpan(start + offset, count))), flags == 1);
+    }
+
+    private static (PathWalk Walk, string? Root) LocalRoot(string path)
+    {
+        if (path.StartsWith(@"\\", StringComparison.Ordinal) || path.StartsWith(@"UNC\", StringComparison.OrdinalIgnoreCase)) return (PathWalk.OffComputer, null);
+        if (path.Length < 3 || !char.IsAsciiLetter(path[0]) || path[1] != ':' || path[2] != '\\') return (PathWalk.Unknown, null);
+        var device = new StringBuilder(32768);
+        if (QueryDosDevice(path[..2], device, (uint)device.Capacity) == 0) return (PathWalk.Unknown, null);
+        var mapping = device.ToString();
+        const string local = @"\Device\HarddiskVolume";
+        if (!mapping.StartsWith(local, StringComparison.OrdinalIgnoreCase) || mapping.Length == local.Length || !mapping[local.Length..].All(char.IsAsciiDigit)) return (PathWalk.Unknown, null);
+        var root = @"\\?\GLOBALROOT" + mapping + "\\";
+        try
+        {
+            return GetDriveType(root) switch
+            {
+                3 => (PathWalk.Local, root),
+                2 or 4 or 5 or 6 => (PathWalk.OffComputer, null),
+                _ => (PathWalk.Unknown, null),
             };
         }
-        catch (Exception error) when (error is IOException or ArgumentException or UnauthorizedAccessException) { return PathWalk.Unknown; }
+        catch (Exception error) when (error is IOException or ArgumentException or UnauthorizedAccessException) { return (PathWalk.Unknown, null); }
     }
 
     public static byte[]? ReadBounded(string folder, string name, int limit, out string? refusal)
@@ -304,6 +333,10 @@ internal static class NativeFiles
     private static extern uint GetFinalPathNameByHandle(SafeFileHandle handle, StringBuilder path, uint length, uint flags);
     [DllImport("kernel32.dll", EntryPoint = "QueryDosDeviceW", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern uint QueryDosDevice(string name, StringBuilder target, uint length);
+    [DllImport("kernel32.dll", EntryPoint = "GetDriveTypeW", CharSet = CharSet.Unicode)]
+    private static extern uint GetDriveType(string root);
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool DeviceIoControl(SafeFileHandle handle, uint control, IntPtr input, uint inputLength, byte[] output, uint outputLength, out uint returned, IntPtr overlapped);
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern bool GetFileInformationByHandleEx(SafeFileHandle handle, int kind, IntPtr buffer, uint size);
     [DllImport("kernel32.dll", EntryPoint = "SetFileInformationByHandle", SetLastError = true)]

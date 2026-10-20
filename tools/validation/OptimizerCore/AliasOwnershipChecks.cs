@@ -12,6 +12,7 @@ static class AliasOwnershipChecks
 {
     public static void Probe(string root, string peerPath)
     {
+        if (peerPath == "parent-handle-rename") { ParentRenameProbe(root); return; }
         var target = Path.Combine(root, "Roo Industries Example");
         var application = new CleanupApplication { AppId = "fixture:alias-owner", DisplayName = "Roo Industries Example", Publisher = "Fixture", InstallLocation = target, PackageFamilyName = null };
         var peer = application with { AppId = "fixture:peer", DisplayName = "Independent alias tool", InstallLocation = peerPath };
@@ -28,6 +29,16 @@ static class AliasOwnershipChecks
 
     private static void CheckPeer(Action<bool, string> check, string root, string peer, string name, bool shared)
     {
+        using var result = JsonDocument.Parse(ProbeOutput(check, root, peer, name));
+        var value = result.RootElement;
+        Console.WriteLine("MEASURE aliasOwnership " + JsonSerializer.Serialize(new { Scenario = name, Result = value }));
+        check(value.GetProperty("PreviewRefused").GetBoolean() && value.GetProperty("Preserved").GetBoolean() &&
+            (shared ? value.GetProperty("SharedOwners").EnumerateArray().Any(owner => owner.GetString() == "Independent alias tool") : !value.GetProperty("OwnershipComplete").GetBoolean()),
+            name + (shared ? " retains its shared owner and refuses cleanup preview" : " stays unknown and refuses cleanup preview"));
+    }
+
+    private static string ProbeOutput(Action<bool, string> check, string root, string peer, string name)
+    {
         var executable = Environment.ProcessPath ?? throw new InvalidOperationException("Probe executable is unavailable.");
         var start = new ProcessStartInfo(executable) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
         if (Path.GetFileNameWithoutExtension(executable).Equals("dotnet", StringComparison.OrdinalIgnoreCase)) start.ArgumentList.Add(Assembly.GetExecutingAssembly().Location);
@@ -40,12 +51,41 @@ static class AliasOwnershipChecks
         var text = output.GetAwaiter().GetResult();
         var error = errors.GetAwaiter().GetResult();
         check(exited && child.ExitCode == 0, name + " finishes in the disposable probe within four seconds: " + error);
-        using var result = JsonDocument.Parse(text);
-        var value = result.RootElement;
-        Console.WriteLine("MEASURE aliasOwnership " + JsonSerializer.Serialize(new { Scenario = name, Result = value }));
-        check(value.GetProperty("PreviewRefused").GetBoolean() && value.GetProperty("Preserved").GetBoolean() &&
-            (shared ? value.GetProperty("SharedOwners").EnumerateArray().Any(owner => owner.GetString() == "Independent alias tool") : !value.GetProperty("OwnershipComplete").GetBoolean()),
-            name + (shared ? " retains its shared owner and refuses cleanup preview" : " stays unknown and refuses cleanup preview"));
+        return text;
+    }
+
+    private static void ParentRenameProbe(string root)
+    {
+        var parent = Path.Combine(root, "moving-parent");
+        var moved = Path.Combine(root, "moved-parent");
+        Directory.CreateDirectory(Path.Combine(parent, "leaf"));
+        var renamed = false; var linked = false;
+        try
+        {
+            using var handle = CreateFile(parent, 0x100080, 7, IntPtr.Zero, 3, 0x02300000, IntPtr.Zero);
+            if (handle.IsInvalid) throw new IOException("Could not open the disposable parent.");
+            Directory.Move(parent, moved); renamed = true;
+            Directory.CreateSymbolicLink(parent, @"\\192.0.2.139\AliasOwnershipFixture"); linked = true;
+            var method = typeof(FileLease).GetMethod("OpenMetadataChild", BindingFlags.Static | BindingFlags.NonPublic)!;
+            using var child = (SafeFileHandle)method.Invoke(null, [handle, "leaf"])!;
+            var name = new StringBuilder(32768);
+            var length = GetFinalPathNameByHandle(child, name, (uint)name.Capacity, 0);
+            Console.WriteLine(JsonSerializer.Serialize(new { Preserved = length > 0 && length < name.Capacity && string.Equals(name.ToString(), @"\\?\" + Path.Combine(moved, "leaf"), StringComparison.OrdinalIgnoreCase) }));
+        }
+        finally
+        {
+            if (linked) Directory.Delete(parent);
+            else if (!renamed) Directory.Delete(parent, true);
+            if (renamed) Directory.Delete(moved, true);
+        }
+    }
+
+    private static void CaptureReparse(string path)
+    {
+        using var handle = CreateFile(path, 0x100080, 7, IntPtr.Zero, 3, 0x02300000, IntPtr.Zero);
+        var bytes = new byte[16384];
+        if (handle.IsInvalid || !DeviceIoControl(handle, 0x900A8, IntPtr.Zero, 0, bytes, (uint)bytes.Length, out var length, IntPtr.Zero) || length < 16) throw new IOException("Could not capture the disposable reparse response.");
+        Console.WriteLine("MEASURE reparseResponse " + JsonSerializer.Serialize(new { ReparseTag = BitConverter.ToUInt32(bytes), ReparseDataLength = BitConverter.ToUInt16(bytes, 4), Reserved = BitConverter.ToUInt16(bytes, 6), SubstituteNameOffset = BitConverter.ToUInt16(bytes, 8), SubstituteNameLength = BitConverter.ToUInt16(bytes, 10), PrintNameOffset = BitConverter.ToUInt16(bytes, 12), PrintNameLength = BitConverter.ToUInt16(bytes, 14), Flags = BitConverter.ToUInt32(bytes) == 0xA000000C ? (uint?)BitConverter.ToUInt32(bytes, 16) : null, RawBase64 = Convert.ToBase64String(bytes, 0, (int)length) }));
     }
 
     private static void Junction(string path, string target)
@@ -85,6 +125,21 @@ static class AliasOwnershipChecks
             links.Add(alias); Junction(alias, elsewhere);
             CheckPeer(check, root, Path.Combine(alias, "..", "Roo Industries Example"), "dotdot-after-junction", true);
 
+            var scanAlias = Path.Combine(root, "scan-alias");
+            links.Add(scanAlias); Junction(scanAlias, root);
+            var scanned = new CleanupApplication { AppId = "fixture:scan-alias", DisplayName = "Roo Industries Example", Publisher = "Fixture", InstallLocation = Path.Combine(scanAlias, "Roo Industries Example"), PackageFamilyName = null };
+            var scan = new LeftoverDiscovery(scanned, []).Scan(CancellationToken.None, [scanAlias], []);
+            check(scan.Complete && scan.Candidates.Length == 1 && scan.Candidates[0].Target == scanned.InstallLocation,
+                "A junctioned scan root preserves lexical candidate identity and avoids duplicate rows");
+
+            var relative = Path.Combine(root, "relative-alias");
+            links.Add(relative); Directory.CreateSymbolicLink(relative, Path.GetRelativePath(root, target));
+            CaptureReparse(relative);
+            CheckPeer(check, root, relative, "relative-symlink-alias", true);
+            CheckPeer(check, root, Path.Combine(relative, "missing-child"), "missing-folder-through-alias", false);
+            using (var renamed = JsonDocument.Parse(ProbeOutput(check, root, "parent-handle-rename", "renamed-parent-open")))
+                check(renamed.RootElement.GetProperty("Preserved").GetBoolean(), "An opened parent keeps child lookup local after its old path becomes an offline network link");
+
             var volume = new StringBuilder(64);
             check(GetVolumeNameForVolumeMountPoint(Path.GetPathRoot(root)!, volume, (uint)volume.Capacity), "A real local volume GUID is available for alias fixtures");
             var mount = Path.Combine(root, "mount");
@@ -102,6 +157,14 @@ static class AliasOwnershipChecks
             var volumeBridge = Path.Combine(root, "volume-bridge");
             links.Add(volumeBridge); Junction(volumeBridge, volume + Path.Combine(nas, "Tool")[Path.GetPathRoot(nas)!.Length..]);
             CheckPeer(check, root, volumeBridge, "volume-guid-bridge-to-unc", false);
+            var device = new StringBuilder(32768);
+            check(QueryDosDevice(root[..2], device, (uint)device.Capacity) != 0, "Local fixture volume has a native DOS-device mapping");
+            var namespaced = Path.Combine(root, "namespace-alias");
+            links.Add(namespaced); Junction(namespaced, @"\\?\GLOBALROOT" + device + target[2..]);
+            CaptureReparse(namespaced);
+            check(File.ReadAllText(Path.Combine(namespaced, "settings.txt")) == "fixture", "A GLOBALROOT alias actually reaches the disposable shared folder");
+            CheckPeer(check, root, namespaced, "non-dos-namespace-alias", false);
+            CheckPeer(check, root, @"\\localhost\" + root[0] + "$" + target[2..], "uninspected-loopback-share", false);
             mappedTarget = @"\??\" + nas; mapping = Map(mappedTarget);
             CheckPeer(check, root, mapping + @"\Tool", "subst-link-to-offline-unc", false);
             if (!DefineDosDevice(15, mapping, mappedTarget)) throw new IOException("Could not remove own DOS mapping.");
@@ -119,10 +182,12 @@ static class AliasOwnershipChecks
 
             var locked = Path.Combine(root, "locked-peer");
             Directory.CreateDirectory(locked);
-            using (var handle = CreateFile(locked, 0x80, 0, IntPtr.Zero, 3, 0x02000000, IntPtr.Zero))
+            using (var handle = CreateFile(locked, 0x10000, 7, IntPtr.Zero, 3, 0x06000000, IntPtr.Zero))
             {
                 check(!handle.IsInvalid && (File.GetAttributes(locked) & FileAttributes.Directory) != 0, "Final-open failure fixture still permits the metadata walk");
-                CheckPeer(check, root, locked, "final-open-sharing-failure", false);
+                using var refused = CreateFile(locked, 0x100080, 7, IntPtr.Zero, 3, 0x02100000, IntPtr.Zero);
+                check(refused.IsInvalid, "Delete-pending fixture really refuses the resolver's final metadata open");
+                CheckPeer(check, root, locked, "final-open-delete-pending", false);
             }
 
             var unreadable = Directory.CreateDirectory(Path.Combine(root, "unreadable-peer"));
@@ -172,4 +237,6 @@ static class AliasOwnershipChecks
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)] private static extern uint GetShortPathName(string path, StringBuilder name, uint length);
     [DllImport("kernel32.dll", EntryPoint = "SetFileShortNameW", CharSet = CharSet.Unicode, SetLastError = true)] private static extern bool SetFileShortName(SafeFileHandle file, string name);
     [DllImport("kernel32.dll", EntryPoint = "CreateFileW", CharSet = CharSet.Unicode, SetLastError = true)] private static extern SafeFileHandle CreateFile(string path, uint access, uint share, IntPtr security, uint disposition, uint flags, IntPtr template);
+    [DllImport("kernel32.dll", EntryPoint = "GetFinalPathNameByHandleW", CharSet = CharSet.Unicode, SetLastError = true)] private static extern uint GetFinalPathNameByHandle(SafeFileHandle handle, StringBuilder name, uint length, uint flags);
+    [DllImport("kernel32.dll", SetLastError = true)] private static extern bool DeviceIoControl(SafeFileHandle handle, uint control, IntPtr input, uint inputLength, byte[] output, uint outputLength, out uint returned, IntPtr overlapped);
 }

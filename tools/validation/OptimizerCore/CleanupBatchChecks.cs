@@ -28,11 +28,17 @@ static class CleanupBatchChecks
                     AppId = app.AppId, ProviderIdentityHash = OperationFiles.Hash(System.Text.Encoding.UTF8.GetBytes(name)), Owner = OperationOwner.Current(),
                     ProviderQueryComplete = true, RegistrationPresent = false, RebootPending = false, RemoverRunning = false, RemovalResolved = true,
                 };
-                var context = new CleanupContext(Path.Combine(root, name + "-queue.json"), authority, app, [], true);
+                var context = new CleanupContext(Path.Combine(root, "queue.json"), authority, app, [], true);
                 contexts.Add(app.AppId, context);
+            }
+            var snapshots = contexts.Values.Select(context => context.Application).ToArray();
+            foreach (var app in snapshots)
+            {
+                var context = contexts[app.AppId] with { Peers = snapshots };
+                contexts[app.AppId] = context;
                 var engine = App(context.Source, app.AppId);
                 var scan = engine.Scan(CancellationToken.None);
-                var path = Path.Combine(root, "operations", name, "review.json");
+                var path = Path.Combine(root, "operations", app.DisplayName, "review.json");
                 var plan = engine.Preview(path, scan.Candidates.Select(item => item.ItemId).ToArray(), true, true);
                 plans.Add(plan);
                 parts.Add(new(path, OperationFiles.HashFile(path), Path.Combine(Path.GetDirectoryName(path)!, "journal.json")));
@@ -48,6 +54,9 @@ static class CleanupBatchChecks
             var stopped = engineBatch.Apply(batchPath, hash, journalPath);
             check(stopped.Status == "stopped" && stopped.Entries[0].Status == "applied" && stopped.Entries[1].Status == "pending" &&
                 !Directory.Exists(Path.Combine(root, "Roo Industries Batch One")) && Directory.Exists(Path.Combine(root, "Roo Industries Batch Two")), "Batch cancellation finishes the current app and preserves the unstarted app's leftovers");
+            var firstPart = parts[0];
+            var replay = App(contexts[plans[0].AppId].Source, plans[0].AppId).Apply(firstPart.PreviewPath, firstPart.ReviewHash, firstPart.JournalPath);
+            check(replay.Status == "applied" && !Directory.Exists(snapshots[0].InstallLocation), "An applied app replays safely when the Host peer inventory still contains its own deleted queue snapshot");
             var pendingRejected = false;
             try { engineBatch.Restore(journalPath, [plans[1].AppId]); }
             catch (InvalidDataException error) { pendingRejected = error.Message.Contains("no attempted cleanup"); }

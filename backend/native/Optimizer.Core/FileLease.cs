@@ -316,6 +316,9 @@ public sealed class FileLease : IDisposable
         return result.OrderBy(stream => stream.Name, StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
+    internal static SafeFileHandle OpenMetadataChild(SafeFileHandle parent, string name)
+        => OpenRelative(parent, name, ReadAttributes | Synchronize, 7, 1, 0x00600020);
+
     private static SafeFileHandle OpenRelative(SafeFileHandle parent, string name, uint access, uint sharing, uint disposition, uint options)
     {
         RequireComponent(name);

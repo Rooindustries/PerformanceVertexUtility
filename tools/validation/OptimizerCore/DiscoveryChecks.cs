@@ -41,7 +41,7 @@ static class DiscoveryChecks
                 unrelated.SetValue("PrefixOnly", "\"" + install + "-Other\\main.exe\"");
             }
             var application = new CleanupApplication { AppId = "fixture:discovery", DisplayName = "Roo Industries Example", Publisher = "Roo Industries", InstallLocation = install, PackageFamilyName = null };
-            var peer = new CleanupApplication { AppId = "fixture:other", DisplayName = "Independent add-on", Publisher = "Roo Industries", InstallLocation = other, PackageFamilyName = null };
+            var peer = new CleanupApplication { AppId = "fixture:other", DisplayName = "Independent add-on", Publisher = "Roo Industries", InstallLocation = other + @"\\", PackageFamilyName = null };
             var independentPeer = peer with { AppId = "fixture:independent", DisplayName = "Independent tool", InstallLocation = independent };
             var scan = new LeftoverDiscovery(application, [peer, independentPeer]).Scan(CancellationToken.None, [local, programs, Path.Combine(root, "absent-scope")],
                 [new("CurrentUser", "Registry64", registryRoot, "key", null), new("CurrentUser", "Registry32", registryRoot, "key", null)]);
@@ -107,8 +107,8 @@ static class DiscoveryChecks
                 var linkedScan = new LeftoverDiscovery(application, [linkedTool]).Scan(CancellationToken.None, [], []);
                 linkWatch.Stop();
                 check(linkWatch.ElapsedMilliseconds < 500, "A local link to an unreachable network share is never followed, so leftover discovery does not wait on it (" + linkWatch.ElapsedMilliseconds + " ms)");
-                check(linkedScan.Candidates.Single(item => item.Target == shared) is { OwnershipComplete: true } linkedCandidate && !linkedCandidate.SharedOwners.Contains(linkedTool.DisplayName),
-                    "An app installed through a link to a network share does not block cleanup of local leftovers");
+                check(!linkedScan.Candidates.Single(item => item.Target == shared).OwnershipComplete,
+                    "An uninspected network share cannot certify exclusive local ownership");
                 var chain = Path.Combine(root, "chain");
                 using (var junction = Process.Start(new ProcessStartInfo("cmd.exe", "/d /c mklink /J \"" + chain + "\" \"" + Path.Combine(nas, "Tool") + "\"") { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true })!)
                 {
@@ -119,7 +119,7 @@ static class DiscoveryChecks
                 var chainWatch = Stopwatch.StartNew();
                 var chainScan = new LeftoverDiscovery(application, [chainedTool]).Scan(CancellationToken.None, [], []);
                 chainWatch.Stop();
-                check((File.GetAttributes(chain) & FileAttributes.ReparsePoint) != 0 && chainWatch.ElapsedMilliseconds < 500 && chainScan.Candidates.Single(item => item.Target == shared).OwnershipComplete,
+                check((File.GetAttributes(chain) & FileAttributes.ReparsePoint) != 0 && chainWatch.ElapsedMilliseconds < 500 && !chainScan.Candidates.Single(item => item.Target == shared).OwnershipComplete,
                     "A local junction whose target goes through a link to a network share is never followed (" + chainWatch.ElapsedMilliseconds + " ms)");
                 var volumeName = new System.Text.StringBuilder(64);
                 if (GetVolumeNameForVolumeMountPoint(Path.GetPathRoot(nas)!, volumeName, (uint)volumeName.Capacity))
