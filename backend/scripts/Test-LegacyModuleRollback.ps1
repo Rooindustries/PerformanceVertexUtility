@@ -102,6 +102,21 @@ try {
             $script:startup='Disabled'
             $restored=Invoke-RollbackModule
             Assert ($script:serviceRestores -eq $before -and @($restored.leftAsChanged).Count -eq 1) 'A legacy service backup without applied startup is left for review'
+            & {
+                $script:instanceTypes=@{FixtureSvc_a='Disabled';FixtureSvc_b='Manual'}
+                function Get-ServiceSnapshot { param($Name) [pscustomobject]@{name=$Name;exists=$true;startType=$script:instanceTypes[$Name]} }
+                function Restore-ServiceSnapshot { param($Snapshot) $script:instanceTypes[$Snapshot.name]=$Snapshot.startType }
+                $instances=[pscustomobject]@{ moduleId='fixture';timestamp=(Get-Date).ToString('o');registry=@();services=@(
+                    @{name='FixtureSvc_a';exists=$true;startType='Automatic';appliedStartup='Disabled'},
+                    @{name='FixtureSvc_b';exists=$true;startType='Automatic';appliedStartup='Disabled'}
+                ) }
+                Write-JsonFile $instances $BackupPath
+                $restored=Invoke-RollbackModule
+                Assert ($script:instanceTypes.FixtureSvc_a -eq 'Automatic' -and $script:instanceTypes.FixtureSvc_b -eq 'Manual' -and $restored.restoredServices -eq 1 -and $restored.leftAsChanged[0].name -eq 'FixtureSvc_b') 'Service instances restore independently and preserve the instance with drift'
+                function Get-ServiceSnapshot { param($Name) [pscustomobject]@{name='FixtureSvc_new';exists=$true;startType='Disabled'} }
+                $restored=Invoke-RollbackModule
+                Assert ($restored.restoredServices -eq 0 -and @($restored.leftAsChanged).Count -eq 2) 'A newly resolved service instance cannot replace an original target'
+            }
         }
     } }
     if ($Scenario -in 'All','Registry') { & {
@@ -140,6 +155,7 @@ try {
                 $applied=Invoke-ApplyModule
                 $BackupPath=$applied.backupPath
                 $saved=Get-Content $BackupPath -Raw | ConvertFrom-Json
+                if ($case.label -eq 'String numeric') { Write-Output ('BACKUP_FIXTURE_JSON ' + (ConvertTo-Json -InputObject ([IO.File]::ReadAllText($BackupPath)) -Compress)) }
                 $restored=Invoke-RollbackModule
                 $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($subkey)
                 try {
@@ -152,12 +168,13 @@ try {
                 Assert ($saved.registry[0].kind -ceq $case.kind -and (ConvertTo-Json -InputObject $saved.registry[0].oldValue -Compress) -ceq (ConvertTo-Json -InputObject $case.expected -Compress)) ($case.label + ' has a lossless JSON encoding')
                 Assert ($restored.restoredRegistry -eq 1 -and @($restored.leftAsChanged).Count -eq 0) ($case.label + ' is reported as restored')
             }
-            foreach ($drift in 'data','kind','deleted-value','deleted-key','missing-before','new-changed','case') {
+            foreach ($drift in 'data','kind','deleted-value','deleted-key','missing-before','new-key','new-changed','case') {
                 $key=[Microsoft.Win32.Registry]::CurrentUser.CreateSubKey($subkey)
                 try {
                     $key.SetValue('Value',[int]1,[Microsoft.Win32.RegistryValueKind]::DWord)
                     if ($drift -in 'missing-before','new-changed') { $key.DeleteValue('Value') }
                 } finally { $key.Dispose() }
+                if ($drift -eq 'new-key') { [Microsoft.Win32.Registry]::CurrentUser.DeleteSubKeyTree($subkey) }
                 $ConfirmApply=$true
                 $applied=Invoke-ApplyModule
                 $BackupPath=$applied.backupPath
@@ -174,7 +191,7 @@ try {
                 if ($drift -eq 'deleted-key') { [Microsoft.Win32.Registry]::CurrentUser.DeleteSubKeyTree($subkey) }
                 $ConfirmApply=$false
                 $preview=Invoke-RollbackModule
-                $expectedLeft=if ($drift -eq 'missing-before') { 0 } else { 1 }
+                $expectedLeft=if ($drift -in 'missing-before','new-key') { 0 } else { 1 }
                 Assert (@($preview.leftAsChanged).Count -eq $expectedLeft) ($drift + ' preview reports ownership accurately')
                 $ConfirmApply=$true
                 $restored=Invoke-RollbackModule
@@ -182,7 +199,7 @@ try {
                 $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($subkey)
                 try {
                     if ($drift -eq 'deleted-key') { Assert ($null -eq $key) 'Rollback keeps a subsequently deleted key absent' }
-                    elseif ($drift -in 'deleted-value','missing-before') { Assert ('Value' -notin $key.GetValueNames()) ($drift + ' stays absent') }
+                    elseif ($drift -in 'deleted-value','missing-before','new-key') { Assert ('Value' -notin $key.GetValueNames()) ($drift + ' stays absent') }
                     else {
                         $actual=$key.GetValue('Value',$null,[Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
                         $wanted=if ($drift -in 'data','new-changed') { 3 } elseif ($drift -eq 'case') { 'TWO' } else { '2' }
@@ -211,9 +228,20 @@ try {
             & $HarnessPath -Action RollbackModule -ModuleId fixture -ManifestPath $fixtureManifest -DataRoot $tempRoot -BackupPath $BackupPath -ConfirmApply | Out-Null
             $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($subkey)
             try { Assert ($key.GetValue('Value') -eq 1) 'The RollbackModule CLI restores the explicit backup only when confirmed' } finally { $key.Dispose() }
-            foreach ($name in '','PSPath') {
+            & {
+                function Set-RegistrySnapshotData { param($Key,$Name,$Snapshot) }
+                $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($subkey,$true)
+                try { $key.SetValue('Value',2,[Microsoft.Win32.RegistryValueKind]::DWord) } finally { $key.Dispose() }
+                $refused=$false
+                try { Restore-RegistryValue $legacy.registry[0] } catch { $refused=$_.Exception.Message -like '*restore verification failed*' }
+                Assert $refused 'Restore refuses to report success when registry readback differs'
+            }
+            foreach ($nameMode in 'empty','reserved','null','missing') {
+                $name=if ($nameMode -eq 'reserved') { 'PSPath' } else { '' }
                 $manifest=Get-Content $fixtureManifest -Raw | ConvertFrom-Json
                 $manifest.modules[0].registryValues[0].name=$name
+                if ($nameMode -eq 'null') { $manifest.modules[0].registryValues[0].name=$null }
+                if ($nameMode -eq 'missing') { $manifest.modules[0].registryValues[0].PSObject.Properties.Remove('name') }
                 $manifest.modules[0].registryValues[0].type='REG_SZ'
                 $manifest.modules[0].registryValues[0].data='Two'
                 Write-JsonFile $manifest $fixtureManifest
@@ -224,19 +252,59 @@ try {
                 $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($subkey,$true)
                 try { $key.SetValue($name,'two',[Microsoft.Win32.RegistryValueKind]::String) } finally { $key.Dispose() }
                 $restored=Invoke-RollbackModule
-                Assert (@($restored.leftAsChanged).Count -eq 1) ('String comparison is case sensitive for value name [' + $name + ']')
+                Assert (@($restored.leftAsChanged).Count -eq 1) ('String comparison is case sensitive for ' + $nameMode + ' value names')
+                $later='Tw'+[char]0xAD+'o'
+                $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($subkey,$true)
+                try { $key.SetValue($name,$later,[Microsoft.Win32.RegistryValueKind]::String) } finally { $key.Dispose() }
+                $restored=Invoke-RollbackModule
+                $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($subkey)
+                try { Assert (@($restored.leftAsChanged).Count -eq 1 -and [string]::Equals($key.GetValue($name),$later,[StringComparison]::Ordinal)) ('Unicode soft-hyphen drift is preserved for ' + $nameMode + ' value names') } finally { $key.Dispose() }
                 $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($subkey,$true)
                 try { $key.SetValue($name,'Two',[Microsoft.Win32.RegistryValueKind]::String) } finally { $key.Dispose() }
                 Invoke-RollbackModule | Out-Null
                 $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($subkey)
-                try { Assert ($key.GetValue($name) -ceq 'Original') ('The original is restored for value name [' + $name + ']') } finally { $key.Dispose() }
+                try { Assert ($key.GetValue($name) -ceq 'Original') ('The original is restored for ' + $nameMode + ' value names') } finally { $key.Dispose() }
             }
-            $manifest.modules[0].registryValues[0].name='Value'
+            & {
+                function Set-RegistrySnapshotData { param($Key,$Name,$Snapshot) }
+                foreach ($kind in 'String','ExpandString','MultiString') {
+                    $later='Tw'+[char]0xAD+'o'
+                    $data=if ($kind -eq 'MultiString') { ,([string[]]@($later)) } else { $later }
+                    $original=if ($kind -eq 'MultiString') { ,([string[]]@('Two')) } else { 'Two' }
+                    $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($subkey,$true)
+                    try { $key.SetValue('Value',$data,[Microsoft.Win32.RegistryValueKind]$kind) } finally { $key.Dispose() }
+                    $snapshot=[pscustomobject]@{path=$regPath;name='Value';valueExists=$true;kind=$kind;oldValue=$original}
+                    $refused=$false
+                    try { Restore-RegistryValue $snapshot } catch { $refused=$_.Exception.Message -like '*restore verification failed*' }
+                    Assert $refused ($kind + ' readback rejects an ignorable Unicode character difference')
+                }
+            }
+            $manifest.modules[0].registryValues[0] | Add-Member -NotePropertyName name -NotePropertyValue 'Value' -Force
             $manifest.protected.registryPathPatterns=@([regex]::Escape($regPath))
             Write-JsonFile $manifest $fixtureManifest
             $applied=Invoke-ApplyModule
             $saved=Get-Content $applied.backupPath -Raw | ConvertFrom-Json
             Assert (@($saved.registry).Count -eq 0) 'Protected settings are excluded from the rollback backup'
+            & {
+                $manifest.protected.services=@('FixtureProtectedSvc')
+                Write-JsonFile $manifest $fixtureManifest
+                $script:protectedRestores=0
+                function Get-ServiceSnapshot { param($Name) [pscustomobject]@{name=$Name;exists=$true;startType='Disabled'} }
+                function Restore-ServiceSnapshot { param($Snapshot) $script:protectedRestores++ }
+                $legacy=[pscustomobject]@{moduleId='fixture';timestamp=(Get-Date).ToString('o');registry=@(@{path=$regPath;name='Value';type='REG_SZ';desiredData='Two';oldValue='Original';valueExists=$true});services=@(@{name='FixtureProtectedSvc';exists=$true;startType='Automatic';appliedStartup='Disabled'})}
+                $BackupPath=$applied.backupPath
+                Write-JsonFile $legacy $BackupPath
+                $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($subkey,$true)
+                try { $key.SetValue('Value','Two',[Microsoft.Win32.RegistryValueKind]::String) } finally { $key.Dispose() }
+                $ConfirmApply=$false
+                $preview=Invoke-RollbackModule
+                Assert ($preview.restoredRegistry -eq 0 -and $preview.restoredServices -eq 0 -and @($preview.leftAsChanged).Count -eq 2) 'Legacy protected targets are left in the rollback preview'
+                $ConfirmApply=$true
+                $restored=Invoke-RollbackModule
+                $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($subkey)
+                try { Assert ($key.GetValue('Value') -ceq 'Two' -and $script:protectedRestores -eq 0 -and @($restored.leftAsChanged).Count -eq 2) 'Legacy backups never restore protected registry values or services' } finally { $key.Dispose() }
+            }
+            $manifest.protected.services=@()
             $manifest.protected.registryPathPatterns=@()
             Write-JsonFile $manifest $fixtureManifest
             $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($subkey,$true)
@@ -256,6 +324,18 @@ try {
             $elsewhere=Join-Path $tempRoot 'elsewhere'
             & $HarnessPath -Action RollbackModule -ModuleId fixture -ManifestPath $fixtureManifest -DataRoot $elsewhere -BackupPath $BackupPath | Out-Null
             Assert (Test-Path $BackupPath) 'An explicit backup works independently of the default backup directory'
+            & {
+                $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($subkey,$true)
+                try { $key.SetValue('Value','Original',[Microsoft.Win32.RegistryValueKind]::String) } finally { $key.Dispose() }
+                function Set-RegistryValueFromManifest { param($Item) throw 'Fixture apply failure before write' }
+                $failed=$false
+                try { Invoke-ApplyModule | Out-Null } catch { $failed=$_.Exception.Message -eq 'Fixture apply failure before write' }
+                Assert $failed 'An apply failure leaves its prior backup available'
+                $BackupPath=''
+                $restored=Invoke-RollbackModule
+                $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($subkey)
+                try { Assert ($key.GetValue('Value') -ceq 'Original' -and $restored.restoredRegistry -eq 0) 'Rollback of a failed apply leaves unwritten settings intact' } finally { $key.Dispose() }
+            }
         } finally {
             [Microsoft.Win32.Registry]::CurrentUser.DeleteSubKeyTree($subkey,$false)
         }

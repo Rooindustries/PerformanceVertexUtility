@@ -44,6 +44,12 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\LeanClientOptimizer.ps
 
 To select an older operation explicitly, supply `-BackupPath` with its `backup.json`. A backup must belong to the requested module. Unproven legacy snapshots require explicit selection.
 
+Leave off `-ConfirmApply` to preview rollback. The result lists settings it would restore in `actions`, and settings it would leave alone in `leftAsChanged`, with their registry path and value name or service name. The restore counts exclude settings left alone; in a preview, they count the planned restores.
+
+Rollback restores a registry value only while its kind and data still match what the module applied. A later edit or deletion stays as it is, with a `Left as changed` notice. New backups preserve the original value kind and raw data, including unexpanded environment variables, multi-string arrays, full-width DWORD and QWORD values, and binary data. Each restore is read back and checked. Apply writes the kind declared in the manifest; module defaults are unchanged. An original registry kind the harness cannot back up safely prevents apply.
+
+Service rollback checks the startup type against the one saved for apply before restoring or restarting that service. Changed or missing services are left alone. Protected registry values and services are left alone even if an older backup includes them. Older registry backups without a saved kind use the manifest type stored in that backup when restored. Older service backups without the applied startup type are left alone because the harness cannot check whether another program changed them.
+
 Generate a basic report:
 
 ```powershell
