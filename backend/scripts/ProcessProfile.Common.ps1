@@ -1134,7 +1134,7 @@ function Split-RooIndustriesLeftAsSetRestoreChanges {
         $control = [string](Get-RooIndustriesPropertyValue $change 'control' '')
         $current = Get-RooIndustriesPropertyValue $change 'currentValue' $null
         $applied = Get-RooIndustriesAppliedControlValue $Snapshot $control
-        if (-not [bool](Get-RooIndustriesPropertyValue $change 'blocked' $false) -and $applied.known -and -not (Test-RooIndustriesControlValueEqual $control $current $applied.value)) {
+        if (-not [bool](Get-RooIndustriesPropertyValue $change 'blocked' $false) -and $applied.known -and -not [string]::IsNullOrWhiteSpace([string]$current) -and -not (Test-RooIndustriesControlValueEqual $control $current $applied.value)) {
             $left.Add([pscustomobject]@{ control = $control; currentValue = $current; appliedValue = $applied.value; originalValue = Get-RooIndustriesPropertyValue $change 'proposedValue' $null; outcome = 'leftAsSet'; reason = $script:RooIndustriesLeftAsSet }) | Out-Null
             continue
         }
