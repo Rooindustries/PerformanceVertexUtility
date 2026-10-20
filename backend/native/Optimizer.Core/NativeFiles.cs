@@ -175,35 +175,52 @@ internal static class NativeFiles
 
     public static string Normalize(string path) => path.StartsWith(@"\\?\", StringComparison.Ordinal) && !path.StartsWith(@"\\?\UNC\", StringComparison.OrdinalIgnoreCase) ? path[4..] : path;
 
+    private enum PathWalk { Local, Absent, OffComputer, Unknown }
+
     public static string? ResolvedPath(string path, out bool known)
     {
         known = true;
+        path = path.Replace('/', '\\');
+        if ((path.StartsWith(@"\\?\", StringComparison.Ordinal) || path.StartsWith(@"\??\", StringComparison.Ordinal)) && !path[4..].StartsWith(@"UNC\", StringComparison.OrdinalIgnoreCase)) path = path[4..];
         if (path.Contains('\0') || !FixedDrivePath(path)) return null;
-        var linked = false;
+        var links = 0;
+        var (walk, physical) = Walk(path, ref links);
+        if (walk == PathWalk.Unknown) known = false;
+        if (walk != PathWalk.Local) return null;
+        try
+        {
+            using var handle = Open(physical, ReadAttributes | Synchronize, ShareAll, BackupSemantics | NoRecallAnonymous);
+            return FinalPath(handle) is { } final ? Normalize(final) : null;
+        }
+        catch (Exception error) when (error is FileNotFoundException or DirectoryNotFoundException) { return null; }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException) { known = links == 0; return null; }
+    }
+
+    private static (PathWalk Walk, string Physical) Walk(string path, ref int links)
+    {
         var current = path[..3];
         foreach (var part in path[3..].Split('\\', StringSplitOptions.RemoveEmptyEntries))
         {
             current = Path.Combine(current, part);
             FileAttributes attributes;
             try { attributes = File.GetAttributes(current); }
-            catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException) { return null; }
+            catch (Exception error) when (error is FileNotFoundException or DirectoryNotFoundException) { return (PathWalk.Absent, current); }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException) { return (PathWalk.Unknown, current); }
             if ((attributes & FileAttributes.ReparsePoint) == 0) continue;
             string? target;
             try { target = ((attributes & FileAttributes.Directory) != 0 ? new DirectoryInfo(current) : (FileSystemInfo)new FileInfo(current)).LinkTarget; }
-            catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException) { return null; }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException) { return (PathWalk.Unknown, current); }
             if (target is null) continue;
+            if (++links > 16) return (PathWalk.Unknown, current);
             if (!Path.IsPathFullyQualified(target)) target = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(current)!, target));
             var plain = target.StartsWith(@"\\?\", StringComparison.Ordinal) || target.StartsWith(@"\??\", StringComparison.Ordinal) ? target[4..] : target;
-            if (!plain.StartsWith("Volume{", StringComparison.OrdinalIgnoreCase) && !FixedDrivePath(plain)) return null;
-            linked = true;
+            if (plain.StartsWith("Volume{", StringComparison.OrdinalIgnoreCase)) { current = @"\\?\" + plain; continue; }
+            if (!FixedDrivePath(plain)) return (PathWalk.OffComputer, current);
+            var (inner, physical) = Walk(plain, ref links);
+            if (inner != PathWalk.Local) return (inner, physical);
+            current = physical;
         }
-        try
-        {
-            using var handle = Open(path, ReadAttributes | Synchronize, ShareAll, BackupSemantics | NoRecallAnonymous);
-            return FinalPath(handle) is { } final ? Normalize(final) : null;
-        }
-        catch (Exception error) when (error is FileNotFoundException or DirectoryNotFoundException) { return null; }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException) { known = !linked; return null; }
+        return (PathWalk.Local, current);
     }
 
     private static bool FixedDrivePath(string path)

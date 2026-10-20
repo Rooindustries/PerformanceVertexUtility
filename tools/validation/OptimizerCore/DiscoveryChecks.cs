@@ -77,6 +77,12 @@ static class DiscoveryChecks
             var peer = new CleanupApplication { AppId = "fixture:alias", DisplayName = "Independent alias tool", Publisher = "Other", InstallLocation = Path.Combine(alias, "Roo Industries Example"), PackageFamilyName = null };
             var scan = new LeftoverDiscovery(application, [peer]).Scan(CancellationToken.None, [], []);
             check(scan.Candidates.Single(item => item.Target == shared).SharedOwners.Contains(peer.DisplayName), "An app installed through a junction to the removed app's folder stays a shared owner");
+            var slashed = peer with { AppId = "fixture:slashed", DisplayName = "Slashed alias tool", InstallLocation = peer.InstallLocation!.Replace('\\', '/') };
+            var slashScan = new LeftoverDiscovery(application, [slashed]).Scan(CancellationToken.None, [], []);
+            check(slashScan.Candidates.Single(item => item.Target == shared).SharedOwners.Contains(slashed.DisplayName), "An app whose install path uses forward slashes through a junction stays a shared owner");
+            var extended = peer with { AppId = "fixture:extended", DisplayName = "Extended path alias tool", InstallLocation = @"\\?\" + peer.InstallLocation };
+            var extendedScan = new LeftoverDiscovery(application, [extended]).Scan(CancellationToken.None, [], []);
+            check(extendedScan.Candidates.Single(item => item.Target == shared).SharedOwners.Contains(extended.DisplayName), "An app whose install path has a \\\\?\\ prefix through a junction stays a shared owner");
             var broken = new CleanupApplication { AppId = "fixture:nul", DisplayName = "Broken path tool", Publisher = "Other", InstallLocation = real + "\\\0invalid", PackageFamilyName = null };
             var nulScan = new LeftoverDiscovery(application, [broken]).Scan(CancellationToken.None, [], []);
             check(!nulScan.Candidates.Single(item => item.Target == shared).SharedOwners.Contains(broken.DisplayName), "An app whose install path has an embedded NUL never becomes an owner of the folder before the NUL");
@@ -93,11 +99,24 @@ static class DiscoveryChecks
                 check(linkWatch.ElapsedMilliseconds < 500, "A local link to an unreachable network share is never followed, so leftover discovery does not wait on it (" + linkWatch.ElapsedMilliseconds + " ms)");
                 check(linkedScan.Candidates.Single(item => item.Target == shared) is { OwnershipComplete: true } linkedCandidate && !linkedCandidate.SharedOwners.Contains(linkedTool.DisplayName),
                     "An app installed through a link to a network share does not block cleanup of local leftovers");
+                var chain = Path.Combine(root, "chain");
+                using (var junction = Process.Start(new ProcessStartInfo("cmd.exe", "/d /c mklink /J \"" + chain + "\" \"" + Path.Combine(nas, "Tool") + "\"") { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true })!)
+                {
+                    junction.StandardOutput.ReadToEnd();
+                    junction.WaitForExit();
+                }
+                var chainedTool = new CleanupApplication { AppId = "fixture:chained", DisplayName = "Chained share tool", Publisher = "Other", InstallLocation = chain, PackageFamilyName = null };
+                var chainWatch = Stopwatch.StartNew();
+                var chainScan = new LeftoverDiscovery(application, [chainedTool]).Scan(CancellationToken.None, [], []);
+                chainWatch.Stop();
+                check((File.GetAttributes(chain) & FileAttributes.ReparsePoint) != 0 && chainWatch.ElapsedMilliseconds < 500 && chainScan.Candidates.Single(item => item.Target == shared).OwnershipComplete,
+                    "A local junction whose target goes through a link to a network share is never followed (" + chainWatch.ElapsedMilliseconds + " ms)");
             }
         }
         finally
         {
             if (Directory.Exists(alias)) Directory.Delete(alias);
+            try { Directory.Delete(Path.Combine(root, "chain")); } catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
             try { Directory.Delete(Path.Combine(root, "nas")); } catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
             Directory.Delete(root, true);
         }
