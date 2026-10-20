@@ -8,6 +8,12 @@ function Assert([bool]$Condition, [string]$Message) {
     if (-not $Condition) { throw $Message }
     Write-Host "PASS $Message"
 }
+$legacyQwordCases=@(
+    @{label='signed number';data=[long]-1;raw=[long]-1;encoded='18446744073709551615'},
+    @{label='signed text';data='-1';raw=[long]-1;encoded='18446744073709551615'},
+    @{label='signed minimum';data='-9223372036854775808';raw=[long]::MinValue;encoded='9223372036854775808'},
+    @{label='unsigned maximum';data='18446744073709551615';raw=[long]-1;encoded='18446744073709551615'}
+)
 try {
     New-Item -ItemType Directory -Path $tempRoot | Out-Null
     $fixtureManifest = Join-Path $tempRoot 'manifest.json'
@@ -16,6 +22,24 @@ try {
     }) } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $fixtureManifest -Encoding UTF8
     if ($Scenario -ne 'Registry') { & {
         . $HarnessPath -Action ListModules -ManifestPath $fixtureManifest -DataRoot $tempRoot -ModuleId 'fixture' | Out-Null
+        if ($Scenario -ne 'Selection') { & {
+            function Open-RegistryKey {
+                param($Path,[switch]$Writable,[switch]$Create)
+                $key=[pscustomobject]@{}
+                $key | Add-Member -MemberType ScriptMethod -Name Dispose -Value {} -PassThru
+            }
+            function Set-RegistrySnapshotData { param($Key,$Name,$Snapshot) $script:legacyQwordValue=[string]$Snapshot.oldValue }
+            function Get-RegistryValueSnapshot { param($Item) [pscustomobject]@{valueExists=$true;kind='QWord';oldValue=$script:legacyQwordValue} }
+            $ConfirmApply=$true
+            $BackupPath=Join-Path $tempRoot 'legacy-qword-stub.json'
+            foreach ($case in $legacyQwordCases) {
+                $script:legacyQwordValue='2'
+                $backup=@{moduleId='fixture';timestamp=(Get-Date).ToString('o');registry=@(@{path='HKCU\Fixture';name='Value';type='REG_QWORD';desiredData=2;oldValue=$case.data;valueExists=$true});services=@()}
+                Write-JsonFile $backup $BackupPath
+                $restored=Invoke-RollbackModule
+                Assert ($script:legacyQwordValue -ceq $case.encoded -and $restored.restoredRegistry -eq 1 -and @($restored.leftAsChanged).Count -eq 0) ('Legacy QWORD '+$case.label+' restores through the real rollback and readback path')
+            }
+        } }
         # Only operating-system calls are replaced; backup selection and apply/rollback execute the real harness.
         $script:value = 1
         function Get-RegistryValueSnapshot { param($Item) [pscustomobject]@{ path=$Item.path; name=$Item.name; type='REG_DWORD'; desiredData=2; kind='DWord'; oldValue=$script:value; pathExists=$true; valueExists=$true } }
@@ -260,6 +284,18 @@ try {
             $restored=Invoke-RollbackModule
             $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($subkey)
             try { Assert ($key.GetValue('Value') -eq 1 -and $restored.backupPath -eq $applied.backupPath) 'Legacy backups retain restore behavior and latest selection through a confirmed run' } finally { $key.Dispose() }
+            & {
+                $BackupPath=Join-Path $tempRoot 'legacy-qword-real.json'
+                foreach ($case in $legacyQwordCases) {
+                    $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($subkey,$true)
+                    try { $key.SetValue('Value',[long]2,[Microsoft.Win32.RegistryValueKind]::QWord) } finally { $key.Dispose() }
+                    $backup=@{moduleId='fixture';timestamp=(Get-Date).ToString('o');registry=@(@{path=$regPath;name='Value';type='REG_QWORD';desiredData=2;oldValue=$case.data;valueExists=$true});services=@()}
+                    Write-JsonFile $backup $BackupPath
+                    $restored=Invoke-RollbackModule
+                    $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($subkey)
+                    try { Assert ($key.GetValueKind('Value') -eq [Microsoft.Win32.RegistryValueKind]::QWord -and $key.GetValue('Value') -eq $case.raw -and $restored.restoredRegistry -eq 1 -and @($restored.leftAsChanged).Count -eq 0) ('Legacy QWORD '+$case.label+' restores its original bits in the real registry') } finally { $key.Dispose() }
+                }
+            }
             $BackupPath=$applied.backupPath
             $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($subkey,$true)
             try { $key.SetValue('Value',2,[Microsoft.Win32.RegistryValueKind]::DWord) } finally { $key.Dispose() }
