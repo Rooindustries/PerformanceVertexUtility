@@ -540,6 +540,28 @@ static class FreshnessChecks
             if (!passed) Console.WriteLine("  simple mode lists [" + string.Join(", ", simple) + "], lacking " + (absent is null ? "missing" : absent.CanRetry + "/" + absent.UnavailableHere + "/" + absent.Detail) + ", failing " + (failed is null ? "missing" : failed.CanRetry + "/" + failed.Current + "/" + failed.Detail));
             return passed;
         });
+        await Scenario("NTFS last-access timestamps names the Windows-managed modes instead of Custom value", async () =>
+        {
+            const string managed = "windows.d0b3259eb0b79e83", managedOff = "windows.d0b3259eb0b79e84", chosen = "windows.d0b3259eb0b79e85";
+            RegistryAddress Address(string name) => new("CurrentUser", "Registry64", @"Software\RooIndustriesUiModelFixture", "value", name);
+            TweakDefinition Setting(string id) => new(id, id, "Storage", "Fixture", 10240, 26200, ["*"], "none",
+                [new("on", "Update timestamps", [new(Address(id), 1)]), new("off", "Do not update timestamps", [new(Address(id), 0)])], [new("Fixture", "fixture", "isolated UI validation")], null, false);
+            TweakControlRead LastAccess(int mode) => new(new ControlAddress("filesystem", "ntfs", "last-access"), "filesystem:ntfs:last-access", "fixture-fsutil", ControlValues.From(mode), "NTFS last access");
+            var fixture = new Fixture(Path.Combine(root, "ntfs-last-access"), new TweakCatalog(1, "ntfs", [Setting(managed), Setting(managedOff), Setting(chosen)], [])) { Missing = false };
+            fixture.TransformStatus = inspection => inspection with { Settings = inspection.Settings.Select(status => status.Id switch
+            {
+                managed => status with { ConfiguredChoices = [], Controls = [LastAccess(2)] },
+                managedOff => status with { ConfiguredChoices = [], Controls = [LastAccess(3)] },
+                chosen => status with { ConfiguredChoices = ["off"], Controls = [LastAccess(1)] },
+                _ => status,
+            }).ToArray() };
+            App.Operations = fixture; var model = new WindowsTweaksViewModel(); await model.ShowAsync();
+            model.ShowAdvanced = true;
+            var current = model.Rows.ToDictionary(row => row.Id, row => row.Current);
+            var passed = current.GetValueOrDefault(managed) == "Updated (Windows managed)" && current.GetValueOrDefault(managedOff) == "Not updated (Windows managed)" && current.GetValueOrDefault(chosen) == "Do not update timestamps";
+            if (!passed) Console.WriteLine("  current values: " + string.Join(", ", current.Select(item => item.Key + "=" + item.Value)));
+            return passed;
+        });
         await Scenario("A row this PC can't use says Not available here instead of Not read", async () =>
         {
             const string missing = "windows.05ad0f0f96ac0c21", failing = "windows.3c9ad96209a9da2f";

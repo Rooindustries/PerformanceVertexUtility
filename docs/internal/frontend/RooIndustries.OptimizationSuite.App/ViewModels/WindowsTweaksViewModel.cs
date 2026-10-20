@@ -222,6 +222,8 @@ public partial class WindowsTweakRow : ObservableObject
         if (Current.Length == 0) Current = "Unknown value";
         if (status is { Error: null, Controls: [var control] } && control.Address.Kind == "timer") Current = control.Value.GetBoolean() ? "Active" : "Stopped";
         if (status is { Error: null, ConfiguredChoices.Length: 0, Controls: [{ Address.Kind: "service" } service] } && ServiceState(service) is { } state) Current = state;
+        if (status is { Error: null, ConfiguredChoices.Length: 0, Controls: [{ Address: { Kind: "filesystem", Property: "last-access" }, Value.ValueKind: System.Text.Json.JsonValueKind.Number } lastAccess] })
+            Current = lastAccess.Value.GetInt32() switch { 2 => "Updated (Windows managed)", 3 => "Not updated (Windows managed)", _ => Current };
         if (status is { Error: null, ConfiguredChoices.Length: 0, Controls: [{ Address.Kind: "mitigations", Value.ValueKind: System.Text.Json.JsonValueKind.Object } policy] } && MitigationFields(Definition) is { Length: > 0 } fields
             && fields.All(field => policy.Value.TryGetProperty(field, out var value) && (value.ValueKind == System.Text.Json.JsonValueKind.String && value.GetString() == "NOTSET" || value.ValueKind == System.Text.Json.JsonValueKind.False)) && NoRawPolicy(policy.Value)) Current = "Windows default";
         if (Current == "Custom value" && status is { Error: null, Controls: null or [] } && status.Observations is [var first, ..] found
