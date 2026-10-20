@@ -675,6 +675,35 @@ static class FreshnessChecks
             if (!passed) Console.WriteLine("  simple mode lists [" + string.Join(", ", simple) + "], linked " + (shared is null ? "missing" : shared.CanRetry + "/" + shared.UnavailableHere + "/" + shared.Detail) + ", not installed " + (absent is null ? "missing" : absent.CanRetry + "/" + absent.UnavailableHere) + ", failing " + (failed is null ? "missing" : failed.CanRetry + "/" + failed.Current));
             return passed;
         });
+        await Scenario("Encrypted DNS and reserved storage on a Windows version without them are unavailable here without a retry, while another failed read keeps Couldn't check", async () =>
+        {
+            const string doh = "windows.2c463a1ebb8644e1", reserved = "windows.8d7bb78335c08201", failing = "windows.3c9ad96209a9da2f";
+            const string dohMissing = "Encrypted DNS is not available with this Windows version.", reservedMissing = "Reserved storage is not available with this Windows version.";
+            RegistryAddress Address(string name) => new("CurrentUser", "Registry64", @"Software\RooIndustriesUiModelFixture", "value", name);
+            TweakDefinition Setting(string id) => new(id, id, "Network", "Fixture", 10240, 26200, ["*"], "none",
+                [new("on", "On", [new(Address(id), 1)]), new("off", "Off", [new(Address(id), 0)])], [new("Fixture", "fixture", "isolated UI validation")], null, false);
+            var fixture = new Fixture(Path.Combine(root, "missing-windows-commands"), new TweakCatalog(1, "missing-commands", [Setting(doh), Setting(reserved), Setting(failing)], [])) { Missing = false };
+            fixture.TransformStatus = inspection => inspection with { Settings = inspection.Settings.Select(status => status.Id switch
+            {
+                doh => status with { Error = dohMissing, Supported = false },
+                reserved => status with { Error = reservedMissing, Supported = false },
+                failing => status with { Error = "Access is denied.", Supported = false },
+                _ => status,
+            }).ToArray() };
+            App.Operations = fixture; var model = new WindowsTweaksViewModel(); await model.ShowAsync();
+            model.ShowAdvanced = false;
+            var simple = model.Rows.Select(row => row.Id).ToArray();
+            model.ShowAdvanced = true;
+            var dns = model.Rows.SingleOrDefault(row => row.Id == doh);
+            var storage = model.Rows.SingleOrDefault(row => row.Id == reserved);
+            var failed = model.Rows.SingleOrDefault(row => row.Id == failing);
+            var passed = simple.SequenceEqual([failing])
+                && dns is { CanRetry: false, UnavailableHere: true, Current: "Not available here" } && dns.Detail == dohMissing
+                && storage is { CanRetry: false, UnavailableHere: true, Current: "Not available here" } && storage.Detail == reservedMissing
+                && failed is { CanRetry: true, Current: "Couldn't check" };
+            if (!passed) Console.WriteLine("  simple mode lists [" + string.Join(", ", simple) + "], dns " + (dns is null ? "missing" : dns.CanRetry + "/" + dns.UnavailableHere + "/" + dns.Current + "/" + dns.Detail) + ", storage " + (storage is null ? "missing" : storage.CanRetry + "/" + storage.UnavailableHere + "/" + storage.Current + "/" + storage.Detail) + ", failing " + (failed is null ? "missing" : failed.CanRetry + "/" + failed.Current));
+            return passed;
+        });
         await Scenario("A service Windows never lets administrators change is unavailable here without a retry, while a service that is still starting keeps Couldn't check", async () =>
         {
             const string locked = "windows.b356c3123766a188", settling = "windows.4e3841a2d61ce3f9";
