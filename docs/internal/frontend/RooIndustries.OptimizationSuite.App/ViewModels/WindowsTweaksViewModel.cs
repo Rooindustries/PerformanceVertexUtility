@@ -118,6 +118,13 @@ public partial class WindowsTweakRow : ObservableObject
     public bool IsApplied => AppliedChoice is not null;
     private static readonly string[] LackedHere = ["Win32 1060", "0x80070002", "Windows driver", "Office installation", "devices expose", "No active adapter", "is not installed", "is not available with", "Hard-linked file permissions", "doesn't let administrators change the"];
     private static bool PcLacks(string error) => error.StartsWith("No choice applies", StringComparison.Ordinal) || LackedHere.Any(text => error.Contains(text, StringComparison.Ordinal));
+    private static string? ServiceState(TweakControlRead control) => (control.Address.Property, control.Value.ValueKind) switch
+    {
+        ("startup", System.Text.Json.JsonValueKind.Number) => control.Value.GetInt32() switch { 0 => "Boot", 1 => "System", 2 => "Automatic", 3 => "Manual", 4 => "Disabled", _ => null },
+        ("running", System.Text.Json.JsonValueKind.True or System.Text.Json.JsonValueKind.False) => control.Value.GetBoolean() ? "Running" : "Stopped",
+        ("delayed-start", System.Text.Json.JsonValueKind.True or System.Text.Json.JsonValueKind.False) => control.Value.GetBoolean() ? "Delayed start" : "No delayed start",
+        _ => null,
+    };
     public bool CouldNotCheck => _observed is { Error: { } error } && error != TweakEngine.FeaturesPending && !PcLacks(error);
     public bool CanRetry => CouldNotCheck;
     public RelayCommand RetryCommand { get; }
@@ -203,6 +210,7 @@ public partial class WindowsTweakRow : ObservableObject
             : status.ConfiguredChoices.Length > 0 ? string.Join(" / ", Choices.Where(choice => status.ConfiguredChoices.Contains(choice.Id)).Select(choice => choice.Name)) : "Custom value";
         if (Current.Length == 0) Current = "Unknown value";
         if (status is { Error: null, Controls: [var control] } && control.Address.Kind == "timer") Current = control.Value.GetBoolean() ? "Active" : "Stopped";
+        if (status is { Error: null, ConfiguredChoices.Length: 0, Controls: [{ Address.Kind: "service" } service] } && ServiceState(service) is { } state) Current = state;
         if (Detail.Contains("Office installation", StringComparison.Ordinal)) Detail = "Office was not detected. You can save this choice before installing it.";
         else if (Detail.StartsWith("No choice applies", StringComparison.Ordinal)) Detail = "This Windows or app version does not use this setting. You can keep a saved choice for a matching installation.";
         else if (Detail.Contains("Win32 1060", StringComparison.Ordinal)) Detail = "This Windows service is not installed.";
