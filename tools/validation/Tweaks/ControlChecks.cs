@@ -186,6 +186,8 @@ static class ControlChecks
         Apply("dep-owner", new TweakSelection("dep", "set")); Apply("cfg-owner", new TweakSelection("cfg", "set"));
         check(store.ReadControl(policyAddress).Value.GetProperty("dep").GetString() == "ON" && store.ReadControl(policyAddress).Value.GetProperty("cfg").GetString() == "OFF", "Shared native policy fields compose without replacing sibling settings");
         reject(() => engine.Preview("conflict", [new("cfg-on", "set")]), "Conflicting native policy fields are rejected before execution");
+        string? policyConflict = null; try { engine.Preview("conflict", [new("cfg-on", "set")]); } catch (InvalidDataException error) { policyConflict = error.Message; }
+        check(policyConflict == "Your \"cfg-owner\" profile already sets cfg-on to a different choice. Pick the same choice, or restore that profile first.", "A policy field conflict names only the profile that owns that field");
         Apply("dep-owner");
         check(store.ReadControl(policyAddress).Value.GetProperty("dep").GetString() == "NOTSET" && store.ReadControl(policyAddress).Value.GetProperty("cfg").GetString() == "OFF", "One policy owner restores Windows default without releasing another owner's field");
         fixture = OperationFiles.Read<TweakFixture>(path);
