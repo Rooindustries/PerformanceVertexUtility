@@ -540,6 +540,34 @@ static class FreshnessChecks
             if (!passed) Console.WriteLine("  simple mode lists [" + string.Join(", ", simple) + "], lacking " + (absent is null ? "missing" : absent.CanRetry + "/" + absent.UnavailableHere + "/" + absent.Detail) + ", failing " + (failed is null ? "missing" : failed.CanRetry + "/" + failed.Current + "/" + failed.Detail));
             return passed;
         });
+        await Scenario("A file setting Windows hard-links or doesn't ship is unavailable here without a retry, while another failed file read keeps Couldn't check", async () =>
+        {
+            const string linked = "windows.c104f89ba4e1b71b", missing = "windows.05ad0f0f96ac0c21", failing = "windows.3c9ad96209a9da2f";
+            RegistryAddress Address(string name) => new("CurrentUser", "Registry64", @"Software\RooIndustriesUiModelFixture", "value", name);
+            TweakDefinition Setting(string id) => new(id, id, "Privacy", "Fixture", 10240, 26200, ["*"], "none",
+                [new("on", "On", [new(Address(id), 1)]), new("off", "Off", [new(Address(id), 0)])], [new("Fixture", "fixture", "isolated UI validation")], null, false);
+            var fixture = new Fixture(Path.Combine(root, "hard-linked-file"), new TweakCatalog(1, "linked", [Setting(linked), Setting(missing), Setting(failing)], [])) { Missing = false };
+            fixture.TransformStatus = inspection => inspection with { Settings = inspection.Settings.Select(status => status.Id switch
+            {
+                linked => status with { Error = "Hard-linked file permissions require a separate review.", Supported = false },
+                missing => status with { Error = "aitagent.exe is not installed on this PC.", Supported = false },
+                failing => status with { Error = "Access is denied.", Supported = false },
+                _ => status,
+            }).ToArray() };
+            App.Operations = fixture; var model = new WindowsTweaksViewModel(); await model.ShowAsync();
+            model.ShowAdvanced = false;
+            var simple = model.Rows.Select(row => row.Id).ToArray();
+            model.ShowAdvanced = true;
+            var shared = model.Rows.SingleOrDefault(row => row.Id == linked);
+            var absent = model.Rows.SingleOrDefault(row => row.Id == missing);
+            var failed = model.Rows.SingleOrDefault(row => row.Id == failing);
+            var passed = simple.SequenceEqual([failing])
+                && shared is { CanRetry: false, UnavailableHere: true } && shared.Detail == "Windows links this file to other copies, so its permissions can't be changed safely here."
+                && absent is { CanRetry: false, UnavailableHere: true } && absent.Detail == "aitagent.exe is not installed on this PC."
+                && failed is { CanRetry: true, Current: "Couldn't check" };
+            if (!passed) Console.WriteLine("  simple mode lists [" + string.Join(", ", simple) + "], linked " + (shared is null ? "missing" : shared.CanRetry + "/" + shared.UnavailableHere + "/" + shared.Detail) + ", not installed " + (absent is null ? "missing" : absent.CanRetry + "/" + absent.UnavailableHere) + ", failing " + (failed is null ? "missing" : failed.CanRetry + "/" + failed.Current));
+            return passed;
+        });
         check(failures.Count == 0, "Windows tweaks freshness checks (" + failures.Count + " failed: " + string.Join("; ", failures) + ")");
     }
 }
