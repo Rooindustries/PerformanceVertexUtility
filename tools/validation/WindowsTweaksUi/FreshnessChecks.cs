@@ -515,6 +515,31 @@ static class FreshnessChecks
             if (!passed) Console.WriteLine("  simple mode lists [" + string.Join(", ", listed) + "], retry on [" + string.Join(", ", retries) + "]");
             return passed;
         });
+        await Scenario("A network setting the adapter lacks is hidden in simple mode and explained in full mode, while a failed adapter read keeps Couldn't check and a retry", async () =>
+        {
+            const string lacking = "windows.bcd77ad54a7accc0", failing = "windows.7f3f80851197aecc";
+            RegistryAddress Address(string name) => new("CurrentUser", "Registry64", @"Software\RooIndustriesUiModelFixture", "value", name);
+            TweakDefinition Setting(string id) => new(id, id, "Network", "Fixture", 10240, 26200, ["*"], "none",
+                [new("on", "On", [new(Address(id), 1)]), new("off", "Off", [new(Address(id), 0)])], [new("Fixture", "fixture", "isolated UI validation")], null, false);
+            var fixture = new Fixture(Path.Combine(root, "network-adapter"), new TweakCatalog(1, "adapter", [Setting(lacking), Setting(failing)], [])) { Missing = false };
+            fixture.TransformStatus = inspection => inspection with { Settings = inspection.Settings.Select(status => status.Id switch
+            {
+                lacking => status with { Error = "No devices expose RSC on the Ethernet 3 adapter.", Supported = false },
+                failing => status with { Error = "LSO configuration is unavailable for Ethernet 3", Supported = false },
+                _ => status,
+            }).ToArray() };
+            App.Operations = fixture; var model = new WindowsTweaksViewModel(); await model.ShowAsync();
+            model.ShowAdvanced = false;
+            var simple = model.Rows.Select(row => row.Id).ToArray();
+            model.ShowAdvanced = true;
+            var absent = model.Rows.SingleOrDefault(row => row.Id == lacking);
+            var failed = model.Rows.SingleOrDefault(row => row.Id == failing);
+            var passed = simple.SequenceEqual([failing])
+                && absent is { IsNetwork: true, CanRetry: false, UnavailableHere: true } && absent.Detail == "The current adapter does not expose this option. You can save a choice for a compatible adapter."
+                && failed is { IsNetwork: true, CanRetry: true, Current: "Couldn't check" } && failed.Detail == "Windows could not read this preference. Refresh to try again.";
+            if (!passed) Console.WriteLine("  simple mode lists [" + string.Join(", ", simple) + "], lacking " + (absent is null ? "missing" : absent.CanRetry + "/" + absent.UnavailableHere + "/" + absent.Detail) + ", failing " + (failed is null ? "missing" : failed.CanRetry + "/" + failed.Current + "/" + failed.Detail));
+            return passed;
+        });
         check(failures.Count == 0, "Windows tweaks freshness checks (" + failures.Count + " failed: " + string.Join("; ", failures) + ")");
     }
 }
