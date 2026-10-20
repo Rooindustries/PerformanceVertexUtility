@@ -767,6 +767,8 @@ function Get-RooIndustriesProcessGovernorLiveIdentity {
     }
     $matches = ($nameMatches -and $pathMatches -and $startTimeMatches)
     $knownPathMismatch = -not $pathMatches -and -not [string]::IsNullOrWhiteSpace([string]$currentPath)
+    $exitedNow = -not $controlState.exists
+    if (-not $exitedNow) { try { $exitedNow = $live.HasExited } catch { $exitedNow = $false } }
     $savedTime = [datetime]::MinValue
     $currentTime = [datetime]::MinValue
     $knownStartMismatch = -not $startTimeMatches -and [datetime]::TryParse($expectedStartTimeUtc, [ref]$savedTime) -and [datetime]::TryParse($currentStartTimeUtc, [ref]$currentTime)
@@ -774,7 +776,7 @@ function Get-RooIndustriesProcessGovernorLiveIdentity {
     return [pscustomobject]@{
         exists = $true
         matches = $matches
-        instanceEnded = (-not $nameMatches -or $knownPathMismatch -or $knownStartMismatch)
+        instanceEnded = ($exitedNow -or -not $nameMatches -or $knownPathMismatch -or $knownStartMismatch)
         process = $live
         currentControlState = $controlState
         processStartTimeUtc = $controlState.startTimeUtc
