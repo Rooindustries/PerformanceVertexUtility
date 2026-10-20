@@ -1,7 +1,12 @@
+using System.ComponentModel;
+using System.Runtime.InteropServices;
+using System.Security.AccessControl;
+using System.Security.Principal;
 using RooIndustries.Optimizer;
 
 static class NativeFileControlChecks
 {
+    [DllImport("advapi32.dll", EntryPoint = "SetFileSecurityW", CharSet = CharSet.Unicode, SetLastError = true)] private static extern bool SetFileSecurity(string path, uint information, byte[] descriptor);
     public static void Run(Action<bool, string> check, Action<Action, string> reject)
     {
         void Denied(Action operation, string name)
@@ -26,6 +31,33 @@ static class NativeFileControlChecks
                 string? message = null;
                 try { store.Read(address with { Target = "fixture:" + missing }); } catch (FileNotFoundException error) { message = error.Message; }
                 check(message == Path.GetFileName(missing) + " is not installed on this PC.", "A Windows file this PC doesn't have reads as not installed, not as a failed check: " + Path.GetRelativePath(root, missing));
+            }
+            var user = WindowsIdentity.GetCurrent().User!.Value;
+            foreach (var (shape, sddl, flags) in new[]
+            {
+                ("protected", "D:P(A;;0x1200a9;;;SY)(A;;0x1200a9;;;BA)(A;;0x1200a9;;;BU)(A;;FA;;;" + user + ")", 0x1000),
+                ("auto-inherited", "D:ARAI(A;;FA;;;" + user + ")(A;ID;FA;;;SY)(A;ID;FA;;;BA)(A;ID;0x1200a9;;;BU)", 0x400),
+                ("protected auto-inherited", "D:PARAI(A;;FA;;;SY)(A;;FA;;;BA)(A;;FA;;;" + user + ")", 0x1400),
+            })
+            {
+                var program = Path.Combine(root, shape.Replace(' ', '-') + ".txt"); File.WriteAllText(program, shape + " fixture");
+                var shaped = new RawSecurityDescriptor(sddl); var shapedBytes = new byte[shaped.BinaryLength]; shaped.GetBinaryForm(shapedBytes, 0);
+                if (!SetFileSecurity(program, 4, shapedBytes)) throw new Win32Exception();
+                var programAddress = address with { Target = "fixture:" + program };
+                var programBefore = store.Read(programAddress);
+                check((programBefore.Value.GetProperty("flags").GetInt32() & 0x1400) == flags, "The " + shape + " fixture has the expected DACL inheritance flags");
+                var programPlan = new ControlPlan([programBefore], [new(programBefore, programBefore.Expand(ControlValues.From(new { denyMask = 0x20, enabled = true })))], []);
+                ControlExecution.Apply(programPlan, store, _ => { });
+                check(ControlValues.Equal(store.Read(programAddress).Value, programPlan.Changes[0].After), "A file restriction on a " + shape + " DACL writes exactly the reviewed DACL and inheritance flags");
+                ControlExecution.Rollback(programPlan, 1, store);
+                check(store.Read(programAddress).Same(programBefore), "Undo restores the " + shape + " file's exact DACL and inheritance flags");
+                var ownedAddress = programAddress with { Kind = "file-ownership" };
+                var ownedBefore = store.Read(ownedAddress);
+                var ownedPlan = new ControlPlan([ownedBefore], [new(ownedBefore, ownedBefore.Expand(ControlValues.From(new { takeOwnership = true })))], []);
+                ControlExecution.Apply(ownedPlan, store, _ => { });
+                check(ControlValues.Equal(store.Read(ownedAddress).Value, ownedPlan.Changes[0].After), "Take ownership of a " + shape + " file writes exactly the reviewed owner, DACL and inheritance flags");
+                ControlExecution.Rollback(ownedPlan, 1, store);
+                check(store.Read(ownedAddress).Same(ownedBefore), "Ownership undo restores the " + shape + " file's exact owner, DACL and inheritance flags");
             }
             var desired = original.Expand(ControlValues.From(new { denyMask = 0x1f01ff }));
             var plan = new ControlPlan([original], [new(original, desired)], []); var attempted = 0;
