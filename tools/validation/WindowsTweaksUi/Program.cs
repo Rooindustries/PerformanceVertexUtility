@@ -56,6 +56,16 @@ if (args is ["--presentation", var presentationRepo])
     Console.WriteLine($"Completed {count} presentation checks.");
     return;
 }
+if (args is ["--policy-editions", var policyRepo])
+{
+    try
+    {
+        await PolicyProfileChecks.Run(root, OperationFiles.Read<TweakCatalog>(Path.Combine(policyRepo, "backend/catalogs/windows-tweaks.json")), Check);
+        Console.WriteLine($"Completed {count} policy profile UI checks.");
+    }
+    finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+    return;
+}
 if (args is ["--freshness"])
 {
     try { await FreshnessChecks.Run(root, Check); Console.WriteLine($"Completed {count} Windows settings UI checks."); }
@@ -69,6 +79,7 @@ try
     {
         var catalog = OperationFiles.Read<TweakCatalog>(Path.Combine(Path.GetFullPath(catalogRepo), "backend/catalogs/windows-tweaks.json"));
         ActionChecks.Run(catalog, Check);
+        await PolicyProfileChecks.Run(root, catalog, Check);
         IconChecks.Run(catalogRepo, catalog, Check);
         if (catalog.Presets.SingleOrDefault(preset => preset.Id == WindowsTweaksViewModel.FpsPresetId) is { } fpsPreset)
         {
