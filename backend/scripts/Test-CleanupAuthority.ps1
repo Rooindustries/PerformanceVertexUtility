@@ -47,6 +47,12 @@ try {
     Write-RooIndustriesOperationJson $queue $journalPath
     $rebooted=Read-Authority
     Assert (-not $rebooted.rebootPending -and $rebooted.removalResolved) 'A changed verified boot boundary resolves the recorded reboot requirement'
+    $entry.exitCodePolicy='generic';$state.outcome=$null;$invocation.creationTimeFileTimeUtc=[DateTime]::UtcNow.ToFileTimeUtc().ToString();Write-RooIndustriesOperationJson $queue $journalPath
+    $unknown=Read-Authority
+    Assert ($unknown.errors.Count -eq 0 -and -not $unknown.removerRunning -and $unknown.rebootPending -and -not $unknown.removalResolved) 'A remover that outlived its time limit and left no exit code asks for a restart instead of failing every scan'
+    $invocation.creationTimeFileTimeUtc=(Get-CimInstance Win32_OperatingSystem).LastBootUpTime.ToUniversalTime().AddMinutes(-1).ToFileTimeUtc().ToString();Write-RooIndustriesOperationJson $queue $journalPath
+    $unknownRebooted=Read-Authority
+    Assert ($unknownRebooted.errors.Count -eq 0 -and -not $unknownRebooted.rebootPending -and $unknownRebooted.removalResolved) 'After a restart, a removal with no recorded exit code unlocks leftover cleanup'
     $state.state='already-absent';$state.attemptCount=0;$state.invocation=$null;$state.outcome=$null;Write-RooIndustriesOperationJson $queue $journalPath
     $notAttempted=Read-Authority
     Assert ($notAttempted.removalResolved -and -not $notAttempted.removerRunning -and -not $notAttempted.rebootPending) 'An already-absent app with no dispatch has explicit no-remover semantics'
