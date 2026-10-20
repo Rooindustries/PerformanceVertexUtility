@@ -123,7 +123,7 @@ public static class GovernorDisplay
         return worker.State?.Status == "running" ? "running" : "notResponding";
     }
 
-    public static bool CanRetry(GovernorSnapshot snapshot, string state) => state is "off" or "paused" && snapshot.Worker.HostRunning == false && Kept(snapshot) > 0;
+    public static bool CanRetry(GovernorSnapshot snapshot, string state) => state is "off" or "paused" && snapshot.Worker.HostRunning == false && Holding(snapshot).Length > 0;
 
     public static string SignIn(GovernorSnapshot snapshot) => snapshot.ScheduledTask switch
     {
@@ -162,7 +162,7 @@ public static class GovernorDisplay
                 : Kept(snapshot) > 0 ? StillHave(Kept(snapshot)) + " a setting the app could not put back." + retry
                 : Changed(snapshot) == 0 ? LeftAsSet(snapshot).Length > 0 ? ProcessControlEngine.LeftAsSet : ""
                 : worker.HostRunning == true ? "Putting the old settings back for " + Count(Changed(snapshot)) + "."
-                : StillHave(Changed(snapshot)) + " rule settings that were not put back.",
+                : StillHave(Changed(snapshot)) + " rule settings that were not put back." + retry,
             "stopped" => (worker.State?.Errors.FirstOrDefault() is { Length: > 0 } last ? last + " " : "")
                 + (snapshot.ScheduledTask is null ? StoppedUnknown : snapshot.ScheduledTask.LastStartFailed && snapshot.ScheduledTask is { Registered: true, Enabled: true, RestartsEveryMinute: true } ? StoppedFailed(snapshot.ScheduledTask.LastResult)
                     : snapshot.ScheduledTask.Restarts ? StoppedRestarts : StoppedStays),
