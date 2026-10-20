@@ -148,6 +148,23 @@ static class FeatureChecks
             var status = engine.Detect().Settings.Single(setting => setting.Id == platform);
             check(status.ConfiguredChoices.SequenceEqual([platformOn]) && status.Controls!.Any(control => control.RestartPending), "Detection shows a pending enable as on and marks it pending");
         });
+        Scenario("Features this Windows doesn't offer", () =>
+        {
+            const string hyperV = "windows.b8f4643cc27fe53f", recall = "windows.0765f2bafa20be4c", platform = "windows.f9609ebfa4139feb";
+            var path = Path.Combine(root, "feature-missing.json"); var store = FileTweakStore.Create(path);
+            var fixture = OperationFiles.Read<TweakFixture>(path);
+            fixture.Controls.Add(Features.Key, FeatureRead(new() { ["HypervisorPlatform"] = "Disabled", ["VirtualMachinePlatform"] = "Disabled" }));
+            OperationFiles.Write(path, fixture);
+            var settings = new TweakEngine(catalog, store).Detect().Settings;
+            foreach (var id in new[] { hyperV, recall })
+            {
+                var status = settings.Single(setting => setting.Id == id);
+                check(!status.Supported && status.Error is { } error && error.StartsWith("No choice applies", StringComparison.Ordinal) && status.AvailableChoices is { Length: 0 },
+                    "A feature row for a feature this Windows doesn't offer is not available here instead of failing to read (" + id + ": " + status.Error + ")");
+            }
+            var readable = settings.Single(setting => setting.Id == platform);
+            check(readable.Supported && readable.Error is null && readable.ConfiguredChoices.Length == 1, "A feature this Windows offers is still read next to features it doesn't offer");
+        });
         check(failures.Count == 0, "Windows feature restart handling (" + failures.Count + " failed scenarios)");
     }
     public static void Native(Action<bool, string> check)
