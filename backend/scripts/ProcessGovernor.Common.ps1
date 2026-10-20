@@ -729,6 +729,7 @@ function Get-RooIndustriesProcessGovernorLiveIdentity {
         return [pscustomobject]@{
             exists = $false
             matches = $false
+            instanceEnded = $true
             process = $null
             currentPath = $null
             reason = 'Process is no longer running.'
@@ -737,7 +738,7 @@ function Get-RooIndustriesProcessGovernorLiveIdentity {
     $expectedName = [string](Get-RooIndustriesPropertyValue $Entry 'processName' '')
     $nameMatches = Test-RooIndustriesProcessNameEquals $live.ProcessName $expectedName
     $currentPath = $null
-    try { $held = $live.Handle; $currentPath = $live.Path } catch { return [pscustomobject]@{ exists = $true; matches = $false; process = $null; currentPath = $null; reason = 'Live process identity could not be verified.' } }
+    try { $held = $live.Handle; $currentPath = $live.Path } catch { $gone = $false; try { $gone = $live.HasExited } catch { $gone = $null -eq (Get-Process -Id $processId -ErrorAction SilentlyContinue) }; return [pscustomobject]@{ exists = $true; matches = $false; instanceEnded = $gone; process = $null; currentPath = $null; reason = 'Live process identity could not be verified.' } }
     $expectedPath = Get-RooIndustriesPropertyValue $Entry 'executablePath' $null
     $pathMatches = $true
     $pathReason = $null
@@ -765,10 +766,17 @@ function Get-RooIndustriesProcessGovernorLiveIdentity {
         }
     }
     $matches = ($nameMatches -and $pathMatches -and $startTimeMatches)
+    $knownPathMismatch = -not $pathMatches -and -not [string]::IsNullOrWhiteSpace([string]$currentPath)
+    $exitedNow = -not $controlState.exists
+    if (-not $exitedNow) { try { $exitedNow = $live.HasExited } catch { $exitedNow = $false } }
+    $savedTime = [datetime]::MinValue
+    $currentTime = [datetime]::MinValue
+    $knownStartMismatch = -not $startTimeMatches -and [datetime]::TryParse($expectedStartTimeUtc, [ref]$savedTime) -and [datetime]::TryParse($currentStartTimeUtc, [ref]$currentTime)
     $reason = if ($matches) { $null } elseif (-not $nameMatches) { 'Live process name does not match the session entry.' } elseif (-not $pathMatches) { $pathReason } else { $startTimeReason }
     return [pscustomobject]@{
         exists = $true
         matches = $matches
+        instanceEnded = ($exitedNow -or -not $nameMatches -or $knownPathMismatch -or $knownStartMismatch)
         process = $live
         currentControlState = $controlState
         processStartTimeUtc = $controlState.startTimeUtc

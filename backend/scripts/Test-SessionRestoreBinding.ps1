@@ -76,11 +76,7 @@ try {
         Write-Json $retry.BackupPath $retryBackup
         $failedRestore = Invoke-Stop $script $retry.SessionId $retry.SessionPath $retry.BackupPath (Join-Path $tempRoot "$kind-incomplete.json") -Confirm
         $retrySaved = Get-Content -LiteralPath $retry.SessionPath -Raw | ConvertFrom-Json
-        if ($kind -eq 'game') {
-            Add-Check ($failedRestore.Json.result.status -eq 'rolledBack' -and -not $failedRestore.Json.restorable -and -not $retrySaved.restorable -and $failedRestore.Json.result.changedItems.Count -eq 0 -and @($failedRestore.Json.skippedItems | Where-Object { $_.outcome -eq 'alreadyClosed' }).Count -eq 1) "$kind restore of an app that already closed finishes without changing a process" "$kind restore of an app that already closed did not finish"
-        } else {
-            Add-Check ($failedRestore.Json.result.status -eq 'failed' -and $failedRestore.Json.restorable -and $retrySaved.restorable -and $failedRestore.Json.result.changedItems.Count -eq 0) "$kind incomplete restore preserves its recovery record without changing a process" "$kind incomplete restore discarded recovery evidence"
-        }
+        Add-Check ($failedRestore.Json.result.status -eq 'rolledBack' -and -not $failedRestore.Json.restorable -and -not $retrySaved.restorable -and $failedRestore.Json.result.changedItems.Count -eq 0 -and @($failedRestore.Json.skippedItems | Where-Object { $_.outcome -eq 'alreadyClosed' }).Count -eq 1) "$kind restore of an app that already closed finishes without changing a process" "$kind restore of an app that already closed did not finish"
         $runner = Get-Process -Id $PID
         $unverified = New-SessionFixture $tempRoot $kind "$kind-unverified" "$kind-unverified-profile"
         $unverifiedBackup = Get-Content -LiteralPath $unverified.BackupPath -Raw | ConvertFrom-Json

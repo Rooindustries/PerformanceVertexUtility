@@ -360,6 +360,28 @@ try {
     }
     $busyProbe = $null
 
+    $busyProbe = Start-Process -FilePath $busyExe -ArgumentList (Join-RooIndustriesWindowsArguments @('-NoProfile','-WindowStyle','Hidden','-Command','while ($true) { [Math]::Sqrt(144) | Out-Null }')) -WindowStyle Hidden -PassThru
+    Start-Sleep -Milliseconds 800
+    $closedSession = & (Join-Path $PSScriptRoot 'Start-ProcessGovernorSession.ps1') `
+        -ProfilePath $profilePath `
+        -SampleIntervalMilliseconds 400 `
+        -MaxDurationSeconds 3 `
+        -ForegroundProcessId $protectedProbe.Id `
+        -StateRoot $stateRoot `
+        -ConfirmApply | ConvertFrom-Json
+    $closedId = $busyProbe.Id
+    $closedChanged = @($closedSession.changedItems | Where-Object { $_.processId -eq $closedId }) | Select-Object -First 1
+    Stop-RooIndustriesValidationProcess $busyProbe
+    $busyProbe = $null
+    $closedRestore = & (Join-Path $PSScriptRoot 'Stop-ProcessGovernorSession.ps1') -SessionPath $closedSession.sessionPath -ConfirmApply | ConvertFrom-Json
+    $closedStatus = & (Join-Path $PSScriptRoot 'Get-ProcessGovernorSessionStatus.ps1') -SessionPath $closedSession.sessionPath | ConvertFrom-Json
+    $closedItems = @($closedRestore.skippedItems | Where-Object { $_.outcome -eq 'alreadyClosed' -and $_.processId -eq $closedId })
+    if ($closedChanged -and $closedRestore.status -eq 'completed' -and $closedRestore.result.status -eq 'rolledBack' -and $closedRestore.restorable -eq $false -and $closedItems.Count -eq 1 -and $closedStatus.status -eq 'completed' -and $closedStatus.restorable -eq $false) {
+        Add-Pass 'Governor restore after the limited app closed finishes and leaves nothing to restore'
+    } else {
+        Add-Failure "Governor restore after the limited app closed did not finish: changed $([bool]$closedChanged), status $($closedRestore.status), result $($closedRestore.result.status), restorable $($closedRestore.restorable), closed items $($closedItems.Count), session $($closedStatus.status)/$($closedStatus.restorable)"
+    }
+
     $calmProbe = Start-Process -FilePath $calmExe -ArgumentList (Join-RooIndustriesWindowsArguments @('-NoProfile','-WindowStyle','Hidden','-Command','$end=(Get-Date).AddSeconds(6); while ((Get-Date) -lt $end) { [Math]::Sqrt(144) | Out-Null }; Start-Sleep -Seconds 60')) -WindowStyle Hidden -PassThru
     Start-Sleep -Milliseconds 800
     $beforeCalm = Get-RooIndustriesProcessControlState $calmProbe.Id $null
