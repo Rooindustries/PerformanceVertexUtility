@@ -211,6 +211,51 @@ try {
             & $HarnessPath -Action RollbackModule -ModuleId fixture -ManifestPath $fixtureManifest -DataRoot $tempRoot -BackupPath $BackupPath -ConfirmApply | Out-Null
             $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($subkey)
             try { Assert ($key.GetValue('Value') -eq 1) 'The RollbackModule CLI restores the explicit backup only when confirmed' } finally { $key.Dispose() }
+            foreach ($name in '','PSPath') {
+                $manifest=Get-Content $fixtureManifest -Raw | ConvertFrom-Json
+                $manifest.modules[0].registryValues[0].name=$name
+                $manifest.modules[0].registryValues[0].type='REG_SZ'
+                $manifest.modules[0].registryValues[0].data='Two'
+                Write-JsonFile $manifest $fixtureManifest
+                $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($subkey,$true)
+                try { $key.SetValue($name,'Original',[Microsoft.Win32.RegistryValueKind]::String) } finally { $key.Dispose() }
+                $applied=Invoke-ApplyModule
+                $BackupPath=$applied.backupPath
+                $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($subkey,$true)
+                try { $key.SetValue($name,'two',[Microsoft.Win32.RegistryValueKind]::String) } finally { $key.Dispose() }
+                $restored=Invoke-RollbackModule
+                Assert (@($restored.leftAsChanged).Count -eq 1) ('String comparison is case sensitive for value name [' + $name + ']')
+                $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($subkey,$true)
+                try { $key.SetValue($name,'Two',[Microsoft.Win32.RegistryValueKind]::String) } finally { $key.Dispose() }
+                Invoke-RollbackModule | Out-Null
+                $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($subkey)
+                try { Assert ($key.GetValue($name) -ceq 'Original') ('The original is restored for value name [' + $name + ']') } finally { $key.Dispose() }
+            }
+            $manifest.modules[0].registryValues[0].name='Value'
+            $manifest.protected.registryPathPatterns=@([regex]::Escape($regPath))
+            Write-JsonFile $manifest $fixtureManifest
+            $applied=Invoke-ApplyModule
+            $saved=Get-Content $applied.backupPath -Raw | ConvertFrom-Json
+            Assert (@($saved.registry).Count -eq 0) 'Protected settings are excluded from the rollback backup'
+            $manifest.protected.registryPathPatterns=@()
+            Write-JsonFile $manifest $fixtureManifest
+            $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($subkey,$true)
+            try { $key.SetValue('Value',[byte[]]@(1,2),[Microsoft.Win32.RegistryValueKind]::None) } finally { $key.Dispose() }
+            $refused=$false
+            try { Invoke-ApplyModule | Out-Null } catch { $refused=$_.Exception.Message -like '*Unsupported registry value kind*' }
+            Assert $refused 'An unsupported original registry kind refuses apply before changing it'
+            $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($subkey,$true)
+            try { $key.SetValue('Value','Original',[Microsoft.Win32.RegistryValueKind]::String) } finally { $key.Dispose() }
+            $applied=Invoke-ApplyModule
+            $BackupPath=$applied.backupPath
+            $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($subkey,$true)
+            try { $key.SetValue('Value',[byte[]]@(1,2),[Microsoft.Win32.RegistryValueKind]::None) } finally { $key.Dispose() }
+            $restored=Invoke-RollbackModule
+            $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($subkey)
+            try { Assert (@($restored.leftAsChanged).Count -eq 1 -and $key.GetValueKind('Value') -eq [Microsoft.Win32.RegistryValueKind]::None) 'A later unsupported registry kind is left untouched' } finally { $key.Dispose() }
+            $elsewhere=Join-Path $tempRoot 'elsewhere'
+            & $HarnessPath -Action RollbackModule -ModuleId fixture -ManifestPath $fixtureManifest -DataRoot $elsewhere -BackupPath $BackupPath | Out-Null
+            Assert (Test-Path $BackupPath) 'An explicit backup works independently of the default backup directory'
         } finally {
             [Microsoft.Win32.Registry]::CurrentUser.DeleteSubKeyTree($subkey,$false)
         }
