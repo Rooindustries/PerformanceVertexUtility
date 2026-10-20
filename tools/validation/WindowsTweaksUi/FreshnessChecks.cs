@@ -542,11 +542,11 @@ static class FreshnessChecks
         });
         await Scenario("A registry row with no matching choice shows the value it found", async () =>
         {
-            const string number = "windows.94caf9dc9f3af63e", text = "windows.b048256362718da0", mixed = "windows.83d4b1b8f7a55f84";
+            const string number = "windows.94caf9dc9f3af63e", text = "windows.b048256362718da0", mixed = "windows.83d4b1b8f7a55f84", partial = "windows.12a2f7d075db4a7a";
             RegistryAddress Address(string name) => new("CurrentUser", "Registry64", @"Software\RooIndustriesUiModelFixture", "value", name);
             TweakDefinition Setting(string id) => new(id, id, "Privacy", "Fixture", 10240, 26200, ["*"], "none",
                 [new("on", "On", [new(Address(id), 1)]), new("off", "Off", [new(Address(id), 0)])], [new("Fixture", "fixture", "isolated UI validation")], null, false);
-            var fixture = new Fixture(Path.Combine(root, "custom-value"), new TweakCatalog(1, "custom-value", [Setting(number), Setting(text), Setting(mixed)], [])) { Missing = false };
+            var fixture = new Fixture(Path.Combine(root, "custom-value"), new TweakCatalog(1, "custom-value", [Setting(number), Setting(text), Setting(mixed), Setting(partial)], [])) { Missing = false };
             TweakRead[] Found(TweakSettingStatus status, params RegistryValueData[] values) => values.Select(value => status.Observations[0] with { KeyExists = true, MissingKeys = [], Value = value with { Name = status.Observations[0].Address.ValueName! } }).ToArray();
             RegistryValueData Dword(uint value) => new("", 4, BitConverter.GetBytes(value));
             fixture.TransformStatus = inspection => inspection with { Settings = inspection.Settings.Select(status => status.Id switch
@@ -554,12 +554,13 @@ static class FreshnessChecks
                 number => status with { ConfiguredChoices = [], Observations = Found(status, Dword(7)) },
                 text => status with { ConfiguredChoices = [], Observations = Found(status, new RegistryValueData("", 1, System.Text.Encoding.Unicode.GetBytes("21\0"))) },
                 mixed => status with { ConfiguredChoices = [], Observations = Found(status, Dword(2), Dword(3)) },
+                partial => status with { ConfiguredChoices = [], Observations = [.. Found(status, Dword(1)), status.Observations[0] with { Value = null }] },
                 _ => status,
             }).ToArray() };
             App.Operations = fixture; var model = new WindowsTweaksViewModel(); await model.ShowAsync();
             model.ShowAdvanced = true;
             var current = model.Rows.ToDictionary(row => row.Id, row => row.Current);
-            var passed = current.GetValueOrDefault(number) == "Custom value: 7" && current.GetValueOrDefault(text) == "Custom value: 21" && current.GetValueOrDefault(mixed) == "Custom value";
+            var passed = current.GetValueOrDefault(number) == "Custom value: 7" && current.GetValueOrDefault(text) == "Custom value: 21" && current.GetValueOrDefault(mixed) == "Custom value" && current.GetValueOrDefault(partial) == "Custom value";
             if (!passed) Console.WriteLine("  current values: " + string.Join(", ", current.Select(item => item.Key + "=" + item.Value)));
             return passed;
         });
