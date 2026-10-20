@@ -200,7 +200,7 @@ if ($initialProbes.Count -eq 0) {
 $runResults = New-Object System.Collections.Generic.List[object]
 
 for ($runIndex = 1; $runIndex -le 3; $runIndex++) {
-    $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) "roo-industries-governor-reliability-$([guid]::NewGuid().ToString('N'))"
+    $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) "roo-industries-governor-reliability-$([guid]::NewGuid().ToString('N').Substring(0, 12))"
     $probe = $null
     $cleanupDone = $false
     try {
