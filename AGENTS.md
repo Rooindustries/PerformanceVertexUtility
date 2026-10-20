@@ -68,7 +68,7 @@ These must hold on every commit of `main`. Each one names the code that enforces
    - Enforced by: the attached files (specs, tweak summary, log tails) go through `BugRedactor` before they're zipped. It replaces:
      - the user's profile path with `%USERPROFILE%`
      - the user name with `<user>` and the PC name with `<pc-name>`
-     - account SIDs with `<sid>`
+     - S-1-5-21 account SIDs with `<sid>`
      - other accounts' profile folders with `<user>`
 
      The app log is redacted when it's written (`AppLog`).
@@ -76,7 +76,8 @@ These must hold on every commit of `main`. Each one names the code that enforces
    - Known gaps:
      - Another account's folder name stops being redacted at a space or apostrophe, and the app log uses its own narrower rules.
      - The description and the editable specs in the message itself are sent as typed.
-     - Account names of one character aren't redacted.
+     - Account names and PC names of one character aren't redacted.
+     - Microsoft Entra account SIDs (`S-1-12-1-...`) aren't redacted.
 
 ### Changing code an invariant depends on
 
