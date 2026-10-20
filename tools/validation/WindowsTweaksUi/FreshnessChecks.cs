@@ -497,7 +497,7 @@ static class FreshnessChecks
             RegistryAddress Address(string name) => new("CurrentUser", "Registry64", @"Software\RooIndustriesUiModelFixture", "value", name);
             TweakDefinition Setting(string id) => new(id, id, "Apps", "Fixture", 10240, 26200, ["*"], "none",
                 [new("on", "On", [new(Address(id), 1)]), new("off", "Off", [new(Address(id), 0)])], [new("Fixture", "fixture", "isolated UI validation")], null, false);
-            var fixture = new Fixture(Path.Combine(root, "simple-other"), new TweakCatalog(1, "six", [Setting("exited"), Setting("denied"), Setting("fine"), Setting("service"), Setting("task"), Setting("office")], [])) { Missing = false };
+            var fixture = new Fixture(Path.Combine(root, "simple-other"), new TweakCatalog(1, "seven", [Setting("exited"), Setting("denied"), Setting("fine"), Setting("service"), Setting("task"), Setting("office"), Setting("adapter")], [])) { Missing = false };
             fixture.TransformStatus = inspection => inspection with { Settings = inspection.Settings.Select(status => status.Id switch
             {
                 "exited" => status with { Error = "The Windows control helper exited 1: fixture", Supported = false },
@@ -505,6 +505,7 @@ static class FreshnessChecks
                 "service" => status with { Error = "OpenService(Fixture) failed (Win32 1060).", Supported = false },
                 "task" => status with { Error = "The task is missing (0x80070002).", Supported = false },
                 "office" => status with { Error = "A supported Microsoft Office installation could not be identified.", Supported = false },
+                "adapter" => status with { Error = "No devices expose RSC on the Ethernet 3 adapter.", Supported = false },
                 _ => status,
             }).ToArray() };
             App.Operations = fixture; var model = new WindowsTweaksViewModel(); await model.ShowAsync();

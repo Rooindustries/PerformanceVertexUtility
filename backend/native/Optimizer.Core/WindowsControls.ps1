@@ -20,6 +20,13 @@ function Get-Adapters([string]$target='primary') {
     if($adapters.Count -eq 0){throw 'No active adapter with an IPv4 default route was found. No wildcard adapter fallback is allowed.'}
     return $adapters
 }
+function Assert-AdapterExposes([object[]]$errors,[int]$count,[string]$setting,$adapter){
+    $failures=@($errors|Where-Object {[string]$_.FullyQualifiedErrorId -notlike 'CmdletizationQuery_NotFound*'})
+    if($failures.Count -gt 0){throw $failures[0]}
+    if($count -gt 0){return}
+    if(@(Get-NetAdapter -IncludeHidden|Where-Object {$_.InterfaceGuid -eq $adapter.InterfaceGuid}).Count -eq 0){throw ('The network adapter '+$adapter.Name+' is no longer present. Refresh to read it again.')}
+    throw ('No devices expose '+$setting+' on the '+$adapter.Name+' adapter.')
+}
 function Get-CanonicalAddress([string]$value){
     if($value.Contains('/')){
         $parts=$value.Split('/');if($parts.Count -ne 2){throw 'Unexpected firewall address format.'}
@@ -167,12 +174,13 @@ function Read-Control($address){
                 $id=([string]$adapter.InterfaceGuid).ToUpperInvariant()
                 switch($address.property){
                     'ipv6-binding' {$item=@(Get-NetAdapterBinding -Name ([WildcardPattern]::Escape([string]$adapter.Name)) -ComponentID 'ms_tcpip6');if($item.Count -ne 1 -or $item[0].Enabled -isnot [bool]){throw ('IPv6 binding is unavailable for '+$adapter.Name)};$values[$id]=[bool]$item[0].Enabled}
-                    'lso' {$item=@(Get-NetAdapterLso -Name ([WildcardPattern]::Escape([string]$adapter.Name)) -WarningAction SilentlyContinue -WarningVariable controlWarnings); if($controlWarnings){throw ($controlWarnings -join '; ')}; if($item.Count -ne 1 -or $item[0].V1IPv4Enabled -isnot [bool] -or $item[0].IPv4Enabled -isnot [bool] -or $item[0].IPv6Enabled -isnot [bool]){throw ('LSO configuration is unavailable for '+$adapter.Name)}; $item=$item[0]; $values[$id]=[ordered]@{ipv4v1=[bool]$item.V1IPv4Enabled;ipv4=[bool]$item.IPv4Enabled;ipv6=[bool]$item.IPv6Enabled}}
-                    'rsc' {$item=@(Get-NetAdapterRsc -Name ([WildcardPattern]::Escape([string]$adapter.Name)) -WarningAction SilentlyContinue -WarningVariable controlWarnings); if($controlWarnings){throw ($controlWarnings -join '; ')}; if($item.Count -ne 1 -or $item[0].IPv4Enabled -isnot [bool] -or $item[0].IPv6Enabled -isnot [bool]){throw ('RSC configuration is unavailable for '+$adapter.Name)}; $item=$item[0]; $values[$id]=[ordered]@{ipv4=[bool]$item.IPv4Enabled;ipv6=[bool]$item.IPv6Enabled}}
+                    'lso' {$item=@(Get-NetAdapterLso -Name ([WildcardPattern]::Escape([string]$adapter.Name)) -WarningAction SilentlyContinue -WarningVariable controlWarnings -ErrorAction SilentlyContinue -ErrorVariable controlErrors); if($controlWarnings){throw ($controlWarnings -join '; ')}; Assert-AdapterExposes $controlErrors $item.Count 'LSO' $adapter; if($item.Count -ne 1 -or $item[0].V1IPv4Enabled -isnot [bool] -or $item[0].IPv4Enabled -isnot [bool] -or $item[0].IPv6Enabled -isnot [bool]){throw ('LSO configuration is unavailable for '+$adapter.Name)}; $item=$item[0]; $values[$id]=[ordered]@{ipv4v1=[bool]$item.V1IPv4Enabled;ipv4=[bool]$item.IPv4Enabled;ipv6=[bool]$item.IPv6Enabled}}
+                    'rsc' {$item=@(Get-NetAdapterRsc -Name ([WildcardPattern]::Escape([string]$adapter.Name)) -WarningAction SilentlyContinue -WarningVariable controlWarnings -ErrorAction SilentlyContinue -ErrorVariable controlErrors); if($controlWarnings){throw ($controlWarnings -join '; ')}; Assert-AdapterExposes $controlErrors $item.Count 'RSC' $adapter; if($item.Count -ne 1 -or $item[0].IPv4Enabled -isnot [bool] -or $item[0].IPv6Enabled -isnot [bool]){throw ('RSC configuration is unavailable for '+$adapter.Name)}; $item=$item[0]; $values[$id]=[ordered]@{ipv4=[bool]$item.IPv4Enabled;ipv6=[bool]$item.IPv6Enabled}}
                     default {
                         if(-not $address.property.StartsWith('advanced:')){throw 'Unknown network-adapter setting.'}
                         $keyword=$address.property.Substring(9)
-                        $item=Get-NetAdapterAdvancedProperty -Name ([WildcardPattern]::Escape([string]$adapter.Name)) -RegistryKeyword $keyword -AllProperties
+                        $item=Get-NetAdapterAdvancedProperty -Name ([WildcardPattern]::Escape([string]$adapter.Name)) -RegistryKeyword $keyword -AllProperties -ErrorAction SilentlyContinue -ErrorVariable controlErrors
+                        Assert-AdapterExposes $controlErrors @($item).Count $keyword $adapter
                         if(@($item).Count -ne 1){throw ('The adapter does not expose exactly one '+$keyword+' property: '+$adapter.Name)}
                         $values[$id]=@($item.RegistryValue | ForEach-Object {[string]$_})
                     }
