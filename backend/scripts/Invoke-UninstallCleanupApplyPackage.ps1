@@ -181,7 +181,8 @@ try {
     }
     if ($AllowFixtureClaims -and ([string]::IsNullOrWhiteSpace($claimRoot) -or ($hasOfficialCommand -and -not (Test-RooIndustriesCleanupPathWithin $commandExecutable $claimRoot)))) { throw 'Fixture claims apply only to removers inside the fixture root.' }
     $officialExecutableAllowlisted = (-not $hasOfficialCommand) -or (-not [string]::IsNullOrWhiteSpace($AllowedOfficialExecutablePath) -and $commandExecutable.Equals([System.IO.Path]::GetFullPath($AllowedOfficialExecutablePath), [System.StringComparison]::OrdinalIgnoreCase))
-    $exactTargetsApproved = Test-ApplyPackageTargetAllowlist $fileFolderItems $ExactTargetAllowlist
+    $itemsProperty = $cleanupManifest.PSObject.Properties['items']
+    $exactTargetsApproved = if (@($fileFolderItems).Count -eq 0) { $hasOfficialCommand -and $null -ne $itemsProperty -and $itemsProperty.Value -is [array] } else { Test-ApplyPackageTargetAllowlist $fileFolderItems $ExactTargetAllowlist }
     $resolvedBackupRoot = if ([string]::IsNullOrWhiteSpace($BackupRoot)) {
         Join-Path $(if ($DataRoot) { $DataRoot } else { Get-RooIndustriesLocalDataRoot -Protected }) ('cleanup-backups\' + [guid]::NewGuid().ToString('N'))
     } else { [System.IO.Path]::GetFullPath($BackupRoot) }
