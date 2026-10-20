@@ -147,7 +147,7 @@ public sealed class FileLease : IDisposable
     public string[] Children()
     {
         if (!Standard(_handle).Directory) return [];
-        return DirectoryEntries(_handle).Select(entry => System.IO.Path.Combine(Path, entry.Name)).ToArray();
+        return DirectoryEntries(_handle).Select(entry => { RequireComponent(entry.Name); return System.IO.Path.Combine(Path, entry.Name); }).ToArray();
     }
 
     internal static (string Name, FileAttributes Attributes)[] DirectoryEntries(SafeFileHandle directory)
@@ -178,7 +178,6 @@ public sealed class FileLease : IDisposable
                     var name = Marshal.PtrToStringUni(entry + 88, length / 2)!;
                     if (name is not ("." or ".."))
                     {
-                        RequireComponent(name);
                         names.Add((name, (FileAttributes)Marshal.ReadInt32(entry, 56)));
                         if (names.Count > 100000) throw new InvalidDataException("Directory exceeds the cleanup enumeration limit.");
                     }
@@ -343,7 +342,7 @@ public sealed class FileLease : IDisposable
         finally { Marshal.FreeHGlobal(unicode); Marshal.FreeHGlobal(buffer); }
     }
 
-    private static void RequireComponent(string name)
+    internal static void RequireComponent(string name)
     {
         if (name is "" or "." or ".." || name.IndexOfAny(['\\', '/', ':', '\0']) >= 0 || name.EndsWith(' ') || name.EndsWith('.'))
             throw new InvalidDataException("A cleanup path contains an unsupported or ambiguous component.");

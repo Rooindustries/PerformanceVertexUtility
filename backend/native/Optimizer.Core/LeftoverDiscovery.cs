@@ -43,7 +43,7 @@ public sealed class LeftoverDiscovery
     private readonly (CleanupApplication App, HashSet<string> Names)[] _peerNames;
     private readonly (string Name, string Path)[] _peerPaths;
     private readonly (string Name, string Path)[] _peerResolved;
-    private readonly bool _peerOwnersKnown = true;
+    private readonly List<string> _unprovedOwners = [];
     private readonly string? _installPath;
     private readonly Dictionary<string, LeftoverCandidate> _found = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<string> _errors = [];
@@ -59,13 +59,13 @@ public sealed class LeftoverDiscovery
         _peers = otherApplications.Where(app => app.AppId != application.AppId).ToArray();
         _names = NameKeys(application.DisplayName);
         _peerNames = _peers.Select(peer => (peer, NameKeys(peer.DisplayName))).ToArray();
-        _peerPaths = _peers.Where(peer => !string.IsNullOrWhiteSpace(peer.InstallLocation)).Select(peer => (peer.DisplayName, ExpandPath(peer.InstallLocation!))).ToArray();
+        _peerPaths = _peers.Where(peer => !string.IsNullOrWhiteSpace(peer.InstallLocation)).Select(peer => (Name: peer.DisplayName, Path: ExpandPath(peer.InstallLocation!))).Where(peer => !string.IsNullOrWhiteSpace(peer.Path)).ToArray();
         _peerResolved = new (string Name, string Path)[_peerPaths.Length];
         for (var index = 0; index < _peerPaths.Length; index++)
         {
             var resolved = NativeFiles.ResolvedPath(_peerPaths[index].Path);
             _peerResolved[index] = (_peerPaths[index].Name, resolved.Path ?? _peerPaths[index].Path);
-            _peerOwnersKnown &= resolved.Walk is NativeFiles.PathWalk.Local or NativeFiles.PathWalk.Absent;
+            if (resolved.Walk is not (NativeFiles.PathWalk.Local or NativeFiles.PathWalk.Absent)) _unprovedOwners.Add(_peerPaths[index].Name);
         }
         _installPath = string.IsNullOrWhiteSpace(application.InstallLocation) || MicrosoftOwnedPath(ExpandPath(application.InstallLocation)) ? null : ExpandPath(application.InstallLocation);
     }
@@ -130,6 +130,8 @@ public sealed class LeftoverDiscovery
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 if ((entry.Attributes & FileAttributes.Directory) == 0) continue;
+                try { FileLease.RequireComponent(entry.Name); }
+                catch (InvalidDataException error) { _errors.Add(Path.Combine(root, entry.Name) + ": " + error.Message); continue; }
                 var name = entry.Name;
                 var directory = Path.Combine(root, name);
                 var match = _names.Contains(Compact(name));
@@ -167,7 +169,8 @@ public sealed class LeftoverDiscovery
             _found.Add(id, new()
             {
                 ItemId = id, Kind = (attributes & FileAttributes.Directory) != 0 ? "folder" : "file", Target = path, Exists = true,
-                Evidence = [evidence], SharedOwners = owners, Protected = protectedPath, UserData = userData, OwnershipComplete = _peerOwnersKnown,
+                Evidence = [evidence, .. _unprovedOwners.Distinct().Select(name => "Ownership could not be checked for installed app: " + name)],
+                SharedOwners = owners, Protected = protectedPath, UserData = userData, OwnershipComplete = _unprovedOwners.Count == 0,
             });
         }
         catch (DirectoryNotFoundException) { }
@@ -181,15 +184,15 @@ public sealed class LeftoverDiscovery
         {
             var resolved = NativeFiles.ResolvedPath(path);
             if (resolved.Walk == NativeFiles.PathWalk.Absent) continue;
-            if (resolved.Path is null || !_peerOwnersKnown || FileOwners(path, resolved.Path).Count != 0)
+            if (resolved.Path is null || _unprovedOwners.Count != 0 || FileOwners(path, resolved.Path).Count != 0)
                 throw new InvalidDataException("This leftover is protected, shared or has incomplete ownership evidence: " + path);
         }
     }
 
     private List<string> FileOwners(string path, string resolvedPath)
         => _peers.Where(peer => NameKeys(peer.DisplayName).Overlaps(_names) ||
-            !string.IsNullOrWhiteSpace(peer.InstallLocation) && (Within(peer.InstallLocation, path) || Within(path, peer.InstallLocation)) ||
             !string.IsNullOrWhiteSpace(_app.PackageFamilyName) && peer.PackageFamilyName == _app.PackageFamilyName).Select(peer => peer.DisplayName)
+            .Concat(_peerPaths.Where(peer => Within(peer.Path, path) || Within(path, peer.Path)).Select(peer => peer.Name))
             .Concat(_peerResolved.Where(peer => Within(peer.Path, resolvedPath) || Within(resolvedPath, peer.Path)).Select(peer => peer.Name)).Distinct().ToList();
 
     private void SearchRegistry(RegistryAddress scope, CancellationToken cancellationToken)
@@ -297,6 +300,8 @@ public sealed class LeftoverDiscovery
 
     private static bool ReferencesPath(string text, string path)
     {
+        text = text.Replace('/', '\\');
+        path = path.Replace('/', '\\');
         if (path.Length < 4) return false;
         if (!text.Contains(path, StringComparison.OrdinalIgnoreCase)) return false;
         return Regex.IsMatch(text, "(?:^|[@\\\"'=\\s])" + Regex.Escape(path) + "(?:[\\\\/\\\"'\\s]|$)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(50));
@@ -304,7 +309,7 @@ public sealed class LeftoverDiscovery
 
     private static string ExpandPath(string path)
     {
-        var expanded = RuntimeEnvironment.ExpandUserVariables(path).Replace('/', '\\');
+        var expanded = RuntimeEnvironment.ExpandUserVariables(path.Trim().Trim('"').Trim()).Replace('/', '\\');
         var root = Path.GetPathRoot(expanded) ?? "";
         var trimmed = expanded.TrimEnd('\\');
         return trimmed.Length < root.Length ? root : trimmed;

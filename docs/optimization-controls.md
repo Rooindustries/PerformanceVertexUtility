@@ -16,7 +16,7 @@ In **Apps & Cleanup → Remove apps**, select applications and review their publ
 
 After removal, scan one app or all completed removals. Ownership checks retain the other apps saved in the removal queue even after their registrations disappear, alongside fresh installed-app inventory. Select exact file, folder, registry-key or registry-value candidates. Matching evidence is shown for each item; known shared owners, protected locations and incomplete subtree ownership block selection. Whole-key deletion requires explicit acceptance of its restoration limits. A separate preview and confirmation bind the cleanup to the reviewed resources.
 
-Cleanup scans local fixed drives. Network and removable paths are not scanned. A folder stays unavailable when another app uses it through a junction or short name, or when an app's published path cannot be checked safely, including SUBST and volume mount paths. Ownership is checked again before cleanup starts.
+Cleanup scans local fixed drives. Network and removable paths are not scanned. A folder stays unavailable when another app uses it through a junction or short name. If any installed app's published path cannot be checked safely, including SUBST and volume mount paths, file and folder cleanup stays unavailable. The scan names the app that blocked it. Ownership is checked again before cleanup starts.
 
 Cleanup batches retain per-app progress. Stop after this app preserves unstarted entries; resume acknowledges the recorded cancellation without clearing a newer request. Cleanup history and restoration survive desktop restarts. Vendor removal itself is not reversible: recovery restores supported leftover data and does not reinstall the application.
 

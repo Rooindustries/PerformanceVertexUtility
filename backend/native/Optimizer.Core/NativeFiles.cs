@@ -186,7 +186,7 @@ internal static class NativeFiles
             using (handle)
                 return handle is null ? (walk == PathWalk.Absent && links != 0 ? PathWalk.Unknown : walk, null, 0) : FinalPath(handle) is { } final ? (PathWalk.Local, Normalize(final), Info(handle).Attributes | (links == 0 ? 0 : FileAttributes.ReparsePoint)) : (PathWalk.Unknown, null, 0);
         }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException or Win32Exception) { return (PathWalk.Unknown, null, 0); }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException or Win32Exception or InvalidDataException) { return (PathWalk.Unknown, null, 0); }
     }
 
     public static (string Name, FileAttributes Attributes)[] ReadDirectory(string path)

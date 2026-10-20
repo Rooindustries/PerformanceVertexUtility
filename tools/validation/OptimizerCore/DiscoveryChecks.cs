@@ -66,6 +66,7 @@ static class DiscoveryChecks
         UncRoaming(check);
         JunctionAlias(check);
         AliasOwnershipChecks.Run(check);
+        PublishedPathChecks.Run(check, []);
     }
 
     private static void JunctionAlias(Action<bool, string> check)

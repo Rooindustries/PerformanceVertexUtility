@@ -201,6 +201,7 @@ public class RooIndustriesHostRemover {
             $clock=[Diagnostics.Stopwatch]::StartNew()
             $scan=Core 'cleanup-scan' @{queueJournalPath=$queue;appId=$app.appId}
             Write-Output ('Scan '+$app.label+': '+[Math]::Round($clock.Elapsed.TotalSeconds,2)+' s; '+$scan.registryKeysVisited+' registry keys; '+@($scan.candidates).Count+' candidates; complete='+$scan.complete)
+            foreach($scanError in @($scan.errors)){Write-Output ('SCAN_ERROR '+$app.label+': '+$scanError)}
             $selected=@($scan.candidates|Where-Object {($_.target -eq $app.install) -or ($_.registry.keyPath -eq $app.dataPath -and $_.registry.kind -eq 'key') -or ($_.registry.keyPath -eq ($dataRoot+'\SharedReferences') -and $_.registry.valueName -eq $app.label)})
             Assert ($selected.Count -eq 3 -and @($selected|Where-Object {$_.protected -or -not $_.ownershipComplete -or @($_.sharedOwners).Count -gt 0}).Count -eq 0) 'Broad discovery finds the owned folder, whole key and shared-container value'
             $reviewPath=Join-Path $root ($app.label+'-cleanup-review.json')
