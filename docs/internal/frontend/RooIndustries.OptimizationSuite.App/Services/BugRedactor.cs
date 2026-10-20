@@ -57,7 +57,7 @@ public sealed class BugRedactor
             while (run[slashes] == '\\') slashes++;
             var total = slashes + 1;
             var escape = total & -total;
-            if (escape == total) escape /= 2;
+            if (escape == total) escape = 0;
             var prefix = slashes - escape;
             root += run[..prefix]; run = run[prefix..];
         }

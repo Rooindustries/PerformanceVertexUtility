@@ -387,6 +387,13 @@ static class BugReportChecks
             (other, @"'C:\Users\O'Connor", @"'C:\Users\<user>"),
             (other, @"C:\Users\" + "John Sm...", @"C:\Users\<user>..."),
         };
+        var literalNames = new[] { "u0012345", "u0009876", "u0022999", "u0123456", "Ubeda", "uFace", "U2018x" };
+        foreach (var name in literalNames)
+        {
+            var profile = @"C:\Users\" + name;
+            transports.Add((other, profile + @"\x", @"C:\Users\<user>\x"));
+            transports.Add((new BugRedactor(profile, name, "GAMER-PC"), profile + @"\x", @"%USERPROFILE%\x"));
+        }
         foreach (var drive in new[] { "C", "D" })
         foreach (var separator in new[] { ".", "-", ",", ";", "=", "@", "#", "!", "$", "~", "(", ")", "[", "{", "%20", " ", "'" })
         foreach (var (tail, remaining) in new[] { (@"\x", @"\x"), ("", ""), (": denied", ": denied"), (" finished.", ".") })
@@ -417,6 +424,34 @@ static class BugReportChecks
                 check(false, "Nested own profile JSON depth " + depth + " is invalid: " + error.Message);
             }
             nested = JsonSerializer.Serialize(nested);
+        }
+        var relaxed = new JsonSerializerOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
+        foreach (var name in literalNames.Append(ownName))
+        foreach (var drive in new[] { "C", "D" })
+        foreach (var tail in new[] { "", @"\x" })
+        foreach (var isOwn in new[] { false, true })
+        foreach (var options in new JsonSerializerOptions?[] { null, relaxed })
+        {
+            var redactor = isOwn ? new BugRedactor(@"C:\Users\" + name, name, "GAMER-PC") : other;
+            var input = drive + @":\Users\" + name + tail;
+            var expected = isOwn && drive == "C" ? "%USERPROFILE%" + tail : drive + @":\Users\<user>" + tail;
+            var encoder = options is null ? "default" : "relaxed";
+            for (var depth = 0; depth <= (options is null ? 5 : 3); depth++)
+            {
+                var actual = redactor.Redact(input);
+                try
+                {
+                    var decoded = actual;
+                    for (var level = 0; level < depth; level++) decoded = JsonSerializer.Deserialize<string>(decoded)!;
+                    check(decoded == expected && redactor.Redact(actual) == actual,
+                        "Literal-u or Unicode component " + encoder + " depth " + depth + " own=" + isOwn + " " + JsonSerializer.Serialize(input) + " => " + JsonSerializer.Serialize(decoded));
+                }
+                catch (JsonException error)
+                {
+                    check(false, "Invalid nested " + encoder + " JSON depth " + depth + " own=" + isOwn + " for " + JsonSerializer.Serialize(input) + ": " + error.Message);
+                }
+                input = JsonSerializer.Serialize(input, options);
+            }
         }
         var jsonCases = new[]
         {
