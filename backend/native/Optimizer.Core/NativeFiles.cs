@@ -175,17 +175,42 @@ internal static class NativeFiles
 
     public static string Normalize(string path) => path.StartsWith(@"\\?\", StringComparison.Ordinal) && !path.StartsWith(@"\\?\UNC\", StringComparison.OrdinalIgnoreCase) ? path[4..] : path;
 
-    public static string? ResolvedPath(string path)
+    public static string? ResolvedPath(string path, out bool known)
     {
-        if (path.Contains('\0') || path.Length < 3 || !char.IsAsciiLetter(path[0]) || path[1] != ':' || path[2] != '\\') return null;
-        try { if (new DriveInfo(path[..1]).DriveType != DriveType.Fixed) return null; }
-        catch (Exception error) when (error is IOException or ArgumentException or UnauthorizedAccessException) { return null; }
+        known = true;
+        if (path.Contains('\0') || !FixedDrivePath(path)) return null;
+        var linked = false;
+        var current = path[..3];
+        foreach (var part in path[3..].Split('\\', StringSplitOptions.RemoveEmptyEntries))
+        {
+            current = Path.Combine(current, part);
+            FileAttributes attributes;
+            try { attributes = File.GetAttributes(current); }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException) { return null; }
+            if ((attributes & FileAttributes.ReparsePoint) == 0) continue;
+            string? target;
+            try { target = ((attributes & FileAttributes.Directory) != 0 ? new DirectoryInfo(current) : (FileSystemInfo)new FileInfo(current)).LinkTarget; }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException) { return null; }
+            if (target is null) continue;
+            if (!Path.IsPathFullyQualified(target)) target = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(current)!, target));
+            var plain = target.StartsWith(@"\\?\", StringComparison.Ordinal) || target.StartsWith(@"\??\", StringComparison.Ordinal) ? target[4..] : target;
+            if (!plain.StartsWith("Volume{", StringComparison.OrdinalIgnoreCase) && !FixedDrivePath(plain)) return null;
+            linked = true;
+        }
         try
         {
             using var handle = Open(path, ReadAttributes | Synchronize, ShareAll, BackupSemantics | NoRecallAnonymous);
             return FinalPath(handle) is { } final ? Normalize(final) : null;
         }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException) { return null; }
+        catch (Exception error) when (error is FileNotFoundException or DirectoryNotFoundException) { return null; }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException) { known = !linked; return null; }
+    }
+
+    private static bool FixedDrivePath(string path)
+    {
+        if (path.Length < 3 || !char.IsAsciiLetter(path[0]) || path[1] != ':' || path[2] != '\\') return false;
+        try { return new DriveInfo(path[..1]).DriveType == DriveType.Fixed; }
+        catch (Exception error) when (error is IOException or ArgumentException or UnauthorizedAccessException) { return false; }
     }
 
     public static byte[]? ReadBounded(string folder, string name, int limit, out string? refusal)

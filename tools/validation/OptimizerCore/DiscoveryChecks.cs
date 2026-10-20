@@ -88,8 +88,11 @@ static class DiscoveryChecks
             {
                 var linkedTool = new CleanupApplication { AppId = "fixture:linked", DisplayName = "Linked share tool", Publisher = "Other", InstallLocation = Path.Combine(nas, "Tool"), PackageFamilyName = null };
                 var linkWatch = Stopwatch.StartNew();
-                _ = new LeftoverDiscovery(application, [linkedTool]);
-                check(linkWatch.ElapsedMilliseconds < 2000, "A local link to an unreachable network share does not stall leftover discovery (" + linkWatch.ElapsedMilliseconds + " ms)");
+                var linkedScan = new LeftoverDiscovery(application, [linkedTool]).Scan(CancellationToken.None, [], []);
+                linkWatch.Stop();
+                check(linkWatch.ElapsedMilliseconds < 500, "A local link to an unreachable network share is never followed, so leftover discovery does not wait on it (" + linkWatch.ElapsedMilliseconds + " ms)");
+                check(linkedScan.Candidates.Single(item => item.Target == shared) is { OwnershipComplete: true } linkedCandidate && !linkedCandidate.SharedOwners.Contains(linkedTool.DisplayName),
+                    "An app installed through a link to a network share does not block cleanup of local leftovers");
             }
         }
         finally
