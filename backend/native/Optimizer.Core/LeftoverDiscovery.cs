@@ -42,6 +42,7 @@ public sealed class LeftoverDiscovery
     private readonly HashSet<string> _names;
     private readonly (CleanupApplication App, HashSet<string> Names)[] _peerNames;
     private readonly (string Name, string Path)[] _peerPaths;
+    private readonly (string Name, string Path)[] _peerResolved;
     private readonly string? _installPath;
     private readonly Dictionary<string, LeftoverCandidate> _found = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<string> _errors = [];
@@ -58,6 +59,7 @@ public sealed class LeftoverDiscovery
         _names = NameKeys(application.DisplayName);
         _peerNames = _peers.Select(peer => (peer, NameKeys(peer.DisplayName))).ToArray();
         _peerPaths = _peers.Where(peer => !string.IsNullOrWhiteSpace(peer.InstallLocation)).Select(peer => (peer.DisplayName, ExpandPath(peer.InstallLocation!))).ToArray();
+        _peerResolved = _peerPaths.Select(peer => (peer.Name, NativeFiles.ResolvedPath(peer.Path) ?? peer.Path)).ToArray();
         _installPath = string.IsNullOrWhiteSpace(application.InstallLocation) || MicrosoftOwnedPath(ExpandPath(application.InstallLocation)) ? null : ExpandPath(application.InstallLocation);
     }
 
@@ -143,9 +145,11 @@ public sealed class LeftoverDiscovery
             var attributes = File.GetAttributes(path);
             var id = Id("path", path);
             if (_found.TryGetValue(id, out var present)) { if (!present.Evidence.Contains(evidence)) present.Evidence.Add(evidence); return; }
+            var resolved = NativeFiles.ResolvedPath(path) ?? path;
             var owners = _peers.Where(peer => NameKeys(peer.DisplayName).Overlaps(_names) ||
                 !string.IsNullOrWhiteSpace(peer.InstallLocation) && (Within(peer.InstallLocation, path) || Within(path, peer.InstallLocation)) ||
-                !string.IsNullOrWhiteSpace(_app.PackageFamilyName) && peer.PackageFamilyName == _app.PackageFamilyName).Select(peer => peer.DisplayName).Distinct().ToList();
+                !string.IsNullOrWhiteSpace(_app.PackageFamilyName) && peer.PackageFamilyName == _app.PackageFamilyName).Select(peer => peer.DisplayName)
+                .Concat(_peerResolved.Where(peer => Within(peer.Path, resolved) || Within(resolved, peer.Path)).Select(peer => peer.Name)).Distinct().ToList();
             var protectedPath = FileCleanupEngine.IsProtectedPath(path) || (attributes & FileAttributes.ReparsePoint) != 0;
             _found.Add(id, new()
             {

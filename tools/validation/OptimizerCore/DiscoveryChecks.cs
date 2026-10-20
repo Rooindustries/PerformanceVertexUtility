@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.Win32;
 using RooIndustries.Optimizer;
 
@@ -54,6 +55,35 @@ static class DiscoveryChecks
         check(!Directory.Exists(root) && hive.OpenSubKey(registryRoot) is null, "Discovery validation leaves no file or registry fixtures");
         ProductBoundaries(check);
         UncRoaming(check);
+        JunctionAlias(check);
+    }
+
+    private static void JunctionAlias(Action<bool, string> check)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "roo-industries-discovery-junction-" + Guid.NewGuid().ToString("N"));
+        var real = Path.Combine(root, "real");
+        var alias = Path.Combine(root, "alias");
+        var shared = Path.Combine(real, "Roo Industries Example");
+        Directory.CreateDirectory(shared);
+        try
+        {
+            using (var link = Process.Start(new ProcessStartInfo("cmd.exe", "/d /c mklink /J \"" + alias + "\" \"" + real + "\"") { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true })!)
+            {
+                link.StandardOutput.ReadToEnd();
+                link.WaitForExit();
+            }
+            check(Directory.Exists(Path.Combine(alias, "Roo Industries Example")) && (File.GetAttributes(alias) & FileAttributes.ReparsePoint) != 0, "Junction fixture shows the same folder under a second path");
+            var application = new CleanupApplication { AppId = "fixture:junction", DisplayName = "Roo Industries Example", Publisher = "Roo Industries", InstallLocation = shared, PackageFamilyName = null };
+            var peer = new CleanupApplication { AppId = "fixture:alias", DisplayName = "Independent alias tool", Publisher = "Other", InstallLocation = Path.Combine(alias, "Roo Industries Example"), PackageFamilyName = null };
+            var scan = new LeftoverDiscovery(application, [peer]).Scan(CancellationToken.None, [], []);
+            check(scan.Candidates.Single(item => item.Target == shared).SharedOwners.Contains(peer.DisplayName), "An app installed through a junction to the removed app's folder stays a shared owner");
+        }
+        finally
+        {
+            if (Directory.Exists(alias)) Directory.Delete(alias);
+            Directory.Delete(root, true);
+        }
+        check(!Directory.Exists(root), "Junction validation leaves no file fixtures");
     }
 
     private static void UncRoaming(Action<bool, string> check)

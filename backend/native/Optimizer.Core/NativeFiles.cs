@@ -175,6 +175,16 @@ internal static class NativeFiles
 
     public static string Normalize(string path) => path.StartsWith(@"\\?\", StringComparison.Ordinal) && !path.StartsWith(@"\\?\UNC\", StringComparison.OrdinalIgnoreCase) ? path[4..] : path;
 
+    public static string? ResolvedPath(string path)
+    {
+        try
+        {
+            using var handle = Open(path, ReadAttributes | Synchronize, ShareAll, BackupSemantics | NoRecallAnonymous);
+            return FinalPath(handle) is { } final ? Normalize(final) : null;
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException) { return null; }
+    }
+
     public static byte[]? ReadBounded(string folder, string name, int limit, out string? refusal)
     {
         refusal = null;
