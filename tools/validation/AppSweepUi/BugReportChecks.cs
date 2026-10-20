@@ -463,6 +463,54 @@ static class BugReportChecks
             (other, @"""\u003C:\\Users\\Alice\\x""", @"""\u003C:\\Users\\<user>\\x"""),
         };
         transports.AddRange(jsonCases);
+        var separatorStart = transports.Count;
+        var separatorCases = new List<(BugRedactor Redactor, string Input, string Expected)>();
+        foreach (var control in new[] { "\n", "\r", "\t", "\b", "\f", "\r\n" })
+        {
+            foreach (var profileRoot in new[] { @"C:\Users\", @"D:/Users\" })
+            {
+                var input = "Scanning " + profileRoot + control + "Found 3 profiles";
+                separatorCases.Add((other, input, input));
+            }
+            separatorCases.Add((other, @"C:\Users\Alice\" + control + "next line", @"%USERPROFILE%\" + control + "next line"));
+        }
+        var listing = @"Source : C:\Users\" + "\r\n" + @"Dest : D:\Backup\";
+        separatorCases.Add((other, listing, listing));
+        transports.AddRange(separatorCases);
+        foreach (var shared in new[] { "Public", "Default", "Default User", "All Users", "" })
+        foreach (var drive in new[] { "C", "D" })
+            transports.Add((other, @"C:\Users\" + shared + drive + @":\Users\Alice",
+                @"C:\Users\<user>" + (drive == "C" && shared.Length != 0 ? "%USERPROFILE%" : drive + @":\Users\<user>")));
+        foreach (var profileRoot in new[] { @"C:\Users\", "D:/Users/" })
+            transports.Add((other, profileRoot, profileRoot));
+        foreach (var name in new[] { "%USERPROFILE%", "Private%USERPROFILE%Suffix" })
+            transports.Add((other, @"C:\Users\" + name + @"\x", @"C:\Users\<user>\x"));
+        var separatorTransports = transports.Skip(separatorStart).ToHashSet();
+        foreach (var name in new[] { "nFound", "rRunner", "tTester", "bBob", "fFixture" })
+        foreach (var profileRoot in new[] { @"C:\Users\", @"D:/Users\" })
+            separatorCases.Add((other, profileRoot + name + @"\x", profileRoot + @"<user>\x"));
+        foreach (var (redactor, raw, expected) in separatorCases)
+        foreach (var options in new JsonSerializerOptions?[] { null, relaxed })
+        {
+            var input = raw;
+            var encoder = options is null ? "default" : "relaxed";
+            for (var depth = 0; depth <= (options is null ? 5 : 3); depth++)
+            {
+                var actual = redactor.Redact(input);
+                try
+                {
+                    var decoded = actual;
+                    for (var level = 0; level < depth; level++) decoded = JsonSerializer.Deserialize<string>(decoded)!;
+                    check(decoded == expected && redactor.Redact(actual) == actual,
+                        "Root separator " + encoder + " depth " + depth + " " + JsonSerializer.Serialize(raw) + " => " + JsonSerializer.Serialize(decoded));
+                }
+                catch (JsonException error)
+                {
+                    check(false, "Invalid root separator " + encoder + " JSON depth " + depth + " for " + JsonSerializer.Serialize(raw) + ": " + error.Message);
+                }
+                input = JsonSerializer.Serialize(input, options);
+            }
+        }
         foreach (var (redactor, input, expected) in transports)
         {
             Exact(redactor, input, expected);
@@ -507,6 +555,21 @@ static class BugReportChecks
             using var saved = ZipFile.OpenRead(service.SaveReport(report, attachment));
             check(Read(saved, "report.txt").Contains("What went wrong:" + Environment.NewLine + expected + Environment.NewLine, StringComparison.Ordinal),
                 "A saved report redacts the complete typed description for " + JsonSerializer.Serialize(input));
+            if (separatorTransports.Contains((redactor, input, expected)))
+            {
+                try
+                {
+                    using var summary = JsonDocument.Parse(Read(saved, "tweak-state.json"));
+                    using var values = JsonDocument.Parse(Read(saved, "specs.json"));
+                    check(summary.RootElement.GetProperty("lastErrors")[0].GetString() == expected
+                        && values.RootElement.GetProperty("specs").GetProperty("cpu").GetString() == expected,
+                        "Saved report component privacy and valid JSON for " + JsonSerializer.Serialize(input));
+                }
+                catch (JsonException error)
+                {
+                    check(false, "Saved report component JSON is invalid for " + JsonSerializer.Serialize(input) + ": " + error.Message);
+                }
+            }
         }
         const string partialProfile = @"C:\Users\" + "John Sm";
         var cut = new string('x', 2000 - partialProfile.Length - 3) + @"C:\Users\John Smith\file";
@@ -523,6 +586,13 @@ static class BugReportChecks
                 "A profile cut at the 2000-character summary boundary keeps no partial account name");
         }
         check(truncatedSender.Calls.Count == 0, "Truncated component attachment checks never send a report");
+        var longRoot = @"C:\Users" + new string('\\', 7 * 1024 * 1024);
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        var redaction = Task.Run(() => other.Redact(longRoot + "Fixture"));
+        var completed = await Task.WhenAny(redaction, Task.Delay(TimeSpan.FromSeconds(5)));
+        check(completed == redaction && redaction.IsCompletedSuccessfully && redaction.Result == longRoot + "<user>",
+            "A 7 MB profile separator run preserves every separator and redacts within five seconds: completed="
+                + (completed == redaction) + " elapsedMs=" + clock.Elapsed.TotalMilliseconds.ToString("F2"));
     }
 
     private static string Read(ZipArchive zip, string name)

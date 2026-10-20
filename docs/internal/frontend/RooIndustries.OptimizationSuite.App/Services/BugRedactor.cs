@@ -51,15 +51,19 @@ public sealed class BugRedactor
     {
         var root = match.Groups["root"].Value;
         var run = match.Groups["run"].Value;
-        if (run[0] == '\\' && root[^1] == '\\')
+        var matchEnd = match.Index + match.Length;
+        var joinedDrive = matchEnd + 2 < input.Length && char.IsAsciiLetter(input[matchEnd]) && input[matchEnd + 1] == ':' && input[matchEnd + 2] is '\\' or '/';
+        if (run.Length == 0) return joinedDrive ? root + User : match.Value;
+        var slashes = root.Length - root.TrimEnd('\\').Length;
+        if (slashes > 0 && (slashes & (slashes - 1)) != 0)
         {
-            var slashes = 0;
-            while (run[slashes] == '\\') slashes++;
-            var total = slashes + 1;
-            var escape = total & -total;
-            if (escape == total) escape = 0;
-            var prefix = slashes - escape;
-            root += run[..prefix]; run = run[prefix..];
+            if (run[0] is 'n' or 'r' or 't' or 'b' or 'f') return match.Value;
+            if (run.Length >= 5 && (run[0] is 'u' or 'U') && run.Skip(1).Take(4).All(Uri.IsHexDigit))
+            {
+                var escape = slashes & -slashes;
+                root = root[..^escape];
+                run = new string('\\', escape) + run;
+            }
         }
         var decoded = new StringBuilder();
         var ends = new List<int>();
@@ -77,7 +81,7 @@ public sealed class BugRedactor
             decoded.Append(c); index = next; ends.Add(index);
         }
         var text = decoded.ToString();
-        if (text.Length == 0 || SharedProfiles.Contains(text)) return match.Value;
+        if (text.Length == 0 || SharedProfiles.Contains(text) && !joinedDrive) return match.Value;
         var rootIndex = match.Groups["root"].Index;
         var escapedRoot = rootIndex > 0 && input[rootIndex - 1] == '\\'
             || rootIndex >= 5 && input[rootIndex - 5] == '\\' && (input[rootIndex - 4] == 'u' || input[rootIndex - 4] == 'U')
@@ -94,7 +98,7 @@ public sealed class BugRedactor
 
     private const string User = "\u0001", PcName = "\u0002", Sid = "\u0003";
     private static readonly HashSet<string> SharedProfiles = new(["Public", "Default", "Default User", "All Users"], StringComparer.OrdinalIgnoreCase);
-    private static readonly Regex ProfileSegment = new(@"(?<root>[A-Za-z]:(?:\\+|/+)Users(?:\\+?|/+))(?<run>(?:\\+u[0-9A-Fa-f]{4}|(?![A-Za-z]:[\\/])[^\\/""\r\n:<>|?*\u0001-\u0003])+)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    private static readonly Regex ProfileSegment = new(@"(?<root>[A-Za-z]:(?:\\+|/+)Users(?>\\+|/+))(?<run>(?:\\+u[0-9A-Fa-f]{4}|(?![A-Za-z]:[\\/])[^\\/""\r\n:<>|?*\u0001-\u0003])*)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     private static Regex Word(string value)
         => new(@"(?<![\p{L}\p{N}_])" + Regex.Escape(value) + @"(?![\p{L}\p{N}_])", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
