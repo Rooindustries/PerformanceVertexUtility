@@ -956,8 +956,8 @@ static class GovernorChecks
     {
         if (!OperatingSystem.IsWindows()) { Console.WriteLine("SKIP Real path rule checks need Windows"); return; }
         var root = Path.Combine(Path.GetTempPath(), "roo-industries-path-rule-" + Guid.NewGuid().ToString("N"));
-        var own = Path.Combine(root, "own", "roo-path-probe.exe");
-        var other = Path.Combine(root, "other", "roo-path-probe.exe");
+        var own = Path.Combine(root, "own", "roo-industries-path-probe.exe");
+        var other = Path.Combine(root, "other", "roo-industries-path-probe.exe");
         var started = new List<System.Diagnostics.Process>();
         var pathRunning = typeof(GovernorProbe).GetMethod("PathRunning", BindingFlags.Static | BindingFlags.NonPublic)!;
         bool? Running(string path) => (bool?)pathRunning.Invoke(null, [ProcessSnapshot.Take(), path]);
