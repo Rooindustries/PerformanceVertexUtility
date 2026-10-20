@@ -25,7 +25,7 @@ static class CatalogIntegrationChecks
         {
             var editionStore = FileTweakStore.Create(Path.Combine(root, "edition-" + edition + ".json"), 26200, edition);
             var settings = catalog.Settings.Where(setting => setting.Id is "privacy.activity-feed" or "windows.953a30d8b6c2c8a5").ToArray();
-            var statuses = new TweakEngine(catalog with { Settings = settings, Presets = [] }, editionStore).Detect().Settings;
+            var statuses = new TweakEngine(catalog with { Settings = settings, Presets = [], Incompatible = null }, editionStore).Detect().Settings;
             check(settings.Length == 2 && statuses.All(status => status.Supported && status.AvailableChoices is { Length: > 0 }), "Group Policy privacy and driver settings are available on " + edition + " like on Pro");
         }
         var path = Path.Combine(root, "product-gates.json"); var store = FileTweakStore.Create(path);
