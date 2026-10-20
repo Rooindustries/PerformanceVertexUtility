@@ -296,11 +296,11 @@ try {
 
 try {
     $closedRoot = Join-Path ([System.IO.Path]::GetTempPath()) "roo-industries-game-tune-closed-$([guid]::NewGuid().ToString('N'))"
-    New-Item -ItemType Directory -Path $closedRoot -Force | Out-Null
     $closedExe = Join-Path $closedRoot 'RooIndustriesTuneProbe.exe'
-    Copy-Item -LiteralPath "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -Destination $closedExe -Force
     $closedProbe = $null
     try {
+        New-Item -ItemType Directory -Path $closedRoot -Force | Out-Null
+        Copy-Item -LiteralPath "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -Destination $closedExe -Force
         $closedProbe = Start-Process -FilePath $closedExe -ArgumentList '-NoProfile','-WindowStyle','Hidden','-Command','Start-Sleep -Seconds 120' -WindowStyle Hidden -PassThru
         Start-Sleep -Milliseconds 800
         $closedProfilePath = Join-Path $closedRoot 'closed-profile.json'
