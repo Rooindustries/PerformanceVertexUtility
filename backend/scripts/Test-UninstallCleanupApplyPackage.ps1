@@ -229,6 +229,19 @@ public class RooIndustriesHandoffFixture {
     $case=New-HandoffCase 'handoff' 'handoff'; $a=$case.args
     $handoff=Read-Result (& $applyScript @a)
     Assert ($handoff.status -eq 'cleanup-review-required' -and $handoff.summary.officialRunnerCompleted -and (Test-Path -LiteralPath ($case.remover+'.done'))) 'A leftover-tab remover that hands off to a temporary copy completes only after that copy finishes'
+    $case=New-HandoffCase 'no-leftovers' 'noop'; $case.manifest.items=@(); $case.args.ExactTargetAllowlist=[string[]]@(); Refresh-Hashes $case; $a=$case.args
+    $emptyReview=$a.Clone(); $emptyReview.ExecutorMode='Preview'; $emptyReview.ConfirmApply=$false
+    $emptyPreview=Read-Result (& $applyScript @emptyReview)
+    Assert ($emptyPreview.status -eq 'preview' -and $emptyPreview.summary.approvalReady -and @($emptyPreview.gates | Where-Object { $_.blocking -and $_.gateId -eq 'exact-target-allowlist' }).Count -eq 0) 'An app with no leftover files passes the final check'
+    $emptyRun=Read-Result (& $applyScript @a)
+    Assert ($emptyRun.summary.officialRunnerCompleted -and $emptyRun.summary.deletedCount -eq 0 -and $emptyRun.status -in @('cleanup-review-required','success')) "An app with no leftover files runs only its remover ($($emptyRun.status))"
+    $case=New-Case 'nothing-to-do'; $case.manifest.items=@(); $case.args.ExactTargetAllowlist=[string[]]@(); Refresh-Hashes $case; $a=$case.args
+    $nothingRun=Read-Result (& $applyScript @a)
+    Assert ($nothingRun.status -ne 'success' -and -not $nothingRun.summary.approvalReady -and @($nothingRun.gates | Where-Object { $_.blocking -and $_.gateId -eq 'exact-target-allowlist' }).Count -eq 1) "An app with no remover and no leftover files cannot report a finished cleanup ($($nothingRun.status))"
+    $case=New-HandoffCase 'no-items-list' 'noop'; $case.manifest.Remove('items'); $case.args.ExactTargetAllowlist=[string[]]@(); Refresh-Hashes $case; $a=$case.args
+    $missingReview=$a.Clone(); $missingReview.ExecutorMode='Preview'; $missingReview.ConfirmApply=$false
+    $missing=Read-Result (& $applyScript @missingReview)
+    Assert (-not $missing.summary.approvalReady -and @($missing.gates | Where-Object { $_.blocking -and $_.gateId -eq 'exact-target-allowlist' }).Count -eq 1) 'A cleanup list with no items field cannot authorize a remover-only run'
     $case=New-HandoffCase 'handoff-hang' 'handoff-hang'; $a=$case.args; $a.TimeoutSeconds=3
     $hung=Read-Result (& $applyScript @a)
     Assert ((Test-Path -LiteralPath $claimPath) -and ((Test-Path -LiteralPath $userClaimPath) -eq $userClaimBefore)) 'A running leftover-tab remover keeps its claim in the fixture root, never in the user profile'
