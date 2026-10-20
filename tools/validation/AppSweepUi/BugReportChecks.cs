@@ -161,9 +161,9 @@ static class BugReportChecks
             check(!others.Contains("Bob", StringComparison.Ordinal) && !others.Contains("Carol", StringComparison.Ordinal)
                 && others.Contains(@"C:\Users\Public\Desktop", StringComparison.Ordinal) && others.Contains(@"C:\Users\Default User\x", StringComparison.Ordinal),
                 "Other accounts' profile folders are redacted while shared Windows folders stay readable");
-            var otherNames = redactor.Redact(@"C:\Users\Jane Doe\AppData and C:\Users\O'Connor\Desktop and {""p"":""C:\\Users\\Jane Doe\\x"",""q"":""C:\\Users\\O\u0027Connor\\y""} and 'C:\Users\Dave' or 'C:\Users\Erin\z'");
-            check(!otherNames.Contains("Doe", StringComparison.Ordinal) && !otherNames.Contains("Connor", StringComparison.Ordinal)
-                && !otherNames.Contains("Dave", StringComparison.Ordinal) && !otherNames.Contains("Erin", StringComparison.Ordinal)
+            var otherNames = redactor.Redact(@"C:\Users\John Smith\AppData and C:\Users\O'Connor\Desktop and {""p"":""C:\\Users\\John Smith\\x"",""q"":""C:\\Users\\O\u0027Connor\\y""} and 'C:\Users\Client' or 'C:\Users\Fixture\z'");
+            check(!otherNames.Contains("Smith", StringComparison.Ordinal) && !otherNames.Contains("Connor", StringComparison.Ordinal)
+                && !otherNames.Contains("Client", StringComparison.Ordinal) && !otherNames.Contains("Fixture", StringComparison.Ordinal)
                 && otherNames.Contains(@"C:\Users\<user>\AppData", StringComparison.Ordinal) && otherNames.Contains(@"C:\\Users\\<user>\\y", StringComparison.Ordinal)
                 && otherNames.Contains(@"'C:\Users\<user>' or 'C:\Users\<user>\z'", StringComparison.Ordinal),
                 "Other accounts' profile folders with spaces or apostrophes are fully redacted");
