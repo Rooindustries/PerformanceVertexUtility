@@ -25,7 +25,7 @@ try{
  $before=Read;Save 'before' $before;$raw=& $driver -BackupPath (Join-Path $directory 'backup.json') -ConfirmApply;$result=$raw|ConvertFrom-Json;Save 'result' $result;$after=Read;Save 'after' $after
  $valid=Get-Content -Raw (Join-Path $directory 'valid-entry-before-reopen.json')|ConvertFrom-Json
  if(@($result.preview).Count -ne 1 -or $valid.blocked -or $valid.processStartTimeUtc -ne $snapshot.processStartTimeUtc){throw 'Initial preview was not independently valid or dropped start time'}
- if(($result|ConvertTo-Json -Depth 40) -notmatch 'start time does not match' -or @($result.result.restoredItems).Count){throw 'Reopened target was not rejected after identity changed'}
+ if(@($result.skippedItems|Where-Object {$_.outcome -eq 'alreadyClosed' -and $_.processId -eq $p.Id}).Count -ne 1 -or @($result.result.restoredItems).Count){throw 'Reopened target was not treated as a different, already closed instance after identity changed'}
  foreach($field in 'priorityClass','affinityMask','ioPriority','memoryPriority'){if([string]$before.$field -cne [string]$after.$field){throw ('Identity change still wrote '+$field)}}
  Save 'done' @{passed=$true;validPreview=$true;identityChangedBeforeReopen=$true;allControlsUnchanged=$true}
 } catch {Save 'failure' @{error=$_.Exception.ToString();stack=$_.ScriptStackTrace};throw}
