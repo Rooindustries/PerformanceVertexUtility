@@ -200,7 +200,7 @@ if ($initialProbes.Count -eq 0) {
 $runResults = New-Object System.Collections.Generic.List[object]
 
 for ($runIndex = 1; $runIndex -le 3; $runIndex++) {
-    $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) "roo-industries-governor-reliability-$([guid]::NewGuid().ToString('N'))"
+    $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) "roo-industries-governor-reliability-$([guid]::NewGuid().ToString('N').Substring(0, 12))"
     $probe = $null
     $cleanupDone = $false
     try {
@@ -287,7 +287,7 @@ if ($runResults.Count -eq 3 -and @($runResults | Where-Object { $_.changed -and 
     Add-Failure "Repeated governor reliability did not complete 3 successful runs: successes=$(@($runResults | Where-Object { $_.changed -and $_.restored -and $_.activeRestraintCount -eq 0 }).Count)"
 }
 
-$relaunchRoot = Join-Path ([System.IO.Path]::GetTempPath()) "roo-industries-governor-relaunch-$([guid]::NewGuid().ToString('N'))"
+$relaunchRoot = Join-Path ([System.IO.Path]::GetTempPath()) "roo-industries-governor-relaunch-$([guid]::NewGuid().ToString('N').Substring(0, 12))"
 $relaunchFirst = $null
 $relaunchSecond = $null
 $relaunchSessionProc = $null
