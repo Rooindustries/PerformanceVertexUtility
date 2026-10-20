@@ -610,8 +610,11 @@ public partial class ProcessControlsViewModel : ObservableObject
         ShowGovernor(snapshot);
     }
 
+    private GovernorSnapshot? _shownGovernor;
+
     private void ShowGovernor(GovernorSnapshot snapshot)
     {
+        _shownGovernor = snapshot;
         GovernorState = GovernorDisplay.State(snapshot);
         GovernorHeadline = GovernorDisplay.Headline(GovernorState, snapshot);
         GovernorDetail = GovernorDisplay.Detail(GovernorState, snapshot);
@@ -800,11 +803,12 @@ public partial class ProcessControlsViewModel : ObservableObject
         Busy = true;
         try
         {
+            var held = _shownGovernor is { } shown ? GovernorDisplay.Holding(shown).Select(instance => (GovernorDisplay.Key(instance.Process), instance.Field)).ToHashSet() : null;
             await App.Operations.RetryGovernorRestoreAsync();
             var snapshot = await App.Operations.ReadGovernorAsync();
             await RefreshRulesAsync();
             var stillHeld = RetryAvailable || GovernorDisplay.Holding(snapshot).Length > 0;
-            var leftAsSet = snapshot.Worker.HostRunning is not null && !stillHeld && GovernorDisplay.LeftAsSet(snapshot).Length > 0;
+            var leftAsSet = snapshot.Worker.HostRunning is not null && !stillHeld && GovernorDisplay.LeftAsSet(snapshot).Any(instance => held is null || held.Contains((GovernorDisplay.Key(instance.Process), instance.Field)));
             Status = snapshot.Worker.HostRunning is null ? "Couldn't confirm the old settings are back."
                 : stillHeld ? "Some settings still could not be put back."
                 : leftAsSet ? "Some settings were left as another program set them." : "The old settings are back.";
