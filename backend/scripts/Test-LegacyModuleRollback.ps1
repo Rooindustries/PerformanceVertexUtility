@@ -118,10 +118,10 @@ try {
             function Get-BenchmarkSnapshot { param($Label) @{label=$Label} }
             function Invoke-SmokeTest { @() }
             $cases=@(
+                @{label='String numeric';kind='String';data='7';expected='7'},
                 @{label='DWORD max';kind='DWord';data=[int]-1;expected=[uint32]::MaxValue},
                 @{label='DWORD high bit';kind='DWord';data=[int]::MinValue;expected=[uint32]2147483648},
                 @{label='DWORD signed max';kind='DWord';data=[int]::MaxValue;expected=[uint32]2147483647},
-                @{label='String numeric';kind='String';data='7';expected='7'},
                 @{label='String empty';kind='String';data='';expected=''},
                 @{label='ExpandString raw';kind='ExpandString';data='%PATH%\fixture';expected='%PATH%\fixture'},
                 @{label='MultiString';kind='MultiString';data=[string[]]@('One','two');expected=@('One','two')},
