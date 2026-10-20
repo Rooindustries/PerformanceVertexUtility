@@ -24,7 +24,8 @@ function Assert-AdapterExposes([object[]]$errors,[int]$count,[string]$setting,$a
     $failures=@($errors|Where-Object {[string]$_.FullyQualifiedErrorId -notlike 'CmdletizationQuery_NotFound*'})
     if($failures.Count -gt 0){throw $failures[0]}
     if($count -gt 0){return}
-    if(@(Get-NetAdapter -IncludeHidden|Where-Object {$_.InterfaceGuid -eq $adapter.InterfaceGuid}).Count -eq 0){throw ('The network adapter '+$adapter.Name+' is no longer present. Refresh to read it again.')}
+    $current=@(Get-NetAdapter -IncludeHidden|Where-Object {$_.InterfaceGuid -eq $adapter.InterfaceGuid -and $_.Name -ceq $adapter.Name})
+    if($current.Count -ne 1 -or $adapter.Hidden){throw ($setting+' configuration is unavailable for '+$adapter.Name)}
     throw ('No devices expose '+$setting+' on the '+$adapter.Name+' adapter.')
 }
 function Get-CanonicalAddress([string]$value){
