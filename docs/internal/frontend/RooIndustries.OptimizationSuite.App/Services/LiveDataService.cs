@@ -695,6 +695,14 @@ public sealed class LiveDataService
     public async Task<string?> RestoreUninstallCleanupTextAsync(string rollbackManifestPath, CancellationToken ct = default)
         => (await RestoreUninstallCleanupResultAsync(rollbackManifestPath, ct)).Value;
 
+    public async Task<string?> FindCleanupRecoveryAsync(string appId, CancellationToken ct = default)
+    {
+        var runs = Path.Combine(await _operations.Value.EnsureStorageAsync().ConfigureAwait(false), "cleanup-runs");
+        return await Task.Run(() => CleanupRecoveries.Find(runs, appId), ct).ConfigureAwait(false);
+    }
+
+    public void MarkCleanupRestored(string rollbackManifestPath) => CleanupRecoveries.MarkRestored(rollbackManifestPath);
+
     public async Task<LiveDataResult<string>> RunBackendScriptResultAsync(string scriptFile, CancellationToken ct = default, string extraArgs = "")
     {
         var dir = ScriptsDirectory;

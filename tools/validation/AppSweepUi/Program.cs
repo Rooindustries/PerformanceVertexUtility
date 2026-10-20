@@ -979,6 +979,53 @@ if (args is [] or ["responses"] or ["cleanup"] or ["race"])
             "A late restore response cannot report completion on another app");
         cleanup.SelectedApp = appA;
         Check(!cleanup.CleanupRestoreAvailable, "A completed stale restore clears only its initiating app recovery");
+
+        var runsRoot = Path.Combine(Path.GetTempPath(), "roo-industries-cleanup-runs-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            string SavedRun(string name, string appId)
+            {
+                var manifest = Path.Combine(runsRoot, name, "rollback-manifest.json");
+                Directory.CreateDirectory(Path.GetDirectoryName(manifest)!);
+                File.WriteAllText(manifest, JsonSerializer.Serialize(new { appId, executionStarted = true, restoreSupported = true, fileBackups = new[] { new { itemId = "saved", backupPath = @"C:\FixtureBackup" } } }));
+                return manifest;
+            }
+            var savedA = SavedRun("run-a", appA.AppId!);
+            File.SetLastWriteTimeUtc(savedA, DateTime.UtcNow.AddMinutes(-5));
+            SavedRun("run-b", appB.AppId!);
+            Directory.CreateDirectory(Path.Combine(runsRoot, "run-broken"));
+            File.WriteAllText(Path.Combine(runsRoot, "run-broken", "rollback-manifest.json"), "{not json");
+            App.Live.CleanupRunsRoot = runsRoot;
+            var reopened = new UninstallCleanupViewModel { SelectedApp = appA };
+            for (var wait = 0; wait < 100 && !reopened.CleanupRestoreAvailable; wait++) await Task.Delay(20);
+            Check(reopened.CleanupRestoreAvailable && reopened.CanRestoreCleanup && reopened.CleanupExecutionState.StartsWith("An earlier cleanup", StringComparison.Ordinal),
+                "A saved cleanup can still be restored after the app is closed and reopened");
+            App.Live.CleanupRestore = path => Task.FromResult<string?>(JsonSerializer.Serialize(new
+            {
+                actionId = "apps.restoreUninstallCleanupExecution",
+                dryRun = false,
+                status = "success",
+                rollbackManifestPath = path,
+                executionMode = "real-system-restore",
+                gates = new[] { new { gateId = "backup-files-present", required = true, satisfied = true, blocking = false } },
+                errors = Array.Empty<object>(),
+                restoredItems = new[] { new { itemId = "saved", restored = true } },
+                summary = new { restoredCount = 1, blockingGateCount = 0 },
+            }));
+            await reopened.RestoreCleanupCommand.ExecuteAsync(null);
+            var again = new UninstallCleanupViewModel { SelectedApp = appA };
+            await Task.Delay(200);
+            Check(File.Exists(Path.Combine(runsRoot, "run-a", "restored.json")) && !again.CleanupRestoreAvailable,
+                "A restored cleanup is not offered again after reopening");
+            var other = new UninstallCleanupViewModel { SelectedApp = appB };
+            for (var wait = 0; wait < 100 && !other.CleanupRestoreAvailable; wait++) await Task.Delay(20);
+            Check(other.CleanupRestoreAvailable, "Another app keeps its own saved cleanup restore");
+        }
+        finally
+        {
+            App.Live.CleanupRunsRoot = null;
+            if (Directory.Exists(runsRoot)) Directory.Delete(runsRoot, true);
+        }
     }
     finally { File.Delete(rollback); }
 }

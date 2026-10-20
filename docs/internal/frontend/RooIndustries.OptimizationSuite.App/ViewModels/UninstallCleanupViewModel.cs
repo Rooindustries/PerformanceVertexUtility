@@ -9,6 +9,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using RooIndustries.OptimizationSuite.Helpers;
 using RooIndustries.OptimizationSuite.Models;
+using RooIndustries.OptimizationSuite.Services;
 
 namespace RooIndustries.OptimizationSuite.ViewModels;
 
@@ -263,6 +264,7 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
         RealCleanupApproved = false;
         PrimaryRemovalButtonLabel = SelectedHasOfficialRemover ? "Check path" : "Plan removal";
         RefreshActionState();
+        if (!CleanupRestoreAvailable) _ = DiscoverRecoveryAsync(value, _selectionGeneration);
     }
 
     private void BlockRemovalRoute()
@@ -585,6 +587,11 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
         {
             var result = await App.Live.RestoreUninstallCleanupResultAsync(rollbackPath);
             var restored = result.Error is null && IsSuccessfulRestore(result.Value, rollbackPath);
+            if (restored)
+            {
+                try { App.Live.MarkCleanupRestored(rollbackPath); }
+                catch (Exception error) { AppLog.Write(nameof(UninstallCleanupViewModel), error.ToString()); }
+            }
             if (restored && _cleanupRecoveryByApp.TryGetValue(app.AppId!, out var retained)
                 && string.Equals(retained, rollbackPath, StringComparison.Ordinal))
             {
@@ -885,6 +892,19 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
         {
             _cleanupRecoveryByApp[appId] = candidate!;
         }
+    }
+
+    private async Task DiscoverRecoveryAsync(InstalledApp app, int generation)
+    {
+        if (string.IsNullOrWhiteSpace(app.AppId)) return;
+        string? saved;
+        try { saved = await App.Live.FindCleanupRecoveryAsync(app.AppId); }
+        catch (Exception error) { AppLog.Write(nameof(UninstallCleanupViewModel), error.ToString()); return; }
+        if (!IsCurrent(app, generation) || ScanBusy || CleanupRestoreAvailable || !IsValidRecovery(saved, app.AppId)) return;
+        _cleanupRecoveryByApp[app.AppId] = saved!;
+        SetSelectedRecovery(app.AppId);
+        CleanupExecutionState = "An earlier cleanup of this app can be restored.";
+        CleanupExecutionDetail = "Restore puts back the files that cleanup removed. It does not reinstall the app.";
     }
 
     private void SetSelectedRecovery(string? appId)

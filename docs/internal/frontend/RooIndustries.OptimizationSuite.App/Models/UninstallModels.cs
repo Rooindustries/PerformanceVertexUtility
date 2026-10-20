@@ -353,3 +353,30 @@ public sealed class CleanupBackupRequirement
     [JsonPropertyName("completed")] public bool Completed { get; set; }
     [JsonPropertyName("previewOnly")] public bool PreviewOnly { get; set; }
 }
+
+public static class CleanupRecoveries
+{
+    private const string RestoredMarker = "restored.json";
+
+    public static string? Find(string runsRoot, string appId)
+    {
+        if (!System.IO.Directory.Exists(runsRoot)) return null;
+        foreach (var manifest in System.IO.Directory.EnumerateDirectories(runsRoot).Select(run => System.IO.Path.Combine(run, "rollback-manifest.json"))
+                     .Where(System.IO.File.Exists).OrderByDescending(System.IO.File.GetLastWriteTimeUtc))
+        {
+            if (System.IO.File.Exists(System.IO.Path.Combine(System.IO.Path.GetDirectoryName(manifest)!, RestoredMarker))) continue;
+            try
+            {
+                using var document = System.Text.Json.JsonDocument.Parse(System.IO.File.ReadAllBytes(manifest));
+                if (document.RootElement.ValueKind == System.Text.Json.JsonValueKind.Object && document.RootElement.TryGetProperty("appId", out var id)
+                    && id.ValueKind == System.Text.Json.JsonValueKind.String && id.GetString() == appId) return manifest;
+            }
+            catch (Exception error) when (error is System.Text.Json.JsonException or System.IO.IOException or UnauthorizedAccessException) { }
+        }
+        return null;
+    }
+
+    public static void MarkRestored(string rollbackManifestPath)
+        => System.IO.File.WriteAllText(System.IO.Path.Combine(System.IO.Path.GetDirectoryName(rollbackManifestPath)!, RestoredMarker),
+            System.Text.Json.JsonSerializer.Serialize(new { restoredAtUtc = DateTime.UtcNow }));
+}
