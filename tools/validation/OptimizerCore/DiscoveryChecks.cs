@@ -77,10 +77,25 @@ static class DiscoveryChecks
             var peer = new CleanupApplication { AppId = "fixture:alias", DisplayName = "Independent alias tool", Publisher = "Other", InstallLocation = Path.Combine(alias, "Roo Industries Example"), PackageFamilyName = null };
             var scan = new LeftoverDiscovery(application, [peer]).Scan(CancellationToken.None, [], []);
             check(scan.Candidates.Single(item => item.Target == shared).SharedOwners.Contains(peer.DisplayName), "An app installed through a junction to the removed app's folder stays a shared owner");
+            var broken = new CleanupApplication { AppId = "fixture:nul", DisplayName = "Broken path tool", Publisher = "Other", InstallLocation = real + "\\\0invalid", PackageFamilyName = null };
+            var nulScan = new LeftoverDiscovery(application, [broken]).Scan(CancellationToken.None, [], []);
+            check(!nulScan.Candidates.Single(item => item.Target == shared).SharedOwners.Contains(broken.DisplayName), "An app whose install path has an embedded NUL never becomes an owner of the folder before the NUL");
+            var nas = Path.Combine(root, "nas");
+            var linked = false;
+            try { Directory.CreateSymbolicLink(nas, @"\\192.0.2.1\OfflineShare"); linked = true; }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException) { Console.WriteLine("SKIP A local link to an unreachable network share does not stall leftover discovery (" + error.Message.Trim() + ")"); }
+            if (linked)
+            {
+                var linkedTool = new CleanupApplication { AppId = "fixture:linked", DisplayName = "Linked share tool", Publisher = "Other", InstallLocation = Path.Combine(nas, "Tool"), PackageFamilyName = null };
+                var linkWatch = Stopwatch.StartNew();
+                _ = new LeftoverDiscovery(application, [linkedTool]);
+                check(linkWatch.ElapsedMilliseconds < 2000, "A local link to an unreachable network share does not stall leftover discovery (" + linkWatch.ElapsedMilliseconds + " ms)");
+            }
         }
         finally
         {
             if (Directory.Exists(alias)) Directory.Delete(alias);
+            try { Directory.Delete(Path.Combine(root, "nas")); } catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
             Directory.Delete(root, true);
         }
         check(!Directory.Exists(root), "Junction validation leaves no file fixtures");
