@@ -78,42 +78,23 @@ function Refresh-Hashes($Case) {
     $Case.args.CleanupManifestSha256=(Get-FileHash $Case.args.CleanupManifestPath -Algorithm SHA256).Hash
 }
 $markerKey = 'SOFTWARE\RooIndustries\OptimizationSuite\GovernorRoots'
-$markerLevels = @('SOFTWARE\RooIndustries', 'SOFTWARE\RooIndustries\OptimizationSuite', $markerKey)
 $fixtureMarker = $null
-$createdMarkerLevel = $null
 function Set-FixtureProtection([string]$Root, [DateTime]$ProtectedAtUtc) {
     if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { throw 'Restore checks need administrator rights to protect the fixture folder as the app protects its data folder.' }
-    $hklm = [Microsoft.Win32.Registry]::LocalMachine
     if ($null -eq $script:fixtureMarker) {
-        foreach ($level in $markerLevels) {
-            $existing = $hklm.OpenSubKey($level)
-            if ($existing) { $existing.Dispose() } elseif (-not $script:createdMarkerLevel) { $script:createdMarkerLevel = $level }
-        }
         [IO.Directory]::CreateDirectory($Root) | Out-Null
         $script:fixtureMarker = Get-RooIndustriesDataRootMarkerName $Root
     }
-    $key = $hklm.CreateSubKey($markerKey, $true)
+    $key = [Microsoft.Win32.Registry]::LocalMachine.CreateSubKey($markerKey, $true)
     try {
         $key.SetValue($script:fixtureMarker + '|protected-at', $ProtectedAtUtc.ToFileTimeUtc(), [Microsoft.Win32.RegistryValueKind]::QWord)
         $key.SetValue($script:fixtureMarker, [Security.Principal.WindowsIdentity]::GetCurrent().User.Value, [Microsoft.Win32.RegistryValueKind]::String)
     } finally { $key.Dispose() }
 }
 function Remove-FixtureProtection {
-    $hklm = [Microsoft.Win32.Registry]::LocalMachine
-    if ($script:fixtureMarker) {
-        $key = $hklm.OpenSubKey($markerKey, $true)
-        if ($key) { try { $key.DeleteValue($script:fixtureMarker, $false); $key.DeleteValue($script:fixtureMarker + '|protected-at', $false) } finally { $key.Dispose() } }
-    }
-    if ($script:createdMarkerLevel) {
-        foreach ($level in @($markerLevels | Where-Object { $_.Length -ge $script:createdMarkerLevel.Length } | Sort-Object Length -Descending)) {
-            $remaining = $hklm.OpenSubKey($level)
-            if (-not $remaining) { continue }
-            $empty = ($remaining.ValueCount + $remaining.SubKeyCount) -eq 0
-            $remaining.Dispose()
-            if (-not $empty) { break }
-            $hklm.DeleteSubKey($level)
-        }
-    }
+    if (-not $script:fixtureMarker) { return }
+    $key = [Microsoft.Win32.Registry]::LocalMachine.OpenSubKey($markerKey, $true)
+    if ($key) { try { $key.DeleteValue($script:fixtureMarker, $false); $key.DeleteValue($script:fixtureMarker + '|protected-at', $false) } finally { $key.Dispose() } }
 }
 try {
     Set-FixtureProtection $tempRoot ([DateTime]::UtcNow)
@@ -496,9 +477,9 @@ function global:Get-FileHash {
     Assert ($endless.status -eq 'needs-reconciliation' -and $watch.Elapsed.TotalSeconds -lt 45) "A remover that keeps starting helpers is reported at the timeout instead of refreshing its process tree forever ($([int]$watch.Elapsed.TotalSeconds) s)"
     if (Test-Path -LiteralPath $claimPath) { Remove-Item -LiteralPath $claimPath -Force }
 } finally {
+    try { Remove-FixtureProtection } catch { Write-Host "FAIL Fixture protection marker cleanup failed: $($_.Exception.Message)" }
     foreach ($process in @(Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($tempRoot, [StringComparison]::OrdinalIgnoreCase) })) { Stop-Process -Id $process.ProcessId -Force -ErrorAction SilentlyContinue; Wait-Process -Id $process.ProcessId -Timeout 10 -ErrorAction SilentlyContinue }
     if (Test-Path -LiteralPath $tempRoot) { Remove-Item -LiteralPath $tempRoot -Recurse -Force }
-    Remove-FixtureProtection
 }
 $markers = [Microsoft.Win32.Registry]::LocalMachine.OpenSubKey($markerKey)
 Assert (-not $markers -or @($markers.GetValueNames() | Where-Object { $fixtureMarker -and ($_ -replace '\|protected-at$', '') -eq $fixtureMarker }).Count -eq 0) 'Restore tests remove the fixture folder protection marker'
