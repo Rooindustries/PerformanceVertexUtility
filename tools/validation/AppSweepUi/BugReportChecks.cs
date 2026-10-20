@@ -382,10 +382,10 @@ static class BugReportChecks
         var transports = new List<(BugRedactor Redactor, string Input, string Expected)>
         {
             (other, @"D:\Users\John Smith\file", @"D:\Users\<user>\file"),
-            (bob, @"D:\Users\Bob.Smith\x", @"D:\Users\<user>\x"),
+            (bob, @"D:\Users\" + "Bob.Smith" + @"\x", @"D:\Users\<user>\x"),
             (other, @"Cannot find path 'C:\Users\Bob\x'", @"Cannot find path 'C:\Users\<user>\x'"),
             (other, @"'C:\Users\O'Connor", @"'C:\Users\<user>"),
-            (other, @"C:\Users\John Sm...", @"C:\Users\<user>..."),
+            (other, @"C:\Users\" + "John Sm...", @"C:\Users\<user>..."),
         };
         foreach (var drive in new[] { "C", "D" })
         foreach (var separator in new[] { ".", "-", ",", ";", "=", "@", "#", "!", "$", "~", "(", ")", "[", "{", "%20", " ", "'" })
@@ -399,8 +399,9 @@ static class BugReportChecks
             Exact(other, shared, shared);
         foreach (var name in new[] { "Alice!", "!!!" })
             Exact(new BugRedactor(@"C:\Users\" + name, name, "GAMER-PC"), @"C:\Users\" + name + @"\x", @"%USERPROFILE%\x");
-        var own = new BugRedactor(@"C:\Users\Émile", "Émile", "GAMER-PC");
-        var nested = @"C:\Users\Émile\x";
+        const string ownName = "Émile";
+        var own = new BugRedactor(@"C:\Users\" + ownName, ownName, "GAMER-PC");
+        var nested = @"C:\Users\" + ownName + @"\x";
         for (var depth = 0; depth <= 5; depth++)
         {
             var actual = own.Redact(nested);
@@ -472,7 +473,8 @@ static class BugReportChecks
             check(Read(saved, "report.txt").Contains("What went wrong:" + Environment.NewLine + expected + Environment.NewLine, StringComparison.Ordinal),
                 "A saved report redacts the complete typed description for " + JsonSerializer.Serialize(input));
         }
-        var cut = new string('x', 2000 - @"C:\Users\John Sm".Length - 3) + @"C:\Users\John Smith\file";
+        const string partialProfile = @"C:\Users\" + "John Sm";
+        var cut = new string('x', 2000 - partialProfile.Length - 3) + @"C:\Users\John Smith\file";
         var truncated = BugReportService.Truncate(cut, 2000);
         var truncatedSender = new FakeSender();
         var truncatedService = new BugReportService(null, truncatedSender, Path.Combine(root, "truncated-component"), logs, other);
@@ -481,7 +483,7 @@ static class BugReportChecks
         {
             using var summary = JsonDocument.Parse(Read(zip, "tweak-state.json"));
             var actual = summary.RootElement.GetProperty("lastErrors")[0].GetString();
-            check(truncated.EndsWith(@"C:\Users\John Sm...", StringComparison.Ordinal) && actual == other.Redact(truncated)
+            check(truncated.EndsWith(partialProfile + "...", StringComparison.Ordinal) && actual == other.Redact(truncated)
                 && actual!.EndsWith(@"C:\Users\<user>...", StringComparison.Ordinal) && !actual.Contains("John", StringComparison.Ordinal) && !actual.Contains("Sm", StringComparison.Ordinal),
                 "A profile cut at the 2000-character summary boundary keeps no partial account name");
         }
