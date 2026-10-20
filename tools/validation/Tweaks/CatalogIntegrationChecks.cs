@@ -21,6 +21,13 @@ static class CatalogIntegrationChecks
         var malformed = JsonNode.Parse(document.RootElement.GetRawText())!;
         malformed["switches"]!["extensions"]!["Params"]!["Script"] = "unreviewed";
         reject(() => CustomTweaks.ParseConstructor(JsonSerializer.SerializeToElement(malformed)), "Unknown constructor parameters cannot become hidden commands");
+        foreach (var edition in new[] { "ProfessionalEducation", "ProfessionalEducationN", "ProfessionalWorkstationN", "EnterpriseSN" })
+        {
+            var editionStore = FileTweakStore.Create(Path.Combine(root, "edition-" + edition + ".json"), 26200, edition);
+            var settings = catalog.Settings.Where(setting => setting.Id is "privacy.activity-feed" or "windows.953a30d8b6c2c8a5").ToArray();
+            var statuses = new TweakEngine(catalog with { Settings = settings, Presets = [] }, editionStore).Detect().Settings;
+            check(settings.Length == 2 && statuses.All(status => status.Supported && status.AvailableChoices is { Length: > 0 }), "Group Policy privacy and driver settings are available on " + edition + " like on Pro");
+        }
         var path = Path.Combine(root, "product-gates.json"); var store = FileTweakStore.Create(path);
         var fixture = OperationFiles.Read<TweakFixture>(path); OperationFiles.Write(path, fixture with { EdgeMajor = 87 });
         var address = new RegistryAddress("CurrentUser", "Registry64", @"Software\RooIndustriesProductFixture", "value", "Choice");
