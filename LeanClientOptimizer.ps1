@@ -197,7 +197,16 @@ function Restore-RegistryValue {
         }
     } else {
         if (-not $Snapshot.kind) {
-            $expected = Get-ManifestRegistrySnapshot ([pscustomobject]@{ type=$Snapshot.type; data=$Snapshot.oldValue })
+            $legacyValue = $Snapshot.oldValue
+            if ($Snapshot.type -eq 'REG_QWORD') {
+                try {
+                    $signedValue = [System.Management.Automation.LanguagePrimitives]::ConvertTo($legacyValue, [long], [Globalization.CultureInfo]::CurrentCulture)
+                    $legacyValue = [BitConverter]::ToUInt64([BitConverter]::GetBytes([long]$signedValue), 0)
+                } catch [System.Management.Automation.PSInvalidCastException] {
+                    $legacyValue = [System.Management.Automation.LanguagePrimitives]::ConvertTo($legacyValue, [uint64], [Globalization.CultureInfo]::CurrentCulture)
+                }
+            }
+            $expected = Get-ManifestRegistrySnapshot ([pscustomobject]@{ type=$Snapshot.type; data=$legacyValue })
         }
         $key = Open-RegistryKey $Snapshot.path -Create
         try { Set-RegistrySnapshotData $key $Snapshot.name $expected } finally { $key.Dispose() }
