@@ -188,6 +188,8 @@ static class BugReportChecks
             check(unusual == @"{""p"":""C:\\Users\\<user>\\x""} C:\Users\<user>\AppData", "One-letter and space-led account folder names are redacted as Windows stores them");
             check(known.Redact(edges) == edges && known.Redact(otherNames) == otherNames && known.Redact(context) == context,
                 "Log text already redacted when it was written stays the same when the bug report redacts it again");
+            var plain = new BugRedactor(null, "user", "PC").Redact("<user> signed in and user left on PC with <pc-name> and <sid>");
+            check(plain == "<user> signed in and <user> left on <pc-name> with <pc-name> and <sid>", "An account named like a placeholder never turns a redacted name into <<user>>");
 
             var longText = "@everyone " + new string('x', 10_000);
             var payload = BugReportService.BuildPayload(Report(longText, "<@123> me@example.com",
