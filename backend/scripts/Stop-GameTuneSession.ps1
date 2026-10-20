@@ -258,13 +258,16 @@ try {
                 $skipped.Add($skip) | Out-Null
                 continue
             }
-            foreach ($left in @(Get-RooIndustriesPropertyArray $entry 'leftAsSet')) { $leftAsSetItems.Add((New-RooIndustriesLeftAsSetItem $entry $left)) | Out-Null }
             $entryControlChanges = @(Get-RooIndustriesPreviewControlChanges $entry)
-            if ($entryControlChanges.Count -eq 0) {
-                continue
-            }
             $appliedControls = New-Object System.Collections.Generic.List[object]
             $failedControls = New-Object System.Collections.Generic.List[string]
+            foreach ($left in @(Get-RooIndustriesPropertyArray $entry 'leftAsSet')) {
+                $kept = Confirm-RooIndustriesLeftAsSet $live $left
+                if ($null -ne $kept) { $leftAsSetItems.Add((New-RooIndustriesLeftAsSetItem $entry $kept)) | Out-Null } else { $failedControls.Add([string]$left.control + ': ' + $script:RooIndustriesLeftAsSetChangedBack) | Out-Null }
+            }
+            if ($entryControlChanges.Count -eq 0 -and $failedControls.Count -eq 0) {
+                continue
+            }
             foreach ($change in $entryControlChanges) {
                 try {
                     Invoke-RooIndustriesProcessControlChange $live $change

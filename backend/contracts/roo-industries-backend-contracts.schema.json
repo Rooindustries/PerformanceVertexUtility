@@ -403,6 +403,13 @@
             "null"
           ],
           "additionalProperties": true
+        },
+        "leftAsSet": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
         }
       }
     },
@@ -1523,6 +1530,13 @@
             "type": "object",
             "additionalProperties": true
           }
+        },
+        "leftAsSetItems": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
         }
       }
     },
@@ -1934,6 +1948,13 @@
           }
         },
         "logs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "leftAsSetItems": {
           "type": "array",
           "items": {
             "type": "object",

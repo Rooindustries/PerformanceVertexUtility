@@ -53,7 +53,8 @@
           "game-tune-restore-safety"
         ]
       },
-      "rollback": null
+      "rollback": null,
+      "leftAsSet": []
     }
   ],
   "changedItems": [],
@@ -100,7 +101,8 @@
         "type": "gameTuneSessionBackup",
         "path": "backend\\state\\game-tune-sessions\\game-tune-overwatch-stream-session-20260630-101000\\backup.json"
       }
-    ]
+    ],
+    "leftAsSetItems": []
   },
   "warnings": [
     {
@@ -121,5 +123,6 @@
       "level": "info",
       "message": "Game Tune restore preview completed. No process priority changes were applied."
     }
-  ]
+  ],
+  "leftAsSetItems": []
 }

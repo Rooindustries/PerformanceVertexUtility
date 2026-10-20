@@ -1112,6 +1112,7 @@ function Get-RooIndustriesRestorableProcessControls {
 
 $script:RooIndustriesLeftAsSet = 'Left as another program set it.'
 $script:RooIndustriesChangedExternally = 'The control changed externally; its current value was preserved.'
+$script:RooIndustriesLeftAsSetChangedBack = 'Undo couldn''t confirm another program still holds it, so it was left alone. Run Undo again.'
 
 function Get-RooIndustriesAppliedControlValue {
     param($Snapshot, [string]$Control)
@@ -1154,6 +1155,15 @@ function Get-RooIndustriesRestoreLeftAsSet {
     if ([string]::IsNullOrWhiteSpace([string]$now) -or (Test-RooIndustriesControlValueEqual $control $now $before)) { return $null }
     $Change | Add-Member -NotePropertyName outcome -NotePropertyValue 'leftAsSet' -Force
     return [pscustomobject]@{ control = $control; currentValue = $now; appliedValue = $before; originalValue = Get-RooIndustriesPropertyValue $Change 'proposedValue' $null; outcome = 'leftAsSet'; reason = $script:RooIndustriesLeftAsSet }
+}
+
+function Confirm-RooIndustriesLeftAsSet {
+    param([System.Diagnostics.Process]$Process, $Left)
+    $control = [string](Get-RooIndustriesPropertyValue $Left 'control' '')
+    $now = $null
+    try { $now = Get-RooIndustriesProcessControlReadback $Process $control } catch { return $null }
+    if ([string]::IsNullOrWhiteSpace([string]$now) -or (Test-RooIndustriesControlValueEqual $control $now (Get-RooIndustriesPropertyValue $Left 'appliedValue' $null))) { return $null }
+    return [pscustomobject]@{ control = $control; currentValue = $now; appliedValue = Get-RooIndustriesPropertyValue $Left 'appliedValue' $null; originalValue = Get-RooIndustriesPropertyValue $Left 'originalValue' $null; outcome = 'leftAsSet'; reason = $script:RooIndustriesLeftAsSet }
 }
 
 function New-RooIndustriesLeftAsSetItem {
