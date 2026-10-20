@@ -103,6 +103,7 @@ public sealed class FileLease : IDisposable
         if (!_writable) throw new InvalidOperationException("A detection handle cannot change permissions.");
         var current = new RawSecurityDescriptor(ReadSecurity(_handle), 0);
         var inheritance = current.ControlFlags & (ControlFlags.DiscretionaryAclAutoInheritRequired | ControlFlags.DiscretionaryAclAutoInherited | ControlFlags.DiscretionaryAclProtected);
+        if ((inheritance & ControlFlags.DiscretionaryAclAutoInherited) != 0) inheritance |= ControlFlags.DiscretionaryAclAutoInheritRequired;
         var descriptor = new RawSecurityDescriptor(inheritance | ControlFlags.DiscretionaryAclPresent, null, null, null, new RawAcl(dacl, 0));
         var bytes = new byte[descriptor.BinaryLength]; descriptor.GetBinaryForm(bytes, 0);
         if (!SetKernelObjectSecurity(_handle, 4, bytes)) Fail("SetKernelObjectSecurity(DACL)");
