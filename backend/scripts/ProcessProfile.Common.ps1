@@ -1111,6 +1111,7 @@ function Get-RooIndustriesRestorableProcessControls {
 }
 
 $script:RooIndustriesLeftAsSet = 'Left as another program set it.'
+$script:RooIndustriesChangedExternally = 'The control changed externally; its current value was preserved.'
 
 function Get-RooIndustriesAppliedControlValue {
     param($Snapshot, [string]$Control)
@@ -1141,6 +1142,18 @@ function Split-RooIndustriesLeftAsSetRestoreChanges {
         $restore.Add($change) | Out-Null
     }
     return [pscustomobject]@{ changes = @($restore.ToArray()); leftAsSet = @($left.ToArray()) }
+}
+
+function Get-RooIndustriesRestoreLeftAsSet {
+    param([System.Diagnostics.Process]$Process, $Change, [string]$Message)
+    $before = Get-RooIndustriesPropertyValue $Change 'currentValue' $null
+    if ($Message -ne $script:RooIndustriesChangedExternally -or [string]::IsNullOrWhiteSpace([string]$before)) { return $null }
+    $control = [string](Get-RooIndustriesPropertyValue $Change 'control' '')
+    $now = $null
+    try { $now = Get-RooIndustriesProcessControlReadback $Process $control } catch { return $null }
+    if ([string]::IsNullOrWhiteSpace([string]$now) -or (Test-RooIndustriesControlValueEqual $control $now $before)) { return $null }
+    $Change | Add-Member -NotePropertyName outcome -NotePropertyValue 'leftAsSet' -Force
+    return [pscustomobject]@{ control = $control; currentValue = $now; appliedValue = $before; originalValue = Get-RooIndustriesPropertyValue $Change 'proposedValue' $null; outcome = 'leftAsSet'; reason = $script:RooIndustriesLeftAsSet }
 }
 
 function New-RooIndustriesLeftAsSetItem {
@@ -1179,7 +1192,7 @@ function Invoke-RooIndustriesProcessControlChange {
     $Change | Add-Member -NotePropertyName outcome -NotePropertyValue 'pending' -Force
     try {
         if (Test-RooIndustriesGovernorOwnsControl $Process $control) { throw $script:RooIndustriesGovernorManaged }
-        if ($action -like 'restore*' -and -not (Test-RooIndustriesControlValueEqual $control (Get-RooIndustriesProcessControlReadback $Process $control) (Get-RooIndustriesPropertyValue $Change 'currentValue' $null))) { throw 'The control changed externally; its current value was preserved.' }
+        if ($action -like 'restore*' -and -not (Test-RooIndustriesControlValueEqual $control (Get-RooIndustriesProcessControlReadback $Process $control) (Get-RooIndustriesPropertyValue $Change 'currentValue' $null))) { throw $script:RooIndustriesChangedExternally }
         if ([string](Get-RooIndustriesPropertyValue $Change 'priorityDirection' '') -in 'lower','raise') {
             $directionReason = Get-RooIndustriesPriorityDirectionReason $Change (Get-RooIndustriesProcessControlReadback $Process $control)
             if ($directionReason) { throw $directionReason }

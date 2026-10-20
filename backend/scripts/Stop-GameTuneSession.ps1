@@ -270,6 +270,8 @@ try {
                     Invoke-RooIndustriesProcessControlChange $live $change
                     $appliedControls.Add($change) | Out-Null
                 } catch {
+                    $left = Get-RooIndustriesRestoreLeftAsSet $live $change $_.Exception.Message
+                    if ($null -ne $left) { $leftAsSetItems.Add((New-RooIndustriesLeftAsSetItem $entry $left)) | Out-Null; continue }
                     $failedControls.Add("$([string](Get-RooIndustriesPropertyValue $change 'control' 'unknown')): $($_.Exception.Message)") | Out-Null
                 }
             }
