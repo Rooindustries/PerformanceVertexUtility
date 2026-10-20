@@ -21,6 +21,12 @@ static class NativeFileControlChecks
         var original = store.Read(address); var directoryOriginal = store.Read(directoryAddress);
         try
         {
+            foreach (var missing in new[] { Path.Combine(root, "aitagent.exe"), Path.Combine(root, "compattel", "DiagTrackRunner.exe") })
+            {
+                string? message = null;
+                try { store.Read(address with { Target = "fixture:" + missing }); } catch (FileNotFoundException error) { message = error.Message; }
+                check(message == Path.GetFileName(missing) + " is not installed on this PC.", "A Windows file this PC doesn't have reads as not installed, not as a failed check: " + Path.GetRelativePath(root, missing));
+            }
             var desired = original.Expand(ControlValues.From(new { denyMask = 0x1f01ff }));
             var plan = new ControlPlan([original], [new(original, desired)], []); var attempted = 0;
             ControlExecution.Apply(plan, store, count => attempted = count);
