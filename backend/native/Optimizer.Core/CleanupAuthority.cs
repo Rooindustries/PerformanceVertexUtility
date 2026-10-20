@@ -21,6 +21,10 @@ public sealed record CleanupAuthority
             throw new InvalidDataException("Cleanup evidence belongs to another installed-app identity.");
         if (ProviderQueryComplete != true || RegistrationPresent != false)
             throw new InvalidOperationException("The app registration is present or its current absence is unknown.");
+        if (RemoverRunning == true)
+            throw new InvalidOperationException("The app's remover is still running. Let it finish, then scan its leftovers again.");
+        if (RebootPending == true)
+            throw new InvalidOperationException("Restart Windows to finish removing this app, then scan its leftovers again.");
         if (RebootPending != false || RemoverRunning != false || RemovalResolved != true)
             throw new InvalidOperationException("Removal, process lifetime or restart requirements remain unresolved.");
     }
