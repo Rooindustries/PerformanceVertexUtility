@@ -127,7 +127,7 @@ def apply_policy_editions(catalog):
                         continue
                     matched = True
                     for gate in gates:
-                        gate['editions'] = policy['editions'] if '*' in gate['editions'] else sorted(set(gate['editions']).intersection(policy['editions']))
+                        gate['editions'] = policy['editions'] if '*' in gate['editions'] else sorted(edition for edition in gate['editions'] if any(edition.casefold().startswith(allowed[:-1].casefold()) if allowed.endswith('*') else edition.casefold() == allowed.casefold() for allowed in policy['editions']))
                     gates = [gate for gate in gates if gate['editions']]
             if matched:
                 if not gates:

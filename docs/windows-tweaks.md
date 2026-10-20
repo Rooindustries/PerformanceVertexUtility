@@ -35,6 +35,11 @@ available, including when the blocked value was set before this catalog update.
 An unsupported choice is excluded from the applicable current choices; its raw
 registry value remains in the observations.
 
+Edition gates match exact edition IDs, `*` for every edition, or a trailing `*`
+for a family, such as `Enterprise*` or `Server*`. This keeps evaluation, LTSC,
+multi-session and Azure variants in their supported families. Pro Education is
+part of the Pro family and does not match `Education*`.
+
 Location-aware search and driver exclusion keep their existing availability.
 Their Microsoft references describe MDM CSP editions without establishing an
 edition limit for the registry policy. The same file records these two explicit

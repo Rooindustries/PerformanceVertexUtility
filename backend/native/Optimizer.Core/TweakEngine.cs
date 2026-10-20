@@ -286,10 +286,12 @@ public sealed class TweakEngine
         }
     }
     private bool Supported(TweakDefinition definition) => _store.Context.WindowsBuild >= definition.MinimumBuild && _store.Context.WindowsBuild <= definition.MaximumBuild &&
-        (definition.Editions.Contains("*") || definition.Editions.Contains(_store.Context.Edition, StringComparer.OrdinalIgnoreCase));
+        EditionSupported(definition.Editions);
     private bool Supported(TweakOption option) => (option.ValidUntilUtc is null || DateTime.UtcNow < option.ValidUntilUtc.Value) && (option.Availability is null || option.Availability.Any(gate =>
         _store.Context.WindowsBuild >= gate.MinimumBuild && _store.Context.WindowsBuild <= gate.MaximumBuild &&
-        (gate.Editions.Contains("*") || gate.Editions.Contains(_store.Context.Edition, StringComparer.OrdinalIgnoreCase)) && (gate.Requirements ?? []).All(RequirementAvailable)));
+        EditionSupported(gate.Editions) && (gate.Requirements ?? []).All(RequirementAvailable)));
+    private bool EditionSupported(string[] editions) => editions.Any(edition => edition.EndsWith('*')
+        ? _store.Context.Edition.StartsWith(edition[..^1], StringComparison.OrdinalIgnoreCase) : string.Equals(edition, _store.Context.Edition, StringComparison.OrdinalIgnoreCase));
     private bool RequirementAvailable(string requirement)
     {
         try { _store.CheckRequirement(requirement); return true; }

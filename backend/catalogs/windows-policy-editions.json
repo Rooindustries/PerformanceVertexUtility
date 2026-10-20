@@ -5,11 +5,7 @@
       "keyPath": "SOFTWARE\\Policies\\Microsoft\\Windows\\CloudContent",
       "valueName": "DisableWindowsConsumerFeatures",
       "editions": [
-        "Enterprise", "EnterpriseS", "EnterpriseN", "EnterpriseSN",
-        "EnterpriseEval", "EnterpriseNEval", "EnterpriseSEval", "EnterpriseSNEval",
-        "EnterpriseG", "EnterpriseGN", "ServerRdsh",
-        "Education", "EducationN", "IoTEnterprise", "IoTEnterpriseS",
-        "ServerStandard", "ServerDatacenter", "ServerStandardEval", "ServerDatacenterEval"
+        "Enterprise*", "Education*", "IoTEnterprise*", "Server*"
       ],
       "reference": "https://learn.microsoft.com/en-us/azure/governance/policy/samples/guest-configuration-baseline-windows",
       "quote": "This setting only applies to Enterprise and Education SKUs.",
@@ -18,9 +14,10 @@
         "https://learn.microsoft.com/en-us/windows/privacy/manage-connections-from-windows-operating-system-components-to-microsoft-services",
         "https://learn.microsoft.com/en-us/intune/fundamentals/filters/ref-device-properties#managed-device-properties",
         "https://learn.microsoft.com/en-us/windows-server/get-started/upgrade-conversion-options",
-        "https://learn.microsoft.com/en-us/windows/win32/api/sysinfoapi/nf-sysinfoapi-getproductinfo"
+        "https://learn.microsoft.com/en-us/windows/win32/api/sysinfoapi/nf-sysinfoapi-getproductinfo",
+        "https://learn.microsoft.com/en-us/windows-server/get-started/azure-edition"
       ],
-      "reason": "CloudContent.admx help limits the registry policy. Keep Enterprise variants including IoT, and Server editions for which Microsoft also documents this registry setting. Removing an override remains available everywhere."
+      "reason": "CloudContent.admx help limits the registry policy. Match documented edition families so their evaluation, LTSC, multi-session and Azure variants remain supported. Microsoft also documents this registry setting for Server. Removing an override remains available everywhere."
     }
   ],
   "allowedOverlaps": [

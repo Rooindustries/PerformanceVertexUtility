@@ -58197,25 +58197,10 @@
               "minimumBuild": 10240,
               "maximumBuild": 26200,
               "editions": [
-                "Enterprise",
-                "EnterpriseS",
-                "EnterpriseN",
-                "EnterpriseSN",
-                "EnterpriseEval",
-                "EnterpriseNEval",
-                "EnterpriseSEval",
-                "EnterpriseSNEval",
-                "EnterpriseG",
-                "EnterpriseGN",
-                "ServerRdsh",
-                "Education",
-                "EducationN",
-                "IoTEnterprise",
-                "IoTEnterpriseS",
-                "ServerStandard",
-                "ServerDatacenter",
-                "ServerStandardEval",
-                "ServerDatacenterEval"
+                "Enterprise*",
+                "Education*",
+                "IoTEnterprise*",
+                "Server*"
               ]
             },
             {
