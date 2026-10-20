@@ -295,6 +295,72 @@ try {
 }
 
 try {
+    $closedRoot = Join-Path ([System.IO.Path]::GetTempPath()) "roo-industries-game-tune-closed-$([guid]::NewGuid().ToString('N'))"
+    $closedExe = Join-Path $closedRoot 'RooIndustriesTuneProbe.exe'
+    $closedProbe = $null
+    try {
+        New-Item -ItemType Directory -Path $closedRoot -Force | Out-Null
+        Copy-Item -LiteralPath "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -Destination $closedExe -Force
+        $closedProbe = Start-Process -FilePath $closedExe -ArgumentList '-NoProfile','-WindowStyle','Hidden','-Command','Start-Sleep -Seconds 120' -WindowStyle Hidden -PassThru
+        Start-Sleep -Milliseconds 800
+        $closedProfilePath = Join-Path $closedRoot 'closed-profile.json'
+        $closedProfile = [pscustomobject]@{
+            schemaVersion = 1
+            productName = 'Roo Industries Optimization Suite'
+            profileId = 'closed-game-restore-validation'
+            name = 'Closed Game Restore Validation'
+            profileKind = 'process-controls'
+            risk = 'medium'
+            protectedCatalogPath = (Join-Path $repoRoot 'backend\profiles\protected-processes.json')
+            foregroundGame = [pscustomobject]@{
+                ruleId = 'closed-probe-priority'
+                processNames = @('RooIndustriesTuneProbe.exe')
+                priorityClass = 'AboveNormal'
+                reason = 'Validate restore after the tuned game closes.'
+                reasonCodes = @('LIVE_VALIDATION')
+            }
+            targetGames = @()
+            protectedCompanions = @()
+            protectedPreviewProcessNames = @()
+            safeCandidates = @()
+            rules = @()
+            rollbackPolicy = [pscustomobject]@{
+                supported = $true
+                scope = 'process-controls'
+                stateRoot = (Join-Path $closedRoot 'state')
+                restoreOriginalPriorityClass = $true
+            }
+            safety = [pscustomobject]@{
+                confirmedApplyChanges = @('PriorityClass')
+                continuousEnforcement = $true
+                runtimeService = $false
+            }
+        }
+        ($closedProfile | ConvertTo-Json -Depth 16) | Set-Content -LiteralPath $closedProfilePath -Encoding UTF8
+        $closedStart = & (Join-Path $PSScriptRoot 'Start-GameTuneSession.ps1') -ProfilePath $closedProfilePath -TargetGameProcessName 'RooIndustriesTuneProbe.exe' -PollIntervalSeconds 1 -MaxDurationSeconds 1 -StateRoot (Join-Path $closedRoot 'state') -ConfirmApply | ConvertFrom-Json
+        if (@($closedStart.changedItems).Count -lt 1) { throw 'The closed-game probe was not tuned.' }
+        Stop-RooIndustriesValidationProcess $closedProbe
+        $closedRestore = & (Join-Path $PSScriptRoot 'Stop-GameTuneSession.ps1') -SessionPath $closedStart.sessionPath -ConfirmApply | ConvertFrom-Json
+        $closedStatus = & (Join-Path $PSScriptRoot 'Get-GameTuneSessionStatus.ps1') -SessionPath $closedStart.sessionPath | ConvertFrom-Json
+        $closedItems = @($closedRestore.skippedItems | Where-Object { $_.outcome -eq 'alreadyClosed' -and $_.processId -eq $closedProbe.Id })
+        if ($closedRestore.status -eq 'completed' -and $closedRestore.result.status -eq 'rolledBack' -and $closedRestore.restorable -eq $false -and $closedItems.Count -eq 1 -and $closedStatus.status -eq 'completed' -and $closedStatus.restorable -eq $false) {
+            Add-Pass 'Restore after the tuned game closed finishes and leaves nothing to restore'
+        } else {
+            Add-Failure "Restore after the tuned game closed did not finish: status $($closedRestore.status), result $($closedRestore.result.status), restorable $($closedRestore.restorable), closed items $($closedItems.Count), session $($closedStatus.status)/$($closedStatus.restorable)"
+        }
+    } finally {
+        if ($closedProbe) { Stop-RooIndustriesValidationProcess $closedProbe }
+        $fullClosedRoot = [System.IO.Path]::GetFullPath($closedRoot)
+        if ($fullClosedRoot.StartsWith([System.IO.Path]::GetTempPath(), [System.StringComparison]::OrdinalIgnoreCase) -and (Test-Path -LiteralPath $fullClosedRoot)) {
+            Remove-Item -LiteralPath $fullClosedRoot -Recurse -Force -ErrorAction Stop
+        }
+        if (Test-Path -LiteralPath $fullClosedRoot) { throw "Game Tune validation left its fixture directory: $fullClosedRoot" }
+    }
+} catch {
+    Add-Failure "Closed-game restore validation failed: $($_.Exception.Message)"
+}
+
+try {
     $runtimeScriptFiles = @(
         (Join-Path $PSScriptRoot 'GameTuneSession.Common.ps1'),
         (Join-Path $PSScriptRoot 'Start-GameTuneSession.ps1'),
