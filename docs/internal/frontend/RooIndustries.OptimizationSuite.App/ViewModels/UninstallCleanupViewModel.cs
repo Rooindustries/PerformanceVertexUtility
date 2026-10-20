@@ -587,11 +587,11 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
         {
             var result = await App.Live.RestoreUninstallCleanupResultAsync(rollbackPath);
             var restored = result.Error is null && IsSuccessfulRestore(result.Value, rollbackPath);
-            string? markFailure = null;
+            var markFailed = false;
             if (restored)
             {
                 try { App.Live.MarkCleanupRestored(rollbackPath); }
-                catch (Exception error) { AppLog.Write(nameof(UninstallCleanupViewModel), error.ToString()); markFailure = error.Message; }
+                catch (Exception error) { AppLog.Write(nameof(UninstallCleanupViewModel), error.ToString()); markFailed = true; }
             }
             if (restored && _cleanupRecoveryByApp.TryGetValue(app.AppId!, out var retained)
                 && string.Equals(retained, rollbackPath, StringComparison.Ordinal))
@@ -600,7 +600,7 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
             }
             if (!IsCurrent(app, generation)) return;
             SummarizeCleanupRestore(result.Value, result.Error, restored);
-            if (markFailure is not null) CleanupExecutionDetail = ((CleanupExecutionDetail ?? "") + " The app couldn't save that this restore finished (" + markFailure.TrimEnd('.') + "), so it may offer it again after you reopen the app. Restoring again is safe.").Trim();
+            if (markFailed) CleanupExecutionDetail = ((CleanupExecutionDetail ?? "") + " The app couldn't save that this restore finished, so it may offer it again after you reopen the app. Restoring again is safe.").Trim();
         }
         catch (Exception error)
         {
