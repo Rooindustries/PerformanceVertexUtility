@@ -40,6 +40,30 @@ static class GameSessionChecks
         return value.ToUInt64();
     }
 
+    public static void Display()
+    {
+        var game = new RunningProcess(4242, "133000000000000000", @"C:\Games\Fixture\game.exe");
+        ProtectedSessionStatus Ended(string status, string fieldStatus, params string[] errors) => new(new ProtectedSessionState
+        {
+            SchemaVersion = 1, PreviewPath = "", ReviewHash = "", Host = game, Status = status, RegistryStatus = "restored", JobStatus = "cleared",
+            Preview = new ProtectedSessionPreview
+            {
+                SchemaVersion = 1, OperationId = "display", Owner = new OperationOwner("PC", "S-1-5-21-0"), Launcher = game, LauncherHash = "", GamePath = game.ExecutablePath,
+                GameHash = "", GameLength = 0, GameModifiedAtUtc = DateTime.UtcNow, TopologyHash = "", OriginalAffinity = new AffinityState(0, "0xF"),
+                Controls = new() { ["gpuPriority"] = V(3) }, OriginalLaunchSettings = new LaunchPrioritySnapshot { ImageKeyExisted = false, OptionsKeyExisted = false, Values = new() },
+                LauncherChanges = null, AcceptLauncherScope = true,
+            },
+            DesiredAffinity = new AffinityState(0, "0xF"), LauncherJournal = null, Errors = errors.ToList(), UpdatedAtUtc = DateTime.UtcNow,
+            Games = [new ProtectedGameState { Identity = game, Fields = [new ProtectedFieldState { Name = "gpuPriority", Route = "native", Status = fieldStatus, JournalPath = @"C:\Fixture\journal.json" }] }],
+        }, false, null);
+        Check(GameSessionDisplay.Restored(Ended("stopped", "restored")), "A cleanly stopped session counts as restored");
+        var history = Ended("stoppedWithErrors", "restored", "Native restoration needs reconciliation: gpuPriority");
+        Check(GameSessionDisplay.Restored(history) && GameSessionDisplay.Title(history) == "Stopped · original settings restored", "A session recovered after an earlier error counts as restored, so a new session can start");
+        Check(!GameSessionDisplay.Restored(Ended("recoveryRequired", "restored", "Native restoration needs reconciliation: gpuPriority")), "A session that still needs recovery stays outstanding");
+        Check(!GameSessionDisplay.Restored(Ended("stoppedWithErrors", "conflict", "Native restoration needs reconciliation: gpuPriority")), "A field that was not put back keeps the session outstanding");
+        Console.WriteLine("Game session display assertions: " + passed);
+    }
+
     public static async Task Run(string repo)
     {
         var root = Path.Combine(Path.GetTempPath(), "roo-industries-game-session-client-" + Guid.NewGuid().ToString("N"));

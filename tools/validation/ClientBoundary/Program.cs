@@ -10,6 +10,7 @@ if (args is ["--review2-services", var reviewOutput, var recoveryDirectory]) { a
 if (args is ["--review2-restore-pending", var pendingOutput, var pendingDirectory]) { await Review2Checks.Run(pendingOutput, pendingDirectory, settings: false); return; }
 if (args is [var hostDll, var hostAction, "-"] && Path.GetFileName(hostDll) == "Optimizer.Host.dll") { FakeHost.Run(hostAction); return; }
 if (Path.GetFileName(System.Reflection.Assembly.GetEntryAssembly()?.Location) == "Optimizer.Host.dll") { await HostFixture.Run(args); return; }
+if (args is [_, "--game-session-display"]) { GameSessionChecks.Display(); return; }
 if (args is [var gameRepo, "--game-sessions"]) { await GameSessionChecks.Run(gameRepo); return; }
 if (args is [_, "--background-priority"]) { PriorityChecks.Run(); return; }
 if (args is [var boundsRepo, "--bounds", .. var boundsFilter]) { await BoundChecks.Run(boundsRepo, boundsFilter.FirstOrDefault()); return; }
