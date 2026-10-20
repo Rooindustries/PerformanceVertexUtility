@@ -184,6 +184,8 @@ static class BugReportChecks
             var caseVariant = new BugRedactor(@"C:\Users\Alice", "Alice", "PC", ["José Smith"]).Redact(@"{""p"":""C:\\Users\\JOS\u00C9 SMITH\\x""}");
             check(escapedOwn == @"{""p"":""%USERPROFILE%\\x"",""q"":""C:\\Users\\<user>\\y""}" && caseVariant == @"{""p"":""C:\\Users\\<user>\\x""}",
                 "JSON-escaped and differently cased account names are matched on their decoded text");
+            var unusual = new BugRedactor(@"C:\Users\Alice", "Alice", "PC", ["李", " John Smith"]).Redact(JsonSerializer.Serialize(new { p = @"C:\Users\" + "李" + @"\x" }) + @" C:\Users\ John Smith\AppData");
+            check(unusual == @"{""p"":""C:\\Users\\<user>\\x""} C:\Users\<user>\AppData", "One-letter and space-led account folder names are redacted as Windows stores them");
             check(known.Redact(edges) == edges && known.Redact(otherNames) == otherNames && known.Redact(context) == context,
                 "Log text already redacted when it was written stays the same when the bug report redacts it again");
 
