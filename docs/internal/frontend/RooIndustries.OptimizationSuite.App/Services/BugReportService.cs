@@ -64,7 +64,7 @@ public sealed class BugRedactor
         return text;
     }
 
-    private static readonly Regex OtherProfiles = new(@"(?<=\b[A-Za-z]:(?:\\{1,2}|/)Users(?:\\{1,2}|/))(?!(?:Public|Default|Default User|All Users)(?:[\\/""]|$))[^\\/""'\s]+", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    private static readonly Regex OtherProfiles = new(@"(?<=\b[A-Za-z]:(?:\\{1,2}|/)Users(?:\\{1,2}|/))(?!(?:Public|Default|Default User|All Users)(?:[\\/""]|$))(?:(?:[^\\/""\[\]:;|=,+*?<>\r\n]|\\u[0-9A-Fa-f]{4})+(?=[\\/])|[^\\/""'\s]+)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     private static Regex Word(string value)
         => new(@"(?<![\p{L}\p{N}_])" + Regex.Escape(value) + @"(?![\p{L}\p{N}_])", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
