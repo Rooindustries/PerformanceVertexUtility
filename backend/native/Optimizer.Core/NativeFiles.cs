@@ -177,6 +177,9 @@ internal static class NativeFiles
 
     public static string? ResolvedPath(string path)
     {
+        if (path.Length < 3 || !char.IsAsciiLetter(path[0]) || path[1] != ':' || path[2] != '\\') return null;
+        try { if (new DriveInfo(path[..1]).DriveType != DriveType.Fixed) return null; }
+        catch (Exception error) when (error is IOException or ArgumentException or UnauthorizedAccessException) { return null; }
         try
         {
             using var handle = Open(path, ReadAttributes | Synchronize, ShareAll, BackupSemantics | NoRecallAnonymous);

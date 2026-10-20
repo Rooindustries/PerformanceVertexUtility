@@ -84,6 +84,10 @@ static class DiscoveryChecks
             Directory.Delete(root, true);
         }
         check(!Directory.Exists(root), "Junction validation leaves no file fixtures");
+        var offline = new CleanupApplication { AppId = "fixture:offline", DisplayName = "Offline share tool", Publisher = "Other", InstallLocation = @"\\192.0.2.1\OfflineShare\Tool", PackageFamilyName = null };
+        var watch = Stopwatch.StartNew();
+        _ = new LeftoverDiscovery(new CleanupApplication { AppId = "fixture:local", DisplayName = "Roo Industries Example", Publisher = "Roo Industries", InstallLocation = null, PackageFamilyName = null }, [offline]);
+        check(watch.ElapsedMilliseconds < 2000, "An app installed on an unreachable network share does not stall leftover discovery (" + watch.ElapsedMilliseconds + " ms)");
     }
 
     private static void UncRoaming(Action<bool, string> check)
