@@ -191,7 +191,11 @@ static class AliasOwnershipChecks
             var locked = Directory.CreateDirectory(Path.Combine(root, "locked-peer"));
             var lockedSecurity = locked.GetAccessControl();
             var lockedDenied = locked.GetAccessControl();
-            lockedDenied.AddAccessRule(new FileSystemAccessRule(WindowsIdentity.GetCurrent().User!, FileSystemRights.Synchronize, AccessControlType.Deny));
+            var lockedDescriptor = new RawSecurityDescriptor(lockedDenied.GetSecurityDescriptorBinaryForm(), 0);
+            lockedDescriptor.DiscretionaryAcl!.InsertAce(0, new CommonAce(AceFlags.None, AceQualifier.AccessDenied, 0x100000, WindowsIdentity.GetCurrent().User!, false, null));
+            var lockedBytes = new byte[lockedDescriptor.BinaryLength];
+            lockedDescriptor.GetBinaryForm(lockedBytes, 0);
+            lockedDenied.SetSecurityDescriptorBinaryForm(lockedBytes);
             try
             {
                 locked.SetAccessControl(lockedDenied);
