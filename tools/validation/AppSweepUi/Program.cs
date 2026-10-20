@@ -928,7 +928,9 @@ if (args is [] or ["responses"] or ["cleanup"] or ["race"])
     await oldFinal;
     Check(!cleanup.FinalCheckPassed && cleanup.SelectedApp == appB, "A late final-check response cannot approve another app");
 
-    var rollback = Path.Combine(Path.GetTempPath(), "cleanup-rollback-" + Guid.NewGuid().ToString("N") + ".json");
+    var rollbackRoot = Path.Combine(Path.GetTempPath(), "roo-industries-cleanup-rollback-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(rollbackRoot);
+    var rollback = Path.Combine(rollbackRoot, "rollback-manifest.json");
     File.WriteAllText(rollback, JsonSerializer.Serialize(new
     {
         appId = appA.AppId,
@@ -979,8 +981,137 @@ if (args is [] or ["responses"] or ["cleanup"] or ["race"])
             "A late restore response cannot report completion on another app");
         cleanup.SelectedApp = appA;
         Check(!cleanup.CleanupRestoreAvailable, "A completed stale restore clears only its initiating app recovery");
+
+        var runsRoot = Path.Combine(Path.GetTempPath(), "roo-industries-cleanup-runs-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            string SavedRun(string name, string appId, string? displayName = null)
+            {
+                var manifest = Path.Combine(runsRoot, name, "rollback-manifest.json");
+                Directory.CreateDirectory(Path.GetDirectoryName(manifest)!);
+                var backup = Path.Combine(runsRoot, name, "backup.bin");
+                File.WriteAllText(backup, "fixture");
+                File.WriteAllText(manifest, JsonSerializer.Serialize(new { appId, displayName, executionStarted = true, restoreSupported = true, fileBackups = new[] { new { itemId = "saved", backupPath = backup } } }));
+                return manifest;
+            }
+            var savedA = SavedRun("run-a", appA.AppId!);
+            File.SetLastWriteTimeUtc(savedA, DateTime.UtcNow.AddMinutes(-5));
+            SavedRun("run-b", appB.AppId!);
+            Directory.CreateDirectory(Path.Combine(runsRoot, "run-broken"));
+            File.WriteAllText(Path.Combine(runsRoot, "run-broken", "rollback-manifest.json"), "{not json");
+            Directory.CreateDirectory(Path.Combine(runsRoot, "run-noop"));
+            File.WriteAllText(Path.Combine(runsRoot, "run-noop", "rollback-manifest.json"), JsonSerializer.Serialize(new { appId = appA.AppId, executionStarted = false, restoreSupported = true, fileBackups = Array.Empty<object>() }));
+            App.Live.CleanupRunsRoot = runsRoot;
+            var reopened = new UninstallCleanupViewModel { SelectedApp = appA };
+            for (var wait = 0; wait < 100 && !reopened.CleanupRestoreAvailable; wait++) await Task.Delay(20);
+            Check(reopened.CleanupRestoreAvailable && reopened.CanRestoreCleanup && reopened.CleanupExecutionState.StartsWith("An earlier cleanup", StringComparison.Ordinal),
+                "A saved cleanup can still be restored after the app is closed and reopened, even when a newer run had nothing to restore");
+
+            var scanGate = new TaskCompletionSource<LeftoverScan?>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var savedScan = App.Live.LeftoverScan;
+            App.Live.LeftoverScan = _ => scanGate.Task;
+            App.Live.CleanupRecoveryDelay = TimeSpan.FromMilliseconds(150);
+            try
+            {
+                var busy = new UninstallCleanupViewModel { SelectedApp = appA };
+                var scanning = busy.ScanLeftoversCommand.ExecuteAsync(null);
+                await Task.Delay(400);
+                scanGate.SetResult(EmptyScan(appA.AppId!));
+                await scanning;
+                Check(busy.CleanupRestoreAvailable && busy.CanRestoreCleanup, "A saved cleanup found while a leftover scan runs can be restored once the scan finishes");
+            }
+            finally { App.Live.CleanupRecoveryDelay = TimeSpan.Zero; App.Live.LeftoverScan = savedScan; }
+            App.Live.CleanupRestore = path => Task.FromResult<string?>(JsonSerializer.Serialize(new
+            {
+                actionId = "apps.restoreUninstallCleanupExecution",
+                dryRun = false,
+                status = "success",
+                rollbackManifestPath = path,
+                executionMode = "real-system-restore",
+                gates = new[] { new { gateId = "backup-files-present", required = true, satisfied = true, blocking = false } },
+                errors = Array.Empty<object>(),
+                restoredItems = new[] { new { itemId = "saved", restored = true } },
+                summary = new { restoredCount = 1, blockingGateCount = 0 },
+            }));
+            await reopened.RestoreCleanupCommand.ExecuteAsync(null);
+            var again = new UninstallCleanupViewModel { SelectedApp = appA };
+            await Task.Delay(200);
+            Check(File.Exists(Path.Combine(runsRoot, "run-a", "restored.json")) && !again.CleanupRestoreAvailable,
+                "A restored cleanup is not offered again after reopening");
+            var other = new UninstallCleanupViewModel { SelectedApp = appB };
+            for (var wait = 0; wait < 100 && !other.CleanupRestoreAvailable; wait++) await Task.Delay(20);
+            Check(other.CleanupRestoreAvailable, "Another app keeps its own saved cleanup restore");
+            Directory.CreateDirectory(Path.Combine(runsRoot, "run-b", "restored.json"));
+            await other.RestoreCleanupCommand.ExecuteAsync(null);
+            Check(other.CleanupExecutionDetail?.Contains("couldn't save that this restore finished", StringComparison.Ordinal) == true,
+                "A restore whose finished mark can't be saved says it may be offered again" + " | got: " + other.CleanupExecutionDetail);
+
+            SavedRun("run-gone", "app-gone", "Gone App");
+            var savedInventory = App.Live.InstalledApps;
+            App.Live.InstalledApps = new InstalledAppInventory { Apps = [appA, appB] };
+            try
+            {
+                var page = new UninstallCleanupViewModel();
+                await page.InitializeAsync();
+                var gone = page.Apps.FirstOrDefault(item => item.AppId == "app-gone");
+                Check(gone is { Removed: true, FriendlyName: "Gone App", SecondaryLabel: "Removed. Its cleanup can be restored." } && page.Apps.Count(item => item.Removed) == 1,
+                    "An app that cleanup removed stays in the list with its saved restore after reopening, and installed apps never show as removed");
+                page.SelectedApp = gone;
+                Check(page.CanRestoreCleanup && !page.CanReviewRemoval && !page.CanScan && page.ApplyApprovalSummary.StartsWith("This app is already removed", StringComparison.Ordinal),
+                    "A removed app offers only Restore from its saved cleanup" + " | got: " + page.ApplyApprovalSummary);
+                await page.RestoreCleanupCommand.ExecuteAsync(null);
+                Check(page.CleanupExecutionState.StartsWith("Restore complete", StringComparison.Ordinal) && !page.CanRestoreCleanup,
+                    "Restore works for an app that is no longer installed" + " | got: " + page.CleanupExecutionState);
+                page.SelectedApp = null;
+                await page.ReloadAsync();
+                Check(page.Apps.All(item => item.AppId != "app-gone"), "A removed app leaves the list once its cleanup is restored");
+
+                App.Live.InstalledApps = null;
+                var unread = new UninstallCleanupViewModel();
+                await unread.InitializeAsync();
+                var savedB = unread.Apps.FirstOrDefault(item => item.AppId == appB.AppId);
+                Check(unread.IsReady && unread.InventoryNotice.StartsWith("We couldn't read your installed apps", StringComparison.Ordinal) && unread.StaleNotice.Length == 0
+                        && savedB is { Removed: true, RemovalUnconfirmed: true, SecondaryLabel: "Its saved cleanup can be restored." },
+                    "A saved cleanup can still be restored when the installed apps list can't be read, and the page says the list is missing" + " | got: " + unread.ErrorMessage + " " + unread.InventoryNotice);
+                unread.SelectedApp = savedB;
+                var scanCalls = 0;
+                var liveScan = App.Live.LeftoverScan;
+                App.Live.LeftoverScan = id => { scanCalls++; return Task.FromResult<LeftoverScan?>(EmptyScan(id)); };
+                try { await unread.ScanLeftoversCommand.ExecuteAsync(null); }
+                finally { App.Live.LeftoverScan = liveScan; }
+                Check(unread.CanRestoreCleanup && !unread.CanScan && scanCalls == 0 && !unread.OfficialPreviewState.Contains("already removed", StringComparison.Ordinal),
+                    "An app listed only for its saved cleanup never scans and never claims it was removed when the list couldn't be read" + " | got: " + unread.OfficialPreviewState);
+                await unread.RestoreCleanupCommand.ExecuteAsync(null);
+                await Task.Delay(200);
+                Check(unread.StaleNotice.Length == 0 && unread.InventoryNotice.StartsWith("We couldn't read your installed apps", StringComparison.Ordinal),
+                    "Restoring while the installed apps list can't be read keeps the page's explanation instead of a changed-elsewhere notice" + " | got: " + unread.StaleNotice);
+                App.Live.InstalledApps = new InstalledAppInventory { Apps = [appA], Complete = false };
+                var partial = new UninstallCleanupViewModel();
+                await partial.InitializeAsync();
+                Check(partial.IsReady && partial.Apps.FirstOrDefault(item => item.AppId == appB.AppId) is { Removed: true, RemovalUnconfirmed: true, SecondaryLabel: "Its saved cleanup can be restored." },
+                    "An app missing from a partly read installed apps list is never shown as removed");
+                App.Live.InstalledApps = null;
+                App.Live.CleanupRunsRoot = null;
+                var failed = new UninstallCleanupViewModel();
+                await failed.InitializeAsync();
+                Check(!failed.IsReady && failed.ErrorMessage is { Length: > 0 }, "With no installed apps list and no saved cleanup, the page still reports that the list couldn't be read");
+                App.Live.CleanupRunsRoot = runsRoot;
+                var olderValid = SavedRun("run-old", "app-old");
+                File.SetLastWriteTimeUtc(olderValid, DateTime.UtcNow.AddMinutes(-10));
+                SavedRun("run-new", "app-old");
+                File.Delete(Path.Combine(runsRoot, "run-new", "backup.bin"));
+                Check(CleanupRecoveries.Find(runsRoot, "app-old") == olderValid, "A saved cleanup whose backup files are gone is not offered and does not hide an older one that can be restored");
+                Check(CleanupRecoveries.Find(runsRoot, "app-old", path => path != olderValid) is null, "A saved cleanup the restore would refuse is not offered");
+            }
+            finally { App.Live.InstalledApps = savedInventory; }
+        }
+        finally
+        {
+            App.Live.CleanupRunsRoot = null;
+            if (Directory.Exists(runsRoot)) Directory.Delete(runsRoot, true);
+        }
     }
-    finally { File.Delete(rollback); }
+    finally { Directory.Delete(rollbackRoot, true); }
 }
 
 Check(RooIndustries.OptimizationSuite.Services.BackendScriptPolicy.Timeout(@"C:\Program Files\Roo Industries\Optimization Suite\backend\scripts\Invoke-UninstallCleanupApplyPackage.ps1") is null

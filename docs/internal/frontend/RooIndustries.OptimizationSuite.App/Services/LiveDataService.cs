@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -694,6 +695,20 @@ public sealed class LiveDataService
     }
     public async Task<string?> RestoreUninstallCleanupTextAsync(string rollbackManifestPath, CancellationToken ct = default)
         => (await RestoreUninstallCleanupResultAsync(rollbackManifestPath, ct)).Value;
+
+    public async Task<string?> FindCleanupRecoveryAsync(string appId, CancellationToken ct = default)
+    {
+        var runs = Path.Combine(await _operations.Value.EnsureStorageAsync().ConfigureAwait(false), "cleanup-runs");
+        return await Task.Run(() => CleanupRecoveries.Find(runs, appId, RooIndustries.Optimizer.PolicyRootSecurity.WrittenAfterProtection), ct).ConfigureAwait(false);
+    }
+
+    public async Task<IReadOnlyList<CleanupRecovery>> FindCleanupRecoveriesAsync(CancellationToken ct = default)
+    {
+        var runs = Path.Combine(await _operations.Value.EnsureStorageAsync().ConfigureAwait(false), "cleanup-runs");
+        return await Task.Run(() => CleanupRecoveries.All(runs, RooIndustries.Optimizer.PolicyRootSecurity.WrittenAfterProtection), ct).ConfigureAwait(false);
+    }
+
+    public void MarkCleanupRestored(string rollbackManifestPath) => CleanupRecoveries.MarkRestored(rollbackManifestPath);
 
     public async Task<LiveDataResult<string>> RunBackendScriptResultAsync(string scriptFile, CancellationToken ct = default, string extraArgs = "")
     {
