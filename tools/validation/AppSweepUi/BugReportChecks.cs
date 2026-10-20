@@ -199,6 +199,25 @@ static class BugReportChecks
             var sent = await service.SendAsync(Report("Crash on apply", values: edited), first);
             check(sent.Status == BugSendStatus.Sent && sender.Calls.Count == 1 && sender.Calls[0].Url == Webhook, "A complete report is sent once to the webhook");
             check(!File.Exists(first.FilePath), "A sent attachment is removed from the outgoing folder");
+            var typedSender = new FakeSender();
+            var typed = Service(Webhook, typedSender);
+            var pasted = specs.Select(spec => spec.Key == "cpu" ? spec with { Value = @"Alice's CPU, see C:\Users\Alice\specs.txt on GAMER-PC" } : spec).ToArray();
+            var typedSent = await typed.SendAsync(Report(@"Crash for Alice at C:\Users\Alice\AppData\x.log on GAMER-PC", "alice#1", pasted), typed.CreateAttachment(specs, "{}"));
+            using (var typedBody = JsonDocument.Parse(typedSender.Calls.Single().Payload))
+            {
+                var embed = typedBody.RootElement.GetProperty("embeds")[0];
+                var values = embed.GetProperty("fields").EnumerateArray().ToDictionary(field => field.GetProperty("name").GetString()!, field => field.GetProperty("value").GetString()!);
+                check(typedSent.Status == BugSendStatus.Sent && embed.GetProperty("description").GetString() == @"Crash for <user> at %USERPROFILE%\AppData\x.log on <pc-name>"
+                    && values["Processor"] == @"<user>'s CPU, see %USERPROFILE%\specs.txt on <pc-name>" && values["Discord or email"] == "alice#1",
+                    "Text the user typed or pasted into the report is redacted before it is sent, while the contact they gave stays as typed");
+            }
+            var typedSaved = typed.SaveReport(Report(@"Crash for Alice on GAMER-PC", "alice#1", pasted), typed.CreateAttachment(specs, "{}"));
+            using (var typedZip = ZipFile.OpenRead(typedSaved))
+            {
+                var reportText = Read(typedZip, "report.txt");
+                check(!reportText.Contains("Alice", StringComparison.Ordinal) && !reportText.Contains("GAMER-PC", StringComparison.Ordinal) && reportText.Contains("Crash for <user> on <pc-name>", StringComparison.Ordinal),
+                    "A saved report file redacts the description the user typed");
+            }
             var second = service.CreateAttachment(specs, "{}");
             var throttled = await service.SendAsync(Report("Again"), second);
             check(throttled.Status == BugSendStatus.Throttled && throttled.Wait > TimeSpan.Zero && sender.Calls.Count == 1, "A second send within 60 seconds is blocked on the client");

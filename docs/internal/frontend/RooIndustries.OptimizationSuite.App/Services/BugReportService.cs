@@ -258,7 +258,7 @@ public sealed class BugReportService
             _nextSendUtc = DateTime.MinValue;
             throw;
         }
-        var payload = BuildPayload(report, current.FileName);
+        var payload = BuildPayload(report with { Description = _redactor.Redact(report.Description), Specs = report.Specs.Select(spec => spec with { Value = _redactor.Redact(spec.Value) }).ToArray() }, current.FileName);
         BugSendResult result;
         try
         {
@@ -355,7 +355,7 @@ public sealed class BugReportService
         foreach (var spec in report.Specs) text.AppendLine(spec.Label + ": " + _redactor.Redact(spec.Value));
         text.AppendLine();
         text.AppendLine("What went wrong:");
-        text.AppendLine(report.Description.Trim());
+        text.AppendLine(_redactor.Redact(report.Description.Trim()));
         return text.ToString();
     }
 
