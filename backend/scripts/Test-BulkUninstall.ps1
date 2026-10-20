@@ -84,8 +84,23 @@ public static class RooIndustriesBulkAccessFixture {
     public static void RestoreDebug(int attributes) { Adjust(attributes & 2); }
 }
 '@
+$markerKey='SOFTWARE\RooIndustries\OptimizationSuite\GovernorRoots';$markerLevels=@('SOFTWARE\RooIndustries','SOFTWARE\RooIndustries\OptimizationSuite',$markerKey);$fixtureMarker=$null;$createdMarkerLevel=$null
+function Set-FixtureProtection([string]$Root){
+    if(-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)){throw 'Restore checks need administrator rights to protect the fixture folder as the app protects its data folder.'}
+    $hklm=[Microsoft.Win32.Registry]::LocalMachine
+    foreach($level in $markerLevels){$existing=$hklm.OpenSubKey($level);if($existing){$existing.Dispose()}elseif(-not $script:createdMarkerLevel){$script:createdMarkerLevel=$level}}
+    $script:fixtureMarker=Get-RooIndustriesDataRootMarkerName $Root
+    $key=$hklm.CreateSubKey($markerKey,$true)
+    try{$key.SetValue($script:fixtureMarker+'|protected-at',[DateTime]::UtcNow.ToFileTimeUtc(),[Microsoft.Win32.RegistryValueKind]::QWord);$key.SetValue($script:fixtureMarker,[Security.Principal.WindowsIdentity]::GetCurrent().User.Value,[Microsoft.Win32.RegistryValueKind]::String)}finally{$key.Dispose()}
+}
+function Remove-FixtureProtection{
+    $hklm=[Microsoft.Win32.Registry]::LocalMachine
+    if($script:fixtureMarker){$key=$hklm.OpenSubKey($markerKey,$true);if($key){try{$key.DeleteValue($script:fixtureMarker,$false);$key.DeleteValue($script:fixtureMarker+'|protected-at',$false)}finally{$key.Dispose()}}}
+    if($script:createdMarkerLevel){foreach($level in @($markerLevels|Where-Object{$_.Length -ge $script:createdMarkerLevel.Length}|Sort-Object Length -Descending)){$remaining=$hklm.OpenSubKey($level);if(-not $remaining){continue};$empty=($remaining.ValueCount+$remaining.SubKeyCount) -eq 0;$remaining.Dispose();if(-not $empty){break};$hklm.DeleteSubKey($level)}}
+}
 try {
     [IO.Directory]::CreateDirectory($root)|Out-Null
+    Set-FixtureProtection $root
     $script:fixtureExe=Join-Path $root 'RooIndustriesBulkFixture.exe'
     Add-Type -TypeDefinition @'
 using System;
@@ -480,6 +495,10 @@ function global:Get-FileHash {
         finally {$process.Dispose()}
     }
     if(Test-Path $root){Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue}
+    Remove-FixtureProtection
 }
 if($cleanupErrors.Count){throw ($cleanupErrors -join '; ')}
 Assert (-not(Test-Path $root) -and -not(Test-Path -LiteralPath ('HKCU:\'+$msiKeyPath)) -and -not(Test-Path -LiteralPath $msiClaim)) 'Bulk tests leave no fixture process, presence marker, registration, claim or journal behind'
+$markers=[Microsoft.Win32.Registry]::LocalMachine.OpenSubKey($markerKey)
+Assert (-not $markers -or @($markers.GetValueNames()|Where-Object{$fixtureMarker -and ($_ -replace '\|protected-at$','') -eq $fixtureMarker}).Count -eq 0) 'Bulk tests remove the fixture folder protection marker'
+if($markers){$markers.Dispose()}
