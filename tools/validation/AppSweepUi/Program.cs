@@ -928,7 +928,9 @@ if (args is [] or ["responses"] or ["cleanup"] or ["race"])
     await oldFinal;
     Check(!cleanup.FinalCheckPassed && cleanup.SelectedApp == appB, "A late final-check response cannot approve another app");
 
-    var rollback = Path.Combine(Path.GetTempPath(), "cleanup-rollback-" + Guid.NewGuid().ToString("N") + ".json");
+    var rollbackRoot = Path.Combine(Path.GetTempPath(), "roo-industries-cleanup-rollback-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(rollbackRoot);
+    var rollback = Path.Combine(rollbackRoot, "rollback-manifest.json");
     File.WriteAllText(rollback, JsonSerializer.Serialize(new
     {
         appId = appA.AppId,
@@ -983,11 +985,11 @@ if (args is [] or ["responses"] or ["cleanup"] or ["race"])
         var runsRoot = Path.Combine(Path.GetTempPath(), "roo-industries-cleanup-runs-" + Guid.NewGuid().ToString("N"));
         try
         {
-            string SavedRun(string name, string appId)
+            string SavedRun(string name, string appId, string? displayName = null)
             {
                 var manifest = Path.Combine(runsRoot, name, "rollback-manifest.json");
                 Directory.CreateDirectory(Path.GetDirectoryName(manifest)!);
-                File.WriteAllText(manifest, JsonSerializer.Serialize(new { appId, executionStarted = true, restoreSupported = true, fileBackups = new[] { new { itemId = "saved", backupPath = @"C:\FixtureBackup" } } }));
+                File.WriteAllText(manifest, JsonSerializer.Serialize(new { appId, displayName, executionStarted = true, restoreSupported = true, fileBackups = new[] { new { itemId = "saved", backupPath = @"C:\FixtureBackup" } } }));
                 return manifest;
             }
             var savedA = SavedRun("run-a", appA.AppId!);
@@ -1041,6 +1043,28 @@ if (args is [] or ["responses"] or ["cleanup"] or ["race"])
             await other.RestoreCleanupCommand.ExecuteAsync(null);
             Check(other.CleanupExecutionDetail?.Contains("couldn't save that this restore finished", StringComparison.Ordinal) == true,
                 "A restore whose finished mark can't be saved says it may be offered again" + " | got: " + other.CleanupExecutionDetail);
+
+            SavedRun("run-gone", "app-gone", "Gone App");
+            var savedInventory = App.Live.InstalledApps;
+            App.Live.InstalledApps = new InstalledAppInventory { Apps = [appA, appB] };
+            try
+            {
+                var page = new UninstallCleanupViewModel();
+                await page.InitializeAsync();
+                var gone = page.Apps.FirstOrDefault(item => item.AppId == "app-gone");
+                Check(gone is { Removed: true, FriendlyName: "Gone App", SecondaryLabel: "Removed. Its cleanup can be restored." } && page.Apps.Count(item => item.Removed) == 1,
+                    "An app that cleanup removed stays in the list with its saved restore after reopening, and installed apps never show as removed");
+                page.SelectedApp = gone;
+                Check(page.CanRestoreCleanup && !page.CanReviewRemoval && !page.CanScan && page.ApplyApprovalSummary.StartsWith("This app is already removed", StringComparison.Ordinal),
+                    "A removed app offers only Restore from its saved cleanup" + " | got: " + page.ApplyApprovalSummary);
+                await page.RestoreCleanupCommand.ExecuteAsync(null);
+                Check(page.CleanupExecutionState.StartsWith("Restore complete", StringComparison.Ordinal) && !page.CanRestoreCleanup,
+                    "Restore works for an app that is no longer installed" + " | got: " + page.CleanupExecutionState);
+                page.SelectedApp = null;
+                await page.ReloadAsync();
+                Check(page.Apps.All(item => item.AppId != "app-gone"), "A removed app leaves the list once its cleanup is restored");
+            }
+            finally { App.Live.InstalledApps = savedInventory; }
         }
         finally
         {
@@ -1048,7 +1072,7 @@ if (args is [] or ["responses"] or ["cleanup"] or ["race"])
             if (Directory.Exists(runsRoot)) Directory.Delete(runsRoot, true);
         }
     }
-    finally { File.Delete(rollback); }
+    finally { Directory.Delete(rollbackRoot, true); }
 }
 
 Check(RooIndustries.OptimizationSuite.Services.BackendScriptPolicy.Timeout(@"C:\Program Files\Roo Industries\Optimization Suite\backend\scripts\Invoke-UninstallCleanupApplyPackage.ps1") is null

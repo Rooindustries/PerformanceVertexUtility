@@ -100,7 +100,7 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
     [ObservableProperty] private bool _canApplyCleanupAction;
     [ObservableProperty] private bool _canRestoreCleanupAction;
 
-    public bool CanScan => HasSelection && !ScanBusy;
+    public bool CanScan => HasSelection && !ScanBusy && SelectedApp?.Removed != true;
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ApplyApprovalSummary))]
     private bool _removalRouteBlocked;
@@ -117,7 +117,7 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
     public string ApplyApprovalSummary => !HasSelection
         ? "Pick an app first."
         : RemovalRouteBlocked
-            ? "Can't run this app's remover. Use Remove apps to remove it."
+            ? SelectedApp?.Removed == true ? "This app is already removed. Restore puts back what its cleanup removed." : "Can't run this app's remover. Use Remove apps to remove it."
             : !RemovalPathReviewed
                 ? "Check the removal route first."
                 : !LeftoverScanCompleted
@@ -152,6 +152,7 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
     protected override async Task LoadCoreAsync()
     {
         var inventory = await App.Live.GetInstalledAppsAsync(fresh: Fresh);
+        var saved = await SavedRecoveriesAsync();
         if (Quiet && SelectedApp is not null) { KeepStale(); return; }
         var apps = inventory?.Apps;
         if (apps is null || apps.Count == 0)
@@ -162,11 +163,15 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
 
         _listChanged = false;
         _allApps.Clear();
+        var installed = apps.Select(a => a.AppId).OfType<string>().ToHashSet(StringComparer.Ordinal);
+        var removed = saved.Where(recovery => !installed.Contains(recovery.AppId)).ToArray();
+        foreach (var recovery in removed) _cleanupRecoveryByApp.TryAdd(recovery.AppId, recovery.ManifestPath);
         _allApps.AddRange(apps
             .Where(a => a.IsListable && !Naming.IsNonActionable(a.DisplayName)
                         && !LocalDisplayFilter.Default.IsHidden(a.FriendlyName, null, a.PackageId ?? a.DisplayName))
+            .Concat(removed.Select(recovery => new InstalledApp { AppId = recovery.AppId, DisplayName = string.IsNullOrWhiteSpace(recovery.DisplayName) ? "Removed app" : recovery.DisplayName, Removed = true }))
             .OrderBy(a => a.FriendlyName, StringComparer.OrdinalIgnoreCase));
-        AppCount = _allApps.Count;
+        AppCount = _allApps.Count(a => !a.Removed);
         Sources = inventory!.Sources is { Count: > 0 } s ? string.Join(", ", s.Select(FriendlySource)) : null;
 
         ApplyFilter();
@@ -263,6 +268,14 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
         CleanupListApproved = false;
         RealCleanupApproved = false;
         PrimaryRemovalButtonLabel = SelectedHasOfficialRemover ? "Check path" : "Plan removal";
+        if (value.Removed)
+        {
+            RemovalRouteBlocked = true;
+            OfficialPreviewState = "This app is already removed.";
+            LeftoverState = "This app is already removed. Restore is the only step left here.";
+            CleanupExecutionState = CleanupRestoreAvailable ? "An earlier cleanup of this app can be restored." : "This cleanup can't be restored anymore.";
+            CleanupExecutionDetail = "Restore puts back the files that cleanup removed. It does not reinstall the app.";
+        }
         RefreshActionState();
         if (!CleanupRestoreAvailable) _ = DiscoverRecoveryAsync(value, _selectionGeneration);
     }
@@ -895,6 +908,12 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
         {
             _cleanupRecoveryByApp[appId] = candidate!;
         }
+    }
+
+    private static async Task<IReadOnlyList<CleanupRecovery>> SavedRecoveriesAsync()
+    {
+        try { return await App.Live.FindCleanupRecoveriesAsync(); }
+        catch (Exception error) { AppLog.Write(nameof(UninstallCleanupViewModel), error.ToString()); return []; }
     }
 
     private async Task DiscoverRecoveryAsync(InstalledApp app, int generation)

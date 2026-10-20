@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -699,6 +700,12 @@ public sealed class LiveDataService
     {
         var runs = Path.Combine(await _operations.Value.EnsureStorageAsync().ConfigureAwait(false), "cleanup-runs");
         return await Task.Run(() => CleanupRecoveries.Find(runs, appId), ct).ConfigureAwait(false);
+    }
+
+    public async Task<IReadOnlyList<CleanupRecovery>> FindCleanupRecoveriesAsync(CancellationToken ct = default)
+    {
+        var runs = Path.Combine(await _operations.Value.EnsureStorageAsync().ConfigureAwait(false), "cleanup-runs");
+        return await Task.Run(() => CleanupRecoveries.All(runs), ct).ConfigureAwait(false);
     }
 
     public void MarkCleanupRestored(string rollbackManifestPath) => CleanupRecoveries.MarkRestored(rollbackManifestPath);

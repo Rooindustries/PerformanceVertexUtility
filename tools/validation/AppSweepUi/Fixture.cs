@@ -221,6 +221,8 @@ namespace RooIndustries.OptimizationSuite.Services
             if (CleanupRecoveryDelay > TimeSpan.Zero) await Task.Delay(CleanupRecoveryDelay, cancellationToken);
             return CleanupRunsRoot is null ? null : CleanupRecoveries.Find(CleanupRunsRoot, appId);
         }
+        public Task<IReadOnlyList<CleanupRecovery>> FindCleanupRecoveriesAsync(CancellationToken cancellationToken = default)
+            => Task.FromResult(CleanupRunsRoot is null ? (IReadOnlyList<CleanupRecovery>)[] : CleanupRecoveries.All(CleanupRunsRoot));
         public void MarkCleanupRestored(string rollbackManifestPath) => CleanupRecoveries.MarkRestored(rollbackManifestPath);
     }
 

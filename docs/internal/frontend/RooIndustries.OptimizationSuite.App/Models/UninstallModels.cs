@@ -46,6 +46,7 @@ public sealed class InstalledApp
     public string? InstallLocation { get; set; }
     public string? UninstallString { get; set; }
     public string? QuietUninstallString { get; set; }
+    [JsonIgnore] public bool Removed { get; init; }
 
     private static readonly Dictionary<string, string> KnownPackages = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -90,6 +91,7 @@ public sealed class InstalledApp
     {
         get
         {
+            if (Removed) return "Removed. Its cleanup can be restored.";
             var pub = PublisherDisplay;
             if (!string.IsNullOrWhiteSpace(pub)
                 && !GuidLike.IsMatch(pub!.Trim('{', '}'))
@@ -354,13 +356,18 @@ public sealed class CleanupBackupRequirement
     [JsonPropertyName("previewOnly")] public bool PreviewOnly { get; set; }
 }
 
+public sealed record CleanupRecovery(string AppId, string? DisplayName, string ManifestPath);
+
 public static class CleanupRecoveries
 {
     private const string RestoredMarker = "restored.json";
 
-    public static string? Find(string runsRoot, string appId)
+    public static string? Find(string runsRoot, string appId) => All(runsRoot).FirstOrDefault(recovery => recovery.AppId == appId)?.ManifestPath;
+
+    public static IReadOnlyList<CleanupRecovery> All(string runsRoot)
     {
-        if (!System.IO.Directory.Exists(runsRoot)) return null;
+        var found = new List<CleanupRecovery>();
+        if (!System.IO.Directory.Exists(runsRoot)) return found;
         foreach (var manifest in System.IO.Directory.EnumerateDirectories(runsRoot).Select(run => System.IO.Path.Combine(run, "rollback-manifest.json"))
                      .Where(System.IO.File.Exists).OrderByDescending(System.IO.File.GetLastWriteTimeUtc))
         {
@@ -370,14 +377,16 @@ public static class CleanupRecoveries
                 using var document = System.Text.Json.JsonDocument.Parse(System.IO.File.ReadAllBytes(manifest));
                 var root = document.RootElement;
                 if (root.ValueKind == System.Text.Json.JsonValueKind.Object && root.TryGetProperty("appId", out var id)
-                    && id.ValueKind == System.Text.Json.JsonValueKind.String && id.GetString() == appId
+                    && id.ValueKind == System.Text.Json.JsonValueKind.String && id.GetString() is { Length: > 0 } appId
+                    && found.All(recovery => recovery.AppId != appId)
                     && root.TryGetProperty("executionStarted", out var started) && started.ValueKind == System.Text.Json.JsonValueKind.True
                     && root.TryGetProperty("restoreSupported", out var supported) && supported.ValueKind == System.Text.Json.JsonValueKind.True
-                    && root.TryGetProperty("fileBackups", out var backups) && backups.ValueKind == System.Text.Json.JsonValueKind.Array && backups.GetArrayLength() > 0) return manifest;
+                    && root.TryGetProperty("fileBackups", out var backups) && backups.ValueKind == System.Text.Json.JsonValueKind.Array && backups.GetArrayLength() > 0)
+                    found.Add(new(appId, root.TryGetProperty("displayName", out var name) && name.ValueKind == System.Text.Json.JsonValueKind.String ? name.GetString() : null, manifest));
             }
             catch (Exception error) when (error is System.Text.Json.JsonException or System.IO.IOException or UnauthorizedAccessException) { }
         }
-        return null;
+        return found;
     }
 
     public static void MarkRestored(string rollbackManifestPath)
