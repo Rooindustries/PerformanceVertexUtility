@@ -49,6 +49,16 @@ static class PolicyEditionChecks
             Seed(path, 0);
             check(engine.Detect().Settings.Single().ConfiguredChoices.Length == 0, "An unrelated consumer policy value is not reported as Blocked on " + edition);
         }
+        foreach (var build in new[] { 20348, 26100 })
+        {
+            var path = Path.Combine(root, "consumer-azure-" + build + ".json"); var store = FileTweakStore.Create(path, build, "ServerTurbine"); Seed(path, 0);
+            var engine = new TweakEngine(subset, store);
+            check(engine.Detect().Settings.Single().AvailableChoices!.Contains(blocked.Id), "Windows Server Azure Edition retains consumer blocking at build " + build);
+            Apply(engine, engine.Preview("azure", [selected]));
+            check(store.Read(address).Value!.Bytes.SequenceEqual(BitConverter.GetBytes(1u)), "Windows Server Azure Edition can apply its supported policy choice at build " + build);
+            Apply(engine, engine.Preview("azure", []));
+            check(store.Read(address).Value!.Bytes.SequenceEqual(BitConverter.GetBytes(0u)), "Windows Server Azure Edition restores the exact original policy value at build " + build);
+        }
         var proPath = Path.Combine(root, "consumer-profiles.json"); var proStore = FileTweakStore.Create(proPath, 26100, "Professional"); Seed(proPath, 0);
         var old = subset with { Settings = [definition with { Options = definition.Options.Select(option => option with { Availability = [new(10240, 26200, ["*"])] }).ToArray() }] };
         Apply(new(old, proStore), new TweakEngine(old, proStore).Preview("old-profile", [selected]));
