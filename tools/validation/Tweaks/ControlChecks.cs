@@ -27,6 +27,8 @@ static class ControlChecks
         check(store.ReadControl(startup).Value.GetInt32() == 4 && store.ReadControl(running).Value.GetBoolean(), "Native fields retain shared ownership while released fields restore");
         check(OperationFiles.Read<TweakFixture>(path).Writes == writes + 1, "Repeated native selection does not repeat a native write");
         reject(() => engine.Preview("conflict", [new("manual", "set")]), "Conflicting native startup choices fail before mutation");
+        string? controlConflict = null; try { engine.Preview("conflict", [new("manual", "set")]); } catch (InvalidDataException error) { controlConflict = error.Message; }
+        check(controlConflict == "Your \"two\" profile already sets manual to a different choice. Pick the same choice, or restore that profile first.", "A Windows control conflict with another profile names that profile and the setting");
         Apply("two");
         check(store.ReadControl(startup).Value.GetInt32() == 2 && store.ReadState()!.Controls!.Length == 0, "Last native owner restores the actual original startup value");
         void SetStartup(uint value, string binding = "fixture-service-binary")
