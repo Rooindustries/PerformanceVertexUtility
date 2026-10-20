@@ -540,6 +540,28 @@ static class FreshnessChecks
             if (!passed) Console.WriteLine("  simple mode lists [" + string.Join(", ", simple) + "], lacking " + (absent is null ? "missing" : absent.CanRetry + "/" + absent.UnavailableHere + "/" + absent.Detail) + ", failing " + (failed is null ? "missing" : failed.CanRetry + "/" + failed.Current + "/" + failed.Detail));
             return passed;
         });
+        await Scenario("A service row whose state isn't one of its choices shows that state instead of Custom value", async () =>
+        {
+            const string startup = "windows.3f496f83e2c4f002", running = "windows.63bc2ce4fde98aee", matched = "windows.78f9bc6062713ff5";
+            RegistryAddress Address(string name) => new("CurrentUser", "Registry64", @"Software\RooIndustriesUiModelFixture", "value", name);
+            TweakDefinition Setting(string id) => new(id, id, "Services", "Fixture", 10240, 26200, ["*"], "none",
+                [new("on", "On", [new(Address(id), 1)]), new("off", "Off", [new(Address(id), 0)])], [new("Fixture", "fixture", "isolated UI validation")], null, false);
+            TweakControlRead Service(string name, string property, object value) => new(new ControlAddress("service", name, property), "service:" + name + ":" + property, "fixture-service", ControlValues.From(value), name + ": " + property);
+            var fixture = new Fixture(Path.Combine(root, "service-state"), new TweakCatalog(1, "service-state", [Setting(startup), Setting(running), Setting(matched)], [])) { Missing = false };
+            fixture.TransformStatus = inspection => inspection with { Settings = inspection.Settings.Select(status => status.Id switch
+            {
+                startup => status with { ConfiguredChoices = [], Controls = [Service("MapsBroker", "startup", 4)] },
+                running => status with { ConfiguredChoices = [], Controls = [Service("BTAGService", "running", true)] },
+                matched => status with { ConfiguredChoices = ["off"], Controls = [Service("PcaSvc", "startup", 3)] },
+                _ => status,
+            }).ToArray() };
+            App.Operations = fixture; var model = new WindowsTweaksViewModel(); await model.ShowAsync();
+            model.ShowAdvanced = true;
+            var current = model.Rows.ToDictionary(row => row.Id, row => row.Current);
+            var passed = current.GetValueOrDefault(startup) == "Disabled" && current.GetValueOrDefault(running) == "Running" && current.GetValueOrDefault(matched) == "Off";
+            if (!passed) Console.WriteLine("  current values: " + string.Join(", ", current.Select(item => item.Key + "=" + item.Value)));
+            return passed;
+        });
         await Scenario("A file setting Windows hard-links or doesn't ship is unavailable here without a retry, while another failed file read keeps Couldn't check", async () =>
         {
             const string linked = "windows.c104f89ba4e1b71b", missing = "windows.05ad0f0f96ac0c21", failing = "windows.3c9ad96209a9da2f";
