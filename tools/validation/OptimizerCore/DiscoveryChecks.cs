@@ -77,11 +77,7 @@ static class DiscoveryChecks
         Directory.CreateDirectory(shared);
         try
         {
-            using (var link = Process.Start(new ProcessStartInfo("cmd.exe", "/d /c mklink /J \"" + alias + "\" \"" + real + "\"") { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true })!)
-            {
-                link.StandardOutput.ReadToEnd();
-                link.WaitForExit();
-            }
+            AliasOwnershipChecks.Junction(alias, real);
             check(Directory.Exists(Path.Combine(alias, "Roo Industries Example")) && (File.GetAttributes(alias) & FileAttributes.ReparsePoint) != 0, "Junction fixture shows the same folder under a second path");
             var application = new CleanupApplication { AppId = "fixture:junction", DisplayName = "Roo Industries Example", Publisher = "Roo Industries", InstallLocation = shared, PackageFamilyName = null };
             var peer = new CleanupApplication { AppId = "fixture:alias", DisplayName = "Independent alias tool", Publisher = "Other", InstallLocation = Path.Combine(alias, "Roo Industries Example"), PackageFamilyName = null };
@@ -110,11 +106,7 @@ static class DiscoveryChecks
                 check(!linkedScan.Candidates.Single(item => item.Target == shared).OwnershipComplete,
                     "An uninspected network share cannot certify exclusive local ownership");
                 var chain = Path.Combine(root, "chain");
-                using (var junction = Process.Start(new ProcessStartInfo("cmd.exe", "/d /c mklink /J \"" + chain + "\" \"" + Path.Combine(nas, "Tool") + "\"") { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true })!)
-                {
-                    junction.StandardOutput.ReadToEnd();
-                    junction.WaitForExit();
-                }
+                AliasOwnershipChecks.Junction(chain, Path.Combine(nas, "Tool"));
                 var chainedTool = new CleanupApplication { AppId = "fixture:chained", DisplayName = "Chained share tool", Publisher = "Other", InstallLocation = chain, PackageFamilyName = null };
                 var chainWatch = Stopwatch.StartNew();
                 var chainScan = new LeftoverDiscovery(application, [chainedTool]).Scan(CancellationToken.None, [], []);
@@ -125,11 +117,7 @@ static class DiscoveryChecks
                 if (GetVolumeNameForVolumeMountPoint(Path.GetPathRoot(nas)!, volumeName, (uint)volumeName.Capacity))
                 {
                     var volumeChain = Path.Combine(root, "volume-chain");
-                    using (var junction = Process.Start(new ProcessStartInfo("cmd.exe", "/d /c mklink /J \"" + volumeChain + "\" \"" + volumeName + Path.Combine(nas, "Tool")[Path.GetPathRoot(nas)!.Length..] + "\"") { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true })!)
-                    {
-                        junction.StandardOutput.ReadToEnd();
-                        junction.WaitForExit();
-                    }
+                    AliasOwnershipChecks.Junction(volumeChain, volumeName + Path.Combine(nas, "Tool")[Path.GetPathRoot(nas)!.Length..]);
                     if (IsLink(volumeChain))
                     {
                         var volumeTool = new CleanupApplication { AppId = "fixture:volume", DisplayName = "Volume path share tool", Publisher = "Other", InstallLocation = volumeChain, PackageFamilyName = null };

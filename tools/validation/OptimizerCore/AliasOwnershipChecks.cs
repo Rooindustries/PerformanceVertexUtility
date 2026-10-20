@@ -88,13 +88,21 @@ static class AliasOwnershipChecks
         Console.WriteLine("MEASURE reparseResponse " + JsonSerializer.Serialize(new { ReparseTag = BitConverter.ToUInt32(bytes), ReparseDataLength = BitConverter.ToUInt16(bytes, 4), Reserved = BitConverter.ToUInt16(bytes, 6), SubstituteNameOffset = BitConverter.ToUInt16(bytes, 8), SubstituteNameLength = BitConverter.ToUInt16(bytes, 10), PrintNameOffset = BitConverter.ToUInt16(bytes, 12), PrintNameLength = BitConverter.ToUInt16(bytes, 14), Flags = BitConverter.ToUInt32(bytes) == 0xA000000C ? (uint?)BitConverter.ToUInt32(bytes, 16) : null, RawBase64 = Convert.ToBase64String(bytes, 0, (int)length) }));
     }
 
-    private static void Junction(string path, string target)
+    internal static void Junction(string path, string target)
     {
-        var start = new ProcessStartInfo("cmd.exe", "/d /c mklink /J \"" + path + "\" \"" + target + "\"") { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
-        using var child = Process.Start(start)!;
-        var output = child.StandardOutput.ReadToEndAsync(); var errors = child.StandardError.ReadToEndAsync();
-        if (!child.WaitForExit(4000)) { child.Kill(true); child.WaitForExit(); throw new IOException("Junction fixture creation timed out."); }
-        if (child.ExitCode != 0 || (File.GetAttributes(path) & FileAttributes.ReparsePoint) == 0) throw new IOException(output.GetAwaiter().GetResult() + errors.GetAwaiter().GetResult());
+        var substitute = Encoding.Unicode.GetBytes(@"\??\" + (target.StartsWith(@"\\?\", StringComparison.Ordinal) ? target[4..] : target));
+        var print = Encoding.Unicode.GetBytes(target);
+        var data = new byte[16 + substitute.Length + 2 + print.Length + 2];
+        BitConverter.GetBytes(0xA0000003u).CopyTo(data, 0);
+        BitConverter.GetBytes(checked((ushort)(data.Length - 8))).CopyTo(data, 4);
+        BitConverter.GetBytes(checked((ushort)substitute.Length)).CopyTo(data, 10);
+        BitConverter.GetBytes(checked((ushort)(substitute.Length + 2))).CopyTo(data, 12);
+        BitConverter.GetBytes(checked((ushort)print.Length)).CopyTo(data, 14);
+        substitute.CopyTo(data, 16); print.CopyTo(data, 18 + substitute.Length);
+        Directory.CreateDirectory(path);
+        using var handle = CreateFile(path, 0x2, 7, IntPtr.Zero, 3, 0x02200000, IntPtr.Zero);
+        if (handle.IsInvalid || !SetReparsePoint(handle, 0x900A4, data, (uint)data.Length, IntPtr.Zero, 0, out _, IntPtr.Zero))
+            throw new IOException("Could not create the disposable junction: " + Marshal.GetLastWin32Error());
     }
 
     private static string Map(string target)
@@ -239,4 +247,5 @@ static class AliasOwnershipChecks
     [DllImport("kernel32.dll", EntryPoint = "CreateFileW", CharSet = CharSet.Unicode, SetLastError = true)] private static extern SafeFileHandle CreateFile(string path, uint access, uint share, IntPtr security, uint disposition, uint flags, IntPtr template);
     [DllImport("kernel32.dll", EntryPoint = "GetFinalPathNameByHandleW", CharSet = CharSet.Unicode, SetLastError = true)] private static extern uint GetFinalPathNameByHandle(SafeFileHandle handle, StringBuilder name, uint length, uint flags);
     [DllImport("kernel32.dll", SetLastError = true)] private static extern bool DeviceIoControl(SafeFileHandle handle, uint control, IntPtr input, uint inputLength, byte[] output, uint outputLength, out uint returned, IntPtr overlapped);
+    [DllImport("kernel32.dll", EntryPoint = "DeviceIoControl", SetLastError = true)] private static extern bool SetReparsePoint(SafeFileHandle handle, uint control, byte[] input, uint inputLength, IntPtr output, uint outputLength, out uint returned, IntPtr overlapped);
 }
