@@ -44,6 +44,12 @@ static class CompositionChecks
         Apply("first", new TweakSelection("vrr", "on"));
         reject(() => engine.Preview("whole", [new("whole", "set")]), "Whole-string replacement conflicts with active field ownership");
         reject(() => engine.Preview("other", [new("vrr", "off")]), "Opposite choices for the same string field conflict");
+        Apply("second", new TweakSelection("windowed", "off"));
+        string? fieldConflict = null; try { engine.Preview("other", [new("vrr", "off")]); } catch (InvalidDataException error) { fieldConflict = error.Message; }
+        check(fieldConflict == "Your \"first\" profile already sets vrr to a different choice. Pick the same choice, or restore that profile first.", "A field conflict names only the profile that owns that field");
+        Apply("second");
+        string? mixedConflict = null; try { engine.Preview("other", [new("whole", "set"), new("windowed", "off")]); } catch (InvalidDataException error) { mixedConflict = error.Message; }
+        check(mixedConflict == "A whole-value setting conflicts with a field-level setting.", "A request that conflicts with itself keeps its own reason even when another profile also overlaps");
         External(Text("VRR=0;"));
         var drifted = engine.Preview("first", []);
         check(drifted.Changes.Length == 0 && drifted.LeftAsChanged.Length == 0, "An owned field Windows put back to its original is released without a report");

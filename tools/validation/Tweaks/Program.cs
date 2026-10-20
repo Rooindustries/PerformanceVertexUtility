@@ -124,6 +124,8 @@ try
     Apply(engine, "one", Show());
     var before = OperationFiles.HashFile(Path.Combine(root, "conflict.json"));
     Reject(() => engine.Preview("two", [new("explorer.file-extensions", "hide")]), "Conflicting presets are rejected before any write");
+    string? conflictMessage = null; try { engine.Preview("two", [new("explorer.file-extensions", "hide")]); } catch (InvalidDataException error) { conflictMessage = error.Message; }
+    Check(conflictMessage == "Your \"one\" profile already sets " + catalog.Settings.Single(setting => setting.Id == "explorer.file-extensions").Name + " to a different choice. Pick the same choice, or restore that profile first.", "A conflict with another profile names that profile and the setting");
     Check(OperationFiles.HashFile(Path.Combine(root, "conflict.json")) == before, "Conflict leaves data and recovery state unchanged");
     Reject(() => engine.Preview("one", [.. Show(), new("explorer.file-extensions", "hide")]), "Contradictory choices inside one request are rejected");
     Reject(() => engine.Preview("one", [new("unknown", "show")]), "Unknown setting IDs cannot inject registry targets");
