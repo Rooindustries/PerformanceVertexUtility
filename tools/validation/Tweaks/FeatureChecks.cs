@@ -155,7 +155,7 @@ static class FeatureChecks
             var fixture = OperationFiles.Read<TweakFixture>(path);
             fixture.Controls.Add(Features.Key, FeatureRead(new() { ["HypervisorPlatform"] = "Disabled", ["VirtualMachinePlatform"] = "Disabled" }));
             OperationFiles.Write(path, fixture);
-            var settings = new TweakEngine(catalog, store).Detect().Settings;
+            var engine = new TweakEngine(catalog, store); var settings = engine.Detect().Settings;
             foreach (var id in new[] { hyperV, recall })
             {
                 var status = settings.Single(setting => setting.Id == id);
@@ -164,6 +164,7 @@ static class FeatureChecks
             }
             var readable = settings.Single(setting => setting.Id == platform);
             check(readable.Supported && readable.Error is null && readable.ConfiguredChoices.Length == 1, "A feature this Windows offers is still read next to features it doesn't offer");
+            check(Refusal(() => engine.Preview("home", [new(hyperV, "choice-13eb31175a6979f4")])) == "This Windows installation does not offer feature: Microsoft-Hyper-V-All", "Applying a feature this Windows doesn't offer is refused and names the feature");
         });
         check(failures.Count == 0, "Windows feature restart handling (" + failures.Count + " failed scenarios)");
     }
