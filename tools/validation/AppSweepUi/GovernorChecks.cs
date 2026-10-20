@@ -153,6 +153,7 @@ static class GovernorChecks
             await RuleValues(check);
             await EditSameName(check);
             await RealSnapshot(check);
+            RealPathRules(check);
             await Scheduled(check);
             await Details(check);
             await LeftAsSetAsync(check);
@@ -757,6 +758,12 @@ static class GovernorChecks
         Expect(check, await Live(Host("running", [], [new(RuleId, 400, null, "Its program path could not be read, so this rule cannot be applied to it.") { Kind = "unavailable" }])),
             "A path-mode rule whose running app has an unreadable program path shows the reason the host recorded for it",
             "Rule Chrome rule: Now: chrome.exe (400) · unavailable · Its program path could not be read, so this rule cannot be applied to it.");
+        var pathRule = rule with { MatchMode = "path" };
+        async Task<string[]> PathLive(bool? running) => await View(Snapshot(false, [pathRule], new(idle, true, null), null, signedIn, images: new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "chrome.exe" })
+            with { PathRulesRunning = new Dictionary<string, bool?>(StringComparer.OrdinalIgnoreCase) { [Chrome] = running } });
+        Expect(check, await PathLive(false), "A path rule says its app is not running when only a copy from another folder runs", "Rule Chrome rule: Now: The app is not running right now.");
+        Expect(check, await PathLive(true), "A path rule whose own copy runs without a record says it was not applied", "Rule Chrome rule: Now: The app is running, but this rule hasn't been applied to it.");
+        Expect(check, await PathLive(null), "A path rule whose same-name app paths can't be read never claims its app is running", "Rule Chrome rule: Now: Can't tell whether the app is running right now.");
 
         GovernorProbe.ForgetTask();
         var reads = 0;
@@ -942,6 +949,56 @@ static class GovernorChecks
         {
             try { if (!alive.HasExited) alive.Kill(entireProcessTree: true); } catch (Exception) { }
             Directory.Delete(root, true);
+        }
+    }
+
+    private static void RealPathRules(Action<bool, string> check)
+    {
+        if (!OperatingSystem.IsWindows()) { Console.WriteLine("SKIP Real path rule checks need Windows"); return; }
+        var root = Path.Combine(Path.GetTempPath(), "roo-industries-path-rule-" + Guid.NewGuid().ToString("N"));
+        var own = Path.Combine(root, "own", "roo-industries-path-probe.exe");
+        var other = Path.Combine(root, "other", "roo-industries-path-probe.exe");
+        var started = new List<System.Diagnostics.Process>();
+        var pathRunning = typeof(GovernorProbe).GetMethod("PathRunning", BindingFlags.Static | BindingFlags.NonPublic)!;
+        bool? Running(string path) => (bool?)pathRunning.Invoke(null, [ProcessSnapshot.Take(), path]);
+        System.Diagnostics.Process Start(string path)
+        {
+            var process = System.Diagnostics.Process.Start(new ProcessStartInfo(path, "-n 60 127.0.0.1") { CreateNoWindow = true, UseShellExecute = false })!;
+            started.Add(process);
+            return process;
+        }
+        try
+        {
+            foreach (var copy in new[] { own, other })
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(copy)!);
+                File.Copy(Path.Combine(Environment.SystemDirectory, "PING.EXE"), copy);
+            }
+            Start(other);
+            check(Running(own) == false, "Real path rule: only a copy from another folder runs, so the rule's app reads as not running");
+            System.Diagnostics.Process? shared = null;
+            try { shared = Start(@"\\localhost\" + own[0] + "$" + own[2..]); }
+            catch (System.ComponentModel.Win32Exception error) { Console.WriteLine("SKIP Real path rule from a network path: " + error.Message); }
+            if (shared is not null)
+            {
+                using var target = new ProcessTarget(shared.Id);
+                var path = target.Identity().ExecutablePath;
+                check(Running(path) == true, "Real path rule: an app started from a network path reads as running for a rule made from it | rule path " + path);
+            }
+            Start(own);
+            check(Running(own) == true, "Real path rule: the rule's own copy reads as running while another copy also runs");
+        }
+        finally
+        {
+            foreach (var process in started)
+                using (process)
+                {
+                    try { if (!process.HasExited) process.Kill(); process.WaitForExit(); } catch (Exception) { }
+                }
+            for (var attempt = 0; ; attempt++)
+                try { Directory.Delete(root, true); break; }
+                catch (IOException) when (attempt < 20) { Thread.Sleep(250); }
+                catch (UnauthorizedAccessException) when (attempt < 20) { Thread.Sleep(250); }
         }
     }
 

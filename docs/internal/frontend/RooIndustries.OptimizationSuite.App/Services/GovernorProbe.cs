@@ -120,7 +120,31 @@ public static class GovernorProbe
             task = alive ? Cached(policyRoot + "|" + installRoot, Environment.TickCount64, () => ReadTask(policyRoot, installRoot, true)) : ReadTask(policyRoot, installRoot);
         var running = rules.Length > 0 || tracked.Length > 0 ? Running() : null;
         return new GovernorSnapshot(summary, worker, rules, journals, task, ExitedKeys(tracked.Select(instance => instance.Process), running), unapplied,
-            running?.Values.Select(process => process.ImageName).ToHashSet(StringComparer.OrdinalIgnoreCase));
+            running?.Values.Select(process => process.ImageName).ToHashSet(StringComparer.OrdinalIgnoreCase),
+            running is null ? null : rules.Where(rule => rule.MatchMode == "path").Select(rule => rule.ExecutablePath).Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(path => path, path => PathRunning(running, path), StringComparer.OrdinalIgnoreCase));
+    }
+
+    private static bool? PathRunning(Dictionary<int, SnapshotProcess> running, string executablePath)
+    {
+        var name = Path.GetFileName(executablePath);
+        var unknown = false;
+        foreach (var process in running.Values.Where(process => string.Equals(process.ImageName, name, StringComparison.OrdinalIgnoreCase)))
+        {
+            string? path;
+            try
+            {
+                using var target = new ProcessTarget(process.ProcessId);
+                var identity = target.Identity();
+                if (identity.CreationTimeFileTimeUtc != process.CreationTimeFileTimeUtc) continue;
+                path = identity.ExecutablePath;
+            }
+            catch (ProcessEndedException) { continue; }
+            catch (Exception) { path = ProcessSnapshot.ImagePath(process.ProcessId); }
+            if (path is null) { unknown = true; continue; }
+            if (string.Equals(path, executablePath, StringComparison.OrdinalIgnoreCase)) return true;
+        }
+        return unknown ? null : false;
     }
 
     private static Dictionary<int, SnapshotProcess>? Running()
