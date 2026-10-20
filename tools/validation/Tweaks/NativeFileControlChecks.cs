@@ -32,18 +32,18 @@ static class NativeFileControlChecks
                 try { store.Read(address with { Target = "fixture:" + missing }); } catch (FileNotFoundException error) { message = error.Message; }
                 check(message == Path.GetFileName(missing) + " is not installed on this PC.", "A Windows file this PC doesn't have reads as not installed, not as a failed check: " + Path.GetRelativePath(root, missing));
             }
-            var program = Path.Combine(root, "compattelrunner.exe"); File.WriteAllText(program, "fixture program");
+            var program = Path.Combine(root, "protected.txt"); File.WriteAllText(program, "protected fixture");
             var shaped = new RawSecurityDescriptor("D:P(A;;0x1200a9;;;SY)(A;;0x1200a9;;;BA)(A;;0x1200a9;;;BU)(A;;FA;;;" + WindowsIdentity.GetCurrent().User!.Value + ")");
             var shapedBytes = new byte[shaped.BinaryLength]; shaped.GetBinaryForm(shapedBytes, 0);
             if (!SetFileSecurity(program, 4, shapedBytes)) throw new Win32Exception();
             var programAddress = address with { Target = "fixture:" + program };
             var programBefore = store.Read(programAddress);
-            check((programBefore.Value.GetProperty("flags").GetInt32() & 0x1400) == 0x1000, "The System32-style fixture has a protected DACL without auto-inheritance");
+            check((programBefore.Value.GetProperty("flags").GetInt32() & 0x1400) == 0x1000, "The protected fixture has a protected DACL without auto-inheritance");
             var programPlan = new ControlPlan([programBefore], [new(programBefore, programBefore.Expand(ControlValues.From(new { denyMask = 0x20, enabled = true })))], []);
             ControlExecution.Apply(programPlan, store, _ => { });
-            check(ControlValues.Equal(store.Read(programAddress).Value, programPlan.Changes[0].After), "Blocking a System32-style program writes exactly the reviewed DACL and inheritance flags");
+            check(ControlValues.Equal(store.Read(programAddress).Value, programPlan.Changes[0].After), "A file restriction on a protected DACL writes exactly the reviewed DACL and inheritance flags");
             ControlExecution.Rollback(programPlan, 1, store);
-            check(store.Read(programAddress).Same(programBefore), "Undo restores the System32-style program's exact DACL and inheritance flags");
+            check(store.Read(programAddress).Same(programBefore), "Undo restores the protected file's exact DACL and inheritance flags");
             var desired = original.Expand(ControlValues.From(new { denyMask = 0x1f01ff }));
             var plan = new ControlPlan([original], [new(original, desired)], []); var attempted = 0;
             ControlExecution.Apply(plan, store, count => attempted = count);
