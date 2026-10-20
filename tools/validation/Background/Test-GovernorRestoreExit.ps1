@@ -35,5 +35,5 @@ function Test-ExitDuringRestore([string]$name,[string]$needle,[bool]$beforeWrite
  } catch {Save $directory 'failure' @{error=$_.Exception.ToString();stack=$_.ScriptStackTrace};throw}
  finally{if($owned){Stop-OwnedProcess $owned};Save $directory 'cleanup' @{fixtureStopped=if($p){$p.HasExited}else{$true}}}
 }
-Test-ExitDuringRestore 'restore-exit' '            foreach ($change in $entryControlChanges) {' $true
-Test-ExitDuringRestore 'restore-exit-after-writes' '            if ($appliedControls.Count -gt 0) {' $false
+Test-ExitDuringRestore 'exit-before' '            foreach ($change in $entryControlChanges) {' $true
+Test-ExitDuringRestore 'exit-after' '            if ($appliedControls.Count -gt 0) {' $false
