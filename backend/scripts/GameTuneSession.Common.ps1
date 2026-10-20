@@ -120,6 +120,8 @@ function Get-RooIndustriesGameTuneLiveProcessIdentity {
     $knownPathMismatch = -not $pathMatches -and -not [string]::IsNullOrWhiteSpace([string]$currentPath)
     $exitedNow = -not $controlState.exists
     if (-not $exitedNow) { try { $exitedNow = $live.HasExited } catch { $exitedNow = $false } }
+    $currentPriority = $controlState.priorityClass
+    if (-not $exitedNow) { try { $currentPriority = [string]$live.PriorityClass } catch { $currentPriority = $controlState.priorityClass } }
     $matches = ($nameMatches -and $pathMatches -and $startMatches)
     $reason = if (-not $startMatches) { 'This app was restarted, or its start time could not be verified. Nothing was changed or restored.' } elseif ($matches) { $null } elseif (-not $nameMatches) { 'Live process name does not match the preview entry.' } else { $pathReason }
     return [pscustomobject]@{
@@ -127,7 +129,7 @@ function Get-RooIndustriesGameTuneLiveProcessIdentity {
         matches = $matches
         instanceEnded = ($exitedNow -or -not $nameMatches -or $knownPathMismatch -or $knownStartMismatch)
         process = $live
-        currentPriorityClass = [string]$live.PriorityClass
+        currentPriorityClass = $currentPriority
         currentControlState = $controlState
         currentAffinityMask = $controlState.affinityMask
         currentIoPriority = $controlState.ioPriority
