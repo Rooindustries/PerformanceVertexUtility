@@ -128,6 +128,7 @@ function Read-Control($address){
         }
         'defender' {
             if($address.target -ne 'system' -or $address.property -ne 'SubmitSamplesConsent'){throw 'Unknown Defender preference.'}
+            if(-not (Get-Command Get-MpPreference -ErrorAction SilentlyContinue)){throw 'Microsoft Defender Antivirus is not available with this Windows version.'}
             $preference=Get-MpPreference
             if($null -eq $preference.SubmitSamplesConsent){throw 'The Defender preference is unavailable.'}
             $value=[int]$preference.SubmitSamplesConsent
