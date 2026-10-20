@@ -21,7 +21,7 @@ public sealed class BugRedactor
         var profile = profilePath?.TrimEnd('\\', '/');
         _own = profile?.Split('\\', '/')[^1] ?? "";
         _ownRoot = string.IsNullOrEmpty(profile) || profile.Length == _own.Length ? null : Root(profile[..^_own.Length]);
-        _profiles = (otherProfiles ?? []).Select(name => name.Trim()).Where(name => name.Length >= 2 && !SharedProfiles.Contains(name)).Append(_own)
+        _profiles = (otherProfiles ?? []).Where(name => !string.IsNullOrWhiteSpace(name) && !SharedProfiles.Contains(name)).Append(_own)
             .Where(name => name.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase).OrderByDescending(name => name.Length).ToArray();
         if (!string.IsNullOrWhiteSpace(profile))
         {
@@ -73,8 +73,9 @@ public sealed class BugRedactor
             return (known.Equals(_own, StringComparison.OrdinalIgnoreCase) && Root(root) == _ownRoot ? "%USERPROFILE%" : root + "<user>") + rest;
         }
         if (SharedProfiles.Any(Starts)) return match.Value;
-        var token = Token.Match(run).Value;
-        return token.Length == 0 ? match.Value : root + "<user>" + run[token.Length..];
+        var length = 0;
+        while (length < text.Length && !char.IsWhiteSpace(text[length]) && text[length] is not ('\'' or '"' or '\\' or '/')) length++;
+        return length == 0 ? match.Value : root + "<user>" + run[ends[length - 1]..];
     }
 
     private static string Root(string path) => path.Replace("\\\\", "\\").Replace('/', '\\').TrimEnd('\\').ToUpperInvariant();
@@ -87,7 +88,6 @@ public sealed class BugRedactor
 
     private static readonly HashSet<string> SharedProfiles = new(["Public", "Default", "Default User", "All Users"], StringComparer.OrdinalIgnoreCase);
     private static readonly Regex ProfileSegment = new(@"(?<root>\b[A-Za-z]:(?:\\{1,2}|/)Users(?:\\{1,2}|/))(?<run>(?:\\u[0-9A-Fa-f]{4}|(?![A-Za-z]:)[^\\/""\r\n:<>|?*])+)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
-    private static readonly Regex Token = new(@"^[^\\/""'\s]+", RegexOptions.CultureInvariant);
 
     private static Regex Word(string value)
         => new(@"(?<![\p{L}\p{N}_])" + Regex.Escape(value) + @"(?![\p{L}\p{N}_])", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
