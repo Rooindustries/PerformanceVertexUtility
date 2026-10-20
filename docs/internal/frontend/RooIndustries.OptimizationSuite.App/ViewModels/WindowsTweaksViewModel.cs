@@ -118,6 +118,8 @@ public partial class WindowsTweakRow : ObservableObject
     public bool IsApplied => AppliedChoice is not null;
     private static readonly string[] LackedHere = ["Win32 1060", "0x80070002", "Windows driver", "Office installation", "devices expose", "No active adapter", "is not installed", "is not available with", "Hard-linked file permissions", "doesn't let administrators change the"];
     private static bool PcLacks(string error) => error.StartsWith("No choice applies", StringComparison.Ordinal) || LackedHere.Any(text => error.Contains(text, StringComparison.Ordinal));
+    private static bool NoRawPolicy(System.Text.Json.JsonElement value) => value.TryGetProperty(MitigationControl.SnapshotField, out var raw) && raw.ValueKind == System.Text.Json.JsonValueKind.Object
+        && raw.TryGetProperty("MitigationOptions", out var options) && options.ValueKind == System.Text.Json.JsonValueKind.Null && raw.TryGetProperty("MitigationAuditOptions", out var audit) && audit.ValueKind == System.Text.Json.JsonValueKind.Null;
     private static string[] MitigationFields(TweakDefinition definition) => definition.Options.SelectMany(option => option.Controls ?? []).Where(control => control.Address.Kind == "mitigations" && control.Value.ValueKind == System.Text.Json.JsonValueKind.Object)
         .SelectMany(control => control.Value.EnumerateObject()).Where(property => property.Value.ValueKind is System.Text.Json.JsonValueKind.String or System.Text.Json.JsonValueKind.False or System.Text.Json.JsonValueKind.True).Select(property => property.Name).Distinct(StringComparer.Ordinal).ToArray();
     private static string? ServiceState(TweakControlRead control) => (control.Address.Property, control.Value.ValueKind) switch
@@ -214,7 +216,7 @@ public partial class WindowsTweakRow : ObservableObject
         if (status is { Error: null, Controls: [var control] } && control.Address.Kind == "timer") Current = control.Value.GetBoolean() ? "Active" : "Stopped";
         if (status is { Error: null, ConfiguredChoices.Length: 0, Controls: [{ Address.Kind: "service" } service] } && ServiceState(service) is { } state) Current = state;
         if (status is { Error: null, ConfiguredChoices.Length: 0, Controls: [{ Address.Kind: "mitigations", Value.ValueKind: System.Text.Json.JsonValueKind.Object } policy] } && MitigationFields(Definition) is { Length: > 0 } fields
-            && fields.All(field => policy.Value.TryGetProperty(field, out var value) && (value.ValueKind == System.Text.Json.JsonValueKind.String && value.GetString() == "NOTSET" || value.ValueKind == System.Text.Json.JsonValueKind.False))) Current = "Windows default";
+            && fields.All(field => policy.Value.TryGetProperty(field, out var value) && (value.ValueKind == System.Text.Json.JsonValueKind.String && value.GetString() == "NOTSET" || value.ValueKind == System.Text.Json.JsonValueKind.False)) && NoRawPolicy(policy.Value)) Current = "Windows default";
         if (Detail.Contains("Office installation", StringComparison.Ordinal)) Detail = "Office was not detected. You can save this choice before installing it.";
         else if (Detail.StartsWith("No choice applies", StringComparison.Ordinal)) Detail = "This Windows or app version does not use this setting. You can keep a saved choice for a matching installation.";
         else if (Detail.Contains("Win32 1060", StringComparison.Ordinal)) Detail = "This Windows service is not installed.";
