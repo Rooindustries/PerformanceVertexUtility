@@ -26,6 +26,20 @@ targets; missing primary-network evidence cannot become an all-adapter change.
 Detection reports observed configuration. It does not establish that a policy
 has taken effect in a running app or improved gaming performance.
 
+`backend/catalogs/windows-policy-editions.json` records Microsoft's registry-policy
+edition limits. The compiler applies them after combining all sources, so a
+wildcard from another source cannot bypass a limit. Home and Pro editions no
+longer offer **Consumer suggestions and promotions: Blocked**. Enterprise,
+Education, IoT Enterprise and Server retain it. **Remove this override** remains
+available, including when the blocked value was set before this catalog update.
+An unsupported choice is excluded from the applicable current choices; its raw
+registry value remains in the observations.
+
+Location-aware search and driver exclusion keep their existing availability.
+Their Microsoft references describe MDM CSP editions without establishing an
+edition limit for the registry policy. The same file records these two explicit
+exceptions to the catalog's overlapping-edition-gate check.
+
 ## One setting, shared ownership
 
 The planner resolves registry handles to their native key identity, with the
@@ -78,6 +92,13 @@ Create a new preview file, inspect it, then apply its exact SHA-256:
 
 `-PresetId explorer-details` can replace `-SelectionsPath`. The original presets `privacy-basics` and `activity-history-off` remain available. Generated source presets are included only when every required setting effect has an executor. Presets are named
 selections of the same controls, with no separate execution bodies.
+
+Source presets that select consumer blocking use `availableOnly`: they skip it
+on Home and Pro and report the omitted setting in `skipped`. Their other
+available choices still apply. A preset with no available choices is refused
+without changing an existing profile. Saved choices can retain an unavailable
+selection for later use on another edition, but cannot apply it here. Existing
+applied profiles can still be restored after the catalog changes.
 
 To restore a profile, create another selections file containing `[]`, preview it
 with the same `ProfileId`, then use `-Action Restore` with that review's hash.

@@ -111,6 +111,34 @@ def apply_availability(settings):
                 setting['editions'] = ['*']
 
 
+def apply_policy_editions(catalog):
+    policies = json.loads((ROOT / 'backend/catalogs/windows-policy-editions.json').read_text())['policies']
+    constrained = set()
+    for setting in catalog['settings']:
+        for option in setting['options']:
+            gates = copy.deepcopy(option.get('availability', [{'minimumBuild': setting['minimumBuild'], 'maximumBuild': setting['maximumBuild'], 'editions': setting['editions']}]))
+            matched = False
+            for change in option['changes']:
+                if not any(change.get(field) is not None for field in ('dword', 'value', 'token', 'bits', 'formula')):
+                    continue
+                address = change['address']
+                for policy in policies:
+                    if not all(address.get(field, '').casefold() == policy[field].casefold() for field in ('hive', 'keyPath', 'valueName')):
+                        continue
+                    matched = True
+                    for gate in gates:
+                        gate['editions'] = policy['editions'] if '*' in gate['editions'] else sorted(set(gate['editions']).intersection(policy['editions']))
+                    gates = [gate for gate in gates if gate['editions']]
+            if matched:
+                if not gates:
+                    raise ValueError('A registry policy edition constraint excludes every source gate: ' + setting['id'] + '/' + option['id'])
+                option['availability'] = gates
+                constrained.add((setting['id'], option['id']))
+    for preset in catalog['presets']:
+        if any((item['settingId'], item['optionId']) in constrained for item in preset['selections']):
+            preset['availableOnly'] = True
+
+
 WINDOWS_REFUSED_SERVICES = {'wermgr', 'waasmedicsvc'}
 WINDOWS_REFUSED_TASK_FOLDERS = ('\\microsoft\\windows\\waasmedic\\', '\\microsoft\\windows\\updateorchestrator\\')
 
@@ -701,6 +729,7 @@ def compile_catalog():
         if combines_incompatible(selections):
             raise ValueError('The FPS preset combines settings that cannot be used together')
         catalog['presets'].append({'id': 'fps-boost', 'name': source['name'], 'selections': selections, 'availableOnly': True})
+    apply_policy_editions(catalog)
     return catalog, {'schemaVersion': 1, 'version': catalog['version'], 'records': coverage, 'additionalSettings': extra_coverage, 'features': features}
 
 

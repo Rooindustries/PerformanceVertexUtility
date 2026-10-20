@@ -58197,13 +58197,6 @@
               "minimumBuild": 10240,
               "maximumBuild": 26200,
               "editions": [
-                "*"
-              ]
-            },
-            {
-              "minimumBuild": 14393,
-              "maximumBuild": 26200,
-              "editions": [
                 "Enterprise",
                 "EnterpriseS",
                 "EnterpriseN",
@@ -58214,6 +58207,22 @@
                 "IoTEnterpriseS",
                 "ServerStandard",
                 "ServerDatacenter"
+              ]
+            },
+            {
+              "minimumBuild": 14393,
+              "maximumBuild": 26200,
+              "editions": [
+                "Education",
+                "EducationN",
+                "Enterprise",
+                "EnterpriseN",
+                "EnterpriseS",
+                "EnterpriseSN",
+                "IoTEnterprise",
+                "IoTEnterpriseS",
+                "ServerDatacenter",
+                "ServerStandard"
               ]
             }
           ]
@@ -78913,7 +78922,8 @@
           "settingId": "windows.9ba2fc5ad6c98df6",
           "optionId": "choice-6b253977ea5987f3"
         }
-      ]
+      ],
+      "availableOnly": true
     },
     {
       "id": "fsos.mouse-throttling.36.enabled",
@@ -87799,7 +87809,8 @@
           "settingId": "windows.a8268996c3eb9072",
           "optionId": "choice-6b253977ea5987f3"
         }
-      ]
+      ],
+      "availableOnly": true
     },
     {
       "id": "oosu.p097.297.source-default",
@@ -89979,7 +89990,8 @@
           "settingId": "windows.a8268996c3eb9072",
           "optionId": "choice-6b253977ea5987f3"
         }
-      ]
+      ],
+      "availableOnly": true
     },
     {
       "id": "winutil.wpftweaksconsumerfeatures.10.source-default",
@@ -92147,7 +92159,8 @@
           "settingId": "windows.a8268996c3eb9072",
           "optionId": "choice-6b253977ea5987f3"
         }
-      ]
+      ],
+      "availableOnly": true
     },
     {
       "id": "wpd.disablewindowsconsumerfeatures.16.source-default",
