@@ -526,6 +526,17 @@ static class GovernorChecks
         check(App.Operations.RetryCalls == baseline + 1 && !panel.RetryAvailable && panel.Status == "The old settings are back." && panel.GovernorDetail == "",
             "Put settings back runs one restore pass and reports the result from fresh governor state");
 
+        (view, panel) = await Show(Snapshot(false, [off], new(failed, false, null)));
+        var left = Instance(chrome, "cpuPriority", "restored", "leftAsSet", ProcessControlEngine.LeftAsSet);
+        App.Operations.RetryRestore = () =>
+        {
+            App.Operations.Governor = Snapshot(false, [off], new(Host("stopped", [left]), false, null));
+            return Task.FromResult(Host("stopped", [left]));
+        };
+        await panel.RetryRestoreCommand.ExecuteAsync(null);
+        check(!panel.RetryAvailable && panel.Status == "Some settings were left as another program set them." && panel.Detail.Contains("that program's value was kept", StringComparison.Ordinal),
+            "Put settings back does not claim the old settings are back when another program's value was kept" + " | got: " + panel.Status);
+
         App.Operations.Governor = Snapshot(true, [Rule(RuleId, "Chrome rule", Chrome, true)], new(failed, false, null));
         App.Operations.RetryRestore = () => Task.FromResult(failed);
         await panel.RefreshRulesCommand.ExecuteAsync(null);
