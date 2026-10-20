@@ -45,8 +45,11 @@ public static class FileAccessControl
         var path = Target(address);
         if (new DriveInfo(Path.GetPathRoot(path)!).DriveFormat != "NTFS") throw new InvalidDataException("File permission controls currently require NTFS.");
         using var privileges = PrivilegeScope.FilePolicy();
-        using var lease = FileLease.OpenPolicy(path);
-        return Snapshot(address, lease);
+        FileLease lease;
+        try { lease = FileLease.OpenPolicy(path); }
+        catch (System.ComponentModel.Win32Exception error) when (error.NativeErrorCode is 2 or 3 && !address.Target.StartsWith("selected:", StringComparison.Ordinal))
+        { throw new FileNotFoundException(Path.GetFileName(path) + " is not installed on this PC.", path, error); }
+        using (lease) return Snapshot(address, lease);
     }
     public static JsonElement Expand(TweakControlRead before, JsonElement requested)
     {
