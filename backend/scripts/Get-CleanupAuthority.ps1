@@ -31,15 +31,20 @@ try {
     } else {
         if($state.invocation.processId -isnot [int] -or $state.invocation.processId -le 0 -or [string]::IsNullOrWhiteSpace([string]$state.invocation.creationTimeFileTimeUtc)){throw 'The remover process identity is incomplete.'}
         $result.removerRunning=[bool](Test-RooIndustriesBulkInvocationLive $state.invocation)
-        if($state.outcome.exitCode -isnot [int] -or $state.outcome.success -isnot [bool] -or $state.outcome.rebootRequired -isnot [bool] -or
-            $state.outcome.stopQueue -isnot [bool] -or $state.outcome.policy -cne $entry.exitCodePolicy){throw 'The remover outcome is missing or incomplete.'}
-        $expected=Get-RooIndustriesUninstallOutcome $entry.exitCodePolicy $state.outcome.exitCode
-        foreach($name in @('success','rebootRequired','stopQueue','state')){if($state.outcome.$name -cne $expected.$name){throw 'Recorded outcome signals disagree with the exit-code policy.'}}
-        $result.rebootPending=[bool]$expected.rebootRequired
-        if($expected.rebootRequired) {
+        if($null -eq $state.outcome) {
             $result.rebootPending=-not(Test-RooIndustriesBulkRestartAfterInvocation $state.invocation)
+            $result.removalResolved=[bool](-not $result.removerRunning -and -not $result.rebootPending)
+        } else {
+            if($state.outcome.exitCode -isnot [int] -or $state.outcome.success -isnot [bool] -or $state.outcome.rebootRequired -isnot [bool] -or
+                $state.outcome.stopQueue -isnot [bool] -or $state.outcome.policy -cne $entry.exitCodePolicy){throw 'The remover outcome is missing or incomplete.'}
+            $expected=Get-RooIndustriesUninstallOutcome $entry.exitCodePolicy $state.outcome.exitCode
+            foreach($name in @('success','rebootRequired','stopQueue','state')){if($state.outcome.$name -cne $expected.$name){throw 'Recorded outcome signals disagree with the exit-code policy.'}}
+            $result.rebootPending=[bool]$expected.rebootRequired
+            if($expected.rebootRequired) {
+                $result.rebootPending=-not(Test-RooIndustriesBulkRestartAfterInvocation $state.invocation)
+            }
+            $result.removalResolved=[bool]($expected.success -and -not $result.removerRunning -and -not $result.rebootPending)
         }
-        $result.removalResolved=[bool]($expected.success -and -not $result.removerRunning -and -not $result.rebootPending)
     }
 } catch {$result.errors=@($_.Exception.Message)}
 $result|ConvertTo-Json -Depth 8
