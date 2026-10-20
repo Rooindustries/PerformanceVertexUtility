@@ -151,6 +151,19 @@ public sealed class TweakEngine
         return new(_store.Commit(plan, reviewHash), plan.Changes.Length != 0 || plan.Controls?.Changes.Length > 0, false);
     }
 
+    private void Compose(List<TweakProfile> profiles, string profileId, string target, Func<TweakProfile, IEnumerable<(string Target, string Setting)>> claims, Action check)
+    {
+        try { check(); }
+        catch (InvalidDataException error)
+        {
+            var requested = profiles.Where(profile => profile.Id == profileId).SelectMany(claims).Where(claim => claim.Target == target).Select(claim => claim.Setting).Distinct(StringComparer.Ordinal).ToArray();
+            var others = profiles.Where(profile => profile.Id != profileId && claims(profile).Any(claim => claim.Target == target)).Select(profile => profile.Id).Distinct(StringComparer.Ordinal).ToArray();
+            if (requested.Length == 0 || others.Length == 0) throw;
+            var names = requested.Select(id => _catalog.Settings.FirstOrDefault(setting => setting.Id == id)?.Name ?? id);
+            throw new InvalidDataException("Your " + string.Join(" and ", others.Select(id => "\"" + id + "\"")) + (others.Length == 1 ? " profile already sets " : " profiles already set ") + string.Join(", ", names)
+                + " to a different choice. Pick the same choice, or restore " + (others.Length == 1 ? "that profile" : "those profiles") + " first.", error);
+        }
+    }
     private TweakPlan Plan(string profileId, TweakSelection[] selections, string operationId, DateTime created, string revision)
     {
         if (string.IsNullOrWhiteSpace(profileId) || profileId.Length > 100 || selections is null || selections.Length > 4096)
@@ -187,8 +200,10 @@ public sealed class TweakEngine
         foreach (var group in wanted.Values)
         {
             foreach (var claim in group) claim.Target.Validate();
-            TweakComposition.Check(group);
+            Compose(profiles, profileId, group[0].Target.Id, profile => profile.Claims.Select(claim => (claim.Target.Id, claim.SettingId)), () => TweakComposition.Check(group));
         }
+        foreach (var group in profiles.SelectMany(profile => profile.Controls ?? []).GroupBy(claim => claim.Target.Id, StringComparer.Ordinal))
+            Compose(profiles, profileId, group.Key, profile => (profile.Controls ?? []).Select(claim => (claim.Target.Id, claim.SettingId)), () => ControlComposition.Check(group.ToArray()));
         var held = (state?.Held ?? []).ToDictionary(item => item.Original.Id, StringComparer.Ordinal);
         var next = new List<TweakHeldValue>();
         var changes = new List<TweakMutation>();
