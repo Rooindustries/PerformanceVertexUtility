@@ -540,6 +540,26 @@ static class FreshnessChecks
             if (!passed) Console.WriteLine("  simple mode lists [" + string.Join(", ", simple) + "], lacking " + (absent is null ? "missing" : absent.CanRetry + "/" + absent.UnavailableHere + "/" + absent.Detail) + ", failing " + (failed is null ? "missing" : failed.CanRetry + "/" + failed.Current + "/" + failed.Detail));
             return passed;
         });
+        await Scenario("A row this PC can't use says Not available here instead of Not read", async () =>
+        {
+            const string missing = "windows.05ad0f0f96ac0c21", failing = "windows.3c9ad96209a9da2f";
+            RegistryAddress Address(string name) => new("CurrentUser", "Registry64", @"Software\RooIndustriesUiModelFixture", "value", name);
+            TweakDefinition Setting(string id) => new(id, id, "Privacy", "Fixture", 10240, 26200, ["*"], "none",
+                [new("on", "On", [new(Address(id), 1)]), new("off", "Off", [new(Address(id), 0)])], [new("Fixture", "fixture", "isolated UI validation")], null, false);
+            var fixture = new Fixture(Path.Combine(root, "unavailable-current"), new TweakCatalog(1, "unavailable", [Setting(missing), Setting(failing)], [])) { Missing = false };
+            fixture.TransformStatus = inspection => inspection with { Settings = inspection.Settings.Select(status => status.Id switch
+            {
+                missing => status with { Error = "aitagent.exe is not installed on this PC.", Supported = false },
+                failing => status with { Error = "Access is denied.", Supported = false },
+                _ => status,
+            }).ToArray() };
+            App.Operations = fixture; var model = new WindowsTweaksViewModel(); await model.ShowAsync();
+            model.ShowAdvanced = true;
+            var current = model.Rows.ToDictionary(row => row.Id, row => row.Current);
+            var passed = current.GetValueOrDefault(missing) == "Not available here" && current.GetValueOrDefault(failing) == "Couldn't check";
+            if (!passed) Console.WriteLine("  current values: " + string.Join(", ", current.Select(item => item.Key + "=" + item.Value)));
+            return passed;
+        });
         await Scenario("A registry row with no matching choice shows the value it found", async () =>
         {
             const string number = "windows.94caf9dc9f3af63e", text = "windows.b048256362718da0", mixed = "windows.83d4b1b8f7a55f84", partial = "windows.12a2f7d075db4a7a";
