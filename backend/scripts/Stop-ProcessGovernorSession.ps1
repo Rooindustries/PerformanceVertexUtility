@@ -9,6 +9,18 @@ param(
 
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'ProcessGovernor.Common.ps1')
+$script:GovernorAlreadyClosed = 'This app was already closed or restarted. Its limits ended with it, so nothing remains to restore.'
+
+function New-GovernorAlreadyClosedItem {
+    param([object]$Entry)
+    return [pscustomobject]@{
+        processId = Get-RooIndustriesPropertyValue $Entry 'processId' 0
+        processName = Get-RooIndustriesPropertyValue $Entry 'processName' ''
+        reason = $script:GovernorAlreadyClosed
+        outcome = 'alreadyClosed'
+        skippedAtUtc = Get-RooIndustriesUtcStamp
+    }
+}
 
 function New-GovernorRestorePreview {
     param(
@@ -23,7 +35,10 @@ function New-GovernorRestorePreview {
     $originalMemoryPriority = Get-RooIndustriesPropertyValue $Snapshot 'originalMemoryPriority' $null
     $originalGpuPriority = Get-RooIndustriesPropertyValue $Snapshot 'originalGpuPriority' $null
     $blocked = (-not $Candidate.exists) -or (-not $Candidate.matches)
-    $reason = if ($blocked) {
+    $ended = $blocked -and [bool](Get-RooIndustriesPropertyValue $Candidate 'instanceEnded' $false)
+    $reason = if ($ended) {
+        $script:GovernorAlreadyClosed
+    } elseif ($blocked) {
         [string]$Candidate.reason
     } else {
         'Restore original process controls from process governor backup.'
@@ -97,7 +112,7 @@ function New-GovernorRestorePreview {
         controlChanges = @($controlChanges.ToArray())
         ruleId = [string](Get-RooIndustriesPropertyValue $Snapshot 'ruleId' '')
         reason = $reason
-        reasonCodes = if ($blocked) { @('PROCESS_GOVERNOR_RESTORE_SKIPPED') } else { @('PROCESS_GOVERNOR_RESTORE') }
+        reasonCodes = if ($ended) { @('PROCESS_GOVERNOR_ALREADY_CLOSED') } elseif ($blocked) { @('PROCESS_GOVERNOR_RESTORE_SKIPPED') } else { @('PROCESS_GOVERNOR_RESTORE') }
         classification = 'rollbackCandidate'
         blocked = $blocked
         blockedReason = if ($blocked) { $reason } else { $null }
@@ -207,10 +222,15 @@ try {
 
     $changed = New-Object System.Collections.Generic.List[object]
     $skipped = New-Object System.Collections.Generic.List[object]
+    $alreadyClosed = New-Object System.Collections.Generic.List[object]
     $restored = New-Object System.Collections.Generic.List[object]
     if ($ConfirmApply) {
         foreach ($entry in @($preview.ToArray())) {
             if ([bool](Get-RooIndustriesPropertyValue $entry 'blocked' $false)) {
+                if (@(Get-RooIndustriesPropertyArray $entry 'reasonCodes') -contains 'PROCESS_GOVERNOR_ALREADY_CLOSED') {
+                    $alreadyClosed.Add((New-GovernorAlreadyClosedItem $entry)) | Out-Null
+                    continue
+                }
                 $skip = [pscustomobject]@{
                     processId = Get-RooIndustriesPropertyValue $entry 'processId' 0
                     processName = Get-RooIndustriesPropertyValue $entry 'processName' ''
@@ -223,6 +243,10 @@ try {
             $processId = [int](Get-RooIndustriesPropertyValue $entry 'processId' 0)
             $identity = Get-RooIndustriesProcessGovernorLiveIdentity $entry
             if (-not $identity.exists -or -not $identity.matches) {
+                if ($identity.instanceEnded) {
+                    $alreadyClosed.Add((New-GovernorAlreadyClosedItem $entry)) | Out-Null
+                    continue
+                }
                 $skipped.Add([pscustomobject]@{
                     processId = $processId
                     processName = Get-RooIndustriesPropertyValue $entry 'processName' ''
@@ -276,6 +300,10 @@ try {
     } else {
         foreach ($entry in @($preview.ToArray())) {
             if ([bool](Get-RooIndustriesPropertyValue $entry 'blocked' $false)) {
+                if (@(Get-RooIndustriesPropertyArray $entry 'reasonCodes') -contains 'PROCESS_GOVERNOR_ALREADY_CLOSED') {
+                    $alreadyClosed.Add((New-GovernorAlreadyClosedItem $entry)) | Out-Null
+                    continue
+                }
                 $skipped.Add([pscustomobject]@{
                     processId = Get-RooIndustriesPropertyValue $entry 'processId' 0
                     processName = Get-RooIndustriesPropertyValue $entry 'processName' ''
@@ -299,8 +327,10 @@ try {
     if (-not $ConfirmApply) {
         $warnings.Add((New-RooIndustriesIssue 'PROCESS_GOVERNOR_RESTORE_PREVIEW_ONLY' 'Governor restore preview did not change any process because -ConfirmApply was omitted.' 'info' 'performance.governor' $resolvedBackupPath $false 'Rerun with -ConfirmApply only after reviewing the restore preview.' $null)) | Out-Null
     }
+    $closedText = if ($alreadyClosed.Count -gt 0) { ' Already closed or restarted, so nothing remained to restore: ' + (($alreadyClosed | ForEach-Object { $_.processName + ' (PID ' + $_.processId + ')' }) -join ', ') + '.' } else { '' }
+    $skippedOut = @($skipped.ToArray()) + @($alreadyClosed.ToArray())
     $summary = if ($ConfirmApply) {
-        "Process governor restore completed with $($restored.Count) restored item(s) and $($skipped.Count) skipped item(s)."
+        "Process governor restore completed with $($restored.Count) restored item(s) and $($skipped.Count) skipped item(s)." + $closedText
     } else {
         'Process governor restore preview completed. No process changes were applied.'
     }
@@ -312,7 +342,7 @@ try {
         completedAtUtc = Get-RooIndustriesUtcStamp
         summary = $summary
         changedItems = @($changed.ToArray())
-        skippedItems = @($skipped.ToArray())
+        skippedItems = $skippedOut
         restoredItems = @($restored.ToArray())
         artifacts = @([pscustomobject]@{ type = 'processGovernorSessionBackup'; path = $resolvedBackupPath })
     }
@@ -333,7 +363,7 @@ try {
         restorable = (-not $ConfirmApply -or $status -in @('partial', 'failed'))
         preview = @($preview.ToArray())
         changedItems = @($changed.ToArray())
-        skippedItems = @($skipped.ToArray())
+        skippedItems = $skippedOut
         restoredItems = @($restored.ToArray())
         backup = $backupMetadata
         result = $result
@@ -349,7 +379,7 @@ try {
         $session.restorable = ($status -in @('partial', 'failed'))
         $session.activeRestraints = @()
         $session.restoredItems = @($restored.ToArray())
-        $session.skippedItems = @($skipped.ToArray())
+        $session.skippedItems = $skippedOut
         $session.completedAtUtc = Get-RooIndustriesUtcStamp
         Write-RooIndustriesProcessGovernorJsonFile $session $resolvedSessionPath
         Add-RooIndustriesProcessGovernorLogFileEntry (Split-Path $resolvedSessionPath -Parent) (New-RooIndustriesLog $summary)
