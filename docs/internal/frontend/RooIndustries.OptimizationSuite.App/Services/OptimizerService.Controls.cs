@@ -15,7 +15,7 @@ public sealed record ProcessControlReview(ProcessControlPreview Plan, string Pre
 public sealed record PolicyWorkerRegistration(string TaskName, bool Registered, bool Enabled, bool RunAtLogon, bool RestartEveryMinute, bool Paused, int Rules, int EnabledRules,
     bool Secured, string? SecurityProblem, string? RulesError, PolicyWorkerStatus Worker);
 public sealed record GovernorSnapshot(PolicySummary Summary, PolicyWorkerStatus Worker, SavedProcessRule[] Rules, Dictionary<string, ProcessControlJournal> Journals,
-    GovernorTaskState? ScheduledTask = null, IReadOnlySet<string>? Exited = null, IReadOnlySet<string>? Unapplied = null, IReadOnlySet<string>? RunningImages = null);
+    GovernorTaskState? ScheduledTask = null, IReadOnlySet<string>? Exited = null, IReadOnlySet<string>? Unapplied = null, IReadOnlySet<string>? RunningImages = null, IReadOnlyDictionary<string, bool?>? PathRulesRunning = null);
 public sealed record CleanupBatchReview(CleanupBatchPreview Plan, string PreviewPath, string Hash, string JournalPath);
 public sealed record CleanupBatchSession(CleanupBatchReview Review, CleanupBatchJournal State);
 

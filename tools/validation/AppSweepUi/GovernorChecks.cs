@@ -757,6 +757,12 @@ static class GovernorChecks
         Expect(check, await Live(Host("running", [], [new(RuleId, 400, null, "Its program path could not be read, so this rule cannot be applied to it.") { Kind = "unavailable" }])),
             "A path-mode rule whose running app has an unreadable program path shows the reason the host recorded for it",
             "Rule Chrome rule: Now: chrome.exe (400) · unavailable · Its program path could not be read, so this rule cannot be applied to it.");
+        var pathRule = rule with { MatchMode = "path" };
+        async Task<string[]> PathLive(bool? running) => await View(Snapshot(false, [pathRule], new(idle, true, null), null, signedIn, images: new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "chrome.exe" })
+            with { PathRulesRunning = new Dictionary<string, bool?>(StringComparer.OrdinalIgnoreCase) { [Chrome] = running } });
+        Expect(check, await PathLive(false), "A path rule says its app is not running when only a copy from another folder runs", "Rule Chrome rule: Now: The app is not running right now.");
+        Expect(check, await PathLive(true), "A path rule whose own copy runs without a record says it was not applied", "Rule Chrome rule: Now: The app is running, but this rule hasn't been applied to it.");
+        Expect(check, await PathLive(null), "A path rule whose same-name app paths can't be read never claims its app is running", "Rule Chrome rule: Now: Can't tell whether the app is running right now.");
 
         GovernorProbe.ForgetTask();
         var reads = 0;

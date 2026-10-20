@@ -140,7 +140,8 @@ public static class GovernorDisplay
     };
 
     private static string Absent(GovernorSnapshot snapshot, SavedProcessRule rule)
-        => snapshot.RunningImages is not { } images ? AppUnknown : images.Contains(Path.GetFileName(rule.ExecutablePath)) ? NotYetApplied : NotRunningApp;
+        => rule.MatchMode == "path" ? snapshot.PathRulesRunning is { } paths && paths.TryGetValue(rule.ExecutablePath, out var running) && running is { } known ? known ? NotYetApplied : NotRunningApp : AppUnknown
+            : snapshot.RunningImages is not { } images ? AppUnknown : images.Contains(Path.GetFileName(rule.ExecutablePath)) ? NotYetApplied : NotRunningApp;
 
     public static string Detail(string state, GovernorSnapshot snapshot)
     {
