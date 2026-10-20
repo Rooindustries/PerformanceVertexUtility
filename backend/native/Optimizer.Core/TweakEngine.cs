@@ -156,11 +156,12 @@ public sealed class TweakEngine
         try { check(group); }
         catch (InvalidDataException error)
         {
-            bool Conflicts(T first, T second) { try { check([first, second]); return false; } catch (InvalidDataException) { return true; } }
+            bool Composes(T[] claims) { try { check(claims); return true; } catch (InvalidDataException) { return false; } }
+            bool Conflicts(T first, T second) => !Composes([first, second]);
             var requested = profiles.Where(profile => profile.Id == profileId).SelectMany(claims).Where(group.Contains).ToArray();
             var blocking = profiles.Where(profile => profile.Id != profileId).SelectMany(profile => claims(profile).Where(group.Contains).Select(claim => (profile.Id, Claim: claim)))
                 .Where(other => requested.Any(mine => Conflicts(mine, other.Claim))).ToArray();
-            if (blocking.Length == 0) throw;
+            if (blocking.Length == 0 || !Composes(group.Where(claim => !blocking.Any(other => ReferenceEquals(other.Claim, claim))).ToArray())) throw;
             var others = blocking.Select(other => other.Id).Distinct(StringComparer.Ordinal).ToArray();
             var names = requested.Where(mine => blocking.Any(other => Conflicts(mine, other.Claim))).Select(setting).Distinct(StringComparer.Ordinal)
                 .Select(id => _catalog.Settings.FirstOrDefault(definition => definition.Id == id)?.Name ?? id);
