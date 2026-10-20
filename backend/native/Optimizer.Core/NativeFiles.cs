@@ -177,19 +177,31 @@ internal static class NativeFiles
 
     internal enum PathWalk { Local, Absent, OffComputer, Unknown }
 
-    public static (PathWalk Walk, string? Path) ResolvedPath(string path)
+    public static (PathWalk Walk, string? Path, FileAttributes Attributes) ResolvedPath(string path)
     {
         var links = 0;
         try
         {
             var (walk, handle) = Walk(path, ref links);
             using (handle)
-                return handle is null ? (walk == PathWalk.Absent && links != 0 ? PathWalk.Unknown : walk, null) : FinalPath(handle) is { } final ? (PathWalk.Local, Normalize(final)) : (PathWalk.Unknown, null);
+                return handle is null ? (walk == PathWalk.Absent && links != 0 ? PathWalk.Unknown : walk, null, 0) : FinalPath(handle) is { } final ? (PathWalk.Local, Normalize(final), Info(handle).Attributes | (links == 0 ? 0 : FileAttributes.ReparsePoint)) : (PathWalk.Unknown, null, 0);
         }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException or Win32Exception) { return (PathWalk.Unknown, null); }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException or Win32Exception) { return (PathWalk.Unknown, null, 0); }
     }
 
-    private static (PathWalk Walk, SafeFileHandle? Handle) Walk(string path, ref int links)
+    public static (string Name, FileAttributes Attributes)[] ReadDirectory(string path)
+    {
+        var links = 0;
+        var (walk, handle) = Walk(path, ref links, true);
+        using (handle)
+        {
+            if (handle is not null && Info(handle).IsDirectory) return FileLease.DirectoryEntries(handle);
+            if (walk == PathWalk.Absent && links == 0) return [];
+            throw new InvalidDataException("This directory could not be opened safely on a local fixed drive.");
+        }
+    }
+
+    private static (PathWalk Walk, SafeFileHandle? Handle) Walk(string path, ref int links, bool directory = false)
     {
         path = path.Replace('/', '\\');
         if (path.StartsWith(@"\\?\", StringComparison.Ordinal) || path.StartsWith(@"\??\", StringComparison.Ordinal)) path = path[4..];
@@ -197,25 +209,25 @@ internal static class NativeFiles
         var (state, root) = LocalRoot(path);
         if (root is null) return (state, null);
         path = Path.GetFullPath(path);
-        return WalkLocal(root, path[3..], ref links);
+        return WalkLocal(root, path[3..], ref links, directory);
     }
 
-    private static (PathWalk Walk, SafeFileHandle? Handle) WalkLocal(string root, string relative, ref int links)
+    private static (PathWalk Walk, SafeFileHandle? Handle) WalkLocal(string root, string relative, ref int links, bool directory)
     {
-        SafeFileHandle? current = Open(root, ReadAttributes | Synchronize, ShareAll, BackupSemantics | OpenReparsePoint | NoRecallAnonymous);
+        SafeFileHandle? current = Open(root, ReadAttributes | Synchronize | (directory ? ReadData : 0), ShareAll, BackupSemantics | OpenReparsePoint | NoRecallAnonymous);
         try
         {
             foreach (var part in relative.Split('\\', StringSplitOptions.RemoveEmptyEntries))
             {
                 SafeFileHandle? child;
-                try { child = FileLease.OpenMetadataChild(current, part); }
+                try { child = directory ? FileLease.OpenDirectoryChild(current, part) : FileLease.OpenMetadataChild(current, part); }
                 catch (Win32Exception error) when (error.NativeErrorCode is 2 or 3) { return (PathWalk.Absent, null); }
                 try
                 {
                     if (Info(child).IsLink)
                     {
                         if (++links > 16 || LinkTarget(child) is not { } link) return (PathWalk.Unknown, null);
-                        var resolved = link.Relative ? WalkRelative(current, link.Target, ref links) : Walk(link.Target, ref links);
+                        var resolved = link.Relative ? WalkRelative(current, link.Target, ref links, directory) : Walk(link.Target, ref links, directory);
                         if (resolved.Handle is null) return resolved;
                         child.Dispose(); child = resolved.Handle;
                     }
@@ -229,7 +241,7 @@ internal static class NativeFiles
         finally { current?.Dispose(); }
     }
 
-    private static (PathWalk Walk, SafeFileHandle? Handle) WalkRelative(SafeFileHandle parent, string target, ref int links)
+    private static (PathWalk Walk, SafeFileHandle? Handle) WalkRelative(SafeFileHandle parent, string target, ref int links, bool directory)
     {
         if (Path.IsPathRooted(target)) return (PathWalk.Unknown, null);
         var native = FinalPath(parent, 2);
@@ -238,7 +250,7 @@ internal static class NativeFiles
         var separator = native.IndexOf('\\', prefix.Length);
         if (separator <= prefix.Length || !native[prefix.Length..separator].All(char.IsAsciiDigit)) return (PathWalk.Unknown, null);
         var relative = Path.GetFullPath(@"C:\" + native[(separator + 1)..] + "\\" + target)[3..];
-        return WalkLocal(@"\\?\GLOBALROOT" + native[..(separator + 1)], relative, ref links);
+        return WalkLocal(@"\\?\GLOBALROOT" + native[..(separator + 1)], relative, ref links, directory);
     }
 
     private static (string Target, bool Relative)? LinkTarget(SafeFileHandle handle)

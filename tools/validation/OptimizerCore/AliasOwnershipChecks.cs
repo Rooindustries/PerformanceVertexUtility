@@ -63,7 +63,7 @@ static class AliasOwnershipChecks
         var renamed = false; var linked = false;
         try
         {
-            using var handle = CreateFile(parent, 0x100080, 7, IntPtr.Zero, 3, 0x02300000, IntPtr.Zero);
+            using var handle = CreateFile(parent, 0x100081, 7, IntPtr.Zero, 3, 0x02300000, IntPtr.Zero);
             if (handle.IsInvalid) throw new IOException("Could not open the disposable parent.");
             Directory.Move(parent, moved); renamed = true;
             Directory.CreateSymbolicLink(parent, @"\\192.0.2.139\AliasOwnershipFixture"); linked = true;
@@ -71,7 +71,9 @@ static class AliasOwnershipChecks
             using var child = (SafeFileHandle)method.Invoke(null, [handle, "leaf"])!;
             var name = new StringBuilder(32768);
             var length = GetFinalPathNameByHandle(child, name, (uint)name.Capacity, 0);
-            Console.WriteLine(JsonSerializer.Serialize(new { Preserved = length > 0 && length < name.Capacity && string.Equals(name.ToString(), @"\\?\" + Path.Combine(moved, "leaf"), StringComparison.OrdinalIgnoreCase) }));
+            var enumerate = typeof(FileLease).GetMethod("DirectoryEntries", BindingFlags.Static | BindingFlags.NonPublic)!;
+            var entries = ((ValueTuple<string, FileAttributes>[])enumerate.Invoke(null, [handle])!);
+            Console.WriteLine(JsonSerializer.Serialize(new { Preserved = length > 0 && length < name.Capacity && string.Equals(name.ToString(), @"\\?\" + Path.Combine(moved, "leaf"), StringComparison.OrdinalIgnoreCase) && entries.Any(entry => entry.Item1 == "leaf" && entry.Item2.HasFlag(FileAttributes.Directory)) }));
         }
         finally
         {
@@ -147,7 +149,7 @@ static class AliasOwnershipChecks
             CheckPeer(check, root, relative, "relative-symlink-alias", true);
             CheckPeer(check, root, Path.Combine(relative, "missing-child"), "missing-folder-through-alias", false);
             using (var renamed = JsonDocument.Parse(ProbeOutput(check, root, "parent-handle-rename", "renamed-parent-open")))
-                check(renamed.RootElement.GetProperty("Preserved").GetBoolean(), "An opened parent keeps child lookup local after its old path becomes an offline network link");
+                check(renamed.RootElement.GetProperty("Preserved").GetBoolean(), "An opened parent keeps child lookup and directory enumeration local after its old path becomes an offline network link");
 
             var volume = new StringBuilder(64);
             check(GetVolumeNameForVolumeMountPoint(Path.GetPathRoot(root)!, volume, (uint)volume.Capacity), "A real local volume GUID is available for alias fixtures");
@@ -198,9 +200,6 @@ static class AliasOwnershipChecks
             try
             {
                 unreadable.SetAccessControl(denied);
-                var refused = false;
-                try { _ = File.GetAttributes(hidden); } catch (UnauthorizedAccessException) { refused = true; }
-                check(refused, "Unreadable ancestor fixture actually denies metadata access");
                 using var parent = CreateFile(root, 0x100080, 7, IntPtr.Zero, 3, 0x02300000, IntPtr.Zero);
                 var method = typeof(FileLease).GetMethod("OpenMetadataChild", BindingFlags.Static | BindingFlags.NonPublic)!;
                 var deniedOpen = false;

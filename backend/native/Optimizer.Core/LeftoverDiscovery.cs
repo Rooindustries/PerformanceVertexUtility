@@ -126,17 +126,18 @@ public sealed class LeftoverDiscovery
     {
         try
         {
-            _ = File.GetAttributes(root);
-            foreach (var directory in Directory.EnumerateDirectories(root))
+            foreach (var entry in NativeFiles.ReadDirectory(root))
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var name = Path.GetFileName(directory);
+                if ((entry.Attributes & FileAttributes.Directory) == 0) continue;
+                var name = entry.Name;
+                var directory = Path.Combine(root, name);
                 var match = _names.Contains(Compact(name));
                 if (match) AddFile(directory, "Directory name matches the selected product", true);
                 var publisher = !string.IsNullOrWhiteSpace(_app.Publisher) && NameKeys(_app.Publisher).Contains(Compact(name));
                 if (depth == 0 && (publisher || name.Equals("Programs", StringComparison.OrdinalIgnoreCase)))
                 {
-                    if ((File.GetAttributes(directory) & FileAttributes.ReparsePoint) == 0) SearchFolders(directory, 1, cancellationToken);
+                    if ((entry.Attributes & FileAttributes.ReparsePoint) == 0) SearchFolders(directory, 1, cancellationToken);
                 }
             }
         }
@@ -158,7 +159,7 @@ public sealed class LeftoverDiscovery
                 if (resolved.Walk != NativeFiles.PathWalk.Absent) _errors.Add(path + ": ownership could not be checked safely.");
                 return;
             }
-            var attributes = File.GetAttributes(path);
+            var attributes = resolved.Attributes;
             var id = Id("path", path);
             if (_found.TryGetValue(id, out var present)) { if (!present.Evidence.Contains(evidence)) present.Evidence.Add(evidence); return; }
             var owners = FileOwners(path, resolved.Path);
