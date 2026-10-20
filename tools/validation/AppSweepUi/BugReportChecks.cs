@@ -171,6 +171,15 @@ static class BugReportChecks
             var context = known.Redact(@"Cannot access 'C:\Users\Client' while checking 'AppData\Local\fixture.log'. Scanning C:\Users\Fixture for leftovers in AppData\Local and C:\Users\Public\Desktop");
             check(context == @"Cannot access 'C:\Users\<user>' while checking 'AppData\Local\fixture.log'. Scanning C:\Users\<user> for leftovers in AppData\Local and C:\Users\Public\Desktop",
                 "Redacting another account keeps the rest of the log line and shared folders readable");
+            var edges = known.Redact(@"Scanning (C:\Users\John Smith), C:\Users\O'Connor. Done");
+            check(edges == @"Scanning (C:\Users\<user>), C:\Users\<user>. Done", "A profile name followed by punctuation is fully redacted");
+            var prefixOther = new BugRedactor(@"C:\Users\Alice", "Alice", "PC", ["Client", "Client two"]).Redact(@"C:\Users\Client two\AppData and C:\Users\Client\Desktop");
+            var prefixOwn = new BugRedactor(@"C:\Users\Client", "Client", "PC", ["Client", "Client two"]).Redact(@"C:\Users\Client two\AppData and C:\Users\Client\Desktop");
+            var prefixLonger = new BugRedactor(@"C:\Users\Client two", "Client two", "PC", ["Client", "Client two"]).Redact(@"C:\Users\Client two\AppData and C:\Users\Client\Desktop");
+            var prefixUser = new BugRedactor(@"C:\Users\jsmith", "Client", "PC", ["jsmith", "Client two"]).Redact(@"C:\Users\Client two\AppData");
+            check(prefixOther == @"C:\Users\<user>\AppData and C:\Users\<user>\Desktop" && prefixOwn == @"C:\Users\<user>\AppData and %USERPROFILE%\Desktop"
+                && prefixLonger == @"%USERPROFILE%\AppData and C:\Users\<user>\Desktop" && prefixUser == @"C:\Users\<user>\AppData",
+                "Account names that start with another account's name are redacted whole, whichever account is signed in");
 
             var longText = "@everyone " + new string('x', 10_000);
             var payload = BugReportService.BuildPayload(Report(longText, "<@123> me@example.com",
