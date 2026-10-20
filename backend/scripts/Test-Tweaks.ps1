@@ -9,6 +9,8 @@ $bootMarkerEvidence=Join-Path $root ('artifacts\validation\tweaks-boot-marker-'+
 try {
 & $DotNetPath run --project (Join-Path $root 'tools/validation/Tweaks/Tweaks.csproj') --configuration Release -p:UseSharedCompilation=false -- $root
 if($LASTEXITCODE -ne 0){throw 'Tweak engine checks failed'}
+& $DotNetPath run --project (Join-Path $root 'tools/validation/Tweaks/Tweaks.csproj') --configuration Release -p:UseSharedCompilation=false -- $root --file-controls-fixture
+if($LASTEXITCODE -ne 0){throw 'Native file-control checks failed'}
 & (Join-Path $PSScriptRoot 'Test-TweakRoutes.ps1') -DotNetPath $DotNetPath
 & (Join-Path $PSScriptRoot 'Test-AppxScopes.ps1')
 & (Join-Path $PSScriptRoot 'Test-WindowsControlOutput.ps1')
