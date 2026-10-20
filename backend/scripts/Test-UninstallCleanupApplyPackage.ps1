@@ -77,7 +77,27 @@ function Refresh-Hashes($Case) {
     $Case.args.OfficialPreviewSha256=(Get-FileHash $Case.args.OfficialPreviewPath -Algorithm SHA256).Hash
     $Case.args.CleanupManifestSha256=(Get-FileHash $Case.args.CleanupManifestPath -Algorithm SHA256).Hash
 }
+$markerKey = 'SOFTWARE\RooIndustries\OptimizationSuite\GovernorRoots'
+$fixtureMarker = $null
+function Set-FixtureProtection([string]$Root, [DateTime]$ProtectedAtUtc) {
+    if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { throw 'Restore checks need administrator rights to protect the fixture folder as the app protects its data folder.' }
+    if ($null -eq $script:fixtureMarker) {
+        [IO.Directory]::CreateDirectory($Root) | Out-Null
+        $script:fixtureMarker = Get-RooIndustriesDataRootMarkerName $Root
+    }
+    $key = [Microsoft.Win32.Registry]::LocalMachine.CreateSubKey($markerKey, $true)
+    try {
+        $key.SetValue($script:fixtureMarker + '|protected-at', $ProtectedAtUtc.ToFileTimeUtc(), [Microsoft.Win32.RegistryValueKind]::QWord)
+        $key.SetValue($script:fixtureMarker, [Security.Principal.WindowsIdentity]::GetCurrent().User.Value, [Microsoft.Win32.RegistryValueKind]::String)
+    } finally { $key.Dispose() }
+}
+function Remove-FixtureProtection {
+    if (-not $script:fixtureMarker) { return }
+    $key = [Microsoft.Win32.Registry]::LocalMachine.OpenSubKey($markerKey, $true)
+    if ($key) { try { $key.DeleteValue($script:fixtureMarker, $false); $key.DeleteValue($script:fixtureMarker + '|protected-at', $false) } finally { $key.Dispose() } }
+}
 try {
+    Set-FixtureProtection $tempRoot ([DateTime]::UtcNow)
     $case=New-Case 'preview'; $a=$case.args
     $preview=Read-Result (& $applyScript -OfficialPreviewPath $a.OfficialPreviewPath -CleanupManifestPath $a.CleanupManifestPath)
     Assert ($preview.status -eq 'preview' -and (Test-Path $case.targets[0]) -and -not (Test-Path $a.BackupRoot)) 'Default preview writes no backup or deletion state'
@@ -117,9 +137,15 @@ try {
     Assert ($again.executionReused -and $again.summary.deletedCount -eq 2) 'Duplicate apply reuses the saved operation without executing again'
     1..2 | ForEach-Object {
         $restore=Read-Result (& $restoreScript -RollbackManifestPath $a.RollbackManifestPath -ConfirmApply -AllowRealSystemExecution -UserApproved)
+        if ($restore.status -ne 'success') { Write-Host ($restore | ConvertTo-Json -Depth 12) }
         Assert ($restore.status -eq 'success' -and (Get-Content (Join-Path $case.targets[0] 'nested\data.txt') -Raw).Trim() -eq 'original cache' -and (Get-Content $case.targets[1] -Raw).Trim() -eq 'original file') "Restore attempt $_ returns the exact original contents"
         Assert (@(Get-ChildItem $case.targets[0] -Recurse -File).Count -eq 1) 'Repeated folder restore does not nest backup folders'
     }
+    Set-FixtureProtection $tempRoot ([DateTime]::UtcNow)
+    $earlier=Read-Result (& $restoreScript -RollbackManifestPath $a.RollbackManifestPath -ConfirmApply -AllowRealSystemExecution -UserApproved)
+    $gate=@($earlier.gates | Where-Object { $_.gateId -eq 'written-after-protection' })
+    Assert ($earlier.status -eq 'blocked' -and $gate.Count -eq 1 -and $gate[0].blocking -and @($earlier.gates | Where-Object { $_.blocking }).Count -eq 1 -and @($earlier.restoredItems).Count -eq 0) 'A backup written before its folder was protected is refused by the protection gate alone'
+    Set-FixtureProtection $tempRoot ([DateTime]::UtcNow.AddDays(-1))
     $case=New-Case 'partial'; $a=$case.args
     $held=[IO.File]::Open($case.targets[1],[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::Read)
     try { $partial=Read-Result (& $applyScript @a) } finally { $held.Dispose() }
@@ -451,9 +477,13 @@ function global:Get-FileHash {
     Assert ($endless.status -eq 'needs-reconciliation' -and $watch.Elapsed.TotalSeconds -lt 45) "A remover that keeps starting helpers is reported at the timeout instead of refreshing its process tree forever ($([int]$watch.Elapsed.TotalSeconds) s)"
     if (Test-Path -LiteralPath $claimPath) { Remove-Item -LiteralPath $claimPath -Force }
 } finally {
+    try { Remove-FixtureProtection } catch { Write-Host "FAIL Fixture protection marker cleanup failed: $($_.Exception.Message)" }
     foreach ($process in @(Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($tempRoot, [StringComparison]::OrdinalIgnoreCase) })) { Stop-Process -Id $process.ProcessId -Force -ErrorAction SilentlyContinue; Wait-Process -Id $process.ProcessId -Timeout 10 -ErrorAction SilentlyContinue }
     if (Test-Path -LiteralPath $tempRoot) { Remove-Item -LiteralPath $tempRoot -Recurse -Force }
 }
+$markers = [Microsoft.Win32.Registry]::LocalMachine.OpenSubKey($markerKey)
+Assert (-not $markers -or @($markers.GetValueNames() | Where-Object { $fixtureMarker -and ($_ -replace '\|protected-at$', '') -eq $fixtureMarker }).Count -eq 0) 'Restore tests remove the fixture folder protection marker'
+if ($markers) { $markers.Dispose() }
 Assert ((Test-Path -LiteralPath $userClaimPath) -eq $userClaimBefore) 'Leftover cleanup tests leave the user profile removal claims untouched'
 $stateRoot=Join-Path $repoRoot 'backend\state'
 Assert ((-not (Test-Path $stateRoot)) -or @(Get-ChildItem $stateRoot -Force -Recurse).Count -eq 0) 'backend/state remains empty'
