@@ -342,9 +342,10 @@ function Test-ScenarioClaimsGovernorValueNotBlamed {
     $rule=New-Rule $path @{cpuPriority='High'}
     Save-ClaimsRule $rule $script:claimsRules $repo|Out-Null
     Set-Field $probe 'cpuPriority' 'High'
-    $game=Invoke-ClaimsFeature 'Start-GameTuneSession.ps1' @{ProfilePath=(New-ClaimsProfile $name 'game' 'Low');StateRoot=(Join-Path $repo 'backend\state');MaxDurationSeconds=1;PollIntervalSeconds=1;ConfirmApply=$true}
+    Set-Field $probe 'ioPriority' 1
+    $game=Invoke-ClaimsFeature 'Start-GameTuneSession.ps1' @{ProfilePath=(New-ClaimsProfile $name 'game' 'Normal');StateRoot=(Join-Path $repo 'backend\state');MaxDurationSeconds=1;PollIntervalSeconds=1;ConfirmApply=$true}
     Note 'gameSession' @{restorable=$game.restorable;skipped=@($game.skippedItems|ForEach-Object {$_.reason})}
-    Assert ($game.restorable -eq $true -and (Read-Field $probe 'cpuPriority') -eq 'High' -and (Read-Field $probe 'ioPriority') -eq 1) 'Game priority changed only I/O priority and recorded the rule value High as the CPU priority original'
+    Assert ($game.restorable -eq $true -and (Read-Field $probe 'cpuPriority') -eq 'High' -and (Read-Field $probe 'ioPriority') -eq 2) 'Game priority changed only I/O priority and recorded the rule value High as the CPU priority original'
     Set-Field $probe 'cpuPriority' 'AboveNormal'
     $rule.controls=@{cpuPriority='AboveNormal'}
     Save-ClaimsRule $rule $script:claimsRules $repo|Out-Null
@@ -664,18 +665,30 @@ function Test-ScenarioClaimsGameUndoLateField {
     $probe=Start-Probe $path
     $repo=New-ClaimsRepo
     $state=Join-Path $repo 'backend\state'
-    $rule=New-Rule $path @{ioPriority=2}
+    Set-Field $probe 'ioPriority' 1
+    $rule=New-Rule $path @{ioPriority=1}
     Save-ClaimsRule $rule $script:claimsRules $repo|Out-Null
-    $session=Start-ClaimsChild '$output=@(& (Join-Path $scriptsRoot ''Start-GameTuneSession.ps1'') -ProfilePath $profilePath -StateRoot $stateRoot -MaxDurationSeconds 14 -PollIntervalSeconds 1 -ConfirmApply) -join "`n";[IO.File]::WriteAllText($resultPath,$output)' @{profilePath=(New-ClaimsProfile $name 'game' 'Low');stateRoot=$state}
+    $session=Start-ClaimsChild '$output=@(& (Join-Path $scriptsRoot ''Start-GameTuneSession.ps1'') -ProfilePath $profilePath -StateRoot $stateRoot -MaxDurationSeconds 24 -PollIntervalSeconds 1 -ConfirmApply) -join "`n";[IO.File]::WriteAllText($resultPath,$output)' @{profilePath=(New-ClaimsProfile $name 'game' 'Normal');stateRoot=$state}
     Assert ($null -ne (Wait-Until {(Read-Field $probe 'cpuPriority') -eq 'AboveNormal'} 20 100)) 'Game priority raised the CPU priority while a rule owned the I/O priority'
-    Assert ((Read-Field $probe 'ioPriority') -eq 2) 'The rule-owned I/O priority was left alone'
+    Start-Sleep -Milliseconds 2500
+    $holder=Start-ClaimsGateHolder 5000
+    Assert ((Read-Field $probe 'ioPriority') -eq 1) 'The rule-owned I/O priority was left alone'
     Remove-ClaimsRule $rule $script:claimsRules
-    Assert ($null -ne (Wait-Until {(Read-Field $probe 'ioPriority') -eq 1} 12 100)) 'After the rule is deleted a later poll sets the I/O priority too'
+    $deletedAt=[DateTime]::UtcNow
+    Assert ($null -ne (Wait-Until {(Read-Field $probe 'ioPriority') -eq 2} 15 100)) 'After the rule is deleted a later poll sets the I/O priority too'
+    Wait-ClaimsChild $holder.child|Out-Null
+    $releasedAt=Get-ClaimsReleasedAt $holder
     $result=Wait-ClaimsChild $session
     Assert ($result.restorable -eq $true) 'The session is left restorable'
+    $cpuPolls=@($result.changedItems|Where-Object {@($_.appliedControls|ForEach-Object {$_.control}) -contains 'priorityClass'}|ForEach-Object {[int]$_.pollIndex})
+    $ioItems=@($result.changedItems|Where-Object {@($_.appliedControls|ForEach-Object {$_.control}) -contains 'ioPriority'})
+    $ioChangedAt=@($ioItems|ForEach-Object {[DateTime]::Parse([string]$_.changedAtUtc,[Globalization.CultureInfo]::InvariantCulture,[Globalization.DateTimeStyles]::RoundtripKind)})
+    Note 'controlPolls' @{cpu=$cpuPolls;io=@($ioItems|ForEach-Object {[int]$_.pollIndex});deletedAt=$deletedAt.ToString('o');gateReleasedAt=$releasedAt.ToString('o');ioChangedAt=@($ioChangedAt|ForEach-Object {$_.ToString('o')})}
+    Assert ($deletedAt -lt $releasedAt) 'The rule was deleted while the governor gate kept Game priority from polling'
+    Assert ($cpuPolls.Count -ge 1 -and $ioItems.Count -eq 1 -and [int]$ioItems[0].pollIndex -gt ($cpuPolls|Measure-Object -Maximum).Maximum -and $ioChangedAt[0] -ge $releasedAt) 'Game priority changed the I/O priority only in a poll after the rule was deleted'
     $stopped=Read-ClaimsOutput (& (Join-Path $scriptsRoot 'Stop-GameTuneSession.ps1') -SessionPath $result.sessionPath -BackupPath $result.backupManifestPath -StateRoot $state -ConfirmApply)
     Note 'gameUndo' @{restorable=$stopped.restorable;result=$stopped.result.status}
-    Assert ((Read-Field $probe 'cpuPriority') -eq 'Normal' -and (Read-Field $probe 'ioPriority') -eq 2) 'Undo restored both the field set at the first poll and the one set by a later poll'
+    Assert ((Read-Field $probe 'cpuPriority') -eq 'Normal' -and (Read-Field $probe 'ioPriority') -eq 1) 'Undo restored both the field set at the first poll and the one set by a later poll'
 }
 
 function Test-ScenarioClaimsGateOnlyForEnabling {
