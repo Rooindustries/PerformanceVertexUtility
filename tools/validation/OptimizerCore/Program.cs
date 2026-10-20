@@ -41,6 +41,8 @@ if (args is [var child, ..] && child.StartsWith("--child-", StringComparison.Ord
 if (args is ["--files"]) { FileChecks.Run(Check); FileConflictChecks.Run(Check); RefusalChecks.Run(Check); return; }
 if (args is ["--registry"]) { RegistryChecks.Run(Check); RegistryConflictChecks.Run(Check); RegistryRefusalChecks.Run(Check); return; }
 if (args is ["--policies"]) { ProcessIdentityChecks.Run(Check); PolicyChecks.Run(Check); return; }
+if (args is ["--alias-ownership-probe", var aliasRoot, var aliasPeer]) { AliasOwnershipChecks.Probe(aliasRoot, aliasPeer); return; }
+if (args is ["--alias-ownership"]) { AliasOwnershipChecks.Run(Check); return; }
 if (args is ["--discovery"]) { DiscoveryChecks.Run(Check); return; }
 if (args is ["--cleanup"]) { ApplicationCleanupChecks.Run(Check); ExclusionChecks.Run(Check); return; }
 if (args is ["--batch"]) { CleanupBatchChecks.Run(Check); return; }

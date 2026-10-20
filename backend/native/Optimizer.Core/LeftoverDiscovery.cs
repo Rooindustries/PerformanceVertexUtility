@@ -63,8 +63,9 @@ public sealed class LeftoverDiscovery
         _peerResolved = new (string Name, string Path)[_peerPaths.Length];
         for (var index = 0; index < _peerPaths.Length; index++)
         {
-            _peerResolved[index] = (_peerPaths[index].Name, NativeFiles.ResolvedPath(_peerPaths[index].Path, out var known) ?? _peerPaths[index].Path);
-            _peerOwnersKnown &= known;
+            var resolved = NativeFiles.ResolvedPath(_peerPaths[index].Path);
+            _peerResolved[index] = (_peerPaths[index].Name, resolved.Path ?? _peerPaths[index].Path);
+            _peerOwnersKnown &= resolved.Walk != NativeFiles.PathWalk.Unknown;
         }
         _installPath = string.IsNullOrWhiteSpace(application.InstallLocation) || MicrosoftOwnedPath(ExpandPath(application.InstallLocation)) ? null : ExpandPath(application.InstallLocation);
     }
@@ -86,12 +87,15 @@ public sealed class LeftoverDiscovery
         foreach (var root in roots.Where(path => !string.IsNullOrWhiteSpace(path)).Distinct(StringComparer.OrdinalIgnoreCase))
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (root.StartsWith(@"\\") || !Path.IsPathFullyQualified(root) || new DriveInfo(Path.GetPathRoot(root)!).DriveType != DriveType.Fixed)
+            if (root.StartsWith(@"\\") || !Path.IsPathFullyQualified(root))
             {
                 _errors.Add(root + ": not scanned because this folder is not on a local fixed drive.");
                 continue;
             }
-            SearchFolders(root, 0, cancellationToken);
+            var resolvedRoot = NativeFiles.ResolvedPath(root);
+            if (resolvedRoot.Walk == NativeFiles.PathWalk.Absent) continue;
+            if (resolvedRoot.Path is null) { _errors.Add(root + ": not scanned because this folder is not on a local fixed drive."); continue; }
+            SearchFolders(resolvedRoot.Path, 0, cancellationToken);
         }
         if (!string.IsNullOrWhiteSpace(_app.PackageFamilyName))
             AddFile(Path.Combine(RuntimeEnvironment.LocalAppData, "Packages", _app.PackageFamilyName), "Exact package-family data directory", true);
@@ -148,19 +152,24 @@ public sealed class LeftoverDiscovery
         {
             path = FileLease.NormalizePath(path);
             if (MicrosoftOwnedPath(path)) return;
+            var resolved = NativeFiles.ResolvedPath(path);
+            if (resolved.Path is null)
+            {
+                if (resolved.Walk != NativeFiles.PathWalk.Absent) _errors.Add(path + ": ownership could not be checked safely.");
+                return;
+            }
             var attributes = File.GetAttributes(path);
             var id = Id("path", path);
             if (_found.TryGetValue(id, out var present)) { if (!present.Evidence.Contains(evidence)) present.Evidence.Add(evidence); return; }
-            var resolved = NativeFiles.ResolvedPath(path, out var resolvedKnown) ?? path;
             var owners = _peers.Where(peer => NameKeys(peer.DisplayName).Overlaps(_names) ||
                 !string.IsNullOrWhiteSpace(peer.InstallLocation) && (Within(peer.InstallLocation, path) || Within(path, peer.InstallLocation)) ||
                 !string.IsNullOrWhiteSpace(_app.PackageFamilyName) && peer.PackageFamilyName == _app.PackageFamilyName).Select(peer => peer.DisplayName)
-                .Concat(_peerResolved.Where(peer => Within(peer.Path, resolved) || Within(resolved, peer.Path)).Select(peer => peer.Name)).Distinct().ToList();
+                .Concat(_peerResolved.Where(peer => Within(peer.Path, resolved.Path) || Within(resolved.Path, peer.Path)).Select(peer => peer.Name)).Distinct().ToList();
             var protectedPath = FileCleanupEngine.IsProtectedPath(path) || (attributes & FileAttributes.ReparsePoint) != 0;
             _found.Add(id, new()
             {
                 ItemId = id, Kind = (attributes & FileAttributes.Directory) != 0 ? "folder" : "file", Target = path, Exists = true,
-                Evidence = [evidence], SharedOwners = owners, Protected = protectedPath, UserData = userData, OwnershipComplete = resolvedKnown && _peerOwnersKnown,
+                Evidence = [evidence], SharedOwners = owners, Protected = protectedPath, UserData = userData, OwnershipComplete = _peerOwnersKnown,
             });
         }
         catch (DirectoryNotFoundException) { }
@@ -278,7 +287,7 @@ public sealed class LeftoverDiscovery
         return Regex.IsMatch(text, "(?:^|[@\\\"'=\\s])" + Regex.Escape(path) + "(?:[\\\\/\\\"'\\s]|$)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(50));
     }
 
-    private static string ExpandPath(string path) => RuntimeEnvironment.ExpandUserVariables(path).TrimEnd('\\', '/');
+    private static string ExpandPath(string path) => Path.TrimEndingDirectorySeparator(RuntimeEnvironment.ExpandUserVariables(path).Replace('/', '\\'));
 
     private string Id(string kind, string path) => kind + ":" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(_app.AppId + "|" + path.ToUpperInvariant())));
     private static bool Within(string path, string root) => !string.IsNullOrWhiteSpace(root) && (string.Equals(path.TrimEnd('\\'), root.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase) || path.StartsWith(root.TrimEnd('\\') + "\\", StringComparison.OrdinalIgnoreCase));

@@ -43,7 +43,7 @@ static class DiscoveryChecks
             var application = new CleanupApplication { AppId = "fixture:discovery", DisplayName = "Roo Industries Example", Publisher = "Roo Industries", InstallLocation = install, PackageFamilyName = null };
             var peer = new CleanupApplication { AppId = "fixture:other", DisplayName = "Independent add-on", Publisher = "Roo Industries", InstallLocation = other, PackageFamilyName = null };
             var independentPeer = peer with { AppId = "fixture:independent", DisplayName = "Independent tool", InstallLocation = independent };
-            var scan = new LeftoverDiscovery(application, [peer, independentPeer]).Scan(CancellationToken.None, [local, programs],
+            var scan = new LeftoverDiscovery(application, [peer, independentPeer]).Scan(CancellationToken.None, [local, programs, Path.Combine(root, "absent-scope")],
                 [new("CurrentUser", "Registry64", registryRoot, "key", null), new("CurrentUser", "Registry32", registryRoot, "key", null)]);
             if (!scan.Complete) Console.WriteLine(string.Join("\n", scan.Errors));
             check(scan.Complete, "Bounded discovery reports complete coverage only after all configured scopes were read");
@@ -65,6 +65,7 @@ static class DiscoveryChecks
         ProductBoundaries(check);
         UncRoaming(check);
         JunctionAlias(check);
+        AliasOwnershipChecks.Run(check);
     }
 
     private static void JunctionAlias(Action<bool, string> check)
@@ -135,10 +136,10 @@ static class DiscoveryChecks
                         var volumeWatch = Stopwatch.StartNew();
                         var volumeScan = new LeftoverDiscovery(application, [volumeTool]).Scan(CancellationToken.None, [], []);
                         volumeWatch.Stop();
-                        check(volumeWatch.ElapsedMilliseconds < 500 && volumeScan.Candidates.Single(item => item.Target == shared).OwnershipComplete,
-                            "A junction to a volume path that goes through a link to a network share is never followed (" + volumeWatch.ElapsedMilliseconds + " ms)");
+                        check(volumeWatch.ElapsedMilliseconds < 500 && !volumeScan.Candidates.Single(item => item.Target == shared).OwnershipComplete,
+                            "An unproved volume path stays unknown without following its link to a network share (" + volumeWatch.ElapsedMilliseconds + " ms)");
                     }
-                    else Console.WriteLine("SKIP A junction to a volume path that goes through a link to a network share is never followed (junction not created)");
+                    else check(false, "The volume-path junction fixture must be created");
                 }
             }
         }

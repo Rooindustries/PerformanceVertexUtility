@@ -5,7 +5,13 @@ public sealed record CleanupContext(string Source, CleanupAuthority Authority, C
     CleanupApplication[] Peers, bool InventoryComplete)
 {
     public string InventoryHash => OperationFiles.Hash(System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(
-        Peers.OrderBy(app => app.AppId, StringComparer.Ordinal).ToArray(), OperationFiles.Json));
+        Peers.OrderBy(app => app.AppId, StringComparer.Ordinal).Select(app =>
+        {
+            var resolved = string.IsNullOrWhiteSpace(app.InstallLocation)
+                ? (Walk: NativeFiles.PathWalk.Absent, Path: (string?)null)
+                : NativeFiles.ResolvedPath(RuntimeEnvironment.ExpandUserVariables(app.InstallLocation));
+            return new { Application = app, resolved.Walk, resolved.Path };
+        }).ToArray(), OperationFiles.Json));
 
     public void Verify()
     {
@@ -63,6 +69,7 @@ public sealed class ApplicationCleanup(Func<CleanupContext> currentContext,
         if (itemIds.Length == 0 || itemIds.Distinct(StringComparer.Ordinal).Count() != itemIds.Length) throw new InvalidDataException("Select distinct leftover items.");
         var context = currentContext();
         context.Verify();
+        var inventoryHash = context.InventoryHash;
         var scan = Scan(context, CancellationToken.None);
         var selection = itemIds.Select(id => scan.Candidates.SingleOrDefault(item => item.ItemId == id)
             ?? throw new InvalidDataException("A selected leftover is no longer present in discovery.")).ToArray();
@@ -74,7 +81,7 @@ public sealed class ApplicationCleanup(Func<CleanupContext> currentContext,
         CleanupAuthority Authority()
         {
             Exclusions().RequireAllowed(selection);
-            return VerifyContext(context.Source, context.Application.AppId, context.Authority.ProviderIdentityHash, context.InventoryHash).Authority;
+            return VerifyContext(context.Source, context.Application.AppId, context.Authority.ProviderIdentityHash, inventoryHash).Authority;
         }
         var registryTargets = selection.Where(item => item.Registry is not null).Select(item => item.Registry!).ToArray();
         var fileTargets = selection.Where(item => item.Registry is null).Select(item => item.Target).ToArray();
@@ -92,7 +99,7 @@ public sealed class ApplicationCleanup(Func<CleanupContext> currentContext,
         {
             SchemaVersion = 1, Owner = OperationOwner.Current(), OperationId = operationId, Source = context.Source,
             AppId = context.Application.AppId, DisplayName = context.Application.DisplayName, ProviderIdentityHash = context.Authority.ProviderIdentityHash,
-            InventoryHash = context.InventoryHash, Selection = selection, Registry = registry, Files = files,
+            InventoryHash = inventoryHash, Selection = selection, Registry = registry, Files = files,
         };
         OperationFiles.Write(outputPath, result);
         return result;
