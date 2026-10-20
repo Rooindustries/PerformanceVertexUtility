@@ -173,6 +173,11 @@ try {
         Start-Sleep -Milliseconds 800
         Set-RooIndustriesProcessIoPriority $probe 'Low'
         $before = Get-RooIndustriesProcessControlState $probe.Id $null -ReadGpu
+        if ($before.ioPriority -eq 'Low') {
+            Add-Pass 'Live probe starts at I/O priority Low'
+        } else {
+            Add-Failure "Live probe did not start at I/O priority Low: $($before.ioPriority)"
+        }
         $targetAffinity = if (($before.affinityMask -band 1) -eq 1 -and [int64]$before.affinityMask -ne 1) { 1 } elseif (($before.affinityMask -band 2) -eq 2) { 2 } else { $before.affinityMask }
         $profilePath = Join-Path $liveRoot 'live-profile.json'
         $stateRoot = Join-Path $liveRoot 'state'
@@ -257,7 +262,7 @@ try {
 
         $restorePreview = & (Join-Path $PSScriptRoot 'Stop-GameTuneSession.ps1') -SessionPath $start.sessionPath | ConvertFrom-Json
         $afterPreview = Get-RooIndustriesProcessControlState $probe.Id $null -ReadGpu
-        if ($restorePreview.dryRun -eq $true -and $afterPreview.priorityClass -eq 'AboveNormal' -and $afterPreview.ioPriority -eq 'Normal' -and $afterPreview.gpuPriority -eq 'AboveNormal') {
+        if ($restorePreview.dryRun -eq $true -and $afterPreview.priorityClass -eq 'AboveNormal' -and [int64]$afterPreview.affinityMask -eq [int64]$targetAffinity -and $afterPreview.ioPriority -eq 'Normal' -and $afterPreview.gpuPriority -eq 'AboveNormal') {
             Add-Pass 'Live Game Tune restore preview did not change the probe'
         } else {
             Add-Failure 'Live Game Tune restore preview changed the probe unexpectedly'
