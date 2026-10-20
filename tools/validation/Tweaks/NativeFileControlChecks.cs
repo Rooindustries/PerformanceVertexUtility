@@ -51,6 +51,12 @@ static class NativeFileControlChecks
             var link = Path.Combine(root, "alias"); Directory.CreateSymbolicLink(link, directory);
             reject(() => store.Read(address with { Target = "fixture:" + Path.Combine(link, "existing.txt") }), "A reparse ancestor is rejected before a permission change");
             Directory.Delete(link);
+            foreach (var missing in new[] { Path.Combine(root, "aitagent.exe"), Path.Combine(root, "compattel", "DiagTrackRunner.exe") })
+            {
+                string? message = null;
+                try { store.Read(address with { Target = "fixture:" + missing }); } catch (FileNotFoundException error) { message = error.Message; }
+                check(message == Path.GetFileName(missing) + " is not installed on this PC.", "A Windows file this PC doesn't have reads as not installed, not as a failed check: " + Path.GetRelativePath(root, missing));
+            }
         }
         finally
         {
