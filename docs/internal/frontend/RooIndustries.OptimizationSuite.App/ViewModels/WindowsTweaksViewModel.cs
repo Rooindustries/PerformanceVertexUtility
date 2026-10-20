@@ -116,7 +116,7 @@ public partial class WindowsTweakRow : ObservableObject
     private TweakSettingStatus? _observed;
     public TweakChoice? AppliedChoice { get; private set; }
     public bool IsApplied => AppliedChoice is not null;
-    private static readonly string[] LackedHere = ["Win32 1060", "0x80070002", "Windows driver", "Office installation", "devices expose", "No active adapter", "is not installed", "is not available with"];
+    private static readonly string[] LackedHere = ["Win32 1060", "0x80070002", "Windows driver", "Office installation", "devices expose", "No active adapter", "is not installed", "is not available with", "Hard-linked file permissions"];
     private static bool PcLacks(string error) => error.StartsWith("No choice applies", StringComparison.Ordinal) || LackedHere.Any(text => error.Contains(text, StringComparison.Ordinal));
     public bool CouldNotCheck => _observed is { Error: { } error } && error != TweakEngine.FeaturesPending && !PcLacks(error);
     public bool CanRetry => CouldNotCheck;
@@ -206,6 +206,7 @@ public partial class WindowsTweakRow : ObservableObject
         if (Detail.Contains("Office installation", StringComparison.Ordinal)) Detail = "Office was not detected. You can save this choice before installing it.";
         else if (Detail.StartsWith("No choice applies", StringComparison.Ordinal)) Detail = "This Windows or app version does not use this setting. You can keep a saved choice for a matching installation.";
         else if (Detail.Contains("Win32 1060", StringComparison.Ordinal)) Detail = "This Windows service is not installed.";
+        else if (Detail.Contains("Hard-linked file permissions", StringComparison.Ordinal)) Detail = "Windows links this file to other copies, so its permissions can't be changed safely here.";
         else if (Detail.Contains("0x80070002", StringComparison.Ordinal) && Definition.Options.SelectMany(option => option.Controls ?? []).Any(control => control.Address.Kind == "scheduled-task")) Detail = "This Windows task is not installed.";
         else if (IsNetwork && status?.Error is { } error) Detail = error.Contains("adapter", StringComparison.OrdinalIgnoreCase) || error.Contains("devices expose", StringComparison.OrdinalIgnoreCase)
             ? "The current adapter does not expose this option. You can save a choice for a compatible adapter." : "Windows could not read this preference. Refresh to try again.";
