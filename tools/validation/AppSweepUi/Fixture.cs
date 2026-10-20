@@ -214,6 +214,16 @@ namespace RooIndustries.OptimizationSuite.Services
             return new(value, OperationError ?? (value is null ? LastError : null));
         }
         public void DiscardCleanupReview() => LastCleanupRollbackPath = null;
+        public string? CleanupRunsRoot { get; set; }
+        public TimeSpan CleanupRecoveryDelay { get; set; }
+        public async Task<string?> FindCleanupRecoveryAsync(string appId, CancellationToken cancellationToken = default)
+        {
+            if (CleanupRecoveryDelay > TimeSpan.Zero) await Task.Delay(CleanupRecoveryDelay, cancellationToken);
+            return CleanupRunsRoot is null ? null : CleanupRecoveries.Find(CleanupRunsRoot, appId);
+        }
+        public Task<IReadOnlyList<CleanupRecovery>> FindCleanupRecoveriesAsync(CancellationToken cancellationToken = default)
+            => Task.FromResult(CleanupRunsRoot is null ? (IReadOnlyList<CleanupRecovery>)[] : CleanupRecoveries.All(CleanupRunsRoot));
+        public void MarkCleanupRestored(string rollbackManifestPath) => CleanupRecoveries.MarkRestored(rollbackManifestPath);
     }
 
     public sealed record CleanupBatchReview(CleanupBatchPreview Plan, string PreviewPath, string Hash, string JournalPath);

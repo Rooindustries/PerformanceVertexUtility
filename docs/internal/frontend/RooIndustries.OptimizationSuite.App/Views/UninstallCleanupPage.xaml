@@ -120,6 +120,7 @@
                     <Border Grid.Row="1" Style="{StaticResource PanelBorderStyle}" Padding="0">
                         <StackPanel>
                             <TextBlock Text="Installed apps" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" Padding="20,16,20,8" />
+                            <TextBlock Text="{x:Bind ViewModel.InventoryNotice, Mode=OneWay}" FontSize="12" LineHeight="17" TextWrapping="Wrap" Padding="20,0,20,8" Foreground="{StaticResource RooIndustriesTextSecondaryBrush}" Visibility="{x:Bind ViewModel.InventoryNotice, Mode=OneWay, Converter={StaticResource StringToVisibility}}" AutomationProperties.AutomationId="AppsCleanupInventoryNotice" />
                             <ListView x:Name="AppsList" ItemsSource="{x:Bind ViewModel.Apps}" SelectionMode="Single"
                                       AutomationProperties.AutomationId="AppsCleanupInstalledAppsList"
                                       IsItemClickEnabled="True" ItemClick="AppsList_ItemClick"
