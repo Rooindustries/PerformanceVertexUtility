@@ -28,14 +28,14 @@ public sealed class BugRedactor
             foreach (var form in new[] { profile, profile.Replace("\\", "\\\\"), profile.Replace('\\', '/') }.Distinct())
                 rules.Add((new Regex(Regex.Escape(form), RegexOptions.IgnoreCase | RegexOptions.CultureInvariant), "%USERPROFILE%"));
         }
-        foreach (var (value, replacement) in new[] { (machineName?.Trim(), "<pc-name>"), (userName?.Trim(), "<user>") })
+        foreach (var (value, replacement) in new[] { (machineName?.Trim(), PcName), (userName?.Trim(), User) })
         {
             if (value is not { Length: >= 2 }) continue;
             rules.Add((Word(value), replacement));
             var escaped = JsonEncodedText.Encode(value).ToString();
             if (escaped != value) rules.Add((Word(escaped), replacement));
         }
-        rules.Add((new Regex(@"S-1-5-21(-\d+){3,4}", RegexOptions.CultureInvariant), "<sid>"));
+        rules.Add((new Regex(@"S-1-5-21(-\d+){3,4}", RegexOptions.CultureInvariant), Sid));
         _rules = rules.ToArray();
     }
 
@@ -47,9 +47,10 @@ public sealed class BugRedactor
 
     public string Redact(string text)
     {
+        text = text.Replace("<user>", User).Replace("<pc-name>", PcName).Replace("<sid>", Sid);
         text = ProfileSegment.Replace(text, Profile);
         foreach (var (pattern, replacement) in _rules) text = pattern.Replace(text, replacement);
-        return text;
+        return text.Replace(User, "<user>").Replace(PcName, "<pc-name>").Replace(Sid, "<sid>");
     }
 
     private string Profile(Match match)
@@ -70,12 +71,12 @@ public sealed class BugRedactor
         if (_profiles.FirstOrDefault(Starts) is { } known)
         {
             var rest = run[ends[known.Length - 1]..];
-            return (known.Equals(_own, StringComparison.OrdinalIgnoreCase) && Root(root) == _ownRoot ? "%USERPROFILE%" : root + "<user>") + rest;
+            return (known.Equals(_own, StringComparison.OrdinalIgnoreCase) && Root(root) == _ownRoot ? "%USERPROFILE%" : root + User) + rest;
         }
         if (SharedProfiles.Any(Starts)) return match.Value;
         var length = 0;
         while (length < text.Length && !char.IsWhiteSpace(text[length]) && text[length] is not ('\'' or '"' or '\\' or '/')) length++;
-        return length == 0 ? match.Value : root + "<user>" + run[ends[length - 1]..];
+        return length == 0 ? match.Value : root + User + run[ends[length - 1]..];
     }
 
     private static string Root(string path) => path.Replace("\\\\", "\\").Replace('/', '\\').TrimEnd('\\').ToUpperInvariant();
@@ -86,8 +87,9 @@ public sealed class BugRedactor
         catch (Exception error) when (error is IOException or UnauthorizedAccessException) { return []; }
     }
 
+    private const string User = "\u0001", PcName = "\u0002", Sid = "\u0003";
     private static readonly HashSet<string> SharedProfiles = new(["Public", "Default", "Default User", "All Users"], StringComparer.OrdinalIgnoreCase);
-    private static readonly Regex ProfileSegment = new(@"(?<root>\b[A-Za-z]:(?:\\{1,2}|/)Users(?:\\{1,2}|/))(?<run>(?:\\u[0-9A-Fa-f]{4}|(?![A-Za-z]:)[^\\/""\r\n:<>|?*])+)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    private static readonly Regex ProfileSegment = new(@"(?<root>\b[A-Za-z]:(?:\\{1,2}|/)Users(?:\\{1,2}|/))(?<run>(?:\\u[0-9A-Fa-f]{4}|(?![A-Za-z]:)[^\\/""\r\n:<>|?*\u0001-\u0003])+)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     private static Regex Word(string value)
         => new(@"(?<![\p{L}\p{N}_])" + Regex.Escape(value) + @"(?![\p{L}\p{N}_])", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
