@@ -738,7 +738,7 @@ function Get-RooIndustriesProcessGovernorLiveIdentity {
     $expectedName = [string](Get-RooIndustriesPropertyValue $Entry 'processName' '')
     $nameMatches = Test-RooIndustriesProcessNameEquals $live.ProcessName $expectedName
     $currentPath = $null
-    try { $held = $live.Handle; $currentPath = $live.Path } catch { return [pscustomobject]@{ exists = $true; matches = $false; instanceEnded = $false; process = $null; currentPath = $null; reason = 'Live process identity could not be verified.' } }
+    try { $held = $live.Handle; $currentPath = $live.Path } catch { $gone = $false; try { $gone = $live.HasExited } catch { $gone = $null -eq (Get-Process -Id $processId -ErrorAction SilentlyContinue) }; return [pscustomobject]@{ exists = $true; matches = $false; instanceEnded = $gone; process = $null; currentPath = $null; reason = 'Live process identity could not be verified.' } }
     $expectedPath = Get-RooIndustriesPropertyValue $Entry 'executablePath' $null
     $pathMatches = $true
     $pathReason = $null
