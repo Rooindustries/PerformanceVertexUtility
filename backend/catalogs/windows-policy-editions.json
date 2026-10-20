@@ -1,0 +1,37 @@
+{
+  "policies": [
+    {
+      "hive": "LocalMachine",
+      "keyPath": "SOFTWARE\\Policies\\Microsoft\\Windows\\CloudContent",
+      "valueName": "DisableWindowsConsumerFeatures",
+      "editions": [
+        "Enterprise", "EnterpriseS", "EnterpriseN", "EnterpriseSN",
+        "Education", "EducationN", "IoTEnterprise", "IoTEnterpriseS",
+        "ServerStandard", "ServerDatacenter"
+      ],
+      "reference": "https://learn.microsoft.com/en-us/azure/governance/policy/samples/guest-configuration-baseline-windows",
+      "quote": "This setting only applies to Enterprise and Education SKUs.",
+      "additionalReferences": [
+        "https://learn.microsoft.com/en-us/windows/client-management/mdm/policy-csp-experience#allowwindowsconsumerfeatures",
+        "https://learn.microsoft.com/en-us/windows/privacy/manage-connections-from-windows-operating-system-components-to-microsoft-services"
+      ],
+      "reason": "CloudContent.admx help limits the registry policy. Keep Enterprise variants including IoT, and Server editions for which Microsoft also documents this registry setting. Removing an override remains available everywhere."
+    }
+  ],
+  "allowedOverlaps": [
+    {
+      "settingId": "windows.fd373f2fbc2a984f",
+      "optionId": "choice-95a6ed84299d0109",
+      "reference": "https://learn.microsoft.com/en-us/windows/client-management/mdm/policy-csp-search#allowsearchtouselocation",
+      "quote": "This policy setting specifies whether search and Cortana can provide location aware search and Cortana results.",
+      "reason": "The edition table describes the MDM CSP, includes Pro, and does not establish that the registry policy is ignored on Home. Keep the existing source gates."
+    },
+    {
+      "settingId": "windows.953a30d8b6c2c8a5",
+      "optionId": "choice-6b253977ea5987f3",
+      "reference": "https://learn.microsoft.com/en-us/windows/deployment/update/waas-wu-settings#do-not-include-drivers-with-windows-updates",
+      "quote": "Allows admins to exclude Windows Update drivers during updates.",
+      "reason": "The Group Policy reference gives no edition exclusion. The Update CSP edition table describes MDM support, not whether the registry policy works on Home. Keep the existing source gates."
+    }
+  ]
+}
