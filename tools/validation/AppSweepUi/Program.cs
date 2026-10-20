@@ -1063,6 +1063,27 @@ if (args is [] or ["responses"] or ["cleanup"] or ["race"])
                 page.SelectedApp = null;
                 await page.ReloadAsync();
                 Check(page.Apps.All(item => item.AppId != "app-gone"), "A removed app leaves the list once its cleanup is restored");
+
+                App.Live.InstalledApps = null;
+                var unread = new UninstallCleanupViewModel();
+                await unread.InitializeAsync();
+                var savedB = unread.Apps.FirstOrDefault(item => item.AppId == appB.AppId);
+                Check(unread.IsReady && unread.StaleNotice.StartsWith("We couldn't read your installed apps", StringComparison.Ordinal)
+                        && savedB is { Removed: true, RemovalUnconfirmed: true, SecondaryLabel: "Its saved cleanup can be restored." },
+                    "A saved cleanup can still be restored when the installed apps list can't be read, and the page says the list is missing" + " | got: " + unread.ErrorMessage + " " + unread.StaleNotice);
+                unread.SelectedApp = savedB;
+                var scanCalls = 0;
+                var liveScan = App.Live.LeftoverScan;
+                App.Live.LeftoverScan = id => { scanCalls++; return Task.FromResult<LeftoverScan?>(EmptyScan(id)); };
+                try { await unread.ScanLeftoversCommand.ExecuteAsync(null); }
+                finally { App.Live.LeftoverScan = liveScan; }
+                Check(unread.CanRestoreCleanup && !unread.CanScan && scanCalls == 0 && !unread.OfficialPreviewState.Contains("already removed", StringComparison.Ordinal),
+                    "An app listed only for its saved cleanup never scans and never claims it was removed when the list couldn't be read" + " | got: " + unread.OfficialPreviewState);
+                App.Live.CleanupRunsRoot = null;
+                var failed = new UninstallCleanupViewModel();
+                await failed.InitializeAsync();
+                Check(!failed.IsReady && failed.ErrorMessage is { Length: > 0 }, "With no installed apps list and no saved cleanup, the page still reports that the list couldn't be read");
+                App.Live.CleanupRunsRoot = runsRoot;
             }
             finally { App.Live.InstalledApps = savedInventory; }
         }

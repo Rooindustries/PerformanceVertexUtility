@@ -117,7 +117,7 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
     public string ApplyApprovalSummary => !HasSelection
         ? "Pick an app first."
         : RemovalRouteBlocked
-            ? SelectedApp?.Removed == true ? "This app is already removed. Restore puts back what its cleanup removed." : "Can't run this app's remover. Use Remove apps to remove it."
+            ? SelectedApp is { Removed: true } removedApp ? removedApp.RemovalUnconfirmed ? "Only Restore is available for this app here." : "This app is already removed. Restore puts back what its cleanup removed." : "Can't run this app's remover. Use Remove apps to remove it."
             : !RemovalPathReviewed
                 ? "Check the removal route first."
                 : !LeftoverScanCompleted
@@ -154,8 +154,9 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
         var inventory = await App.Live.GetInstalledAppsAsync(fresh: Fresh);
         var saved = await SavedRecoveriesAsync();
         if (Quiet && SelectedApp is not null) { KeepStale(); return; }
-        var apps = inventory?.Apps;
-        if (apps is null || apps.Count == 0)
+        var listed = inventory?.Apps is { Count: > 0 };
+        var apps = inventory?.Apps ?? new List<InstalledApp>();
+        if (!listed && saved.Count == 0)
         {
             ErrorMessage = "We couldn't read your installed apps yet. Close and reopen to try again.";
             return;
@@ -169,13 +170,14 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
         _allApps.AddRange(apps
             .Where(a => a.IsListable && !Naming.IsNonActionable(a.DisplayName)
                         && !LocalDisplayFilter.Default.IsHidden(a.FriendlyName, null, a.PackageId ?? a.DisplayName))
-            .Concat(removed.Select(recovery => new InstalledApp { AppId = recovery.AppId, DisplayName = string.IsNullOrWhiteSpace(recovery.DisplayName) ? "Removed app" : recovery.DisplayName, Removed = true }))
+            .Concat(removed.Select(recovery => new InstalledApp { AppId = recovery.AppId, DisplayName = string.IsNullOrWhiteSpace(recovery.DisplayName) ? "Removed app" : recovery.DisplayName, Removed = true, RemovalUnconfirmed = !listed }))
             .OrderBy(a => a.FriendlyName, StringComparer.OrdinalIgnoreCase));
         AppCount = _allApps.Count(a => !a.Removed);
-        Sources = inventory!.Sources is { Count: > 0 } s ? string.Join(", ", s.Select(FriendlySource)) : null;
+        Sources = inventory?.Sources is { Count: > 0 } s ? string.Join(", ", s.Select(FriendlySource)) : null;
 
         ApplyFilter();
         IsEmpty = _allApps.Count == 0;
+        if (!listed) StaleNotice = "We couldn't read your installed apps, so only saved cleanups you can restore are listed. Close and reopen to try again.";
     }
 
     partial void OnSearchTextChanged(string value) => ApplyFilter();
@@ -271,8 +273,8 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
         if (value.Removed)
         {
             RemovalRouteBlocked = true;
-            OfficialPreviewState = "This app is already removed.";
-            LeftoverState = "This app is already removed. Restore is the only step left here.";
+            OfficialPreviewState = value.RemovalUnconfirmed ? "The installed apps list couldn't be read, so only Restore is available here." : "This app is already removed.";
+            LeftoverState = "Restore is the only step available for this app here.";
             CleanupExecutionState = CleanupRestoreAvailable ? "An earlier cleanup of this app can be restored." : "This cleanup can't be restored anymore.";
             CleanupExecutionDetail = "Restore puts back the files that cleanup removed. It does not reinstall the app.";
         }
@@ -384,7 +386,7 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
     private async Task ScanLeftoversAsync()
     {
         var app = SelectedApp;
-        if (app is null || string.IsNullOrWhiteSpace(app.AppId) || ScanBusy)
+        if (app is null || string.IsNullOrWhiteSpace(app.AppId) || ScanBusy || app.Removed)
         {
             return;
         }
