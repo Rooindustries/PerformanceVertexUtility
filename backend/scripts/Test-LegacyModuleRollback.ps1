@@ -117,6 +117,47 @@ try {
                 $restored=Invoke-RollbackModule
                 Assert ($restored.restoredServices -eq 0 -and @($restored.leftAsChanged).Count -eq 2) 'A newly resolved service instance cannot replace an original target'
             }
+            & {
+                $shipped=Get-Content (Join-Path (Split-Path $HarnessPath -Parent) 'modules\tweak_manifest.json') -Raw | ConvertFrom-Json
+                $manifest=Get-Content $fixtureManifest -Raw | ConvertFrom-Json
+                $manifest.protected=$shipped.protected
+                $manifest.modules[0].services=@()
+                $targets=@(
+                    @{path='HKLM\Software\Policies\Microsoft\Windows\AppPrivacy';name='LetAppsAccessPhone'},
+                    @{path='HKLM/SOFTWARE/Microsoft/Windows/CurrentVersion/CapabilityAccessManager/ConsentStore/bluetooth';name='Value'},
+                    @{path='HKEY_LOCAL_MACHINE\Software\Policies\Microsoft\Windows\AppPrivacy';name='LetAppsAccessPhone'},
+                    @{path='HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\CapabilityAccessManager\\ConsentStore\\bluetooth\';name='Value'}
+                )
+                $script:registryWrites=0
+                $script:registryRestores=0
+                $script:registryReads=0
+                function Get-RegistryValueSnapshot { param($Item) $script:registryReads++; [pscustomobject]@{path=$Item.path;name=$Item.name;type='REG_DWORD';desiredData=2;kind='DWord';oldValue=$script:value;valueExists=$true} }
+                function Set-RegistryValueFromManifest { param($Item) $script:registryWrites++; $script:value=$Item.data }
+                function Restore-RegistryValue { param($Snapshot) $script:registryRestores++; $script:value=$Snapshot.oldValue }
+                foreach ($target in $targets) {
+                    $manifest.modules[0].registryValues=@(@{path=$target.path;name=$target.name;type='REG_DWORD';data=2})
+                    Write-JsonFile $manifest $fixtureManifest
+                    $script:value=1
+                    $ConfirmApply=$false
+                    $preview=Invoke-ApplyModule
+                    Assert ($preview.actions[0].blocked -and $script:value -eq 1) ('Apply preview protects the normalized full target ' + $target.name)
+                    $ConfirmApply=$true
+                    $applied=Invoke-ApplyModule
+                    $saved=Get-Content $applied.backupPath -Raw | ConvertFrom-Json
+                    Assert (@($saved.registry).Count -eq 0 -and $script:registryWrites -eq 0 -and $script:value -eq 1) ('Confirmed apply excludes the normalized protected target ' + $target.name)
+                    $legacy=[pscustomobject]@{moduleId='fixture';timestamp=(Get-Date).ToString('o');registry=@(@{path=$target.path;name=$target.name;type='REG_DWORD';desiredData=2;oldValue=1;valueExists=$true});services=@()}
+                    $BackupPath=$applied.backupPath
+                    Write-JsonFile $legacy $BackupPath
+                    $script:value=2
+                    $ConfirmApply=$false
+                    $preview=Invoke-RollbackModule
+                    Assert ($preview.restoredRegistry -eq 0 -and @($preview.leftAsChanged).Count -eq 1) ('Rollback preview protects the legacy full target ' + $target.name)
+                    $ConfirmApply=$true
+                    $restored=Invoke-RollbackModule
+                    Assert ($script:value -eq 2 -and $script:registryRestores -eq 0 -and $restored.leftAsChanged[0].path -ceq $target.path -and $restored.leftAsChanged[0].name -ceq $target.name) ('Confirmed rollback leaves the legacy full target ' + $target.name)
+                }
+                Assert ($script:registryReads -eq 0) 'Protected targets never reach the registry OS calls'
+            }
         }
     } }
     if ($Scenario -in 'All','Registry') { & {
@@ -280,7 +321,8 @@ try {
                 }
             }
             $manifest.modules[0].registryValues[0] | Add-Member -NotePropertyName name -NotePropertyValue 'Value' -Force
-            $manifest.protected.registryPathPatterns=@([regex]::Escape($regPath))
+            $manifest.modules[0].registryValues[0].path=$regPath.Replace('\','/')
+            $manifest.protected.registryPathPatterns=@([regex]::Escape($regPath+'\Value'))
             Write-JsonFile $manifest $fixtureManifest
             $applied=Invoke-ApplyModule
             $saved=Get-Content $applied.backupPath -Raw | ConvertFrom-Json
@@ -291,7 +333,7 @@ try {
                 $script:protectedRestores=0
                 function Get-ServiceSnapshot { param($Name) [pscustomobject]@{name=$Name;exists=$true;startType='Disabled'} }
                 function Restore-ServiceSnapshot { param($Snapshot) $script:protectedRestores++ }
-                $legacy=[pscustomobject]@{moduleId='fixture';timestamp=(Get-Date).ToString('o');registry=@(@{path=$regPath;name='Value';type='REG_SZ';desiredData='Two';oldValue='Original';valueExists=$true});services=@(@{name='FixtureProtectedSvc';exists=$true;startType='Automatic';appliedStartup='Disabled'})}
+                $legacy=[pscustomobject]@{moduleId='fixture';timestamp=(Get-Date).ToString('o');registry=@(@{path=$regPath.Replace('\','/');name='Value';type='REG_SZ';desiredData='Two';oldValue='Original';valueExists=$true});services=@(@{name='FixtureProtectedSvc';exists=$true;startType='Automatic';appliedStartup='Disabled'})}
                 $BackupPath=$applied.backupPath
                 Write-JsonFile $legacy $BackupPath
                 $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($subkey,$true)
@@ -306,6 +348,7 @@ try {
             }
             $manifest.protected.services=@()
             $manifest.protected.registryPathPatterns=@()
+            $manifest.modules[0].registryValues[0].path=$regPath
             Write-JsonFile $manifest $fixtureManifest
             $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($subkey,$true)
             try { $key.SetValue('Value',[byte[]]@(1,2),[Microsoft.Win32.RegistryValueKind]::None) } finally { $key.Dispose() }

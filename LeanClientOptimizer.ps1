@@ -40,7 +40,7 @@ function Read-Manifest {
 
 function Convert-RegPath {
     param([string]$Path)
-    $p = $Path -replace '/', '\'
+    $p = ($Path -replace '/', '\' -replace '\\+', '\').TrimEnd('\')
     if ($p -match '^HKLM\\(.+)$') { return "Registry::HKEY_LOCAL_MACHINE\$($Matches[1])" }
     if ($p -match '^HKCU\\(.+)$') { return "Registry::HKEY_CURRENT_USER\$($Matches[1])" }
     if ($p -match '^HKU\\(.+)$') { return "Registry::HKEY_USERS\$($Matches[1])" }
@@ -58,9 +58,23 @@ function Test-ProtectedService {
 }
 
 function Test-ProtectedRegistryPath {
-    param([string]$Path, [object]$Manifest)
+    param([string]$Path, [object]$Manifest, [string]$Name = '')
+    $normalizedPath = $Path -replace '/', '\'
+    $canonicalPath = (Convert-RegPath $Path).Substring(10)
+    $hive = ($canonicalPath -split '\\', 2)[0]
+    $alias = switch ($hive) {
+        'HKEY_LOCAL_MACHINE' { 'HKLM' }
+        'HKEY_CURRENT_USER' { 'HKCU' }
+        'HKEY_USERS' { 'HKU' }
+        'HKEY_CLASSES_ROOT' { 'HKCR' }
+        'HKEY_CURRENT_CONFIG' { 'HKCC' }
+        default { $hive }
+    }
+    $paths = @($normalizedPath, $canonicalPath, ('Registry::' + $canonicalPath), ($alias + $canonicalPath.Substring($hive.Length)))
     foreach ($pattern in @($Manifest.protected.registryPathPatterns)) {
-        if ($Path -match $pattern) { return $true }
+        foreach ($keyPath in $paths) {
+            if ($keyPath -match $pattern -or ($keyPath + '\' + $Name) -match $pattern) { return $true }
+        }
     }
     return $false
 }
@@ -387,7 +401,7 @@ function New-ModuleBackup {
     Ensure-Dir $moduleDir
     $regSnapshots = New-Object System.Collections.Generic.List[object]
     foreach ($rv in @($Module.registryValues)) {
-        if (Test-ProtectedRegistryPath $rv.path $Manifest) { continue }
+        if (Test-ProtectedRegistryPath $rv.path $Manifest $rv.name) { continue }
         $snap = Get-RegistryValueSnapshot $rv
         if ($snap.valueExists -and $snap.kind -notin 'String','ExpandString','MultiString','DWord','QWord','Binary') {
             throw "Unsupported registry value kind: $($snap.kind) at $($rv.path)\$($rv.name)"
@@ -424,7 +438,7 @@ function Invoke-ApplyModule {
     $backupPath = if ($ConfirmApply) { New-ModuleBackup $manifest $module } else { $null }
     $actions = New-Object System.Collections.Generic.List[object]
     foreach ($rv in @($module.registryValues)) {
-        $blocked = Test-ProtectedRegistryPath $rv.path $manifest
+        $blocked = Test-ProtectedRegistryPath $rv.path $manifest $rv.name
         $actions.Add([pscustomobject]@{ type='registry'; target=($rv.path + '\' + $rv.name); blocked=$blocked; action='set'; value=$rv.data }) | Out-Null
         if ($blocked) { continue }
         if ($ConfirmApply) { Set-RegistryValueFromManifest $rv }
@@ -453,7 +467,6 @@ function Invoke-ApplyModule {
 
 function Invoke-RollbackModule {
     $manifest = Read-Manifest
-    [void]$manifest
     $backupRoot = Join-Path $DataRoot ("backups\" + $ModuleId)
     $backupPath = $BackupPath
     if ([string]::IsNullOrWhiteSpace($backupPath)) {
@@ -490,7 +503,7 @@ function Invoke-RollbackModule {
         $expected = if ($rv.PSObject.Properties['desiredData'] -and $rv.type) {
             Get-ManifestRegistrySnapshot ([pscustomobject]@{ type=$rv.type; data=$rv.desiredData })
         } else { $null }
-        $blocked = Test-ProtectedRegistryPath $rv.path $manifest
+        $blocked = Test-ProtectedRegistryPath $rv.path $manifest $rv.name
         $current = if (-not $blocked) { Get-RegistryValueSnapshot $rv } else { $null }
         if ($blocked -or -not $expected -or -not (Test-RegistrySnapshotEqual $expected $current)) {
             $leftAsChanged.Add([pscustomobject]@{ type='registry'; path=$rv.path; name=$rv.name }) | Out-Null
