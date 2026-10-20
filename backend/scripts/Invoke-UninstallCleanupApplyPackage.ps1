@@ -34,7 +34,7 @@ function Test-ApplyPackageTargetAllowlist {
         [object[]]$Items,
         [string[]]$Allowlist
     )
-    if (@($Items).Count -eq 0) { return $true }
+    if (@($Items).Count -eq 0) { return $false }
     $allowed = @{}
     foreach ($target in @(Get-RooIndustriesUninstallArray $Allowlist)) {
         if ([string]::IsNullOrWhiteSpace([string]$target)) { continue }
@@ -181,7 +181,7 @@ try {
     }
     if ($AllowFixtureClaims -and ([string]::IsNullOrWhiteSpace($claimRoot) -or ($hasOfficialCommand -and -not (Test-RooIndustriesCleanupPathWithin $commandExecutable $claimRoot)))) { throw 'Fixture claims apply only to removers inside the fixture root.' }
     $officialExecutableAllowlisted = (-not $hasOfficialCommand) -or (-not [string]::IsNullOrWhiteSpace($AllowedOfficialExecutablePath) -and $commandExecutable.Equals([System.IO.Path]::GetFullPath($AllowedOfficialExecutablePath), [System.StringComparison]::OrdinalIgnoreCase))
-    $exactTargetsApproved = Test-ApplyPackageTargetAllowlist $fileFolderItems $ExactTargetAllowlist
+    $exactTargetsApproved = if (@($fileFolderItems).Count -eq 0) { $hasOfficialCommand } else { Test-ApplyPackageTargetAllowlist $fileFolderItems $ExactTargetAllowlist }
     $resolvedBackupRoot = if ([string]::IsNullOrWhiteSpace($BackupRoot)) {
         Join-Path $(if ($DataRoot) { $DataRoot } else { Get-RooIndustriesLocalDataRoot -Protected }) ('cleanup-backups\' + [guid]::NewGuid().ToString('N'))
     } else { [System.IO.Path]::GetFullPath($BackupRoot) }

@@ -235,6 +235,9 @@ public class RooIndustriesHandoffFixture {
     Assert ($emptyPreview.status -eq 'preview' -and $emptyPreview.summary.approvalReady -and @($emptyPreview.gates | Where-Object { $_.blocking -and $_.gateId -eq 'exact-target-allowlist' }).Count -eq 0) 'An app with no leftover files passes the final check'
     $emptyRun=Read-Result (& $applyScript @a)
     Assert ($emptyRun.summary.officialRunnerCompleted -and $emptyRun.summary.deletedCount -eq 0 -and $emptyRun.status -in @('cleanup-review-required','success')) "An app with no leftover files runs only its remover ($($emptyRun.status))"
+    $case=New-Case 'nothing-to-do'; $case.manifest.items=@(); $case.args.ExactTargetAllowlist=[string[]]@(); Refresh-Hashes $case; $a=$case.args
+    $nothingRun=Read-Result (& $applyScript @a)
+    Assert ($nothingRun.status -ne 'success' -and -not $nothingRun.summary.approvalReady -and @($nothingRun.gates | Where-Object { $_.blocking -and $_.gateId -eq 'exact-target-allowlist' }).Count -eq 1) "An app with no remover and no leftover files cannot report a finished cleanup ($($nothingRun.status))"
     $case=New-HandoffCase 'handoff-hang' 'handoff-hang'; $a=$case.args; $a.TimeoutSeconds=3
     $hung=Read-Result (& $applyScript @a)
     Assert ((Test-Path -LiteralPath $claimPath) -and ((Test-Path -LiteralPath $userClaimPath) -eq $userClaimBefore)) 'A running leftover-tab remover keeps its claim in the fixture root, never in the user profile'
