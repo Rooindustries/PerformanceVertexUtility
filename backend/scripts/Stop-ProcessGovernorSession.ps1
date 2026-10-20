@@ -256,6 +256,7 @@ try {
                 continue
             }
             $live = $identity.process
+            $entrySkipStart = $skipped.Count
             foreach ($control in @(Get-RooIndustriesPreviewControlChanges $entry | Where-Object { $_.blocked })) {
                 $skipped.Add([pscustomobject]@{ processId = $processId; processName = $entry.processName; control = $control.control; reason = $control.blockedReason; skippedAtUtc = Get-RooIndustriesUtcStamp }) | Out-Null
             }
@@ -292,6 +293,7 @@ try {
                 $exitedDuringRestore = $false
                 try { $exitedDuringRestore = $live.HasExited } catch { $exitedDuringRestore = $false }
                 if ($exitedDuringRestore) {
+                    while ($skipped.Count -gt $entrySkipStart) { $skipped.RemoveAt($skipped.Count - 1) }
                     $alreadyClosed.Add((New-GovernorAlreadyClosedItem $entry)) | Out-Null
                     continue
                 }
