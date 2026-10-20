@@ -161,6 +161,12 @@ static class BugReportChecks
             check(!others.Contains("Bob", StringComparison.Ordinal) && !others.Contains("Carol", StringComparison.Ordinal)
                 && others.Contains(@"C:\Users\Public\Desktop", StringComparison.Ordinal) && others.Contains(@"C:\Users\Default User\x", StringComparison.Ordinal),
                 "Other accounts' profile folders are redacted while shared Windows folders stay readable");
+            var otherNames = redactor.Redact(@"C:\Users\Jane Doe\AppData and C:\Users\O'Connor\Desktop and {""p"":""C:\\Users\\Jane Doe\\x"",""q"":""C:\\Users\\O\u0027Connor\\y""} and 'C:\Users\Dave' or 'C:\Users\Erin\z'");
+            check(!otherNames.Contains("Doe", StringComparison.Ordinal) && !otherNames.Contains("Connor", StringComparison.Ordinal)
+                && !otherNames.Contains("Dave", StringComparison.Ordinal) && !otherNames.Contains("Erin", StringComparison.Ordinal)
+                && otherNames.Contains(@"C:\Users\<user>\AppData", StringComparison.Ordinal) && otherNames.Contains(@"C:\\Users\\<user>\\y", StringComparison.Ordinal)
+                && otherNames.Contains(@"'C:\Users\<user>' or 'C:\Users\<user>\z'", StringComparison.Ordinal),
+                "Other accounts' profile folders with spaces or apostrophes are fully redacted");
 
             var longText = "@everyone " + new string('x', 10_000);
             var payload = BugReportService.BuildPayload(Report(longText, "<@123> me@example.com",
