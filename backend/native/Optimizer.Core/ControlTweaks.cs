@@ -30,6 +30,7 @@ public sealed record TweakControlRead([property: JsonRequired] ControlAddress Ad
         return ControlValues.From(Value.EnumerateObject().ToDictionary(property => property.Name, _ => value));
     }
     public bool Allows(JsonElement value) => (Address.Kind != "hibernation" || !value.TryGetProperty("mode", out var mode) || mode.GetString() != "Full" || Binding == "power-capabilities:s4=True") &&
+        (Address.Kind != "windows-features" || value.ValueKind != JsonValueKind.Object || Value.ValueKind == JsonValueKind.Object && value.EnumerateObject().All(feature => Value.TryGetProperty(feature.Name, out _))) &&
         (AllowedValues is null || AllowedValues.Any(allowed => ControlValues.Equal(allowed, value)));
     [JsonIgnore] public string Id => OperationFiles.Hash(System.Text.Encoding.UTF8.GetBytes(Identity.ToUpperInvariant()));
     public bool Same(TweakControlRead other) => Id == other.Id && Binding == other.Binding && ControlValues.Equal(Value, other.Value) && EvidenceHash == other.EvidenceHash;
