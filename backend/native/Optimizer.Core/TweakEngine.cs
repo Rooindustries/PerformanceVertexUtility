@@ -151,15 +151,19 @@ public sealed class TweakEngine
         return new(_store.Commit(plan, reviewHash), plan.Changes.Length != 0 || plan.Controls?.Changes.Length > 0, false);
     }
 
-    private void Compose(List<TweakProfile> profiles, string profileId, string target, Func<TweakProfile, IEnumerable<(string Target, string Setting)>> claims, Action check)
+    private void Compose<T>(List<TweakProfile> profiles, string profileId, T[] group, Func<TweakProfile, IEnumerable<T>> claims, Action<T[]> check, Func<T, string> setting)
     {
-        try { check(); }
+        try { check(group); }
         catch (InvalidDataException error)
         {
-            var requested = profiles.Where(profile => profile.Id == profileId).SelectMany(claims).Where(claim => claim.Target == target).Select(claim => claim.Setting).Distinct(StringComparer.Ordinal).ToArray();
-            var others = profiles.Where(profile => profile.Id != profileId && claims(profile).Any(claim => claim.Target == target)).Select(profile => profile.Id).Distinct(StringComparer.Ordinal).ToArray();
-            if (requested.Length == 0 || others.Length == 0) throw;
-            var names = requested.Select(id => _catalog.Settings.FirstOrDefault(setting => setting.Id == id)?.Name ?? id);
+            bool Conflicts(T first, T second) { try { check([first, second]); return false; } catch (InvalidDataException) { return true; } }
+            var requested = profiles.Where(profile => profile.Id == profileId).SelectMany(claims).Where(group.Contains).ToArray();
+            var blocking = profiles.Where(profile => profile.Id != profileId).SelectMany(profile => claims(profile).Where(group.Contains).Select(claim => (profile.Id, Claim: claim)))
+                .Where(other => requested.Any(mine => Conflicts(mine, other.Claim))).ToArray();
+            if (blocking.Length == 0) throw;
+            var others = blocking.Select(other => other.Id).Distinct(StringComparer.Ordinal).ToArray();
+            var names = requested.Where(mine => blocking.Any(other => Conflicts(mine, other.Claim))).Select(setting).Distinct(StringComparer.Ordinal)
+                .Select(id => _catalog.Settings.FirstOrDefault(definition => definition.Id == id)?.Name ?? id);
             throw new InvalidDataException("Your " + string.Join(" and ", others.Select(id => "\"" + id + "\"")) + (others.Length == 1 ? " profile already sets " : " profiles already set ") + string.Join(", ", names)
                 + " to a different choice. Pick the same choice, or restore " + (others.Length == 1 ? "that profile" : "those profiles") + " first.", error);
         }
@@ -200,10 +204,10 @@ public sealed class TweakEngine
         foreach (var group in wanted.Values)
         {
             foreach (var claim in group) claim.Target.Validate();
-            Compose(profiles, profileId, group[0].Target.Id, profile => profile.Claims.Select(claim => (claim.Target.Id, claim.SettingId)), () => TweakComposition.Check(group));
+            Compose(profiles, profileId, group, profile => profile.Claims, TweakComposition.Check, claim => claim.SettingId);
         }
         foreach (var group in profiles.SelectMany(profile => profile.Controls ?? []).GroupBy(claim => claim.Target.Id, StringComparer.Ordinal))
-            Compose(profiles, profileId, group.Key, profile => (profile.Controls ?? []).Select(claim => (claim.Target.Id, claim.SettingId)), () => ControlComposition.Check(group.ToArray()));
+            Compose(profiles, profileId, group.ToArray(), profile => profile.Controls ?? [], ControlComposition.Check, claim => claim.SettingId);
         var held = (state?.Held ?? []).ToDictionary(item => item.Original.Id, StringComparer.Ordinal);
         var next = new List<TweakHeldValue>();
         var changes = new List<TweakMutation>();
