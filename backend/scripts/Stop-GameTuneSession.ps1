@@ -274,6 +274,12 @@ try {
                 $changed.Add($restoreItem) | Out-Null
             }
             if ($failedControls.Count -gt 0) {
+                $exitedDuringRestore = $false
+                try { $exitedDuringRestore = $live.HasExited } catch { $exitedDuringRestore = $false }
+                if ($exitedDuringRestore) {
+                    $alreadyClosed.Add((New-GameTuneAlreadyClosedItem $entry)) | Out-Null
+                    continue
+                }
                 $skip = [pscustomobject]@{
                     processId = $processId
                     processName = Get-RooIndustriesPropertyValue $entry 'processName' ''
