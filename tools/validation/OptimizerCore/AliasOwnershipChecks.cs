@@ -200,13 +200,16 @@ static class AliasOwnershipChecks
             try
             {
                 unreadable.SetAccessControl(denied);
-                using var parent = CreateFile(root, 0x100080, 7, IntPtr.Zero, 3, 0x02300000, IntPtr.Zero);
-                var method = typeof(FileLease).GetMethod("OpenMetadataChild", BindingFlags.Static | BindingFlags.NonPublic)!;
-                var deniedOpen = false;
-                try { using var opened = (SafeFileHandle)method.Invoke(null, [parent, unreadable.Name])!; }
-                catch (TargetInvocationException error) when (error.InnerException is Win32Exception { NativeErrorCode: 5 }) { deniedOpen = true; }
-                check(deniedOpen, "The resolver's actual parent-relative metadata open refuses the unreadable ancestor");
-                CheckPeer(check, root, hidden, "unreadable-ancestor", false);
+                PrivilegeChecks.WithoutPrivileges(() =>
+                {
+                    using var parent = CreateFile(root, 0x100080, 7, IntPtr.Zero, 3, 0x02300000, IntPtr.Zero);
+                    var method = typeof(FileLease).GetMethod("OpenMetadataChild", BindingFlags.Static | BindingFlags.NonPublic)!;
+                    var deniedOpen = false;
+                    try { using var opened = (SafeFileHandle)method.Invoke(null, [parent, unreadable.Name])!; }
+                    catch (TargetInvocationException error) when (error.InnerException is Win32Exception { NativeErrorCode: 5 }) { deniedOpen = true; }
+                    check(deniedOpen, "The resolver's actual parent-relative metadata open refuses the unreadable ancestor");
+                    CheckPeer(check, root, hidden, "unreadable-ancestor", false);
+                }, "SeBackupPrivilege", "SeRestorePrivilege", "SeChangeNotifyPrivilege");
             }
             finally { unreadable.SetAccessControl(security); }
 
