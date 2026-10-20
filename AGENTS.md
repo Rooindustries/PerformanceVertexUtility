@@ -35,7 +35,7 @@ Backend scripts run on the Windows PowerShell 5.1 that ships with Windows. `tool
 
 ## Prove a change on Linux
 
-Linux is the development host. These are the four Baseline jobs every pull request runs:
+Linux is the development host. These are the four Baseline jobs every pull request and push to `main` runs on the self-hosted runner on linux-dev-laptop (`runs-on: [self-hosted, laptop]`):
 
 ```sh
 python -m pip install -r tools/validation/requirements.txt
@@ -49,7 +49,7 @@ If GitHub Actions can't start them, run them on the PR's head commit and post th
 
 ## What needs real Windows
 
-Anything that reads or changes the registry, services, process, I/O or GPU priority, drivers or the desktop app. Run the backend suites from an isolated source copy on a Windows test PC:
+Anything that reads or changes the registry, services, process, I/O or GPU priority, drivers or the desktop app. The Baseline workflow's Windows matrix runs on GitHub-hosted Windows only on a manual run, or on pushes to `main` while the repository variable `HOSTED_WINDOWS_CI` is `true`. Run the backend suites from an isolated source copy on a Windows test PC:
 
 ```powershell
 .\tools\scripts\Test-Baseline.ps1 -TestName Test-LegacyModuleRollback.ps1
