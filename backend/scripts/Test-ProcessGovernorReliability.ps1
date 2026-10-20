@@ -287,7 +287,7 @@ if ($runResults.Count -eq 3 -and @($runResults | Where-Object { $_.changed -and 
     Add-Failure "Repeated governor reliability did not complete 3 successful runs: successes=$(@($runResults | Where-Object { $_.changed -and $_.restored -and $_.activeRestraintCount -eq 0 }).Count)"
 }
 
-$relaunchRoot = Join-Path ([System.IO.Path]::GetTempPath()) "roo-industries-governor-relaunch-$([guid]::NewGuid().ToString('N'))"
+$relaunchRoot = Join-Path ([System.IO.Path]::GetTempPath()) "roo-industries-governor-relaunch-$([guid]::NewGuid().ToString('N').Substring(0, 12))"
 $relaunchFirst = $null
 $relaunchSecond = $null
 $relaunchSessionProc = $null
