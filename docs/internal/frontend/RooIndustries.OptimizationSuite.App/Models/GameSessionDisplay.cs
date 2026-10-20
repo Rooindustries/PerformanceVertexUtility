@@ -7,7 +7,7 @@ namespace RooIndustries.OptimizationSuite.Models;
 public static class GameSessionDisplay
 {
     public static bool Restored(ProtectedSessionStatus status) => status.HostRunning == false && status.Error is null && status.State is { } state &&
-        state.Status == "stopped" && state.RegistryStatus == "restored" && state.JobStatus == "cleared" && state.Errors.Count == 0 &&
+        state.Status is "stopped" or "stoppedWithErrors" && state.RegistryStatus == "restored" && state.JobStatus == "cleared" &&
         state.Games.All(game => game.Fields.All(field => field.JournalPath is null || field.Status is "restored" or "expired"));
 
     public static bool CoresMatch(ProtectedSessionStatus status, string mask)
