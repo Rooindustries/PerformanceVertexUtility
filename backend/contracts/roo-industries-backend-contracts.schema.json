@@ -470,6 +470,31 @@
             "additionalProperties": true
           }
         },
+        "leftAsSetItems": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "restorePendingCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "pendingItems": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "alreadyClosedItems": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
         "metricsBefore": {
           "type": [
             "object",

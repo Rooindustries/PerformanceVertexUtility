@@ -701,33 +701,73 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
 
     private static string SummarizeControls(JsonElement root)
     {
-        if ((!root.TryGetProperty("preview", out var preview) || preview.ValueKind != JsonValueKind.Array) &&
-            (!root.TryGetProperty("skippedItems", out preview) || preview.ValueKind != JsonValueKind.Array)) return string.Empty;
-        var lines = new List<string>();
-        foreach (var item in preview.EnumerateArray())
+        if (root.ValueKind != JsonValueKind.Object) return string.Empty;
+        var isPreview = root.TryGetProperty("dryRun", out var dryRun) && dryRun.ValueKind == JsonValueKind.True;
+        var result = root.TryGetProperty("result", out var value) && value.ValueKind == JsonValueKind.Object ? value : default;
+        JsonElement items;
+        if (isPreview)
         {
+            if (!root.TryGetProperty("preview", out items) || items.ValueKind != JsonValueKind.Array)
+                root.TryGetProperty("skippedItems", out items);
+        }
+        else if (result.ValueKind == JsonValueKind.Object)
+        {
+            if (!result.TryGetProperty("changedItems", out items)) result.TryGetProperty("restoredItems", out items);
+        }
+        else root.TryGetProperty("changedItems", out items);
+        var lines = new List<string>();
+        if (items.ValueKind == JsonValueKind.Array)
+        foreach (var item in items.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.Object) continue;
             var fields = new List<string>();
-            if (item.TryGetProperty("controlChanges", out var changes) && changes.ValueKind == JsonValueKind.Array)
+            JsonElement changes;
+            if (isPreview) item.TryGetProperty("controlChanges", out changes);
+            else if (!item.TryGetProperty("restoredControls", out changes) || changes.ValueKind != JsonValueKind.Array)
+            {
+                if (!item.TryGetProperty("appliedControls", out changes) || changes.ValueKind != JsonValueKind.Array)
+                    item.TryGetProperty("controlChanges", out changes);
+            }
+            if (changes.ValueKind == JsonValueKind.Array)
             foreach (var change in changes.EnumerateArray())
             {
+                if (change.ValueKind != JsonValueKind.Object) continue;
+                var blocked = change.TryGetProperty("blocked", out var block) && block.ValueKind == JsonValueKind.True;
+                var outcome = ExtractString(change, "outcome");
+                if (!isPreview && (blocked || outcome is { Length: > 0 } && outcome != "applied")) continue;
                 var control = ExtractString(change, "control");
                 var label = ControlLabel(control);
                 var current = change.TryGetProperty("currentValue", out var from) ? ControlValue(control, from) : "unavailable";
                 var proposed = change.TryGetProperty("proposedValue", out var to) ? ControlValue(control, to) : "unavailable";
-                var blocked = change.TryGetProperty("blocked", out var block) && block.ValueKind == JsonValueKind.True;
                 fields.Add(label + " " + current + " → " + proposed + (blocked ? " (skipped: " + ExtractString(change, "blockedReason") + ")" : string.Empty));
             }
-            if (item.TryGetProperty("leftAsSet", out var kept) && kept.ValueKind == JsonValueKind.Array)
+            if (isPreview && item.TryGetProperty("leftAsSet", out var kept) && kept.ValueKind == JsonValueKind.Array)
             foreach (var left in kept.EnumerateArray())
             {
+                if (left.ValueKind != JsonValueKind.Object) continue;
                 var control = ExtractString(left, "control");
-                fields.Add(ControlLabel(control) + " " + (left.TryGetProperty("currentValue", out var value) ? ControlValue(control, value) : "unavailable") + " (left as another program set it)");
+                fields.Add(ControlLabel(control) + " " + (left.TryGetProperty("currentValue", out var keptValue) ? ControlValue(control, keptValue) : "unavailable") + " (left as another program set it)");
             }
             if (fields.Count > 0) lines.Add((ExtractString(item, "processName") ?? "App") + ": " + string.Join("; ", fields));
-            else if ((ExtractString(item, "classification") == "protectedCompanion" ||
+            else if (isPreview && (ExtractString(item, "classification") == "protectedCompanion" ||
                 item.TryGetProperty("reasonCodes", out var codes) && codes.ValueKind == JsonValueKind.Array && codes.EnumerateArray().Any(code => code.ValueKind == JsonValueKind.String && code.GetString() == "GAME_LAUNCHER_PROTECTED")) &&
                 ExtractString(item, "reason") is { Length: > 0 } reason)
                 lines.Add((ExtractString(item, "processName") ?? "App") + ": " + reason);
+        }
+        if (!isPreview && result.ValueKind == JsonValueKind.Object)
+        {
+            if (result.TryGetProperty("leftAsSetItems", out var kept) && kept.ValueKind == JsonValueKind.Array)
+            foreach (var left in kept.EnumerateArray())
+            {
+                if (left.ValueKind != JsonValueKind.Object) continue;
+                var control = ExtractString(left, "control");
+                lines.Add((ExtractString(left, "processName") ?? "App") + ": " + ControlLabel(control) + " " +
+                    (left.TryGetProperty("currentValue", out var keptValue) ? ControlValue(control, keptValue) : "unavailable") + " (left as another program set it)");
+            }
+            if (result.TryGetProperty("skippedItems", out var skipped) && skipped.ValueKind == JsonValueKind.Array)
+            foreach (var item in skipped.EnumerateArray())
+                if (item.ValueKind == JsonValueKind.Object && ExtractString(item, "reason") is { Length: > 0 } reason)
+                    lines.Add((ExtractString(item, "processName") ?? "App") + ": " + reason);
         }
         return lines.Count == 0 ? string.Empty : "\n" + string.Join("\n", lines.Take(20)) + (lines.Count > 20 ? "\n" + (lines.Count - 20) + " more apps; see the list below." : string.Empty);
     }

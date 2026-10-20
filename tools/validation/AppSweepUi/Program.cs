@@ -36,6 +36,125 @@ if (args is ["revisit"])
     return;
 }
 
+if (args is [] or ["restore-summary"] or ["restore-summary", _])
+{
+    var output = args.Length > 1 ? Path.GetFullPath(args[1]) : Path.Combine(Path.GetTempPath(), "restore-summary-" + Guid.NewGuid().ToString("N"));
+    var fixtures = Path.Combine(output, "fixtures-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(fixtures);
+    var saved = App.Live.GetType().GetProperties(BindingFlags.Instance | BindingFlags.Public)
+        .Where(property => property.CanWrite).Select(property => (Property: property, Value: property.GetValue(App.Live))).ToArray();
+    var failures = new List<string>();
+    var observations = new List<object>();
+    void Verify(bool condition, string message)
+    {
+        if (condition) Check(true, message);
+        else { failures.Add(message); Console.WriteLine("FAIL " + message); }
+    }
+    void Capture(string name, string receipt, PerformanceProfilesViewModel model)
+        => observations.Add(new { name, receipt = JsonSerializer.Deserialize<JsonElement>(receipt), model.ActionTitle, model.ActionDetail,
+            model.RestoreAvailable, model.MatchTuneStatus, model.MatchTuneDetail, model.MatchTuneRestoreAvailable,
+            recoveryPath = App.Live.ProcessProfileRecovery?.Path, App.Live.LastProcessRestorePath, App.Live.LastGameRestoreRequest });
+    var preview = new[] { new { processName = "Target", controlChanges = Array.Empty<object>(),
+        leftAsSet = new[] { new { control = "priorityClass", currentValue = "BelowNormal" } } } };
+    var restored = new[] { new { processName = "Peer", restoredControls = new[] {
+        new { control = "priorityClass", currentValue = "AboveNormal", proposedValue = "Normal", outcome = "applied" } } } };
+    var applied = new[] { new { processName = "Peer", appliedControls = new[] {
+        new { control = "priorityClass", currentValue = "AboveNormal", proposedValue = "Normal", outcome = "applied" } },
+        controlChanges = new[] { new { control = "gpuPriority", currentValue = "Normal", proposedValue = "Realtime", outcome = "failed" } } } };
+    var kept = new[] { new { processName = "Target", control = "priorityClass", currentValue = "Idle" } };
+    const string reason = "priorityClass: Undo could not confirm another program still holds it. Run Undo again.";
+    var skipped = new[] { new { processName = "Target", reason } };
+    try
+    {
+        App.Live.LastError = App.Live.OperationError = App.Live.GameTuneResultError = App.Live.GameTuneRestoreError = null;
+        App.Live.ProcessProfileRecovery = null;
+        var backup = Path.Combine(fixtures, "process.json");
+        File.WriteAllText(backup, JsonSerializer.Serialize(new { actionId = "performance.applyProfile", backupId = "summary-backup", profileId = "summary-profile",
+            dryRun = false, snapshots = new[] { new { processId = 123 } } }));
+        var profile = new PerformanceProfilesViewModel();
+        App.Live.ProcessPreviewText = JsonSerializer.Serialize(new { actionId = "performance.previewProfile", dryRun = true, status = "preview", preview,
+            result = new { summary = "Restore preview." } });
+        await profile.PreviewPlanCommand.ExecuteAsync(null);
+        Capture("profile-preview", App.Live.ProcessPreviewText, profile);
+        Verify(profile.ActionDetail.Contains("CPU BelowNormal (left as another program set it)", StringComparison.Ordinal), "Profile preview names the proposed kept value");
+        App.Live.ProcessApplyText = JsonSerializer.Serialize(new { actionId = "performance.applyProfile", dryRun = false, status = "success",
+            backup = new { backupId = "summary-backup", location = backup, rollbackSupported = true },
+            result = new { status = "success", summary = "Applied controls.", changedItems = applied } });
+        await profile.ApplyProfileCommand.ExecuteAsync(null);
+        Verify(profile.RestoreAvailable, "Summary profile apply binds the exact recovery artifact");
+        Verify(profile.ActionDetail.Contains("Peer: CPU AboveNormal → Normal", StringComparison.Ordinal), "Confirmed apply details use applied controls");
+        App.Live.ProcessRestoreText = JsonSerializer.Serialize(new { actionId = "performance.rollbackProfile", dryRun = false, status = "partial", preview,
+            backup = new { backupId = "summary-backup", location = backup },
+            result = new { status = "partial", summary = "Partial restore.", changedItems = restored, leftAsSetItems = Array.Empty<object>(), skippedItems = skipped, restorePendingCount = 1 } });
+        await profile.RestoreProfileCommand.ExecuteAsync(null);
+        Capture("profile-partial", App.Live.ProcessRestoreText, profile);
+        Verify(profile.RestoreAvailable && profile.CanRestoreProfile && App.Live.ProcessProfileRecovery?.Path == backup && App.Live.LastProcessRestorePath == backup,
+            "Partial profile restore retains and requests its exact recovery artifact");
+        Verify(profile.ActionDetail.StartsWith("Partial restore.", StringComparison.Ordinal) && profile.ActionDetail.Contains(reason, StringComparison.Ordinal)
+            && !profile.ActionDetail.Contains("BelowNormal", StringComparison.Ordinal), "Partial profile details report the failed confirmation without a stale kept value");
+        Verify(profile.ActionDetail.Contains("Peer: CPU AboveNormal → Normal", StringComparison.Ordinal), "Partial profile details retain unrelated restored controls");
+        App.Live.ProcessRestoreText = JsonSerializer.Serialize(new { actionId = "performance.rollbackProfile", dryRun = false, status = "success", preview,
+            backup = new { backupId = "summary-backup", location = backup },
+            result = new { status = "success", summary = "Restore completed.", changedItems = applied, leftAsSetItems = kept, skippedItems = Array.Empty<object>(), restorePendingCount = 0 } });
+        await profile.RestoreProfileCommand.ExecuteAsync(null);
+        Capture("profile-success", App.Live.ProcessRestoreText, profile);
+        Verify(!profile.RestoreAvailable && App.Live.ProcessProfileRecovery is null, "Successful profile restore clears only its exact recovery artifact");
+        Verify(profile.ActionDetail.Contains("Target: CPU Idle (left as another program set it)", StringComparison.Ordinal)
+            && !profile.ActionDetail.Contains("BelowNormal", StringComparison.Ordinal), "Confirmed profile details certify the fresh Idle value only");
+        Verify(profile.ActionDetail.Contains("Peer: CPU AboveNormal → Normal", StringComparison.Ordinal) && !profile.ActionDetail.Contains("Realtime", StringComparison.Ordinal),
+            "Confirmed profile details prefer applied controls over stale control changes");
+
+        var sessionPath = Path.Combine(fixtures, "session.json");
+        var sessionBackup = Path.Combine(fixtures, "game.json");
+        File.WriteAllText(sessionBackup, JsonSerializer.Serialize(new { actionId = "performance.gameTune.startSession", backupId = "summary-game-backup",
+            sessionId = "summary-session", profileId = "summary-game", dryRun = false, snapshots = new[] { new { processId = 123 } } }));
+        File.WriteAllText(sessionPath, JsonSerializer.Serialize(new { sessionId = "summary-session", profileId = "summary-game", dryRun = false,
+            restorable = true, backupManifestPath = sessionBackup }));
+        var game = new PerformanceProfilesViewModel { HasGameRunning = true };
+        App.Live.GameTuneText = JsonSerializer.Serialize(new { actionId = "performance.gameTune.startSession", dryRun = true, status = "preview", preview,
+            result = new { summary = "Game restore preview." } });
+        await game.CheckMatchTuneCommand.ExecuteAsync(null);
+        Capture("game-preview", App.Live.GameTuneText, game);
+        Verify(game.MatchTuneDetail.Contains("CPU BelowNormal (left as another program set it)", StringComparison.Ordinal), "Game preview names the proposed kept value");
+        App.Live.GameTuneText = JsonSerializer.Serialize(new { actionId = "performance.gameTune.startSession", dryRun = false, status = "active",
+            sessionId = "summary-session", profileId = "summary-game", sessionPath, backupManifestPath = sessionBackup, restorable = true,
+            summary = new { changedItemCount = 1 }, changedItems = applied });
+        await game.StartMatchTuneCommand.ExecuteAsync(null);
+        Verify(game.MatchTuneRestoreAvailable, "Summary game start binds the exact session recovery artifact");
+        App.Live.GameTuneRestoreText = JsonSerializer.Serialize(new { actionId = "performance.gameTune.stopSession", dryRun = false, status = "completed",
+            sessionId = "summary-session", profileId = "summary-game", sessionPath, backupManifestPath = sessionBackup, restorable = true, preview,
+            result = new { status = "partial", summary = "Partial game restore.", restoredItems = restored, leftAsSetItems = Array.Empty<object>(), skippedItems = skipped } });
+        await game.RestoreMatchTuneCommand.ExecuteAsync(null);
+        Capture("game-partial", App.Live.GameTuneRestoreText, game);
+        Verify(game.MatchTuneRestoreAvailable && game.CanRestoreMatchTune && App.Live.LastGameRestoreRequest == ("summary-session", sessionPath, sessionBackup),
+            "Partial game restore retains and requests its exact session artifact");
+        Verify(game.MatchTuneDetail.StartsWith("Partial game restore.", StringComparison.Ordinal) && game.MatchTuneDetail.Contains(reason, StringComparison.Ordinal)
+            && !game.MatchTuneDetail.Contains("BelowNormal", StringComparison.Ordinal), "Partial game details report the failed confirmation without a stale kept value");
+        Verify(game.MatchTuneDetail.Contains("Peer: CPU AboveNormal → Normal", StringComparison.Ordinal), "Confirmed game details use restored-item evidence when changed items are absent");
+        var mixed = new object?[] { null, new { processName = "Peer", controlChanges = new object?[] { null,
+            new { control = "priorityClass", currentValue = "AboveNormal", proposedValue = "Normal", outcome = "applied" },
+            new { control = "gpuPriority", currentValue = "Normal", proposedValue = "Realtime", outcome = "failed" } } } };
+        App.Live.GameTuneRestoreText = JsonSerializer.Serialize(new { actionId = "performance.gameTune.stopSession", dryRun = false, status = "completed",
+            sessionId = "summary-session", profileId = "summary-game", sessionPath, backupManifestPath = sessionBackup, restorable = false, preview,
+            result = new { status = "rolledBack", summary = "Game restore completed.", restoredItems = mixed, leftAsSetItems = kept, skippedItems = Array.Empty<object>() } });
+        await game.RestoreMatchTuneCommand.ExecuteAsync(null);
+        Capture("game-success", App.Live.GameTuneRestoreText, game);
+        Verify(!game.MatchTuneRestoreAvailable, "Successful game restore finishes its exact session recovery");
+        Verify(game.MatchTuneDetail.Contains("Target: CPU Idle (left as another program set it)", StringComparison.Ordinal)
+            && !game.MatchTuneDetail.Contains("BelowNormal", StringComparison.Ordinal), "Confirmed game details certify the fresh Idle value only");
+        Verify(game.MatchTuneDetail.Contains("Peer: CPU AboveNormal → Normal", StringComparison.Ordinal) && !game.MatchTuneDetail.Contains("Realtime", StringComparison.Ordinal),
+            "Confirmed game details ignore malformed entries and explicitly failed controls without hiding the restored peer");
+    }
+    finally
+    {
+        foreach (var entry in saved) entry.Property.SetValue(App.Live, entry.Value);
+        Directory.Delete(fixtures, true);
+        File.WriteAllText(Path.Combine(output, "receipts.json"), JsonSerializer.Serialize(observations, new JsonSerializerOptions { WriteIndented = true }));
+    }
+    if (failures.Count > 0) throw new InvalidOperationException(string.Join("\n", failures));
+    if (args.Length > 0) { Console.WriteLine($"Completed {count} restore summary UI checks."); return; }
+}
+
 ControlRead Read<T>(T value) => ControlRead.From(value);
 var error = new ApiError("fixture", "win32", 5, "read", "Controlled affinity read failure");
 Dictionary<string, ControlRead> Controls(ControlRead cpuSets, ControlRead affinity) => new()

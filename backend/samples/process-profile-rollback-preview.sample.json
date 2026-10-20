@@ -141,7 +141,11 @@
         "type": "processProfileBackup",
         "path": "backend\\samples\\process-profile-backup.sample.json"
       }
-    ]
+    ],
+    "restorePendingCount": 0,
+    "pendingItems": [],
+    "alreadyClosedItems": [],
+    "leftAsSetItems": []
   },
   "warnings": [
     {
