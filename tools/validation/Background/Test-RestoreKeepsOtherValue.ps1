@@ -43,6 +43,8 @@ function Invoke-GameScenario([string]$name,[ValidateSet('before','race','back','
   $start=& (Join-Path $Source 'backend\scripts\Start-GameTuneSession.ps1') -ProfilePath (Join-Path $directory 'profile.json') -TargetGameProcessName ($p.ProcessName+'.exe') -PollIntervalSeconds 1 -MaxDurationSeconds 1 -StateRoot (Join-Path $directory 'state') -ConfirmApply|ConvertFrom-Json;Save $directory 'start' $start
   $applied=Read-Fixture $p
   if($applied.priorityClass -ne 'AboveNormal' -or $applied.affinityMask -ne $affinity){throw ('Game Tune did not apply priority and affinity to the fixture: '+$applied.priorityClass+' '+$applied.affinityMask)}
+  $statusBefore=& (Join-Path $Source 'backend\scripts\Get-GameTuneSessionStatus.ps1') -SessionPath $start.sessionPath|ConvertFrom-Json;Save $directory 'status-before' $statusBefore
+  if($statusBefore.restoreAttempted -isnot [bool] -or $statusBefore.restoreAttempted){throw 'Game Tune status did not identify the pre-Undo phase'}
   if($Mode -eq 'pending'){
    $backup=Get-Content -LiteralPath $start.backupManifestPath -Raw|ConvertFrom-Json
    $pendingControls=0
@@ -63,6 +65,7 @@ function Invoke-GameScenario([string]$name,[ValidateSet('before','race','back','
   $undo=& (Join-Path $Source 'backend\scripts\Stop-GameTuneSession.ps1') -SessionPath $start.sessionPath -ConfirmApply|ConvertFrom-Json;Save $directory 'undo' $undo
   $breakpointHits=0;if($breakpoint){$breakpointHits=$breakpoint.HitCount;Remove-PSBreakpoint $breakpoint;$breakpoint=$null}
   $status=& (Join-Path $Source 'backend\scripts\Get-GameTuneSessionStatus.ps1') -SessionPath $start.sessionPath|ConvertFrom-Json;Save $directory 'status' $status
+  if($status.restoreAttempted -isnot [bool] -or -not$status.restoreAttempted){throw 'Game Tune status lost the confirmed Undo phase'}
   $after=Read-Fixture $p
   if($Mode -in @('back','original')){
    Save $directory 'undo-first' $undo;Save $directory 'status-first' $status

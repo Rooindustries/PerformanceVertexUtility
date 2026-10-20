@@ -2206,6 +2206,9 @@
             "type": "object",
             "additionalProperties": true
           }
+        },
+        "restoreAttempted": {
+          "type": "boolean"
         }
       }
     },

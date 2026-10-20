@@ -715,7 +715,14 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
         {
             if (isGameStatus)
             {
-                if (!result.TryGetProperty("restoredItems", out items)) result.TryGetProperty("changedItems", out items);
+                if (!result.TryGetProperty("restoredItems", out items) || items.ValueKind != JsonValueKind.Array || items.GetArrayLength() == 0)
+                {
+                    items = default;
+                    var hasKept = result.TryGetProperty("leftAsSetItems", out var keptStatus) && keptStatus.ValueKind == JsonValueKind.Array && keptStatus.GetArrayLength() > 0;
+                    var canShowApplied = !hasKept && (result.TryGetProperty("restoreAttempted", out var attempted)
+                        ? attempted.ValueKind == JsonValueKind.False : ExtractString(root, "status") is "active" or "restorable");
+                    if (canShowApplied) result.TryGetProperty("changedItems", out items);
+                }
             }
             else if (!result.TryGetProperty("changedItems", out items)) result.TryGetProperty("restoredItems", out items);
         }

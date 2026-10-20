@@ -264,14 +264,10 @@ try {
             $entryControlChanges = @(Get-RooIndustriesPreviewControlChanges $entry)
             $appliedControls = New-Object System.Collections.Generic.List[object]
             $failedControls = New-Object System.Collections.Generic.List[string]
-            foreach ($check in @(Get-RooIndustriesPropertyArray $entry 'alreadyOriginal')) {
-                $verification = Confirm-RooIndustriesOriginalRestore $live $check
-                if (-not $verification.confirmed) { $failedControls.Add([string]$check.control + ': ' + $script:RooIndustriesLeftAsSetChangedBack) | Out-Null }
+            foreach ($check in (@(Get-RooIndustriesPropertyArray $entry 'alreadyOriginal') + @(Get-RooIndustriesPropertyArray $entry 'leftAsSet'))) {
+                $verification = Confirm-RooIndustriesRestoreControl $live $check
+                if (-not $verification.confirmed) { $failedControls.Add([string]$check.control + ': ' + $verification.reason) | Out-Null }
                 elseif ($null -ne $verification.leftAsSet) { $leftAsSetItems.Add((New-RooIndustriesLeftAsSetItem $entry $verification.leftAsSet)) | Out-Null }
-            }
-            foreach ($left in @(Get-RooIndustriesPropertyArray $entry 'leftAsSet')) {
-                $kept = Confirm-RooIndustriesLeftAsSet $live $left
-                if ($null -ne $kept) { $leftAsSetItems.Add((New-RooIndustriesLeftAsSetItem $entry $kept)) | Out-Null } else { $failedControls.Add([string]$left.control + ': ' + $script:RooIndustriesLeftAsSetChangedBack) | Out-Null }
             }
             if ($entryControlChanges.Count -eq 0 -and $failedControls.Count -eq 0) {
                 continue
@@ -285,9 +281,16 @@ try {
                     Invoke-RooIndustriesProcessControlChange $live $change
                     $appliedControls.Add($change) | Out-Null
                 } catch {
-                    $left = Get-RooIndustriesRestoreLeftAsSet $live $change $_.Exception.Message
-                    if ($null -ne $left) { $leftAsSetItems.Add((New-RooIndustriesLeftAsSetItem $entry $left)) | Out-Null; continue }
-                    $failedControls.Add("$([string](Get-RooIndustriesPropertyValue $change 'control' 'unknown')): $($_.Exception.Message)") | Out-Null
+                    $failureMessage = $_.Exception.Message
+                    $verification = Get-RooIndustriesRestoreLeftAsSet $live $change $failureMessage
+                    if ($null -ne $verification) {
+                        if ($verification.confirmed) {
+                            if ($null -ne $verification.leftAsSet) { $leftAsSetItems.Add((New-RooIndustriesLeftAsSetItem $entry $verification.leftAsSet)) | Out-Null }
+                            continue
+                        }
+                        $failureMessage = $verification.reason
+                    }
+                    $failedControls.Add("$([string](Get-RooIndustriesPropertyValue $change 'control' 'unknown')): $failureMessage") | Out-Null
                 }
             }
             if ($appliedControls.Count -gt 0) {

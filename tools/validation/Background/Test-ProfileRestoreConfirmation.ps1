@@ -9,6 +9,9 @@ function Read-Ast([string]$Path){
  if($errors.Count){throw ($errors -join '; ')}
  return $ast
 }
+function Test-RooIndustriesGovernorOwnsControl {param($Process,$Control) return $false}
+function Enter-RooIndustriesGovernorGate {param($Seconds) return [pscustomobject]@{fixtureGate=$true}}
+function Exit-RooIndustriesGovernorGate {param($Gate)}
 $common=Read-Ast 'backend/scripts/ProcessProfile.Common.ps1'
 $restore=Read-Ast 'backend/scripts/Restore-ProcessProfileBackup.ps1'
 $failures=New-Object System.Collections.Generic.List[string]
@@ -38,7 +41,7 @@ function Invoke-Scenario([string]$Mode,[bool]$WithPeer,[bool]$EndDuringRebuild=$
    $id=[int]$Snapshot.processId;$script:FixtureCurrentId=$id
    if($id -eq 1001){$script:FixtureTargetCandidates++}
    $ended=$id -eq 1001 -and $script:FixtureEnded -and $script:FixtureTargetCandidates -ge 3
-   return [pscustomobject]@{exists=(-not$ended);matches=(-not$ended);instanceEnded=$ended;process=[Diagnostics.Process]::GetCurrentProcess();currentPriorityClass=$script:FixtureValues[$id];currentControlState=[pscustomobject]@{priorityClass=$script:FixtureValues[$id]};blockedReason=if($ended){'This saved instance ended.'}else{$null}}
+   return [pscustomobject]@{exists=(-not$ended);matches=(-not$ended);instanceEnded=$ended;process=[Diagnostics.Process]::GetCurrentProcess();currentPriorityClass=$script:FixtureValues[$id];currentControlState=[pscustomobject]@{priorityClass=$script:FixtureValues[$id];process=[Diagnostics.Process]::GetCurrentProcess()};blockedReason=if($ended){'This saved instance ended.'}else{$null}}
   }
   function Get-RooIndustriesProcessControlReadback {
    param($Process,$Control)
@@ -104,7 +107,7 @@ function Invoke-PreviewBranch([string]$Kind,[string]$Branch){
    }
   }
   $snapshot=[pscustomobject]@{processId=1001;processName='ContractFixture';processStartTimeUtc='legacy-start-value';originalPriorityClass='Normal';originalMemoryPriority=5;controlChanges=@([pscustomobject]@{control='priorityClass';proposedValue='AboveNormal';outcome='applied'})}
-  $candidate=[pscustomobject]@{exists=($Branch -ne 'ended');matches=($Branch -eq 'normal');instanceEnded=($Branch -eq 'ended');reason='Identity could not be checked.';blockedReason='Identity could not be checked.';currentPriorityClass='AboveNormal';currentAffinityMask=1;currentIoPriority='Normal';currentMemoryPriority=5;currentGpuPriority=$null;currentControlState=[pscustomobject]@{priorityClass='AboveNormal';memoryPriority=5;gpuPriorityAvailable=$false;gpuPriorityStatus=-1073741811}}
+  $candidate=[pscustomobject]@{exists=($Branch -ne 'ended');matches=($Branch -eq 'normal');instanceEnded=($Branch -eq 'ended');reason='Identity could not be checked.';blockedReason='Identity could not be checked.';currentPriorityClass='AboveNormal';currentAffinityMask=1;currentIoPriority='Normal';currentMemoryPriority=5;currentGpuPriority=$null;currentControlState=[pscustomobject]@{priorityClass='AboveNormal';memoryPriority=5;gpuPriorityAvailable=$false;gpuPriorityStatus=-1073741811;process=[Diagnostics.Process]::GetCurrentProcess()}}
   $preview=if($Kind -eq 'profile'){New-RollbackPreviewEntry $snapshot $candidate}else{New-GameTuneRestorePreview $snapshot $candidate}
   $name=$Kind+'-preview-'+$Branch
   Save $OutRoot $name $preview
@@ -163,7 +166,7 @@ function Invoke-DecisionScenario([string]$Kind,[string]$Outcome,[string]$Bulk,[s
   function Resolve-RooIndustriesGameTuneStateRoot {param($StateRoot) return $directory}
   function Get-DecisionState {
    $priority=if($script:DecisionPriority -in @('null','throw','empty')){$null}else{$script:DecisionPriority}
-   return [pscustomobject]@{priorityClass=$priority;gpuPriority=if($script:DecisionGpuAvailable){$script:DecisionGpu}else{$null};gpuPriorityAvailable=$script:DecisionGpuAvailable;gpuPriorityStatus=if($script:DecisionGpuAvailable){0}else{-1073741811}}
+   return [pscustomobject]@{priorityClass=$priority;gpuPriority=if($script:DecisionGpuAvailable){$script:DecisionGpu}else{$null};gpuPriorityAvailable=$script:DecisionGpuAvailable;gpuPriorityStatus=if($script:DecisionGpuAvailable){0}else{-1073741811};process=[Diagnostics.Process]::GetCurrentProcess()}
   }
   function Get-DecisionCandidate {
    $script:DecisionCalls++
@@ -202,9 +205,11 @@ function Invoke-DecisionScenario([string]$Kind,[string]$Outcome,[string]$Bulk,[s
    $status=& ([scriptblock]::Create($body.Extent.Text));Save $directory $Label $status
    return $status
   }
-  if($Kind -eq 'game' -and $Legacy -and $Bulk -eq 'Normal'){
-   $legacyStatus=Save-DecisionStatus 'status-legacy'
-   Check ($legacyStatus.leftAsSetItems -is [array] -and $legacyStatus.leftAsSetItems.Count -eq 0) "$name legacy persisted session defaults to an empty kept array"
+  if($Kind -eq 'game'){
+   [IO.File]::Copy($sessionFile,(Join-Path $directory 'session-before.json'),$true)
+   $beforeStatus=Save-DecisionStatus 'status-before'
+   Check ($beforeStatus.restoreAttempted -is [bool] -and -not$beforeStatus.restoreAttempted) "$name status reports no confirmed Undo before restoration"
+   if($Legacy -and $Bulk -eq 'Normal'){Save $directory 'status-legacy' $beforeStatus;Check ($beforeStatus.leftAsSetItems -is [array] -and $beforeStatus.leftAsSetItems.Count -eq 0) "$name legacy persisted session defaults to an empty kept array"}
   }
   $first=Invoke-DecisionUndo
   Save $directory 'first' $first
@@ -232,6 +237,7 @@ function Invoke-DecisionScenario([string]$Kind,[string]$Outcome,[string]$Bulk,[s
   if($Kind -eq 'game'){
    [IO.File]::Delete((Join-Path $directory 'events.jsonl'))
    $status=Save-DecisionStatus 'status-first'
+   Check ($status.restoreAttempted -is [bool] -and $status.restoreAttempted) "$name status records the confirmed Undo phase"
    Check ($status.restorable -eq $first.restorable -and ($status.leftAsSetItems|ConvertTo-Json -Depth 20 -Compress) -eq ($first.leftAsSetItems|ConvertTo-Json -Depth 20 -Compress)) "$name persisted status preserves exact kept evidence and recovery"
   }
   if($uncertain -and -not$Ended){

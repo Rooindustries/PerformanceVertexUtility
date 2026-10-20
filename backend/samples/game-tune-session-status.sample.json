@@ -61,5 +61,6 @@
       "outcome": "leftAsSet",
       "reason": "Left as another program set it."
     }
-  ]
+  ],
+  "restoreAttempted": true
 }

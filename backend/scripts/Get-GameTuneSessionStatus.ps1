@@ -23,6 +23,7 @@ try {
             stateRoot = $resolvedStateRoot
             sessionPath = $resolvedSessionPath
             restorable = $false
+            restoreAttempted = $false
             active = $false
             completed = $false
             failed = $false
@@ -78,6 +79,7 @@ try {
         sessionPath = $resolvedSessionPath
         backupManifestPath = Get-RooIndustriesPropertyValue $session 'backupManifestPath' $null
         restorable = $isRestorable
+        restoreAttempted = ($null -ne $session.PSObject.Properties['leftAsSetItems'] -or @(Get-RooIndustriesPropertyArray $session 'restoredItems').Count -gt 0)
         active = ($status -eq 'active')
         completed = ($status -eq 'completed')
         failed = ($status -eq 'failed')
@@ -111,6 +113,7 @@ try {
         stateRoot = $StateRoot
         sessionPath = $SessionPath
         restorable = $false
+        restoreAttempted = $false
         active = $false
         completed = $false
         failed = $true

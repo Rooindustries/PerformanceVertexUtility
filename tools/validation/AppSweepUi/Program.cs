@@ -213,7 +213,59 @@ if (args is [] or ["restore-summary"] or ["restore-summary", _])
         Capture("game-reopen-kept-only", App.Live.GameTuneStatusText, keptOnly);
         Verify(keptOnly.MatchTuneDetail.Contains("Target: CPU Idle (left as another program set it)", StringComparison.Ordinal) && !keptOnly.MatchTuneRestoreAvailable,
             "Kept-only legacy session status names its persisted result without logs or counts");
+        foreach (var phase in new[] { "before", "after", "legacy", "legacy-finished" })
+        foreach (var status in phase switch { "before" => new[] { "active", "restorable", "failed" }, "after" => new[] { "completed", "failed", "partial" },
+            "legacy" => new[] { "active", "restorable" }, _ => new[] { "completed", "failed" } })
+        foreach (var variant in phase switch { "before" => new[] { "empty", "missing", "null", "scalar" }, "legacy" => new[] { "empty", "kept" }, _ => new[] { "empty" } })
+        {
+            var retained = status != "completed";
+            File.WriteAllText(sessionPath, JsonSerializer.Serialize(new { sessionId = "summary-session", profileId = "summary-game", dryRun = false,
+                restorable = retained, backupManifestPath = sessionBackup }));
+            var showApplied = phase == "before" || phase == "legacy" && variant != "kept";
+            var showKept = variant == "kept" || phase == "after" && status != "completed";
+            var receipt = new Dictionary<string, object?> { ["actionId"] = "performance.gameTune.sessionStatus", ["dryRun"] = false,
+                ["status"] = status, ["sessionId"] = "summary-session", ["profileId"] = "summary-game", ["sessionPath"] = sessionPath,
+                ["backupManifestPath"] = sessionBackup, ["restorable"] = retained, ["changedItems"] = applied,
+                ["leftAsSetItems"] = showKept ? kept : Array.Empty<object>(), ["skippedItems"] = phase == "after" && retained ? skipped : Array.Empty<object>(),
+                ["summary"] = new { changedItemCount = 1, restoredItemCount = 0, skippedItemCount = phase == "after" && retained ? 1 : 0, pollCount = 1 } };
+            if (phase is "before" or "after") receipt["restoreAttempted"] = phase == "after";
+            if (variant != "missing") receipt["restoredItems"] = variant switch { "null" => null, "scalar" => "unavailable", _ => Array.Empty<object>() };
+            App.Live.GameTuneStatusText = JsonSerializer.Serialize(receipt);
+            var reloaded = new PerformanceProfilesViewModel();
+            await reloaded.ReloadAsync();
+            Capture("game-status-phase-" + phase + "-" + status + "-" + variant, App.Live.GameTuneStatusText, reloaded);
+            Verify(reloaded.MatchTuneDetail.Contains("Peer: CPU AboveNormal → Normal", StringComparison.Ordinal) == showApplied
+                && !reloaded.MatchTuneDetail.Contains("Realtime", StringComparison.Ordinal)
+                && (!showKept || reloaded.MatchTuneDetail.Contains("Target: CPU Idle (left as another program set it)", StringComparison.Ordinal))
+                && (phase != "after" || !retained || reloaded.MatchTuneDetail.Contains(reason, StringComparison.Ordinal))
+                && reloaded.MatchTuneRestoreAvailable == retained,
+                "Public Reload distinguishes applied controls from completed Undo evidence: " + phase + "/" + status + "/" + variant);
+        }
         if (Environment.GetEnvironmentVariable("ROO_RESTORE_BACKEND_ARTIFACTS") is { Length: > 0 } backendArtifacts)
+        {
+        foreach (var afterUndo in new[] { false, true })
+        {
+            var scenario = "game-pending-BelowNormal-BelowNormal";
+            App.Live.GameTuneStatusText = File.ReadAllText(Path.Combine(backendArtifacts, scenario, afterUndo ? "status-first.json" : "status-before.json"));
+            var recordedSession = Path.Combine(backendArtifacts, scenario, "session.json");
+            var afterRetry = File.ReadAllText(recordedSession);
+            try
+            {
+                File.WriteAllText(recordedSession, File.ReadAllText(Path.Combine(backendArtifacts, scenario, afterUndo ? "session-first.json" : "session-before.json")));
+                var reloaded = new PerformanceProfilesViewModel();
+                await reloaded.ReloadAsync();
+                Capture("game-real-status-phase-" + afterUndo, App.Live.GameTuneStatusText, reloaded);
+                using var statusDocument = JsonDocument.Parse(App.Live.GameTuneStatusText);
+                var phaseKnown = statusDocument.RootElement.TryGetProperty("restoreAttempted", out var attempted)
+                    && attempted.ValueKind == (afterUndo ? JsonValueKind.True : JsonValueKind.False);
+                Verify(phaseKnown && (afterUndo
+                    ? !reloaded.MatchTuneRestoreAvailable && reloaded.MatchTuneDetail.Contains("Target: CPU BelowNormal (left as another program set it)", StringComparison.Ordinal)
+                        && !reloaded.MatchTuneDetail.Contains("OldApply", StringComparison.Ordinal)
+                    : reloaded.MatchTuneRestoreAvailable && reloaded.MatchTuneDetail.Contains("OldApply: CPU Normal → AboveNormal", StringComparison.Ordinal)),
+                    "Public Reload consumes the actual GetStatus Undo phase without rewriting its envelope: " + afterUndo);
+            }
+            finally { File.WriteAllText(recordedSession, afterRetry); }
+        }
         foreach (var partial in new[] { false, true })
         {
             var scenario = partial ? "game-applied-AboveNormal-AboveNormal-gpu" : "game-pending-BelowNormal-BelowNormal";
@@ -233,6 +285,7 @@ if (args is [] or ["restore-summary"] or ["restore-summary", _])
                     "Public Reload consumes the unmodified real backend status with simulated process I/O: " + partial);
             }
             finally { File.WriteAllText(recordedSession, afterRetry); }
+        }
         }
     }
     finally

@@ -1134,6 +1134,13 @@ function Split-RooIndustriesLeftAsSetRestoreChanges {
         $control = [string](Get-RooIndustriesPropertyValue $change 'control' '')
         if ($seen.ContainsKey($control)) { continue }
         $seen[$control] = $true
+        $process = Get-RooIndustriesPropertyValue $CurrentState 'process' $null
+        if ($process -is [System.Diagnostics.Process] -and (Test-RooIndustriesGovernorOwnsControl $process $control)) {
+            $change.blocked = $true
+            $change.blockedReason = $script:RooIndustriesGovernorManaged
+            $restore.Add($change) | Out-Null
+            continue
+        }
         $current = Get-RooIndustriesPropertyValue $change 'currentValue' $null
         $applied = Get-RooIndustriesAppliedControlValue $Snapshot $control
         $savedOriginal = Get-RooIndustriesPropertyValue $change 'proposedValue' $null
@@ -1156,40 +1163,39 @@ function Split-RooIndustriesLeftAsSetRestoreChanges {
     return [pscustomobject]@{ changes = @($restore.ToArray()); leftAsSet = @($left.ToArray()); alreadyOriginal = @($original.ToArray()) }
 }
 
-function Confirm-RooIndustriesOriginalRestore {
+function Confirm-RooIndustriesRestoreControl {
     param([System.Diagnostics.Process]$Process, $Check)
-    $unconfirmed = [pscustomobject]@{ confirmed = $false; leftAsSet = $null }
+    $unconfirmed = [pscustomobject]@{ confirmed = $false; leftAsSet = $null; reason = $script:RooIndustriesLeftAsSetChangedBack }
     $control = [string](Get-RooIndustriesPropertyValue $Check 'control' '')
-    try { $now = Get-RooIndustriesProcessControlReadback $Process $control } catch { return $unconfirmed }
-    if ([string]::IsNullOrWhiteSpace([string]$now)) { return $unconfirmed }
-    $original = Get-RooIndustriesPropertyValue $Check 'originalValue' $null
-    if (Test-RooIndustriesControlValueEqual $control $now $original) { return [pscustomobject]@{ confirmed = $true; leftAsSet = $null } }
-    $applied = Get-RooIndustriesPropertyValue $Check 'appliedValue' $null
-    if ([bool](Get-RooIndustriesPropertyValue $Check 'appliedKnown' $false) -and -not (Test-RooIndustriesControlValueEqual $control $now $applied)) {
-        return [pscustomobject]@{ confirmed = $true; leftAsSet = [pscustomobject]@{ control = $control; currentValue = $now; appliedValue = $applied; originalValue = $original; outcome = 'leftAsSet'; reason = $script:RooIndustriesLeftAsSet } }
-    }
-    return $unconfirmed
+    $gate = $null
+    try {
+        $gate = Enter-RooIndustriesGovernorGate -Seconds 2
+        if ($null -eq $gate -or (Test-RooIndustriesGovernorOwnsControl $Process $control)) {
+            $unconfirmed.reason = $script:RooIndustriesGovernorManaged
+            return $unconfirmed
+        }
+        try { $now = Get-RooIndustriesProcessControlReadback $Process $control } catch { return $unconfirmed }
+        if ([string]::IsNullOrWhiteSpace([string]$now)) { return $unconfirmed }
+        $original = Get-RooIndustriesPropertyValue $Check 'originalValue' $null
+        if (Test-RooIndustriesControlValueEqual $control $now $original) { return [pscustomobject]@{ confirmed = $true; leftAsSet = $null; reason = $null } }
+        $applied = Get-RooIndustriesPropertyValue $Check 'appliedValue' $null
+        $known = [bool](Get-RooIndustriesPropertyValue $Check 'appliedKnown' (-not [string]::IsNullOrWhiteSpace([string]$applied)))
+        if ($known -and -not (Test-RooIndustriesControlValueEqual $control $now $applied)) {
+            return [pscustomobject]@{ confirmed = $true; leftAsSet = [pscustomobject]@{ control = $control; currentValue = $now; appliedValue = $applied; originalValue = $original; outcome = 'leftAsSet'; reason = $script:RooIndustriesLeftAsSet }; reason = $null }
+        }
+        return $unconfirmed
+    } catch { return $unconfirmed }
+    finally { Exit-RooIndustriesGovernorGate $gate }
 }
 
 function Get-RooIndustriesRestoreLeftAsSet {
     param([System.Diagnostics.Process]$Process, $Change, [string]$Message)
     $before = Get-RooIndustriesPropertyValue $Change 'currentValue' $null
     if ($Message -ne $script:RooIndustriesChangedExternally -or [string]::IsNullOrWhiteSpace([string]$before)) { return $null }
-    $control = [string](Get-RooIndustriesPropertyValue $Change 'control' '')
-    $now = $null
-    try { $now = Get-RooIndustriesProcessControlReadback $Process $control } catch { return $null }
-    if ([string]::IsNullOrWhiteSpace([string]$now) -or (Test-RooIndustriesControlValueEqual $control $now $before)) { return $null }
-    $Change | Add-Member -NotePropertyName outcome -NotePropertyValue 'leftAsSet' -Force
-    return [pscustomobject]@{ control = $control; currentValue = $now; appliedValue = $before; originalValue = Get-RooIndustriesPropertyValue $Change 'proposedValue' $null; outcome = 'leftAsSet'; reason = $script:RooIndustriesLeftAsSet }
-}
-
-function Confirm-RooIndustriesLeftAsSet {
-    param([System.Diagnostics.Process]$Process, $Left)
-    $control = [string](Get-RooIndustriesPropertyValue $Left 'control' '')
-    $now = $null
-    try { $now = Get-RooIndustriesProcessControlReadback $Process $control } catch { return $null }
-    if ([string]::IsNullOrWhiteSpace([string]$now) -or (Test-RooIndustriesControlValueEqual $control $now (Get-RooIndustriesPropertyValue $Left 'appliedValue' $null))) { return $null }
-    return [pscustomobject]@{ control = $control; currentValue = $now; appliedValue = Get-RooIndustriesPropertyValue $Left 'appliedValue' $null; originalValue = Get-RooIndustriesPropertyValue $Left 'originalValue' $null; outcome = 'leftAsSet'; reason = $script:RooIndustriesLeftAsSet }
+    $check = [pscustomobject]@{ control = [string](Get-RooIndustriesPropertyValue $Change 'control' ''); originalValue = Get-RooIndustriesPropertyValue $Change 'proposedValue' $null; appliedValue = $before; appliedKnown = $true }
+    $verification = Confirm-RooIndustriesRestoreControl $Process $check
+    if ($verification.confirmed -and $null -ne $verification.leftAsSet) { $Change | Add-Member -NotePropertyName outcome -NotePropertyValue 'leftAsSet' -Force }
+    return $verification
 }
 
 function New-RooIndustriesLeftAsSetItem {
