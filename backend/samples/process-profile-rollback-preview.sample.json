@@ -47,7 +47,13 @@
           "rollback-safety"
         ]
       },
-      "rollback": null
+      "rollback": null,
+      "processStartTimeUtc": null,
+      "currentMemoryPriority": 5,
+      "proposedMemoryPriority": 5,
+      "gpuPriorityAvailable": false,
+      "gpuPriorityStatus": -1073741811,
+      "instanceEnded": false
     },
     {
       "previewId": "rollback-battle-net-6480",
@@ -88,7 +94,13 @@
           "rollback-safety"
         ]
       },
-      "rollback": null
+      "rollback": null,
+      "processStartTimeUtc": null,
+      "currentMemoryPriority": null,
+      "proposedMemoryPriority": null,
+      "gpuPriorityAvailable": false,
+      "gpuPriorityStatus": null,
+      "instanceEnded": false
     }
   ],
   "backup": {

@@ -54,7 +54,12 @@
         ]
       },
       "rollback": null,
-      "leftAsSet": []
+      "leftAsSet": [],
+      "processStartTimeUtc": null,
+      "currentMemoryPriority": 5,
+      "proposedMemoryPriority": 5,
+      "gpuPriorityAvailable": false,
+      "gpuPriorityStatus": -1073741811
     }
   ],
   "changedItems": [],

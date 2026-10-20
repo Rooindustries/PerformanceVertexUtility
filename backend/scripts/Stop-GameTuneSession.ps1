@@ -114,7 +114,7 @@ function New-GameTuneRestorePreview {
         leftAsSet = @($leftAsSet)
         ruleId = [string](Get-RooIndustriesPropertyValue $Snapshot 'ruleId' '')
         reason = $reason
-        reasonCodes = if ($ended) { @('GAME_TUNE_ALREADY_CLOSED') } elseif ($blocked) { @('GAME_TUNE_RESTORE_SKIPPED') } else { @('GAME_TUNE_PROCESS_CONTROLS_RESTORE') }
+        reasonCodes = @(if ($ended) { 'GAME_TUNE_ALREADY_CLOSED' } elseif ($blocked) { 'GAME_TUNE_RESTORE_SKIPPED' } else { 'GAME_TUNE_PROCESS_CONTROLS_RESTORE' })
         classification = 'rollbackCandidate'
         blocked = $blocked
         blockedReason = if ($blocked) { $reason } else { $null }

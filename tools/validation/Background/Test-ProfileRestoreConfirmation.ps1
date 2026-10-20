@@ -91,6 +91,57 @@ function Invoke-Scenario([string]$Mode,[bool]$WithPeer,[bool]$EndDuringRebuild=$
 }
 foreach($mode in 'throw','null','empty'){Invoke-Scenario $mode $false;Invoke-Scenario $mode $true}
 Invoke-Scenario 'throw' $false $true
-Save $OutRoot 'summary' @{proof='Dependency simulation, not a real Windows gate';cases=@($observations.ToArray());failures=@($failures.ToArray())}
+$previewCases=New-Object System.Collections.Generic.List[object]
+$previewSchema=Join-Path $OutRoot 'action-preview.schema.json'
+$schema=Get-Content -LiteralPath (Join-Path $Source 'backend/contracts/roo-industries-backend-contracts.schema.json') -Raw|ConvertFrom-Json
+[IO.File]::WriteAllText($previewSchema,(@{'$schema'=$schema.'$schema';'$defs'=$schema.'$defs';'$ref'='#/$defs/actionPreview'}|ConvertTo-Json -Depth 100),$utf8)
+function Invoke-PreviewBranch([string]$Kind,[string]$Branch){
+ & {
+  foreach($path in 'backend/scripts/ProcessProfile.Common.ps1','backend/scripts/GameTuneSession.Common.ps1','backend/scripts/Restore-ProcessProfileBackup.ps1','backend/scripts/Stop-GameTuneSession.ps1'){
+   $ast=Read-Ast $path
+   foreach($statement in $ast.EndBlock.Statements){
+    if($statement -is [System.Management.Automation.Language.FunctionDefinitionAst] -or (($path -like '*Common.ps1' -or $path -like '*Stop-GameTuneSession.ps1') -and $statement -is [System.Management.Automation.Language.AssignmentStatementAst])){. ([scriptblock]::Create($statement.Extent.Text))}
+   }
+  }
+  $snapshot=[pscustomobject]@{processId=1001;processName='ContractFixture';processStartTimeUtc='legacy-start-value';originalPriorityClass='Normal';originalMemoryPriority=5;controlChanges=@([pscustomobject]@{control='priorityClass';proposedValue='AboveNormal';outcome='applied'})}
+  $candidate=[pscustomobject]@{exists=($Branch -ne 'ended');matches=($Branch -eq 'normal');instanceEnded=($Branch -eq 'ended');reason='Identity could not be checked.';blockedReason='Identity could not be checked.';currentPriorityClass='AboveNormal';currentAffinityMask=1;currentIoPriority='Normal';currentMemoryPriority=5;currentGpuPriority=$null;currentControlState=[pscustomobject]@{priorityClass='AboveNormal';memoryPriority=5;gpuPriorityAvailable=$false;gpuPriorityStatus=-1073741811}}
+  $preview=if($Kind -eq 'profile'){New-RollbackPreviewEntry $snapshot $candidate}else{New-GameTuneRestorePreview $snapshot $candidate}
+  $name=$Kind+'-preview-'+$Branch
+  Save $OutRoot $name $preview
+  $expected=if($Kind -eq 'profile'){if($Branch -eq 'normal'){'ROLLBACK_PROCESS_CONTROLS_RESTORE'}else{'ROLLBACK_SKIPPED'}}elseif($Branch -eq 'normal'){'GAME_TUNE_PROCESS_CONTROLS_RESTORE'}elseif($Branch -eq 'ended'){'GAME_TUNE_ALREADY_CLOSED'}else{'GAME_TUNE_RESTORE_SKIPPED'}
+  Check ($preview.reasonCodes -is [array] -and $preview.reasonCodes.Count -eq 1 -and $preview.reasonCodes[0] -eq $expected) "$name emits one array reason code $expected"
+  $issues=@();$valid=Test-Json -LiteralPath (Join-Path $OutRoot ($name+'.json')) -SchemaFile $previewSchema -ErrorAction SilentlyContinue -ErrorVariable issues
+  $details=New-Object System.Collections.Generic.List[string]
+  foreach($issue in $issues){$details.Add($issue.ToString())|Out-Null}
+  if(-not$valid){
+   $validator=[Json.Schema.JsonSchema]::FromFile($previewSchema);$options=[Json.Schema.EvaluationOptions]::new();$options.OutputFormat=[Json.Schema.OutputFormat]::List
+   $node=[System.Text.Json.Nodes.JsonNode]::Parse([IO.File]::ReadAllText((Join-Path $OutRoot ($name+'.json'))))
+   foreach($detail in $validator.Evaluate($node,$options).Details){if(-not$detail.IsValid -and $detail.Errors){$details.Add($detail.InstanceLocation.ToString()+': '+($detail.Errors|ConvertTo-Json -Compress))|Out-Null}}
+  }
+  [IO.File]::WriteAllText((Join-Path $OutRoot ($name+'.errors.log')),($details -join [Environment]::NewLine),$utf8)
+  Check $valid "$name raw preview matches the strict actionPreview contract"
+  if($Kind -eq 'game'){
+   $gameAst=Read-Ast 'backend/scripts/Stop-GameTuneSession.ps1'
+   $script:ContractGameBackup=[pscustomobject]@{actionId='performance.gameTune.startSession';dryRun=$false;sessionId='contract-session';profileId='contract-profile';backupId='contract-backup';createdAtUtc='2026-10-01T00:00:00Z';snapshots=@($snapshot)}
+   function Resolve-RooIndustriesPath {param($Path,$DefaultPath) return $Path}
+   function Read-RooIndustriesJsonFile {param($Path) return $script:ContractGameBackup}
+   function Resolve-RooIndustriesGameTuneSessionFile {param($SessionId,$SessionPath,$StateRoot) return ''}
+   function Get-RooIndustriesGameTuneLiveProcessIdentity {param($Entry) return $candidate}
+   function Invoke-RooIndustriesProcessControlChange {throw 'Contract preview must not write process controls.'}
+   function Write-RooIndustriesGameTuneJsonFile {throw 'Contract preview must not write session state.'}
+   function Write-RooIndustriesJsonOutput {param($Value,$OutputPath) return $Value}
+   $SessionId='';$SessionPath='';$BackupPath='contract-game-backup.json';$StateRoot='';$OutputPath='';$ConfirmApply=$false
+   $body=$gameAst.EndBlock.Statements|Where-Object {$_ -is [System.Management.Automation.Language.TryStatementAst]}|Select-Object -Last 1
+   $envelope=& ([scriptblock]::Create($body.Extent.Text))
+   Save $OutRoot ($name+'-envelope') $envelope
+   Check ($envelope.actionId -eq 'performance.gameTune.stopSession' -and $envelope.status -eq 'preview' -and @($envelope.preview).Count -eq 1) "$name runs the real Game Tune restore body without writes"
+  }
+  $previewCases.Add([pscustomobject]@{name=$name;schemaValid=$valid;expectedCode=$expected})|Out-Null
+ }
+}
+foreach($branch in 'normal','blocked'){Invoke-PreviewBranch 'profile' $branch}
+foreach($branch in 'normal','blocked','ended'){Invoke-PreviewBranch 'game' $branch}
+Save $OutRoot 'summary' @{proof='Dependency simulation, not a real Windows gate';cases=@($observations.ToArray());previewCases=@($previewCases.ToArray());failures=@($failures.ToArray())}
 if($failures.Count){throw ($failures -join '; ')}
 "Completed $($observations.Count) profile confirmation integration scenarios."
+"Completed $($previewCases.Count) restore preview contract branches."

@@ -173,7 +173,7 @@ function New-RollbackPreviewEntry {
         ruleId = [string](Get-RooIndustriesPropertyValue $Snapshot 'ruleId' '')
         reason = $reason
         instanceEnded = [bool](Get-RooIndustriesPropertyValue $Candidate 'instanceEnded' $false)
-        reasonCodes = if ($blocked) { @('ROLLBACK_SKIPPED') } else { @('ROLLBACK_PROCESS_CONTROLS_RESTORE') }
+        reasonCodes = @(if ($blocked) { 'ROLLBACK_SKIPPED' } else { 'ROLLBACK_PROCESS_CONTROLS_RESTORE' })
         classification = 'rollbackCandidate'
         blocked = $blocked
         blockedReason = if ($blocked) { $reason } else { $null }

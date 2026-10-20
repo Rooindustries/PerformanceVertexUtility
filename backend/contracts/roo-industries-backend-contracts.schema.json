@@ -410,6 +410,36 @@
             "type": "object",
             "additionalProperties": true
           }
+        },
+        "processStartTimeUtc": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "currentMemoryPriority": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "proposedMemoryPriority": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "gpuPriorityAvailable": {
+          "type": "boolean"
+        },
+        "gpuPriorityStatus": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "instanceEnded": {
+          "type": "boolean"
         }
       }
     },

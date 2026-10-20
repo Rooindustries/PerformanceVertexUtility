@@ -93,6 +93,40 @@ if (args is [] or ["restore-summary"] or ["restore-summary", _])
         Verify(profile.ActionDetail.StartsWith("Partial restore.", StringComparison.Ordinal) && profile.ActionDetail.Contains(reason, StringComparison.Ordinal)
             && !profile.ActionDetail.Contains("BelowNormal", StringComparison.Ordinal), "Partial profile details report the failed confirmation without a stale kept value");
         Verify(profile.ActionDetail.Contains("Peer: CPU AboveNormal → Normal", StringComparison.Ordinal), "Partial profile details retain unrelated restored controls");
+        var backendReason = "Restore finished for 1 app(s). 1 app(s) still need attention: Target (PID 123): " + reason + ".";
+        foreach (var identity in new[] { "matched", "shared", "missing-id", "string-id" })
+        {
+            object[] actualSkipped = identity switch
+            {
+                "shared" => [new { processName = "Target", processId = 123, reason }, new { processName = "Other", processId = 124, reason }],
+                "missing-id" => [new { processName = "Target", reason }],
+                "string-id" => [new { processName = "Target", processId = "123", reason }],
+                _ => [new { processName = "Target", processId = 123, reason }],
+            };
+            App.Live.ProcessRestoreText = JsonSerializer.Serialize(new { actionId = "performance.rollbackProfile", dryRun = false, status = "partial", preview,
+                backup = new { backupId = "summary-backup", location = backup },
+                result = new { status = "partial", summary = backendReason, changedItems = restored, leftAsSetItems = Array.Empty<object>(), skippedItems = actualSkipped, restorePendingCount = 1 } });
+            await profile.RestoreProfileCommand.ExecuteAsync(null);
+            Capture("profile-summary-skipped-" + identity, App.Live.ProcessRestoreText, profile);
+            Verify(profile.ActionDetail.Split(reason, StringSplitOptions.None).Length - 1 == (identity == "matched" ? 1 : 2)
+                && (identity != "shared" || profile.ActionDetail.Contains("Other: " + reason, StringComparison.Ordinal)),
+                "Skipped summary deduplication requires the exact numeric process identity: " + identity);
+        }
+        foreach (var completeList in new[] { true, false })
+        {
+            object[] actualKept = completeList ? kept : [kept[0], new { processName = "Other", control = "priorityClass", currentValue = "Idle" }];
+            App.Live.ProcessRestoreText = JsonSerializer.Serialize(new { actionId = "performance.rollbackProfile", dryRun = false, status = "partial", preview,
+                backup = new { backupId = "summary-backup", location = backup },
+                result = new { status = "partial", summary = "Restore completed. Left as another program set it: Target CPU priority (Idle).", changedItems = restored,
+                    leftAsSetItems = actualKept, skippedItems = Array.Empty<object>(), restorePendingCount = 1 } });
+            await profile.RestoreProfileCommand.ExecuteAsync(null);
+            Capture("profile-summary-kept-" + completeList, App.Live.ProcessRestoreText, profile);
+            Verify(profile.ActionDetail.Contains("Peer: CPU AboveNormal → Normal", StringComparison.Ordinal) && (completeList
+                ? profile.ActionDetail.Split("Idle", StringSplitOptions.None).Length - 1 == 1
+                : profile.ActionDetail.Contains("Other: CPU Idle (left as another program set it)", StringComparison.Ordinal)
+                    && profile.ActionDetail.Contains("Target: CPU Idle (left as another program set it)", StringComparison.Ordinal)),
+                "Kept summary deduplication requires the complete actual list: " + completeList);
+        }
         App.Live.ProcessRestoreText = JsonSerializer.Serialize(new { actionId = "performance.rollbackProfile", dryRun = false, status = "success", preview,
             backup = new { backupId = "summary-backup", location = backup },
             result = new { status = "success", summary = "Restore completed.", changedItems = applied, leftAsSetItems = kept, skippedItems = Array.Empty<object>(), restorePendingCount = 0 } });

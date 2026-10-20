@@ -756,18 +756,41 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
         }
         if (!isPreview && result.ValueKind == JsonValueKind.Object)
         {
+            var summaryText = result.TryGetProperty("summary", out var summaryValue) && summaryValue.ValueKind == JsonValueKind.String
+                ? summaryValue.GetString() ?? string.Empty : string.Empty;
             if (result.TryGetProperty("leftAsSetItems", out var kept) && kept.ValueKind == JsonValueKind.Array)
-            foreach (var left in kept.EnumerateArray())
             {
-                if (left.ValueKind != JsonValueKind.Object) continue;
-                var control = ExtractString(left, "control");
-                lines.Add((ExtractString(left, "processName") ?? "App") + ": " + ControlLabel(control) + " " +
-                    (left.TryGetProperty("currentValue", out var keptValue) ? ControlValue(control, keptValue) : "unavailable") + " (left as another program set it)");
+                var entries = new List<string>();
+                var complete = kept.GetArrayLength() > 0;
+                foreach (var left in kept.EnumerateArray())
+                {
+                    if (left.ValueKind != JsonValueKind.Object || !left.TryGetProperty("processName", out var name) || name.ValueKind != JsonValueKind.String
+                        || !left.TryGetProperty("control", out var controlValue) || controlValue.ValueKind != JsonValueKind.String
+                        || !left.TryGetProperty("currentValue", out var current) || current.ValueKind is not (JsonValueKind.String or JsonValueKind.Number))
+                    { complete = false; break; }
+                    var control = controlValue.GetString();
+                    var label = control switch { "priorityClass" => "CPU priority", "affinityMask" => "CPU affinity", "ioPriority" => "I/O priority",
+                        "memoryPriority" => "memory priority", "gpuPriority" => "GPU priority", _ => control };
+                    entries.Add(name.GetString() + " " + label + " (" + current.ToString() + ")");
+                }
+                if (!complete || !summaryText.Contains(" Left as another program set it: " + string.Join(", ", entries) + ".", StringComparison.Ordinal))
+                foreach (var left in kept.EnumerateArray())
+                {
+                    if (left.ValueKind != JsonValueKind.Object) continue;
+                    var control = ExtractString(left, "control");
+                    lines.Add((ExtractString(left, "processName") ?? "App") + ": " + ControlLabel(control) + " " +
+                        (left.TryGetProperty("currentValue", out var keptValue) ? ControlValue(control, keptValue) : "unavailable") + " (left as another program set it)");
+                }
             }
             if (result.TryGetProperty("skippedItems", out var skipped) && skipped.ValueKind == JsonValueKind.Array)
             foreach (var item in skipped.EnumerateArray())
                 if (item.ValueKind == JsonValueKind.Object && ExtractString(item, "reason") is { Length: > 0 } reason)
-                    lines.Add((ExtractString(item, "processName") ?? "App") + ": " + reason);
+                {
+                    var name = ExtractString(item, "processName");
+                    if (name is { Length: > 0 } && item.TryGetProperty("processId", out var processId) && processId.ValueKind == JsonValueKind.Number
+                        && processId.TryGetInt64(out var id) && summaryText.Contains(name + " (PID " + id.ToString(CultureInfo.InvariantCulture) + "): " + reason, StringComparison.Ordinal)) continue;
+                    lines.Add((name ?? "App") + ": " + reason);
+                }
         }
         return lines.Count == 0 ? string.Empty : "\n" + string.Join("\n", lines.Take(20)) + (lines.Count > 20 ? "\n" + (lines.Count - 20) + " more apps; see the list below." : string.Empty);
     }
