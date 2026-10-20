@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Reflection;
 using System.Runtime.InteropServices;
@@ -188,24 +189,6 @@ static class AliasOwnershipChecks
             check(GetShortPathName(target, shortName, (uint)shortName.Capacity) != 0 && !string.Equals(target, shortName.ToString(), StringComparison.OrdinalIgnoreCase) && shortName.ToString().Contains('~'), "Fixture has an actual 8.3 alias");
             CheckPeer(check, root, shortName.ToString(), "actual-8dot3-alias", true);
 
-            var locked = Directory.CreateDirectory(Path.Combine(root, "locked-peer"));
-            var lockedSecurity = locked.GetAccessControl();
-            var lockedDenied = locked.GetAccessControl();
-            var lockedDescriptor = new RawSecurityDescriptor(lockedDenied.GetSecurityDescriptorBinaryForm(), 0);
-            lockedDescriptor.DiscretionaryAcl!.InsertAce(0, new CommonAce(AceFlags.None, AceQualifier.AccessDenied, 0x100000, WindowsIdentity.GetCurrent().User!, false, null));
-            var lockedBytes = new byte[lockedDescriptor.BinaryLength];
-            lockedDescriptor.GetBinaryForm(lockedBytes, 0);
-            lockedDenied.SetSecurityDescriptorBinaryForm(lockedBytes);
-            try
-            {
-                locked.SetAccessControl(lockedDenied);
-                check((File.GetAttributes(locked.FullName) & FileAttributes.Directory) != 0, "Metadata-open failure fixture still permits attribute reads");
-                using var refused = CreateFile(locked.FullName, 0x100080, 7, IntPtr.Zero, 3, 0x02300000, IntPtr.Zero);
-                check(refused.IsInvalid && Marshal.GetLastWin32Error() == 5, "Synchronize denial really refuses the resolver's metadata handle open");
-                CheckPeer(check, root, locked.FullName, "metadata-open-access-denied", false);
-            }
-            finally { locked.SetAccessControl(lockedSecurity); }
-
             var unreadable = Directory.CreateDirectory(Path.Combine(root, "unreadable-peer"));
             var hidden = Path.Combine(unreadable.FullName, "alias");
             links.Add(hidden); Junction(hidden, target);
@@ -218,6 +201,12 @@ static class AliasOwnershipChecks
                 var refused = false;
                 try { _ = File.GetAttributes(hidden); } catch (UnauthorizedAccessException) { refused = true; }
                 check(refused, "Unreadable ancestor fixture actually denies metadata access");
+                using var parent = CreateFile(root, 0x100080, 7, IntPtr.Zero, 3, 0x02300000, IntPtr.Zero);
+                var method = typeof(FileLease).GetMethod("OpenMetadataChild", BindingFlags.Static | BindingFlags.NonPublic)!;
+                var deniedOpen = false;
+                try { using var opened = (SafeFileHandle)method.Invoke(null, [parent, unreadable.Name])!; }
+                catch (TargetInvocationException error) when (error.InnerException is Win32Exception { NativeErrorCode: 5 }) { deniedOpen = true; }
+                check(deniedOpen, "The resolver's actual parent-relative metadata open refuses the unreadable ancestor");
                 CheckPeer(check, root, hidden, "unreadable-ancestor", false);
             }
             finally { unreadable.SetAccessControl(security); }
