@@ -215,7 +215,7 @@ static class AliasOwnershipChecks
                     catch (TargetInvocationException error) when (error.InnerException is Win32Exception { NativeErrorCode: 5 }) { deniedOpen = true; }
                     check(deniedOpen, "The resolver's actual parent-relative metadata open refuses the unreadable ancestor");
                     CheckPeer(check, root, hidden, "unreadable-ancestor", false);
-                }, "SeBackupPrivilege", "SeRestorePrivilege", "SeChangeNotifyPrivilege");
+                }, "SeBackupPrivilege", "SeRestorePrivilege");
             }
             finally { opaque.SetAccessControl(opaqueSecurity); unreadable.SetAccessControl(security); }
 
