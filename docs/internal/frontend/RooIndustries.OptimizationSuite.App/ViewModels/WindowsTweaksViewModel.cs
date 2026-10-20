@@ -116,7 +116,7 @@ public partial class WindowsTweakRow : ObservableObject
     private TweakSettingStatus? _observed;
     public TweakChoice? AppliedChoice { get; private set; }
     public bool IsApplied => AppliedChoice is not null;
-    private static readonly string[] LackedHere = ["Win32 1060", "0x80070002", "Windows driver", "Office installation", "devices expose", "No active adapter", "is not installed", "is not available with", "Hard-linked file permissions"];
+    private static readonly string[] LackedHere = ["Win32 1060", "0x80070002", "Windows driver", "Office installation", "devices expose", "No active adapter", "is not installed", "is not available with", "Hard-linked file permissions", "doesn't let administrators change the"];
     private static bool PcLacks(string error) => error.StartsWith("No choice applies", StringComparison.Ordinal) || LackedHere.Any(text => error.Contains(text, StringComparison.Ordinal));
     public bool CouldNotCheck => _observed is { Error: { } error } && error != TweakEngine.FeaturesPending && !PcLacks(error);
     public bool CanRetry => CouldNotCheck;

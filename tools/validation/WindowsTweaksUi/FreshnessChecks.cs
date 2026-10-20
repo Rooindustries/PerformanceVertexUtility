@@ -568,6 +568,32 @@ static class FreshnessChecks
             if (!passed) Console.WriteLine("  simple mode lists [" + string.Join(", ", simple) + "], linked " + (shared is null ? "missing" : shared.CanRetry + "/" + shared.UnavailableHere + "/" + shared.Detail) + ", not installed " + (absent is null ? "missing" : absent.CanRetry + "/" + absent.UnavailableHere) + ", failing " + (failed is null ? "missing" : failed.CanRetry + "/" + failed.Current));
             return passed;
         });
+        await Scenario("A service Windows never lets administrators change is unavailable here without a retry, while a service that is still starting keeps Couldn't check", async () =>
+        {
+            const string locked = "windows.b356c3123766a188", settling = "windows.4e3841a2d61ce3f9";
+            const string refusal = "Windows doesn't let administrators change the startup of this service: printworkflowusersvc";
+            RegistryAddress Address(string name) => new("CurrentUser", "Registry64", @"Software\RooIndustriesUiModelFixture", "value", name);
+            TweakDefinition Setting(string id) => new(id, id, "Services", "Fixture", 10240, 26200, ["*"], "none",
+                [new("on", "On", [new(Address(id), 1)]), new("off", "Off", [new(Address(id), 0)])], [new("Fixture", "fixture", "isolated UI validation")], null, false);
+            var fixture = new Fixture(Path.Combine(root, "protected-service"), new TweakCatalog(1, "services", [Setting(locked), Setting(settling)], [])) { Missing = false };
+            fixture.TransformStatus = inspection => inspection with { Settings = inspection.Settings.Select(status => status.Id switch
+            {
+                locked => status with { Error = refusal, Supported = false },
+                settling => status with { Error = "The service is transitioning. Try again after it settles: PrintWorkflowUserSvc", Supported = false },
+                _ => status,
+            }).ToArray() };
+            App.Operations = fixture; var model = new WindowsTweaksViewModel(); await model.ShowAsync();
+            model.ShowAdvanced = false;
+            var simple = model.Rows.Select(row => row.Id).ToArray();
+            model.ShowAdvanced = true;
+            var refused = model.Rows.SingleOrDefault(row => row.Id == locked);
+            var waiting = model.Rows.SingleOrDefault(row => row.Id == settling);
+            var passed = simple.SequenceEqual([settling])
+                && refused is { CanRetry: false, UnavailableHere: true } && refused.Detail == refusal
+                && waiting is { CanRetry: true, Current: "Couldn't check" };
+            if (!passed) Console.WriteLine("  simple mode lists [" + string.Join(", ", simple) + "], protected " + (refused is null ? "missing" : refused.CanRetry + "/" + refused.UnavailableHere + "/" + refused.Detail) + ", settling " + (waiting is null ? "missing" : waiting.CanRetry + "/" + waiting.Current));
+            return passed;
+        });
         check(failures.Count == 0, "Windows tweaks freshness checks (" + failures.Count + " failed: " + string.Join("; ", failures) + ")");
     }
 }
