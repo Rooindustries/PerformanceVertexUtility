@@ -256,8 +256,9 @@ namespace RooIndustries.OptimizationSuite.Services
         public GameSessionEntry[] GameSessions { get; set; } = [];
         public TweakRecovery? WindowsRecovery { get; set; } = new(null, null, null);
         public string? FindLastJournal(string kind) => null;
+        public Func<int, ProcessControlSnapshot>? ProcessReads { get; set; }
         public Task<ProcessControlSnapshot> ReadProcessControlsAsync(int processId)
-            => Task.FromResult(ProcessSnapshot ?? throw new InvalidOperationException("Process snapshot fixture is missing."));
+            => Task.FromResult(ProcessReads?.Invoke(processId) ?? ProcessSnapshot ?? throw new InvalidOperationException("Process snapshot fixture is missing."));
         public Func<Dictionary<string, JsonElement>, ProcessControlReview>? Review { get; set; }
         public Task<ProcessControlReview> PreviewControlsAsync(int processId, Dictionary<string, JsonElement> controls, CpuSelection? selection)
             => Review is { } review ? Task.FromResult(review(controls)) : throw new InvalidOperationException("Unexpected preview call.");

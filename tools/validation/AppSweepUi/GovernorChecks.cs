@@ -151,6 +151,7 @@ static class GovernorChecks
 #if !OLD_UI
             await RetryButton(check);
             await RuleValues(check);
+            await EditSameName(check);
             await RealSnapshot(check);
             await Scheduled(check);
             await Details(check);
@@ -465,6 +466,37 @@ static class GovernorChecks
     }
 
 #if !OLD_UI
+    private static async Task EditSameName(Action<bool, string> check)
+    {
+        ControlRead Read<T>(T value) => ControlRead.From(value);
+        var controls = new Dictionary<string, ControlRead>
+        {
+            ["cpuPriority"] = Read("Normal"), ["ioPriority"] = Read(2), ["gpuPriority"] = Read(2), ["memoryPriority"] = Read(5),
+            ["executionQoS"] = Read(new PowerThrottling(0, 0)), ["priorityBoost"] = Read(true), ["cpuSets"] = Read(Array.Empty<uint>()), ["affinity"] = Read(new AffinityState(0, "0x3")),
+        };
+        var first = new RunningProcess(201, "1", @"C:\FolderA\game.exe");
+        var second = new RunningProcess(202, "2", @"C:\FolderB\game.exe");
+        var savedInventory = App.Live.Inventory;
+        App.Live.Inventory = new ProcessInventory { Processes = [new ProcessItem { Pid = 201, Name = "game.exe", Category = "backgroundApp" }, new ProcessItem { Pid = 202, Name = "game.exe", Category = "backgroundApp" }] };
+        App.Operations.ProcessReads = id => new(id == 201 ? first : second, Read(0xfffffffeu), [new LogicalCpu(103, 0, 0, 0, 0, 0, 0, false, false, false)], controls);
+        var rule = Rule(RuleId, "Folder B game", second.ExecutablePath, true) with { MatchMode = "path" };
+        App.Operations.Governor = Snapshot(false, [rule], new(Host("running", []), true, null));
+        try
+        {
+            var panel = new ProcessControlsViewModel();
+            await panel.RefreshCommand.ExecuteAsync(null);
+            await panel.RefreshRulesCommand.ExecuteAsync(null);
+            panel.SelectedRule = panel.Rules.Single();
+            await panel.EditRuleCommand.ExecuteAsync(null);
+            check(panel.SelectedProcess?.Id == 202 && panel.RuleName == "Folder B game",
+                "Edit picks the running app from the rule's folder when another folder has an app with the same file name" + " | got: " + panel.SelectedProcess?.Id + " " + panel.Status + " " + panel.Detail);
+            panel.SelectedProcess = panel.Processes.Single(process => process.Id == 202);
+            await panel.EditRuleCommand.ExecuteAsync(null);
+            check(panel.SelectedProcess?.Id == 202 && panel.RuleName == "Folder B game", "Edit keeps an already selected matching app instead of switching to the first same-name app");
+        }
+        finally { App.Operations.ProcessReads = null; App.Live.Inventory = savedInventory; }
+    }
+
     private static async Task RuleValues(Action<bool, string> check)
     {
         ControlRead Read<T>(T value) => ControlRead.From(value);

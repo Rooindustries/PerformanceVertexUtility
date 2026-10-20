@@ -711,10 +711,15 @@ public partial class ProcessControlsViewModel : ObservableObject
         var rule = SelectedRule!.Rule;
         try
         {
-            var process = Processes.FirstOrDefault(item => string.Equals(Path.GetFileNameWithoutExtension(item.Name), Path.GetFileNameWithoutExtension(rule.ExecutablePath), StringComparison.OrdinalIgnoreCase));
-            if (process is null) throw new InvalidOperationException("Start the rule's application and refresh the process list to review changed controls.");
-            SelectedProcess = process;
-            await _readTask;
+            var candidates = Processes.Where(item => string.Equals(Path.GetFileNameWithoutExtension(item.Name), Path.GetFileNameWithoutExtension(rule.ExecutablePath), StringComparison.OrdinalIgnoreCase))
+                .OrderBy(item => item == SelectedProcess ? 0 : 1).ToArray();
+            if (candidates.Length == 0) throw new InvalidOperationException("Start the rule's application and refresh the process list to review changed controls.");
+            foreach (var process in candidates)
+            {
+                SelectedProcess = process;
+                await _readTask;
+                if (_snapshot is not null && (rule.MatchMode != "path" || string.Equals(_snapshot.Identity.ExecutablePath, rule.ExecutablePath, StringComparison.OrdinalIgnoreCase))) break;
+            }
             if (_snapshot is null || rule.MatchMode == "path" && !string.Equals(_snapshot.Identity.ExecutablePath, rule.ExecutablePath, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("Choose a running instance from the saved executable path before editing this rule.");
             _editingRuleId = rule.RuleId;
