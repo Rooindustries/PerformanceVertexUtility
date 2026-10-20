@@ -9,6 +9,18 @@ param(
 
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'GameTuneSession.Common.ps1')
+$script:GameTuneAlreadyClosed = 'This app was already closed or restarted. Its settings ended with it, so nothing remains to restore.'
+
+function New-GameTuneAlreadyClosedItem {
+    param([object]$Entry)
+    return [pscustomobject]@{
+        processId = Get-RooIndustriesPropertyValue $Entry 'processId' 0
+        processName = Get-RooIndustriesPropertyValue $Entry 'processName' ''
+        reason = $script:GameTuneAlreadyClosed
+        outcome = 'alreadyClosed'
+        skippedAtUtc = Get-RooIndustriesUtcStamp
+    }
+}
 
 function New-GameTuneRestorePreview {
     param(
@@ -25,7 +37,10 @@ function New-GameTuneRestorePreview {
     $recorded = @(Get-RooIndustriesRestorableProcessControls $Snapshot (Get-RooIndustriesPropertyValue $Candidate 'currentControlState' $null) | ForEach-Object { [string](Get-RooIndustriesPropertyValue $_ 'control' '') })
     $restoresAll = $null -eq $Snapshot.PSObject.Properties['controlChanges']
     $blocked = (-not $Candidate.exists) -or (-not $Candidate.matches)
-    $reason = if ($blocked) {
+    $ended = $blocked -and [bool](Get-RooIndustriesPropertyValue $Candidate 'instanceEnded' $false)
+    $reason = if ($ended) {
+        $script:GameTuneAlreadyClosed
+    } elseif ($blocked) {
         [string]$Candidate.reason
     } else {
         'Restore original process controls from Game Tune session backup.'
@@ -84,7 +99,7 @@ function New-GameTuneRestorePreview {
         controlChanges = @($controlChanges.ToArray())
         ruleId = [string](Get-RooIndustriesPropertyValue $Snapshot 'ruleId' '')
         reason = $reason
-        reasonCodes = if ($blocked) { @('GAME_TUNE_RESTORE_SKIPPED') } else { @('GAME_TUNE_PROCESS_CONTROLS_RESTORE') }
+        reasonCodes = if ($ended) { @('GAME_TUNE_ALREADY_CLOSED') } elseif ($blocked) { @('GAME_TUNE_RESTORE_SKIPPED') } else { @('GAME_TUNE_PROCESS_CONTROLS_RESTORE') }
         classification = 'rollbackCandidate'
         blocked = $blocked
         blockedReason = if ($blocked) { $reason } else { $null }
@@ -179,6 +194,7 @@ try {
     $preview = New-Object System.Collections.Generic.List[object]
     $changed = New-Object System.Collections.Generic.List[object]
     $skipped = New-Object System.Collections.Generic.List[object]
+    $alreadyClosed = New-Object System.Collections.Generic.List[object]
     $restored = New-Object System.Collections.Generic.List[object]
     foreach ($snapshot in @(Get-RooIndustriesPropertyArray $backup 'snapshots')) {
         $candidateEntry = [pscustomobject]@{
@@ -196,6 +212,10 @@ try {
     if ($ConfirmApply) {
         foreach ($entry in @($preview.ToArray())) {
             if ([bool](Get-RooIndustriesPropertyValue $entry 'blocked' $false)) {
+                if (@(Get-RooIndustriesPropertyArray $entry 'reasonCodes') -contains 'GAME_TUNE_ALREADY_CLOSED') {
+                    $alreadyClosed.Add((New-GameTuneAlreadyClosedItem $entry)) | Out-Null
+                    continue
+                }
                 $skip = [pscustomobject]@{
                     processId = Get-RooIndustriesPropertyValue $entry 'processId' 0
                     processName = Get-RooIndustriesPropertyValue $entry 'processName' ''
@@ -209,6 +229,10 @@ try {
             $identity = Get-RooIndustriesGameTuneLiveProcessIdentity $entry
             $live = $identity.process
             if (-not $identity.exists -or -not $identity.matches) {
+                if ($identity.instanceEnded) {
+                    $alreadyClosed.Add((New-GameTuneAlreadyClosedItem $entry)) | Out-Null
+                    continue
+                }
                 $skip = [pscustomobject]@{
                     processId = $processId
                     processName = Get-RooIndustriesPropertyValue $entry 'processName' ''
@@ -262,6 +286,10 @@ try {
     } else {
         foreach ($entry in @($preview.ToArray())) {
             if ([bool](Get-RooIndustriesPropertyValue $entry 'blocked' $false)) {
+                if (@(Get-RooIndustriesPropertyArray $entry 'reasonCodes') -contains 'GAME_TUNE_ALREADY_CLOSED') {
+                    $alreadyClosed.Add((New-GameTuneAlreadyClosedItem $entry)) | Out-Null
+                    continue
+                }
                 $skipped.Add([pscustomobject]@{
                     processId = Get-RooIndustriesPropertyValue $entry 'processId' 0
                     processName = Get-RooIndustriesPropertyValue $entry 'processName' ''
@@ -287,8 +315,10 @@ try {
         $warnings.Add((New-RooIndustriesIssue 'GAME_TUNE_RESTORE_PREVIEW_ONLY' 'Restore preview did not change any process because -ConfirmApply was omitted.' 'info' 'performance.gameTune' $resolvedBackupPath $false 'Rerun with -ConfirmApply only after reviewing the restore preview.' $null)) | Out-Null
     }
 
+    $closedText = if ($alreadyClosed.Count -gt 0) { ' Already closed or restarted, so nothing remained to restore: ' + (($alreadyClosed | ForEach-Object { $_.processName + ' (PID ' + $_.processId + ')' }) -join ', ') + '.' } else { '' }
+    $skippedOut = @($skipped.ToArray()) + @($alreadyClosed.ToArray())
     $summary = if ($ConfirmApply) {
-        "Game Tune restore completed with $($restored.Count) restored item(s) and $($skipped.Count) skipped item(s)."
+        "Game Tune restore completed with $($restored.Count) restored item(s) and $($skipped.Count) skipped item(s)." + $closedText
     } else {
         "Game Tune restore preview completed. No process priority changes were applied."
     }
@@ -298,7 +328,7 @@ try {
         -Status $(if ($status -eq 'restored') { 'rolledBack' } elseif ($status -eq 'preview') { 'preview' } else { $status }) `
         -Summary $summary `
         -ChangedItems @($changed.ToArray()) `
-        -SkippedItems @($skipped.ToArray()) `
+        -SkippedItems $skippedOut `
         -RestoredItems @($restored.ToArray()) `
         -Artifacts @([pscustomobject]@{ type = 'gameTuneSessionBackup'; path = $resolvedBackupPath })
 
@@ -320,7 +350,7 @@ try {
         restorable = (-not $ConfirmApply -or $status -in @('partial', 'failed'))
         preview = @($preview.ToArray())
         changedItems = @($changed.ToArray())
-        skippedItems = @($skipped.ToArray())
+        skippedItems = $skippedOut
         restoredItems = @($restored.ToArray())
         backup = $backupMetadata
         result = $result
@@ -335,7 +365,7 @@ try {
         $session.status = $sessionStatus
         $session.restorable = ($status -in @('partial', 'failed'))
         $session.restoredItems = @($restored.ToArray())
-        $session.skippedItems = @($skipped.ToArray())
+        $session.skippedItems = $skippedOut
         $session.completedAtUtc = Get-RooIndustriesUtcStamp
         Write-RooIndustriesGameTuneJsonFile $session $resolvedSessionPath
         Add-RooIndustriesGameTuneLogFileEntry (Split-Path $resolvedSessionPath -Parent) (New-RooIndustriesLog $summary)

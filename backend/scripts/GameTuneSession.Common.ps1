@@ -86,6 +86,7 @@ function Get-RooIndustriesGameTuneLiveProcessIdentity {
         return [pscustomobject]@{
             exists = $false
             matches = $false
+            instanceEnded = $true
             process = $null
             currentPriorityClass = $null
             currentPath = $null
@@ -111,12 +112,18 @@ function Get-RooIndustriesGameTuneLiveProcessIdentity {
     }
 
     $controlState = Get-RooIndustriesProcessControlState $processId $null -ReadGpu:(Test-RooIndustriesEntryHasGpuControl $PreviewEntry)
-    $startMatches = Test-RooIndustriesProcessStartTime (Get-RooIndustriesPropertyValue $PreviewEntry 'processStartTimeUtc' $null) $controlState.startTimeUtc
+    $savedStart = Get-RooIndustriesPropertyValue $PreviewEntry 'processStartTimeUtc' $null
+    $startMatches = Test-RooIndustriesProcessStartTime $savedStart $controlState.startTimeUtc
+    $savedTime = [datetime]::MinValue
+    $currentTime = [datetime]::MinValue
+    $knownStartMismatch = -not $startMatches -and [datetime]::TryParse([string]$savedStart, [ref]$savedTime) -and [datetime]::TryParse([string]$controlState.startTimeUtc, [ref]$currentTime)
+    $knownPathMismatch = -not $pathMatches -and -not [string]::IsNullOrWhiteSpace([string]$currentPath)
     $matches = ($nameMatches -and $pathMatches -and $startMatches)
     $reason = if (-not $startMatches) { 'This app was restarted, or its start time could not be verified. Nothing was changed or restored.' } elseif ($matches) { $null } elseif (-not $nameMatches) { 'Live process name does not match the preview entry.' } else { $pathReason }
     return [pscustomobject]@{
         exists = $true
         matches = $matches
+        instanceEnded = (-not $nameMatches -or $knownPathMismatch -or $knownStartMismatch)
         process = $live
         currentPriorityClass = [string]$live.PriorityClass
         currentControlState = $controlState
