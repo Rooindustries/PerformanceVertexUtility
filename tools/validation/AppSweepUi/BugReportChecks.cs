@@ -180,6 +180,12 @@ static class BugReportChecks
             check(prefixOther == @"C:\Users\<user>\AppData and C:\Users\<user>\Desktop" && prefixOwn == @"C:\Users\<user>\AppData and %USERPROFILE%\Desktop"
                 && prefixLonger == @"%USERPROFILE%\AppData and C:\Users\<user>\Desktop" && prefixUser == @"C:\Users\<user>\AppData",
                 "Account names that start with another account's name are redacted whole, whichever account is signed in");
+            var escapedOwn = new BugRedactor(@"C:\Users\Client o'Connor", "Client o'Connor", "PC", ["Client", "Client o'Connor"]).Redact(@"{""p"":""C:\\Users\\Client o\u0027Connor\\x"",""q"":""C:\\Users\\Client\\y""}");
+            var caseVariant = new BugRedactor(@"C:\Users\Alice", "Alice", "PC", ["José Smith"]).Redact(@"{""p"":""C:\\Users\\JOS\u00C9 SMITH\\x""}");
+            check(escapedOwn == @"{""p"":""%USERPROFILE%\\x"",""q"":""C:\\Users\\<user>\\y""}" && caseVariant == @"{""p"":""C:\\Users\\<user>\\x""}",
+                "JSON-escaped and differently cased account names are matched on their decoded text");
+            check(known.Redact(edges) == edges && known.Redact(otherNames) == otherNames && known.Redact(context) == context,
+                "Log text already redacted when it was written stays the same when the bug report redacts it again");
 
             var longText = "@everyone " + new string('x', 10_000);
             var payload = BugReportService.BuildPayload(Report(longText, "<@123> me@example.com",
