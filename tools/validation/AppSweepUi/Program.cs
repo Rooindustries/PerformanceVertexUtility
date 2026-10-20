@@ -1079,6 +1079,12 @@ if (args is [] or ["responses"] or ["cleanup"] or ["race"])
                 finally { App.Live.LeftoverScan = liveScan; }
                 Check(unread.CanRestoreCleanup && !unread.CanScan && scanCalls == 0 && !unread.OfficialPreviewState.Contains("already removed", StringComparison.Ordinal),
                     "An app listed only for its saved cleanup never scans and never claims it was removed when the list couldn't be read" + " | got: " + unread.OfficialPreviewState);
+                App.Live.InstalledApps = new InstalledAppInventory { Apps = [appA], Complete = false };
+                var partial = new UninstallCleanupViewModel();
+                await partial.InitializeAsync();
+                Check(partial.IsReady && partial.Apps.FirstOrDefault(item => item.AppId == appB.AppId) is { Removed: true, RemovalUnconfirmed: true, SecondaryLabel: "Its saved cleanup can be restored." },
+                    "An app missing from a partly read installed apps list is never shown as removed");
+                App.Live.InstalledApps = null;
                 App.Live.CleanupRunsRoot = null;
                 var failed = new UninstallCleanupViewModel();
                 await failed.InitializeAsync();

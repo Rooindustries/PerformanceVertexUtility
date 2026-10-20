@@ -155,6 +155,7 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
         var saved = await SavedRecoveriesAsync();
         if (Quiet && SelectedApp is not null) { KeepStale(); return; }
         var listed = inventory?.Apps is { Count: > 0 };
+        var complete = listed && inventory!.Complete != false;
         var apps = inventory?.Apps ?? new List<InstalledApp>();
         if (!listed && saved.Count == 0)
         {
@@ -170,7 +171,7 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
         _allApps.AddRange(apps
             .Where(a => a.IsListable && !Naming.IsNonActionable(a.DisplayName)
                         && !LocalDisplayFilter.Default.IsHidden(a.FriendlyName, null, a.PackageId ?? a.DisplayName))
-            .Concat(removed.Select(recovery => new InstalledApp { AppId = recovery.AppId, DisplayName = string.IsNullOrWhiteSpace(recovery.DisplayName) ? "Removed app" : recovery.DisplayName, Removed = true, RemovalUnconfirmed = !listed }))
+            .Concat(removed.Select(recovery => new InstalledApp { AppId = recovery.AppId, DisplayName = string.IsNullOrWhiteSpace(recovery.DisplayName) ? "Removed app" : recovery.DisplayName, Removed = true, RemovalUnconfirmed = !complete }))
             .OrderBy(a => a.FriendlyName, StringComparer.OrdinalIgnoreCase));
         AppCount = _allApps.Count(a => !a.Removed);
         Sources = inventory?.Sources is { Count: > 0 } s ? string.Join(", ", s.Select(FriendlySource)) : null;
@@ -273,7 +274,7 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
         if (value.Removed)
         {
             RemovalRouteBlocked = true;
-            OfficialPreviewState = value.RemovalUnconfirmed ? "The installed apps list couldn't be read, so only Restore is available here." : "This app is already removed.";
+            OfficialPreviewState = value.RemovalUnconfirmed ? "The installed apps list couldn't be fully read, so only Restore is available here." : "This app is already removed.";
             LeftoverState = "Restore is the only step available for this app here.";
             CleanupExecutionState = CleanupRestoreAvailable ? "An earlier cleanup of this app can be restored." : "This cleanup can't be restored anymore.";
             CleanupExecutionDetail = "Restore puts back the files that cleanup removed. It does not reinstall the app.";
