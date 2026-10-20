@@ -1110,6 +1110,64 @@ function Get-RooIndustriesRestorableProcessControls {
     }
 }
 
+$script:RooIndustriesLeftAsSet = 'Left as another program set it.'
+
+function Get-RooIndustriesAppliedControlValue {
+    param($Snapshot, [string]$Control)
+    $recorded = @(Get-RooIndustriesPropertyArray $Snapshot 'controlChanges' | Where-Object { [string](Get-RooIndustriesPropertyValue $_ 'control' '') -eq $Control -and [string](Get-RooIndustriesPropertyValue $_ 'outcome' '') -ne 'failed' })
+    if ($recorded.Count -gt 0) { return [pscustomobject]@{ known = $true; value = Get-RooIndustriesPropertyValue $recorded[-1] 'proposedValue' $null } }
+    if ($null -ne $Snapshot.PSObject.Properties['controlChanges']) { return [pscustomobject]@{ known = $false; value = $null } }
+    $field = switch ($Control) { 'priorityClass' { 'PriorityClass' } 'affinityMask' { 'AffinityMask' } 'ioPriority' { 'IoPriority' } 'memoryPriority' { 'MemoryPriority' } 'gpuPriority' { 'GpuPriority' } default { $null } }
+    foreach ($prefix in 'applied', 'proposed') {
+        if ($null -eq $field) { break }
+        $value = Get-RooIndustriesPropertyValue $Snapshot ($prefix + $field) $null
+        if ($null -ne $value -and -not [string]::IsNullOrWhiteSpace([string]$value)) { return [pscustomobject]@{ known = $true; value = $value } }
+    }
+    return [pscustomobject]@{ known = $false; value = $null }
+}
+
+function Split-RooIndustriesLeftAsSetRestoreChanges {
+    param($Snapshot, [object[]]$Changes)
+    $restore = New-Object System.Collections.Generic.List[object]
+    $left = New-Object System.Collections.Generic.List[object]
+    foreach ($change in @(Get-RooIndustriesArray $Changes)) {
+        $control = [string](Get-RooIndustriesPropertyValue $change 'control' '')
+        $current = Get-RooIndustriesPropertyValue $change 'currentValue' $null
+        $applied = Get-RooIndustriesAppliedControlValue $Snapshot $control
+        if (-not [bool](Get-RooIndustriesPropertyValue $change 'blocked' $false) -and $applied.known -and -not (Test-RooIndustriesControlValueEqual $control $current $applied.value)) {
+            $left.Add([pscustomobject]@{ control = $control; currentValue = $current; appliedValue = $applied.value; originalValue = Get-RooIndustriesPropertyValue $change 'proposedValue' $null; outcome = 'leftAsSet'; reason = $script:RooIndustriesLeftAsSet }) | Out-Null
+            continue
+        }
+        $restore.Add($change) | Out-Null
+    }
+    return [pscustomobject]@{ changes = @($restore.ToArray()); leftAsSet = @($left.ToArray()) }
+}
+
+function New-RooIndustriesLeftAsSetItem {
+    param($Entry, $Left)
+    return [pscustomobject]@{
+        processId = Get-RooIndustriesPropertyValue $Entry 'processId' 0
+        processName = Get-RooIndustriesPropertyValue $Entry 'processName' ''
+        control = Get-RooIndustriesPropertyValue $Left 'control' ''
+        currentValue = Get-RooIndustriesPropertyValue $Left 'currentValue' $null
+        appliedValue = Get-RooIndustriesPropertyValue $Left 'appliedValue' $null
+        originalValue = Get-RooIndustriesPropertyValue $Left 'originalValue' $null
+        outcome = 'leftAsSet'
+        reason = $script:RooIndustriesLeftAsSet
+    }
+}
+
+function Format-RooIndustriesLeftAsSetText {
+    param([object[]]$Items)
+    $items = @(Get-RooIndustriesArray $Items)
+    if ($items.Count -eq 0) { return '' }
+    $names = $items | ForEach-Object {
+        $label = switch ([string]$_.control) { 'priorityClass' { 'CPU priority' } 'affinityMask' { 'CPU affinity' } 'ioPriority' { 'I/O priority' } 'memoryPriority' { 'memory priority' } 'gpuPriority' { 'GPU priority' } default { [string]$_.control } }
+        [string]$_.processName + ' ' + $label + ' (' + [string]$_.currentValue + ')'
+    }
+    return ' Left as another program set it: ' + ($names -join ', ') + '.'
+}
+
 function Invoke-RooIndustriesProcessControlChange {
     param(
         [System.Diagnostics.Process]$Process,

@@ -51,21 +51,27 @@ finally{if($game){Stop-OwnedProcess $game.owned}}
 $profileDirectory=Join-Path $OutRoot 'profile';[IO.Directory]::CreateDirectory($profileDirectory)|Out-Null
 $kept=$null;$untouched=$null
 try{
- $kept=Start-Fixture $profileDirectory 'KeepValueKept';$untouched=Start-Fixture $profileDirectory 'KeepValueSame'
- $profile=Get-Content -Raw (Join-Path $Source 'backend\profiles\game-session.profile.json')|ConvertFrom-Json;$profile.profileId='keep-other-value-profile';$profile.protectedCatalogPath=Join-Path $Source 'backend\profiles\protected-processes.json'
- $profile.foregroundGame.processNames=@('KeepValueAbsentGame.exe');$profile.targetGames=@()
- $profile.rules=@([pscustomobject]@{ruleId='keep-value-background';enabled=$true;match=@{processNames=@($kept.process.ProcessName+'.exe',$untouched.process.ProcessName+'.exe')};action=@{actionType='setPriority';priorityClass='BelowNormal'};risk='low'})
+ $keptDirectory=Join-Path $profileDirectory 'a';$sameDirectory=Join-Path $profileDirectory 'b';[IO.Directory]::CreateDirectory($keptDirectory)|Out-Null;[IO.Directory]::CreateDirectory($sameDirectory)|Out-Null
+ $kept=Start-Fixture $keptDirectory 'KeepValueTarget';$untouched=Start-Fixture $sameDirectory 'KeepValueTarget'
+ $profile=[pscustomobject]@{
+  schemaVersion=1;productName='Roo Industries Optimization Suite';profileId='keep-other-value-profile';name='Keep another program value';profileKind='process-controls';risk='medium'
+  protectedCatalogPath=(Join-Path $Source 'backend\profiles\protected-processes.json')
+  foregroundGame=[pscustomobject]@{ruleId='keep-value-profile';processNames=@('KeepValueTarget.exe');priorityClass='AboveNormal';reason='Validate that profile restore keeps a value another program set.';reasonCodes=@('LIVE_VALIDATION')}
+  targetGames=@();protectedCompanions=@();protectedPreviewProcessNames=@();safeCandidates=@();rules=@()
+  rollbackPolicy=[pscustomobject]@{supported=$true;scope='process-controls';stateRoot=(Join-Path $profileDirectory 'state');restoreOriginalPriorityClass=$true}
+  safety=[pscustomobject]@{confirmedApplyChanges=@('PriorityClass');continuousEnforcement=$true;runtimeService=$false}
+ }
  Save $profileDirectory 'profile' $profile
- $apply=& (Join-Path $Source 'backend\scripts\Apply-ProcessProfile.ps1') -ProfilePath (Join-Path $profileDirectory 'profile.json') -StateRoot (Join-Path $profileDirectory 'state') -ConfirmApply|ConvertFrom-Json;Save $profileDirectory 'apply' $apply
- foreach($fixture in $kept,$untouched){if((Read-Fixture $fixture.process).priorityClass -ne 'BelowNormal'){throw ('The profile did not lower '+$fixture.process.ProcessName)}}
- $kept.process.PriorityClass='High'
+ $apply=& (Join-Path $Source 'backend\scripts\Apply-ProcessProfile.ps1') -ProfilePath (Join-Path $profileDirectory 'profile.json') -TargetGameProcessName 'KeepValueTarget.exe' -StateRoot (Join-Path $profileDirectory 'state') -ConfirmApply|ConvertFrom-Json;Save $profileDirectory 'apply' $apply
+ foreach($fixture in $kept,$untouched){if((Read-Fixture $fixture.process).priorityClass -ne 'AboveNormal'){throw ('The profile did not raise fixture '+$fixture.process.Id)}}
+ $kept.process.PriorityClass='BelowNormal'
  $undo=& (Join-Path $Source 'backend\scripts\Restore-ProcessProfileBackup.ps1') -BackupPath $apply.backup.location -ConfirmApply|ConvertFrom-Json;Save $profileDirectory 'undo' $undo
  $keptAfter=Read-Fixture $kept.process;$untouchedAfter=Read-Fixture $untouched.process
- if($keptAfter.priorityClass -ne 'High'){throw ('Profile restore overwrote the priority another program set: '+$keptAfter.priorityClass)}
+ if($keptAfter.priorityClass -ne 'BelowNormal'){throw ('Profile restore overwrote the priority another program set: '+$keptAfter.priorityClass)}
  if($untouchedAfter.priorityClass -ne 'Normal'){throw ('Profile restore did not put back the untouched priority: '+$untouchedAfter.priorityClass)}
- if(-not(Test-LeftItem $undo $kept.process.Id 'priorityClass' 'High')){throw 'Profile restore did not name the priority it left as another program set it'}
+ if(-not(Test-LeftItem $undo $kept.process.Id 'priorityClass' 'BelowNormal')){throw 'Profile restore did not name the priority it left as another program set it'}
  if($undo.status -ne 'success' -or $undo.result.restorePendingCount -ne 0){throw ('Profile restore did not finish: '+$undo.status+' pending '+$undo.result.restorePendingCount)}
- Save $profileDirectory 'done' @{passed=$true;kept='priorityClass High';restored='priorityClass Normal'}
+ Save $profileDirectory 'done' @{passed=$true;kept='priorityClass BelowNormal';restored='priorityClass Normal'}
 } catch {Save $profileDirectory 'failure' @{error=$_.Exception.ToString();stack=$_.ScriptStackTrace};$failures.Add('profile: '+$_.Exception.Message)|Out-Null}
 finally{foreach($fixture in $kept,$untouched){if($fixture){Stop-OwnedProcess $fixture.owned}}}
 if($failures.Count){throw ($failures -join '; ')}

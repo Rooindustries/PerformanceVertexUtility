@@ -711,11 +711,17 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
             foreach (var change in changes.EnumerateArray())
             {
                 var control = ExtractString(change, "control");
-                var label = control switch { "priorityClass" => "CPU", "memoryPriority" => "Memory", "ioPriority" => "I/O", "affinityMask" => "CPUs", "gpuPriority" => "GPU", _ => control ?? "Control" };
+                var label = ControlLabel(control);
                 var current = change.TryGetProperty("currentValue", out var from) ? ControlValue(control, from) : "unavailable";
                 var proposed = change.TryGetProperty("proposedValue", out var to) ? ControlValue(control, to) : "unavailable";
                 var blocked = change.TryGetProperty("blocked", out var block) && block.ValueKind == JsonValueKind.True;
                 fields.Add(label + " " + current + " → " + proposed + (blocked ? " (skipped: " + ExtractString(change, "blockedReason") + ")" : string.Empty));
+            }
+            if (item.TryGetProperty("leftAsSet", out var kept) && kept.ValueKind == JsonValueKind.Array)
+            foreach (var left in kept.EnumerateArray())
+            {
+                var control = ExtractString(left, "control");
+                fields.Add(ControlLabel(control) + " " + (left.TryGetProperty("currentValue", out var value) ? ControlValue(control, value) : "unavailable") + " (left as another program set it)");
             }
             if (fields.Count > 0) lines.Add((ExtractString(item, "processName") ?? "App") + ": " + string.Join("; ", fields));
             else if ((ExtractString(item, "classification") == "protectedCompanion" ||
@@ -725,6 +731,9 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
         }
         return lines.Count == 0 ? string.Empty : "\n" + string.Join("\n", lines.Take(20)) + (lines.Count > 20 ? "\n" + (lines.Count - 20) + " more apps; see the list below." : string.Empty);
     }
+
+    private static string ControlLabel(string? control)
+        => control switch { "priorityClass" => "CPU", "memoryPriority" => "Memory", "ioPriority" => "I/O", "affinityMask" => "CPUs", "gpuPriority" => "GPU", _ => control ?? "Control" };
 
     private static string ControlValue(string? control, JsonElement value)
         => control == "memoryPriority" && value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var memory) ? FriendlyMemoryPriority(memory) : value.ToString();

@@ -101,6 +101,7 @@ function New-RollbackPreviewEntry {
     } else {
         'Restore original process controls captured before apply.'
     }
+    $leftAsSet = @()
     $controlChanges = New-Object System.Collections.Generic.List[object]
     if (-not $blocked) {
         if (($restoresAll -or $recorded -contains 'priorityClass') -and -not [string]::IsNullOrWhiteSpace($originalPriority) -and (Test-RooIndustriesPriorityAllowed $originalPriority -Restoring) -and [string]$currentPriority -ne [string]$originalPriority) {
@@ -124,8 +125,21 @@ function New-RollbackPreviewEntry {
                 $controlChanges.Add((New-RooIndustriesControlChange 'gpuPriority' $currentGpuPriority $originalGpuPriority 'restoreGpuPriority' 'GPU scheduling priority is unavailable for this restore target.' $true $reason)) | Out-Null
             }
         }
+        $split = Split-RooIndustriesLeftAsSetRestoreChanges $Snapshot @($controlChanges.ToArray())
+        $leftAsSet = @($split.leftAsSet)
+        $controlChanges = New-Object System.Collections.Generic.List[object]
+        foreach ($change in @($split.changes)) { $controlChanges.Add($change) | Out-Null }
+        foreach ($left in $leftAsSet) {
+            switch ([string]$left.control) {
+                'priorityClass' { $originalPriority = [string]$left.currentValue }
+                'affinityMask' { $originalAffinityMask = $left.currentValue }
+                'ioPriority' { $originalIoPriority = $left.currentValue }
+                'memoryPriority' { $originalMemoryPriority = $left.currentValue }
+                'gpuPriority' { $originalGpuPriority = $left.currentValue }
+            }
+        }
         if ($controlChanges.Count -eq 0) {
-            $reason = 'Process already matches the process profile backup.'
+            $reason = if ($leftAsSet.Count -gt 0) { $script:RooIndustriesLeftAsSet } else { 'Process already matches the process profile backup.' }
         }
     }
     $restorePlan = Get-RooIndustriesApplicableProcessControlChanges @($controlChanges.ToArray()) $currentState
@@ -155,6 +169,7 @@ function New-RollbackPreviewEntry {
         gpuPriorityStatus = Get-RooIndustriesPropertyValue $currentState 'gpuPriorityStatus' $null
         proposedAction = $proposedAction
         controlChanges = @($controlChanges.ToArray())
+        leftAsSet = @($leftAsSet)
         ruleId = [string](Get-RooIndustriesPropertyValue $Snapshot 'ruleId' '')
         reason = $reason
         instanceEnded = [bool](Get-RooIndustriesPropertyValue $Candidate 'instanceEnded' $false)
@@ -249,6 +264,7 @@ try {
 
     $changed = New-Object System.Collections.Generic.List[object]
     $skipped = New-Object System.Collections.Generic.List[object]
+    $leftAsSetItems = New-Object System.Collections.Generic.List[object]
 
     if ($ConfirmApply) {
         foreach ($entry in @($previewEntries.ToArray())) {
@@ -264,6 +280,7 @@ try {
                 $skipped.Add((New-RestoreSkippedItem $entry $identity.blockedReason @(Get-RooIndustriesPreviewControlChanges $entry) 'exited')) | Out-Null
                 continue
             }
+            foreach ($left in @(Get-RooIndustriesPropertyArray $entry 'leftAsSet')) { $leftAsSetItems.Add((New-RooIndustriesLeftAsSetItem $entry $left)) | Out-Null }
 
             $entryControlChanges = @(Get-RooIndustriesPreviewControlChanges $entry | Where-Object { -not [bool](Get-RooIndustriesPropertyValue $_ 'blocked' $false) })
             if ($entryControlChanges.Count -eq 0) { continue }
@@ -327,9 +344,10 @@ try {
 
     $summary = if ($ConfirmApply) {
         $closedText = if ($alreadyClosed.Count -gt 0) { ' Already closed or restarted: ' + (($alreadyClosed | ForEach-Object { $_.processName + ' (PID ' + $_.processId + ')' }) -join ', ') + '.' } else { '' }
+        $leftText = Format-RooIndustriesLeftAsSetText @($leftAsSetItems.ToArray())
         $finishedCount = @(Get-RooIndustriesPropertyArray $backup 'snapshots').Count - $pending.Count - $alreadyClosed.Count
         if ($status -eq 'success') {
-            "Restore completed for $finishedCount app(s)." + $closedText
+            "Restore completed for $finishedCount app(s)." + $leftText + $closedText
         } else {
             $attention = ($pending | ForEach-Object {
                 $entry = $_
@@ -337,7 +355,7 @@ try {
                 $details = if ($failedReasons.Count -gt 0) { $failedReasons -join '; ' } else { $entry.reason }
                 $entry.processName + ' (PID ' + $entry.processId + '): ' + $details
             }) -join '; '
-            "Restore finished for $finishedCount app(s). $($pending.Count) app(s) still need attention: $attention." + $closedText
+            "Restore finished for $finishedCount app(s). $($pending.Count) app(s) still need attention: $attention." + $leftText + $closedText
         }
     } else {
         "Rollback preview completed. No process control changes were applied."
@@ -354,6 +372,7 @@ try {
     $result | Add-Member -NotePropertyName restorePendingCount -NotePropertyValue $pending.Count
     $result | Add-Member -NotePropertyName pendingItems -NotePropertyValue @($pending.ToArray())
     $result | Add-Member -NotePropertyName alreadyClosedItems -NotePropertyValue @($alreadyClosed.ToArray())
+    $result | Add-Member -NotePropertyName leftAsSetItems -NotePropertyValue @($leftAsSetItems.ToArray())
 
     $warnings = New-Object System.Collections.Generic.List[object]
     if (-not $ConfirmApply) {

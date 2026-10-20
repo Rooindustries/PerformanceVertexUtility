@@ -45,6 +45,7 @@ function New-GameTuneRestorePreview {
     } else {
         'Restore original process controls from Game Tune session backup.'
     }
+    $leftAsSet = @()
     $controlChanges = New-Object System.Collections.Generic.List[object]
     if (-not $blocked) {
         if (($restoresAll -or $recorded -contains 'priorityClass') -and -not [string]::IsNullOrWhiteSpace($originalPriority) -and (Test-RooIndustriesPriorityAllowed $originalPriority -Restoring) -and [string]$Candidate.currentPriorityClass -ne $originalPriority) {
@@ -68,8 +69,21 @@ function New-GameTuneRestorePreview {
                 $controlChanges.Add((New-RooIndustriesControlChange 'gpuPriority' $Candidate.currentGpuPriority $originalGpuPriority 'restoreGpuPriority' 'GPU scheduling priority is unavailable for this restore target.' $true $reason)) | Out-Null
             }
         }
+        $split = Split-RooIndustriesLeftAsSetRestoreChanges $Snapshot @($controlChanges.ToArray())
+        $leftAsSet = @($split.leftAsSet)
+        $controlChanges = New-Object System.Collections.Generic.List[object]
+        foreach ($change in @($split.changes)) { $controlChanges.Add($change) | Out-Null }
+        foreach ($left in $leftAsSet) {
+            switch ([string]$left.control) {
+                'priorityClass' { $originalPriority = [string]$left.currentValue }
+                'affinityMask' { $originalAffinityMask = $left.currentValue }
+                'ioPriority' { $originalIoPriority = $left.currentValue }
+                'memoryPriority' { $originalMemoryPriority = $left.currentValue }
+                'gpuPriority' { $originalGpuPriority = $left.currentValue }
+            }
+        }
         if ($controlChanges.Count -eq 0) {
-            $reason = 'Process already matches the Game Tune backup.'
+            $reason = if ($leftAsSet.Count -gt 0) { $script:RooIndustriesLeftAsSet } else { 'Process already matches the Game Tune backup.' }
         }
     }
     $proposedAction = if ($blocked -or $controlChanges.Count -eq 0) { 'noChange' } elseif ($controlChanges.Count -eq 1 -and [string](Get-RooIndustriesPropertyValue $controlChanges[0] 'control' '') -eq 'priorityClass') { 'restorePriority' } else { 'restoreProcessControls' }
@@ -97,6 +111,7 @@ function New-GameTuneRestorePreview {
         gpuPriorityStatus = Get-RooIndustriesPropertyValue (Get-RooIndustriesPropertyValue $Candidate 'currentControlState' $null) 'gpuPriorityStatus' $null
         proposedAction = $proposedAction
         controlChanges = @($controlChanges.ToArray())
+        leftAsSet = @($leftAsSet)
         ruleId = [string](Get-RooIndustriesPropertyValue $Snapshot 'ruleId' '')
         reason = $reason
         reasonCodes = if ($ended) { @('GAME_TUNE_ALREADY_CLOSED') } elseif ($blocked) { @('GAME_TUNE_RESTORE_SKIPPED') } else { @('GAME_TUNE_PROCESS_CONTROLS_RESTORE') }
@@ -196,6 +211,7 @@ try {
     $skipped = New-Object System.Collections.Generic.List[object]
     $alreadyClosed = New-Object System.Collections.Generic.List[object]
     $restored = New-Object System.Collections.Generic.List[object]
+    $leftAsSetItems = New-Object System.Collections.Generic.List[object]
     foreach ($snapshot in @(Get-RooIndustriesPropertyArray $backup 'snapshots')) {
         $candidateEntry = [pscustomobject]@{
             processId = Get-RooIndustriesPropertyValue $snapshot 'processId' 0
@@ -242,6 +258,7 @@ try {
                 $skipped.Add($skip) | Out-Null
                 continue
             }
+            foreach ($left in @(Get-RooIndustriesPropertyArray $entry 'leftAsSet')) { $leftAsSetItems.Add((New-RooIndustriesLeftAsSetItem $entry $left)) | Out-Null }
             $entryControlChanges = @(Get-RooIndustriesPreviewControlChanges $entry)
             if ($entryControlChanges.Count -eq 0) {
                 continue
@@ -324,7 +341,7 @@ try {
     $closedText = if ($alreadyClosed.Count -gt 0) { ' Already closed or restarted, so nothing remained to restore: ' + (($alreadyClosed | ForEach-Object { $_.processName + ' (PID ' + $_.processId + ')' }) -join ', ') + '.' } else { '' }
     $skippedOut = @($skipped.ToArray()) + @($alreadyClosed.ToArray())
     $summary = if ($ConfirmApply) {
-        "Game Tune restore completed with $($restored.Count) restored item(s) and $($skipped.Count) skipped item(s)." + $closedText
+        "Game Tune restore completed with $($restored.Count) restored item(s) and $($skipped.Count) skipped item(s)." + (Format-RooIndustriesLeftAsSetText @($leftAsSetItems.ToArray())) + $closedText
     } else {
         "Game Tune restore preview completed. No process priority changes were applied."
     }
@@ -337,6 +354,7 @@ try {
         -SkippedItems $skippedOut `
         -RestoredItems @($restored.ToArray()) `
         -Artifacts @([pscustomobject]@{ type = 'gameTuneSessionBackup'; path = $resolvedBackupPath })
+    $result | Add-Member -NotePropertyName leftAsSetItems -NotePropertyValue @($leftAsSetItems.ToArray()) -Force
 
     $logs = @((New-RooIndustriesLog $summary))
     $envelope = [pscustomobject]@{
@@ -358,6 +376,7 @@ try {
         changedItems = @($changed.ToArray())
         skippedItems = $skippedOut
         restoredItems = @($restored.ToArray())
+        leftAsSetItems = @($leftAsSetItems.ToArray())
         backup = $backupMetadata
         result = $result
         warnings = @($warnings.ToArray())
@@ -372,6 +391,7 @@ try {
         $session.restorable = ($status -in @('partial', 'failed'))
         $session.restoredItems = @($restored.ToArray())
         $session.skippedItems = $skippedOut
+        $session | Add-Member -NotePropertyName leftAsSetItems -NotePropertyValue @($leftAsSetItems.ToArray()) -Force
         $session.completedAtUtc = Get-RooIndustriesUtcStamp
         Write-RooIndustriesGameTuneJsonFile $session $resolvedSessionPath
         Add-RooIndustriesGameTuneLogFileEntry (Split-Path $resolvedSessionPath -Parent) (New-RooIndustriesLog $summary)
