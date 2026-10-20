@@ -716,7 +716,7 @@ public partial class ProcessControlsViewModel : ObservableObject
             if (candidates.Length == 0) throw new InvalidOperationException("Start the rule's application and refresh the process list to review changed controls.");
             foreach (var process in candidates)
             {
-                SelectedProcess = process;
+                if (Equals(SelectedProcess, process)) OnSelectedProcessChanged(process); else SelectedProcess = process;
                 await _readTask;
                 if (_snapshot is not null && (rule.MatchMode != "path" || string.Equals(_snapshot.Identity.ExecutablePath, rule.ExecutablePath, StringComparison.OrdinalIgnoreCase))) break;
             }

@@ -493,6 +493,16 @@ static class GovernorChecks
             panel.SelectedProcess = panel.Processes.Single(process => process.Id == 202);
             await panel.EditRuleCommand.ExecuteAsync(null);
             check(panel.SelectedProcess?.Id == 202 && panel.RuleName == "Folder B game", "Edit keeps an already selected matching app instead of switching to the first same-name app");
+
+            var readable = false;
+            App.Operations.ProcessReads = id => new(id == 201 ? first : second, Read(id == 202 && !readable ? 0u : 0xfffffffeu), [new LogicalCpu(103, 0, 0, 0, 0, 0, 0, false, false, false)], controls);
+            panel.SelectedProcess = panel.Processes.Single(process => process.Id == 201);
+            panel.SelectedProcess = panel.Processes.Single(process => process.Id == 202);
+            readable = true;
+            panel.RuleName = "";
+            await panel.EditRuleCommand.ExecuteAsync(null);
+            check(panel.SelectedProcess?.Id == 202 && panel.RuleName == "Folder B game",
+                "Edit reads the selected app again when its earlier read failed" + " | got: " + panel.SelectedProcess?.Id + " " + panel.Status + " " + panel.Detail);
         }
         finally { App.Operations.ProcessReads = null; App.Live.Inventory = savedInventory; }
     }
