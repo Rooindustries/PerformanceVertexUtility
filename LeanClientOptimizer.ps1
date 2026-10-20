@@ -284,7 +284,9 @@ function Invoke-SmokeTest {
         $dns = Resolve-DnsName 'www.microsoft.com' -ErrorAction Stop | Select-Object -First 1
         Add-Result 'dns' ($null -ne $dns) 'www.microsoft.com resolves'
     } catch { Add-Result 'dns' $false $_.Exception.Message }
-    foreach ($svcName in @('WlanSvc','bthserv','Tailscale','WinDefend','BFE','mpssvc','WpnService')) {
+    try { $bluetooth = @(Get-PnpDevice -Class Bluetooth -PresentOnly -ErrorAction SilentlyContinue).Count -gt 0 } catch { $bluetooth = $true }
+    foreach ($svcName in @('WlanSvc','bthserv','WinDefend','BFE','mpssvc','WpnService')) {
+        if ($svcName -eq 'bthserv' -and -not $bluetooth) { continue }
         $svc = Get-Service -Name $svcName -ErrorAction SilentlyContinue
         if ($null -eq $svc) {
             Add-Result "service:$svcName" $false 'Service missing'
@@ -298,8 +300,18 @@ function Invoke-SmokeTest {
             Add-Result "samsung:$optional" ($svc.Status -eq 'Running') "Status=$($svc.Status), StartType=$($svc.StartType)"
         }
     }
-    $wispr = @(Get-Process -Name 'Wispr Flow' -ErrorAction SilentlyContinue)
-    Add-Result 'process:Wispr Flow' ($wispr.Count -gt 0) "Count=$($wispr.Count)"
+    $uninstallKeys = @('HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*','HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*','HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*')
+    $installedApps = @(Get-ItemProperty -Path $uninstallKeys -ErrorAction SilentlyContinue | Where-Object { $_.PSObject.Properties['DisplayName'] } | ForEach-Object { [string]$_.DisplayName })
+    $tailscale = Get-Service -Name 'Tailscale' -ErrorAction SilentlyContinue
+    if ($null -ne $tailscale) {
+        Add-Result 'service:Tailscale' ($tailscale.Status -eq 'Running') "Status=$($tailscale.Status), StartType=$($tailscale.StartType)"
+    } elseif (@($installedApps | Where-Object { $_ -like 'Tailscale*' }).Count -gt 0) {
+        Add-Result 'service:Tailscale' $false 'Service missing'
+    }
+    if (@($installedApps | Where-Object { $_ -like 'Wispr Flow*' }).Count -gt 0) {
+        $wispr = @(Get-Process -Name 'Wispr Flow' -ErrorAction SilentlyContinue)
+        Add-Result 'process:Wispr Flow' ($wispr.Count -gt 0) "Count=$($wispr.Count)"
+    }
     $webview = @(Get-ChildItem 'C:\Program Files (x86)\Microsoft\EdgeWebView\Application' -Directory -ErrorAction SilentlyContinue)
     Add-Result 'webview2-runtime' ($webview.Count -gt 0) "Versions=$($webview.Count)"
     $overall = -not (@($results | Where-Object { -not $_.pass }).Count -gt 0)
