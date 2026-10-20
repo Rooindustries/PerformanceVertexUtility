@@ -151,6 +151,24 @@ public sealed class TweakEngine
         return new(_store.Commit(plan, reviewHash), plan.Changes.Length != 0 || plan.Controls?.Changes.Length > 0, false);
     }
 
+    private void Compose<T>(List<TweakProfile> profiles, string profileId, T[] group, Func<TweakProfile, IEnumerable<T>> claims, Action<T[]> check, Func<T, string> setting)
+    {
+        try { check(group); }
+        catch (InvalidDataException error)
+        {
+            bool Composes(T[] claims) { try { check(claims); return true; } catch (InvalidDataException) { return false; } }
+            bool Conflicts(T first, T second) => !Composes([first, second]);
+            var requested = profiles.Where(profile => profile.Id == profileId).SelectMany(claims).Where(group.Contains).ToArray();
+            var blocking = profiles.Where(profile => profile.Id != profileId).SelectMany(profile => claims(profile).Where(group.Contains).Select(claim => (profile.Id, Claim: claim)))
+                .Where(other => requested.Any(mine => Conflicts(mine, other.Claim))).ToArray();
+            if (blocking.Length == 0 || !Composes(group.Where(claim => !blocking.Any(other => ReferenceEquals(other.Claim, claim))).ToArray())) throw;
+            var others = blocking.Select(other => other.Id).Distinct(StringComparer.Ordinal).ToArray();
+            var names = requested.Where(mine => blocking.Any(other => Conflicts(mine, other.Claim))).Select(setting).Distinct(StringComparer.Ordinal)
+                .Select(id => _catalog.Settings.FirstOrDefault(definition => definition.Id == id)?.Name ?? id);
+            throw new InvalidDataException("Your " + string.Join(" and ", others.Select(id => "\"" + id + "\"")) + (others.Length == 1 ? " profile already sets " : " profiles already set ") + string.Join(", ", names)
+                + " to a different choice. Pick the same choice, or restore " + (others.Length == 1 ? "that profile" : "those profiles") + " first.", error);
+        }
+    }
     private TweakPlan Plan(string profileId, TweakSelection[] selections, string operationId, DateTime created, string revision)
     {
         if (string.IsNullOrWhiteSpace(profileId) || profileId.Length > 100 || selections is null || selections.Length > 4096)
@@ -187,8 +205,10 @@ public sealed class TweakEngine
         foreach (var group in wanted.Values)
         {
             foreach (var claim in group) claim.Target.Validate();
-            TweakComposition.Check(group);
+            Compose(profiles, profileId, group, profile => profile.Claims, TweakComposition.Check, claim => claim.SettingId);
         }
+        foreach (var group in profiles.SelectMany(profile => profile.Controls ?? []).GroupBy(claim => claim.Target.Id, StringComparer.Ordinal))
+            Compose(profiles, profileId, group.ToArray(), profile => profile.Controls ?? [], ControlComposition.Check, claim => claim.SettingId);
         var held = (state?.Held ?? []).ToDictionary(item => item.Original.Id, StringComparer.Ordinal);
         var next = new List<TweakHeldValue>();
         var changes = new List<TweakMutation>();
