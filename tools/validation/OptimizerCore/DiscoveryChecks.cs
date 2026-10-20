@@ -4,6 +4,15 @@ using RooIndustries.Optimizer;
 
 static class DiscoveryChecks
 {
+    [System.Runtime.InteropServices.DllImport("kernel32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode, SetLastError = true)]
+    private static extern bool GetVolumeNameForVolumeMountPoint(string mountPoint, System.Text.StringBuilder volumeName, uint length);
+
+    private static bool IsLink(string path)
+    {
+        try { return (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0; }
+        catch (Exception error) when (error is FileNotFoundException or DirectoryNotFoundException) { return false; }
+    }
+
     public static void Run(Action<bool, string> check)
     {
         var root = Path.Combine(Path.GetTempPath(), "roo-industries-discovery-" + Guid.NewGuid().ToString("N"));
@@ -111,12 +120,33 @@ static class DiscoveryChecks
                 chainWatch.Stop();
                 check((File.GetAttributes(chain) & FileAttributes.ReparsePoint) != 0 && chainWatch.ElapsedMilliseconds < 500 && chainScan.Candidates.Single(item => item.Target == shared).OwnershipComplete,
                     "A local junction whose target goes through a link to a network share is never followed (" + chainWatch.ElapsedMilliseconds + " ms)");
+                var volumeName = new System.Text.StringBuilder(64);
+                if (GetVolumeNameForVolumeMountPoint(Path.GetPathRoot(nas)!, volumeName, (uint)volumeName.Capacity))
+                {
+                    var volumeChain = Path.Combine(root, "volume-chain");
+                    using (var junction = Process.Start(new ProcessStartInfo("cmd.exe", "/d /c mklink /J \"" + volumeChain + "\" \"" + volumeName + Path.Combine(nas, "Tool")[Path.GetPathRoot(nas)!.Length..] + "\"") { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true })!)
+                    {
+                        junction.StandardOutput.ReadToEnd();
+                        junction.WaitForExit();
+                    }
+                    if (IsLink(volumeChain))
+                    {
+                        var volumeTool = new CleanupApplication { AppId = "fixture:volume", DisplayName = "Volume path share tool", Publisher = "Other", InstallLocation = volumeChain, PackageFamilyName = null };
+                        var volumeWatch = Stopwatch.StartNew();
+                        var volumeScan = new LeftoverDiscovery(application, [volumeTool]).Scan(CancellationToken.None, [], []);
+                        volumeWatch.Stop();
+                        check(volumeWatch.ElapsedMilliseconds < 500 && volumeScan.Candidates.Single(item => item.Target == shared).OwnershipComplete,
+                            "A junction to a volume path that goes through a link to a network share is never followed (" + volumeWatch.ElapsedMilliseconds + " ms)");
+                    }
+                    else Console.WriteLine("SKIP A junction to a volume path that goes through a link to a network share is never followed (junction not created)");
+                }
             }
         }
         finally
         {
             if (Directory.Exists(alias)) Directory.Delete(alias);
             try { Directory.Delete(Path.Combine(root, "chain")); } catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
+            try { Directory.Delete(Path.Combine(root, "volume-chain")); } catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
             try { Directory.Delete(Path.Combine(root, "nas")); } catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
             Directory.Delete(root, true);
         }

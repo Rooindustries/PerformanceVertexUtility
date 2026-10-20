@@ -190,7 +190,9 @@ internal static class NativeFiles
         try
         {
             using var handle = Open(physical, ReadAttributes | Synchronize, ShareAll, BackupSemantics | NoRecallAnonymous);
-            return FinalPath(handle) is { } final ? Normalize(final) : null;
+            if (FinalPath(handle) is { } final) return Normalize(final);
+            known = links == 0;
+            return null;
         }
         catch (Exception error) when (error is FileNotFoundException or DirectoryNotFoundException) { return null; }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException) { known = links == 0; return null; }
@@ -198,8 +200,10 @@ internal static class NativeFiles
 
     private static (PathWalk Walk, string Physical) Walk(string path, ref int links)
     {
-        var current = path[..3];
-        foreach (var part in path[3..].Split('\\', StringSplitOptions.RemoveEmptyEntries))
+        var rootLength = path.StartsWith(@"\\?\Volume{", StringComparison.OrdinalIgnoreCase) ? path.IndexOf('\\', 4) + 1 : 3;
+        if (rootLength <= 0) return (PathWalk.Unknown, path);
+        var current = path[..rootLength];
+        foreach (var part in path[rootLength..].Split('\\', StringSplitOptions.RemoveEmptyEntries))
         {
             current = Path.Combine(current, part);
             FileAttributes attributes;
@@ -214,9 +218,9 @@ internal static class NativeFiles
             if (++links > 16) return (PathWalk.Unknown, current);
             if (!Path.IsPathFullyQualified(target)) target = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(current)!, target));
             var plain = target.StartsWith(@"\\?\", StringComparison.Ordinal) || target.StartsWith(@"\??\", StringComparison.Ordinal) ? target[4..] : target;
-            if (plain.StartsWith("Volume{", StringComparison.OrdinalIgnoreCase)) { current = @"\\?\" + plain; continue; }
-            if (!FixedDrivePath(plain)) return (PathWalk.OffComputer, current);
-            var (inner, physical) = Walk(plain, ref links);
+            var volume = plain.StartsWith("Volume{", StringComparison.OrdinalIgnoreCase);
+            if (!volume && !FixedDrivePath(plain)) return (PathWalk.OffComputer, current);
+            var (inner, physical) = Walk(volume ? @"\\?\" + plain : plain, ref links);
             if (inner != PathWalk.Local) return (inner, physical);
             current = physical;
         }
