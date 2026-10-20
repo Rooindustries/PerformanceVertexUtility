@@ -622,12 +622,12 @@ public partial class WindowsTweaksViewModel : ObservableObject
             if (!restore && selections.Length == 0) return;
             var selectedReady = restore ? selections : chosen.Where(item => item.Row.CanApplyChoice(item.Id)).Select(item => new TweakSelection(item.Row.Id, item.Id)).ToArray();
             var retained = restore ? Array.Empty<TweakSelection>() : (state?.Profiles.SingleOrDefault(profile => profile.Id == ProfileId.Trim())?.Selections ?? [])
-                .Where(selection => selectedReady.All(selected => selected.SettingId != selection.SettingId)).ToArray();
+                .Where(selection => selectedReady.All(selected => selected.SettingId != selection.SettingId) && _all.Any(row => row.Id == selection.SettingId && row.CanApplyChoice(selection.OptionId))).ToArray();
             var ready = selectedReady.Concat(retained).ToArray();
             var deferred = restore ? Array.Empty<WindowsTweakRow>() : chosen.Where(item => !item.Row.CanApplyChoice(item.Id)).Select(item => item.Row).ToArray();
             _deferredDetail = string.Join("\n", deferred.Select(row => row.Name + ": " + (row.Detail.Length == 0 ? "This choice needs a matching Windows or app version." : row.Detail)));
             _reviewedChoices = selections; _restoringChoices = restore;
-            if (ready.Length == 0 && state?.Profiles.Any(profile => profile.Id == ProfileId.Trim()) != true)
+            if (ready.Length == 0 && (!restore || state?.Profiles.Any(profile => profile.Id == ProfileId.Trim()) != true))
             {
                 Status = _restoringChoices ? "Remove this saved profile" : "Save the selected choices";
                 Detail = _restoringChoices ? "Only this profile's saved choices will be removed." : "These choices will be saved. Windows settings will stay unchanged until their requirements are met and you apply them.\n" + _deferredDetail;

@@ -100,6 +100,12 @@ without changing an existing profile. Saved choices can retain an unavailable
 selection for later use on another edition, but cannot apply it here. Existing
 applied profiles can still be restored after the catalog changes.
 
+When editing an applied profile, unavailable old choices do not block its other
+changes. The review shows the restoration of their original values alongside
+the new changes, and approval is still required. Unavailable choices stay saved
+for later. Reviewing only unavailable choices saves them without changing the
+active profile; restoring that profile remains a separate action.
+
 To restore a profile, create another selections file containing `[]`, preview it
 with the same `ProfileId`, then use `-Action Restore` with that review's hash.
 Restore requires an empty selection, preserves other active owners, and removes

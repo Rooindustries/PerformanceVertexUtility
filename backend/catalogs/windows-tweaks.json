@@ -58201,12 +58201,21 @@
                 "EnterpriseS",
                 "EnterpriseN",
                 "EnterpriseSN",
+                "EnterpriseEval",
+                "EnterpriseNEval",
+                "EnterpriseSEval",
+                "EnterpriseSNEval",
+                "EnterpriseG",
+                "EnterpriseGN",
+                "ServerRdsh",
                 "Education",
                 "EducationN",
                 "IoTEnterprise",
                 "IoTEnterpriseS",
                 "ServerStandard",
-                "ServerDatacenter"
+                "ServerDatacenter",
+                "ServerStandardEval",
+                "ServerDatacenterEval"
               ]
             },
             {

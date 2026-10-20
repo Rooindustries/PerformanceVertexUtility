@@ -6,14 +6,19 @@
       "valueName": "DisableWindowsConsumerFeatures",
       "editions": [
         "Enterprise", "EnterpriseS", "EnterpriseN", "EnterpriseSN",
+        "EnterpriseEval", "EnterpriseNEval", "EnterpriseSEval", "EnterpriseSNEval",
+        "EnterpriseG", "EnterpriseGN", "ServerRdsh",
         "Education", "EducationN", "IoTEnterprise", "IoTEnterpriseS",
-        "ServerStandard", "ServerDatacenter"
+        "ServerStandard", "ServerDatacenter", "ServerStandardEval", "ServerDatacenterEval"
       ],
       "reference": "https://learn.microsoft.com/en-us/azure/governance/policy/samples/guest-configuration-baseline-windows",
       "quote": "This setting only applies to Enterprise and Education SKUs.",
       "additionalReferences": [
         "https://learn.microsoft.com/en-us/windows/client-management/mdm/policy-csp-experience#allowwindowsconsumerfeatures",
-        "https://learn.microsoft.com/en-us/windows/privacy/manage-connections-from-windows-operating-system-components-to-microsoft-services"
+        "https://learn.microsoft.com/en-us/windows/privacy/manage-connections-from-windows-operating-system-components-to-microsoft-services",
+        "https://learn.microsoft.com/en-us/intune/fundamentals/filters/ref-device-properties#managed-device-properties",
+        "https://learn.microsoft.com/en-us/windows-server/get-started/upgrade-conversion-options",
+        "https://learn.microsoft.com/en-us/windows/win32/api/sysinfoapi/nf-sysinfoapi-getproductinfo"
       ],
       "reason": "CloudContent.admx help limits the registry policy. Keep Enterprise variants including IoT, and Server editions for which Microsoft also documents this registry setting. Removing an override remains available everywhere."
     }
