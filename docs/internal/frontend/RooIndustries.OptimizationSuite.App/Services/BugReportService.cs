@@ -39,6 +39,17 @@ public sealed class BugRedactor
     {
         var rules = new List<(Regex, string)>();
         var profile = profilePath?.TrimEnd('\\', '/');
+        var own = profile?.Split('\\', '/')[^1] ?? "";
+        var names = (otherProfiles ?? []).Select(name => name.Trim()).Where(name => name.Length >= 2 && !SharedProfiles.Contains(name)).Append(own).Where(name => name.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        void AddName(string form, IEnumerable<string> forms) => rules.Add((new Regex(ProfileRoot + Regex.Escape(form)
+            + string.Concat(forms.Where(other => other.Length > form.Length && other.StartsWith(form, StringComparison.OrdinalIgnoreCase)).Select(other => "(?!" + Regex.Escape(other[form.Length..]) + NameEnd + ")"))
+            + NameEnd, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant), "<user>"));
+        foreach (var name in names.Where(name => !name.Equals(own, StringComparison.OrdinalIgnoreCase)).OrderByDescending(name => name.Length))
+        {
+            AddName(name, names);
+            var escapedName = JsonEncodedText.Encode(name).ToString();
+            if (escapedName != name) AddName(escapedName, names.Select(other => JsonEncodedText.Encode(other).ToString()));
+        }
         if (!string.IsNullOrWhiteSpace(profile))
         {
             foreach (var form in new[] { profile, profile.Replace("\\", "\\\\"), profile.Replace('\\', '/') }.Distinct())
@@ -51,9 +62,6 @@ public sealed class BugRedactor
             var escaped = JsonEncodedText.Encode(value).ToString();
             if (escaped != value) rules.Add((Word(escaped), replacement));
         }
-        foreach (var name in (otherProfiles ?? []).Select(name => name.Trim()).Where(name => name.Length >= 2 && !SharedProfiles.Contains(name)).Distinct(StringComparer.OrdinalIgnoreCase))
-            foreach (var form in new[] { name, JsonEncodedText.Encode(name).ToString() }.Distinct())
-                rules.Add((new Regex(ProfileRoot + Regex.Escape(form) + @"(?![^\\/""'\s])", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant), "<user>"));
         rules.Add((OtherProfiles, "<user>"));
         rules.Add((new Regex(@"S-1-5-21(-\d+){3,4}", RegexOptions.CultureInvariant), "<sid>"));
         _rules = rules.ToArray();
@@ -78,8 +86,9 @@ public sealed class BugRedactor
     }
 
     private const string ProfileRoot = @"(?<=\b[A-Za-z]:(?:\\{1,2}|/)Users(?:\\{1,2}|/))";
+    private const string NameEnd = @"(?![\p{L}\p{N}_])";
     private static readonly HashSet<string> SharedProfiles = new(["Public", "Default", "Default User", "All Users"], StringComparer.OrdinalIgnoreCase);
-    private static readonly Regex OtherProfiles = new(ProfileRoot + @"(?!(?:Public|Default|Default User|All Users)(?:[\\/""]|$))[^\\/""'\s]+", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    private static readonly Regex OtherProfiles = new(ProfileRoot + @"(?!(?:Public|Default|Default User|All Users)(?:[\\/""]|$)|<user>)[^\\/""'\s]+", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     private static Regex Word(string value)
         => new(@"(?<![\p{L}\p{N}_])" + Regex.Escape(value) + @"(?![\p{L}\p{N}_])", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
