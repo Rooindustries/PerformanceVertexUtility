@@ -989,7 +989,9 @@ if (args is [] or ["responses"] or ["cleanup"] or ["race"])
             {
                 var manifest = Path.Combine(runsRoot, name, "rollback-manifest.json");
                 Directory.CreateDirectory(Path.GetDirectoryName(manifest)!);
-                File.WriteAllText(manifest, JsonSerializer.Serialize(new { appId, displayName, executionStarted = true, restoreSupported = true, fileBackups = new[] { new { itemId = "saved", backupPath = @"C:\FixtureBackup" } } }));
+                var backup = Path.Combine(runsRoot, name, "backup.bin");
+                File.WriteAllText(backup, "fixture");
+                File.WriteAllText(manifest, JsonSerializer.Serialize(new { appId, displayName, executionStarted = true, restoreSupported = true, fileBackups = new[] { new { itemId = "saved", backupPath = backup } } }));
                 return manifest;
             }
             var savedA = SavedRun("run-a", appA.AppId!);
@@ -1068,9 +1070,9 @@ if (args is [] or ["responses"] or ["cleanup"] or ["race"])
                 var unread = new UninstallCleanupViewModel();
                 await unread.InitializeAsync();
                 var savedB = unread.Apps.FirstOrDefault(item => item.AppId == appB.AppId);
-                Check(unread.IsReady && unread.StaleNotice.StartsWith("We couldn't read your installed apps", StringComparison.Ordinal)
+                Check(unread.IsReady && unread.InventoryNotice.StartsWith("We couldn't read your installed apps", StringComparison.Ordinal) && unread.StaleNotice.Length == 0
                         && savedB is { Removed: true, RemovalUnconfirmed: true, SecondaryLabel: "Its saved cleanup can be restored." },
-                    "A saved cleanup can still be restored when the installed apps list can't be read, and the page says the list is missing" + " | got: " + unread.ErrorMessage + " " + unread.StaleNotice);
+                    "A saved cleanup can still be restored when the installed apps list can't be read, and the page says the list is missing" + " | got: " + unread.ErrorMessage + " " + unread.InventoryNotice);
                 unread.SelectedApp = savedB;
                 var scanCalls = 0;
                 var liveScan = App.Live.LeftoverScan;
@@ -1079,6 +1081,10 @@ if (args is [] or ["responses"] or ["cleanup"] or ["race"])
                 finally { App.Live.LeftoverScan = liveScan; }
                 Check(unread.CanRestoreCleanup && !unread.CanScan && scanCalls == 0 && !unread.OfficialPreviewState.Contains("already removed", StringComparison.Ordinal),
                     "An app listed only for its saved cleanup never scans and never claims it was removed when the list couldn't be read" + " | got: " + unread.OfficialPreviewState);
+                await unread.RestoreCleanupCommand.ExecuteAsync(null);
+                await Task.Delay(200);
+                Check(unread.StaleNotice.Length == 0 && unread.InventoryNotice.StartsWith("We couldn't read your installed apps", StringComparison.Ordinal),
+                    "Restoring while the installed apps list can't be read keeps the page's explanation instead of a changed-elsewhere notice" + " | got: " + unread.StaleNotice);
                 App.Live.InstalledApps = new InstalledAppInventory { Apps = [appA], Complete = false };
                 var partial = new UninstallCleanupViewModel();
                 await partial.InitializeAsync();
@@ -1090,6 +1096,12 @@ if (args is [] or ["responses"] or ["cleanup"] or ["race"])
                 await failed.InitializeAsync();
                 Check(!failed.IsReady && failed.ErrorMessage is { Length: > 0 }, "With no installed apps list and no saved cleanup, the page still reports that the list couldn't be read");
                 App.Live.CleanupRunsRoot = runsRoot;
+                var olderValid = SavedRun("run-old", "app-old");
+                File.SetLastWriteTimeUtc(olderValid, DateTime.UtcNow.AddMinutes(-10));
+                SavedRun("run-new", "app-old");
+                File.Delete(Path.Combine(runsRoot, "run-new", "backup.bin"));
+                Check(CleanupRecoveries.Find(runsRoot, "app-old") == olderValid, "A saved cleanup whose backup files are gone is not offered and does not hide an older one that can be restored");
+                Check(CleanupRecoveries.Find(runsRoot, "app-old", path => path != olderValid) is null, "A saved cleanup the restore would refuse is not offered");
             }
             finally { App.Live.InstalledApps = savedInventory; }
         }

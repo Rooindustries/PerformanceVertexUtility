@@ -699,13 +699,13 @@ public sealed class LiveDataService
     public async Task<string?> FindCleanupRecoveryAsync(string appId, CancellationToken ct = default)
     {
         var runs = Path.Combine(await _operations.Value.EnsureStorageAsync().ConfigureAwait(false), "cleanup-runs");
-        return await Task.Run(() => CleanupRecoveries.Find(runs, appId), ct).ConfigureAwait(false);
+        return await Task.Run(() => CleanupRecoveries.Find(runs, appId, RooIndustries.Optimizer.PolicyRootSecurity.WrittenAfterProtection), ct).ConfigureAwait(false);
     }
 
     public async Task<IReadOnlyList<CleanupRecovery>> FindCleanupRecoveriesAsync(CancellationToken ct = default)
     {
         var runs = Path.Combine(await _operations.Value.EnsureStorageAsync().ConfigureAwait(false), "cleanup-runs");
-        return await Task.Run(() => CleanupRecoveries.All(runs), ct).ConfigureAwait(false);
+        return await Task.Run(() => CleanupRecoveries.All(runs, RooIndustries.Optimizer.PolicyRootSecurity.WrittenAfterProtection), ct).ConfigureAwait(false);
     }
 
     public void MarkCleanupRestored(string rollbackManifestPath) => CleanupRecoveries.MarkRestored(rollbackManifestPath);

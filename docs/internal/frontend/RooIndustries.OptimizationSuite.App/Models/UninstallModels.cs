@@ -363,9 +363,9 @@ public static class CleanupRecoveries
 {
     private const string RestoredMarker = "restored.json";
 
-    public static string? Find(string runsRoot, string appId) => All(runsRoot).FirstOrDefault(recovery => recovery.AppId == appId)?.ManifestPath;
+    public static string? Find(string runsRoot, string appId, Func<string, bool>? usable = null) => All(runsRoot, usable).FirstOrDefault(recovery => recovery.AppId == appId)?.ManifestPath;
 
-    public static IReadOnlyList<CleanupRecovery> All(string runsRoot)
+    public static IReadOnlyList<CleanupRecovery> All(string runsRoot, Func<string, bool>? usable = null)
     {
         var found = new List<CleanupRecovery>();
         if (!System.IO.Directory.Exists(runsRoot)) return found;
@@ -382,13 +382,19 @@ public static class CleanupRecoveries
                     && found.All(recovery => recovery.AppId != appId)
                     && root.TryGetProperty("executionStarted", out var started) && started.ValueKind == System.Text.Json.JsonValueKind.True
                     && root.TryGetProperty("restoreSupported", out var supported) && supported.ValueKind == System.Text.Json.JsonValueKind.True
-                    && root.TryGetProperty("fileBackups", out var backups) && backups.ValueKind == System.Text.Json.JsonValueKind.Array && backups.GetArrayLength() > 0)
+                    && root.TryGetProperty("fileBackups", out var backups) && backups.ValueKind == System.Text.Json.JsonValueKind.Array && backups.GetArrayLength() > 0
+                    && backups.EnumerateArray().All(BackupPresent) && usable?.Invoke(manifest) != false)
                     found.Add(new(appId, root.TryGetProperty("displayName", out var name) && name.ValueKind == System.Text.Json.JsonValueKind.String ? name.GetString() : null, manifest));
             }
             catch (Exception error) when (error is System.Text.Json.JsonException or System.IO.IOException or UnauthorizedAccessException) { }
         }
         return found;
     }
+
+    private static bool BackupPresent(System.Text.Json.JsonElement backup)
+        => backup.ValueKind == System.Text.Json.JsonValueKind.Object
+            && (backup.TryGetProperty("copied", out var copied) && copied.ValueKind == System.Text.Json.JsonValueKind.False
+                || backup.TryGetProperty("backupPath", out var path) && path.ValueKind == System.Text.Json.JsonValueKind.String && path.GetString() is { Length: > 0 } value && (System.IO.File.Exists(value) || System.IO.Directory.Exists(value)));
 
     public static void MarkRestored(string rollbackManifestPath)
         => System.IO.File.WriteAllText(System.IO.Path.Combine(System.IO.Path.GetDirectoryName(rollbackManifestPath)!, RestoredMarker),

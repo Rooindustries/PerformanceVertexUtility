@@ -99,6 +99,7 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
     [ObservableProperty] private bool _canRunFinalCheckAction;
     [ObservableProperty] private bool _canApplyCleanupAction;
     [ObservableProperty] private bool _canRestoreCleanupAction;
+    [ObservableProperty] private string _inventoryNotice = "";
 
     public bool CanScan => HasSelection && !ScanBusy && SelectedApp?.Removed != true;
     [ObservableProperty]
@@ -157,6 +158,7 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
         var listed = inventory?.Apps is { Count: > 0 };
         var complete = listed && inventory!.Complete != false;
         var apps = inventory?.Apps ?? new List<InstalledApp>();
+        InventoryNotice = !listed && saved.Count > 0 ? "We couldn't read your installed apps, so only saved cleanups you can restore are listed. Close and reopen to try again." : "";
         if (!listed && saved.Count == 0)
         {
             ErrorMessage = "We couldn't read your installed apps yet. Close and reopen to try again.";
@@ -178,7 +180,6 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
 
         ApplyFilter();
         IsEmpty = _allApps.Count == 0;
-        if (!listed) StaleNotice = "We couldn't read your installed apps, so only saved cleanups you can restore are listed. Close and reopen to try again.";
     }
 
     partial void OnSearchTextChanged(string value) => ApplyFilter();
