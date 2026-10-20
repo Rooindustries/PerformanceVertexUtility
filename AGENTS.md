@@ -28,12 +28,12 @@ Backend scripts run on the Windows PowerShell 5.1 that ships with Windows. `tool
 
 ## Invariants
 
-These must hold on every commit of `main`. Each one names the code that enforces it and the check that proves it. A path that doesn't meet one yet is listed under "Known gaps" with its Linear issue. The PR that closes a gap removes that line in the same change.
+These must hold on every commit of `main`. Each one names the code that enforces it and the check that proves it. A path that doesn't meet one yet is listed under "Known gaps". The PR that closes a gap removes that line in the same change.
 
 1. **Preview before change.** Nothing changes a PC until the user approved a preview of that exact change.
    - Enforced by: `TweakEngine.Apply` takes only a saved preview and its review hash. It rebuilds the plan and refuses if a saved profile or any current value changed since the review, or if the catalog changed for a preview that selects settings; undo previews are allowed across catalog updates (`backend/native/Optimizer.Core/TweakEngine.cs`). Process controls and leftover cleanup apply only a reviewed preview the same way (`ProcessControlEngine.Apply`, `FileCleanupEngine.Apply`, `RegistryCleanupEngine.Apply`). Harness modules are dry runs unless `-ConfirmApply` is passed (`Invoke-ApplyModule` in `LeanClientOptimizer.ps1`). Game Tune starts when the user clicks Start for that game, and Stop undoes it.
    - Checked by: `tools/validation/Tweaks`, `Test-LegacyModuleRollback.ps1`.
-   - Known gaps: a confirmed harness apply re-reads its module manifest instead of the one the user previewed (ROO-530).
+   - Known gaps: a confirmed harness apply re-reads its module manifest instead of the one the user previewed.
 2. **Backup before apply.** Every prior value is saved before it changes, never after.
    - Enforced by:
      - Registry tweaks commit in one registry transaction together with the recovery state that holds each original value (`RegistryTweakStore.CommitRegistry` in `RegistryTweaks.cs`).
@@ -49,18 +49,18 @@ These must hold on every commit of `main`. Each one names the code that enforces
      - Cleanup restores verify their backups and refuse a conflicting destination (`FileCleanupEngine.Restore`, `RegistryCleanupEngine.Restore`).
    - Checked by: `tools/validation/Tweaks`, `tools/validation/AppSweepUi/GovernorChecks.cs`.
    - Known gaps:
-     - Game Tune Stop and background-limit or profile backup restores overwrite a value another program set afterwards (ROO-529).
-     - Harness rollback can't restore an existing DWORD of 0xFFFFFFFF, restores the manifest's value kind rather than the original kind, and overwrites later changes (ROO-530).
+     - Game Tune Stop and background-limit or profile backup restores overwrite a value another program set afterwards.
+     - Harness rollback can't restore an existing DWORD of 0xFFFFFFFF, restores the manifest's value kind rather than the original kind, and overwrites later changes.
 4. **No surprise defaults.** A PC only gets what the user chose. Presets are fixed catalog entries.
    - Enforced by: `tools/validation/check_windows_tweaks.py` requires the FPS preset to list exactly the measured winners in `backend/catalogs/fps-preset.json`. Each pick must be a real catalog option with benchmark evidence, and the setting known to break a PC after a reboot is excluded.
    - A PR that changes what a PC gets by default says so in its first line.
-   - Known gaps: the harness manifest gap in 1 (ROO-530).
+   - Known gaps: the harness manifest gap in 1.
 5. **Edition detection.** A setting a PC can't use shows as not available on that PC, never as an error or a retry that can't work.
    - Enforced by: the engine reads the PC's build and edition from `CurrentBuildNumber` and `EditionID` (`RegistryTweaks.cs`), and offers only options whose build and edition gates match (`TweakEngine.Supported`). A Windows feature the PC doesn't have makes its choices unavailable instead of failing the read (`TweakControlRead.Allows`). A row with no option for this PC reports "No choice applies to this Windows version, edition or installed product.", and missing Windows components report "... is not installed" or "... is not available with ...". The app shows these as "Not available here" with no Retry (`PcLacks`, `UnavailableHere` and `CanRetry` in `WindowsTweaksViewModel.cs`).
    - Checked by: `tools/validation/Tweaks` (catalog integration and feature checks), `tools/validation/WindowsTweaksUi`.
    - Known gaps:
-     - Encrypted DNS and reserved storage read as "Couldn't check" on Windows versions without their commands (ROO-514).
-     - "Consumer suggestions and promotions: Blocked" is offered on Pro, where Windows ignores the policy (ROO-532).
+     - Encrypted DNS and reserved storage read as "Couldn't check" on Windows versions without their commands.
+     - "Consumer suggestions and promotions: Blocked" is offered on Pro, where Windows ignores the policy.
 6. **Bug report privacy.** A bug report leaves the PC only when the user clicks Send (`BugReportViewModel.SendAsync`), and it never carries the user's or another local account's name, the PC name, or account SIDs.
    - Enforced by: the attached files (specs, tweak summary, log tails) go through `BugRedactor` before they're zipped. It replaces:
      - the user's profile path with `%USERPROFILE%`
@@ -71,8 +71,8 @@ These must hold on every commit of `main`. Each one names the code that enforces
      The app log is redacted when it's written (`AppLog`).
    - Checked by: `tools/validation/AppSweepUi/BugReportChecks.cs`.
    - Known gaps:
-     - Another account's folder name stops being redacted at a space or apostrophe, and the app log uses its own narrower rules (ROO-476).
-     - The description and the editable specs in the message itself are sent as typed (ROO-531).
+     - Another account's folder name stops being redacted at a space or apostrophe, and the app log uses its own narrower rules.
+     - The description and the editable specs in the message itself are sent as typed.
 
 ### Changing code an invariant depends on
 
