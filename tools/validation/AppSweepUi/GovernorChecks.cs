@@ -559,7 +559,7 @@ static class GovernorChecks
         check(!panel.RetryAvailable && panel.Status == "Some settings were left as another program set them." && panel.Detail.Contains("that program's value was kept", StringComparison.Ordinal),
             "Put settings back does not claim the old settings are back when another program's value was kept" + " | got: " + panel.Status);
 
-        var earlier = Instance(Process(300, @"C:\Other\tool.exe"), "ioPriority", "restored", "leftAsSet", ProcessControlEngine.LeftAsSet);
+        var earlier = Instance(chrome, "cpuPriority", "restored", "leftAsSet", ProcessControlEngine.LeftAsSet, "older");
         (view, panel) = await Show(Snapshot(false, [off], new(Host("stoppedWithConflicts", [failed.Instances.Single(), earlier]), false, null)));
         App.Operations.RetryRestore = () =>
         {
@@ -568,7 +568,7 @@ static class GovernorChecks
         };
         await panel.RetryRestoreCommand.ExecuteAsync(null);
         check(!panel.RetryAvailable && panel.Status == "The old settings are back.",
-            "An older left-as-set record from another app does not change a fully successful Put settings back" + " | got: " + panel.Status);
+            "An older left-as-set record for the same app and setting does not change a fully successful Put settings back" + " | got: " + panel.Status);
     }
 
     private static string Under(string root, params string[] names) => root + string.Concat(names.Select(name => Path.DirectorySeparatorChar + name));
