@@ -233,7 +233,7 @@ public partial class WindowsTweakRow : ObservableObject
         else if (Detail.Contains("Win32 1060", StringComparison.Ordinal)) Detail = "This Windows service is not installed.";
         else if (Detail.Contains("Hard-linked file permissions", StringComparison.Ordinal)) Detail = "Windows links this file to other copies, so its permissions can't be changed safely here.";
         else if (Detail.Contains("0x80070002", StringComparison.Ordinal) && Definition.Options.SelectMany(option => option.Controls ?? []).Any(control => control.Address.Kind == "scheduled-task")) Detail = "This Windows task is not installed.";
-        else if (IsNetwork && status?.Error is { } error) Detail = error.Contains("adapter", StringComparison.OrdinalIgnoreCase) || error.Contains("devices expose", StringComparison.OrdinalIgnoreCase)
+        else if (IsNetwork && status?.Error is { } error && !error.Contains("is not available with this Windows version", StringComparison.Ordinal)) Detail = error.Contains("adapter", StringComparison.OrdinalIgnoreCase) || error.Contains("devices expose", StringComparison.OrdinalIgnoreCase)
             ? "The current adapter does not expose this option. You can save a choice for a compatible adapter." : "Windows could not read this preference. Refresh to try again.";
         OnPropertyChanged(nameof(CouldNotCheck)); OnPropertyChanged(nameof(CanRetry)); OnPropertyChanged(nameof(UnavailableHere));
         SyncToggle(); NotifyPending(); OnPropertyChanged(nameof(CanApplySelected));

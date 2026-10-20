@@ -46,3 +46,8 @@ $stray=@($lines | Where-Object { $_ -notmatch '^ROO_INDUSTRIES_CONTROL \d+ ' })
 if($stray.Count -lt 1){throw ('The fixture output line did not reach standard output: '+($lines -join ' | '))}
 if(@($stray | Where-Object { [array]::IndexOf($lines,$_) -lt $firstIndex -or [array]::IndexOf($lines,$_) -gt $secondIndex }).Count){throw ('Output from one batch read leaked next to another address: '+($lines -join ' | '))}
 Write-Host ('PASS batched reads keep request order and keep each read''s stray output before its own result ('+$stray.Count+' stray lines before the second result)')
+$providers='Import-Module Microsoft.PowerShell.Utility; $global:PSModuleAutoLoadingPreference=''None'''
+$request=@{action='read-batch';addresses=@([ordered]@{kind='dns-over-https';target='203.0.113.253';property='configuration'},[ordered]@{kind='reserved-storage';target='system';property='enabled'})}
+$missing=@((Run-Helper $source) -split "`r?`n" | Where-Object { $_ -match '^ROO_INDUSTRIES_CONTROL \d+ ' } | ForEach-Object { ($_ -replace '^ROO_INDUSTRIES_CONTROL \d+ ','')|ConvertFrom-Json })
+if($missing.Count -ne 2 -or $missing[0].error -cne 'Encrypted DNS is not available with this Windows version.' -or $missing[1].error -cne 'Reserved storage is not available with this Windows version.'){throw ('A Windows version without the encrypted DNS or reserved storage commands must read as not available: '+(($missing|ForEach-Object { $_.error }) -join ' | '))}
+Write-Host 'PASS Windows versions without the encrypted DNS or reserved storage commands read those rows as not available'
