@@ -161,12 +161,16 @@ static class BugReportChecks
             check(!others.Contains("Bob", StringComparison.Ordinal) && !others.Contains("Carol", StringComparison.Ordinal)
                 && others.Contains(@"C:\Users\Public\Desktop", StringComparison.Ordinal) && others.Contains(@"C:\Users\Default User\x", StringComparison.Ordinal),
                 "Other accounts' profile folders are redacted while shared Windows folders stay readable");
-            var otherNames = redactor.Redact(@"C:\Users\John Smith\AppData and C:\Users\O'Connor\Desktop and {""p"":""C:\\Users\\John Smith\\x"",""q"":""C:\\Users\\O\u0027Connor\\y""} and 'C:\Users\Client' or 'C:\Users\Fixture\z'");
+            var known = new BugRedactor(@"C:\Users\Alice", "Alice", "GAMER-PC", ["John Smith", "O'Connor", "Client", "Fixture", "Public", "Default User"]);
+            var otherNames = known.Redact(@"C:\Users\John Smith\AppData and C:\Users\O'Connor\Desktop and {""p"":""C:\\Users\\John Smith\\x"",""q"":""C:\\Users\\O\u0027Connor\\y""} and 'C:\Users\Client' or C:/Users/Fixture/z");
             check(!otherNames.Contains("Smith", StringComparison.Ordinal) && !otherNames.Contains("Connor", StringComparison.Ordinal)
                 && !otherNames.Contains("Client", StringComparison.Ordinal) && !otherNames.Contains("Fixture", StringComparison.Ordinal)
                 && otherNames.Contains(@"C:\Users\<user>\AppData", StringComparison.Ordinal) && otherNames.Contains(@"C:\\Users\\<user>\\y", StringComparison.Ordinal)
-                && otherNames.Contains(@"'C:\Users\<user>' or 'C:\Users\<user>\z'", StringComparison.Ordinal),
-                "Other accounts' profile folders with spaces or apostrophes are fully redacted");
+                && otherNames.Contains(@"'C:\Users\<user>' or C:/Users/<user>/z", StringComparison.Ordinal),
+                "Other accounts on this PC are fully redacted even with spaces or apostrophes in their folder names");
+            var context = known.Redact(@"Cannot access 'C:\Users\Client' while checking 'AppData\Local\fixture.log'. Scanning C:\Users\Fixture for leftovers in AppData\Local and C:\Users\Public\Desktop");
+            check(context == @"Cannot access 'C:\Users\<user>' while checking 'AppData\Local\fixture.log'. Scanning C:\Users\<user> for leftovers in AppData\Local and C:\Users\Public\Desktop",
+                "Redacting another account keeps the rest of the log line and shared folders readable");
 
             var longText = "@everyone " + new string('x', 10_000);
             var payload = BugReportService.BuildPayload(Report(longText, "<@123> me@example.com",
