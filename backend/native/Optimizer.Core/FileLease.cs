@@ -1,6 +1,7 @@
 #nullable enable
 using System.ComponentModel;
 using System.Runtime.InteropServices;
+using System.Security.AccessControl;
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Win32.SafeHandles;
@@ -100,13 +101,11 @@ public sealed class FileLease : IDisposable
     public void SetDacl(byte[] dacl)
     {
         if (!_writable) throw new InvalidOperationException("A detection handle cannot change permissions.");
-        var pin = GCHandle.Alloc(dacl, GCHandleType.Pinned);
-        try
-        {
-            var status = SetSecurityInfo(_handle, 1, 4, IntPtr.Zero, IntPtr.Zero, pin.AddrOfPinnedObject(), IntPtr.Zero);
-            if (status != 0) throw new Win32Exception((int)status, "SetSecurityInfo(DACL) failed: " + status);
-        }
-        finally { pin.Free(); }
+        var current = new RawSecurityDescriptor(ReadSecurity(_handle), 0);
+        var inheritance = current.ControlFlags & (ControlFlags.DiscretionaryAclAutoInheritRequired | ControlFlags.DiscretionaryAclAutoInherited | ControlFlags.DiscretionaryAclProtected);
+        var descriptor = new RawSecurityDescriptor(inheritance | ControlFlags.DiscretionaryAclPresent, null, null, null, new RawAcl(dacl, 0));
+        var bytes = new byte[descriptor.BinaryLength]; descriptor.GetBinaryForm(bytes, 0);
+        if (!SetKernelObjectSecurity(_handle, 4, bytes)) Fail("SetKernelObjectSecurity(DACL)");
     }
 
     public static string ResolveExclusionPath(string path)
@@ -408,6 +407,7 @@ public sealed class FileLease : IDisposable
     [DllImport("kernel32.dll", SetLastError=true)] private static extern bool BackupRead(SafeFileHandle file, [Out] byte[]? buffer, uint size, out uint read, bool abort, bool security, ref IntPtr context);
     [DllImport("kernel32.dll", SetLastError=true)] private static extern bool BackupWrite(SafeFileHandle file, byte[]? buffer, uint size, out uint written, bool abort, bool security, ref IntPtr context);
     [DllImport("advapi32.dll", SetLastError=true)] private static extern bool GetKernelObjectSecurity(SafeFileHandle handle, uint information, [Out] byte[]? descriptor, uint size, out uint needed);
+    [DllImport("advapi32.dll", SetLastError=true)] private static extern bool SetKernelObjectSecurity(SafeFileHandle handle, uint information, byte[] descriptor);
     [DllImport("kernel32.dll", EntryPoint="FindFirstStreamW", CharSet=CharSet.Unicode, SetLastError=true)] private static extern IntPtr FindFirstStream(string path, int kind, out FindStreamData data, uint flags);
     [DllImport("kernel32.dll", EntryPoint="FindNextStreamW", CharSet=CharSet.Unicode, SetLastError=true)] private static extern bool FindNextStream(IntPtr find, out FindStreamData data);
     [DllImport("kernel32.dll", SetLastError=true)] private static extern bool FindClose(IntPtr find);
