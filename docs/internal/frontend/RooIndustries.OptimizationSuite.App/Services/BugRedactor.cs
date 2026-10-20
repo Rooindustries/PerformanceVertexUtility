@@ -21,7 +21,7 @@ public sealed class BugRedactor
         var profile = profilePath?.TrimEnd('\\', '/');
         _own = profile?.Split('\\', '/')[^1] ?? "";
         _ownRoot = string.IsNullOrEmpty(profile) || profile.Length == _own.Length ? null : Root(profile[..^_own.Length]);
-        _profiles = (otherProfiles ?? []).Where(name => !string.IsNullOrWhiteSpace(name) && !SharedProfiles.Contains(name)).Append(_own)
+        _profiles = (otherProfiles ?? []).Where(name => !string.IsNullOrWhiteSpace(name) && !SharedProfiles.Contains(name)).Append(_own).Append(userName?.Trim() ?? "")
             .Where(name => name.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase).OrderByDescending(name => name.Length).ToArray();
         if (!string.IsNullOrWhiteSpace(profile))
         {
