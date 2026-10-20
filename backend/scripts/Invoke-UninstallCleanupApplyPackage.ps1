@@ -34,7 +34,7 @@ function Test-ApplyPackageTargetAllowlist {
         [object[]]$Items,
         [string[]]$Allowlist
     )
-    if (@($Items).Count -eq 0) { return $false }
+    if (@($Items).Count -eq 0) { return $true }
     $allowed = @{}
     foreach ($target in @(Get-RooIndustriesUninstallArray $Allowlist)) {
         if ([string]::IsNullOrWhiteSpace([string]$target)) { continue }
