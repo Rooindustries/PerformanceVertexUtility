@@ -301,7 +301,7 @@ try {
     foreach ($probe in @($busyProbe, $protectedProbe, $obsProbe, $discordProbe, $gameProbe, $antiCheatProbe, $networkProbe, $audioProbe, $inputProbe, $securityProbe, $gpuDriverProbe)) { $probes.Add($probe) | Out-Null }
     Start-Sleep -Milliseconds 800
 
-    $beforeBusy = Get-RooIndustriesProcessControlState $busyProbe.Id $null
+    $beforeBusy = Get-RooIndustriesProcessControlState $busyProbe.Id $null -ReadGpu
     $beforeProtected = Get-RooIndustriesProcessControlState $protectedProbe.Id $null
     $affinityTarget = if ([Environment]::ProcessorCount -gt 1) { [int64]1 } else { [int64]$beforeBusy.affinityMask }
     $gpuTarget = if ([string]$beforeBusy.gpuPriority -eq 'BelowNormal') { 'Normal' } else { 'BelowNormal' }
@@ -324,7 +324,7 @@ try {
         -GpuPriority $gpuTarget
 
     $preview = & (Join-Path $PSScriptRoot 'Start-NativeProcessGovernorSession.ps1') -PolicyPath $previewPolicy -WorkerPath $workerPath | ConvertFrom-Json
-    $afterPreviewBusy = Get-RooIndustriesProcessControlState $busyProbe.Id $null
+    $afterPreviewBusy = Get-RooIndustriesProcessControlState $busyProbe.Id $null -ReadGpu
     $previewBusy = @($preview.preview | Where-Object { $_.processId -eq $busyProbe.Id }) | Select-Object -First 1
     $previewProtected = @($preview.preview | Where-Object { $_.processId -eq $protectedProbe.Id }) | Select-Object -First 1
     $previewObs = @($preview.preview | Where-Object { $_.processId -eq $obsProbe.Id }) | Select-Object -First 1
@@ -385,7 +385,7 @@ try {
         -GpuPriority $gpuTarget
 
     $session = & (Join-Path $PSScriptRoot 'Start-NativeProcessGovernorSession.ps1') -PolicyPath $confirmPolicy -WorkerPath $workerPath | ConvertFrom-Json
-    $afterSessionBusy = Get-RooIndustriesProcessControlState $busyProbe.Id $null
+    $afterSessionBusy = Get-RooIndustriesProcessControlState $busyProbe.Id $null -ReadGpu
     $changedBusy = @($session.changedItems | Where-Object { $_.processId -eq $busyProbe.Id }) | Select-Object -First 1
     $restoredBusy = @($session.restoredItems | Where-Object { $_.processId -eq $busyProbe.Id }) | Select-Object -First 1
     $affinityRestored = ([int64]$afterSessionBusy.affinityMask -eq [int64]$beforeBusy.affinityMask)

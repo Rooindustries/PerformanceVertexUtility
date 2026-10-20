@@ -171,7 +171,8 @@ try {
     try {
         $probe = Start-Process -FilePath $probeExe -ArgumentList '-NoProfile','-WindowStyle','Hidden','-Command','Start-Sleep -Seconds 120' -WindowStyle Hidden -PassThru
         Start-Sleep -Milliseconds 800
-        $before = Get-RooIndustriesProcessControlState $probe.Id $null
+        Set-RooIndustriesProcessIoPriority $probe 'Low'
+        $before = Get-RooIndustriesProcessControlState $probe.Id $null -ReadGpu
         $targetAffinity = if (($before.affinityMask -band 1) -eq 1 -and [int64]$before.affinityMask -ne 1) { 1 } elseif (($before.affinityMask -band 2) -eq 2) { 2 } else { $before.affinityMask }
         $profilePath = Join-Path $liveRoot 'live-profile.json'
         $stateRoot = Join-Path $liveRoot 'state'
@@ -188,7 +189,7 @@ try {
                 processNames = @('RooIndustriesTuneProbe.exe')
                 priorityClass = 'AboveNormal'
                 affinityMask = [int64]$targetAffinity
-                ioPriority = 'Low'
+                ioPriority = 'Normal'
                 gpuPriority = 'AboveNormal'
                 reason = 'Validate live process controls against a disposable probe process.'
                 reasonCodes = @('LIVE_VALIDATION')
@@ -219,7 +220,7 @@ try {
             -MaxDurationSeconds 1 `
             -StateRoot $stateRoot `
             -ConfirmApply | ConvertFrom-Json
-        $afterApply = Get-RooIndustriesProcessControlState $probe.Id $null
+        $afterApply = Get-RooIndustriesProcessControlState $probe.Id $null -ReadGpu
 
         if ($start.dryRun -eq $false -and $start.status -eq 'completed' -and @($start.changedItems).Count -ge 1) {
             Add-Pass 'Live Game Tune session applied process controls to disposable probe'
@@ -236,10 +237,10 @@ try {
         } else {
             Add-Failure "Live probe affinity did not change to mask ${targetAffinity}: $($afterApply.affinityMask)"
         }
-        if ($afterApply.ioPriority -eq 'Low') {
-            Add-Pass 'Live probe I/O priority changed to Low'
+        if ($afterApply.ioPriority -eq 'Normal') {
+            Add-Pass 'Live probe I/O priority raised from Low to Normal'
         } else {
-            Add-Failure "Live probe I/O priority did not change to Low: $($afterApply.ioPriority)"
+            Add-Failure "Live probe I/O priority was not raised from Low to Normal: $($afterApply.ioPriority)"
         }
         if ($afterApply.gpuPriority -eq 'AboveNormal') {
             Add-Pass 'Live probe GPU priority changed to AboveNormal'
@@ -255,21 +256,21 @@ try {
         }
 
         $restorePreview = & (Join-Path $PSScriptRoot 'Stop-GameTuneSession.ps1') -SessionPath $start.sessionPath | ConvertFrom-Json
-        $afterPreview = Get-RooIndustriesProcessControlState $probe.Id $null
-        if ($restorePreview.dryRun -eq $true -and $afterPreview.priorityClass -eq 'AboveNormal' -and $afterPreview.ioPriority -eq 'Low' -and $afterPreview.gpuPriority -eq 'AboveNormal') {
+        $afterPreview = Get-RooIndustriesProcessControlState $probe.Id $null -ReadGpu
+        if ($restorePreview.dryRun -eq $true -and $afterPreview.priorityClass -eq 'AboveNormal' -and $afterPreview.ioPriority -eq 'Normal' -and $afterPreview.gpuPriority -eq 'AboveNormal') {
             Add-Pass 'Live Game Tune restore preview did not change the probe'
         } else {
             Add-Failure 'Live Game Tune restore preview changed the probe unexpectedly'
         }
 
         $restore = & (Join-Path $PSScriptRoot 'Stop-GameTuneSession.ps1') -SessionPath $start.sessionPath -ConfirmApply | ConvertFrom-Json
-        $afterRestore = Get-RooIndustriesProcessControlState $probe.Id $null
+        $afterRestore = Get-RooIndustriesProcessControlState $probe.Id $null -ReadGpu
         if ($restore.dryRun -eq $false -and $restore.status -eq 'completed' -and @($restore.restoredItems).Count -ge 1) {
             Add-Pass 'Live Game Tune restore confirmed against disposable probe'
         } else {
             Add-Failure 'Live Game Tune restore did not report a confirmed restore'
         }
-        if ($afterRestore.priorityClass -eq $before.priorityClass -and [int64]$afterRestore.affinityMask -eq [int64]$before.affinityMask -and $afterRestore.ioPriority -eq $before.ioPriority -and $afterRestore.gpuPriority -eq $before.gpuPriority) {
+        if ($afterRestore.priorityClass -eq $before.priorityClass -and [int64]$afterRestore.affinityMask -eq [int64]$before.affinityMask -and $afterRestore.ioPriority -eq $before.ioPriority -and $null -ne $before.gpuPriority -and $afterRestore.gpuPriority -eq $before.gpuPriority) {
             Add-Pass 'Live probe process controls restored to original state'
         } else {
             Add-Failure "Live probe restore mismatch: priority $($afterRestore.priorityClass)/$($before.priorityClass), affinity $($afterRestore.affinityMask)/$($before.affinityMask), I/O $($afterRestore.ioPriority)/$($before.ioPriority), GPU $($afterRestore.gpuPriority)/$($before.gpuPriority)"
