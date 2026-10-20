@@ -33,7 +33,9 @@ These must hold on every commit of `main`. Each one names the code that enforces
 1. **Preview before change.** Nothing changes a PC until the user approved a preview of that exact change.
    - Enforced by: `TweakEngine.Apply` takes only a saved preview and its review hash. It rebuilds the plan and refuses if a saved profile or any current value changed since the review, or if the catalog changed for a preview that selects settings; undo previews are allowed across catalog updates (`backend/native/Optimizer.Core/TweakEngine.cs`). Process controls and leftover cleanup apply only a reviewed preview the same way (`ProcessControlEngine.Apply`, `FileCleanupEngine.Apply`, `RegistryCleanupEngine.Apply`). Harness modules are dry runs unless `-ConfirmApply` is passed (`Invoke-ApplyModule` in `LeanClientOptimizer.ps1`). Game Tune starts when the user clicks Start for that game, and Stop undoes it.
    - Checked by: `tools/validation/Tweaks`, `Test-LegacyModuleRollback.ps1`.
-   - Known gaps: a confirmed harness apply re-reads its module manifest instead of the one the user previewed.
+   - Known gaps:
+     - A confirmed harness apply re-reads its module manifest instead of the one the user previewed.
+     - Game Tune Start isn't bound to the game the user reviewed: it tunes whichever supported game is running when it executes.
 2. **Backup before apply.** Every prior value is saved before it changes, never after.
    - Enforced by:
      - Registry tweaks commit in one registry transaction together with the recovery state that holds each original value (`RegistryTweakStore.CommitRegistry` in `RegistryTweaks.cs`).
@@ -49,8 +51,8 @@ These must hold on every commit of `main`. Each one names the code that enforces
      - Cleanup restores verify their backups and refuse a conflicting destination (`FileCleanupEngine.Restore`, `RegistryCleanupEngine.Restore`).
    - Checked by: `tools/validation/Tweaks`, `tools/validation/AppSweepUi/GovernorChecks.cs`.
    - Known gaps:
-     - Game Tune Stop and background-limit or profile backup restores overwrite a value another program set afterwards.
-     - Harness rollback can't restore an existing DWORD of 0xFFFFFFFF, restores the manifest's value kind rather than the original kind, and overwrites later changes.
+     - Game Tune Stop and profile backup restores overwrite a value another program set afterwards. Background-limit restores already keep it.
+     - Harness rollback restores the manifest's value kind rather than the original kind, and overwrites later changes.
 4. **No surprise defaults.** A PC only gets what the user chose. Presets are fixed catalog entries.
    - Enforced by: `tools/validation/check_windows_tweaks.py` requires the FPS preset to list exactly the measured winners in `backend/catalogs/fps-preset.json`. Each pick must be a real catalog option with benchmark evidence, and the setting known to break a PC after a reboot is excluded.
    - A PR that changes what a PC gets by default says so in its first line.
@@ -61,6 +63,7 @@ These must hold on every commit of `main`. Each one names the code that enforces
    - Known gaps:
      - Encrypted DNS and reserved storage read as "Couldn't check" on Windows versions without their commands.
      - "Consumer suggestions and promotions: Blocked" is offered on Pro, where Windows ignores the policy.
+     - Defender rows read as "Couldn't check" on Windows without Defender's PowerShell commands.
 6. **Bug report privacy.** A bug report leaves the PC only when the user clicks Send (`BugReportViewModel.SendAsync`), and it never carries the user's or another local account's name, the PC name, or account SIDs.
    - Enforced by: the attached files (specs, tweak summary, log tails) go through `BugRedactor` before they're zipped. It replaces:
      - the user's profile path with `%USERPROFILE%`
@@ -73,6 +76,7 @@ These must hold on every commit of `main`. Each one names the code that enforces
    - Known gaps:
      - Another account's folder name stops being redacted at a space or apostrophe, and the app log uses its own narrower rules.
      - The description and the editable specs in the message itself are sent as typed.
+     - Account names of one character aren't redacted.
 
 ### Changing code an invariant depends on
 
