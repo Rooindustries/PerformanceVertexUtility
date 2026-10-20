@@ -188,15 +188,19 @@ static class AliasOwnershipChecks
             check(GetShortPathName(target, shortName, (uint)shortName.Capacity) != 0 && !string.Equals(target, shortName.ToString(), StringComparison.OrdinalIgnoreCase) && shortName.ToString().Contains('~'), "Fixture has an actual 8.3 alias");
             CheckPeer(check, root, shortName.ToString(), "actual-8dot3-alias", true);
 
-            var locked = Path.Combine(root, "locked-peer");
-            Directory.CreateDirectory(locked);
-            using (var handle = CreateFile(locked, 0x10000, 7, IntPtr.Zero, 3, 0x06000000, IntPtr.Zero))
+            var locked = Directory.CreateDirectory(Path.Combine(root, "locked-peer"));
+            var lockedSecurity = locked.GetAccessControl();
+            var lockedDenied = locked.GetAccessControl();
+            lockedDenied.AddAccessRule(new FileSystemAccessRule(WindowsIdentity.GetCurrent().User!, FileSystemRights.Synchronize, AccessControlType.Deny));
+            try
             {
-                check(!handle.IsInvalid && (File.GetAttributes(locked) & FileAttributes.Directory) != 0, "Final-open failure fixture still permits the metadata walk");
-                using var refused = CreateFile(locked, 0x100080, 7, IntPtr.Zero, 3, 0x02100000, IntPtr.Zero);
-                check(refused.IsInvalid, "Delete-pending fixture really refuses the resolver's final metadata open");
-                CheckPeer(check, root, locked, "final-open-delete-pending", false);
+                locked.SetAccessControl(lockedDenied);
+                check((File.GetAttributes(locked.FullName) & FileAttributes.Directory) != 0, "Metadata-open failure fixture still permits attribute reads");
+                using var refused = CreateFile(locked.FullName, 0x100080, 7, IntPtr.Zero, 3, 0x02300000, IntPtr.Zero);
+                check(refused.IsInvalid && Marshal.GetLastWin32Error() == 5, "Synchronize denial really refuses the resolver's metadata handle open");
+                CheckPeer(check, root, locked.FullName, "metadata-open-access-denied", false);
             }
+            finally { locked.SetAccessControl(lockedSecurity); }
 
             var unreadable = Directory.CreateDirectory(Path.Combine(root, "unreadable-peer"));
             var hidden = Path.Combine(unreadable.FullName, "alias");
