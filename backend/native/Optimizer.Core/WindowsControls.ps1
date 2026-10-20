@@ -130,6 +130,7 @@ function Read-Control($address){
         }
         'dns-over-https' {
             if($address.property -ne 'configuration'){throw 'Unknown encrypted DNS control.'}
+            if(-not (Get-Command Get-DnsClientDohServerAddress -ErrorAction SilentlyContinue)){throw 'Encrypted DNS is not available with this Windows version.'}
             $ip=([Net.IPAddress]::Parse($address.target)).ToString()
             if($script:BatchDoh){if($null -eq $script:DohServers){$script:DohServers=@(Get-DnsClientDohServerAddress)};$servers=$script:DohServers}else{$servers=Get-DnsClientDohServerAddress}
             $entries=@($servers|Where-Object {([Net.IPAddress]::Parse($_.ServerAddress)).ToString() -ceq $ip})
@@ -157,6 +158,7 @@ function Read-Control($address){
         }
         'reserved-storage' {
             if($address.target -ne 'system' -or $address.property -ne 'enabled'){throw 'Unknown reserved-storage setting.'}
+            if(-not (Get-Command Get-WindowsReservedStorageState -ErrorAction SilentlyContinue)){throw 'Reserved storage is not available with this Windows version.'}
             $state=[string](Get-WindowsReservedStorageState).ReservedStorageState
             if($state -notin @('Enabled','Disabled')){throw ('Reserved storage has an unresolved state: '+$state)}
             $value=$state -eq 'Enabled'
