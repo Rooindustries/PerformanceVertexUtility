@@ -215,7 +215,12 @@ namespace RooIndustries.OptimizationSuite.Services
         }
         public void DiscardCleanupReview() => LastCleanupRollbackPath = null;
         public string? CleanupRunsRoot { get; set; }
-        public Task<string?> FindCleanupRecoveryAsync(string appId, CancellationToken cancellationToken = default) => Task.FromResult(CleanupRunsRoot is null ? null : CleanupRecoveries.Find(CleanupRunsRoot, appId));
+        public TimeSpan CleanupRecoveryDelay { get; set; }
+        public async Task<string?> FindCleanupRecoveryAsync(string appId, CancellationToken cancellationToken = default)
+        {
+            if (CleanupRecoveryDelay > TimeSpan.Zero) await Task.Delay(CleanupRecoveryDelay, cancellationToken);
+            return CleanupRunsRoot is null ? null : CleanupRecoveries.Find(CleanupRunsRoot, appId);
+        }
         public void MarkCleanupRestored(string rollbackManifestPath) => CleanupRecoveries.MarkRestored(rollbackManifestPath);
     }
 

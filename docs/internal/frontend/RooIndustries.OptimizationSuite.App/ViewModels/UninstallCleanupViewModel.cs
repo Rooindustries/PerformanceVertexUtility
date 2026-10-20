@@ -587,10 +587,11 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
         {
             var result = await App.Live.RestoreUninstallCleanupResultAsync(rollbackPath);
             var restored = result.Error is null && IsSuccessfulRestore(result.Value, rollbackPath);
+            string? markFailure = null;
             if (restored)
             {
                 try { App.Live.MarkCleanupRestored(rollbackPath); }
-                catch (Exception error) { AppLog.Write(nameof(UninstallCleanupViewModel), error.ToString()); }
+                catch (Exception error) { AppLog.Write(nameof(UninstallCleanupViewModel), error.ToString()); markFailure = error.Message; }
             }
             if (restored && _cleanupRecoveryByApp.TryGetValue(app.AppId!, out var retained)
                 && string.Equals(retained, rollbackPath, StringComparison.Ordinal))
@@ -599,6 +600,7 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
             }
             if (!IsCurrent(app, generation)) return;
             SummarizeCleanupRestore(result.Value, result.Error, restored);
+            if (markFailure is not null) CleanupExecutionDetail = ((CleanupExecutionDetail ?? "") + " The app couldn't save that this restore finished (" + markFailure.TrimEnd('.') + "), so it may offer it again after you reopen the app. Restoring again is safe.").Trim();
         }
         catch (Exception error)
         {
@@ -842,6 +844,7 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
     {
         if (generation != _selectionGeneration) return;
         ScanBusy = false;
+        if (!CleanupRestoreAvailable && SelectedApp?.AppId is { Length: > 0 } selected && _cleanupRecoveryByApp.ContainsKey(selected)) SetSelectedRecovery(selected);
         RefreshActionState();
     }
 
@@ -900,8 +903,9 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
         string? saved;
         try { saved = await App.Live.FindCleanupRecoveryAsync(app.AppId); }
         catch (Exception error) { AppLog.Write(nameof(UninstallCleanupViewModel), error.ToString()); return; }
-        if (!IsCurrent(app, generation) || ScanBusy || CleanupRestoreAvailable || !IsValidRecovery(saved, app.AppId)) return;
-        _cleanupRecoveryByApp[app.AppId] = saved!;
+        if (!IsCurrent(app, generation) || !IsValidRecovery(saved, app.AppId)) return;
+        _cleanupRecoveryByApp.TryAdd(app.AppId, saved!);
+        if (ScanBusy || CleanupRestoreAvailable) return;
         SetSelectedRecovery(app.AppId);
         CleanupExecutionState = "An earlier cleanup of this app can be restored.";
         CleanupExecutionDetail = "Restore puts back the files that cleanup removed. It does not reinstall the app.";

@@ -995,11 +995,28 @@ if (args is [] or ["responses"] or ["cleanup"] or ["race"])
             SavedRun("run-b", appB.AppId!);
             Directory.CreateDirectory(Path.Combine(runsRoot, "run-broken"));
             File.WriteAllText(Path.Combine(runsRoot, "run-broken", "rollback-manifest.json"), "{not json");
+            Directory.CreateDirectory(Path.Combine(runsRoot, "run-noop"));
+            File.WriteAllText(Path.Combine(runsRoot, "run-noop", "rollback-manifest.json"), JsonSerializer.Serialize(new { appId = appA.AppId, executionStarted = false, restoreSupported = true, fileBackups = Array.Empty<object>() }));
             App.Live.CleanupRunsRoot = runsRoot;
             var reopened = new UninstallCleanupViewModel { SelectedApp = appA };
             for (var wait = 0; wait < 100 && !reopened.CleanupRestoreAvailable; wait++) await Task.Delay(20);
             Check(reopened.CleanupRestoreAvailable && reopened.CanRestoreCleanup && reopened.CleanupExecutionState.StartsWith("An earlier cleanup", StringComparison.Ordinal),
-                "A saved cleanup can still be restored after the app is closed and reopened");
+                "A saved cleanup can still be restored after the app is closed and reopened, even when a newer run had nothing to restore");
+
+            var scanGate = new TaskCompletionSource<LeftoverScan?>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var savedScan = App.Live.LeftoverScan;
+            App.Live.LeftoverScan = _ => scanGate.Task;
+            App.Live.CleanupRecoveryDelay = TimeSpan.FromMilliseconds(150);
+            try
+            {
+                var busy = new UninstallCleanupViewModel { SelectedApp = appA };
+                var scanning = busy.ScanLeftoversCommand.ExecuteAsync(null);
+                await Task.Delay(400);
+                scanGate.SetResult(EmptyScan(appA.AppId!));
+                await scanning;
+                Check(busy.CleanupRestoreAvailable && busy.CanRestoreCleanup, "A saved cleanup found while a leftover scan runs can be restored once the scan finishes");
+            }
+            finally { App.Live.CleanupRecoveryDelay = TimeSpan.Zero; App.Live.LeftoverScan = savedScan; }
             App.Live.CleanupRestore = path => Task.FromResult<string?>(JsonSerializer.Serialize(new
             {
                 actionId = "apps.restoreUninstallCleanupExecution",
@@ -1020,6 +1037,10 @@ if (args is [] or ["responses"] or ["cleanup"] or ["race"])
             var other = new UninstallCleanupViewModel { SelectedApp = appB };
             for (var wait = 0; wait < 100 && !other.CleanupRestoreAvailable; wait++) await Task.Delay(20);
             Check(other.CleanupRestoreAvailable, "Another app keeps its own saved cleanup restore");
+            Directory.CreateDirectory(Path.Combine(runsRoot, "run-b", "restored.json"));
+            await other.RestoreCleanupCommand.ExecuteAsync(null);
+            Check(other.CleanupExecutionDetail?.Contains("couldn't save that this restore finished", StringComparison.Ordinal) == true,
+                "A restore whose finished mark can't be saved says it may be offered again" + " | got: " + other.CleanupExecutionDetail);
         }
         finally
         {

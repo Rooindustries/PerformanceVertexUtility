@@ -368,8 +368,12 @@ public static class CleanupRecoveries
             try
             {
                 using var document = System.Text.Json.JsonDocument.Parse(System.IO.File.ReadAllBytes(manifest));
-                if (document.RootElement.ValueKind == System.Text.Json.JsonValueKind.Object && document.RootElement.TryGetProperty("appId", out var id)
-                    && id.ValueKind == System.Text.Json.JsonValueKind.String && id.GetString() == appId) return manifest;
+                var root = document.RootElement;
+                if (root.ValueKind == System.Text.Json.JsonValueKind.Object && root.TryGetProperty("appId", out var id)
+                    && id.ValueKind == System.Text.Json.JsonValueKind.String && id.GetString() == appId
+                    && root.TryGetProperty("executionStarted", out var started) && started.ValueKind == System.Text.Json.JsonValueKind.True
+                    && root.TryGetProperty("restoreSupported", out var supported) && supported.ValueKind == System.Text.Json.JsonValueKind.True
+                    && root.TryGetProperty("fileBackups", out var backups) && backups.ValueKind == System.Text.Json.JsonValueKind.Array && backups.GetArrayLength() > 0) return manifest;
             }
             catch (Exception error) when (error is System.Text.Json.JsonException or System.IO.IOException or UnauthorizedAccessException) { }
         }
