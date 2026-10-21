@@ -40,7 +40,7 @@ function Read-Manifest {
 
 function Convert-RegPath {
     param([string]$Path)
-    $p = $Path -replace '/', '\'
+    $p = ($Path -replace '/', '\' -replace '\\+', '\').TrimEnd('\')
     if ($p -match '^HKLM\\(.+)$') { return "Registry::HKEY_LOCAL_MACHINE\$($Matches[1])" }
     if ($p -match '^HKCU\\(.+)$') { return "Registry::HKEY_CURRENT_USER\$($Matches[1])" }
     if ($p -match '^HKU\\(.+)$') { return "Registry::HKEY_USERS\$($Matches[1])" }
@@ -58,45 +58,174 @@ function Test-ProtectedService {
 }
 
 function Test-ProtectedRegistryPath {
-    param([string]$Path, [object]$Manifest)
+    param([string]$Path, [object]$Manifest, [string]$Name = '')
+    $normalizedPath = $Path -replace '/', '\'
+    $canonicalPath = (Convert-RegPath $Path).Substring(10)
+    $hive = ($canonicalPath -split '\\', 2)[0]
+    $alias = switch ($hive) {
+        'HKEY_LOCAL_MACHINE' { 'HKLM' }
+        'HKEY_CURRENT_USER' { 'HKCU' }
+        'HKEY_USERS' { 'HKU' }
+        'HKEY_CLASSES_ROOT' { 'HKCR' }
+        'HKEY_CURRENT_CONFIG' { 'HKCC' }
+        default { $hive }
+    }
+    $paths = @($normalizedPath, $canonicalPath, ('Registry::' + $canonicalPath), ($alias + $canonicalPath.Substring($hive.Length)))
     foreach ($pattern in @($Manifest.protected.registryPathPatterns)) {
-        if ($Path -match $pattern) { return $true }
+        foreach ($keyPath in $paths) {
+            if ($keyPath -match $pattern -or ($keyPath + '\' + $Name) -match $pattern) { return $true }
+        }
     }
     return $false
 }
 
+function Open-RegistryKey {
+    param([string]$Path, [switch]$Writable, [switch]$Create)
+    $parts = (Convert-RegPath $Path).Substring(10) -split '\\', 2
+    $root = switch ($parts[0]) {
+        'HKEY_LOCAL_MACHINE' { [Microsoft.Win32.Registry]::LocalMachine }
+        'HKEY_CURRENT_USER' { [Microsoft.Win32.Registry]::CurrentUser }
+        'HKEY_USERS' { [Microsoft.Win32.Registry]::Users }
+        'HKEY_CLASSES_ROOT' { [Microsoft.Win32.Registry]::ClassesRoot }
+        'HKEY_CURRENT_CONFIG' { [Microsoft.Win32.Registry]::CurrentConfig }
+        default { throw "Unsupported registry path: $Path" }
+    }
+    $subkey = if ($parts.Count -gt 1) { $parts[1] } else { '' }
+    if ($Create) { return $root.CreateSubKey($subkey) }
+    return $root.OpenSubKey($subkey, [bool]$Writable)
+}
+
+function Get-RegistryRawValue {
+    param([Microsoft.Win32.RegistryKey]$Key, [string]$Name)
+    if (-not ('RooIndustries.LegacyRegistry.Native' -as [type])) {
+        Add-Type -TypeDefinition @'
+using System;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
+using Microsoft.Win32;
+using Microsoft.Win32.SafeHandles;
+namespace RooIndustries.LegacyRegistry {
+    public sealed class RawValue { public uint Kind; public byte[] Data; }
+    public static class Native {
+        [DllImport("advapi32.dll", EntryPoint="RegQueryValueExW", CharSet=CharSet.Unicode)]
+        private static extern int Query(SafeRegistryHandle key,string name,IntPtr reserved,out uint kind,[Out] byte[] data,ref uint length);
+        public static RawValue Read(RegistryKey key,string name) {
+            uint kind,length=0;
+            int error=Query(key.Handle,name,IntPtr.Zero,out kind,null,ref length);
+            if(error!=0)throw new Win32Exception(error);
+            byte[] data=new byte[checked((int)length)];
+            uint readKind,readLength=length;
+            error=Query(key.Handle,name,IntPtr.Zero,out readKind,data,ref readLength);
+            if(error!=0)throw new Win32Exception(error);
+            if(readKind!=kind||readLength!=length)throw new InvalidOperationException("Registry value changed during raw read");
+            return new RawValue{Kind=kind,Data=data};
+        }
+    }
+}
+'@
+    }
+    return [RooIndustries.LegacyRegistry.Native]::Read($Key, $Name)
+}
+
+function ConvertTo-RegistrySnapshotData {
+    param([string]$Kind, [object]$Value)
+    if ($Kind -in 'String','ExpandString','MultiString') {
+        $encoding = [Text.UTF8Encoding]::new($false, $true)
+        foreach ($text in @($Value)) { $null = $encoding.GetByteCount([string]$text) }
+    }
+    switch ($Kind) {
+        'DWord' { $Value = [BitConverter]::ToUInt32([BitConverter]::GetBytes([int]$Value), 0) }
+        'QWord' { $Value = [BitConverter]::ToUInt64([BitConverter]::GetBytes([long]$Value), 0).ToString([Globalization.CultureInfo]::InvariantCulture) }
+        'Binary' { $Value = [Convert]::ToBase64String([byte[]]$Value) }
+        'MultiString' { $Value = [string[]]$Value }
+    }
+    return ,$Value
+}
+
+function Test-RegistryRawLayout {
+    param([string]$Kind, [byte[]]$Data)
+    $length = $Data.Length
+    switch ($Kind) {
+        'DWord' { return $length -eq 4 }
+        'QWord' { return $length -eq 8 }
+        'Binary' { return $true }
+    }
+    if ($length -lt 2 -or $length % 2 -ne 0 -or $Data[$length-1] -ne 0 -or $Data[$length-2] -ne 0) { return $false }
+    if ($Kind -eq 'MultiString' -and $length -ne 2) { return $length -ge 4 -and $Data[$length-3] -eq 0 -and $Data[$length-4] -eq 0 }
+    return $true
+}
+
+function Test-RegistryChangedLayout {
+    param([object]$Snapshot)
+    return $Snapshot.PSObject.TypeNames.Contains('RooIndustries.LegacyRegistry.ChangedLayout')
+}
+
 function Get-RegistryValueSnapshot {
-    param([object]$Item)
-    $psPath = Convert-RegPath $Item.path
-    $exists = Test-Path -LiteralPath $psPath
+    param([object]$Item, [switch]$AllowChangedLayout)
+    $name = [string]$Item.name
+    $key = Open-RegistryKey $Item.path
+    $exists = $null -ne $key
     $valueExists = $false
     $oldValue = $null
-    if ($exists) {
-        $props = Get-ItemProperty -LiteralPath $psPath -ErrorAction SilentlyContinue
-        $prop = $props.PSObject.Properties | Where-Object { $_.Name -eq $Item.name } | Select-Object -First 1
-        if ($null -ne $prop) {
+    $kind = $null
+    try {
+        if ($key -and $name -in $key.GetValueNames()) {
             $valueExists = $true
-            $oldValue = $prop.Value
+            $kind = [string]$key.GetValueKind($name)
+            if ($kind -in 'String','ExpandString','MultiString','DWord','QWord','Binary') {
+                $native = Get-RegistryRawValue $key $name
+                if ($null -eq $native -or $native.Data -isnot [byte[]] -or ($native.Kind -isnot [int] -and $native.Kind -isnot [uint32])) { throw "Invalid native registry read: $($Item.path)\$name" }
+                if ($native.Kind -ne [int][Microsoft.Win32.RegistryValueKind]$kind) { throw "Registry kind changed while reading: $($Item.path)\$name" }
+                if (-not (Test-RegistryRawLayout $kind $native.Data)) {
+                    if (-not $AllowChangedLayout) { throw "Cannot back up registry raw layout exactly: $($Item.path)\$name" }
+                    $changed = [pscustomobject]@{ valueExists=$true; kind=$kind; oldValue=$null }
+                    $changed.PSObject.TypeNames.Insert(0, 'RooIndustries.LegacyRegistry.ChangedLayout')
+                    return $changed
+                }
+                $oldValue = $key.GetValue($name, $null, [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
+                if ($null -eq $oldValue) { throw "Registry value disappeared while reading $($Item.path)\$($Item.name)" }
+                $managedType = switch ($kind) {
+                    'String' { [string] }
+                    'ExpandString' { [string] }
+                    'MultiString' { [string[]] }
+                    'Binary' { [byte[]] }
+                    'DWord' { [int] }
+                    'QWord' { [long] }
+                }
+                if ($oldValue.GetType() -ne $managedType) { throw "Registry managed type changed while reading: $($Item.path)\$name" }
+                if ($kind -eq 'MultiString') { foreach ($part in $oldValue) { if ($null -eq $part) { throw "Invalid registry string array: $($Item.path)\$name" } } }
+                $encoded = ConvertTo-RegistrySnapshotData $kind $oldValue
+                if ($kind -in 'DWord','QWord') {
+                    $number = if ($kind -eq 'DWord') { [BitConverter]::ToInt32($native.Data, 0) } else { [BitConverter]::ToInt64($native.Data, 0) }
+                    if ($number -ne $oldValue) { throw "Registry value changed while reading: $($Item.path)\$name" }
+                } elseif ($kind -eq 'Binary') {
+                    if (-not [string]::Equals($encoded, [Convert]::ToBase64String($native.Data), [StringComparison]::Ordinal)) { throw "Registry binary data changed while reading: $($Item.path)\$name" }
+                } elseif ($kind -in 'String','ExpandString','MultiString') {
+                    $text = if ($kind -eq 'MultiString') { ((@($oldValue) | ForEach-Object { $_ + [char]0 }) -join '') + [char]0 } else { [string]$oldValue + [char]0 }
+                    $bytes = [Text.Encoding]::Unicode.GetBytes($text)
+                    if (-not [string]::Equals([Convert]::ToBase64String($bytes), [Convert]::ToBase64String($native.Data), [StringComparison]::Ordinal)) { throw "Cannot back up registry text bytes exactly: $($Item.path)\$name" }
+                }
+                $oldValue = $encoded
+            }
         }
+    } finally {
+        if ($key) { $key.Dispose() }
     }
     return [pscustomobject]@{
         path = $Item.path
-        name = $Item.name
+        name = $name
         type = $Item.type
         desiredData = $Item.data
         pathExists = $exists
         valueExists = $valueExists
+        kind = $kind
         oldValue = $oldValue
     }
 }
 
-function Set-RegistryValueFromManifest {
+function Get-ManifestRegistrySnapshot {
     param([object]$Item)
-    $psPath = Convert-RegPath $Item.path
-    if (-not (Test-Path -LiteralPath $psPath)) {
-        New-Item -Path $psPath -Force | Out-Null
-    }
-    $propertyType = switch ($Item.type) {
+    $kind = switch ($Item.type) {
         'REG_DWORD' { 'DWord' }
         'REG_QWORD' { 'QWord' }
         'REG_SZ' { 'String' }
@@ -104,37 +233,113 @@ function Set-RegistryValueFromManifest {
     }
     $value = $Item.data
     if ($Item.type -eq 'REG_DWORD') { $value = [uint32]([uint64]$Item.data) }
-    if ($Item.type -eq 'REG_QWORD') { $value = [uint64]$Item.data }
-    $existing = Get-ItemProperty -LiteralPath $psPath -ErrorAction SilentlyContinue
-    $prop = $existing.PSObject.Properties | Where-Object { $_.Name -eq $Item.name } | Select-Object -First 1
-    if ($null -eq $prop) {
-        New-ItemProperty -LiteralPath $psPath -Name $Item.name -PropertyType $propertyType -Value $value -Force | Out-Null
-    } else {
-        Set-ItemProperty -LiteralPath $psPath -Name $Item.name -Value $value -Force
+    if ($Item.type -eq 'REG_QWORD') { $value = ([uint64]$Item.data).ToString([Globalization.CultureInfo]::InvariantCulture) }
+    if ($kind -eq 'String') { $value = [string]$value }
+    return [pscustomobject]@{ valueExists=$true; kind=$kind; oldValue=$value }
+}
+
+function Convert-RegistrySnapshotData {
+    param([object]$Snapshot)
+    $value = $Snapshot.oldValue
+    switch ($Snapshot.kind) {
+        'String' { $value = [string]$value }
+        'ExpandString' { $value = [string]$value }
+        'MultiString' { $value = [string[]]@($value) }
+        'DWord' { $value = [BitConverter]::ToInt32([BitConverter]::GetBytes([uint32]([uint64]$value)), 0) }
+        'QWord' { $value = [BitConverter]::ToInt64([BitConverter]::GetBytes([uint64]$value), 0) }
+        'Binary' { $value = [Convert]::FromBase64String([string]$value) }
+        default { throw "Unsupported registry value kind: $($Snapshot.kind)" }
     }
+    return ,$value
+}
+
+function Set-RegistrySnapshotData {
+    param([Microsoft.Win32.RegistryKey]$Key, [string]$Name, [object]$Snapshot)
+    $Key.SetValue($Name, (Convert-RegistrySnapshotData $Snapshot), [Microsoft.Win32.RegistryValueKind]$Snapshot.kind)
+}
+
+function Test-RegistrySnapshotEqual {
+    param([object]$Expected, [object]$Actual)
+    if ((Test-RegistryChangedLayout $Expected) -or (Test-RegistryChangedLayout $Actual)) { return $false }
+    if ($Expected.valueExists -ne $Actual.valueExists) { return $false }
+    if (-not $Expected.valueExists) { return $true }
+    if (-not [string]::Equals($Expected.kind, $Actual.kind, [StringComparison]::Ordinal)) { return $false }
+    if ($Expected.kind -eq 'MultiString') {
+        $wanted = @($Expected.oldValue)
+        $current = @($Actual.oldValue)
+        if ($wanted.Count -ne $current.Count) { return $false }
+        for ($index = 0; $index -lt $wanted.Count; $index++) {
+            if (-not [string]::Equals($wanted[$index], $current[$index], [StringComparison]::Ordinal)) { return $false }
+        }
+        return $true
+    }
+    return [string]::Equals([string]$Expected.oldValue, [string]$Actual.oldValue, [StringComparison]::Ordinal)
+}
+
+function Set-RegistryValueFromManifest {
+    param([object]$Item)
+    $expected = Get-ManifestRegistrySnapshot $Item
+    $key = Open-RegistryKey $Item.path -Create
+    try { Set-RegistrySnapshotData $key $Item.name $expected } finally { $key.Dispose() }
+}
+
+function Get-RegistryRestoreSnapshot {
+    param([object]$Snapshot)
+    $expected = $Snapshot
+    if ($Snapshot.valueExists) {
+        if (-not $Snapshot.kind) {
+            $legacyValue = $Snapshot.oldValue
+            if ($Snapshot.type -eq 'REG_DWORD') {
+                try {
+                    $signedValue = [System.Management.Automation.LanguagePrimitives]::ConvertTo($legacyValue, [int], [Globalization.CultureInfo]::CurrentCulture)
+                    $legacyValue = [BitConverter]::ToUInt32([BitConverter]::GetBytes([int]$signedValue), 0)
+                } catch [System.Management.Automation.PSInvalidCastException] {
+                    $legacyValue = [System.Management.Automation.LanguagePrimitives]::ConvertTo($legacyValue, [uint32], [Globalization.CultureInfo]::CurrentCulture)
+                }
+            } elseif ($Snapshot.type -eq 'REG_QWORD') {
+                try {
+                    $signedValue = [System.Management.Automation.LanguagePrimitives]::ConvertTo($legacyValue, [long], [Globalization.CultureInfo]::CurrentCulture)
+                    $legacyValue = [BitConverter]::ToUInt64([BitConverter]::GetBytes([long]$signedValue), 0)
+                } catch [System.Management.Automation.PSInvalidCastException] {
+                    $legacyValue = [System.Management.Automation.LanguagePrimitives]::ConvertTo($legacyValue, [uint64], [Globalization.CultureInfo]::CurrentCulture)
+                }
+            }
+            $expected = Get-ManifestRegistrySnapshot ([pscustomobject]@{ type=$Snapshot.type; data=$legacyValue })
+        }
+        $evidenceError = "Missing or invalid original value evidence: $($Snapshot.path)\$($Snapshot.name)"
+        $kinds = [string[]]@('String','ExpandString','MultiString','DWord','QWord','Binary')
+        if ($expected.kind -isnot [string] -or [Array]::IndexOf($kinds, $expected.kind) -lt 0 -or -not $expected.PSObject.Properties['oldValue'] -or $null -eq $expected.oldValue) { throw $evidenceError }
+        $value = $expected.oldValue
+        if ($expected.kind -ceq 'MultiString') {
+            if ($value -isnot [array]) { throw $evidenceError }
+            foreach ($part in $value) { if ($part -isnot [string]) { throw $evidenceError } }
+        } elseif ($expected.kind -ceq 'DWord') {
+            if ($value -isnot [int] -and $value -isnot [long] -and $value -isnot [uint32] -and $value -isnot [uint64]) { throw $evidenceError }
+        } elseif ($value -isnot [string]) { throw $evidenceError }
+        try {
+            $decoded = Convert-RegistrySnapshotData $expected
+            $canonical = [pscustomobject]@{ valueExists=$true; kind=$expected.kind; oldValue=(ConvertTo-RegistrySnapshotData $expected.kind $decoded) }
+            if (-not (Test-RegistrySnapshotEqual $expected $canonical)) { throw 'Noncanonical original encoding' }
+        } catch { throw ($evidenceError + ': ' + $_.Exception.Message) }
+    }
+    return $expected
 }
 
 function Restore-RegistryValue {
-    param([object]$Snapshot)
-    $psPath = Convert-RegPath $Snapshot.path
+    param([object]$Snapshot, [object]$Expected = $null)
+    if ($null -eq $Expected) { $Expected = Get-RegistryRestoreSnapshot $Snapshot }
     if (-not $Snapshot.valueExists) {
-        if (Test-Path -LiteralPath $psPath) {
-            Remove-ItemProperty -LiteralPath $psPath -Name $Snapshot.name -ErrorAction SilentlyContinue
+        $key = Open-RegistryKey $Snapshot.path -Writable
+        if ($key) {
+            try { $key.DeleteValue($Snapshot.name, $false) } finally { $key.Dispose() }
         }
-        return
+    } else {
+        $key = Open-RegistryKey $Snapshot.path -Create
+        try { Set-RegistrySnapshotData $key $Snapshot.name $Expected } finally { $key.Dispose() }
     }
-    if (-not (Test-Path -LiteralPath $psPath)) {
-        New-Item -Path $psPath -Force | Out-Null
+    if (-not (Test-RegistrySnapshotEqual $Expected (Get-RegistryValueSnapshot $Snapshot))) {
+        throw "Registry restore verification failed: $($Snapshot.path)\$($Snapshot.name)"
     }
-    $propertyType = switch ($Snapshot.type) {
-        'REG_DWORD' { 'DWord' }
-        'REG_QWORD' { 'QWord' }
-        'REG_SZ' { 'String' }
-        default { 'String' }
-    }
-    $value = $Snapshot.oldValue
-    if ($Snapshot.type -eq 'REG_DWORD') { $value = [uint32]([uint64]$value) }
-    New-ItemProperty -LiteralPath $psPath -Name $Snapshot.name -PropertyType $propertyType -Value $value -Force | Out-Null
 }
 
 function Resolve-ServiceTargets {
@@ -186,6 +391,11 @@ function Set-ServiceFromManifest {
     }
 }
 
+function Test-ServiceRestoreComplete {
+    param([object]$Snapshot, [object]$Current)
+    return ($Current.startType -eq $Snapshot.startType -and (-not ($Snapshot.status -eq 'Running') -or $Current.status -eq 'Running'))
+}
+
 function Restore-ServiceSnapshot {
     param([object]$Snapshot)
     if (-not $Snapshot.exists) { return }
@@ -199,7 +409,7 @@ function Restore-ServiceSnapshot {
         Set-Service -Name $Snapshot.name -StartupType $startup
     }
     if ($Snapshot.status -eq 'Running') {
-        Start-Service -Name $Snapshot.name -ErrorAction SilentlyContinue
+        Start-Service -Name $Snapshot.name -ErrorAction Stop
     }
 }
 
@@ -331,11 +541,19 @@ function New-ModuleBackup {
     Ensure-Dir $moduleDir
     $regSnapshots = New-Object System.Collections.Generic.List[object]
     foreach ($rv in @($Module.registryValues)) {
-        $regSnapshots.Add((Get-RegistryValueSnapshot $rv)) | Out-Null
+        if (Test-ProtectedRegistryPath $rv.path $Manifest $rv.name) { continue }
+        $snap = Get-RegistryValueSnapshot $rv
+        if ($snap.valueExists -and $snap.kind -notin 'String','ExpandString','MultiString','DWord','QWord','Binary') {
+            throw "Unsupported registry value kind: $($snap.kind) at $($rv.path)\$($rv.name)"
+        }
+        $regSnapshots.Add($snap) | Out-Null
     }
     $svcSnapshots = New-Object System.Collections.Generic.List[object]
     foreach ($svc in @($Module.services)) {
+        if (Test-ProtectedService $svc.name $Manifest) { continue }
         foreach ($snap in @(Get-ServiceSnapshot $svc.name)) {
+            $startup = if ($svc.startup -in 'Disabled','Manual','Automatic') { $svc.startup } else { $snap.startType }
+            $snap | Add-Member -NotePropertyName appliedStartup -NotePropertyValue $startup
             $svcSnapshots.Add($snap) | Out-Null
         }
     }
@@ -360,7 +578,7 @@ function Invoke-ApplyModule {
     $backupPath = if ($ConfirmApply) { New-ModuleBackup $manifest $module } else { $null }
     $actions = New-Object System.Collections.Generic.List[object]
     foreach ($rv in @($module.registryValues)) {
-        $blocked = Test-ProtectedRegistryPath $rv.path $manifest
+        $blocked = Test-ProtectedRegistryPath $rv.path $manifest $rv.name
         $actions.Add([pscustomobject]@{ type='registry'; target=($rv.path + '\' + $rv.name); blocked=$blocked; action='set'; value=$rv.data }) | Out-Null
         if ($blocked) { continue }
         if ($ConfirmApply) { Set-RegistryValueFromManifest $rv }
@@ -389,11 +607,10 @@ function Invoke-ApplyModule {
 
 function Invoke-RollbackModule {
     $manifest = Read-Manifest
-    [void]$manifest
     $backupRoot = Join-Path $DataRoot ("backups\" + $ModuleId)
-    if (-not (Test-Path -LiteralPath $backupRoot)) { throw "No backups found for $ModuleId in $backupRoot" }
     $backupPath = $BackupPath
     if ([string]::IsNullOrWhiteSpace($backupPath)) {
+        if (-not (Test-Path -LiteralPath $backupRoot)) { throw "No backups found for $ModuleId in $backupRoot" }
         $appliedPaths = @{}
         $runRoot = Join-Path $DataRoot 'runs'
         if (Test-Path -LiteralPath $runRoot) {
@@ -418,16 +635,162 @@ function Invoke-RollbackModule {
     }
     $backup = Get-Content -LiteralPath $backupPath -Raw | ConvertFrom-Json
     if ($backup.moduleId -ne $ModuleId) { throw 'The selected backup belongs to a different module.' }
-    if ($ConfirmApply) {
-        foreach ($rv in @($backup.registry)) { Restore-RegistryValue $rv }
-        foreach ($svc in @($backup.services)) { Restore-ServiceSnapshot $svc }
+    $actions = New-Object System.Collections.Generic.List[object]
+    $leftAsChanged = New-Object System.Collections.Generic.List[object]
+    $alreadyAtOriginal = New-Object System.Collections.Generic.List[object]
+    $failures = New-Object System.Collections.Generic.List[object]
+    $pending = New-Object System.Collections.Generic.List[object]
+    $work = New-Object System.Collections.Generic.List[object]
+    $registryCount = 0
+    $serviceCount = 0
+    foreach ($rv in @($backup.registry)) {
+        $target = @{ type='registry'; path=$rv.path; name=$rv.name }
+        try {
+            $reason = if (Test-ProtectedRegistryPath $rv.path $manifest $rv.name) { 'protected setting' }
+                elseif ($rv.valueExists -isnot [bool]) { 'missing original existence evidence' }
+                elseif (-not $rv.PSObject.Properties['kind'] -and ([string]::IsNullOrEmpty([string]$rv.name) -or [Globalization.CultureInfo]::CurrentCulture.CompareInfo.Compare([string]$rv.name, '(default)', [Globalization.CompareOptions]::IgnoreCase) -eq 0)) { 'missing original existence evidence for legacy default alias' }
+                elseif ($rv.valueExists -and -not $rv.kind) { 'missing applied kind evidence in legacy backup' }
+                elseif (-not $rv.PSObject.Properties['desiredData'] -or -not $rv.type) { 'missing applied value evidence' }
+                else { $null }
+            if ($reason) {
+                $leftAsChanged.Add([pscustomobject]($target + @{ reason=$reason })) | Out-Null
+                Write-Host "Left as changed: $($rv.path)\$($rv.name) ($reason)"
+                continue
+            }
+            $expected = Get-ManifestRegistrySnapshot ([pscustomobject]@{ type=$rv.type; data=$rv.desiredData })
+            $null = ConvertTo-RegistrySnapshotData $expected.kind (Convert-RegistrySnapshotData $expected)
+            $current = Get-RegistryValueSnapshot $rv -AllowChangedLayout
+            $original = $null
+            try { $original = Get-RegistryRestoreSnapshot $rv } catch { if (Test-RegistrySnapshotEqual $expected $current) { throw } }
+            if ($null -ne $original -and (Test-RegistrySnapshotEqual $original $current)) {
+                $alreadyAtOriginal.Add([pscustomobject]$target) | Out-Null
+                Write-Host "Already at original value: $($rv.path)\$($rv.name)"
+            } elseif (-not (Test-RegistrySnapshotEqual $expected $current)) {
+                $reason = if (Test-RegistryChangedLayout $current) { 'current raw layout cannot have been applied' } else { 'current kind or data changed' }
+                $leftAsChanged.Add([pscustomobject]($target + @{ reason=$reason })) | Out-Null
+                Write-Host "Left as changed: $($rv.path)\$($rv.name) ($reason)"
+            } else {
+                $action = [pscustomobject]($target + @{ action='restore'; status='planned' })
+                $actions.Add($action) | Out-Null
+                $work.Add([pscustomobject]@{ target=$target; snapshot=$rv; applied=$expected; original=$original; action=$action }) | Out-Null
+            }
+        } catch {
+            $failures.Add([pscustomobject]($target + @{ phase='preflight'; error=$_.Exception.Message; mayHaveChanged=$false })) | Out-Null
+            $actions.Add([pscustomobject]($target + @{ action='restore'; status='failed' })) | Out-Null
+        }
     }
+    foreach ($svc in @($backup.services)) {
+        $target = @{ type='service'; name=$svc.name }
+        if ($svc.exists -isnot [bool]) {
+            $leftAsChanged.Add([pscustomobject]($target + @{ reason='missing original existence evidence' })) | Out-Null
+            Write-Host "Left as changed: service $($svc.name) (missing original existence evidence)"
+            continue
+        }
+        if (-not $svc.exists) { continue }
+        try {
+            $blocked = Test-ProtectedService $svc.name $manifest
+            $current = @(if (-not $blocked) { Get-ServiceSnapshot $svc.name | Where-Object { $_.exists -and $_.name -ieq $svc.name } })
+            if ($blocked -or $svc.appliedStartup -notin 'Disabled','Manual','Automatic' -or $current.Count -ne 1) {
+                $leftAsChanged.Add([pscustomobject]($target + @{ reason='protected, missing, or applied startup evidence unavailable' })) | Out-Null
+                Write-Host "Left as changed: service $($svc.name) (applied startup unavailable or changed)"
+            } elseif (Test-ServiceRestoreComplete $svc $current[0]) {
+                $alreadyAtOriginal.Add([pscustomobject]$target) | Out-Null
+                Write-Host "Already at original service settings: $($svc.name)"
+            } elseif ($current[0].startType -eq $svc.startType) {
+                $reason = 'original startup matches; recorded Running state is unverified and runtime ownership is unavailable'
+                $leftAsChanged.Add([pscustomobject]($target + @{ reason=$reason })) | Out-Null
+                Write-Host "Left as changed: service $($svc.name) ($reason)"
+            } elseif ($current[0].startType -eq $svc.appliedStartup) {
+                if ($svc.startType -notin 'Disabled','Manual','Automatic') { throw "Unsupported original service startup: $($svc.name)" }
+                $action = [pscustomobject]($target + @{ action='restore'; status='planned' })
+                $actions.Add($action) | Out-Null
+                $work.Add([pscustomobject]@{ target=$target; snapshot=$svc; action=$action }) | Out-Null
+            } else {
+                $leftAsChanged.Add([pscustomobject]($target + @{ reason='current startup changed' })) | Out-Null
+                Write-Host "Left as changed: service $($svc.name)"
+            }
+        } catch {
+            $failures.Add([pscustomobject]($target + @{ phase='preflight'; error=$_.Exception.Message; mayHaveChanged=$false })) | Out-Null
+            $actions.Add([pscustomobject]($target + @{ action='restore'; status='failed' })) | Out-Null
+        }
+    }
+    $stopped = $failures.Count -gt 0
+    $attempted = 0
+    foreach ($item in $work) {
+        if ($stopped) {
+            $item.action.status = 'pending'
+            $pending.Add([pscustomobject]$item.target) | Out-Null
+            continue
+        }
+        if (-not $ConfirmApply) {
+            if ($item.target.type -eq 'registry') { $registryCount++ } else { $serviceCount++ }
+            continue
+        }
+        $writing = $false
+        try {
+            if ($item.target.type -eq 'registry') {
+                $current = Get-RegistryValueSnapshot $item.snapshot -AllowChangedLayout
+                if (Test-RegistrySnapshotEqual $item.original $current) {
+                    $alreadyAtOriginal.Add([pscustomobject]$item.target) | Out-Null
+                    $item.action.status = 'alreadyAtOriginal'
+                    continue
+                }
+                if (-not (Test-RegistrySnapshotEqual $item.applied $current)) {
+                    $reason = if (Test-RegistryChangedLayout $current) { 'current raw layout cannot have been applied' } else { 'changed after preflight' }
+                    $leftAsChanged.Add([pscustomobject]($item.target + @{ reason=$reason })) | Out-Null
+                    $item.action.status = 'leftAsChanged'
+                    Write-Host "Left as changed: $($item.target.path)\$($item.target.name) ($reason)"
+                    continue
+                }
+                $attempted++
+                $writing = $true
+                Restore-RegistryValue $item.snapshot $item.original
+                $registryCount++
+            } else {
+                $svc = $item.snapshot
+                $current = @(Get-ServiceSnapshot $svc.name | Where-Object { $_.exists -and $_.name -ieq $svc.name })
+                if ($current.Count -eq 1 -and (Test-ServiceRestoreComplete $svc $current[0])) {
+                    $alreadyAtOriginal.Add([pscustomobject]$item.target) | Out-Null
+                    $item.action.status = 'alreadyAtOriginal'
+                    continue
+                }
+                if ($current.Count -ne 1 -or $current[0].startType -ne $svc.appliedStartup -or $current[0].startType -eq $svc.startType) {
+                    $reason = if ($current.Count -eq 1 -and $current[0].startType -eq $svc.startType) {
+                        'original startup matches; recorded Running state is unverified and runtime ownership is unavailable'
+                    } else { 'changed after preflight' }
+                    $leftAsChanged.Add([pscustomobject]($item.target + @{ reason=$reason })) | Out-Null
+                    $item.action.status = 'leftAsChanged'
+                    Write-Host "Left as changed: service $($svc.name) ($reason)"
+                    continue
+                }
+                $attempted++
+                $writing = $true
+                Restore-ServiceSnapshot $svc
+                $verified = @(Get-ServiceSnapshot $svc.name | Where-Object { $_.exists -and $_.name -ieq $svc.name })
+                if ($verified.Count -ne 1 -or -not (Test-ServiceRestoreComplete $svc $verified[0])) { throw "Service restore verification failed: $($svc.name)" }
+                $serviceCount++
+            }
+            $item.action.status = 'restored'
+        } catch {
+            $item.action.status = 'failed'
+            $failures.Add([pscustomobject]($item.target + @{ phase='restore'; error=$_.Exception.Message; mayHaveChanged=$writing })) | Out-Null
+            $stopped = $true
+        }
+    }
+    if ($failures.Count) { Write-Host "Rollback incomplete. Backup retained: $backupPath. Review failures and pending settings before retrying." }
     return [pscustomobject]@{
         moduleId = $ModuleId
         dryRun = -not $ConfirmApply
         backupPath = $backupPath
-        restoredRegistry = @($backup.registry).Count
-        restoredServices = @($backup.services).Count
+        success = $failures.Count -eq 0
+        partial = $failures.Count -gt 0 -and $attempted -gt 0
+        restoredRegistry = $registryCount
+        restoredServices = $serviceCount
+        actions = @($actions.ToArray())
+        leftAsChanged = @($leftAsChanged.ToArray())
+        alreadyAtOriginal = @($alreadyAtOriginal.ToArray())
+        failures = @($failures.ToArray())
+        pending = @($pending.ToArray())
     }
 }
 
@@ -503,7 +866,13 @@ switch ($Action) {
     'RollbackModule' {
         Ensure-Dir $DataRoot
         if ([string]::IsNullOrWhiteSpace($ModuleId)) { throw 'ModuleId is required.' }
-        Invoke-RollbackModule
+        $result = Invoke-RollbackModule
+        $result
+        if (-not $result.success) {
+            $failure = [InvalidOperationException]::new("Rollback incomplete. Original backup retained: $($result.backupPath)")
+            $failure.Data['RollbackResult'] = $result
+            throw $failure
+        }
     }
     'Report' {
         New-Report

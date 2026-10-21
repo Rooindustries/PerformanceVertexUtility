@@ -62,6 +62,14 @@ Run individual regressions with `-TestName`:
 .\tools\scripts\Test-Baseline.ps1 -TestName Test-LegacyModuleRollback.ps1,Test-UninstallCleanupApplyPackage.ps1
 ```
 
+The legacy rollback suite also has a fixture-only base/new apply comparison. Supply an exported base harness and its SHA-256; it records the actual absent/present UInt32-max outcomes and checks differing-kind writes on a disposable HKCU key:
+
+```powershell
+.\backend\scripts\Test-LegacyModuleRollback.ps1 -Scenario ApplyComparison -BaseHarnessPath C:\OwnedFixture\base.ps1 -BaseHarnessSha256 <sha256>
+```
+
+Set `ROO_INDUSTRIES_LEGACY_BASE_HARNESS` and `ROO_INDUSTRIES_LEGACY_BASE_HARNESS_SHA256` to include that comparison in the suite's `All` scenario through `Test-Baseline.ps1`. The comparison removes its fixture in `finally` and never changes real services.
+
 From Linux, configure a Windows SSH alias with its own authorized key and use the direct helper:
 
 ```console
