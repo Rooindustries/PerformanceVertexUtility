@@ -8,7 +8,9 @@ static class RetainedProfileChecks
     public static async Task Run(string root, TweakCatalog catalog, Action<bool, string> check)
     {
         foreach (var scenario in new[] { "adapter-switch", "registry-error", "service-transition", "restart", "checking", "timeout", "unobserved" })
+        foreach (var keepCurrent in new[] { true, false })
         {
+            var label = scenario + (keepCurrent ? " with Keep current" : " with a saved choice");
             var service = new ControlAddress("service", "RooIndustriesUiModelFixture", "running");
             var second = catalog.Settings.Single(setting => setting.Id == "second");
             var registry = second.Options.Single(option => option.Id == "on").Changes.Single().Address;
@@ -17,7 +19,7 @@ static class RetainedProfileChecks
             {
                 Options = [new("on", "Running", [], Controls: [new(service, ControlValues.From(true))]), new("off", "Stopped", [], Controls: [new(service, ControlValues.From(false))])],
             }).ToArray() } : catalog;
-            var directory = Path.Combine(root, "retained-" + scenario);
+            var directory = Path.Combine(root, "retained-" + scenario + (keepCurrent ? "-keep" : "-saved"));
             var fixture = new Fixture(directory, subset) { Missing = false };
             var path = Path.Combine(directory, "windows.json");
             if (controls)
@@ -44,14 +46,15 @@ static class RetainedProfileChecks
             model = new WindowsTweaksViewModel(); await model.RefreshCommand.ExecuteAsync(null);
             var firstRow = model.Rows.Single(row => row.Id == "first");
             var secondRow = model.Rows.Single(row => row.Id == second.Id);
-            firstRow.Selected = firstRow.Choices.Single(choice => choice.Id == "off"); secondRow.Selected = secondRow.Choices[0];
+            firstRow.Selected = firstRow.Choices.Single(choice => choice.Id == "off");
+            if (keepCurrent) secondRow.Selected = secondRow.Choices[0];
             check(!secondRow.CanApplyChoice("on"), "The retained row cannot offer a fresh apply during " + scenario);
             var before = OperationFiles.HashFile(path);
             await model.ReviewCommand.ExecuteAsync(null);
             check(fixture.LastPreviewSelections?.OrderBy(selection => selection.SettingId).SequenceEqual(new[] { new TweakSelection("first", "off"), new TweakSelection("second", "on") }) == true,
                 "Partial review retains the applied choice during " + scenario);
-            check(model.HasReview && model.Changes.All(change => change.Name != secondRow.Name) && OperationFiles.HashFile(path) == before,
-                "Review never restores the unedited choice or writes fixture state during " + scenario);
+            check(model.HasReview && model.Changes.All(change => change.Name != secondRow.Name) && OperationFiles.HashFile(path) == before && !model.Detail.Contains("requirements pending", StringComparison.Ordinal),
+                "Review never restores or defers the retained choice or writes fixture state during " + label);
             model.Approved = true; await model.ApplyCommand.ExecuteAsync(null);
             var updated = fixture.Windows.ReadState()!;
             check(updated.Profiles.Single().Selections.Contains(new("second", "on")) && (controls
