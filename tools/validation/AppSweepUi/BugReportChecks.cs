@@ -746,6 +746,26 @@ static class BugReportChecks
         cases.Add((emissionExact[0], @"C:/Users/<user>C:\Users\<user>\u0041pp", true));
         cases.Add((emissionExact[1], @"C:\Users/<user>.C:\Users\<user>\Ubedau0041", true));
         foreach (var profileRoot in new[] { "C:/Users/", @"C:\\Users\\", @"C:\Users/" })
+        foreach (var punctuation in new[] { "", ".", "'" })
+        foreach (var tail in new[] { @"\u0041pp", @"\Ubeda", @"\uFace", @"\x" })
+        {
+            cases.Add((profileRoot + "Zqxother" + punctuation + profileRoot + joinedName + joinedOwn + tail,
+                profileRoot + "<user>" + punctuation + "%USERPROFILE%" + @"C:\Users\<user>" + tail, true));
+            cases.Add((profileRoot + "Zqxother" + punctuation + profileRoot + joinedName + profileRoot + joinedName + joinedOwn + tail,
+                profileRoot + "<user>" + punctuation + "%USERPROFILE%%USERPROFILE%" + @"C:\Users\<user>" + tail, true));
+        }
+        foreach (var profileRoot in new[] { "C:/Users/", @"C:\\Users\\", @"C:\Users/" })
+        foreach (var marker in new[] { "<user>", "<pc-name>", "<sid>", "<USER>", "<Pc-Name>", "<SID>" })
+        foreach (var punctuation in new[] { "", ".", "'" })
+        foreach (var macro in new[] { "%USERPROFILE%", "%USERPROFILE%%USERPROFILE%" })
+        foreach (var tail in new[] { @"\u0041pp", @"\Ubeda", @"\uFace", @"\x" })
+            cases.Add((profileRoot + marker + punctuation + macro + joinedOwn + tail,
+                profileRoot + marker.ToLowerInvariant() + punctuation + macro + @"C:\Users\<user>" + tail, true));
+        var quotedChainInput = "C:/Users/<user>'%USERPROFILE%" + joinedOwn + @"\u0041pp";
+        var quotedChainExpected = @"C:/Users/<user>'%USERPROFILE%C:\Users\<user>\u0041pp";
+        cases.Add((JsonSerializer.Serialize(quotedChainInput, relaxed).Replace("'", @"\u0027", StringComparison.Ordinal),
+            JsonSerializer.Serialize(quotedChainExpected, relaxed).Replace("'", @"\u0027", StringComparison.Ordinal), true));
+        foreach (var profileRoot in new[] { "C:/Users/", @"C:\\Users\\", @"C:\Users/" })
         foreach (var marker in new[] { "<user>", "<USER>", "<pc-name>", "<Pc-Name>", "<sid>", "<SID>" })
         foreach (var punctuation in new[] { "", " ", ".", "'", ",;!)]}' " })
         foreach (var tail in new[] { @"\u0041pp", @"\Ubeda", @"\uFace" })
@@ -804,6 +824,8 @@ static class BugReportChecks
             var owner = new BugRedactor(profile, ownName, "GAMER-PC");
             var unicodeCases = new List<(string Input, string Expected)>
             {
+                ("C:/Users/" + "Zqxother" + "C:/Users/" + ownName + profile + @"\u0041pp", @"C:/Users/<user>%USERPROFILE%C:\Users\<user>\u0041pp"),
+                (@"C:/Users/<pc-name>%USERPROFILE%%USERPROFILE%" + profile + @"\u0041pp", @"C:/Users/<pc-name>%USERPROFILE%%USERPROFILE%C:\Users\<user>\u0041pp"),
                 (@"C:/Users/<user>" + profile + @"\u0041pp", @"C:/Users/<user>C:\Users\<user>\u0041pp"),
                 (@"C:\\Users\\<pc-name>." + profile + @"\uFace", @"C:\\Users\\<pc-name>.C:\Users\<user>\uFace"),
                 (@"C:/Users/" + @"Zqxother" + profile + @"\x", @"C:/Users/<user>C:\Users\<user>\x"),
