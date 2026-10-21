@@ -35,7 +35,7 @@ Backend scripts run on the Windows PowerShell 5.1 that ships with Windows. `tool
 
 ## Prove a change on Linux
 
-Linux is the development host. These are the four Baseline jobs every pull request runs:
+Linux is the development host. These four Baseline jobs run for same-repository pull requests, pushes to `main` and manual runs on the self-hosted Linux runner (`runs-on: [self-hosted, laptop]`). Fork pull requests skip these jobs and need isolated local validation:
 
 ```sh
 python -m pip install -r tools/validation/requirements.txt
@@ -45,11 +45,11 @@ pwsh tools/validation/check_powershell.ps1   # needs PSScriptAnalyzer 1.25.0
 python tools/validation/build_dotnet.py      # needs the .NET 8 SDK
 ```
 
-If GitHub Actions can't start them, run them on the PR's head commit and post the results on the PR.
+If GitHub Actions can't start them, run the same steps on the exact head commit and record a `local-ci` commit status (`gh api repos/Rooindustries/PerformanceVertexUtility/statuses/<sha> -f state=success -f context=local-ci -f description=...`), never as PR text.
 
 ## What needs real Windows
 
-Anything that reads or changes the registry, services, process, I/O or GPU priority, drivers or the desktop app. Run the backend suites from an isolated source copy on a Windows test PC:
+Anything that reads or changes the registry, services, process, I/O or GPU priority, drivers or the desktop app. The Baseline workflow's Windows matrix runs on GitHub-hosted Windows only on a manual run, or on pushes to `main` while the repository variable `HOSTED_WINDOWS_CI` is `true`. Run the backend suites from an isolated source copy on a Windows test PC:
 
 ```powershell
 .\tools\scripts\Test-Baseline.ps1 -TestName Test-LegacyModuleRollback.ps1
