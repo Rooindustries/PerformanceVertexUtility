@@ -724,7 +724,7 @@ static class BugReportChecks
         var emissionExact = new[]
         {
             @"C:/Users/" + joinedOwn + @"\u0041pp",
-            @"C:\Users/u0012345\u0041ppé." + joinedOwn + @"\Ubedau0041"
+            @"C:\Users/" + @"u0012345\u0041ppé." + joinedOwn + @"\Ubedau0041"
         };
         cases.Add((emissionExact[0], @"C:/Users/<user>C:\Users\<user>\u0041pp", true));
         cases.Add((emissionExact[1], @"C:\Users/<user>.C:\Users\<user>\Ubedau0041", true));
@@ -744,12 +744,12 @@ static class BugReportChecks
         foreach (var punctuation in new[] { "", ".", ";", "'" })
         foreach (var tail in new[] { @"\u0041pp", @"\Ubeda", @"\uD83D\uDE00x", @"\x", "/x" })
         {
-            var input = @"C:/Users/ZqxotherC:\\Users\\" + joinedName + punctuation + joinedOwn + tail;
+            var input = @"C:/Users/" + @"ZqxotherC:\\Users\\" + joinedName + punctuation + joinedOwn + tail;
             var expected = @"C:/Users/<user>C:\\Users\\<user>" + punctuation + @"C:\Users\<user>" + tail;
             cases.Add((input, expected, true));
             var fourthRoot = @"C:\\Users\\";
             var fourthTail = tail.Replace(@"\", @"\\", StringComparison.Ordinal);
-            cases.Add((@"C:/Users/ZqxotherC:\\Users\\" + joinedName + punctuation + joinedOwn + punctuation + fourthRoot + joinedName + fourthTail,
+            cases.Add((@"C:/Users/" + @"ZqxotherC:\\Users\\" + joinedName + punctuation + joinedOwn + punctuation + fourthRoot + joinedName + fourthTail,
                 @"C:/Users/<user>C:\\Users\\<user>" + punctuation + @"C:\Users\<user>" + punctuation + fourthRoot + "<user>" + fourthTail, true));
             if (punctuation.Length > 0)
             {
@@ -760,9 +760,9 @@ static class BugReportChecks
         }
         foreach (var tail in new[] { @"\u0041pp", @"\Ubeda", @"\x", "/x" })
         {
-            cases.Add((@"C:\Users\Zqxother" + joinedOwn + tail, @"C:\Users\<user>%USERPROFILE%" + tail, true));
+            cases.Add((@"C:\Users\" + @"Zqxother" + joinedOwn + tail, @"C:\Users\<user>%USERPROFILE%" + tail, true));
             cases.Add((joinedOwn + tail, "%USERPROFILE%" + tail, true));
-            cases.Add((@"C:/Users/Zqxother""" + joinedOwn + tail, @"C:/Users/<user>""%USERPROFILE%" + tail, true));
+            cases.Add((@"C:/Users/" + @"Zqxother""" + joinedOwn + tail, @"C:/Users/<user>""%USERPROFILE%" + tail, true));
         }
         foreach (var shared in new[] { "Public", "Default", "Default User", "All Users" })
             cases.Add((@"C:\Users\" + shared + @"\boundary-control", @"C:\Users\" + shared + @"\boundary-control", true));
@@ -772,16 +772,16 @@ static class BugReportChecks
             var owner = new BugRedactor(profile, ownName, "GAMER-PC");
             var unicodeCases = new List<(string Input, string Expected)>
             {
-                (@"C:/Users/Zqxother" + profile + @"\x", @"C:/Users/<user>C:\Users\<user>\x"),
-                (@"C:\Users\Zqxother" + profile + @"\x", @"C:\Users\<user>%USERPROFILE%\x"),
+                (@"C:/Users/" + @"Zqxother" + profile + @"\x", @"C:/Users/<user>C:\Users\<user>\x"),
+                (@"C:\Users\" + @"Zqxother" + profile + @"\x", @"C:\Users\<user>%USERPROFILE%\x"),
                 (profile + @"\u0041pp", @"%USERPROFILE%\u0041pp"),
-                (@"C:/Users/Zqxother" + profile + @"\u0041pp", @"C:/Users/<user>C:\Users\<user>\u0041pp"),
-                (@"C:\Users/u0012345\u0041ppé." + profile + @"\Ubedau0041", @"C:\Users/<user>.C:\Users\<user>\Ubedau0041"),
-                (@"C:/Users/ZqxotherC:\\Users\\" + ownName + profile + @"\u0041pp", @"C:/Users/<user>C:\\Users\\<user>C:\Users\<user>\u0041pp"),
-                (@"C:/Users/ZqxotherC:\\Users\\" + ownName + "." + profile + @"\x", @"C:/Users/<user>C:\\Users\\<user>.C:\Users\<user>\x"),
-                (@"C:/Users/ZqxotherC:\\Users\\" + ownName + profile + @"C:\\Users\\" + ownName + @"\\x", @"C:/Users/<user>C:\\Users\\<user>C:\Users\<user>C:\\Users\\<user>\\x")
+                (@"C:/Users/" + @"Zqxother" + profile + @"\u0041pp", @"C:/Users/<user>C:\Users\<user>\u0041pp"),
+                (@"C:\Users/" + @"u0012345\u0041ppé." + profile + @"\Ubedau0041", @"C:\Users/<user>.C:\Users\<user>\Ubedau0041"),
+                (@"C:/Users/" + @"ZqxotherC:\\Users\\" + ownName + profile + @"\u0041pp", @"C:/Users/<user>C:\\Users\\<user>C:\Users\<user>\u0041pp"),
+                (@"C:/Users/" + @"ZqxotherC:\\Users\\" + ownName + "." + profile + @"\x", @"C:/Users/<user>C:\\Users\\<user>.C:\Users\<user>\x"),
+                (@"C:/Users/" + @"ZqxotherC:\\Users\\" + ownName + profile + @"C:\\Users\\" + ownName + @"\\x", @"C:/Users/<user>C:\\Users\\<user>C:\Users\<user>C:\\Users\\<user>\\x")
             };
-            unicodeCases.Add((JsonSerializer.Serialize(@"C:\Users/Zqxother'" + profile + @"\x", relaxed).Replace("'", @"\u0027", StringComparison.Ordinal),
+            unicodeCases.Add((JsonSerializer.Serialize(@"C:\Users/" + @"Zqxother'" + profile + @"\x", relaxed).Replace("'", @"\u0027", StringComparison.Ordinal),
                 JsonSerializer.Serialize(@"C:\Users/<user>'C:\Users\<user>\x", relaxed).Replace("'", @"\u0027", StringComparison.Ordinal)));
             foreach (var (input, expected) in unicodeCases)
             {
