@@ -1109,7 +1109,7 @@ public static class RooIndustriesLegacyFixtureRaw {
             foreach ($nameMode in 'empty','reserved','null','missing','literal-default') {
                 $name=if ($nameMode -eq 'reserved') { 'PSPath' } elseif ($nameMode -eq 'literal-default') { '(default)' } else { '' }
                 $manifest=Get-Content $fixtureManifest -Raw | ConvertFrom-Json
-                $manifest.modules[0].registryValues[0].name=$name
+                $manifest.modules[0].registryValues[0] | Add-Member -NotePropertyName name -NotePropertyValue $name -Force
                 if ($nameMode -eq 'null') { $manifest.modules[0].registryValues[0].name=$null }
                 if ($nameMode -eq 'missing') { $manifest.modules[0].registryValues[0].PSObject.Properties.Remove('name') }
                 $manifest.modules[0].registryValues[0].type='REG_SZ'
