@@ -50,7 +50,7 @@ TweakCatalog TwoSettingCatalog()
 }
 if (args is ["--denied-releases", var deniedRepo])
 {
-    try { await DeniedReleaseChecks.Run(root, OperationFiles.Read<TweakCatalog>(Path.Combine(deniedRepo, "backend/catalogs/windows-tweaks.json")), Check); Console.WriteLine($"Completed {count} denied release UI checks."); }
+    try { await DeniedReleaseChecks.Run(root, OperationFiles.Read<TweakCatalog>(Path.Combine(deniedRepo, "backend/catalogs/windows-tweaks.json")), Check, deniedRepo); Console.WriteLine($"Completed {count} denied release UI checks."); }
     finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
     return;
 }
@@ -92,7 +92,7 @@ try
     if (args is [var catalogRepo])
     {
         var catalog = OperationFiles.Read<TweakCatalog>(Path.Combine(Path.GetFullPath(catalogRepo), "backend/catalogs/windows-tweaks.json"));
-        await DeniedReleaseChecks.Run(root, catalog, Check);
+        await DeniedReleaseChecks.Run(root, catalog, Check, catalogRepo);
         await RetainedRequirementChecks.Run(root, catalog, Check);
         ActionChecks.Run(catalog, Check);
         await PolicyProfileChecks.Run(root, catalog, Check);
