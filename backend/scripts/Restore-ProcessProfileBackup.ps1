@@ -352,7 +352,7 @@ try {
                 continue
             }
             $remaining = New-RollbackPreviewEntry $snapshot $candidate
-            $restoreFailed = @($skipped | Where-Object { $_.processId -eq (Get-RooIndustriesPropertyValue $snapshot 'processId' 0) -and $_.category -eq 'restore-failed' }).Count -gt 0
+            $restoreFailed = @($skipped | Where-Object { $_.processId -eq (Get-RooIndustriesPropertyValue $snapshot 'processId' 0) -and $_.category -in @('restore-failed','blocked','exited') }).Count -gt 0
             if ($restoreFailed -or $remaining.blocked -or @(Get-RooIndustriesPreviewControlChanges $remaining).Count -gt 0) {
                 $pending.Add($remaining) | Out-Null
             }
