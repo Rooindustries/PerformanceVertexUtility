@@ -669,6 +669,8 @@ static class BugReportChecks
         }
         cases.Add((@"""C:\\Users\\B\u006Fb\\x""", @"""C:\\Users\\<user>\\x""", true));
         var spanStart = cases.Count;
+        foreach (var suffix in new[] { @"\u003Cusername\u003E\x", @"\u0001\x", "<user>" + @"\x", @"\u003Cuser\\u003E\x" })
+            cases.Add((@"C:\Users\" + "Zqxother" + suffix, @"C:\Users\<user>" + suffix, true));
         foreach (var drive in new[] { "C", "D" })
         foreach (var separator in new[] { @"\", "/" })
         foreach (var emoji in new[] { "😀", "😌" })
