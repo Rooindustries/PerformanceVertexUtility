@@ -2,8 +2,8 @@ param(
     [string]$HarnessPath = (Join-Path $PSScriptRoot '..\..\LeanClientOptimizer.ps1'),
     [ValidateSet('All','Selection','Drift','Registry','Recovery','ApplyComparison')][string]$Scenario = 'All',
     [ValidateSet('All','Signed','LegacyEvidence','Preflight','RegistryFailure','ServiceFailure')][string]$RecoveryCase = 'All',
-    [string]$BaseHarnessPath = $env:ROO_LEGACY_BASE_HARNESS,
-    [string]$BaseHarnessSha256 = $env:ROO_LEGACY_BASE_HARNESS_SHA256
+    [string]$BaseHarnessPath = $env:ROO_INDUSTRIES_LEGACY_BASE_HARNESS,
+    [string]$BaseHarnessSha256 = $env:ROO_INDUSTRIES_LEGACY_BASE_HARNESS_SHA256
 )
 $ErrorActionPreference = 'Stop'
 $tempRoot = Join-Path ([IO.Path]::GetTempPath()) ('roo-industries-legacy-rollback-' + [guid]::NewGuid().ToString('N'))
@@ -650,7 +650,7 @@ try {
                     $comparisonManifest=Join-Path $tempRoot 'apply-comparison-manifest.json'
                     @{protected=@{services=@();registryPathPatterns=@()};modules=@(@{id='fixture';name='Fixture';registryValues=@(@{path=$comparisonPath;name='Value';type='REG_DWORD';data=$desired});services=@()})}|ConvertTo-Json -Depth 8|Set-Content $comparisonManifest
                     $candidate=if ($flavor -eq 'base') {$BaseHarnessPath} else {$HarnessPath}
-                    . $candidate -Action ListModules -ManifestPath $comparisonManifest -DataRoot (Join-Path $tempRoot ('comparison-'+$flavor+'-'+[guid]::NewGuid().ToString('N'))) -ModuleId fixture | Out-Null
+                    . $candidate -Action ListModules -ManifestPath $comparisonManifest -DataRoot (Join-Path $tempRoot ('compare-'+$flavor)) -ModuleId fixture | Out-Null
                     function Get-BenchmarkSnapshot { param($Label) @{label=$Label} }
                     function Invoke-SmokeTest { @() }
                     $ConfirmApply=$true

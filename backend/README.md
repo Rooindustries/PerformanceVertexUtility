@@ -68,7 +68,7 @@ The legacy rollback suite also has a fixture-only base/new apply comparison. Sup
 .\backend\scripts\Test-LegacyModuleRollback.ps1 -Scenario ApplyComparison -BaseHarnessPath C:\OwnedFixture\base.ps1 -BaseHarnessSha256 <sha256>
 ```
 
-Set `ROO_LEGACY_BASE_HARNESS` and `ROO_LEGACY_BASE_HARNESS_SHA256` to include that comparison in the suite's `All` scenario through `Test-Baseline.ps1`. The comparison removes its fixture in `finally` and never changes real services.
+Set `ROO_INDUSTRIES_LEGACY_BASE_HARNESS` and `ROO_INDUSTRIES_LEGACY_BASE_HARNESS_SHA256` to include that comparison in the suite's `All` scenario through `Test-Baseline.ps1`. The comparison removes its fixture in `finally` and never changes real services.
 
 From Linux, configure a Windows SSH alias with its own authorized key and use the direct helper:
 
