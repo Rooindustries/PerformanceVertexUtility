@@ -119,7 +119,8 @@
         "tools/validation/Update/Clear-UpdateFrame.ps1",
         "tools/validation/Update/Harness.Common.ps1",
         "tools/validation/BugReportE2E/shared/OwnedBoundary.cs",
-        "tools/validation/BugReportE2E/phases/Contract.Common.ps1"
+        "tools/validation/BugReportE2E/phases/Contract.Common.ps1",
+        "tools/validation/Background/Invoke-RestoreE2EGates.ps1"
       ],
       "reason": "Windows harness staging and host-lease root; existing frames, cleanup ownership and path-length guards depend on this exact path spelling, including its source escaping."
     },
@@ -143,6 +144,14 @@
         "tools/validation/Governor/Test-GovernorSetupFallbacks.ps1"
       ],
       "reason": "On-disk game-root fixture used in ownership and setup-fallback requests; preserve the exact persisted path."
+    },
+    {
+      "text": "Local\\RooProcessControls-",
+      "files": [
+        "backend/scripts/ProcessProfile.Common.ps1",
+        "tools/validation/Background/NativeRestoreContention/Program.cs"
+      ],
+      "reason": "Existing native process-instance mutex prefix; restore and contention controls must share the exact namespace and PID/native creation identity."
     },
     {
       "text": "Local\\RooTrace-",

@@ -42,7 +42,7 @@ $inputProbe=$null;$bodyError=$null;$cleanupError=$null;$directory=$null
 try{
  $inputProbe=[RooIndustriesValidationOwnership.ProbeFile]::Open((Get-HarnessLongPath $inputPath),$inputEntries[0].identity.id,$inputEntries[0].identity.hash)
  $inputText=$inputProbe.ReadText();$inputs=$inputText|ConvertFrom-Json
- if($inputs.sourceCommit -cne $receipt.sourceCommit -or $inputs.originalSourceCommit -cne 'b0dbcd240953fbf1b87ef0e1d6c15afa44152cb1'){throw 'Current/original source binding changed.'}
+ if($inputs.sourceCommit -cne $receipt.sourceCommit -or $inputs.originalSourceCommit -cne 'b0dbcd240953fbf1b87ef0e1d6c15afa44152cb1' -or $inputs.reviewedSourceCommit -cne 'c50c8c8c9a0c8bd2d9103dc0059d088f79a85964'){throw 'Current/original source binding changed.'}
  $bindings=[Collections.Generic.Dictionary[string,object]]::new([StringComparer]::OrdinalIgnoreCase)
  foreach($binding in @($inputs.files)){
   if($binding.path -isnot [string] -or -not [IO.Path]::IsPathRooted($binding.path) -or $binding.sha256 -isnot [string] -or $binding.sha256 -notmatch '^[a-fA-F0-9]{64}$'){throw 'Malformed original input file binding.'}
@@ -80,41 +80,53 @@ try{
  $originalSource=Get-HarnessPlainPath ([string]$inputs.originalSource)
  $originalManifestPath=Get-HarnessPlainPath ([string]$inputs.originalSourceManifest)
  if(-not $originalSource.StartsWith($OutRoot+'\',[StringComparison]::OrdinalIgnoreCase) -or -not $bindings.ContainsKey($originalManifestPath)){throw 'Original source export/manifest escapes or lacks its original hash binding.'}
- function Assert-E2EOriginalSource{
-  Assert-ProtectedFrame $originalSource;Assert-PlainAncestry $originalManifestPath
-  $manifest=[IO.File]::ReadAllText((Get-HarnessLongPath $originalManifestPath))|ConvertFrom-Json
+ $originalIdentity=Get-E2EOwnedFolder $originalSource
+ if($inputs.reviewedSourceCommit -cne 'c50c8c8c9a0c8bd2d9103dc0059d088f79a85964' -or $inputs.reviewedSource -isnot [string] -or $inputs.reviewedSourceManifest -isnot [string] -or ($inputs.reviewedSourceFileCount -isnot [int] -and $inputs.reviewedSourceFileCount -isnot [long]) -or $inputs.reviewedSourceFileCount -le 0){throw 'Malformed reviewed c50 input binding.'}
+ $reviewedSource=(Get-HarnessPlainPath $inputs.reviewedSource).TrimEnd('\')
+ $reviewedManifestPath=Get-HarnessPlainPath $inputs.reviewedSourceManifest
+ if($reviewedSource -ine $inputs.reviewedSource -or $reviewedManifestPath -ine $inputs.reviewedSourceManifest -or -not $reviewedSource.StartsWith($OutRoot+'\',[StringComparison]::OrdinalIgnoreCase) -or -not $reviewedManifestPath.StartsWith($OutRoot+'\',[StringComparison]::OrdinalIgnoreCase) -or -not $bindings.ContainsKey($reviewedManifestPath) -or $reviewedSource -ieq $originalSource){throw 'Reviewed c50 path/manifest alias, separation or binding refused.'}
+ Assert-PlainAncestry $reviewedSource;Assert-PlainAncestry $reviewedManifestPath
+ $reviewedIdentity=Get-E2EOwnedFolder $reviewedSource
+ function Assert-E2EOriginalSource([string]$Export=$originalSource,[string]$ManifestPath=$originalManifestPath,[string]$Commit=$inputs.originalSourceCommit,[int]$FileCount=$inputs.originalSourceFileCount){
+  Assert-ProtectedFrame $Export;Assert-PlainAncestry $ManifestPath
+  $manifest=[IO.File]::ReadAllText((Get-HarnessLongPath $ManifestPath))|ConvertFrom-Json
   $files=@($manifest.files.PSObject.Properties)
-  if($manifest.commit -cne $inputs.originalSourceCommit -or $files.Count -le 0 -or $files.Count -ne $inputs.originalSourceFileCount){throw 'Original b0 source commit/count differs from the original input binding.'}
+  if($manifest.commit -cne $Commit -or $files.Count -le 0 -or $files.Count -ne $FileCount){throw 'Original b0 source commit/count differs from the original input binding.'}
   $seen=[Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
   foreach($file in $files){
-   $path=Get-HarnessPlainPath (Join-Path $originalSource $file.Name)
-   if(-not $path.StartsWith($originalSource+'\',[StringComparison]::OrdinalIgnoreCase) -or -not $seen.Add($path) -or $file.Value -notmatch '^[a-fA-F0-9]{64}$'){throw 'Original source manifest traversal/alias/duplicate refused.'}
+   $path=Get-HarnessPlainPath (Join-Path $Export $file.Name)
+   if(-not $path.StartsWith($Export+'\',[StringComparison]::OrdinalIgnoreCase) -or -not $seen.Add($path) -or $file.Value -notmatch '^[a-fA-F0-9]{64}$'){throw 'Original source manifest traversal/alias/duplicate refused.'}
    Assert-PlainAncestry $path
    if((Get-HarnessFileSha256 $path) -ine $file.Value){throw ('Original b0 export bytes changed: '+$file.Name)}
   }
-  $actual=@(Get-HarnessTree $originalSource -FilesOnly)
+  $actual=@(Get-HarnessTree $Export -FilesOnly)
   if($actual.Count -ne $files.Count){throw 'Original b0 export file count differs from its bound manifest.'}
   foreach($file in $actual){if(-not $seen.Contains($file.FullName)){throw 'Unbound original export file.'}}
   return $files.Count
  }
  $originalCount=Assert-E2EOriginalSource
+ $reviewedCount=Assert-E2EOriginalSource $reviewedSource $reviewedManifestPath $inputs.reviewedSourceCommit $inputs.reviewedSourceFileCount
  $directory=Join-Path $OutRoot ('restore-gates-'+[guid]::NewGuid().ToString('N'))
  $null=New-HarnessDirectory $directory 'restore-e2e-artifacts' 'frame'
  $legacy=Join-Path $directory 'legacy';$native=Join-Path $directory 'native';$output=Join-Path $directory 'output'
  foreach($path in $legacy,$native,$output){$null=New-HarnessDirectory $path 'restore-e2e-group' 'frame'}
  & (Join-Path $Source 'tools\validation\Background\Test-RestoreKeepsOtherValue.ps1') -Source $Source -OutRoot $legacy
  if(-not [IO.File]::Exists((Join-Path $legacy 'summary.json'))){throw 'Legacy group lacks its asserted completion artifact.'}
- $parameters=@{Source=$Source;OutRoot=$native;ActorExe=$actor;SourceCommit=$receipt.sourceCommit;OriginalSource=$originalSource}
+ $parameters=@{Source=$Source;OutRoot=$native;ActorExe=$actor;SourceCommit=$receipt.sourceCommit;OriginalSource=$originalSource;ReviewedSource=$reviewedSource}
  if($Scenario.Count){$parameters.Scenario=$Scenario}
  & (Join-Path $Source 'tools\validation\Background\Test-RestoreSerialization.ps1') @parameters
  $summary=Get-Content -LiteralPath (Join-Path $native 'serialization-summary.json') -Raw|ConvertFrom-Json
- if(-not$summary.passed -or @($summary.cases).Count -eq 0){throw 'Native group lacks asserted cleanup/completion.'}
+ if(-not$summary.passed -or @($summary.cases).Count -eq 0 -or $summary.actualCaseCount -ne $summary.expectedCaseCount -or @($summary.selectedTriples).Count -ne @($summary.cases).Count){throw 'Native group lacks asserted cleanup/completion.'}
  & (Join-Path $Source 'tools\validation\Background\Test-RestoreSummaryOutput.ps1') -Source $Source -OutRoot $output -AppSweepExe $app
  Assert-HarnessHostLease
  $finalSource=Assert-E2ECurrentSource
  $finalInputEntries=@(Get-HarnessEntries|Where-Object {$_.kind -ceq 'file' -and $_.state -ceq 'active' -and (Get-HarnessPlainPath ([string]$_.identity.path)) -ieq $inputPath})
  if($finalInputEntries.Count -ne 1 -or $finalInputEntries[0].id -cne $inputEntries[0].id -or $finalInputEntries[0].identity.id -cne $inputEntries[0].identity.id -or $finalInputEntries[0].identity.hash -cne $inputEntries[0].identity.hash){throw 'Original active input ledger entry changed during execution.'}
- if((Assert-E2ECompiledFiles) -ne $publishedCount -or (Assert-E2EOriginalSource) -ne $originalCount -or $inputProbe.ReadText() -cne $inputText){throw 'Post-group original source/artifact binding changed.'}
+ if((Assert-E2ECompiledFiles) -ne $publishedCount -or (Assert-E2EOriginalSource) -ne $originalCount -or (Assert-E2EOriginalSource $reviewedSource $reviewedManifestPath $inputs.reviewedSourceCommit $inputs.reviewedSourceFileCount) -ne $reviewedCount -or $inputProbe.ReadText() -cne $inputText){throw 'Post-group original source/artifact binding changed.'}
+ foreach($exportIdentity in $originalIdentity,$reviewedIdentity){
+  $exportNow=Get-E2EOwnedFolder $exportIdentity.path
+  if($exportNow.creationTimeFileTimeUtc -cne $exportIdentity.creationTimeFileTimeUtc){throw 'Original b0/reviewed c50 export ownership changed.'}
+ }
  $now=Get-E2EOwnedFolder $OutRoot
  if($now.creationTimeFileTimeUtc -cne $outputIdentity.creationTimeFileTimeUtc){throw 'Original output root identity changed.'}
 }catch{$bodyError=$_.Exception}
@@ -122,5 +134,5 @@ finally{if($inputProbe){try{$inputProbe.Dispose()}catch{$cleanupError=$_.Excepti
 if($bodyError -and $cleanupError){throw [AggregateException]::new([Exception[]]@($bodyError,$cleanupError))}
 if($bodyError){[Runtime.ExceptionServices.ExceptionDispatchInfo]::Capture($bodyError).Throw()}
 if($cleanupError){[Runtime.ExceptionServices.ExceptionDispatchInfo]::Capture($cleanupError).Throw()}
-$null=New-HarnessText (Join-Path $directory 'gates.json') (@{sourceCommit=$receipt.sourceCommit;manifestSha256=$receipt.manifestSha256;frameId=$receipt.frameId;sourceFileCount=@($finalSource.files.PSObject.Properties).Count;originalSourceFileCount=$originalCount;publishedFileCount=$publishedCount;inputFileIdentity=$inputEntries[0].identity;engine=$PSVersionTable.PSVersion.ToString();restoreSessionId=(Get-Process -Id $PID).SessionId;passed=$true;scope='Selected real backend serialization/provenance and output groups only; C6/UI8/media/both vision remain separate required gates';selectedScenarios=$Scenario}|ConvertTo-Json -Depth 15) 'restore-e2e-completion' 'frame'
+$null=New-HarnessText (Join-Path $directory 'gates.json') (@{sourceCommit=$receipt.sourceCommit;manifestSha256=$receipt.manifestSha256;frameId=$receipt.frameId;sourceFileCount=@($finalSource.files.PSObject.Properties).Count;originalSourceFileCount=$originalCount;reviewedSourceCommit=$inputs.reviewedSourceCommit;reviewedSourceFileCount=$reviewedCount;reviewedManifestSha256=$bindings[$reviewedManifestPath].sha256;serializationExpectedCount=$summary.expectedCaseCount;serializationActualCount=$summary.actualCaseCount;serializationTriples=$summary.selectedTriples;publishedFileCount=$publishedCount;inputFileIdentity=$inputEntries[0].identity;engine=$PSVersionTable.PSVersion.ToString();restoreSessionId=(Get-Process -Id $PID).SessionId;passed=$true;scope='Selected real backend serialization/provenance and output groups only; C6/UI8/media/both vision remain separate required gates';selectedScenarios=$Scenario}|ConvertTo-Json -Depth 15) 'restore-e2e-completion' 'frame'
 'ROO_INDUSTRIES_RESTORE_E2E_GATES_COMPLETE'

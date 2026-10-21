@@ -1101,7 +1101,13 @@ function Get-RooIndustriesProcessControlReadback {
 
 function Get-RooIndustriesRestorableProcessControls {
     param($Snapshot, $CurrentState)
-    Get-RooIndustriesPropertyArray $Snapshot 'controlChanges'
+    $recorded = @(Get-RooIndustriesPropertyArray $Snapshot 'controlChanges')
+    foreach ($change in $recorded) { $change }
+    foreach ($control in 'priorityClass', 'affinityMask', 'ioPriority', 'memoryPriority', 'gpuPriority') {
+        if (@($recorded | Where-Object { [string](Get-RooIndustriesPropertyValue $_ 'control' '') -eq $control }).Count -gt 0) { continue }
+        $applied = Get-RooIndustriesAppliedControlValue $Snapshot $control
+        if ($applied.known) { [pscustomobject]@{ control = $control } }
+    }
 }
 
 $script:RooIndustriesLeftAsSet = 'Left as another program set it.'
@@ -1122,7 +1128,7 @@ function Get-RooIndustriesRestoreControlOwnershipReason {
 function Get-RooIndustriesAppliedControlValue {
     param($Snapshot, [string]$Control)
     $recorded = @(Get-RooIndustriesPropertyArray $Snapshot 'controlChanges' | Where-Object { [string](Get-RooIndustriesPropertyValue $_ 'control' '') -eq $Control })
-    $verified = if ($recorded.Count -eq 0) { $true } else { [string](Get-RooIndustriesPropertyValue $recorded[-1] 'outcome' '') -ceq 'applied' }
+    $verified = $recorded.Count -gt 0 -and [string](Get-RooIndustriesPropertyValue $recorded[-1] 'outcome' '') -ceq 'applied'
     if ($recorded.Count -gt 0) {
         $value = Get-RooIndustriesPropertyValue $recorded[-1] 'proposedValue' $null
         if (-not [string]::IsNullOrWhiteSpace([string]$value)) { return [pscustomobject]@{ known = $true; value = $value; verified = $verified } }
@@ -1214,13 +1220,8 @@ function Confirm-RooIndustriesRestoreControl {
         $queryHandle = Open-RooIndustriesProcessControlHandle $Process 0x1000
         foreach ($pass in 1, 2) {
             [long]$created = 0; [long]$exited = 0; [long]$kernel = 0; [long]$user = 0
-            $path = [Text.StringBuilder]::new(32768)
-            [uint32]$size = $path.Capacity
             if (-not [RooIndustriesNativeProcessControl]::GetProcessTimes($queryHandle, [ref]$created, [ref]$exited, [ref]$kernel, [ref]$user) -or
-                $created -le 0 -or $created -ne $savedBirth -or $exited -ne 0 -or $Process.HasExited -or
-                -not [RooIndustriesNativeProcessControl]::QueryFullProcessImageName($queryHandle, 0, $path, [ref]$size) -or
-                [string]::IsNullOrWhiteSpace($path.ToString()) -or
-                (-not [string]::IsNullOrWhiteSpace($savedPath) -and -not [string]::Equals($path.ToString(), $savedPath, [StringComparison]::OrdinalIgnoreCase)) -or
+                $created -le 0 -or $created -ne $savedBirth -or $Process.HasExited -or
                 -not (Test-RooIndustriesProcessNameEquals $Process.ProcessName ([string](Get-RooIndustriesPropertyValue $Snapshot 'processName' '')))) { throw $script:RooIndustriesLeftAsSetChangedBack }
             if ($pass -eq 1) {
                 $name = 'Local\RooProcessControls-' + $Process.Id.ToString([Globalization.CultureInfo]::InvariantCulture) + '-' + $created.ToString([Globalization.CultureInfo]::InvariantCulture)

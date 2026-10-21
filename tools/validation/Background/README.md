@@ -144,6 +144,12 @@ and original b0 export. Every row in `files` has an absolute plain `path` and
 compiled directories, with no duplicate or unlisted paths: apphost EXE, entry
 DLL, runtimeconfig, deps, managed dependencies and other published files. The
 group rechecks this inventory and every hash after execution.
+Keep a separate reviewed c50 export with `reviewedSourceCommit`,
+`reviewedSource`, `reviewedSourceManifest` and `reviewedSourceFileCount`. The
+count is an integer from the retained c50 manifest, not a new corrected export.
+Bind both export manifests and every export file before and after execution,
+and retain each export directory's original active Harness creation identity.
+`OriginalSource` remains the b0 interleaving input; it does not stand in for c50.
 
 The group refuses another user, machine, source frame or terminal session.
 `-Scenario` selects named native cases; its completion artifact states exactly
@@ -162,7 +168,61 @@ what Windows did. Failed/pending saved-outcome replays are labelled as replays; 
 PowerShell debugger breakpoint and real controls. No simulated getter, setter,
 mutex or API result is an E2E pass.
 
+Missing-record cases start with a real verified apply and retain the original
+producer bytes, then replay a labelled saved format. They cover absent and
+empty control arrays, an unmatched target beside a genuinely verified memory
+peer, and a matching record without an outcome. Requested-first, repeat and
+external-drift steps preserve recovery without a target write or kept claim.
+Six base histories finish only at the actual original; six separate `-ended`
+histories terminate their own original process while still pending. Completion
+is terminal; neither history reopens completed Game Tune recovery. Applied-only
+inputs exercise reader compatibility, not conformance to the current raw backup
+schema or provenance from an old installation.
+
+The junction case owns a real image and a sibling junction. It retains native,
+CIM, MainModule and actual saved producer paths, original birth/session/name,
+canonical image and hashes. Every required path observation must succeed and
+be nonempty. It compares c50 only when the actual saved and native spellings
+differ; equal spellings leave F1 NOT REPRODUCED and missing red. Undefined live
+exit-time bits are raw observations only. Cleanup stops and disposes the
+original target before removing the original junction ID, image and real
+folder. A failed stop, unregistered link or refused link cleanup retains all
+dependent resources and fails completion.
+
+Four coherence cases mutate only in-memory inputs at the actual Confirm seam
+after a real preview. They are labelled constructed, not actual PID reuse or
+outside tampering. They require refusal, pending recovery and zero setters,
+then remove the original breakpoint and use the unchanged backup for a fresh
+positive Undo.
+
+The default authored selection has 53 scenario names and 378 serialization
+cases: 344 retained cases plus 17 new priority-only names across both bodies.
+The 10 keeps-other-value and 10 output cases make 398 top-level green cases.
+These are SOURCE-DERIVED counts, UNRUN until real Windows completion receipts
+exist. Explicit incompatible `-Control` fails. Selected runs record exact
+kind/control/scenario triples and expected/actual counts. No subset certifies
+the default grid, C6 or rendered proof.
+
+Twelve separately reported old-c50 negative controls are the six base legacy
+shapes across both bodies, with the current driver and reviewed c50 product.
+Each owns a new directory/process/backup and must retain requested-first JSON,
+readback, producer and cleanup receipts plus the specific lost-recovery failure.
+An arbitrary nonzero exit is not red proof. The six ended names are green-only
+histories, not six extra old-source runs. Conditional old-c50 alias observations
+are separate from these 12 and from the b0 TOCTOU case. For a later granted
+window, the current driver can target the separately bound product export:
+
+```powershell
+& (Join-Path $Source 'tools\validation\Background\Test-RestoreSerialization.ps1') -Source $reviewedSource -SourceCommit 'c50c8c8c9a0c8bd2d9103dc0059d088f79a85964' -ActorExe $actor -OutRoot $ownedRedCase -Kind $body -Control priorityClass -Scenario $legacyMode
+```
+
+Those variables must come from the approved frame and complete input bindings.
+This call is an expected-failing old-source control, not a second controller,
+automatic retry or permission for host contact. Its failure must be judged from
+the specific saved observations and original cleanup.
+
 `Test-RestoreSummaryOutput.ps1` runs the real AppSweep process with owned
+
 filesystem failures. The `restore-summary-setup-failure`, `-body-failure`,
 `-cleanup-failure` and `-body-cleanup-failure` modes create only validation
 fixtures: an owned setup blocker, missing body input or held cleanup file.

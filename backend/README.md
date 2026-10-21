@@ -90,3 +90,6 @@ This group is separate from automatic Baseline discovery. Historical Linux
 restore diagnostics simulate process I/O; schema validation of their full JSON
 envelopes proves only the contract. Real restore, contention, C6 and rendered
 UI8/media gates must finish on the authorized Windows source before merge.
+Saved-format replay and owned junction launch checks are part of that manual
+gate. Keep c50 and b0 evidence separate; an un-reproduced alias case stays
+recorded as missing red.
