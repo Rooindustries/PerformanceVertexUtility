@@ -717,6 +717,7 @@ static class BugReportChecks
                 cases.Add((profileRoot + shared + separator + "x", profileRoot + shared + separator + "x", true));
         }
         var emissionStart = cases.Count;
+        var emissionOwners = new Dictionary<string, BugRedactor>(StringComparer.Ordinal);
         var joinedName = "Zqxown " + "Smith";
         var joinedOwn = @"C:\Users\" + joinedName;
         var emissionRedactor = new BugRedactor(joinedOwn, joinedName, "GAMER-PC");
@@ -765,6 +766,29 @@ static class BugReportChecks
         }
         foreach (var shared in new[] { "Public", "Default", "Default User", "All Users" })
             cases.Add((@"C:\Users\" + shared + @"\boundary-control", @"C:\Users\" + shared + @"\boundary-control", true));
+        foreach (var ownName in new[] { "Émile", "😀Fixture", "u0012345", "O'Connor" })
+        {
+            var profile = @"C:\Users\" + ownName;
+            var owner = new BugRedactor(profile, ownName, "GAMER-PC");
+            var unicodeCases = new List<(string Input, string Expected)>
+            {
+                (@"C:/Users/Zqxother" + profile + @"\x", @"C:/Users/<user>C:\Users\<user>\x"),
+                (@"C:\Users\Zqxother" + profile + @"\x", @"C:\Users\<user>%USERPROFILE%\x"),
+                (profile + @"\u0041pp", @"%USERPROFILE%\u0041pp"),
+                (@"C:/Users/Zqxother" + profile + @"\u0041pp", @"C:/Users/<user>C:\Users\<user>\u0041pp"),
+                (@"C:\Users/u0012345\u0041ppé." + profile + @"\Ubedau0041", @"C:\Users/<user>.C:\Users\<user>\Ubedau0041"),
+                (@"C:/Users/ZqxotherC:\\Users\\" + ownName + profile + @"\u0041pp", @"C:/Users/<user>C:\\Users\\<user>C:\Users\<user>\u0041pp"),
+                (@"C:/Users/ZqxotherC:\\Users\\" + ownName + "." + profile + @"\x", @"C:/Users/<user>C:\\Users\\<user>.C:\Users\<user>\x"),
+                (@"C:/Users/ZqxotherC:\\Users\\" + ownName + profile + @"C:\\Users\\" + ownName + @"\\x", @"C:/Users/<user>C:\\Users\\<user>C:\Users\<user>C:\\Users\\<user>\\x")
+            };
+            unicodeCases.Add((JsonSerializer.Serialize(@"C:\Users/Zqxother'" + profile + @"\x", relaxed).Replace("'", @"\u0027", StringComparison.Ordinal),
+                JsonSerializer.Serialize(@"C:\Users/<user>'C:\Users\<user>\x", relaxed).Replace("'", @"\u0027", StringComparison.Ordinal)));
+            foreach (var (input, expected) in unicodeCases)
+            {
+                cases.Add((input, expected, true));
+                emissionOwners.Add(input, owner);
+            }
+        }
         var emissionInputs = cases.Skip(emissionStart).Select(item => item.Input).ToHashSet(StringComparer.Ordinal);
         bool WholeUnicode(string value)
         {
@@ -781,7 +805,7 @@ static class BugReportChecks
         var spanInputs = cases.Skip(spanStart).Select(item => item.Input).ToHashSet(StringComparer.Ordinal);
         foreach (var (raw, expected, defaultEncoder) in cases)
         {
-            var activeRedactor = emissionInputs.Contains(raw) ? emissionRedactor : redactor;
+            var activeRedactor = emissionOwners.TryGetValue(raw, out var ownRedactor) ? ownRedactor : emissionInputs.Contains(raw) ? emissionRedactor : redactor;
             foreach (var options in defaultEncoder ? new JsonSerializerOptions?[] { null, relaxed } : new JsonSerializerOptions?[] { relaxed })
             {
                 var input = raw;
