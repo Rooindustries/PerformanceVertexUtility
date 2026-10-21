@@ -61,11 +61,10 @@ These must hold on every commit of `main`. Each one names the code that enforces
    - Enforced by: the engine reads the PC's build and edition from `CurrentBuildNumber` and `EditionID` (`RegistryTweaks.cs`), and offers only options whose build and edition gates match (`TweakEngine.Supported`). A Windows feature the PC doesn't have makes its choices unavailable instead of failing the read (`TweakControlRead.Allows`). A row with no option for this PC reports "No choice applies to this Windows version, edition or installed product.", and missing Windows components report "... is not installed" or "... is not available with ...". The app shows these as "Not available here" with no Retry (`PcLacks`, `UnavailableHere` and `CanRetry` in `WindowsTweaksViewModel.cs`).
    - Checked by: `tools/validation/Tweaks` (catalog integration and feature checks), `tools/validation/WindowsTweaksUi`.
    - Known gaps:
-     - Encrypted DNS and reserved storage read as "Couldn't check" on Windows versions without their commands.
      - "Consumer suggestions and promotions: Blocked" is offered on Pro, where Windows ignores the policy.
      - Defender rows read as "Couldn't check" on Windows without Defender's PowerShell commands.
-6. **Bug report privacy.** A bug report leaves the PC only when the user clicks Send (`BugReportViewModel.SendAsync`), and it never carries the user's or another local account's name, the PC name, or account SIDs.
-   - Enforced by: the attached files (specs, tweak summary, log tails) go through `BugRedactor` before they're zipped. It replaces:
+6. **Bug report privacy.** A bug report leaves the PC only when the user clicks Send (`BugReportViewModel.SendAsync`). The description, editable specs and diagnostics must redact account profile paths, the current user and PC names, and account SIDs. Contact details the user supplies are kept as typed.
+   - Enforced by: the attached files (specs, tweak summary, log tails), description and editable specs go through `BugRedactor` before they're zipped or sent. It replaces:
      - the user's profile path with `%USERPROFILE%`
      - the user name with `<user>` and the PC name with `<pc-name>`
      - S-1-5-21 account SIDs with `<sid>`
@@ -75,7 +74,6 @@ These must hold on every commit of `main`. Each one names the code that enforces
    - Checked by: `tools/validation/AppSweepUi/BugReportChecks.cs`.
    - Known gaps:
      - Another account's folder name stops being redacted at a space or apostrophe, and the app log uses its own narrower rules.
-     - The description and the editable specs in the message itself are sent as typed.
      - Account names and PC names of one character aren't redacted.
      - Microsoft Entra account SIDs (`S-1-12-1-...`) aren't redacted.
 
