@@ -650,7 +650,7 @@ static class BugReportChecks
         {
             var encoded = @"""C:\\Users\\" + escape + @"\\x""";
             check(JsonSerializer.Deserialize<string>(encoded) == @"C:\Users\" + name + @"\x", "The shared-name Unicode fixture has a provably shorter escape than its profile separator: " + name);
-            cases.Add((encoded, encoded, true));
+            cases.Add((encoded, @"""C:\\Users\\<user>\\x""", true));
             cases.Add((@"""C:/Users/" + escape + @"/x""", @"""C:/Users/<user>/x""", true));
         }
         cases.Add((@"""C:\\Users\\B\u006Fb\\x""", @"""C:\\Users\\<user>\\x""", true));
@@ -682,6 +682,40 @@ static class BugReportChecks
             var chain = profileRoot + "<user>%USERPROFILE%%USERPROFILE%" + suffix;
             cases.Add((chain, suffix.StartsWith('.') ? profileRoot + "<user>" + profileRoot[^1] + "x" : chain, false));
         }
+        foreach (var profileRoot in new[] { @"C:\Users\", "C:/Users/" })
+        foreach (var marker in new[] { "<user>", "<USER>", "<pc-name>", "<Pc-Name>", "<sid>", "<SID>" })
+        foreach (var macro in new[] { "%USERPROFILE%", "%USERPROFILE%%USERPROFILE%" })
+        {
+            var separator = profileRoot[^1].ToString();
+            foreach (var suffix in new[] { marker + "Zqxsmith", "'Zqxsmith", "😀Zqxsmith", "\u007FZqxsmith", "AZqxsmith" })
+                cases.Add((profileRoot + marker + macro + suffix + separator + "x", profileRoot + "<user>" + separator + "x", false));
+            var encodedRoot = profileRoot.Replace(@"\", @"\\", StringComparison.Ordinal);
+            var encodedSeparator = separator.Replace(@"\", @"\\", StringComparison.Ordinal);
+            foreach (var suffix in new[] { @"\u0027", @"\uD83D\uDE00", @"\u007F", @"\u0041" })
+                cases.Add(("\"" + encodedRoot + marker + macro + suffix + "Zqxsmith" + encodedSeparator + "x\"",
+                    "\"" + encodedRoot + "<user>" + encodedSeparator + "x\"", false));
+            foreach (var delimiter in new[] { @"\u0001", @"\u005c", @"\u0022", @"\u003A" })
+            {
+                var input = "\"" + encodedRoot + marker + macro + delimiter + "tail\"";
+                var expected = "\"" + encodedRoot + marker.ToLowerInvariant() + macro + delimiter + "tail\"";
+                cases.Add((input, expected, false));
+            }
+            var colon = profileRoot + marker + macro + ": denied";
+            cases.Add((colon, profileRoot + marker.ToLowerInvariant() + macro + ": denied", false));
+        }
+        var reviewerSuffix = "Sm" + "ith";
+        cases.Add((@"C:\Users\<user>%USERPROFILE%<user>" + reviewerSuffix + @"\x", @"C:\Users\<user>\x", false));
+        cases.Add((@"""C:\\Users\\<user>%USERPROFILE%\u0027" + reviewerSuffix + @"\\x""", @"""C:\\Users\\<user>\\x""", false));
+        cases.Add((@"C:/Users/<user>%USERPROFILE%\uD83D\uDE00" + reviewerSuffix + "/x", "C:/Users/<user>/x", false));
+        cases.Add((@"Z://Users//<sid>Qx%USERPROFILE%\\u007F\\u007FZv", "Z://Users//<user>", false));
+        foreach (var profileRoot in new[] { @"C:\Users\\", @"C:/Users\\", @"C:\\Users\\", "C://Users//" })
+        {
+            var separator = profileRoot.EndsWith('/') ? "//" : @"\";
+            foreach (var component in new[] { @"Pub\u006Cic", @"Defaul\u0074", @"Defaul\u0074 User", @"All Us\u0065rs" })
+                cases.Add((profileRoot + component + separator + "x", profileRoot + "<user>" + separator + "x", true));
+            foreach (var shared in new[] { "Public", "Default", "Default User", "All Users" })
+                cases.Add((profileRoot + shared + separator + "x", profileRoot + shared + separator + "x", true));
+        }
         var spanInputs = cases.Skip(spanStart).Select(item => item.Input).ToHashSet(StringComparer.Ordinal);
         foreach (var (raw, expected, defaultEncoder) in cases)
         {
@@ -698,6 +732,9 @@ static class BugReportChecks
                         for (var level = 0; level < depth; level++) decoded = JsonSerializer.Deserialize<string>(decoded)!;
                         check(decoded == expected && redactor.Redact(actual) == actual,
                             "Legacy component boundary " + encoder + " depth " + depth + " " + JsonSerializer.Serialize(raw) + " => " + JsonSerializer.Serialize(decoded));
+                        if (spanInputs.Contains(raw) && raw.StartsWith('"'))
+                            check(JsonSerializer.Deserialize<string>(decoded!) == JsonSerializer.Deserialize<string>(expected),
+                                "An encoded macro component remains valid inner JSON at " + encoder + " depth " + depth + " for " + JsonSerializer.Serialize(raw));
                     }
                     catch (Exception error) when (error is JsonException or InvalidOperationException)
                     {
@@ -728,9 +765,15 @@ static class BugReportChecks
                             && summary.RootElement.GetProperty("lastErrors")[0].GetString() == expected,
                             "Legacy boundary " + (isSaved ? "saved" : "attachment") + " specs and lastErrors are private valid JSON for " + JsonSerializer.Serialize(raw));
                         if (spanInputs.Contains(raw))
+                        {
                             check(redactor.Redact(values.RootElement.GetProperty("specs").GetProperty("cpu").GetString()!) == expected
                                 && redactor.Redact(summary.RootElement.GetProperty("lastErrors")[0].GetString()!) == expected,
                                 "Span boundary decoded specs and lastErrors stay private and stable after another pass for " + JsonSerializer.Serialize(raw));
+                            if (raw.StartsWith('"'))
+                                check(JsonSerializer.Deserialize<string>(values.RootElement.GetProperty("specs").GetProperty("cpu").GetString()!) == JsonSerializer.Deserialize<string>(expected)
+                                    && JsonSerializer.Deserialize<string>(summary.RootElement.GetProperty("lastErrors")[0].GetString()!) == JsonSerializer.Deserialize<string>(expected),
+                                    "An attached encoded macro component has valid inner specs and lastErrors JSON for " + JsonSerializer.Serialize(raw));
+                        }
                     }
                     catch (Exception error) when (error is JsonException or InvalidOperationException)
                     {
