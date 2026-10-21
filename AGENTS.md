@@ -35,7 +35,7 @@ Backend scripts run on the Windows PowerShell 5.1 that ships with Windows. `tool
 
 ## Prove a change on Linux
 
-Linux is the development host. These are the four Baseline jobs every pull request and push to `main` runs on the self-hosted Linux runner (`runs-on: [self-hosted, laptop]`):
+Linux is the development host. These four Baseline jobs run for same-repository pull requests, pushes to `main` and manual runs on the self-hosted Linux runner (`runs-on: [self-hosted, laptop]`). Fork pull requests skip these jobs and need isolated local validation:
 
 ```sh
 python -m pip install -r tools/validation/requirements.txt
@@ -45,7 +45,7 @@ pwsh tools/validation/check_powershell.ps1   # needs PSScriptAnalyzer 1.25.0
 python tools/validation/build_dotnet.py      # needs the .NET 8 SDK
 ```
 
-If GitHub Actions can't start them, run them on the PR's head commit and post the results on the PR.
+If GitHub Actions can't start them, run the same steps on the exact head commit and record a `local-ci` commit status (`gh api repos/Rooindustries/PerformanceVertexUtility/statuses/<sha> -f state=success -f context=local-ci -f description=...`), never as PR text.
 
 ## What needs real Windows
 
