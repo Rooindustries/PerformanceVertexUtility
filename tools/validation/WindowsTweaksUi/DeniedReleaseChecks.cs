@@ -46,6 +46,8 @@ static class DeniedReleaseChecks
             check(controls ? ControlEnabled() : fixture.Windows.Read(address!).Value!.Bytes.SequenceEqual(BitConverter.GetBytes(1u)), "The obsolete " + scenario + " fixture starts with its applied value and original backup");
             if (scenario == "control-missing") { data = OperationFiles.Read<TweakFixture>(path); data.Controls.Remove(service.Key); OperationFiles.Write(path, data); }
             var nativeFailure = scenario.Contains("adapter", StringComparison.Ordinal) ? await MissingAdapter(repo, service, scenario.Contains("batch", StringComparison.Ordinal)) : null;
+            var replacementFailure = scenario == "control-blocker-file-malformed" ? ReplacedBlockerFailure() : null;
+            if (replacementFailure is not null) check(replacementFailure is InvalidDataException && replacementFailure.Message == "Download-folder applied permissions differ from their original receipt.", "Malformed receipt validation precedes the native replacement-file drift signal");
             Exception Failure() => scenario switch
             {
                 "registry-denied" => new RegistryApiException("RegOpenKeyEx", 5),
@@ -58,7 +60,7 @@ static class DeniedReleaseChecks
                 "control-timer-changed" => HelperFailure("{\"error\":\"The timer startup task or its script changed and was left intact.\",\"resourceChanged\":true}"),
                 "control-helper-denied" => HelperFailure("{\"error\":\"Access is denied.\"}"),
                 "control-timer-malformed" or "control-blocker-malformed" => ReceiptFailure(directory, scenario == "control-timer-malformed"),
-                "control-blocker-file-malformed" => ReplacedBlockerFailure(),
+                "control-blocker-file-malformed" => replacementFailure!,
                 _ => new Win32Exception(5),
             };
             if (controls) fixture.ControlReadError = target => target == service ? Failure() : null;
