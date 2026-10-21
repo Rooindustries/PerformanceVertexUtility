@@ -287,13 +287,15 @@ public sealed class TweakEngine
                 throw new InvalidDataException(string.Join(" and ", options.Select(item => item.Definition.Name)) + " cannot be used together. " + rule.Reason);
         }
     }
-    private bool Supported(TweakDefinition definition) => _store.Context.WindowsBuild >= definition.MinimumBuild && _store.Context.WindowsBuild <= definition.MaximumBuild &&
-        EditionSupported(definition.Editions);
-    private bool Supported(TweakOption option) => (option.ValidUntilUtc is null || DateTime.UtcNow < option.ValidUntilUtc.Value) && (option.Availability is null || option.Availability.Any(gate =>
-        _store.Context.WindowsBuild >= gate.MinimumBuild && _store.Context.WindowsBuild <= gate.MaximumBuild &&
-        EditionSupported(gate.Editions) && (gate.Requirements ?? []).All(RequirementAvailable)));
-    private bool EditionSupported(string[] editions) => editions.Any(edition => edition.EndsWith('*')
-        ? _store.Context.Edition.StartsWith(edition[..^1], StringComparison.OrdinalIgnoreCase) : string.Equals(edition, _store.Context.Edition, StringComparison.OrdinalIgnoreCase));
+    public static bool SupportsWindows(TweakDefinition definition, TweakOption option, TweakContext context) =>
+        WindowsRange(definition.MinimumBuild, definition.MaximumBuild, definition.Editions, context) && Unexpired(option) &&
+        (option.Availability is null || option.Availability.Any(gate => WindowsRange(gate.MinimumBuild, gate.MaximumBuild, gate.Editions, context)));
+    private bool Supported(TweakDefinition definition) => WindowsRange(definition.MinimumBuild, definition.MaximumBuild, definition.Editions, _store.Context);
+    private bool Supported(TweakOption option) => Unexpired(option) && (option.Availability is null || option.Availability.Any(gate =>
+        WindowsRange(gate.MinimumBuild, gate.MaximumBuild, gate.Editions, _store.Context) && (gate.Requirements ?? []).All(RequirementAvailable)));
+    private static bool Unexpired(TweakOption option) => option.ValidUntilUtc is null || DateTime.UtcNow < option.ValidUntilUtc.Value;
+    private static bool WindowsRange(int minimum, int maximum, string[] editions, TweakContext context) => context.WindowsBuild >= minimum && context.WindowsBuild <= maximum &&
+        editions.Any(edition => edition.EndsWith('*') ? context.Edition.StartsWith(edition[..^1], StringComparison.OrdinalIgnoreCase) : string.Equals(edition, context.Edition, StringComparison.OrdinalIgnoreCase));
     private bool RequirementAvailable(string requirement)
     {
         try { _store.CheckRequirement(requirement); return true; }

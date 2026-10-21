@@ -112,9 +112,10 @@ changes. The review shows the restoration of their original values alongside
 the new changes, and approval is still required. Unavailable choices stay saved
 for later. Reviewing only unavailable choices saves them without changing the
 active profile; restoring that profile remains a separate action.
-Temporary read errors, unfinished reads and pending restarts do not release an
-existing profile choice. It stays in the plan with its saved original, and the
-engine must read it again before applying the edit.
+Only catalog build, edition and expiry limits can make an existing choice
+unavailable during an edit. Read errors, pending reads, restarts, remote sessions
+and device or product requirements keep it in the plan with its saved original.
+The engine must check those requirements again before applying the edit.
 
 To restore a profile, create another selections file containing `[]`, preview it
 with the same `ProfileId`, then use `-Action Restore` with that review's hash.
