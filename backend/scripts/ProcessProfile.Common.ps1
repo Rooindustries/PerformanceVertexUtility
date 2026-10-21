@@ -1163,7 +1163,7 @@ function Split-RooIndustriesLeftAsSetRestoreChanges {
             $original.Add([pscustomobject]@{ control = $control; originalValue = $savedOriginal; appliedValue = $applied.value; appliedKnown = $applied.known }) | Out-Null
             continue
         }
-        if ($readable -and $applied.known -and -not (Test-RooIndustriesControlValueEqual $control $current $applied.value)) {
+        if ($readable -and $applied.known -and $applied.verified -and -not (Test-RooIndustriesControlValueEqual $control $current $applied.value)) {
             $left.Add([pscustomobject]@{ control = $control; currentValue = $current; appliedValue = $applied.value; originalValue = $savedOriginal; outcome = 'leftAsSet'; reason = $script:RooIndustriesLeftAsSet }) | Out-Null
             continue
         }
@@ -1177,43 +1177,118 @@ function Split-RooIndustriesLeftAsSetRestoreChanges {
 }
 
 function Confirm-RooIndustriesRestoreControl {
-    param([System.Diagnostics.Process]$Process, $Check)
-    $unconfirmed = [pscustomobject]@{ confirmed = $false; leftAsSet = $null; reason = $script:RooIndustriesLeftAsSetChangedBack }
+    param([System.Diagnostics.Process]$Process, $Check, $Snapshot, $Entry, $Change = $null)
     $control = [string](Get-RooIndustriesPropertyValue $Check 'control' '')
+    $candidateConfirmed = $false
+    $candidateRestored = $false
+    $candidateLeft = $null
+    $errors = New-Object System.Collections.Generic.List[string]
     $gate = $null
+    $instanceMutex = $null
+    $instanceHeld = $false
+    $queryHandle = [IntPtr]::Zero
     try {
         $gate = Enter-RooIndustriesGovernorGate -Seconds 2
-        if ($null -eq $gate) {
-            $unconfirmed.reason = $script:RooIndustriesGovernorManaged
-            return $unconfirmed
+        if ($null -eq $gate) { throw $script:RooIndustriesGovernorManaged }
+        $originalField = switch ($control) {
+            'priorityClass' { 'originalPriorityClass' }
+            'affinityMask' { 'originalAffinityMask' }
+            'ioPriority' { 'originalIoPriority' }
+            'memoryPriority' { 'originalMemoryPriority' }
+            'gpuPriority' { 'originalGpuPriority' }
+            default { throw $script:RooIndustriesLeftAsSetChangedBack }
+        }
+        $original = Get-RooIndustriesPropertyValue $Snapshot $originalField $null
+        $savedId = Get-RooIndustriesPropertyValue $Snapshot 'processId' 0
+        $savedStart = [string](Get-RooIndustriesPropertyValue $Snapshot 'processStartTimeUtc' '')
+        $savedTime = [DateTime]::MinValue
+        $savedPath = [string](Get-RooIndustriesPropertyValue $Snapshot 'executablePath' '')
+        if (($savedId -isnot [int] -and $savedId -isnot [long]) -or $savedId -le 0 -or $savedId -ne $Process.Id -or
+            (Get-RooIndustriesPropertyValue $Entry 'processId' 0) -ne $savedId -or
+            -not [DateTime]::TryParse($savedStart, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::RoundtripKind, [ref]$savedTime) -or
+            [string](Get-RooIndustriesPropertyValue $Entry 'processStartTimeUtc' '') -cne $savedStart -or
+            -not [string]::Equals([string](Get-RooIndustriesPropertyValue $Entry 'executablePath' ''), $savedPath, [StringComparison]::OrdinalIgnoreCase) -or
+            [string]::IsNullOrWhiteSpace([string]$original)) { throw $script:RooIndustriesLeftAsSetChangedBack }
+        $savedBirth = $savedTime.ToUniversalTime().ToFileTimeUtc()
+        if ($savedBirth -le 0) { throw $script:RooIndustriesLeftAsSetChangedBack }
+        $queryHandle = Open-RooIndustriesProcessControlHandle $Process 0x1000
+        foreach ($pass in 1, 2) {
+            [long]$created = 0; [long]$exited = 0; [long]$kernel = 0; [long]$user = 0
+            $path = [Text.StringBuilder]::new(32768)
+            [uint32]$size = $path.Capacity
+            if (-not [RooIndustriesNativeProcessControl]::GetProcessTimes($queryHandle, [ref]$created, [ref]$exited, [ref]$kernel, [ref]$user) -or
+                $created -le 0 -or $created -ne $savedBirth -or $exited -ne 0 -or $Process.HasExited -or
+                -not [RooIndustriesNativeProcessControl]::QueryFullProcessImageName($queryHandle, 0, $path, [ref]$size) -or
+                [string]::IsNullOrWhiteSpace($path.ToString()) -or
+                (-not [string]::IsNullOrWhiteSpace($savedPath) -and -not [string]::Equals($path.ToString(), $savedPath, [StringComparison]::OrdinalIgnoreCase)) -or
+                -not (Test-RooIndustriesProcessNameEquals $Process.ProcessName ([string](Get-RooIndustriesPropertyValue $Snapshot 'processName' '')))) { throw $script:RooIndustriesLeftAsSetChangedBack }
+            if ($pass -eq 1) {
+                $name = 'Local\RooProcessControls-' + $Process.Id.ToString([Globalization.CultureInfo]::InvariantCulture) + '-' + $created.ToString([Globalization.CultureInfo]::InvariantCulture)
+                $instanceMutex = [Threading.Mutex]::new($false, $name)
+                try { $instanceHeld = $instanceMutex.WaitOne(0) }
+                catch {
+                    $failure = $_.Exception
+                    while ($failure -is [Management.Automation.MethodInvocationException] -and $failure.InnerException) { $failure = $failure.InnerException }
+                    if ($failure -isnot [Threading.AbandonedMutexException]) { throw }
+                    $instanceHeld = $true
+                }
+                if (-not $instanceHeld) { throw 'Another operation controls this process instance.' }
+            }
         }
         $ownershipReason = Get-RooIndustriesRestoreControlOwnershipReason $Process $control
-        if (-not [string]::IsNullOrWhiteSpace($ownershipReason)) {
-            $unconfirmed.reason = $ownershipReason
-            return $unconfirmed
+        if (-not [string]::IsNullOrWhiteSpace($ownershipReason)) { throw $ownershipReason }
+        $applied = Get-RooIndustriesAppliedControlValue $Snapshot $control
+        $now = Get-RooIndustriesProcessControlReadback $Process $control
+        if ([string]::IsNullOrWhiteSpace([string]$now)) { throw $script:RooIndustriesLeftAsSetChangedBack }
+        if (Test-RooIndustriesControlValueEqual $control $now $original) {
+            $candidateConfirmed = $true
+        } elseif (-not $applied.known -or -not $applied.verified) {
+            throw $script:RooIndustriesLeftAsSetChangedBack
+        } elseif (-not (Test-RooIndustriesControlValueEqual $control $now $applied.value)) {
+            $candidateConfirmed = $true
+            $candidateLeft = [pscustomobject]@{ control = $control; currentValue = $now; appliedValue = $applied.value; originalValue = $original; outcome = 'leftAsSet'; reason = $script:RooIndustriesLeftAsSet }
+        } else {
+            if ($null -ne $Change -and [bool](Get-RooIndustriesPropertyValue $Change 'blocked' $false)) { throw [string](Get-RooIndustriesPropertyValue $Change 'blockedReason' $script:RooIndustriesLeftAsSetChangedBack) }
+            $reviewed = $false
+            foreach ($candidate in @(Get-RooIndustriesPreviewControlChanges $Entry)) { if ([object]::ReferenceEquals($candidate, $Change)) { $reviewed = $true; break } }
+            if ($null -eq $Change -or -not $reviewed -or [string](Get-RooIndustriesPropertyValue $Change 'control' '') -cne $control -or
+                -not (Test-RooIndustriesControlValueEqual $control (Get-RooIndustriesPropertyValue $Change 'proposedValue' $null) $original) -or
+                [string](Get-RooIndustriesPropertyValue $Change 'action' '') -notlike 'restore*') { throw $script:RooIndustriesLeftAsSetChangedBack }
+            try {
+                Invoke-RooIndustriesProcessControlChange $Process $Change
+                $candidateConfirmed = $true
+                $candidateRestored = $true
+            } catch {
+                if ($_.Exception.Message -cne $script:RooIndustriesChangedExternally) { throw }
+                $now = Get-RooIndustriesProcessControlReadback $Process $control
+                if ([string]::IsNullOrWhiteSpace([string]$now)) { throw $script:RooIndustriesLeftAsSetChangedBack }
+                if (Test-RooIndustriesControlValueEqual $control $now $original) {
+                    $candidateConfirmed = $true
+                } elseif ($applied.known -and $applied.verified -and -not (Test-RooIndustriesControlValueEqual $control $now $applied.value)) {
+                    $candidateConfirmed = $true
+                    $candidateLeft = [pscustomobject]@{ control = $control; currentValue = $now; appliedValue = $applied.value; originalValue = $original; outcome = 'leftAsSet'; reason = $script:RooIndustriesLeftAsSet }
+                } else { throw $script:RooIndustriesLeftAsSetChangedBack }
+            }
         }
-        try { $now = Get-RooIndustriesProcessControlReadback $Process $control } catch { return $unconfirmed }
-        if ([string]::IsNullOrWhiteSpace([string]$now)) { return $unconfirmed }
-        $original = Get-RooIndustriesPropertyValue $Check 'originalValue' $null
-        if (Test-RooIndustriesControlValueEqual $control $now $original) { return [pscustomobject]@{ confirmed = $true; leftAsSet = $null; reason = $null } }
-        $applied = Get-RooIndustriesPropertyValue $Check 'appliedValue' $null
-        $known = [bool](Get-RooIndustriesPropertyValue $Check 'appliedKnown' (-not [string]::IsNullOrWhiteSpace([string]$applied)))
-        if ($known -and -not (Test-RooIndustriesControlValueEqual $control $now $applied)) {
-            return [pscustomobject]@{ confirmed = $true; leftAsSet = [pscustomobject]@{ control = $control; currentValue = $now; appliedValue = $applied; originalValue = $original; outcome = 'leftAsSet'; reason = $script:RooIndustriesLeftAsSet }; reason = $null }
+    } catch { $errors.Add($_.Exception.Message) | Out-Null }
+    finally {
+        if ($instanceHeld) {
+            try { $instanceMutex.ReleaseMutex() } catch { $errors.Add('Instance release: ' + $_.Exception.Message) | Out-Null }
         }
-        return $unconfirmed
-    } catch { return $unconfirmed }
-    finally { Exit-RooIndustriesGovernorGate $gate }
-}
-
-function Get-RooIndustriesRestoreLeftAsSet {
-    param([System.Diagnostics.Process]$Process, $Change, [string]$Message)
-    $before = Get-RooIndustriesPropertyValue $Change 'currentValue' $null
-    if ($Message -ne $script:RooIndustriesChangedExternally -or [string]::IsNullOrWhiteSpace([string]$before)) { return $null }
-    $check = [pscustomobject]@{ control = [string](Get-RooIndustriesPropertyValue $Change 'control' ''); originalValue = Get-RooIndustriesPropertyValue $Change 'proposedValue' $null; appliedValue = $before; appliedKnown = $true }
-    $verification = Confirm-RooIndustriesRestoreControl $Process $check
-    if ($verification.confirmed -and $null -ne $verification.leftAsSet) { $Change | Add-Member -NotePropertyName outcome -NotePropertyValue 'leftAsSet' -Force }
-    return $verification
+        if ($null -ne $instanceMutex) {
+            try { $instanceMutex.Dispose() } catch { $errors.Add('Instance dispose: ' + $_.Exception.Message) | Out-Null }
+        }
+        if ($null -ne $gate) {
+            try { $gate.ReleaseMutex() } catch { $errors.Add('Governor release: ' + $_.Exception.Message) | Out-Null }
+            try { $gate.Dispose() } catch { $errors.Add('Governor dispose: ' + $_.Exception.Message) | Out-Null }
+        }
+        if ($queryHandle -ne [IntPtr]::Zero) {
+            try { if (-not [RooIndustriesNativeProcessControl]::CloseHandle($queryHandle)) { throw 'Windows could not close the original query handle.' } }
+            catch { $errors.Add('Query handle close: ' + $_.Exception.Message) | Out-Null }
+        }
+    }
+    if ($errors.Count -gt 0) { return [pscustomobject]@{ confirmed = $false; restored = $false; leftAsSet = $null; reason = ($errors -join '; ') } }
+    return [pscustomobject]@{ confirmed = $candidateConfirmed; restored = $candidateRestored; leftAsSet = $candidateLeft; reason = if ($candidateConfirmed) { $null } else { $script:RooIndustriesLeftAsSetChangedBack } }
 }
 
 function New-RooIndustriesLeftAsSetItem {

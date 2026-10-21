@@ -1,6 +1,22 @@
 param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutRoot)
 $ErrorActionPreference='Stop'
 . (Join-Path $Source 'tools\validation\LoadTimes\CleanupOwnership.Common.ps1')
+function Invoke-E2EBackend {
+ param([string]$Script,[string]$ProfilePath='',[string]$TargetGameProcessName='',[string]$StateRoot='',[string]$SessionPath='',[string]$BackupPath='',[int]$PollIntervalSeconds=1,[int]$MaxDurationSeconds=1,[switch]$ConfirmApply)
+ . (Join-Path $Source 'backend\scripts\GameTuneSession.Common.ps1')
+ $script:RestoreE2ELegacyData=Join-Path $OutRoot 'owned-data'
+ function Get-RooIndustriesLocalDataRoot{return $script:RestoreE2ELegacyData}
+ $tokens=$null;$errors=$null
+ $ast=[Management.Automation.Language.Parser]::ParseFile((Join-Path $Source ('backend\scripts\'+$Script)),[ref]$tokens,[ref]$errors)
+ if($errors.Count){throw ($errors -join '; ')}
+ foreach($statement in $ast.EndBlock.Statements){
+  if($statement -is [Management.Automation.Language.FunctionDefinitionAst] -or $statement -is [Management.Automation.Language.AssignmentStatementAst]){. ([scriptblock]::Create($statement.Extent.Text))}
+ }
+ $OutputPath='';$SessionId=''
+ $body=@($ast.EndBlock.Statements|Where-Object {$_ -is [Management.Automation.Language.TryStatementAst]})
+ if($body.Count -ne 1){throw 'Expected one real backend body'}
+ & ([scriptblock]::Create($body[0].Extent.Text))
+}
 $utf8=[Text.UTF8Encoding]::new($false)
 function Save([string]$directory,[string]$name,$value){[IO.File]::WriteAllText((Join-Path $directory ($name+'.json')),($value|ConvertTo-Json -Depth 40),$utf8)}
 function Start-Fixture([string]$directory,[string]$name){
@@ -22,7 +38,7 @@ function Set-ChangeLineBreakpoint($p,[string]$Script,[string]$Value){
  $line=@(Select-String -LiteralPath $Script -Pattern '^\s*\$entryControlChanges = @\(')
  if($line.Count -ne 1){throw ('Expected one restore control-change line in '+$Script+', found '+$line.Count)}
  $race=@{done=$false;process=$p;value=$Value}
- return Set-PSBreakpoint -Script $Script -Line $line[0].LineNumber -Action ({if(-not$race.done){$race.done=$true;$race.process.PriorityClass=$race.value}}.GetNewClosure())
+ return Set-PSBreakpoint -Command Confirm-RooIndustriesRestoreControl -Action ({if(-not$race.done){$race.done=$true;$race.process.PriorityClass=$race.value}}.GetNewClosure())
 }
 
 function Invoke-GameScenario([string]$name,[ValidateSet('before','race','back','original','pending')][string]$Mode){
@@ -40,7 +56,7 @@ function Invoke-GameScenario([string]$name,[ValidateSet('before','race','back','
    safety=[pscustomobject]@{confirmedApplyChanges=@('PriorityClass','Affinity');continuousEnforcement=$true;runtimeService=$false}
   }
   Save $directory 'profile' $profile
-  $start=& (Join-Path $Source 'backend\scripts\Start-GameTuneSession.ps1') -ProfilePath (Join-Path $directory 'profile.json') -TargetGameProcessName ($p.ProcessName+'.exe') -PollIntervalSeconds 1 -MaxDurationSeconds 1 -StateRoot (Join-Path $directory 'state') -ConfirmApply|ConvertFrom-Json;Save $directory 'start' $start
+  $start=Invoke-E2EBackend 'Start-GameTuneSession.ps1' -ProfilePath (Join-Path $directory 'profile.json') -TargetGameProcessName ($p.ProcessName+'.exe') -PollIntervalSeconds 1 -MaxDurationSeconds 1 -StateRoot (Join-Path $directory 'state') -ConfirmApply|ConvertFrom-Json;Save $directory 'start' $start
   $applied=Read-Fixture $p
   if($applied.priorityClass -ne 'AboveNormal' -or $applied.affinityMask -ne $affinity){throw ('Game Tune did not apply priority and affinity to the fixture: '+$applied.priorityClass+' '+$applied.affinityMask)}
   $statusBefore=& (Join-Path $Source 'backend\scripts\Get-GameTuneSessionStatus.ps1') -SessionPath $start.sessionPath|ConvertFrom-Json;Save $directory 'status-before' $statusBefore
@@ -57,12 +73,12 @@ function Invoke-GameScenario([string]$name,[ValidateSet('before','race','back','
    $breakpoint=Set-ChangeBreakpoint $p 'Invoke-RooIndustriesProcessControlChange' 'BelowNormal'
   }else{
    $p.PriorityClass=if($Mode -eq 'original'){'Normal'}else{'BelowNormal'}
-   $preview=& (Join-Path $Source 'backend\scripts\Stop-GameTuneSession.ps1') -SessionPath $start.sessionPath|ConvertFrom-Json;Save $directory 'preview' $preview
+   $preview=Invoke-E2EBackend 'Stop-GameTuneSession.ps1' -SessionPath $start.sessionPath|ConvertFrom-Json;Save $directory 'preview' $preview
    $entry=@($preview.preview|Where-Object processId -eq $p.Id)|Select-Object -First 1
-   if($Mode -ne 'original' -and (-not$entry -or @($entry.controlChanges|Where-Object control -eq 'priorityClass').Count -or @($entry.leftAsSet|Where-Object {$_.control -eq 'priorityClass' -and $_.currentValue -eq 'BelowNormal'}).Count -ne 1)){throw 'Game Tune undo preview still proposes overwriting the priority another program set'}
+   if($Mode -notin @('original','pending') -and (-not$entry -or @($entry.controlChanges|Where-Object control -eq 'priorityClass').Count -or @($entry.leftAsSet|Where-Object {$_.control -eq 'priorityClass' -and $_.currentValue -eq 'BelowNormal'}).Count -ne 1)){throw 'Game Tune undo preview still proposes overwriting the priority another program set'}
    if($Mode -in @('back','original')){$breakpoint=Set-ChangeLineBreakpoint $p (Join-Path $Source 'backend\scripts\Stop-GameTuneSession.ps1') 'AboveNormal'}
   }
-  $undo=& (Join-Path $Source 'backend\scripts\Stop-GameTuneSession.ps1') -SessionPath $start.sessionPath -ConfirmApply|ConvertFrom-Json;Save $directory 'undo' $undo
+  $undo=Invoke-E2EBackend 'Stop-GameTuneSession.ps1' -SessionPath $start.sessionPath -ConfirmApply|ConvertFrom-Json;Save $directory 'undo' $undo
   $breakpointHits=0;if($breakpoint){$breakpointHits=$breakpoint.HitCount;Remove-PSBreakpoint $breakpoint;$breakpoint=$null}
   $status=& (Join-Path $Source 'backend\scripts\Get-GameTuneSessionStatus.ps1') -SessionPath $start.sessionPath|ConvertFrom-Json;Save $directory 'status' $status
   if($status.restoreAttempted -isnot [bool] -or -not$status.restoreAttempted){throw 'Game Tune status lost the confirmed Undo phase'}
@@ -76,12 +92,23 @@ function Invoke-GameScenario([string]$name,[ValidateSet('before','race','back','
    if(@($undo.result.leftAsSetItems|Where-Object control -eq 'priorityClass').Count){throw 'Game Tune undo claimed it left a priority that changed back'}
    if(-not$undo.restorable -or -not$status.restorable){throw ('Game Tune changed-back undo lost the recovery point: undo '+$undo.restorable+' session '+$status.restorable)}
    if($Mode -eq 'original' -and @($entry.alreadyOriginal|Where-Object control -eq 'priorityClass').Count -ne 1){throw 'Game Tune original-value preview lost its fresh verification check'}
-   $undo=& (Join-Path $Source 'backend\scripts\Stop-GameTuneSession.ps1') -SessionPath $start.sessionPath -ConfirmApply|ConvertFrom-Json;Save $directory 'undo' $undo
+   $undo=Invoke-E2EBackend 'Stop-GameTuneSession.ps1' -SessionPath $start.sessionPath -ConfirmApply|ConvertFrom-Json;Save $directory 'undo' $undo
    $status=& (Join-Path $Source 'backend\scripts\Get-GameTuneSessionStatus.ps1') -SessionPath $start.sessionPath|ConvertFrom-Json;Save $directory 'status' $status
    $after=Read-Fixture $p
    if($after.priorityClass -ne 'Normal'){throw ('Game Tune second undo did not restore the original priority: '+$after.priorityClass)}
    if($undo.restorable -or $undo.status -ne 'completed' -or $status.restorable){throw ('Game Tune second undo did not finish: '+$undo.status+' restorable '+$undo.restorable+' session '+$status.restorable)}
    Save $directory 'done' @{passed=$true;mode=$Mode;kept='priorityClass AboveNormal on first undo';restored='affinityMask and priorityClass Normal on second undo'}
+   return
+  }
+  if($Mode -eq 'pending'){
+   if($after.priorityClass -ne 'BelowNormal' -or -not $undo.restorable -or -not $status.restorable -or @($undo.result.leftAsSetItems).Count){throw 'Unverified Game Tune drift must remain pending without kept attribution'}
+   if($after.affinityMask -ne $before.affinityMask){throw 'Independent affinity did not restore'}
+   $repeat=Invoke-E2EBackend 'Stop-GameTuneSession.ps1' -SessionPath $start.sessionPath -ConfirmApply|ConvertFrom-Json;Save $directory 'repeat' $repeat
+   if(-not $repeat.restorable -or (Read-Fixture $p).priorityClass -ne 'BelowNormal' -or @($repeat.result.leftAsSetItems).Count){throw 'Repeated unverified Undo incorrectly closed recovery'}
+   $p.PriorityClass='Normal'
+   $resolved=Invoke-E2EBackend 'Stop-GameTuneSession.ps1' -SessionPath $start.sessionPath -ConfirmApply|ConvertFrom-Json;Save $directory 'original-resolution' $resolved
+   if($resolved.restorable -or (Read-Fixture $p).priorityClass -ne 'Normal'){throw 'Actual original did not safely resolve pending Game Tune recovery'}
+   Save $directory 'done' @{passed=$true;mode=$Mode;pendingDrift='BelowNormal';resolvedOriginal='Normal'}
    return
   }
   if($after.priorityClass -ne 'BelowNormal'){throw ('Game Tune undo overwrote the priority another program set: '+$after.priorityClass)}
@@ -110,7 +137,7 @@ function Invoke-ProfileScenario([string]$name,[ValidateSet('before','race','back
    safety=[pscustomobject]@{confirmedApplyChanges=@('PriorityClass');continuousEnforcement=$true;runtimeService=$false}
   }
   Save $directory 'profile' $profile
-  $apply=& (Join-Path $Source 'backend\scripts\Apply-ProcessProfile.ps1') -ProfilePath (Join-Path $directory 'profile.json') -TargetGameProcessName 'KeepValueTarget.exe' -StateRoot (Join-Path $directory 'state') -ConfirmApply|ConvertFrom-Json;Save $directory 'apply' $apply
+  $apply=Invoke-E2EBackend 'Apply-ProcessProfile.ps1' -ProfilePath (Join-Path $directory 'profile.json') -TargetGameProcessName 'KeepValueTarget.exe' -StateRoot (Join-Path $directory 'state') -ConfirmApply|ConvertFrom-Json;Save $directory 'apply' $apply
   foreach($fixture in $kept,$untouched){if((Read-Fixture $fixture.process).priorityClass -ne 'AboveNormal'){throw ('The profile did not raise fixture '+$fixture.process.Id)}}
   if($Mode -eq 'pending'){
    $backup=Get-Content -LiteralPath $apply.backup.location -Raw|ConvertFrom-Json
@@ -124,7 +151,7 @@ function Invoke-ProfileScenario([string]$name,[ValidateSet('before','race','back
    $kept.process.PriorityClass=if($Mode -eq 'original'){'Normal'}else{'BelowNormal'}
    if($Mode -in @('back','original')){$breakpoint=Set-ChangeLineBreakpoint $kept.process (Join-Path $Source 'backend\scripts\Restore-ProcessProfileBackup.ps1') 'AboveNormal'}
   }
-  $undo=& (Join-Path $Source 'backend\scripts\Restore-ProcessProfileBackup.ps1') -BackupPath $apply.backup.location -ConfirmApply|ConvertFrom-Json;Save $directory 'undo' $undo
+  $undo=Invoke-E2EBackend 'Restore-ProcessProfileBackup.ps1' -BackupPath $apply.backup.location -ConfirmApply|ConvertFrom-Json;Save $directory 'undo' $undo
   $breakpointHits=0;if($breakpoint){$breakpointHits=$breakpoint.HitCount;Remove-PSBreakpoint $breakpoint;$breakpoint=$null}
   $keptAfter=Read-Fixture $kept.process;$untouchedAfter=Read-Fixture $untouched.process
   if($Mode -in @('back','original')){
@@ -135,11 +162,21 @@ function Invoke-ProfileScenario([string]$name,[ValidateSet('before','race','back
    if($untouchedAfter.priorityClass -ne 'Normal'){throw ('Profile restore did not put back the untouched priority: '+$untouchedAfter.priorityClass)}
    if(@($undo.result.leftAsSetItems|Where-Object processId -eq $kept.process.Id).Count){throw 'Profile restore claimed it left a priority that changed back'}
    if($undo.status -ne 'partial' -or $undo.result.restorePendingCount -ne 1){throw ('Profile changed-back restore lost the recovery point: '+$undo.status+' pending '+$undo.result.restorePendingCount)}
-   $undo=& (Join-Path $Source 'backend\scripts\Restore-ProcessProfileBackup.ps1') -BackupPath $apply.backup.location -ConfirmApply|ConvertFrom-Json;Save $directory 'undo' $undo
+   $undo=Invoke-E2EBackend 'Restore-ProcessProfileBackup.ps1' -BackupPath $apply.backup.location -ConfirmApply|ConvertFrom-Json;Save $directory 'undo' $undo
    $keptAfter=Read-Fixture $kept.process
    if($keptAfter.priorityClass -ne 'Normal'){throw ('Profile second restore did not restore the original priority: '+$keptAfter.priorityClass)}
    if($undo.status -ne 'success' -or $undo.result.restorePendingCount -ne 0){throw ('Profile second restore did not finish: '+$undo.status+' pending '+$undo.result.restorePendingCount)}
    Save $directory 'done' @{passed=$true;mode=$Mode;kept='priorityClass AboveNormal on first restore';restored='priorityClass Normal on second restore'}
+   return
+  }
+  if($Mode -eq 'pending'){
+   if($keptAfter.priorityClass -ne 'BelowNormal' -or $untouchedAfter.priorityClass -ne 'Normal' -or $undo.result.restorePendingCount -ne 1 -or @($undo.result.leftAsSetItems).Count){throw 'Unverified profile drift must remain pending while its peer restores'}
+   $repeat=Invoke-E2EBackend 'Restore-ProcessProfileBackup.ps1' -BackupPath $apply.backup.location -ConfirmApply|ConvertFrom-Json;Save $directory 'repeat' $repeat
+   if($repeat.result.restorePendingCount -ne 1 -or (Read-Fixture $kept.process).priorityClass -ne 'BelowNormal' -or @($repeat.result.leftAsSetItems).Count){throw 'Repeated unverified profile drift incorrectly closed recovery'}
+   $kept.process.PriorityClass='Normal'
+   $resolved=Invoke-E2EBackend 'Restore-ProcessProfileBackup.ps1' -BackupPath $apply.backup.location -ConfirmApply|ConvertFrom-Json;Save $directory 'original-resolution' $resolved
+   if($resolved.result.restorePendingCount -ne 0 -or (Read-Fixture $kept.process).priorityClass -ne 'Normal'){throw 'Actual original did not safely resolve profile recovery'}
+   Save $directory 'done' @{passed=$true;mode=$Mode;pendingDrift='BelowNormal';resolvedOriginal='Normal'}
    return
   }
   if($keptAfter.priorityClass -ne 'BelowNormal'){throw ('Profile restore overwrote the priority another program set: '+$keptAfter.priorityClass)}
@@ -163,3 +200,5 @@ Invoke-GameScenario 'game-pending' 'pending'
 Invoke-ProfileScenario 'profile-original' 'original'
 Invoke-ProfileScenario 'profile-pending' 'pending'
 if($failures.Count){throw ($failures -join '; ')}
+[IO.File]::WriteAllText((Join-Path $OutRoot 'summary.json'),(@{passed=$true;cases=10;engine=$PSVersionTable.PSVersion.ToString()}|ConvertTo-Json))
+'ROO_INDUSTRIES_RESTORE_KEEPS_VALUE_E2E_COMPLETE'

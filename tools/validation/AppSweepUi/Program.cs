@@ -36,13 +36,19 @@ if (args is ["revisit"])
     return;
 }
 
-if (args is [] or ["restore-summary"] or ["restore-summary", _])
+if (args.Length == 0 || (args.Length <= 2 && args[0] is "restore-summary" or "restore-summary-setup-failure" or "restore-summary-body-failure" or "restore-summary-cleanup-failure" or "restore-summary-body-cleanup-failure"))
 {
-    var output = args.Length > 1 ? Path.GetFullPath(args[1]) : Path.Combine(Path.GetTempPath(), "restore-summary-" + Guid.NewGuid().ToString("N"));
-    var fixtures = Path.Combine(output, "fixtures-" + Guid.NewGuid().ToString("N"));
-    Directory.CreateDirectory(fixtures);
-    var saved = App.Live.GetType().GetProperties(BindingFlags.Instance | BindingFlags.Public)
-        .Where(property => property.CanWrite).Select(property => (Property: property, Value: property.GetValue(App.Live))).ToArray();
+    var keepReceipts = args.Length > 1;
+    string? output = null;
+    string? fixtures = null;
+    DirectoryInfo? generatedOutput = null;
+    var saved = new List<(PropertyInfo Property, object? Value)>();
+    var restoredProperties = 0;
+    Exception? bodyError = null;
+    var cleanupErrors = new List<Exception>();
+    FileStream? cleanupHeld = null;
+    var setupBlockerCreated = false;
+    var fault = args.Length == 0 ? "" : args[0];
     var failures = new List<string>();
     var observations = new List<object>();
     void Verify(bool condition, string message)
@@ -66,7 +72,19 @@ if (args is [] or ["restore-summary"] or ["restore-summary", _])
     var skipped = new[] { new { processName = "Target", reason } };
     try
     {
+        output = keepReceipts ? Path.GetFullPath(args[1]) : (generatedOutput = Directory.CreateTempSubdirectory("restore-summary-")).FullName;
+        fixtures = Path.Combine(output, "fixtures-" + Guid.NewGuid().ToString("N"));
+        if (fault == "restore-summary-setup-failure")
+        {
+            using (File.Create(fixtures)) { setupBlockerCreated = true; }
+        }
+        Directory.CreateDirectory(fixtures);
+        foreach (var property in App.Live.GetType().GetProperties(BindingFlags.Instance | BindingFlags.Public).Where(property => property.CanWrite))
+            saved.Add((property, property.GetValue(App.Live)));
+        if (fault is "restore-summary-cleanup-failure" or "restore-summary-body-cleanup-failure")
+            cleanupHeld = new FileStream(Path.Combine(fixtures, "cleanup-held"), FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None);
         App.Live.LastError = App.Live.OperationError = App.Live.GameTuneResultError = App.Live.GameTuneRestoreError = null;
+        if (fault is "restore-summary-body-failure" or "restore-summary-body-cleanup-failure") File.ReadAllText(Path.Combine(fixtures, "missing-body.json"));
         App.Live.ProcessProfileRecovery = null;
         var backup = Path.Combine(fixtures, "process.json");
         File.WriteAllText(backup, JsonSerializer.Serialize(new { actionId = "performance.applyProfile", backupId = "summary-backup", profileId = "summary-profile",
@@ -372,14 +390,46 @@ if (args is [] or ["restore-summary"] or ["restore-summary", _])
             finally { File.WriteAllText(recordedSession, afterRetry); }
         }
         }
+        if (failures.Count > 0) throw new InvalidOperationException(string.Join("\n", failures));
     }
+    catch (Exception restoreSummaryError) { bodyError = restoreSummaryError; }
     finally
     {
-        foreach (var entry in saved) entry.Property.SetValue(App.Live, entry.Value);
-        Directory.Delete(fixtures, true);
-        File.WriteAllText(Path.Combine(output, "receipts.json"), JsonSerializer.Serialize(observations, new JsonSerializerOptions { WriteIndented = true }));
+        foreach (var entry in saved)
+        {
+            try
+            {
+                entry.Property.SetValue(App.Live, entry.Value);
+                if (!Equals(entry.Property.GetValue(App.Live), entry.Value)) throw new InvalidOperationException("A saved App.Live property was not restored: " + entry.Property.Name);
+                restoredProperties++;
+            }
+            catch (Exception restoreSummaryError) { cleanupErrors.Add(restoreSummaryError); }
+        }
+        try { if (setupBlockerCreated && fixtures is not null) File.Delete(fixtures); }
+        catch (Exception restoreSummaryError) { cleanupErrors.Add(restoreSummaryError); }
+        try { if (fixtures is not null && Directory.Exists(fixtures)) Directory.Delete(fixtures, true); }
+        catch (Exception restoreSummaryError) { cleanupErrors.Add(restoreSummaryError); }
+        if (cleanupHeld is not null)
+        {
+            try { cleanupHeld.Dispose(); }
+            catch (Exception restoreSummaryError) { cleanupErrors.Add(restoreSummaryError); }
+            try { if (fixtures is not null && Directory.Exists(fixtures)) Directory.Delete(fixtures, true); }
+            catch (Exception restoreSummaryError) { cleanupErrors.Add(restoreSummaryError); }
+        }
+        try
+        {
+            if (keepReceipts && output is not null)
+                File.WriteAllText(Path.Combine(output, "receipts.json"), JsonSerializer.Serialize(observations, new JsonSerializerOptions { WriteIndented = true }));
+            else if (generatedOutput is not null)
+                Directory.Delete(generatedOutput.FullName, true);
+        }
+        catch (Exception restoreSummaryError) { cleanupErrors.Add(restoreSummaryError); }
     }
-    if (failures.Count > 0) throw new InvalidOperationException(string.Join("\n", failures));
+    try { Console.WriteLine($"ROO_INDUSTRIES_RESTORE_SUMMARY_CLEANUP:{saved.Count}:{restoredProperties}:{cleanupErrors.Count}"); }
+    catch (Exception restoreSummaryError) { cleanupErrors.Add(restoreSummaryError); }
+    if (bodyError is not null && cleanupErrors.Count == 0) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(bodyError).Throw();
+    if (bodyError is not null) cleanupErrors.Insert(0, bodyError);
+    if (cleanupErrors.Count > 0) throw new AggregateException(cleanupErrors);
     if (args.Length > 0) { Console.WriteLine($"Completed {count} restore summary UI checks."); return; }
 }
 

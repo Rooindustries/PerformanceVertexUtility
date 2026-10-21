@@ -81,3 +81,12 @@ python3 tools/validation/windows_ssh.py --host windows-test --expected-machine T
 The helper disables SSH proxying, checks the Windows computer name before writes, and preserves argument boundaries through encoded PowerShell. Upload includes tracked working-tree source and a SHA-256 manifest under the current Windows user's Temp directory; it excludes frontend sources. Add new source files to Git before uploading them. The returned staging path can be used by a trusted validation script that runs `Test-Baseline.ps1` and verifies the manifest before and after testing. Retrieve results before removing the owned staging directory.
 
 A green build or fixture suite does not establish real-provider operation, real uninstall success, a performance gain, or visual quality. Record those separately on the relevant Windows machine.
+
+Profile and Game Tune restore changes also require the manual real Windows
+entry point `tools/validation/Background/Invoke-RestoreE2EGates.ps1 -Source
+$Source -OutRoot $OwnedArtifacts`. Use its original frame receipt, active Harness
+lease and hashed E2E inputs as described in the [Background checks](../tools/validation/Background/README.md#required-restore-e2e-gates).
+This group is separate from automatic Baseline discovery. Historical Linux
+restore diagnostics simulate process I/O; schema validation of their full JSON
+envelopes proves only the contract. Real restore, contention, C6 and rendered
+UI8/media gates must finish on the authorized Windows source before merge.

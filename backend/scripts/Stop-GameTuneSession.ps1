@@ -210,6 +210,7 @@ try {
     }
     $startedAtUtc = Get-RooIndustriesUtcStamp
 
+    $executionPairs = New-Object System.Collections.Generic.List[object]
     $preview = New-Object System.Collections.Generic.List[object]
     $changed = New-Object System.Collections.Generic.List[object]
     $skipped = New-Object System.Collections.Generic.List[object]
@@ -227,10 +228,12 @@ try {
         $candidate = Get-RooIndustriesGameTuneLiveProcessIdentity $candidateEntry
         $entry = New-GameTuneRestorePreview $snapshot $candidate
         $preview.Add($entry) | Out-Null
+        $executionPairs.Add([pscustomobject]@{ entry = $entry; snapshot = $snapshot }) | Out-Null
     }
 
     if ($ConfirmApply) {
-        foreach ($entry in @($preview.ToArray())) {
+        foreach ($pair in @($executionPairs.ToArray())) {
+            $entry = $pair.entry
             if ([bool](Get-RooIndustriesPropertyValue $entry 'blocked' $false)) {
                 if (@(Get-RooIndustriesPropertyArray $entry 'reasonCodes') -contains 'GAME_TUNE_ALREADY_CLOSED') {
                     $alreadyClosed.Add((New-GameTuneAlreadyClosedItem $entry)) | Out-Null
@@ -266,36 +269,21 @@ try {
             $appliedControls = New-Object System.Collections.Generic.List[object]
             $failedControls = New-Object System.Collections.Generic.List[string]
             foreach ($check in (@(Get-RooIndustriesPropertyArray $entry 'alreadyOriginal') + @(Get-RooIndustriesPropertyArray $entry 'leftAsSet'))) {
-                $verification = Confirm-RooIndustriesRestoreControl $live $check
+                $verification = Confirm-RooIndustriesRestoreControl $live $check $pair.snapshot $entry
                 if (-not $verification.confirmed) { $failedControls.Add([string]$check.control + ': ' + $verification.reason) | Out-Null }
                 elseif ($null -ne $verification.leftAsSet) { $leftAsSetItems.Add((New-RooIndustriesLeftAsSetItem $entry $verification.leftAsSet)) | Out-Null }
             }
-            if ($entryControlChanges.Count -eq 0 -and $failedControls.Count -eq 0) {
-                continue
-            }
             foreach ($change in $entryControlChanges) {
-                if ([bool](Get-RooIndustriesPropertyValue $change 'blocked' $false)) {
-                    $failedControls.Add([string]$change.control + ': ' + [string]$change.blockedReason) | Out-Null
-                    continue
-                }
-                try {
-                    Invoke-RooIndustriesProcessControlChange $live $change
-                    $appliedControls.Add($change) | Out-Null
-                } catch {
-                    $failureMessage = $_.Exception.Message
-                    $verification = Get-RooIndustriesRestoreLeftAsSet $live $change $failureMessage
-                    if ($null -ne $verification) {
-                        if ($verification.confirmed) {
-                            if ($null -ne $verification.leftAsSet) { $leftAsSetItems.Add((New-RooIndustriesLeftAsSetItem $entry $verification.leftAsSet)) | Out-Null }
-                            continue
-                        }
-                        $failureMessage = $verification.reason
-                    }
-                    $failedControls.Add("$([string](Get-RooIndustriesPropertyValue $change 'control' 'unknown')): $failureMessage") | Out-Null
-                }
+                $verification = Confirm-RooIndustriesRestoreControl $live $change $pair.snapshot $entry $change
+                if (-not $verification.confirmed) { $failedControls.Add([string]$change.control + ': ' + $verification.reason) | Out-Null }
+                elseif ($verification.restored) { $appliedControls.Add($change) | Out-Null }
+                elseif ($null -ne $verification.leftAsSet) { $leftAsSetItems.Add((New-RooIndustriesLeftAsSetItem $entry $verification.leftAsSet)) | Out-Null }
             }
             if ($appliedControls.Count -gt 0) {
-                $afterControls = Get-RooIndustriesProcessControlState $processId $null -ReadGpu:(Test-RooIndustriesEntryHasGpuControl $entry)
+                $afterControls = $null
+                try {
+                    $afterControls = Get-RooIndustriesProcessControlState $processId $null -ReadGpu:(Test-RooIndustriesEntryHasGpuControl $entry)
+                } catch { $failedControls.Add($_.Exception.Message) | Out-Null }
                 $restoreItem = [pscustomobject]@{
                     processId = $processId
                     processName = Get-RooIndustriesPropertyValue $entry 'processName' ''
@@ -312,12 +300,6 @@ try {
                 $changed.Add($restoreItem) | Out-Null
             }
             if ($failedControls.Count -gt 0) {
-                $exitedDuringRestore = $false
-                try { $exitedDuringRestore = $live.HasExited } catch { $exitedDuringRestore = $false }
-                if ($exitedDuringRestore) {
-                    $alreadyClosed.Add((New-GameTuneAlreadyClosedItem $entry)) | Out-Null
-                    continue
-                }
                 $skip = [pscustomobject]@{
                     processId = $processId
                     processName = Get-RooIndustriesPropertyValue $entry 'processName' ''

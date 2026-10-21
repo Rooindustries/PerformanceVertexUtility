@@ -117,3 +117,87 @@ placement and inverse restore may change either direction. Partial/failed restor
 text must name the remaining live apps and explain their failures. An archived
 invalid recovery reference must show a dismissible notice once on the Background
 apps card, without changing the preserved bytes or falsely freeing a valid slot.
+
+## Required restore E2E gates
+
+Before merging a change to profile or Game Tune Undo, run this manual group on
+an explicitly granted Windows test PC, in its original owned source frame:
+
+```powershell
+& "$Source\tools\validation\Background\Invoke-RestoreE2EGates.ps1" -Source $Source -OutRoot $OwnedArtifacts
+```
+
+The caller must first supply the existing verified `windows_ssh.py`
+`REMOTE_GUARDS` recipe in the same PowerShell session. The group requires its
+`Assert-FrameSourceSnapshot` and protected path helpers; it fails if they are
+missing. It checks current source bytes before importing any source and again
+after the groups, including protocol, commit, frame, SID, machine and file count.
+
+The original `frame-receipt.json` and active canonical Harness lease remain
+required. Create `OutRoot` and both `compiled\actor` and `compiled\ui` directories
+through the owned Harness ledger. Create `e2e-inputs.json` through that ledger
+as a file; the group holds its original file identity and hash while running.
+Its `sourceCommit`, `originalSourceCommit`, `originalSource`,
+`originalSourceManifest` and `originalSourceFileCount` bind the current source
+and original b0 export. Every row in `files` has an absolute plain `path` and
+`sha256`. Include the original export manifest and every published file in both
+compiled directories, with no duplicate or unlisted paths: apphost EXE, entry
+DLL, runtimeconfig, deps, managed dependencies and other published files. The
+group rechecks this inventory and every hash after execution.
+
+The group refuses another user, machine, source frame or terminal session.
+`-Scenario` selects named native cases; its completion artifact states exactly
+which cases ran. It does not certify omitted cases or the whole release gate.
+
+`Test-RestoreSerialization.ps1` exercises real Windows controls and both actual
+restore bodies. It isolates only the data root. The separate Core actor uses
+public Preview/Apply/Restore, records native birth and actual terminal sessions,
+and must report `InstanceBusyException` for a contention refusal. The original
+b0 interleaving is an explicit negative control. Its bad outcome is retained
+before separately labelled post-red owned fixture cleanup; that cleanup is not
+Undo proof. Canonical ledger image paths remain intact; actor requests use the
+existing Plain normalization and retain both representations. Setter breakpoint
+counters count attempts, while actual readbacks and emitted outcomes establish
+what Windows did. Failed/pending saved-outcome replays are labelled as replays; the actual setter/readback failure case uses a
+PowerShell debugger breakpoint and real controls. No simulated getter, setter,
+mutex or API result is an E2E pass.
+
+`Test-RestoreSummaryOutput.ps1` runs the real AppSweep process with owned
+filesystem failures. The `restore-summary-setup-failure`, `-body-failure`,
+`-cleanup-failure` and `-body-cleanup-failure` modes create only validation
+fixtures: an owned setup blocker, missing body input or held cleanup file.
+Generated output must disappear in every case, including recovered cleanup
+failures. Explicit output, its sentinel and receipts remain, including early
+setup failure. The driver retains the original process identity, saves raw
+output before assertions and attempts each owned cleanup even when a check
+fails. It checks every captured property, cleanup error counts and original
+body error ordering. These Windows scenarios remain unrun until a new grant.
+
+Validate the complete captured envelopes, including single-field malformed
+copies, with:
+
+```sh
+bash tools/validation/Background/test_restore_contracts.sh "$source" "$artifacts" --negative-records
+```
+
+That command validates JSON against the schema. It proves no Windows behavior.
+Its coverage receipt lists the actual kept controls and representations it saw;
+missing real producer variants remain unrun. Historical Linux outputs with
+simulated process I/O remain useful schema inputs, including unsafe historical
+outcomes, and remain labelled as historical.
+
+`Test-ProfileRestoreConfirmation.ps1`, `Test-ProfileRestoreIdentityRecovery.ps1`,
+`Test-RestoreGovernorOwnership.ps1`, `Test-RestoreProcessOperationOwnership.ps1`
+and `Test-RestoreOwnershipScale.ps1` contain historical dependency simulations.
+They are not automatic Background E2E discovery by `Test-Baseline.ps1`. The
+Baseline workflow runs its declared Linux checks and optional Windows matrix.
+The manual real restore group above is a separate required gate. C6 still
+requires 40 real processes, two controls, 125 histories and each whole Undo
+under 45 seconds. UI8, screenshots, interaction video and both actual vision
+reviews remain separate required Windows gates.
+
+The Global governor gate coordinates supported actors for the current SID.
+The unchanged Local process-instance mutex coordinates direct Core actors in
+the same terminal session. Uncooperative direct DLL consumers in another
+terminal session and legacy direct policy/governor setter routing are outside
+this change; they are not claimed serialized by these checks.
