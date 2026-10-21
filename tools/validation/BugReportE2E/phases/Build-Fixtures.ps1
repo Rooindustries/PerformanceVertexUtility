@@ -28,7 +28,7 @@ public static class BuildBinding {
   if($kind -ceq 'desktop'){$arguments+=@('-p:Platform=x64','-r','win-x64')}
   $native=Invoke-RooIndustriesOwnedCommand $dotnet $arguments $FixtureRoot $OutRoot ('report-e2e-'+$kind+'-build') 600
   $expected=if($kind -ceq 'applog'){'Roo70LogProof.dll'}else{'Roo70.RenderedBugReportFixture.exe'}
-  $matches=@(Get-HarnessTree $output -FilesOnly|Where-Object {$_.Name -ceq $expected})
+  $matches=@(Get-HarnessTree $output -FilesOnly|Where-Object {[IO.Path]::GetFileName($_.FullName) -ceq $expected})
   Assert-RooIndustries ($matches.Count -eq 1 -and $matches[0].FullName -ieq (Join-Path $output $expected)) 'Unique expected fixture binary missing; prerequisites may be unavailable.'
   $files=Register-RooIndustriesTree $BuildOut 'report-e2e-build-output'
   $build=@{schemaVersion=1;kind=$kind;helperBuild=($kind -ceq 'applog' -and $script:RooIndustriesScenario -ceq 'Rendered' -and $script:RooIndustriesReaderAdverseRequested);sourceCommit=$script:RooIndustriesCommit;sourceManifestSha256=(ConvertTo-RooIndustriesSha256 $script:Harness.Manifest);uiNonce=$binding.uiNonce;invocationNonce=$binding.invocationNonce;nativeExit=$native.exit;files=$files;generatedBinding=$bindingFile;appLogSha256=$binding.appLogSha256;redactorSha256=$binding.redactorSha256;nativeExecuted=$false}
