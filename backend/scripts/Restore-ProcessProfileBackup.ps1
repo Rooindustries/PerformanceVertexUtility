@@ -264,7 +264,20 @@ try {
         $candidate = Get-RestoreCandidate $snapshot
         $previewEntry = New-RollbackPreviewEntry $snapshot $candidate
         $previewEntries.Add($previewEntry) | Out-Null
-        $executionPairs.Add([pscustomobject]@{ entry = $previewEntry; snapshot = $snapshot; failed = $false }) | Out-Null
+        $executionPairs.Add([pscustomobject]@{
+            entry = $previewEntry
+            snapshot = $snapshot
+            failed = $false
+            executionMatched = $false
+            closed = $false
+            stopControls = $false
+            closedReason = 'This app was already closed or restarted. Nothing remains to restore for the saved instance.'
+            skipCategory = 'restore-failed'
+            failureReasons = (New-Object System.Collections.Generic.List[string])
+            initialSkipped = (New-Object System.Collections.Generic.List[object])
+            stagedChanged = $null
+            stagedKept = (New-Object System.Collections.Generic.List[object])
+        }) | Out-Null
     }
 
     $changed = New-Object System.Collections.Generic.List[object]
@@ -275,55 +288,126 @@ try {
         foreach ($pair in @($executionPairs.ToArray())) {
             $entry = $pair.entry
             if ([bool](Get-RooIndustriesPropertyValue $entry 'blocked' $false)) {
-                $pair.failed = -not [bool](Get-RooIndustriesPropertyValue $entry 'instanceEnded' $false)
-                $skipped.Add((New-RestoreSkippedItem $entry (Get-RooIndustriesPropertyValue $entry 'blockedReason' 'Rollback entry is blocked.') @(Get-RooIndustriesPreviewControlChanges $entry) 'blocked')) | Out-Null
+                $reason = [string](Get-RooIndustriesPropertyValue $entry 'blockedReason' 'Rollback entry is blocked.')
+                if ([bool](Get-RooIndustriesPropertyValue $entry 'instanceEnded' $false)) {
+                    $pair.closed = $true
+                    $pair.closedReason = $reason
+                    $pair.initialSkipped.Add((New-RestoreSkippedItem $entry $reason @(Get-RooIndustriesPreviewControlChanges $entry) 'blocked')) | Out-Null
+                } else {
+                    $pair.failed = $true
+                    $pair.skipCategory = 'blocked'
+                    $pair.failureReasons.Add($reason) | Out-Null
+                }
                 continue
             }
 
-            $processId = [int](Get-RooIndustriesPropertyValue $entry 'processId' 0)
-            $identity = Get-RestoreCandidate $pair.snapshot
-            $live = $identity.process
-            if (-not $identity.exists -or -not $identity.matches) {
-                $pair.failed = -not $identity.instanceEnded
-                $skipped.Add((New-RestoreSkippedItem $entry $identity.blockedReason @(Get-RooIndustriesPreviewControlChanges $entry) 'exited')) | Out-Null
-                continue
-            }
-            $entryControlChanges = @(Get-RooIndustriesPreviewControlChanges $entry)
-            $appliedControls = New-Object System.Collections.Generic.List[object]
-            $failedControls = New-Object System.Collections.Generic.List[string]
-            foreach ($check in (@(Get-RooIndustriesPropertyArray $entry 'alreadyOriginal') + @(Get-RooIndustriesPropertyArray $entry 'leftAsSet'))) {
-                $verification = Confirm-RooIndustriesRestoreControl $live $check $pair.snapshot $entry
-                if (-not $verification.confirmed) { $failedControls.Add([string]$check.control + ': ' + $verification.reason) | Out-Null }
-                elseif ($null -ne $verification.leftAsSet) { $leftAsSetItems.Add((New-RooIndustriesLeftAsSetItem $entry $verification.leftAsSet)) | Out-Null }
-            }
-            foreach ($change in $entryControlChanges) {
-                $verification = Confirm-RooIndustriesRestoreControl $live $change $pair.snapshot $entry $change
-                if (-not $verification.confirmed) { $failedControls.Add([string]$change.control + ': ' + $verification.reason) | Out-Null }
-                elseif ($verification.restored) { $appliedControls.Add($change) | Out-Null }
-                elseif ($null -ne $verification.leftAsSet) { $leftAsSetItems.Add((New-RooIndustriesLeftAsSetItem $entry $verification.leftAsSet)) | Out-Null }
-            }
-            if ($failedControls.Count -gt 0) { $pair.failed = $true }
             try {
-                if ($appliedControls.Count -gt 0) {
-                    $afterControls = Get-RooIndustriesProcessControlState $processId $null -ReadGpu:(Test-RooIndustriesEntryHasGpuControl $entry)
-                    $changed.Add([pscustomobject]@{
-                        processId = $processId
-                        processName = Get-RooIndustriesPropertyValue $entry 'processName' ''
-                        restoredPriorityClass = $afterControls.priorityClass
-                        restoredAffinityMask = $afterControls.affinityMask
-                        restoredIoPriority = $afterControls.ioPriority
-                        restoredMemoryPriority = $afterControls.memoryPriority
-                        restoredGpuPriority = $afterControls.gpuPriority
-                        restoredControls = @($appliedControls.ToArray())
-                        ruleId = Get-RooIndustriesPropertyValue $entry 'ruleId' ''
-                    }) | Out-Null
+                $processId = [int](Get-RooIndustriesPropertyValue $entry 'processId' 0)
+                $identity = Get-RestoreCandidate $pair.snapshot
+                $live = $identity.process
+                if (-not $identity.exists -or -not $identity.matches) {
+                    if ($identity.instanceEnded) {
+                        $pair.closed = $true
+                        $pair.closedReason = [string]$identity.blockedReason
+                        $pair.initialSkipped.Add((New-RestoreSkippedItem $entry $identity.blockedReason @(Get-RooIndustriesPreviewControlChanges $entry) 'exited')) | Out-Null
+                    } else {
+                        $pair.failed = $true
+                        $pair.skipCategory = 'exited'
+                        $pair.failureReasons.Add([string]$identity.blockedReason) | Out-Null
+                    }
+                    continue
                 }
-                if ($failedControls.Count -gt 0) {
-                    $skipped.Add((New-RestoreSkippedItem $entry ($failedControls -join '; ') $entryControlChanges 'restore-failed')) | Out-Null
+                $pair.executionMatched = $true
+                $appliedControls = New-Object System.Collections.Generic.List[object]
+                $workItems = New-Object System.Collections.Generic.List[object]
+                foreach ($check in (@(Get-RooIndustriesPropertyArray $entry 'alreadyOriginal') + @(Get-RooIndustriesPropertyArray $entry 'leftAsSet'))) {
+                    $workItems.Add([pscustomobject]@{ check = $check; change = $null }) | Out-Null
+                }
+                foreach ($change in @(Get-RooIndustriesPreviewControlChanges $entry)) {
+                    $workItems.Add([pscustomobject]@{ check = $change; change = $change }) | Out-Null
+                }
+                foreach ($work in @($workItems.ToArray())) {
+                    try {
+                        $verification = Confirm-RooIndustriesRestoreControl $live $work.check $pair.snapshot $entry $work.change
+                        if ($null -eq $verification) { throw 'Restore confirmation returned no result.' }
+                        foreach ($flag in @('confirmed', 'restored', 'instanceEnded', 'cleanupFailed')) {
+                            $property = $verification.PSObject.Properties[$flag]
+                            if ($null -eq $property -or $property.Value -isnot [bool]) { throw 'Restore confirmation returned an incomplete result.' }
+                        }
+                        if ($verification.cleanupFailed) { throw [string]$verification.reason }
+                        if ($verification.instanceEnded) {
+                            if ($verification.confirmed -or $verification.restored -or $null -ne $verification.leftAsSet) { throw 'Restore confirmation returned conflicting results.' }
+                            $pair.stopControls = $true
+                            if (-not $pair.failed) {
+                                $pair.closed = $true
+                                $pair.closedReason = [string]$verification.reason
+                            }
+                            break
+                        }
+                        if (-not $verification.confirmed) { throw [string]$verification.reason }
+                        if ($verification.restored) {
+                            if ($null -eq $work.change -or $null -ne $verification.leftAsSet) { throw 'Restore confirmation returned conflicting results.' }
+                            $appliedControls.Add($work.change) | Out-Null
+                        } elseif ($null -ne $verification.leftAsSet) {
+                            $pair.stagedKept.Add((New-RooIndustriesLeftAsSetItem $entry $verification.leftAsSet)) | Out-Null
+                        }
+                    } catch {
+                        $pair.failed = $true
+                        $pair.failureReasons.Add([string](Get-RooIndustriesPropertyValue $work.check 'control' '') + ': ' + $_.Exception.Message) | Out-Null
+                    }
+                }
+
+                if (-not $pair.failed -and -not $pair.closed) {
+                    if (Test-RooIndustriesRestoreInstanceEnded $pair.snapshot $entry) {
+                        $pair.closed = $true
+                        $pair.stopControls = $true
+                    }
+                }
+                if (-not $pair.closed -and -not $pair.stopControls -and $appliedControls.Count -gt 0) {
+                    $afterControls = Get-RooIndustriesProcessControlState $processId $null -ReadGpu:(Test-RooIndustriesEntryHasGpuControl $entry)
+                    $existsProperty = if ($null -ne $afterControls) { $afterControls.PSObject.Properties['exists'] } else { $null }
+                    if ($null -eq $existsProperty -or $existsProperty.Value -isnot [bool] -or -not $existsProperty.Value) {
+                        throw 'Windows could not verify the restored process controls.'
+                    }
+                    foreach ($appliedControl in @($appliedControls.ToArray())) {
+                        $control = [string]$appliedControl.control
+                        $actual = Get-RooIndustriesPropertyValue $afterControls $control $null
+                        $available = Get-RooIndustriesPropertyValue $afterControls ($control + 'Available') $null
+                        $valid = switch ($control) {
+                            'priorityClass' { $actual -is [string] -and (Test-RooIndustriesPriorityAllowed $actual -Restoring) }
+                            'affinityMask' { ($actual -is [int] -or $actual -is [long]) -and (Test-RooIndustriesAffinityMaskAllowed $actual) }
+                            'ioPriority' { $actual -is [string] -and (Test-RooIndustriesIoPriorityAllowed $actual -Restoring) -and $available -is [bool] -and $available }
+                            'memoryPriority' { ($actual -is [int] -or $actual -is [long]) -and (Test-RooIndustriesMemoryPriorityAllowed $actual) -and $available -is [bool] -and $available }
+                            'gpuPriority' { $actual -is [string] -and (Test-RooIndustriesGpuPriorityAllowed $actual) -and $available -is [bool] -and $available }
+                            default { $false }
+                        }
+                        if (-not $valid -or -not (Test-RooIndustriesControlValueEqual $control $actual $appliedControl.proposedValue)) {
+                            throw ('Windows could not verify the restored value for ' + $control + '.')
+                        }
+                    }
+                    if (-not $pair.failed) {
+                        if (Test-RooIndustriesRestoreInstanceEnded $pair.snapshot $entry) {
+                            $pair.closed = $true
+                            $pair.stopControls = $true
+                        }
+                    }
+                    if (-not $pair.closed -and -not $pair.stopControls) {
+                        $pair.stagedChanged = [pscustomobject]@{
+                            processId = $processId
+                            processName = Get-RooIndustriesPropertyValue $entry 'processName' ''
+                            restoredPriorityClass = $afterControls.priorityClass
+                            restoredAffinityMask = $afterControls.affinityMask
+                            restoredIoPriority = $afterControls.ioPriority
+                            restoredMemoryPriority = $afterControls.memoryPriority
+                            restoredGpuPriority = $afterControls.gpuPriority
+                            restoredControls = @($appliedControls.ToArray())
+                            ruleId = Get-RooIndustriesPropertyValue $entry 'ruleId' ''
+                        }
+                    }
                 }
             } catch {
                 $pair.failed = $true
-                $skipped.Add((New-RestoreSkippedItem $entry $_.Exception.Message $entryControlChanges 'restore-failed')) | Out-Null
+                $pair.failureReasons.Add($_.Exception.Message) | Out-Null
             }
         }
     } else {
@@ -339,18 +423,58 @@ try {
     if ($ConfirmApply) {
         foreach ($pair in @($executionPairs.ToArray())) {
             $snapshot = $pair.snapshot
-            $candidate = Get-RestoreCandidate $snapshot
-            if ($candidate.instanceEnded -and -not $pair.failed) {
-                $alreadyClosed.Add((New-RestoreSkippedItem $snapshot $candidate.blockedReason @() 'alreadyClosed')) | Out-Null
+            $entry = $pair.entry
+            $remaining = $null
+            if ($pair.executionMatched -and -not $pair.failed -and -not $pair.closed) {
+                try {
+                    if (Test-RooIndustriesRestoreInstanceEnded $snapshot $entry) {
+                        $pair.closed = $true
+                        $pair.stopControls = $true
+                    }
+                } catch {
+                    $pair.failed = $true
+                    $pair.failureReasons.Add($_.Exception.Message) | Out-Null
+                }
+            }
+            if ($pair.closed -and -not $pair.failed) {
+                $alreadyClosed.Add((New-RestoreSkippedItem $snapshot $pair.closedReason @() 'alreadyClosed')) | Out-Null
+                foreach ($item in @($pair.initialSkipped.ToArray())) { $skipped.Add($item) | Out-Null }
                 continue
             }
-            $remaining = New-RollbackPreviewEntry $snapshot $candidate
-            $restoreFailed = $pair.failed
-            if ($restoreFailed -or $remaining.blocked -or @(Get-RooIndustriesPreviewControlChanges $remaining).Count -gt 0) {
+            if (-not $pair.failed) {
+                try {
+                    $candidate = Get-RestoreCandidate $snapshot
+                    $remaining = New-RollbackPreviewEntry $snapshot $candidate
+                } catch {
+                    $pair.failed = $true
+                    $pair.failureReasons.Add($_.Exception.Message) | Out-Null
+                }
+            }
+            if ($pair.failed) {
+                $failureReason = $pair.failureReasons -join '; '
+                $unknown = [pscustomobject]@{
+                    exists = $false
+                    matches = $false
+                    instanceEnded = $false
+                    process = $null
+                    currentPriorityClass = $null
+                    currentControlState = $null
+                    blockedReason = $failureReason
+                }
+                $remaining = New-RollbackPreviewEntry $snapshot $unknown
+                $remaining.controlChanges = @(Get-RooIndustriesPreviewControlChanges $entry)
+                $skipped.Add((New-RestoreSkippedItem $entry $failureReason @(Get-RooIndustriesPreviewControlChanges $entry) $pair.skipCategory)) | Out-Null
+            }
+            if (-not $pair.stopControls) {
+                if ($null -ne $pair.stagedChanged) { $changed.Add($pair.stagedChanged) | Out-Null }
+                foreach ($item in @($pair.stagedKept.ToArray())) { $leftAsSetItems.Add($item) | Out-Null }
+            }
+            if ($pair.failed -or $remaining.blocked -or @(Get-RooIndustriesPreviewControlChanges $remaining).Count -gt 0) {
                 $pending.Add($remaining) | Out-Null
             }
         }
     }
+
     $status = if ($ConfirmApply) { 'success' } else { 'preview' }
     if ($ConfirmApply -and $pending.Count -gt 0) { $status = if ($changed.Count -gt 0) { 'partial' } else { 'failed' } }
 

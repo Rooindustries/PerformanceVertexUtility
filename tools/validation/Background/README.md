@@ -195,14 +195,60 @@ outside tampering. They require refusal, pending recovery and zero setters,
 then remove the original breakpoint and use the unchanged backup for a fresh
 positive Undo.
 
-The default authored selection has 79 scenario names and 622 serialization
-cases: the existing 378, plus 24 all-control names across both bodies (240),
-plus two affinity-only names across both bodies (4). The 10 keeps-other-value
-and 10 output cases stay unchanged, making 642 top-level green cases.
+The default authored selection has 84 scenario names and 672 serialization
+histories: the existing 622 plus five late-exit names across both bodies and
+all five controls (50). The 10 keeps-other-value and 10 output cases stay
+unchanged, making 692 top-level histories. Each of the 10 postwrite histories
+has two fresh-original producer legs, so the 50 new histories require 60
+producer legs. These counts describe authored selections, not completed runs.
 These are SOURCE-DERIVED counts, UNRUN until real Windows completion receipts
 exist. Explicit incompatible `-Control` fails. Selected runs record exact
 kind/control/scenario triples and expected/actual counts. No subset certifies
 the default grid, C6 or rendered proof.
+
+Late-exit histories stop the original only after the actual restore caller's
+execution identity check. They use breakpoints bound to the named Common
+function, with one matching source line in that function. The original
+breakpoint objects are removed before repeat or fresh-ended retry.
+
+| Scenario | Required observation |
+| --- | --- |
+| `late-exit-restore` | A clean late end closes the target once. For CPU, a separate owned original in the same actual producer backup restores once. |
+| `late-exit-original` | The genuine original-value preview enters confirmation before the target ends; no target setter or current kept claim. |
+| `late-exit-kept` | A genuinely applied record and actual external value produce a kept preview before exit; the closed result has no current kept claim. |
+| `late-exit-postwrite` | Two fresh-original legs stop before and after aggregate readback. Both retain all earlier successful native writes and readbacks. |
+| `late-exit-release-error` | A real mutex release failure remains pending after exit. Remove the injection and settle the original mutex before a separate fresh-ended retry. |
+
+The CPU restore history owns two separate PING originals with one unpredictable
+basename, separate directory/image/process ledger entries and native handles.
+One actual Apply or Start call creates both snapshots; Game uses one session.
+Both CPU originals are Normal and both memory values are read back as 5 before
+the producer requests AboveNormal and memory 5. A same-process control, actor
+or duplicate snapshot is not the surviving original.
+
+Only these five new histories pass an immutable owned-instance guard through
+their actual producer and every Undo call. It validates the original retained
+handle and the actual backend instance before calling the unchanged native
+mutator on the same Process and Change objects. An unowned candidate is refused
+before that method; the fixture then fails and retains its rejection trace.
+Inventory, classification and producer responses are not filtered or mocked.
+The unowned branch has no claimed native negative execution proof.
+
+A clean explicit instance check can close a late-ended original. An observed
+query, write, readback or cleanup error stays hard, even if a later check sees
+that the process ended. The driver saves prior writes, exact provider error
+types, full producer bytes, raw results, reopened status and original cleanup
+receipts. It never fills in native values after exit or counts the same
+original as both closed and currently restored. A race between a clean check
+and a later failed operation remains pending for that attempt.
+
+These histories are UNRUN until real Windows receipts exist. The postwrite
+history requires both leg completion and cleanup artifacts. Its after-aggregate
+old-f4 comparison remains missing because old f4 has no new observer seam;
+no observer is transplanted and no new source-comparison parameter is added.
+The release-error history exercises instance release, not all five cleanup
+faults. P1, C6, rendered UI8/media and the other required manual gates remain
+separate.
 
 No-effect histories first run the actual foreground-game producer, then retain
 its unmodified backup bytes and exact native values and record set before any

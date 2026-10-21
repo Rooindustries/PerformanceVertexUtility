@@ -105,3 +105,14 @@ available until a fresh check confirms the original value or the process has
 ended. Changed requests with missing apply evidence stay recoverable. An
 already-original or kept value seen in a preview still needs a fresh check
 before recovery closes.
+
+Restore checks the saved process instance at explicit points before publishing
+its result. If a clean check proves that the original ended or restarted,
+that entry is reported as already closed. A failed query, write, readback or
+resource cleanup keeps the entry pending with its actual error, even if the
+process later exits. Other saved entries continue. Verified writes made
+before an exit remain in the artifacts; a closed entry is counted once and
+has no current restored or kept value. A process can exit between a clean
+check and a later operation. If that operation fails, the attempt stays
+pending. These timing cases require the manual Windows gate; authored
+scenarios and Linux static checks do not prove native behavior.

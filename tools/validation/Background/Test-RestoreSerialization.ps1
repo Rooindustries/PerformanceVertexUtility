@@ -6,8 +6,8 @@ param(
  [string]$BeforeNoEffectSource='',
  [ValidateSet('profile','game','all')][string]$Kind='all',
  [ValidateSet('priorityClass','affinityMask','ioPriority','memoryPriority','gpuPriority','all')][string]$Control='all',
- [ValidateSet('normal','native-before','native-after-read','protected-launcher','protected-game','governor','malformed','unknown-schema','sharing','mutex-busy','mutex-denied','mutex-type','mutex-abandoned','identity-unknown','identity-denied','identity-reused','identity-ended','release-error','setter-denied','readback-mismatch','failed-drift','failed-target','unknown-drift','missing-outcome','failed-ended','pending-drift','pending-target','pending-ended','late-unverified','verified-external','original-after-preview','kept-changed-back','old-interleaving','failed-apply-readback','schema-records','duplicate-snapshot','image-alias','legacy-proposed-absent','legacy-applied-absent','legacy-proposed-empty','legacy-applied-empty','legacy-proposed-unmatched','legacy-applied-unmatched','confirm-name-mismatch','entry-pid-mismatch','entry-path-mismatch','entry-start-mismatch','legacy-proposed-absent-ended','legacy-applied-absent-ended','legacy-proposed-empty-ended','legacy-applied-empty-ended','legacy-proposed-unmatched-ended','legacy-applied-unmatched-ended','no-effect-original','no-effect-external','no-effect-after-preview','no-effect-applied-equal','no-effect-applied-conflict','no-effect-proposed-missing','no-effect-proposed-null','no-effect-proposed-invalid','no-effect-applied-invalid','no-effect-applied-null','no-effect-record-applied','no-effect-record-failed','no-effect-record-pending','no-effect-record-unknown','no-effect-changed-absent','no-effect-changed-empty','no-effect-changed-unmatched','no-effect-changed-absent-ended','no-effect-changed-empty-ended','no-effect-changed-unmatched-ended','no-effect-confirm-busy-retry','no-effect-confirm-busy-ended','no-effect-confirm-wrapper-retry','no-effect-confirm-wrapper-ended','no-effect-affinity-decimal','no-effect-affinity-hex')]
- [string[]]$Scenario=@('normal','native-before','native-after-read','protected-launcher','protected-game','governor','malformed','unknown-schema','sharing','mutex-busy','mutex-denied','mutex-type','mutex-abandoned','identity-unknown','identity-denied','identity-reused','identity-ended','release-error','setter-denied','readback-mismatch','failed-drift','failed-target','unknown-drift','missing-outcome','failed-ended','pending-drift','pending-target','pending-ended','late-unverified','verified-external','original-after-preview','kept-changed-back','old-interleaving','failed-apply-readback','schema-records','duplicate-snapshot','image-alias','legacy-proposed-absent','legacy-applied-absent','legacy-proposed-empty','legacy-applied-empty','legacy-proposed-unmatched','legacy-applied-unmatched','confirm-name-mismatch','entry-pid-mismatch','entry-path-mismatch','entry-start-mismatch','legacy-proposed-absent-ended','legacy-applied-absent-ended','legacy-proposed-empty-ended','legacy-applied-empty-ended','legacy-proposed-unmatched-ended','legacy-applied-unmatched-ended','no-effect-original','no-effect-external','no-effect-after-preview','no-effect-applied-equal','no-effect-applied-conflict','no-effect-proposed-missing','no-effect-proposed-null','no-effect-proposed-invalid','no-effect-applied-invalid','no-effect-applied-null','no-effect-record-applied','no-effect-record-failed','no-effect-record-pending','no-effect-record-unknown','no-effect-changed-absent','no-effect-changed-empty','no-effect-changed-unmatched','no-effect-changed-absent-ended','no-effect-changed-empty-ended','no-effect-changed-unmatched-ended','no-effect-confirm-busy-retry','no-effect-confirm-busy-ended','no-effect-confirm-wrapper-retry','no-effect-confirm-wrapper-ended','no-effect-affinity-decimal','no-effect-affinity-hex')
+ [ValidateSet('normal','native-before','native-after-read','protected-launcher','protected-game','governor','malformed','unknown-schema','sharing','mutex-busy','mutex-denied','mutex-type','mutex-abandoned','identity-unknown','identity-denied','identity-reused','identity-ended','release-error','setter-denied','readback-mismatch','failed-drift','failed-target','unknown-drift','missing-outcome','failed-ended','pending-drift','pending-target','pending-ended','late-unverified','verified-external','original-after-preview','kept-changed-back','old-interleaving','failed-apply-readback','schema-records','duplicate-snapshot','image-alias','legacy-proposed-absent','legacy-applied-absent','legacy-proposed-empty','legacy-applied-empty','legacy-proposed-unmatched','legacy-applied-unmatched','confirm-name-mismatch','entry-pid-mismatch','entry-path-mismatch','entry-start-mismatch','legacy-proposed-absent-ended','legacy-applied-absent-ended','legacy-proposed-empty-ended','legacy-applied-empty-ended','legacy-proposed-unmatched-ended','legacy-applied-unmatched-ended','no-effect-original','no-effect-external','no-effect-after-preview','no-effect-applied-equal','no-effect-applied-conflict','no-effect-proposed-missing','no-effect-proposed-null','no-effect-proposed-invalid','no-effect-applied-invalid','no-effect-applied-null','no-effect-record-applied','no-effect-record-failed','no-effect-record-pending','no-effect-record-unknown','no-effect-changed-absent','no-effect-changed-empty','no-effect-changed-unmatched','no-effect-changed-absent-ended','no-effect-changed-empty-ended','no-effect-changed-unmatched-ended','no-effect-confirm-busy-retry','no-effect-confirm-busy-ended','no-effect-confirm-wrapper-retry','no-effect-confirm-wrapper-ended','no-effect-affinity-decimal','no-effect-affinity-hex','late-exit-restore','late-exit-original','late-exit-kept','late-exit-postwrite','late-exit-release-error')]
+ [string[]]$Scenario=@('normal','native-before','native-after-read','protected-launcher','protected-game','governor','malformed','unknown-schema','sharing','mutex-busy','mutex-denied','mutex-type','mutex-abandoned','identity-unknown','identity-denied','identity-reused','identity-ended','release-error','setter-denied','readback-mismatch','failed-drift','failed-target','unknown-drift','missing-outcome','failed-ended','pending-drift','pending-target','pending-ended','late-unverified','verified-external','original-after-preview','kept-changed-back','old-interleaving','failed-apply-readback','schema-records','duplicate-snapshot','image-alias','legacy-proposed-absent','legacy-applied-absent','legacy-proposed-empty','legacy-applied-empty','legacy-proposed-unmatched','legacy-applied-unmatched','confirm-name-mismatch','entry-pid-mismatch','entry-path-mismatch','entry-start-mismatch','legacy-proposed-absent-ended','legacy-applied-absent-ended','legacy-proposed-empty-ended','legacy-applied-empty-ended','legacy-proposed-unmatched-ended','legacy-applied-unmatched-ended','no-effect-original','no-effect-external','no-effect-after-preview','no-effect-applied-equal','no-effect-applied-conflict','no-effect-proposed-missing','no-effect-proposed-null','no-effect-proposed-invalid','no-effect-applied-invalid','no-effect-applied-null','no-effect-record-applied','no-effect-record-failed','no-effect-record-pending','no-effect-record-unknown','no-effect-changed-absent','no-effect-changed-empty','no-effect-changed-unmatched','no-effect-changed-absent-ended','no-effect-changed-empty-ended','no-effect-changed-unmatched-ended','no-effect-confirm-busy-retry','no-effect-confirm-busy-ended','no-effect-confirm-wrapper-retry','no-effect-confirm-wrapper-ended','no-effect-affinity-decimal','no-effect-affinity-hex','late-exit-restore','late-exit-original','late-exit-kept','late-exit-postwrite','late-exit-release-error')
 )
 $ErrorActionPreference='Stop'
 if($env:OS -ne 'Windows_NT' -or $PSVersionTable.PSVersion.Major -ne 5 -or -not [Environment]::Is64BitProcess){throw 'Real Windows PowerShell5.1 x64 is required.'}
@@ -22,6 +22,7 @@ $root=[IO.Path]::GetFullPath($OutRoot).TrimEnd('\')
 if(-not [IO.Directory]::Exists($root) -or (Get-Item -LiteralPath $root).Attributes -band [IO.FileAttributes]::ReparsePoint){throw 'Expected an original owned output directory.'}
 $results=New-Object System.Collections.Generic.List[object]
 $driverSourcePath=$PSCommandPath
+$lateScenarios=@('late-exit-restore','late-exit-original','late-exit-kept','late-exit-postwrite','late-exit-release-error')
 $priorityScenarios=@('image-alias','legacy-proposed-absent','legacy-applied-absent','legacy-proposed-empty','legacy-applied-empty','legacy-proposed-unmatched','legacy-applied-unmatched','confirm-name-mismatch','entry-pid-mismatch','entry-path-mismatch','entry-start-mismatch','legacy-proposed-absent-ended','legacy-applied-absent-ended','legacy-proposed-empty-ended','legacy-applied-empty-ended','legacy-proposed-unmatched-ended','legacy-applied-unmatched-ended')
 if($Control -notin @('all','priorityClass') -and @($Scenario|Where-Object {$priorityScenarios -contains $_}).Count){throw 'The seventeen new scenarios are explicitly priorityClass-only; incompatible -Control is not a skipped case.'}
 $noEffectScenarios=@('no-effect-original','no-effect-external','no-effect-after-preview','no-effect-applied-equal','no-effect-applied-conflict','no-effect-proposed-missing','no-effect-proposed-null','no-effect-proposed-invalid','no-effect-applied-invalid','no-effect-applied-null','no-effect-record-applied','no-effect-record-failed','no-effect-record-pending','no-effect-record-unknown','no-effect-changed-absent','no-effect-changed-empty','no-effect-changed-unmatched','no-effect-changed-absent-ended','no-effect-changed-empty-ended','no-effect-changed-unmatched-ended','no-effect-confirm-busy-retry','no-effect-confirm-busy-ended','no-effect-confirm-wrapper-retry','no-effect-confirm-wrapper-ended','no-effect-affinity-decimal','no-effect-affinity-hex')
@@ -50,7 +51,25 @@ function Read-E2EControls($process){
  }
  return $values
 }
-function Invoke-Body([string]$backend,[string]$scriptName,[hashtable]$arguments,[string]$data){
+function New-LateMutationGuard([object[]]$Originals, [string]$Nonce) {
+ $slots=New-Object System.Collections.Generic.List[object]
+ foreach($original in $Originals){
+  Require ($null -ne $original -and $null -ne $original.process -and $null -ne $original.owned) 'MISSING original late mutation ownership.'
+  $receipt=$original.owned
+  $identity=$receipt.Identity
+  Require ([object]::ReferenceEquals($original.process,$receipt.process)) 'Late mutation receipt owns another wrapper.'
+  Require ($identity.pid -gt 0 -and $receipt.handle -ne [IntPtr]::Zero -and $original.process.Id -eq $identity.pid -and $original.process.Handle -eq $receipt.handle) 'Late mutation original handle/PID differs.'
+  [long]$birth=0
+  Require ([long]::TryParse([string]$identity.creationTimeFileTimeUtc,[ref]$birth) -and $birth -gt 0 -and -not[string]::IsNullOrWhiteSpace([string]$identity.imagePath)) 'MISSING late mutation original identity.'
+  Require ([RooIndustriesValidationOwnership.Native]::Created($receipt.handle) -eq $birth -and [string]::Equals([RooIndustriesValidationOwnership.Native]::Image($receipt.handle),[string]$identity.imagePath,[StringComparison]::OrdinalIgnoreCase)) 'Late mutation original native identity differs.'
+  Require (@($slots | Where-Object {$_.pid -eq $identity.pid}).Count -eq 0) 'Ambiguous late mutation original PID.'
+  $slots.Add([pscustomobject]@{pid=[int]$identity.pid;birth=$birth;image=[string]$identity.imagePath;handle=[IntPtr]$receipt.handle;process=$original.process}) | Out-Null
+ }
+ Require ($slots.Count -gt 0 -and -not[string]::IsNullOrWhiteSpace($Nonce)) 'Empty late mutation ownership set.'
+ return [pscustomobject]@{nonce=$Nonce;originals=$slots.ToArray();events=(New-Object System.Collections.Generic.List[object]);rejections=(New-Object System.Collections.Generic.List[object])}
+}
+
+function Invoke-Body([string]$backend,[string]$scriptName,[hashtable]$arguments,[string]$data,$MutationGuard=$null){
  & {
   . (Join-Path $backend 'backend\scripts\GameTuneSession.Common.ps1')
   $script:RestoreE2EData=$data
@@ -63,7 +82,56 @@ function Invoke-Body([string]$backend,[string]$scriptName,[hashtable]$arguments,
   foreach($key in $arguments.Keys){Set-Variable -Name $key -Value $arguments[$key] -Scope Local}
   $body=@($ast.EndBlock.Statements|Where-Object {$_ -is [Management.Automation.Language.TryStatementAst]})
   Require ($body.Count -eq 1) 'Expected one actual top-level backend body.'
-  & ([scriptblock]::Create($body[0].Extent.Text))
+  $lateGuardInstalled=$false
+  $lateGuardPriorExists=$false
+  $lateGuardPriorValue=$null
+  try {
+   if($null -ne $MutationGuard){
+    Require ($MutationGuard.originals.Count -gt 0 -and $null -ne $MutationGuard.events -and $null -ne $MutationGuard.rejections) 'MISSING late mutation guard input.'
+    $realMutator=Get-Command Invoke-RooIndustriesProcessControlChange -CommandType Function -ErrorAction Stop
+    $realCommon=Join-Path $backend 'backend\scripts\ProcessProfile.Common.ps1'
+    Require ([string]::Equals([IO.Path]::GetFullPath($realMutator.ScriptBlock.Ast.Extent.File),[IO.Path]::GetFullPath($realCommon),[StringComparison]::OrdinalIgnoreCase)) 'Late guard did not capture the actual backend mutator.'
+    $prior=Get-Variable -Name RestoreE2ELateMutationGuard -Scope Script -ErrorAction SilentlyContinue
+    $lateGuardPriorExists=$null -ne $prior
+    if($lateGuardPriorExists){$lateGuardPriorValue=$prior.Value}
+    $script:RestoreE2ELateMutationGuard=[pscustomobject]@{actual=$realMutator.ScriptBlock;input=$MutationGuard}
+    $lateGuardInstalled=$true
+    function Invoke-RooIndustriesProcessControlChange {
+     param([Diagnostics.Process]$Process,[object]$Change)
+     $guard=$script:RestoreE2ELateMutationGuard
+     $selected=$null
+     $backendHandle=[IntPtr]::Zero
+     try {
+      if($null -eq $guard -or $guard.actual -isnot [scriptblock] -or $null -eq $Process){throw 'MISSING armed late mutation guard.'}
+      $guardMatches=@($guard.input.originals | Where-Object {$_.pid -eq $Process.Id})
+      if($guardMatches.Count -ne 1){throw 'Late mutation refused an unowned process.'}
+      $selected=$guardMatches[0]
+      if($selected.process.Id -ne $selected.pid -or $selected.process.Handle -ne $selected.handle -or $selected.process.HasExited){throw 'Late mutation lost its retained original.'}
+      if([RooIndustriesValidationOwnership.Native]::Created($selected.handle) -ne $selected.birth -or -not[string]::Equals([RooIndustriesValidationOwnership.Native]::Image($selected.handle),$selected.image,[StringComparison]::OrdinalIgnoreCase)){throw 'Late mutation retained identity changed.'}
+      $backendHandle=$Process.Handle
+      if($backendHandle -eq [IntPtr]::Zero -or [RooIndustriesValidationOwnership.Native]::Created($backendHandle) -ne $selected.birth -or -not[string]::Equals([RooIndustriesValidationOwnership.Native]::Image($backendHandle),$selected.image,[StringComparison]::OrdinalIgnoreCase) -or $Process.HasExited){throw 'Late mutation backend instance is not the original.'}
+     } catch {
+      if($null -ne $guard -and $null -ne $guard.input -and $null -ne $guard.input.rejections){$guard.input.rejections.Add([pscustomobject]@{nonce=$guard.input.nonce;reason=$_.Exception.ToString();control=[string]$Change.control;realMutatorInvoked=$false}) | Out-Null}
+      throw
+     }
+     $guardEvent=[pscustomobject]@{nonce=$guard.input.nonce;pid=$selected.pid;birth=$selected.birth;image=$selected.image;retainedHandle=$selected.handle.ToInt64();backendHandle=$backendHandle.ToInt64();control=[string]$Change.control;action=[string]$Change.action;enteredRealMutator=$false;returned=$false;outcome=$null;error=$null}
+     $guard.input.events.Add($guardEvent) | Out-Null
+     try {
+      $guardEvent.enteredRealMutator=$true
+      & $guard.actual -Process $Process -Change $Change
+      $guardEvent.returned=$true
+     } catch {$guardEvent.error=$_.Exception.ToString();throw}
+     finally {$guardEvent.outcome=[string]$Change.outcome}
+    }
+   }
+   & ([scriptblock]::Create($body[0].Extent.Text))
+  } finally {
+   if($lateGuardInstalled){
+    if($lateGuardPriorExists){$script:RestoreE2ELateMutationGuard=$lateGuardPriorValue}
+    else{Remove-Variable -Name RestoreE2ELateMutationGuard -Scope Script -ErrorAction Stop}
+   }
+  }
+
  } | ConvertFrom-Json
 }
 function New-Actor($context,[string]$mode,$value,[string]$journal){
@@ -103,11 +171,11 @@ function Wait-Actor($actor,[switch]$Held){
  }
  return $record
 }
-function Undo($context,[string]$name,[string]$backend=$Source){
+function Undo($context,[string]$name,[string]$backend=$Source,$MutationGuard=$null){
  Assert-HarnessHostLease
  $arguments=@{BackupPath=$context.backup;OutputPath='';ConfirmApply=$true;SessionId='';SessionPath='';StateRoot=$context.state}
  if($context.kind -eq 'game'){$arguments.SessionPath=$context.session}
- $result=Invoke-Body $backend $(if($context.kind -eq 'game'){'Stop-GameTuneSession.ps1'}else{'Restore-ProcessProfileBackup.ps1'}) $arguments $context.data
+ $result=Invoke-Body $backend $(if($context.kind -eq 'game'){'Stop-GameTuneSession.ps1'}else{'Restore-ProcessProfileBackup.ps1'}) $arguments $context.data $MutationGuard
  Save (Join-Path $context.directory ($name+'.json')) $result
  Require ((Get-FileHash -LiteralPath $context.backup -Algorithm SHA256).Hash -ceq $context.backupHash) 'Undo changed original backup bytes.'
  if($context.kind -eq 'game'){
@@ -123,13 +191,21 @@ function Assert-Pending($context,$result,$value){
  Require (@($result.result.leftAsSetItems|Where-Object control -eq $context.control).Count -eq 0) 'Uncertain control was certified kept.'
  Require ((Read-Actual $context.process $context.control).ToString() -eq $value.ToString()) 'Uncertain control was written.'
 }
-function New-Breakpoint($context,[string]$script,[string]$pattern,[scriptblock]$action){
+function New-Breakpoint($context,[string]$script,[string]$pattern,[scriptblock]$action,[string]$FunctionName=''){
  $lines=@(Select-String -LiteralPath $script -Pattern $pattern)
+ if(-not [string]::IsNullOrEmpty($FunctionName)){
+  $sourceAst=Read-Ast $script
+  $functions=@($sourceAst.EndBlock.Statements | Where-Object {$_ -is [Management.Automation.Language.FunctionDefinitionAst] -and $_.Name -ceq $FunctionName})
+  Require ($functions.Count -eq 1) ('Expected one actual top-level debugger function: '+$FunctionName)
+  $functionBody=$functions[0].Body.Extent
+  $lines=@($lines | Where-Object {$_.LineNumber -ge $functionBody.StartLineNumber -and $_.LineNumber -le $functionBody.EndLineNumber})
+ }
  Require ($lines.Count -eq 1) ('Expected one actual debugger seam: '+$pattern)
  $bp=Set-PSBreakpoint -Script $script -Line $lines[0].LineNumber -Action $action
  $context.breakpoints.Add($bp)|Out-Null
  return $bp
 }
+
 function Invoke-NoEffectHistory($context,[string]$kind,[string]$field,[string]$mode){
  $directory=$context.directory
  $backend=if($BeforeNoEffectSource){$BeforeNoEffectSource}else{$Source}
@@ -342,7 +418,7 @@ function Invoke-NoEffectHistory($context,[string]$kind,[string]$field,[string]$m
      while($exception){$types.Add($exception.GetType().FullName)|Out-Null;$exception=$exception.InnerException}
      $meter.wrapperErrors.Add(@{phase=$meter.phase;control=$field;error=$failure.ToString();errorId=$failure.FullyQualifiedErrorId;exceptionTypes=@($types.ToArray());position=$failure.InvocationInfo.PositionMessage;line=$failure.InvocationInfo.Line;originalIdentity=$context.owned.Identity;originalHandle=$context.owned.handle.ToInt64();originalBirth=[RooIndustriesValidationOwnership.Native]::Created($context.owned.handle).ToString()})|Out-Null
     }
-   }.GetNewClosure())
+   }.GetNewClosure()) -FunctionName 'Confirm-RooIndustriesRestoreControl'
   }
   $first=Invoke-NoEffectPhase 'adverse-original';Assert-NoEffectPending $first $original 0
   Require (@($first.result.preview|ForEach-Object {@($_.alreadyOriginal)}|Where-Object control -eq $field).Count -eq 1) 'Adverse original phase did not exercise alreadyOriginal preview.'
@@ -408,6 +484,366 @@ function Invoke-NoEffectHistory($context,[string]$kind,[string]$field,[string]$m
  Save (Join-Path $directory 'observations.json') @{kind=$kind;control=$field;scenario=$mode;sourceCommit=$backendCommit;driverSourceCommit=$SourceCommit;producerBackupSha256=$producerHash;operativeBackupSha256=$context.backupHash;original=$original;requested=$requested;external=$external;conflictingApplied=$conflictingApplied;targetSetterAttempts=$meter.setterAttempts;peerSetterAttempts=$meter.peerSetterAttempts;unlistedSetterAttempts=$meter.unlistedSetterAttempts;confirms=$meter.confirms;wrapperGuards=@($meter.wrapperGuards.ToArray());wrapperErrors=@($meter.wrapperErrors.ToArray());counterSemantics='Attempts only; all phases require native readbacks, full results and immutable bytes';fixtureInputCorrection=$true;nativeBehaviorSimulated=$false}
  return $meter
 }
+function Assert-LateOriginal($original){
+ Require ($null -ne $original.owned -and [object]::ReferenceEquals($original.process,$original.owned.process)) 'MISSING late original receipt.'
+ Require ($original.process.Id -eq $original.owned.Identity.pid -and $original.process.Handle -eq $original.owned.handle -and -not $original.process.HasExited) 'Late original is not the retained live process.'
+ Require ([RooIndustriesValidationOwnership.Native]::Created($original.owned.handle).ToString() -ceq $original.owned.Identity.creationTimeFileTimeUtc -and [RooIndustriesValidationOwnership.Native]::Image($original.owned.handle) -ieq $original.owned.Identity.imagePath) 'Late original native identity changed.'
+}
+function Set-LateFixtureValue($original,[string]$control,$value){
+ Assert-LateOriginal $original
+ switch($control){
+  'priorityClass'{$original.process.PriorityClass=$value}
+  'affinityMask'{$original.process.ProcessorAffinity=[IntPtr][long]$value}
+  'ioPriority'{[RooIndustriesBackgroundOracle]::SetIo($original.process,(Convert-RooIndustriesIoPriorityToValue $value -Restoring))}
+  'memoryPriority'{[RooIndustriesBackgroundOracle]::SetMemory($original.process,[uint32]$value)}
+  'gpuPriority'{Set-RooIndustriesProcessGpuPriority $original.process $value}
+ }
+ Require (Test-RooIndustriesControlValueEqual $control (Read-Actual $original.process $control) $value) 'Late fixture value did not read back.'
+}
+function Get-LateBoundIdentity($process,$snapshot,$entry,$original,[string]$control){
+ Assert-LateOriginal $original
+ Require ($process.Id -eq $original.owned.Identity.pid -and $snapshot.processId -eq $process.Id -and $entry.processId -eq $snapshot.processId) 'Late seam selected another original.'
+ $savedTime=[DateTime]::Parse([string]$snapshot.processStartTimeUtc,[Globalization.CultureInfo]::InvariantCulture,[Globalization.DateTimeStyles]::RoundtripKind)
+ Require ($savedTime.ToUniversalTime().ToFileTimeUtc().ToString() -ceq $original.owned.Identity.creationTimeFileTimeUtc -and [string]$entry.processStartTimeUtc -ceq [string]$snapshot.processStartTimeUtc) 'Late seam saved/entry native birth differs.'
+ Require ((Test-RooIndustriesProcessNameEquals $snapshot.processName $entry.processName) -and (Test-RooIndustriesProcessNameEquals $snapshot.processName $original.process.ProcessName)) 'Late seam original name differs.'
+ Require ([string]::Equals([string]$snapshot.executablePath,[string]$entry.executablePath,[StringComparison]::OrdinalIgnoreCase) -and [RooIndustriesValidationOwnership.Native]::Canonical([string]$snapshot.executablePath) -ieq $original.owned.Identity.imagePath) 'Late seam original path differs.'
+ Require ([RooIndustriesValidationOwnership.Native]::Created($process.Handle).ToString() -ceq $original.owned.Identity.creationTimeFileTimeUtc -and [RooIndustriesValidationOwnership.Native]::Image($process.Handle) -ieq $original.owned.Identity.imagePath -and -not $process.HasExited) 'Late seam backend native identity differs.'
+ return @{processId=$snapshot.processId;processName=$snapshot.processName;executablePath=$snapshot.executablePath;processStartTimeUtc=$snapshot.processStartTimeUtc;entryProcessId=$entry.processId;entryStart=$entry.processStartTimeUtc;entryPath=$entry.executablePath;control=$control;original=$original.owned.Identity;originalHandle=$original.owned.handle.ToInt64();backendHandle=$process.Handle.ToInt64();session=$original.process.SessionId;engine=$PSVersionTable.PSVersion.ToString()}
+}
+function Stop-LateOriginal($original,$meter,$binding){
+ Require ($meter.stopHits -eq 0) 'Late original stop repeated.'
+ $meter.beforeExit=Read-E2EControls $original.process
+ $meter.stopBinding=$binding
+ $meter.stopHits++
+ Stop-OwnedProcess $original.owned
+ Require ($original.process.WaitForExit(5000) -and $original.process.HasExited) 'Original late exit was not observed.'
+ $meter.waitCompleted=$true
+}
+function Remove-LateBreakpoints($context,$breakpoints){
+ foreach($breakpoint in @($breakpoints.ToArray())){
+  Remove-PSBreakpoint -Breakpoint $breakpoint
+  Require ($context.breakpoints.Remove($breakpoint)) 'Original late breakpoint was not tracked for removal.'
+ }
+ $breakpoints.Clear()
+}
+function Assert-LateProducerRecord($record,$original,[string]$control,[switch]$Applied){
+ $expectedAction=switch($control){'priorityClass'{'setPriority'};'affinityMask'{'setAffinity'};'ioPriority'{'setIoPriority'};'memoryPriority'{'setMemoryPriority'};'gpuPriority'{'setGpuPriority'};default{throw 'Unsupported late producer control.'}}
+ Require ($null -ne $record -and $record.control -is [string] -and $record.control -ceq $control -and $record.action -is [string] -and $record.action -ceq $expectedAction -and $record.blocked -is [bool] -and -not $record.blocked -and (Test-RooIndustriesControlValueEqual $control $record.currentValue $original.originalValues[$control]) -and (Test-RooIndustriesControlValueEqual $control $record.proposedValue $original.values[$control])) 'Late producer record does not bind its original plan.'
+ if($control -in @('priorityClass','ioPriority','memoryPriority')){Require ($record.priorityDirection -is [string] -and $record.priorityDirection -ceq 'raise') 'Late producer lost the actual foreground raise policy.'}
+ if($Applied){Require ($record.outcome -is [string] -and $record.outcome -ceq 'applied') 'Late producer record was not actually applied.'}
+}
+function Assert-LateProducerItems([object[]]$Items,[object[]]$Originals,[string]$Kind){
+ Require ($Items.Count -eq $Originals.Count) 'Late producer changed-item count differs from the actual originals.'
+ foreach($original in $Originals){
+  $itemMatches=@($Items|Where-Object {$_.processId -eq $original.owned.Identity.pid})
+  Require ($itemMatches.Count -eq 1) 'Late producer changed-item original is missing or duplicated.'
+  $item=$itemMatches[0]
+  Require (($item.processId -is [int] -or $item.processId -is [long]) -and $item.processName -is [string] -and (Test-RooIndustriesProcessNameEquals $item.processName $original.snapshot.processName) -and $item.ruleId -is [string] -and $item.ruleId -ceq $original.snapshot.ruleId) 'Late producer changed-item identity/rule differs.'
+  if($Kind -ceq 'game'){Require ([RooIndustriesValidationOwnership.Native]::Canonical([string]$item.executablePath) -ieq $original.owned.Identity.imagePath) 'Late Game changed-item path differs from its original image.'}
+  $applied=@($item.appliedControls)
+  Require ($applied.Count -eq $original.expected.Count) 'Late producer applied-control set differs.'
+  foreach($control in $original.expected){
+   $suffix=switch($control){'priorityClass'{'PriorityClass'};'affinityMask'{'AffinityMask'};'ioPriority'{'IoPriority'};'memoryPriority'{'MemoryPriority'};'gpuPriority'{'GpuPriority'}}
+   $saved=@($original.snapshot.controlChanges|Where-Object control -CEQ $control)
+   $record=@($applied|Where-Object control -CEQ $control)
+   Require ($saved.Count -eq 1 -and $record.Count -eq 1) 'Late applied/saved control is missing or duplicated.'
+   Assert-LateProducerRecord $record[0] $original $control -Applied
+   Require ($record[0].action -ceq $saved[0].action -and $record[0].outcome -ceq $saved[0].outcome -and (Test-RooIndustriesControlValueEqual $control $record[0].currentValue $saved[0].currentValue) -and (Test-RooIndustriesControlValueEqual $control $record[0].proposedValue $saved[0].proposedValue)) 'Late returned and saved applied records differ.'
+   if($control -in @('priorityClass','ioPriority','memoryPriority')){Require ($record[0].priorityDirection -ceq $saved[0].priorityDirection) 'Late returned and saved directions differ.'}
+   $native=$original.afterProducer[$control]
+   Require ($native.available -is [bool] -and $native.available -and (Test-RooIndustriesControlValueEqual $control $item.('original'+$suffix) $original.originalValues[$control]) -and (Test-RooIndustriesControlValueEqual $control $item.('applied'+$suffix) $original.values[$control]) -and (Test-RooIndustriesControlValueEqual $control $item.('applied'+$suffix) $native.value)) 'Late producer flat values do not match the saved original and actual native readback.'
+  }
+ }
+}
+function Invoke-LateHistory($parent,[string]$kind,[string]$field,[string]$mode,$history){
+ $legs=if($mode -ceq 'late-exit-postwrite'){@('before-aggregate','after-aggregate')}else{@('main')}
+ foreach($legName in $legs){ & {
+  $directory=Join-Path $parent.directory $legName
+  $null=New-HarnessDirectory $directory 'restore-late-evidence' 'frame'
+  $context=[pscustomobject]@{directory=$directory;nonce=([guid]::NewGuid().ToString('N'));kind=$kind;control=$field;process=$null;owned=$null;actors=(New-Object System.Collections.Generic.List[object]);breakpoints=(New-Object System.Collections.Generic.List[object]);data=(Join-Path $directory 'data');state=(Join-Path $directory 'state');backup='';backupHash='';session=''}
+  $originals=New-Object System.Collections.Generic.List[object]
+  $breakpoints=New-Object System.Collections.Generic.List[object]
+  $cleanupErrors=New-Object System.Collections.Generic.List[string]
+  $phaseResults=New-Object System.Collections.Generic.List[object]
+  $legRecord=[pscustomobject]@{name=$legName;directory=$directory;cleanupPassed=$false;completed=$false;originals=$originals;errors=$cleanupErrors}
+  $history.legs.Add($legRecord)|Out-Null
+  $guard=$null;$bodyError=$null;$releaseKeep=$null;$releaseAcquired=$false
+  $meter=@{stopHits=0;waitCompleted=$false;beforeExit=$null;stopBinding=$null;observerCalls=0;initializations=(New-Object System.Collections.Generic.List[object]);readbacks=(New-Object System.Collections.Generic.List[object]);returns=(New-Object System.Collections.Generic.List[object]);providerErrors=(New-Object System.Collections.Generic.List[object]);hardReturns=(New-Object System.Collections.Generic.List[object]);attempts=@{};injectionErrors=(New-Object System.Collections.Generic.List[string]);releaseFault=$false;phase='setup';undoGuardStart=0;afterAggregate=$null}
+  $twoOriginalHistory=$mode -ceq 'late-exit-restore' -and $field -ceq 'priorityClass'
+  $common=Join-Path $Source 'backend\scripts\ProcessProfile.Common.ps1'
+  $fixtureName='RooIndustriesLate'+$context.nonce.Substring(0,12)+'.exe'
+  $lateTarget=$null;$survivor=$null
+  try{
+   foreach($role in $(if($twoOriginalHistory){@('target','surviving-peer')}else{@('target')})){
+    $fixtureDirectory=Join-Path $directory $(if($role -ceq 'target'){'a'}else{'b'})
+    $original=[pscustomobject]@{role=$role;directory=$fixtureDirectory;directoryEntry=$null;image=(Join-Path $fixtureDirectory $fixtureName);imageCreationAttempted=$false;imageProbe=$null;imageEntry=$null;extraEntries=(New-Object System.Collections.Generic.List[object]);process=$null;owned=$null;processEntry=$null;before=$null;afterProducer=$null;snapshot=$null;expected=@();values=@{};originalValues=@{};stopVerified=$false;wrapperDisposed=$false;cleanupPassed=$false;cleanupError=$null}
+    $originals.Add($original)|Out-Null
+    if($role -ceq 'target'){$lateTarget=$original}else{$survivor=$original}
+    $original.directoryEntry=New-HarnessDirectory $original.directory ('restore-late-'+$role) 'invocation'
+    $original.imageCreationAttempted=$true
+    if($field -ceq 'gpuPriority'){
+     $compiler=Join-Path $env:SystemRoot 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
+     & $compiler /nologo ('/out:'+$original.image) (Join-Path $Source 'tools\validation\Background\LauncherFixture.cs') > (Join-Path $directory 'fixture-compile.stdout') 2> (Join-Path $directory 'fixture-compile.stderr')
+     Require ($LASTEXITCODE -eq 0) 'Owned late GPU fixture compilation failed.'
+     $original.imageEntry=Register-HarnessFile $original.image 'restore-late-image' 'invocation'
+     $signal=Join-Path $original.directory 'never-signalled'
+     $arguments='"'+$signal+'" "'+(Join-Path $original.directory 'never-child.exe')+'" --gpu'
+    }else{
+     try{$original.imageProbe=Copy-OwnedProbe (Join-Path $env:SystemRoot 'System32\PING.EXE') $original.image;$original.imageEntry=Add-HarnessEntry 'file' $original.imageProbe.Identity 'restore-late-image' 'invocation'}
+     finally{if($null -ne $original.imageProbe){$original.imageProbe.Dispose();$original.imageProbe=$null}}
+     $arguments='-t 127.0.0.1'
+    }
+    $original.process=Start-Process -FilePath $original.image -ArgumentList $arguments -PassThru -WindowStyle Hidden
+    $original.owned=New-OwnedProcess $original.process
+    Require ($null -ne $original.owned -and $original.process.SessionId -eq (Get-Process -Id $PID).SessionId) 'MISSING original late fixture identity/session.'
+    $original.processEntry=Add-HarnessEntry 'process' $original.owned.Identity 'restore-late-original' 'invocation' @{directoryEntryId=$original.directoryEntry.id;imageEntryId=$original.imageEntry.id}
+    Assert-LateOriginal $original
+    if($field -ceq 'gpuPriority'){
+     $clock=[Diagnostics.Stopwatch]::StartNew()
+     while(-not [IO.File]::Exists($signal+'.gpu-ready')){if($clock.Elapsed.TotalSeconds -gt 10){throw 'MISSING actual late GPU activation.'};Start-Sleep -Milliseconds 20}
+     $original.extraEntries.Add((Register-HarnessFile ($signal+'.gpu-ready') 'restore-late-gpu-ready' 'invocation'))|Out-Null
+    }
+    Set-LateFixtureValue $original 'priorityClass' 'Normal'
+    if($twoOriginalHistory){Set-LateFixtureValue $original 'memoryPriority' 5}
+    elseif($field -in @('priorityClass','memoryPriority')){Set-LateFixtureValue $original 'memoryPriority' 2}
+    if($field -ceq 'ioPriority'){Set-LateFixtureValue $original 'ioPriority' 'Low'}
+    if($field -ceq 'gpuPriority'){Set-LateFixtureValue $original 'gpuPriority' 'Normal'}
+    $original.before=Read-E2EControls $original.process
+    $peer=if($field -ceq 'priorityClass'){'memoryPriority'}else{'priorityClass'}
+    $original.expected=if($twoOriginalHistory){@('priorityClass')}else{@('priorityClass','affinityMask','ioPriority','memoryPriority','gpuPriority')|Where-Object {$_ -eq $field -or $_ -eq $peer}}
+    foreach($name in $original.expected){Require $original.before[$name].available ('MISSING actual late original '+$name);$original.originalValues[$name]=$original.before[$name].value;$original.values[$name]=switch($name){'priorityClass'{'AboveNormal'};'affinityMask'{[long]($original.before[$name].value -band (-[long]$original.before[$name].value))};'ioPriority'{'Normal'};'memoryPriority'{5};'gpuPriority'{'BelowNormal'}}}
+    Save (Join-Path $directory ('original-'+$role+'.json')) @{original=$original.owned.Identity;handle=$original.owned.handle.ToInt64();session=$original.process.SessionId;directoryEntry=$original.directoryEntry;imageEntry=$original.imageEntry;processEntry=$original.processEntry;before=$original.before;expectedControls=$original.expected;originalValues=$original.originalValues;requestedValues=$original.values}
+   }
+   if($twoOriginalHistory){Require ($lateTarget.process.Id -ne $survivor.process.Id -and $lateTarget.owned.handle -ne $survivor.owned.handle -and -not [object]::ReferenceEquals($lateTarget.process,$survivor.process) -and $lateTarget.directoryEntry.id -cne $survivor.directoryEntry.id -and $lateTarget.imageEntry.id -cne $survivor.imageEntry.id) 'Two late originals share an identity/resource.'}
+   else{$context.process=$lateTarget.process;$context.owned=$lateTarget.owned}
+   $originalValue=$lateTarget.originalValues[$field];$desired=$lateTarget.values[$field]
+   $external=switch($field){'priorityClass'{'BelowNormal'};'affinityMask'{$originalValue -band (-bnot [long]$desired)};'ioPriority'{'VeryLow'};'memoryPriority'{3};'gpuPriority'{'High'}}
+   Require (-not(Test-RooIndustriesControlValueEqual $field $originalValue $desired) -and -not(Test-RooIndustriesControlValueEqual $field $originalValue $external) -and -not(Test-RooIndustriesControlValueEqual $field $desired $external) -and ($field -ne 'affinityMask' -or $external -ne 0)) 'MISSING three distinct actual late fixture values.'
+   $guard=New-LateMutationGuard $(if($twoOriginalHistory){@($originals.ToArray())}else{@($context)}) $context.nonce
+   $foreground=[ordered]@{ruleId='restore-late-e2e';processNames=@($fixtureName);priorityClass='AboveNormal';reason='Restore E2E fixture';reasonCodes=@('LIVE_VALIDATION')}
+   foreach($name in $lateTarget.expected){$foreground[$name]=$lateTarget.values[$name]}
+   if($twoOriginalHistory){$foreground.memoryPriority=5}
+   $profilePath=Join-Path $directory 'profile.json'
+   Save $profilePath @{schemaVersion=1;productName='Roo Industries Optimization Suite';profileId='restore-late-e2e';name='Restore E2E';profileKind='process-controls';risk='medium';protectedCatalogPath=(Join-Path $Source 'backend\profiles\protected-processes.json');foregroundGame=$foreground;targetGames=@();protectedCompanions=@();protectedPreviewProcessNames=@();safeCandidates=@();rules=@();rollbackPolicy=@{supported=$true;scope='process-controls';stateRoot=$context.state;restoreOriginalPriorityClass=$true};safety=@{confirmedApplyChanges=@('PriorityClass','Affinity','IoPriority','MemoryPriority','GpuPriority');continuousEnforcement=$true;runtimeService=$false}}
+   $preview=Invoke-Body $Source 'Preview-ProcessProfile.ps1' @{ProfilePath=$profilePath;TargetGameProcessName=$fixtureName;Preset='lower';OutputPath=''} $context.data $guard
+   Save (Join-Path $directory 'producer-preview.json') $preview
+   $eligible=@($preview.preview|Where-Object {-not $_.blocked -and -not $_.protected -and @(Get-RooIndustriesPreviewControlChanges $_).Count -gt 0})
+   Require ($eligible.Count -eq $originals.Count) 'MISSING exact owned late producer eligible set.'
+   foreach($original in @($originals.ToArray())){
+    $entry=@($eligible|Where-Object processId -eq $original.owned.Identity.pid)
+    Require ($entry.Count -eq 1 -and $entry[0].classification -ceq 'gameTarget') 'Late producer preview selected another original/classification.'
+    Require ($entry[0].ruleId -is [string] -and $entry[0].ruleId -ceq $foreground.ruleId) 'Late producer preview rule differs from the selected producer.'
+    $null=Get-LateBoundIdentity $original.process $entry[0] $entry[0] $original $field
+    $records=@(Get-RooIndustriesPreviewControlChanges $entry[0]);Require ($records.Count -eq $original.expected.Count) 'Late producer preview control set differs.'
+    foreach($name in $original.expected){$record=@($records|Where-Object control -eq $name);Require ($record.Count -eq 1 -and -not $record[0].blocked -and (Test-RooIndustriesControlValueEqual $name $record[0].currentValue $original.originalValues[$name]) -and (Test-RooIndustriesControlValueEqual $name $record[0].proposedValue $original.values[$name])) 'Late producer preview original/request differs.';Assert-LateProducerRecord $record[0] $original $name}
+   }
+   $producerName=if($kind -ceq 'game'){'Start-GameTuneSession.ps1'}else{'Apply-ProcessProfile.ps1'}
+   $producerArguments=@{ProfilePath=$profilePath;TargetGameProcessName=$fixtureName;StateRoot=$context.state;OutputPath='';ConfirmApply=$true}
+   if($kind -ceq 'game'){$producerArguments.PollIntervalSeconds=1;$producerArguments.MaxDurationSeconds=1}else{$producerArguments.Preset='lower'}
+   $apply=Invoke-Body $Source $producerName $producerArguments $context.data $guard
+   Save (Join-Path $directory 'apply.json') $apply
+   Require ($guard.rejections.Count -eq 0 -and @($apply.errors).Count -eq 0 -and $apply.result.status -ceq 'success') 'MISSING successful owned late producer.'
+   $context.backup=if($kind -ceq 'game'){$apply.backupManifestPath}else{$apply.backup.location};$context.session=if($kind -ceq 'game'){$apply.sessionPath}else{''}
+   Require ([IO.File]::Exists($context.backup)) 'MISSING whole actual late producer backup.'
+   $producerArtifact=Join-Path $directory $(if($kind -ceq 'profile'){'producer-profile-backup.json'}else{'producer-game-backup.json'})
+   [IO.File]::WriteAllBytes($producerArtifact,[IO.File]::ReadAllBytes($context.backup))
+   $context.backupHash=Get-HarnessFileSha256 $context.backup
+   Require ((Get-HarnessFileSha256 $producerArtifact) -ceq $context.backupHash) 'Whole original late producer copy differs.'
+   $backup=Get-Content -LiteralPath $context.backup -Raw|ConvertFrom-Json
+   Require (@($backup.snapshots).Count -eq $originals.Count -and $backup.actionId -ceq $(if($kind -ceq 'profile'){'performance.applyProfile'}else{'performance.gameTune.startSession'}) -and $backup.dryRun -is [bool] -and -not $backup.dryRun -and $backup.profileId -ceq 'restore-late-e2e' -and $backup.profilePath -ieq $profilePath) 'Whole actual late producer binding differs.'
+   $producerWrites=0
+   foreach($original in @($originals.ToArray())){
+    $matches=@($backup.snapshots|Where-Object processId -eq $original.owned.Identity.pid);Require ($matches.Count -eq 1) 'Original late snapshot missing/duplicated.';$original.snapshot=$matches[0]
+    $null=Get-LateBoundIdentity $original.process $original.snapshot $original.snapshot $original $field
+    Require ($original.snapshot.profileId -is [string] -and $original.snapshot.profileId -ceq 'restore-late-e2e' -and $original.snapshot.ruleId -is [string] -and $original.snapshot.ruleId -ceq $foreground.ruleId) 'Late original snapshot profile/rule differs from the selected producer.'
+    $records=@($original.snapshot.controlChanges);Require ($records.Count -eq $original.expected.Count) 'Actual late producer record set differs.'
+    foreach($name in $original.expected){
+     $suffix=switch($name){'priorityClass'{'PriorityClass'};'affinityMask'{'AffinityMask'};'ioPriority'{'IoPriority'};'memoryPriority'{'MemoryPriority'};'gpuPriority'{'GpuPriority'}}
+     $record=@($records|Where-Object control -eq $name)
+     Require ((Test-RooIndustriesControlValueEqual $name $original.snapshot.('original'+$suffix) $original.originalValues[$name]) -and (Test-RooIndustriesControlValueEqual $name $original.snapshot.('proposed'+$suffix) $original.values[$name])) 'MISSING exact original and peer producer flat values.'
+     Require ($record.Count -eq 1 -and $record[0].outcome -ceq 'applied' -and -not $record[0].blocked -and (Test-RooIndustriesControlValueEqual $name $record[0].currentValue $original.originalValues[$name]) -and (Test-RooIndustriesControlValueEqual $name $record[0].proposedValue $original.values[$name]) -and (Test-RooIndustriesControlValueEqual $name (Read-Actual $original.process $name) $original.values[$name])) 'MISSING exact actual late producer record/native value.'
+     Assert-LateProducerRecord $record[0] $original $name -Applied
+     $events=@($guard.events|Where-Object {$_.pid -eq $original.owned.Identity.pid -and $_.control -ceq $name})
+     Require ($events.Count -eq 1 -and $events[0].enteredRealMutator -and $events[0].returned -and $events[0].outcome -ceq 'applied') 'Producer did not execute the actual owned native mutator once.'
+     $producerWrites++
+    }
+    if($twoOriginalHistory){Require ($original.snapshot.originalMemoryPriority -eq 5 -and $original.snapshot.proposedMemoryPriority -eq 5 -and (Read-Actual $original.process 'memoryPriority') -eq 5) 'Two-original no-effect memory evidence differs.'}
+    if($kind -ceq 'game'){Require ($original.snapshot.sessionId -is [string] -and -not [string]::IsNullOrWhiteSpace($original.snapshot.sessionId) -and $backup.sessionId -is [string] -and -not [string]::IsNullOrWhiteSpace($backup.sessionId) -and $apply.sessionId -is [string] -and -not [string]::IsNullOrWhiteSpace($apply.sessionId) -and $original.snapshot.sessionId -ceq $apply.sessionId -and $backup.sessionId -ceq $apply.sessionId) 'Late original Game session differs.'}
+    $original.afterProducer=Read-E2EControls $original.process
+   }
+   Require ($guard.events.Count -eq $producerWrites -and @($apply.result.changedItems).Count -eq $originals.Count) 'Actual producer write/process counts differ.'
+   Require ($apply.actionId -is [string] -and $apply.actionId -ceq $(if($kind -ceq 'profile'){'performance.applyProfile'}else{'performance.gameTune.startSession'}) -and $apply.dryRun -is [bool] -and -not $apply.dryRun) 'Late actual producer action/dry-run binding differs.'
+   Assert-LateProducerItems @($apply.result.changedItems) @($originals.ToArray()) $kind
+   if($kind -ceq 'game'){
+    [IO.File]::WriteAllBytes((Join-Path $directory 'producer-game-session.json'),[IO.File]::ReadAllBytes($context.session))
+    $session=Get-Content -LiteralPath $context.session -Raw|ConvertFrom-Json
+    Require ($session.sessionId -ceq $apply.sessionId -and $session.profileId -ceq $backup.profileId -and $session.backupManifestPath -ceq $context.backup -and @($session.changedItems).Count -eq $originals.Count) 'Single actual late Game session binding differs.'
+    Require ($apply.profileId -is [string] -and $apply.profileId -ceq $backup.profileId -and [string]::Equals([string]$apply.profilePath,[string]$profilePath,[StringComparison]::OrdinalIgnoreCase)) 'Late Game producer profile binding differs.'
+    Require ($session.sessionId -is [string] -and -not [string]::IsNullOrWhiteSpace($session.sessionId) -and $session.sessionId -ceq $apply.sessionId -and $session.profileId -is [string] -and $session.profileId -ceq $backup.profileId) 'Late Game persisted identity/profile differs.'
+    Require ([string]::Equals([string]$session.profilePath,[string]$profilePath,[StringComparison]::OrdinalIgnoreCase) -and [string]::Equals([string]$session.profilePath,[string]$apply.profilePath,[StringComparison]::OrdinalIgnoreCase) -and [string]::Equals([string]$session.sessionPath,[string]$context.session,[StringComparison]::OrdinalIgnoreCase) -and [string]::Equals([string]$session.sessionPath,[string]$apply.sessionPath,[StringComparison]::OrdinalIgnoreCase)) 'Late Game actual profile/session paths differ.'
+    Assert-LateProducerItems @($apply.changedItems) @($originals.ToArray()) $kind
+    Assert-LateProducerItems @($session.changedItems) @($originals.ToArray()) $kind
+   }
+   Save (Join-Path $directory 'producer-evidence.json') @{sourceRoot=$Source;sourceCommit=$SourceCommit;producerScript=$producerName;producerScriptSha256=(Get-HarnessFileSha256 (Join-Path $Source ('backend\scripts\'+$producerName)));commonSha256=(Get-HarnessFileSha256 $common);driverPath=$driverSourcePath;driverSha256=(Get-HarnessFileSha256 $driverSourcePath);engine=$PSVersionTable.PSVersion.ToString();nonce=$context.nonce;producerArguments=$producerArguments;producerArtifact=$producerArtifact;producerBackupSha256=$context.backupHash;originals=@($originals|ForEach-Object {@{role=$_.role;identity=$_.owned.Identity;handle=$_.owned.handle.ToInt64();before=$_.before;after=$_.afterProducer;snapshot=$_.snapshot;directoryEntry=$_.directoryEntry;imageEntry=$_.imageEntry;processEntry=$_.processEntry}});rawProfileContract=($kind -ceq 'profile');singleActualProducer=$true;compoundReplay=$false}
+   if($mode -ceq 'late-exit-original'){Set-LateFixtureValue $lateTarget $field $originalValue}
+   if($mode -ceq 'late-exit-kept'){Set-LateFixtureValue $lateTarget $field $external}
+   $meter.phase='undo';$meter.undoGuardStart=$guard.events.Count
+   foreach($name in @('priorityClass','affinityMask','ioPriority','memoryPriority','gpuPriority')){$meter.attempts[$name]=0}
+   $patterns=@{priorityClass='^\s*\$Process.PriorityClass = \[System.Diagnostics.ProcessPriorityClass\]::\$priority';affinityMask='^\s*\$Process.ProcessorAffinity = \[IntPtr\]';ioPriority='^\s*Set-RooIndustriesProcessIoPriority \$Process \$priority';memoryPriority='^\s*Set-RooIndustriesProcessMemoryPriority \$Process \$value';gpuPriority='^\s*Set-RooIndustriesProcessGpuPriority \$Process \$priority'}
+   foreach($name in $patterns.Keys){$observedControl=$name;$breakpoints.Add((New-Breakpoint $context $common $patterns[$name] ({$process=(Get-Variable Process -ErrorAction Stop).Value;$meter.attempts[$observedControl]++}.GetNewClosure()) -FunctionName 'Invoke-RooIndustriesProcessControlChange'))|Out-Null}
+   $breakpoints.Add((New-Breakpoint $context $common '^\s*if \(-not \(Test-RooIndustriesControlValueEqual \$control \$actual \$value\)\)' ({
+    try{
+     $process=(Get-Variable Process -ErrorAction Stop).Value;$change=(Get-Variable Change -ErrorAction Stop).Value;$control=[string](Get-Variable control -ErrorAction Stop).Value;$actual=(Get-Variable actual -ErrorAction Stop).Value;$value=(Get-Variable value -ErrorAction Stop).Value
+     $original=@($originals|Where-Object {$_.owned.Identity.pid -eq $process.Id});Require ($original.Count -eq 1) 'Native late readback selected another original.'
+     Assert-LateOriginal $original[0]
+     Require ((Test-RooIndustriesControlValueEqual $control $actual $value) -and (Test-RooIndustriesControlValueEqual $control $actual $original[0].originalValues[$control]) -and $change.action -like 'restore*') 'Actual late setter readback did not restore the original.'
+     $meter.readbacks.Add(@{pid=$process.Id;control=$control;actual=$actual;requested=$value;change=$change;identity=$original[0].owned.Identity;phase=$meter.phase;stack=@(Get-PSCallStack|ForEach-Object {@{command=$_.Command;script=$_.ScriptName;line=$_.ScriptLineNumber}})})|Out-Null
+    }catch{$meter.injectionErrors.Add($_.Exception.ToString())|Out-Null;throw}
+   }.GetNewClosure()) -FunctionName 'Invoke-RooIndustriesProcessControlChange'))|Out-Null
+   $breakpoints.Add((New-Breakpoint $context $common '^\s*return \[pscustomobject\]@\{ confirmed = \$candidateConfirmed;' ({
+    $process=(Get-Variable Process -ErrorAction Stop).Value;$control=[string](Get-Variable control -ErrorAction Stop).Value
+    $meter.returns.Add(@{pid=$process.Id;control=$control;confirmed=(Get-Variable candidateConfirmed -ErrorAction Stop).Value;restored=(Get-Variable candidateRestored -ErrorAction Stop).Value;cleanupFailed=(Get-Variable cleanupFailed -ErrorAction Stop).Value})|Out-Null
+   }.GetNewClosure()) -FunctionName 'Confirm-RooIndustriesRestoreControl'))|Out-Null
+   $breakpoints.Add((New-Breakpoint $context $common '^\s*if \(\$errors.Count -gt 0\)' ({
+    if((Get-Variable errors -ErrorAction Stop).Value.Count -gt 0){$meter.hardReturns.Add(@{control=(Get-Variable control -ErrorAction Stop).Value;cleanupFailed=(Get-Variable cleanupFailed -ErrorAction Stop).Value;reasons=@((Get-Variable errors -ErrorAction Stop).Value.ToArray());candidateEnded=(Get-Variable candidateEnded -ErrorAction Stop).Value;evidenceKind='Actual error-return locals; raw caller result retained'})|Out-Null}
+   }.GetNewClosure()) -FunctionName 'Confirm-RooIndustriesRestoreControl'))|Out-Null
+   $breakpoints.Add((New-Breakpoint $context $common '^\s*if \(\$failure.GetType\(\) -ne \[ArgumentException\]\)' ({
+    $failure=(Get-Variable failure -ErrorAction Stop).Value;$savedId=(Get-Variable savedId -ErrorAction Stop).Value
+    $meter.providerErrors.Add(@{exceptionType=$failure.GetType().FullName;errorRecord=(Get-Variable -Name '_' -ErrorAction Stop).Value.ToString();savedId=$savedId;savedBirth=(Get-Variable savedBirth -ErrorAction Stop).Value;engine=$PSVersionTable.PSVersion.ToString();source=$common;stack=@(Get-PSCallStack|ForEach-Object {@{command=$_.Command;script=$_.ScriptName;line=$_.ScriptLineNumber}})})|Out-Null
+   }.GetNewClosure()) -FunctionName 'Test-RooIndustriesRestoreInstanceEnded'))|Out-Null
+   if($mode -in @('late-exit-restore','late-exit-original','late-exit-kept')){
+    $breakpoints.Add((New-Breakpoint $context $common '^\s*\$candidateConfirmed = \$false' ({
+     try{
+      $process=(Get-Variable Process -ErrorAction Stop).Value;$snapshot=(Get-Variable Snapshot -ErrorAction Stop).Value;$entry=(Get-Variable Entry -ErrorAction Stop).Value;$control=[string](Get-Variable control -ErrorAction Stop).Value;$check=(Get-Variable Check -ErrorAction Stop).Value
+      if($control -ceq $field -and $snapshot.processId -eq $lateTarget.owned.Identity.pid -and $meter.stopHits -eq 0){
+       $binding=Get-LateBoundIdentity $process $snapshot $entry $lateTarget $control
+       $binding.check=$check;$binding.stack=@(Get-PSCallStack|ForEach-Object {@{command=$_.Command;script=$_.ScriptName;line=$_.ScriptLineNumber}})
+       $meter.initializations.Add($binding)|Out-Null
+       Stop-LateOriginal $lateTarget $meter $binding
+      }
+     }catch{$meter.injectionErrors.Add($_.Exception.ToString())|Out-Null;throw}
+    }.GetNewClosure()) -FunctionName 'Confirm-RooIndustriesRestoreControl'))|Out-Null
+   }elseif($legName -ceq 'after-aggregate'){
+    $breakpoints.Add((New-Breakpoint $context $common '^\s*\$ended = \$false' ({
+     try{
+      $snapshot=(Get-Variable Snapshot -ErrorAction Stop).Value;$entry=(Get-Variable Entry -ErrorAction Stop).Value
+      if($snapshot.processId -eq $lateTarget.owned.Identity.pid -and $meter.stopHits -eq 0){
+       $meter.observerCalls++
+       if($meter.observerCalls -eq $lateTarget.expected.Count+2){
+        $pair=(Get-Variable pair -ErrorAction Stop).Value;$after=(Get-Variable afterControls -ErrorAction Stop).Value;$applied=(Get-Variable appliedControls -ErrorAction Stop).Value;$verification=(Get-Variable verification -ErrorAction Stop).Value;$workItems=(Get-Variable workItems -ErrorAction Stop).Value
+        $stack=@(Get-PSCallStack)
+        Require (@($stack|Where-Object Command -eq 'Confirm-RooIndustriesRestoreControl').Count -eq 0 -and $pair.executionMatched -and -not $pair.failed -and -not $pair.closed -and [object]::ReferenceEquals($pair.snapshot,$snapshot) -and [object]::ReferenceEquals($pair.entry,$entry)) 'MISSING actual post-aggregate caller scope/order.'
+        Require ($workItems.Count -eq $lateTarget.expected.Count -and $applied.Count -eq $lateTarget.expected.Count -and $verification.confirmed -is [bool] -and $verification.confirmed -and $verification.restored -and -not $verification.cleanupFailed -and -not $verification.instanceEnded -and $after.exists -is [bool] -and $after.exists) 'MISSING actual successful post-aggregate controls/return.'
+        foreach($name in $lateTarget.expected){Require ((Test-RooIndustriesControlValueEqual $name $after.$name $lateTarget.originalValues[$name]) -and @($meter.readbacks|Where-Object {$_.pid -eq $snapshot.processId -and $_.control -ceq $name -and $_.change.outcome -ceq 'applied'}).Count -eq 1 -and @($meter.returns|Where-Object {$_.pid -eq $snapshot.processId -and $_.control -ceq $name -and $_.confirmed -and $_.restored -and -not $_.cleanupFailed}).Count -eq 1) 'MISSING actual native/return/aggregate readback for every prior write.'}
+        foreach($name in $lateTarget.expected){$appliedMatch=@($applied.ToArray()|Where-Object control -CEQ $name);$workMatch=@($workItems.ToArray()|Where-Object {$_.change.control -ceq $name});$readbackMatch=@($meter.readbacks|Where-Object {$_.pid -eq $snapshot.processId -and $_.control -ceq $name});Require ($appliedMatch.Count -eq 1 -and $workMatch.Count -eq 1 -and $readbackMatch.Count -eq 1 -and [object]::ReferenceEquals($appliedMatch[0],$workMatch[0].change) -and [object]::ReferenceEquals($appliedMatch[0],$readbackMatch[0].change)) 'Actual post-aggregate work/change/readback references differ.'}
+        $aggregateEvidence=@{exists=$after.exists};foreach($name in $lateTarget.expected){$aggregateEvidence[$name]=$after.$name;$aggregateEvidence[($name+'Available')]=Get-RooIndustriesPropertyValue $after ($name+'Available') $null}
+        $meter.afterAggregate=@{observedAggregate=$aggregateEvidence;appliedControls=@($applied.ToArray());verification=$verification;workItemCount=$workItems.Count;stack=@($stack|ForEach-Object {@{command=$_.Command;script=$_.ScriptName;line=$_.ScriptLineNumber}})}
+        $binding=Get-LateBoundIdentity $lateTarget.process $snapshot $entry $lateTarget $field
+        Stop-LateOriginal $lateTarget $meter $binding
+       }
+      }
+     }catch{$meter.injectionErrors.Add($_.Exception.ToString())|Out-Null;throw}
+    }.GetNewClosure()) -FunctionName 'Test-RooIndustriesRestoreInstanceEnded'))|Out-Null
+   }else{
+    $lastControl=if($mode -ceq 'late-exit-release-error'){$field}else{@($lateTarget.expected)[-1]}
+    $breakpoints.Add((New-Breakpoint $context $common '^\s*if \(\$instanceHeld\)' ({
+     try{
+      $process=(Get-Variable Process -ErrorAction Stop).Value;$snapshot=(Get-Variable Snapshot -ErrorAction Stop).Value;$entry=(Get-Variable Entry -ErrorAction Stop).Value;$control=[string](Get-Variable control -ErrorAction Stop).Value
+      if($control -ceq $lastControl -and $snapshot.processId -eq $lateTarget.owned.Identity.pid -and $meter.stopHits -eq 0){
+       $change=(Get-Variable Change -ErrorAction Stop).Value
+       Require ((Get-Variable candidateConfirmed -ErrorAction Stop).Value -and (Get-Variable candidateRestored -ErrorAction Stop).Value -and (Get-Variable instanceHeld -ErrorAction Stop).Value -and $change.outcome -ceq 'applied') 'MISSING actual last successful Confirm/setter/held mutex.'
+       $expectedPrior=if($mode -ceq 'late-exit-release-error' -and $field -ceq 'priorityClass'){@($field)}else{@($lateTarget.expected)}
+       foreach($name in $expectedPrior){Require (@($meter.readbacks|Where-Object {$_.pid -eq $snapshot.processId -and $_.control -ceq $name -and $_.change.outcome -ceq 'applied'}).Count -eq 1) 'MISSING prior actual native write/readback.'}
+       $binding=Get-LateBoundIdentity $process $snapshot $entry $lateTarget $control
+       $binding.change=$change;$binding.stack=@(Get-PSCallStack|ForEach-Object {@{command=$_.Command;script=$_.ScriptName;line=$_.ScriptLineNumber}})
+       if($mode -ceq 'late-exit-release-error'){$releaseKeep=[Threading.Mutex]::OpenExisting((Get-Variable name -ErrorAction Stop).Value);$meter.releaseKeep=$releaseKeep}
+       Stop-LateOriginal $lateTarget $meter $binding
+       if($mode -ceq 'late-exit-release-error'){(Get-Variable instanceMutex -ErrorAction Stop).Value.ReleaseMutex();$meter.releaseFault=$true}
+      }
+     }catch{$meter.injectionErrors.Add($_.Exception.ToString())|Out-Null;throw}
+    }.GetNewClosure()) -FunctionName 'Confirm-RooIndustriesRestoreControl'))|Out-Null
+   }
+   $first=Undo $context 'first' $Source $guard
+   $status=if($kind -ceq 'game'){Get-Content -LiteralPath (Join-Path $directory 'status-first.json') -Raw|ConvertFrom-Json}else{$null}
+   Require ($meter.injectionErrors.Count -eq 0 -and $meter.stopHits -eq 1 -and $meter.waitCompleted -and $lateTarget.process.HasExited -and $guard.rejections.Count -eq 0) 'MISSING exact owned late-exit ordering/guard proof.'
+   $targetPid=$lateTarget.owned.Identity.pid
+   $closed=if($kind -ceq 'game'){@($first.skippedItems|Where-Object {$_.processId -eq $targetPid -and $_.outcome -ceq 'alreadyClosed'})}else{@($first.result.alreadyClosedItems|Where-Object processId -eq $targetPid)}
+   $restored=@($first.result.changedItems|ForEach-Object {@($_.restoredControls)})
+   Require (@($first.result.changedItems|Where-Object processId -eq $targetPid).Count -eq 0 -and @($first.result.leftAsSetItems|Where-Object processId -eq $targetPid).Count -eq 0 -and @($first.leftAsSetItems|Where-Object processId -eq $targetPid).Count -eq 0) 'Ended target received current restored/kept attribution.'
+   foreach($original in @($originals.ToArray())){foreach($name in @('priorityClass','affinityMask','ioPriority','memoryPriority','gpuPriority')){
+    $expectedWrites=0
+    if($original.role -ceq 'surviving-peer'){$expectedWrites=if($name -ceq 'priorityClass'){1}else{0}}
+    elseif($mode -ceq 'late-exit-postwrite'){$expectedWrites=if($original.expected -contains $name){1}else{0}}
+    elseif($mode -ceq 'late-exit-release-error'){$expectedWrites=if($name -ceq $field -or ($field -cne 'priorityClass' -and $name -ceq 'priorityClass')){1}else{0}}
+    elseif($mode -ceq 'late-exit-restore' -and $field -cne 'priorityClass' -and $name -ceq 'priorityClass'){$expectedWrites=1}
+    $events=@($guard.events|Select-Object -Skip $meter.undoGuardStart|Where-Object {$_.pid -eq $original.owned.Identity.pid -and $_.control -ceq $name})
+    $readbacks=@($meter.readbacks|Where-Object {$_.pid -eq $original.owned.Identity.pid -and $_.control -ceq $name})
+    Require ($events.Count -eq $expectedWrites -and $readbacks.Count -eq $expectedWrites) 'Actual late per-original/control write/readback count differs.'
+    foreach($event in $events){Require ($event.enteredRealMutator -and $event.returned -and $event.outcome -ceq 'applied' -and $null -eq $event.error) 'Prior late native mutator did not actually succeed.'}
+   }}
+   foreach($name in $meter.attempts.Keys){Require ($meter.attempts[$name] -eq @($guard.events|Select-Object -Skip $meter.undoGuardStart|Where-Object control -CEQ $name).Count) 'Late setter attempt and actual guard identity counts differ.'}
+   if($twoOriginalHistory){Assert-LateOriginal $survivor;Require ((Read-Actual $survivor.process 'priorityClass') -ceq 'Normal' -and @($first.result.changedItems|Where-Object processId -eq $survivor.process.Id).Count -eq 1 -and $restored.Count -eq 1) 'Independent surviving original did not restore once.'}
+   else{Require ($restored.Count -eq 0) 'Closed/refused original counted a prior write as current restored.'}
+   Save (Join-Path $directory 'first-readback.json') @{result=$first;reopenedStatus=$status;targetEnded=$true;targetValues=$null;beforeExit=$meter.beforeExit;survivorValues=$(if($twoOriginalHistory){Read-E2EControls $survivor.process}else{$null});stopBinding=$meter.stopBinding;observerCalls=$meter.observerCalls;readbacks=@($meter.readbacks.ToArray());confirmReturnSites=@($meter.returns.ToArray());hardReturns=@($meter.hardReturns.ToArray());providerErrors=@($meter.providerErrors.ToArray());afterAggregate=$meter.afterAggregate;backendRoot=$Source;backendCommit=$SourceCommit;restoreScriptSha256=(Get-HarnessFileSha256 (Join-Path $Source ('backend\scripts\'+$(if($kind -ceq 'game'){'Stop-GameTuneSession.ps1'}else{'Restore-ProcessProfileBackup.ps1'}))));driverPath=$driverSourcePath;driverSha256=(Get-HarnessFileSha256 $driverSourcePath);statusReaderRoot=$(if($kind -ceq 'game'){$Source}else{$null});statusReaderSha256=$(if($kind -ceq 'game'){Get-HarnessFileSha256 (Join-Path $Source 'backend\scripts\Get-GameTuneSessionStatus.ps1')}else{$null});sourceCommit=$SourceCommit;engine=$PSVersionTable.PSVersion.ToString();backupSha256=$context.backupHash;oldF4Red='MISSING: no old backend run or transplanted observer'}
+   if($mode -ceq 'late-exit-release-error'){
+    Require ($meter.releaseFault -and $closed.Count -eq 0 -and (Is-Pending $context $first) -and @($meter.hardReturns|Where-Object {$_.cleanupFailed -is [bool] -and $_.cleanupFailed -and ($_.reasons -join '; ') -like '*Instance release:*'}).Count -ge 1 -and ($first.result.skippedItems.reason -join '; ') -like '*Instance release:*') 'Actual release failure did not remain hard/pending.'
+    if($kind -ceq 'profile'){Require ($first.status -ceq 'failed' -and $first.result.restorePendingCount -eq 1) 'Release failure Profile phase differs.'}
+    else{Require ($first.result.status -ceq 'failed' -and $first.status -ceq 'failed' -and $first.restorable -and $status.status -ceq 'failed' -and -not $status.completed) 'Release failure Game tuple differs.'}
+   }else{
+    Require ($closed.Count -eq 1 -and -not(Is-Pending $context $first) -and @($meter.providerErrors|Where-Object {$_.savedId -eq $targetPid -and $_.exceptionType -ceq 'System.ArgumentException' -and $_.savedBirth.ToString() -ceq $lateTarget.owned.Identity.creationTimeFileTimeUtc}).Count -ge 1) 'MISSING actual exact GetProcessById ArgumentException/closed original.'
+    if($kind -ceq 'profile'){Require ($first.status -ceq 'success' -and $first.result.restorePendingCount -eq 0 -and @($first.result.pendingItems).Count -eq 0 -and @($first.result.changedItems).Count -eq $(if($twoOriginalHistory){1}else{0}) -and $first.result.summary -like ('*for '+$(if($twoOriginalHistory){1}else{0})+' app(s).*')) 'Positive late Profile counts differ.'}
+    else{Require ($first.result.status -ceq 'rolledBack' -and $first.status -ceq 'completed' -and $first.sessionStatus -ceq 'completed' -and -not $first.restorable -and $status.status -ceq 'completed' -and $status.completed -and -not $status.restorable -and $status.restoreAttempted -and $status.summary.changedItemCount -eq $originals.Count -and $status.summary.restoredItemCount -eq $(if($twoOriginalHistory){1}else{0}) -and $status.summary.skippedItemCount -eq 1) 'Positive late Game raw/persisted/public counts differ.'}
+   }
+   if($mode -ceq 'late-exit-original'){Require (@($first.preview|Where-Object processId -eq $targetPid|ForEach-Object {@($_.alreadyOriginal)}|Where-Object control -CEQ $field).Count -eq 1) 'Late original case did not enter the actual no-write original lane.'}
+   if($mode -ceq 'late-exit-kept'){Require (@($first.preview|Where-Object processId -eq $targetPid|ForEach-Object {@($_.leftAsSet)}|Where-Object control -CEQ $field).Count -eq 1) 'Late kept case did not enter the actual verified-kept lane.'}
+   Remove-LateBreakpoints $context $breakpoints
+   if($mode -ceq 'late-exit-release-error'){
+    $releaseKeep=$meter.releaseKeep
+    $releaseAcquired=$releaseKeep.WaitOne(0)
+    Require $releaseAcquired 'Original release-error mutex obligation did not settle.'
+    $releaseKeep.ReleaseMutex();$releaseAcquired=$false;$releaseKeep.Dispose();$releaseKeep=$null;$meter.releaseKeep=$null
+   }
+   $eventsBeforeRepeat=$guard.events.Count
+   $repeat=Undo $context $(if($mode -ceq 'late-exit-release-error'){'fresh-ended-retry'}else{'repeat'}) $Source $guard
+   Require (-not(Is-Pending $context $repeat) -and $guard.events.Count -eq $eventsBeforeRepeat -and $guard.rejections.Count -eq 0 -and @($repeat.result.changedItems).Count -eq 0 -and @($repeat.result.leftAsSetItems).Count -eq 0) 'Fresh ended/repeated Undo wrote or certified a current target.'
+   if($kind -ceq 'game'){$phase=if($mode -ceq 'late-exit-release-error'){'fresh-ended-retry'}else{'repeat'};$again=Get-Content -LiteralPath (Join-Path $directory ('status-'+$phase+'.json')) -Raw|ConvertFrom-Json;Require ($repeat.sessionId -ceq $apply.sessionId -and $again.sessionId -ceq $apply.sessionId -and $again.status -ceq 'completed' -and $again.completed -and -not $again.restorable -and $again.summary.changedItemCount -eq $originals.Count -and $again.summary.restoredItemCount -eq 0 -and $again.summary.skippedItemCount -eq 1) 'Repeated/fresh-ended Game status differs.'}
+   if($twoOriginalHistory){Require ((Read-Actual $survivor.process 'priorityClass') -ceq 'Normal') 'Repeated Undo changed the surviving original.'}
+   Require ((Get-HarnessFileSha256 $context.backup) -ceq $context.backupHash -and (Get-HarnessFileSha256 $producerArtifact) -ceq $context.backupHash) 'Late phase changed immutable original producer bytes.'
+   $phaseResults.Add($first)|Out-Null;$phaseResults.Add($repeat)|Out-Null
+   $legRecord.completed=$true
+  }catch{$bodyError=$_;Save (Join-Path $directory 'failure.json') @{error=$_.Exception.ToString();stack=$_.ScriptStackTrace}}
+  finally{
+   foreach($bp in @($context.breakpoints.ToArray())){try{Remove-PSBreakpoint -Breakpoint $bp;$null=$context.breakpoints.Remove($bp)}catch{$cleanupErrors.Add($_.Exception.ToString())|Out-Null}}
+   if($meter.ContainsKey('releaseKeep') -and $null -ne $meter.releaseKeep -and $null -eq $releaseKeep){$releaseKeep=$meter.releaseKeep}
+   try{if($null -ne $releaseKeep){if($releaseAcquired){$releaseKeep.ReleaseMutex();$releaseAcquired=$false};$releaseKeep.Dispose();$releaseKeep=$null}}catch{$cleanupErrors.Add($_.Exception.ToString())|Out-Null}
+   foreach($original in @($originals.ToArray())){
+    try{
+     if($null -ne $original.imageProbe){$original.imageProbe.Dispose();$original.imageProbe=$null}
+     if($null -ne $original.process){Require ($null -ne $original.owned -and $null -ne $original.processEntry) 'Original late process lacks ownership/ledger proof; dependencies retained.';Stop-OwnedProcess $original.owned;Require ($original.process.WaitForExit(5000) -and $original.process.HasExited) 'Original late fixture did not exit.';$original.stopVerified=$true;Remove-HarnessEntry $original.processEntry;$original.process.Dispose();$original.wrapperDisposed=$true}else{$original.stopVerified=$true}
+     if($original.imageCreationAttempted -and $null -eq $original.imageEntry -and (Test-HarnessPath $original.image)){throw 'Unregistered late original image retained with its directory.'}
+     foreach($extra in @($original.extraEntries.ToArray())){Remove-HarnessEntry $extra}
+     if($null -ne $original.imageEntry){Remove-HarnessEntry $original.imageEntry}
+     if($null -ne $original.directoryEntry){Require (@([IO.Directory]::EnumerateFileSystemEntries($original.directory)).Count -eq 0) 'Late original directory is not empty; retained.';Remove-HarnessEntry $original.directoryEntry}elseif(Test-HarnessPath $original.directory){throw 'Unregistered late original directory retained.'}
+     $finalEntries=New-Object System.Collections.Generic.List[object]
+     foreach($entry in @($original.processEntry,$original.imageEntry,$original.directoryEntry)+@($original.extraEntries.ToArray())){if($null -eq $entry){continue};$actual=@(Get-HarnessEntries|Where-Object id -CEQ $entry.id);Require ($actual.Count -eq 1 -and [string]::IsNullOrWhiteSpace([string]$actual[0].cleanupError)) 'Original late cleanup ledger ID failed.';if($entry.kind -ceq 'process'){Require ($actual[0].state -in @('removed','absent') -and $actual[0].identity.pid -eq $entry.identity.pid -and $actual[0].identity.creationTimeFileTimeUtc -ceq $entry.identity.creationTimeFileTimeUtc -and $actual[0].identity.imagePath -ieq $entry.identity.imagePath) 'Original late process ledger identity differs.'}elseif($entry.kind -ceq 'file'){Require ($actual[0].state -ceq 'removed' -and $actual[0].identity.id -ceq $entry.identity.id -and $actual[0].identity.hash -ceq $entry.identity.hash -and $actual[0].identity.path -ieq $entry.identity.path) 'Original late file ledger identity differs.'}else{Require ($actual[0].state -ceq 'removed' -and $actual[0].identity.creationTimeFileTimeUtc -ceq $entry.identity.creationTimeFileTimeUtc -and $actual[0].identity.path -ieq $entry.identity.path) 'Original late directory ledger identity differs.'};$finalEntries.Add($actual[0])|Out-Null}
+     Require (-not(Test-HarnessPath $original.directory)) 'Original late directory still exists.'
+     $original.cleanupPassed=$true
+     Save (Join-Path $directory ('cleanup-'+$original.role+'.json')) @{original=$original.owned.Identity;originalHandle=$original.owned.handle.ToInt64();stopVerified=$original.stopVerified;wrapperDisposed=$original.wrapperDisposed;originalProcessEntry=$original.processEntry;originalImageEntry=$original.imageEntry;originalDirectoryEntry=$original.directoryEntry;finalSameIdEntries=@($finalEntries.ToArray());cleanupPassed=$true}
+    }catch{$original.cleanupError=$_.Exception.ToString();$cleanupErrors.Add($original.role+': '+$original.cleanupError)|Out-Null}
+   }
+   $legRecord.cleanupPassed=$cleanupErrors.Count -eq 0 -and @($originals|Where-Object {-not $_.cleanupPassed}).Count -eq 0
+   Save (Join-Path $directory 'mutation-guard.json') @{nonce=$context.nonce;armed=($null -ne $guard);backendRoot=$Source;sourceCommit=$SourceCommit;commonPath=$common;commonSha256=(Get-HarnessFileSha256 $common);driverPath=$driverSourcePath;driverSha256=(Get-HarnessFileSha256 $driverSourcePath);originals=$(if($null -ne $guard){@($guard.originals|ForEach-Object {@{pid=$_.pid;birth=$_.birth;image=$_.image;handle=$_.handle.ToInt64()}})}else{@()});events=$(if($null -ne $guard){@($guard.events.ToArray())}else{@()});rejections=$(if($null -ne $guard){@($guard.rejections.ToArray())}else{@()});fixtureProtection='Pass-through actual backend mutator; no inventory/producer/native simulation'}
+   Save (Join-Path $directory 'cleanup.json') @{cleanupPassed=$legRecord.cleanupPassed;errors=@($cleanupErrors.ToArray());originals=@($originals|ForEach-Object {@{role=$_.role;identity=$(if($null -ne $_.owned){$_.owned.Identity}else{$null});processEntry=$_.processEntry;imageEntry=$_.imageEntry;directoryEntry=$_.directoryEntry;imageCreationAttempted=$_.imageCreationAttempted;stopVerified=$_.stopVerified;wrapperDisposed=$_.wrapperDisposed;cleanupPassed=$_.cleanupPassed;cleanupError=$_.cleanupError}});guardRejections=$(if($null -ne $guard){@($guard.rejections.ToArray())}else{@()});injectionErrors=@($meter.injectionErrors.ToArray());nativeBehaviorSimulated=$false}
+  }
+  if($bodyError){throw $bodyError}
+  Require ($legRecord.completed -and $legRecord.cleanupPassed -and $cleanupErrors.Count -eq 0) 'Original late leg cleanup/completion failed.'
+  Save (Join-Path $directory 'done.json') @{passed=$true;kind=$kind;control=$field;scenario=$mode;leg=$legName;cleanupPassed=$true;sourceCommit=$SourceCommit;oldRed='MISSING/UNRUN'}
+ }}
+ Require ($history.legs.Count -eq $legs.Count -and @($history.legs|Where-Object {-not $_.completed -or -not $_.cleanupPassed}).Count -eq 0) 'Composite late history lacks every original leg.'
+ Save (Join-Path $parent.directory 'observations.json') @{kind=$kind;control=$field;scenario=$mode;sourceCommit=$SourceCommit;legs=@($history.legs|ForEach-Object {@{name=$_.name;directory=$_.directory;completed=$_.completed;cleanupPassed=$_.cleanupPassed}});actualProducerLegs=$history.legs.Count;nativeBehaviorSimulated=$false;oldF4Red='MISSING/UNRUN; no transplanted new observer or source comparison interface'}
+ return $history
+}
+
 function Run-Scenario([string]$kind,[string]$field,[string]$mode){ & {
  $directory=Join-Path $root ($kind+'-'+$field+'-'+$mode)
  Require (-not [IO.Directory]::Exists($directory)) 'Case output already exists; no automatic repeat.'
@@ -426,10 +862,13 @@ function Run-Scenario([string]$kind,[string]$field,[string]$mode){ & {
  $alias=$null;$real=$null;$realImage=$null;$aliasEntry=$null;$imageEntry=$null;$targetCleanupSucceeded=$false
  $identityTrace=New-Object System.Collections.Generic.List[object]
  $producerHash=$null;$producerPeerText=$null;$aliasRedReproduced=$null
+ $lateScenario=$lateScenarios -contains $mode
+ $lateHistory=[pscustomobject]@{legs=(New-Object System.Collections.Generic.List[object]);setterFailures=(New-Object System.Collections.Generic.List[object])}
  try{
   . (Join-Path $Source 'backend\scripts\ProcessProfile.Common.ps1')
   $script:RestoreE2EData=$context.data
   function Get-RooIndustriesLocalDataRoot{return $script:RestoreE2EData}
+  if($lateScenario){$meter=Invoke-LateHistory $context $kind $field $mode $lateHistory}else{
   $image=Join-Path $directory 'RestoreTarget.exe'
   if($mode -eq 'image-alias'){
    $real=Join-Path $directory 'real';$alias=Join-Path $directory 'alias'
@@ -930,6 +1369,7 @@ function Run-Scenario([string]$kind,[string]$field,[string]$mode){ & {
   Require ((Get-FileHash -LiteralPath $context.backup -Algorithm SHA256).Hash -ceq $context.backupHash) 'Post-case fixture/journal cleanup changed original backup bytes.'
   Save (Join-Path $directory 'observations.json') @{sourceCommit=$SourceCommit;kind=$kind;control=$field;scenario=$mode;original=$original;requested=$desired;external=$external;firstReadback=$readback;targetSetterAttempts=($meter.setterAttempts-$baselineAttempts);peerSetterAttempts=($meter.peerSetterAttempts-$baselinePeer);counterSemantics='Breakpoint before setter: attempts only; successful OS writes require actual readback, not this counter';unlistedSetterAttempts=$meter.unlistedSetterAttempts;aliasRedReproduced=$aliasRedReproduced;identityTrace=@($identityTrace.ToArray());producerBackupSha256=$producerHash;denialPhases=@{injected=$denial.applied;restored=$denial.restored;originalAclPending=($null -ne $denial.acl);injectionPhase=$denial.injectionPhase;restorePhase=$denial.restorePhase;ownedIdentity=$context.owned.Identity};setterFailures=@($meter.setterFailures.ToArray());breakpointHits=$meter.hits;restoreSessionId=(Get-Process -Id $PID).SessionId;nativeBirth=$context.owned.Identity.creationTimeFileTimeUtc;backupSha256=$context.backupHash;engine=$PSVersionTable.PSVersion.ToString()}
   }
+  }
  }catch{$bodyError=$_;Save (Join-Path $directory 'failure.json') @{error=$_.Exception.ToString();stack=$_.ScriptStackTrace}}
  finally{
   foreach($bp in $context.breakpoints){try{Remove-PSBreakpoint $bp}catch{$cleanups.Add($_.Exception.ToString())|Out-Null}}
@@ -954,7 +1394,8 @@ function Run-Scenario([string]$kind,[string]$field,[string]$mode){ & {
    finally{$actor.process.Dispose()}
   }
   try{
-   if($context.owned){
+   if($lateScenario){Require ($lateHistory.legs.Count -gt 0 -and @($lateHistory.legs|Where-Object {-not $_.cleanupPassed}).Count -eq 0) 'Original late fixture cleanup is incomplete.';$targetCleanupSucceeded=$true}
+   elseif($context.owned){
     Stop-OwnedProcess $context.owned
     Require ($context.process.WaitForExit(5000) -and $context.process.HasExited) 'Original fixture did not exit.'
     $context.process.Dispose()
