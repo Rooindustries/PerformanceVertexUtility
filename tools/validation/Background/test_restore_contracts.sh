@@ -29,17 +29,17 @@ for file in "${files[@]}"; do
   matched=$((matched + 1))
   printf -v errors '%s/%04d.errors.log' "$report_dir" "$matched"
   status=0
-  ROO_CONTRACT_INPUT="$file" ROO_CONTRACT_SCHEMA="$report_dir/$definition.schema.json" \
+  ROO_INDUSTRIES_CONTRACT_INPUT="$file" ROO_INDUSTRIES_CONTRACT_SCHEMA="$report_dir/$definition.schema.json" \
     pwsh -NoProfile -NonInteractive -Command '
       try {
         $issues = @()
-        $valid = Test-Json -LiteralPath $env:ROO_CONTRACT_INPUT -SchemaFile $env:ROO_CONTRACT_SCHEMA -ErrorAction SilentlyContinue -ErrorVariable issues
+        $valid = Test-Json -LiteralPath $env:ROO_INDUSTRIES_CONTRACT_INPUT -SchemaFile $env:ROO_INDUSTRIES_CONTRACT_SCHEMA -ErrorAction SilentlyContinue -ErrorVariable issues
         if ($valid) { exit 0 }
         foreach ($issue in $issues) { $issue.ToString(); if ($issue.ErrorDetails) { $issue.ErrorDetails.Message } }
-        $schema = [Json.Schema.JsonSchema]::FromFile($env:ROO_CONTRACT_SCHEMA)
+        $schema = [Json.Schema.JsonSchema]::FromFile($env:ROO_INDUSTRIES_CONTRACT_SCHEMA)
         $options = [Json.Schema.EvaluationOptions]::new()
         $options.OutputFormat = [Json.Schema.OutputFormat]::List
-        $node = [System.Text.Json.Nodes.JsonNode]::Parse([IO.File]::ReadAllText($env:ROO_CONTRACT_INPUT))
+        $node = [System.Text.Json.Nodes.JsonNode]::Parse([IO.File]::ReadAllText($env:ROO_INDUSTRIES_CONTRACT_INPUT))
         foreach ($detail in $schema.Evaluate($node, $options).Details) {
           if (-not $detail.IsValid -and $detail.Errors) { $detail.InstanceLocation.ToString() + ": " + ($detail.Errors | ConvertTo-Json -Compress) }
         }

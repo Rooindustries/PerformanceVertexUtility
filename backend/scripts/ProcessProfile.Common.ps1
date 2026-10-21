@@ -1107,7 +1107,7 @@ function Get-RooIndustriesRestorableProcessControls {
 $script:RooIndustriesLeftAsSet = 'Left as another program set it.'
 $script:RooIndustriesChangedExternally = 'The control changed externally; its current value was preserved.'
 $script:RooIndustriesLeftAsSetChangedBack = 'Undo couldn''t confirm another program still holds it, so it was left alone. Run Undo again.'
-$script:RooIndustriesProcessOperationManaged = 'Another saved change in Roo Industries still uses this control. Undo that change first, then try again.'
+$script:RooIndustriesProcessOperationManaged = 'Another saved change still uses this control. Undo that change first, then try again.'
 
 function Get-RooIndustriesRestoreControlOwnershipReason {
     param([System.Diagnostics.Process]$Process, [string]$Control, [switch]$ForPreview)

@@ -241,7 +241,7 @@ if (args is [] or ["restore-summary"] or ["restore-summary", _])
                 && reloaded.MatchTuneRestoreAvailable == retained,
                 "Public Reload distinguishes applied controls from completed Undo evidence: " + phase + "/" + status + "/" + variant);
         }
-        if (Environment.GetEnvironmentVariable("ROO_RESTORE_OPERATION_ARTIFACTS") is { Length: > 0 } operationArtifacts)
+        if (Environment.GetEnvironmentVariable("ROO_INDUSTRIES_RESTORE_OPERATION_ARTIFACTS") is { Length: > 0 } operationArtifacts)
         {
             foreach (var receiptPath in new[] { "opus/status.json", "legacy-completed/status.json", "legacy-failed/status.json" })
             {
@@ -326,7 +326,7 @@ if (args is [] or ["restore-summary"] or ["restore-summary", _])
         Capture("governor-action-restore", App.Live.GovernorRestoreText, governorActions);
         Verify(governorActions.GovernorDetail.Contains("Peer: CPU AboveNormal → Normal", StringComparison.Ordinal) && !governorActions.GovernorRestoreAvailable,
             "Governor confirmed restore retains actual restored control rows and closes its exact recovery");
-        if (Environment.GetEnvironmentVariable("ROO_RESTORE_BACKEND_ARTIFACTS") is { Length: > 0 } backendArtifacts)
+        if (Environment.GetEnvironmentVariable("ROO_INDUSTRIES_RESTORE_BACKEND_ARTIFACTS") is { Length: > 0 } backendArtifacts)
         {
         foreach (var afterUndo in new[] { false, true })
         {
