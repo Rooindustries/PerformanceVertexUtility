@@ -52,7 +52,7 @@ if (args is [] or ["restore-summary"] or ["restore-summary", _])
     }
     void Capture(string name, string receipt, PerformanceProfilesViewModel model)
         => observations.Add(new { name, receipt = JsonSerializer.Deserialize<JsonElement>(receipt), model.ActionTitle, model.ActionDetail,
-            model.RestoreAvailable, model.MatchTuneStatus, model.MatchTuneDetail, model.MatchTuneRestoreAvailable,
+            model.RestoreAvailable, model.MatchTuneStatus, model.MatchTuneDetail, model.MatchTuneRestoreAvailable, model.GovernorDetail,
             recoveryPath = App.Live.ProcessProfileRecovery?.Path, App.Live.LastProcessRestorePath, App.Live.LastGameRestoreRequest });
     var preview = new[] { new { processName = "Target", controlChanges = Array.Empty<object>(),
         leftAsSet = new[] { new { control = "priorityClass", currentValue = "BelowNormal" } } } };
@@ -221,7 +221,7 @@ if (args is [] or ["restore-summary"] or ["restore-summary", _])
             var retained = status != "completed";
             File.WriteAllText(sessionPath, JsonSerializer.Serialize(new { sessionId = "summary-session", profileId = "summary-game", dryRun = false,
                 restorable = retained, backupManifestPath = sessionBackup }));
-            var showApplied = phase == "before" || phase == "legacy" && variant != "kept";
+            var showApplied = phase == "before" && status != "failed" || phase == "legacy" && variant != "kept";
             var showKept = variant == "kept" || phase == "after" && status != "completed";
             var receipt = new Dictionary<string, object?> { ["actionId"] = "performance.gameTune.sessionStatus", ["dryRun"] = false,
                 ["status"] = status, ["sessionId"] = "summary-session", ["profileId"] = "summary-game", ["sessionPath"] = sessionPath,
@@ -241,6 +241,91 @@ if (args is [] or ["restore-summary"] or ["restore-summary", _])
                 && reloaded.MatchTuneRestoreAvailable == retained,
                 "Public Reload distinguishes applied controls from completed Undo evidence: " + phase + "/" + status + "/" + variant);
         }
+        if (Environment.GetEnvironmentVariable("ROO_RESTORE_OPERATION_ARTIFACTS") is { Length: > 0 } operationArtifacts)
+        {
+            foreach (var receiptPath in new[] { "opus/status.json", "legacy-completed/status.json", "legacy-failed/status.json" })
+            {
+                App.Live.GameTuneStatusText = File.ReadAllText(Path.Combine(operationArtifacts, receiptPath));
+                var reloaded = new PerformanceProfilesViewModel();
+                await reloaded.ReloadAsync();
+                Capture("game-raw-legacy-" + receiptPath, App.Live.GameTuneStatusText, reloaded);
+                using var rawStatus = JsonDocument.Parse(App.Live.GameTuneStatusText);
+                Verify(rawStatus.RootElement.GetProperty("restoreAttempted").ValueKind == JsonValueKind.False
+                    && !reloaded.MatchTuneDetail.Contains("CPU Normal → AboveNormal", StringComparison.Ordinal)
+                    && reloaded.MatchTuneDetail.Contains("skipped", StringComparison.Ordinal)
+                    && reloaded.MatchTuneRestoreAvailable == rawStatus.RootElement.GetProperty("restorable").GetBoolean(),
+                    "Public Reload hides stale apply from a real explicit-false legacy zero-write GetStatus: " + receiptPath);
+            }
+            App.Live.GovernorStatusText = File.ReadAllText(Path.Combine(operationArtifacts, "opus/gov-status.json"));
+            var governorReloaded = new PerformanceProfilesViewModel();
+            await governorReloaded.ReloadAsync();
+            Capture("governor-raw-restored-status", App.Live.GovernorStatusText, governorReloaded);
+            Verify(governorReloaded.GovernorDetail == "Finished: 1 changed, 1 restored, 0 skipped across 4 checks.",
+                "Public Reload renders the real restored governor status as counts without stale apply detail");
+        }
+        foreach (var status in new[] { "completed", "failed", "partial", "unknown", "active", "restorable" })
+        foreach (var flag in new[] { "false", "true", "null", "malformed", "missing" })
+        {
+            var retained = status != "completed";
+            File.WriteAllText(sessionPath, JsonSerializer.Serialize(new { sessionId = "summary-session", profileId = "summary-game", dryRun = false,
+                restorable = retained, backupManifestPath = sessionBackup }));
+            var receipt = new Dictionary<string, object?> { ["actionId"] = "performance.gameTune.sessionStatus", ["dryRun"] = false,
+                ["status"] = status, ["sessionId"] = "summary-session", ["profileId"] = "summary-game", ["sessionPath"] = sessionPath,
+                ["backupManifestPath"] = sessionBackup, ["restorable"] = retained, ["changedItems"] = applied,
+                ["restoredItems"] = Array.Empty<object>(), ["leftAsSetItems"] = Array.Empty<object>(), ["skippedItems"] = skipped,
+                ["summary"] = new { changedItemCount = 1, restoredItemCount = 0, skippedItemCount = 1, pollCount = 1 } };
+            if (flag != "missing") receipt["restoreAttempted"] = flag switch { "false" => false, "true" => true, "null" => null, _ => "false" };
+            App.Live.GameTuneStatusText = JsonSerializer.Serialize(receipt);
+            var reloaded = new PerformanceProfilesViewModel();
+            await reloaded.ReloadAsync();
+            Capture("game-status-final-phase-" + status + "-" + flag, App.Live.GameTuneStatusText, reloaded);
+            var showApplied = status is "active" or "restorable" && flag is "false" or "missing";
+            Verify(reloaded.MatchTuneDetail.Contains("Peer: CPU AboveNormal → Normal", StringComparison.Ordinal) == showApplied
+                && reloaded.MatchTuneDetail.Contains(reason, StringComparison.Ordinal) && reloaded.MatchTuneRestoreAvailable == retained,
+                "Public Reload limits historical apply details to active/restorable without known Undo: " + status + "/" + flag);
+        }
+        foreach (var governorState in new[] { "active", "restorable", "failed", "completed" })
+        {
+            App.Live.GovernorStatusText = JsonSerializer.Serialize(new { actionId = "performance.governor.sessionStatus", dryRun = false,
+                status = governorState, restorable = false, changedItems = applied, restoredItems = restored,
+                summary = new { changedItemCount = 1, restoredItemCount = 1, skippedItemCount = 0, pollCount = 2 } });
+            var reloaded = new PerformanceProfilesViewModel();
+            await reloaded.ReloadAsync();
+            Capture("governor-status-counts-" + governorState, App.Live.GovernorStatusText, reloaded);
+            Verify(reloaded.GovernorDetail.Contains("1 changed, 1 restored, 0 skipped across 2 checks.", StringComparison.Ordinal)
+                && !reloaded.GovernorDetail.Contains("CPU", StringComparison.Ordinal),
+                "Governor status keeps counts without historical control rows: " + governorState);
+        }
+        App.Live.GovernorResultError = App.Live.GovernorRestoreError = null;
+        App.Live.GovernorText = JsonSerializer.Serialize(new { actionId = "performance.governor.startSession", dryRun = true, status = "preview", preview,
+            result = new { summary = "Governor preview." } });
+        var governorActions = new PerformanceProfilesViewModel();
+        await governorActions.CheckGovernorCommand.ExecuteAsync(null);
+        Capture("governor-action-preview", App.Live.GovernorText, governorActions);
+        Verify(governorActions.GovernorDetail.Contains("Target: CPU BelowNormal (left as another program set it)", StringComparison.Ordinal),
+            "Governor preview action retains its preview control rows");
+        App.Live.GovernorText = JsonSerializer.Serialize(new { actionId = "performance.governor.startSession", dryRun = false, status = "completed", restorable = false,
+            result = new { summary = "Governor apply.", changedItems = applied } });
+        await governorActions.StartGovernorCommand.ExecuteAsync(null);
+        Capture("governor-action-apply", App.Live.GovernorText, governorActions);
+        Verify(governorActions.GovernorDetail.Contains("Peer: CPU AboveNormal → Normal", StringComparison.Ordinal),
+            "Governor confirmed action retains actual applied control rows");
+        var governorSession = Path.Combine(fixtures, "governor-session.json");
+        var governorBackup = Path.Combine(fixtures, "governor-backup.json");
+        File.WriteAllText(governorBackup, JsonSerializer.Serialize(new { actionId = "performance.governor.startSession", dryRun = false,
+            sessionId = "summary-governor", profileId = "governor-profile", backupId = "governor-backup", snapshots = new[] { new { processId = 123 } } }));
+        File.WriteAllText(governorSession, JsonSerializer.Serialize(new { sessionId = "summary-governor", profileId = "governor-profile",
+            dryRun = false, restorable = true, backupManifestPath = governorBackup }));
+        App.Live.GovernorText = JsonSerializer.Serialize(new { actionId = "performance.governor.startSession", dryRun = false, status = "restorable",
+            sessionId = "summary-governor", profileId = "governor-profile", sessionPath = governorSession, backupManifestPath = governorBackup, restorable = true });
+        await governorActions.StartGovernorCommand.ExecuteAsync(null);
+        App.Live.GovernorRestoreText = JsonSerializer.Serialize(new { actionId = "performance.governor.stopSession", dryRun = false, status = "completed",
+            sessionId = "summary-governor", sessionPath = governorSession, backupManifestPath = governorBackup, restorable = false,
+            result = new { status = "rolledBack", summary = "Governor restored.", restoredItems = restored } });
+        await governorActions.RestoreGovernorCommand.ExecuteAsync(null);
+        Capture("governor-action-restore", App.Live.GovernorRestoreText, governorActions);
+        Verify(governorActions.GovernorDetail.Contains("Peer: CPU AboveNormal → Normal", StringComparison.Ordinal) && !governorActions.GovernorRestoreAvailable,
+            "Governor confirmed restore retains actual restored control rows and closes its exact recovery");
         if (Environment.GetEnvironmentVariable("ROO_RESTORE_BACKEND_ARTIFACTS") is { Length: > 0 } backendArtifacts)
         {
         foreach (var afterUndo in new[] { false, true })

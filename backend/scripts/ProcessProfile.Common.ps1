@@ -1107,6 +1107,17 @@ function Get-RooIndustriesRestorableProcessControls {
 $script:RooIndustriesLeftAsSet = 'Left as another program set it.'
 $script:RooIndustriesChangedExternally = 'The control changed externally; its current value was preserved.'
 $script:RooIndustriesLeftAsSetChangedBack = 'Undo couldn''t confirm another program still holds it, so it was left alone. Run Undo again.'
+$script:RooIndustriesProcessOperationManaged = 'Another saved change in Roo Industries still uses this control. Undo that change first, then try again.'
+
+function Get-RooIndustriesRestoreControlOwnershipReason {
+    param([System.Diagnostics.Process]$Process, [string]$Control)
+    try {
+        if (Test-RooIndustriesGovernorOwnsControl $Process $Control) { return $script:RooIndustriesGovernorManaged }
+        $native = switch ($Control) { 'priorityClass' { 'cpuPriority' } 'affinityMask' { 'affinity' } default { $Control } }
+        if (@(Get-RooIndustriesProcessOperationControls $Process) -contains $native) { return $script:RooIndustriesProcessOperationManaged }
+    } catch { return $script:RooIndustriesLeftAsSetChangedBack }
+    return $null
+}
 
 function Get-RooIndustriesAppliedControlValue {
     param($Snapshot, [string]$Control)
@@ -1135,9 +1146,10 @@ function Split-RooIndustriesLeftAsSetRestoreChanges {
         if ($seen.ContainsKey($control)) { continue }
         $seen[$control] = $true
         $process = Get-RooIndustriesPropertyValue $CurrentState 'process' $null
-        if ($process -is [System.Diagnostics.Process] -and (Test-RooIndustriesGovernorOwnsControl $process $control)) {
+        $ownershipReason = if ($process -is [System.Diagnostics.Process]) { Get-RooIndustriesRestoreControlOwnershipReason $process $control } else { $null }
+        if (-not [string]::IsNullOrWhiteSpace($ownershipReason)) {
             $change.blocked = $true
-            $change.blockedReason = $script:RooIndustriesGovernorManaged
+            $change.blockedReason = $ownershipReason
             $restore.Add($change) | Out-Null
             continue
         }
@@ -1170,8 +1182,13 @@ function Confirm-RooIndustriesRestoreControl {
     $gate = $null
     try {
         $gate = Enter-RooIndustriesGovernorGate -Seconds 2
-        if ($null -eq $gate -or (Test-RooIndustriesGovernorOwnsControl $Process $control)) {
+        if ($null -eq $gate) {
             $unconfirmed.reason = $script:RooIndustriesGovernorManaged
+            return $unconfirmed
+        }
+        $ownershipReason = Get-RooIndustriesRestoreControlOwnershipReason $Process $control
+        if (-not [string]::IsNullOrWhiteSpace($ownershipReason)) {
+            $unconfirmed.reason = $ownershipReason
             return $unconfirmed
         }
         try { $now = Get-RooIndustriesProcessControlReadback $Process $control } catch { return $unconfirmed }

@@ -10,7 +10,7 @@ report_dir="$artifact_dir/contract-validation"
 mkdir -p -- "$report_dir"
 records=$(mktemp "$report_dir/records.XXXXXX")
 trap 'rm -f -- "$records"' EXIT
-for definition in actionEnvelope gameTuneSessionRestoreEnvelope gameTuneSessionStatus; do
+for definition in actionEnvelope gameTuneSessionRestoreEnvelope gameTuneSessionStatus processGovernorSessionStatus; do
   jq --arg definition "$definition" '{"$schema": ."$schema", "$defs": ."$defs", "$ref": ("#/$defs/" + $definition)}' \
     "$source_dir/backend/contracts/roo-industries-backend-contracts.schema.json" > "$report_dir/$definition.schema.json"
 done
@@ -23,6 +23,7 @@ for file in "${files[@]}"; do
     performance.rollbackProfile) definition=actionEnvelope ;;
     performance.gameTune.stopSession) definition=gameTuneSessionRestoreEnvelope ;;
     performance.gameTune.sessionStatus) definition=gameTuneSessionStatus ;;
+    performance.governor.sessionStatus) definition=processGovernorSessionStatus ;;
     *) continue ;;
   esac
   matched=$((matched + 1))

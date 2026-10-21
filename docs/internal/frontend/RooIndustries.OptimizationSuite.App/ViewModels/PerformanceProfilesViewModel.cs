@@ -703,7 +703,9 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
     {
         if (root.ValueKind != JsonValueKind.Object) return string.Empty;
         var isPreview = root.TryGetProperty("dryRun", out var dryRun) && dryRun.ValueKind == JsonValueKind.True;
-        var isGameStatus = !isPreview && ExtractString(root, "actionId") == "performance.gameTune.sessionStatus";
+        var actionId = ExtractString(root, "actionId");
+        var isGameStatus = !isPreview && actionId == "performance.gameTune.sessionStatus";
+        if (!isPreview && !isGameStatus && actionId?.EndsWith(".sessionStatus", StringComparison.Ordinal) == true) return string.Empty;
         var result = isGameStatus ? root : root.TryGetProperty("result", out var value) && value.ValueKind == JsonValueKind.Object ? value : default;
         JsonElement items;
         if (isPreview)
@@ -719,8 +721,8 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
                 {
                     items = default;
                     var hasKept = result.TryGetProperty("leftAsSetItems", out var keptStatus) && keptStatus.ValueKind == JsonValueKind.Array && keptStatus.GetArrayLength() > 0;
-                    var canShowApplied = !hasKept && (result.TryGetProperty("restoreAttempted", out var attempted)
-                        ? attempted.ValueKind == JsonValueKind.False : ExtractString(root, "status") is "active" or "restorable");
+                    var canShowApplied = ExtractString(root, "status") is "active" or "restorable" && !hasKept
+                        && (!result.TryGetProperty("restoreAttempted", out var attempted) || attempted.ValueKind == JsonValueKind.False);
                     if (canShowApplied) result.TryGetProperty("changedItems", out items);
                 }
             }

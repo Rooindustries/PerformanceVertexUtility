@@ -37,7 +37,7 @@ function Read-RooIndustriesGovernorJson {
             try {
                 $data=$text.TrimStart([char]0xfeff)|ConvertFrom-Json -ErrorAction Stop
                 if($null -eq $data){throw [IO.InvalidDataException]::new('The file holds no JSON value.')}
-                return [pscustomobject]@{state='read';data=$data;message=$null}
+                return [pscustomobject]@{state='read';data=$data;message=$null;objectRoot=$text.TrimStart([char]0xfeff).TrimStart().StartsWith('{',[StringComparison]::Ordinal)}
             } catch {$failure=$_.Exception;$content=$true}
         }
         if($failure -is [IO.FileNotFoundException] -or $failure -is [IO.DirectoryNotFoundException]){return [pscustomobject]@{state='missing';data=$null;message=$failure.Message}}
@@ -46,6 +46,79 @@ function Read-RooIndustriesGovernorJson {
         if($expired){return [pscustomobject]@{state='unreadable';data=$null;message=$failure.Message}}
         Start-Sleep -Milliseconds 50
     }
+}
+
+function Get-RooIndustriesProcessOperationControls {
+    param([System.Diagnostics.Process]$Process)
+    if ($null -eq $Process) { throw [IO.InvalidDataException]::new('The live process identity could not be read.') }
+    $clock = [Diagnostics.Stopwatch]::StartNew()
+    $owned = New-Object 'System.Collections.Generic.HashSet[string]'
+    $journals = New-Object System.Collections.Generic.List[string]
+    $directories = {
+        param([string]$Path)
+        try { $item = Get-Item -LiteralPath $Path -Force -ErrorAction Stop }
+        catch [Management.Automation.ItemNotFoundException] { return }
+        catch [IO.FileNotFoundException] { return }
+        catch [IO.DirectoryNotFoundException] { return }
+        if (-not $item.PSIsContainer) { throw [IO.InvalidDataException]::new('The saved operations path is not a directory.') }
+        Get-ChildItem -LiteralPath $item.FullName -Directory -Force -ErrorAction Stop
+    }
+    $root = Join-Path (Get-RooIndustriesLocalDataRoot) 'operations'
+    foreach ($operation in @(& $directories $root)) {
+        if ($operation.Name -like 'process-*') {
+            $journals.Add((Join-Path $operation.FullName 'journal.json')) | Out-Null
+        } elseif ($operation.Name -like 'game-session-*') {
+            $journals.Add((Join-Path $operation.FullName 'launcher-journal.json')) | Out-Null
+            foreach ($instance in @(& $directories (Join-Path $operation.FullName 'games'))) {
+                foreach ($field in @(& $directories $instance.FullName)) {
+                    $journals.Add((Join-Path $field.FullName 'journal.json')) | Out-Null
+                }
+            }
+        }
+    }
+    foreach ($path in $journals) {
+        $read = Read-RooIndustriesGovernorJson $path 800 $clock $true
+        if ($read.state -eq 'missing') { continue }
+        if ($read.state -ne 'read') { throw [IO.InvalidDataException]::new('A saved process operation could not be read: ' + $read.message) }
+        $journal = $read.data
+        if (-not $read.objectRoot -or $journal -isnot [pscustomobject] -or ($journal.schemaVersion -isnot [int] -and $journal.schemaVersion -isnot [long]) -or $journal.schemaVersion -ne 1 -or
+            $journal.status -isnot [string] -or $journal.status -cnotin @('applying','applied','needsReconciliation','restored','expired')) {
+            throw [IO.InvalidDataException]::new('A saved process operation has an unknown schema or state.')
+        }
+        if ($journal.status -cin @('restored','expired')) { continue }
+        if ($journal.changes -isnot [array] -or $journal.preview -isnot [pscustomobject] -or $journal.preview.identity -isnot [pscustomobject]) {
+            throw [IO.InvalidDataException]::new('A saved process operation has no complete identity or change list.')
+        }
+        $identity = $journal.preview.identity
+        $creation = 0L
+        $processId = $identity.processId
+        $executable = $identity.executablePath
+        if (($processId -isnot [int] -and $processId -isnot [long]) -or $processId -le 0 -or $processId -gt [int]::MaxValue -or
+            $identity.creationTimeFileTimeUtc -isnot [string] -or -not [long]::TryParse($identity.creationTimeFileTimeUtc, [ref]$creation) -or $creation -le 0 -or
+            $executable -isnot [string] -or [string]::IsNullOrWhiteSpace($executable) -or -not [IO.Path]::IsPathRooted($executable) -or
+            ([IO.Path]::DirectorySeparatorChar -eq '\' -and $executable -notmatch '^(?:[A-Za-z]:[\\/]|\\\\[^\\]+\\[^\\]+(?:\\|$))')) {
+            throw [IO.InvalidDataException]::new('A saved process operation has an invalid process identity.')
+        }
+        $attempted = New-Object 'System.Collections.Generic.HashSet[string]'
+        foreach ($change in $journal.changes) {
+            if ($change -isnot [pscustomobject] -or $change.name -isnot [string] -or $change.status -isnot [string] -or
+                $change.status -cnotin @('pending','unchanged','applyIntent','applied','restoreIntent','restored','leftAsSet')) {
+                throw [IO.InvalidDataException]::new('A saved process operation has an unknown change state.')
+            }
+            $control = switch -CaseSensitive ($change.name) { 'priorityClass' { 'cpuPriority' } 'affinityMask' { 'affinity' } default { $change.name } }
+            if ($script:RooIndustriesGovernorAllControls -cnotcontains $control) { throw [IO.InvalidDataException]::new('A saved process operation has an unknown control.') }
+            if ($change.status -cin @('applyIntent','applied','restoreIntent') -or ($change.status -ceq 'pending' -and $journal.status -ceq 'applying')) {
+                [void]$attempted.Add($control)
+            }
+        }
+        if ($processId -ne $Process.Id) { continue }
+        $liveCreation = $Process.StartTime.ToUniversalTime().ToFileTimeUtc()
+        $liveExecutable = $Process.MainModule.FileName
+        if ($liveCreation -le 0 -or [string]::IsNullOrWhiteSpace($liveExecutable)) { throw [IO.InvalidDataException]::new('The live process identity could not be read.') }
+        if ($creation -ne $liveCreation -or -not [string]::Equals($executable, $liveExecutable, [StringComparison]::OrdinalIgnoreCase)) { continue }
+        foreach ($control in $attempted) { [void]$owned.Add($control) }
+    }
+    return @($owned)
 }
 
 function Get-RooIndustriesGovernorOwnership {

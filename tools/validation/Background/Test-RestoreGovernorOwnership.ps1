@@ -10,9 +10,10 @@ function Read-Ast([string]$Path){$e=$null;$t=$null;$a=[System.Management.Automat
 function Invoke-Scenario([string]$Kind,[string]$Mode){
  $name=$Kind+'-'+$Mode;$directory=Join-Path $OutRoot $name;[IO.Directory]::CreateDirectory($directory)|Out-Null
  & {
-  foreach($path in 'backend/scripts/OperationState.Common.ps1','backend/scripts/ProcessProfile.Common.ps1','backend/scripts/GameTuneSession.Common.ps1','backend/scripts/Restore-ProcessProfileBackup.ps1','backend/scripts/Stop-GameTuneSession.ps1'){
+  foreach($path in 'backend/scripts/OperationState.Common.ps1','backend/scripts/GovernorOwnership.Common.ps1','backend/scripts/ProcessProfile.Common.ps1','backend/scripts/GameTuneSession.Common.ps1','backend/scripts/Restore-ProcessProfileBackup.ps1','backend/scripts/Stop-GameTuneSession.ps1'){
    foreach($s in (Read-Ast $path).EndBlock.Statements){if($s -is [System.Management.Automation.Language.FunctionDefinitionAst] -or (($path -like '*Common.ps1' -or $path -like '*Stop-GameTuneSession.ps1') -and $s -is [System.Management.Automation.Language.AssignmentStatementAst])){. ([scriptblock]::Create($s.Extent.Text))}}
   }
+  function Get-RooIndustriesLocalDataRoot {return (Join-Path $directory 'empty-native-data')}
   $script:RooIndustriesGovernorManaged='Managed by the governor'
   $withPeer=$Mode -notin @('gate-busy','gate-throw','unreadable')
   $snapshots=@([pscustomobject]@{processId=1001;processName='MemoryTarget';originalPriorityClass='Normal';originalMemoryPriority=5;proposedMemoryPriority=2;controlChanges=@([pscustomobject]@{control='memoryPriority';proposedValue=2;outcome='applied'})})

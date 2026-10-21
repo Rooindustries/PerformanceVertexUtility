@@ -9,6 +9,8 @@ function Read-Ast([string]$Path){
  if($errors.Count){throw ($errors -join '; ')}
  return $ast
 }
+foreach($statement in (Read-Ast 'backend/scripts/GovernorOwnership.Common.ps1').EndBlock.Statements){if($statement -is [System.Management.Automation.Language.FunctionDefinitionAst] -or $statement -is [System.Management.Automation.Language.AssignmentStatementAst]){. ([scriptblock]::Create($statement.Extent.Text))}}
+function Get-RooIndustriesLocalDataRoot {return (Join-Path $OutRoot 'empty-native-data')}
 function Test-RooIndustriesGovernorOwnsControl {param($Process,$Control) return $false}
 function Enter-RooIndustriesGovernorGate {param($Seconds) return [pscustomobject]@{fixtureGate=$true}}
 function Exit-RooIndustriesGovernorGate {param($Gate)}
