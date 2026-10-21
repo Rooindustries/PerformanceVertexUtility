@@ -10,7 +10,7 @@ report_dir="$artifact_dir/contract-validation"
 mkdir -p -- "$report_dir"
 records=$(mktemp "$report_dir/records.XXXXXX")
 trap 'rm -f -- "$records"' EXIT
-for definition in actionEnvelope gameTuneSessionRestoreEnvelope gameTuneSessionStatus processGovernorSessionStatus; do
+for definition in actionEnvelope gameTuneSessionRestoreEnvelope gameTuneSessionStatus processGovernorSessionStatus processProfileBackupManifest; do
   perl -MJSON::PP -e '
     my ($definition, $path) = @ARGV;
     open my $input, "<", $path or die $!;
@@ -23,9 +23,14 @@ done
 mapfile -d '' files < <(find "$artifact_dir" -path "$report_dir" -prune -o -type f -name '*.json' -print0 | sort -z)
 matched=0
 failed=0
+raw_profile_matched=0
 for file in "${files[@]}"; do
   action=$(jq -r 'if type == "object" then .actionId // empty else empty end' "$file")
   case "$action" in
+    performance.applyProfile)
+      [[ ${file##*/} == producer-profile-backup.json ]] || continue
+      definition=processProfileBackupManifest
+      ;;
     performance.rollbackProfile) definition=actionEnvelope ;;
     performance.gameTune.stopSession) definition=gameTuneSessionRestoreEnvelope ;;
     performance.gameTune.sessionStatus) definition=gameTuneSessionStatus ;;
@@ -33,6 +38,9 @@ for file in "${files[@]}"; do
     *) continue ;;
   esac
   matched=$((matched + 1))
+  if [[ $definition == processProfileBackupManifest ]]; then
+    raw_profile_matched=$((raw_profile_matched+1))
+  fi
   printf -v errors '%s/%04d.errors.log' "$report_dir" "$matched"
   status=0
   ROO_INDUSTRIES_CONTRACT_INPUT="$file" ROO_INDUSTRIES_CONTRACT_SCHEMA="$report_dir/$definition.schema.json" \
@@ -107,6 +115,37 @@ if [[ ${3:-} == --negative-records ]]; then
       done
     done
   done
+  raw_profile_negative_count=0
+  raw_profile_source=''
+  for file in "${files[@]}"; do
+    [[ ${file##*/} == producer-profile-backup.json ]] || continue
+    [[ $(jq -r '.actionId // empty' "$file") == performance.applyProfile ]] || continue
+    raw_profile_source=$file
+    for field in originalMemoryPriority proposedMemoryPriority processStartTimeUtc; do
+      case_dir="$negative_root/profile-$field"
+      mkdir -- "$case_dir"
+      perl -MJSON::PP -e '
+        my ($field, $path) = @ARGV;
+        open my $input, "<", $path or die $!;
+        local $/;
+        my $json = JSON::PP->new->allow_bignum;
+        my $data = $json->decode(<$input>);
+        die "Expected actual Profile snapshot" unless ref($data->{snapshots}) eq "ARRAY" && @{$data->{snapshots}};
+        $data->{snapshots}[0]{$field} = {};
+        print $json->canonical->pretty->encode($data);
+      ' "$field" "$file" > "$case_dir/producer-profile-backup.json"
+      if bash "$0" "$source_dir" "$case_dir" > "$case_dir/validation.log" 2>&1; then
+        printf 'FAIL malformed complete Profile backup accepted: %s %s\n' "$file" "$field"
+        exit 1
+      fi
+      jq -e '.matched==1 and .passed==0 and .failed==1' "$case_dir/contract-validation/summary.json" > /dev/null
+      raw_profile_negative_count=$((raw_profile_negative_count+1))
+    done
+    break
+  done
+  jq -n --argjson matched "$raw_profile_matched" --argjson rejected "$raw_profile_negative_count" --arg source "$raw_profile_source" \
+    '{rawProfileMatched:$matched,rawProfileNegativeCount:$rejected,negativeSource:$source,scope:"Actual supplied whole Profile producer backups; three single-field wrong-type copies from the first actual source. No Game, replay or native-success inference."}' \
+    > "$report_dir/profile-backup-coverage.json"
   jq -s --argjson negativeCount "$negative_count" '{observed:.,negativeCount:$negativeCount,limitation:"Only actual supplied full producer envelopes and single-field negative copies; absent real control/legacy representations remain UNRUN"}' "$controls" > "$report_dir/kept-record-coverage.json"
   [[ $negative_count -gt 0 ]] || { printf 'FAIL no actual kept-record envelope was supplied\n'; exit 1; }
   printf 'Rejected %s single-field malformed complete envelopes\n' "$negative_count"

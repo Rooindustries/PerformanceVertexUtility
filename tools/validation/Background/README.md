@@ -195,13 +195,101 @@ outside tampering. They require refusal, pending recovery and zero setters,
 then remove the original breakpoint and use the unchanged backup for a fresh
 positive Undo.
 
-The default authored selection has 53 scenario names and 378 serialization
-cases: 344 retained cases plus 17 new priority-only names across both bodies.
-The 10 keeps-other-value and 10 output cases make 398 top-level green cases.
+The default authored selection has 79 scenario names and 622 serialization
+cases: the existing 378, plus 24 all-control names across both bodies (240),
+plus two affinity-only names across both bodies (4). The 10 keeps-other-value
+and 10 output cases stay unchanged, making 642 top-level green cases.
 These are SOURCE-DERIVED counts, UNRUN until real Windows completion receipts
 exist. Explicit incompatible `-Control` fails. Selected runs record exact
 kind/control/scenario triples and expected/actual counts. No subset certifies
 the default grid, C6 or rendered proof.
+
+No-effect histories first run the actual foreground-game producer, then retain
+its unmodified backup bytes and exact native values and record set before any
+external fixture write or labelled replay. The public raising policy stays the
+same. Changed fixtures use CPU Normal -> AboveNormal, I/O Low -> Normal and
+memory 2 -> 5. A CPU target's independent memory peer also starts at 2 and
+requests 5. Other targets use an independent CPU peer Normal -> AboveNormal.
+GPU starts at Normal and requests BelowNormal; affinity starts at the actual
+allowed mask A and requests its least significant bit. Changed external values
+are CPU BelowNormal, I/O VeryLow, memory 3, GPU High and the remaining allowed
+affinity bits. An insufficient mask or unavailable native precondition fails;
+it is missing proof, never a skipped pass.
+
+A genuine no-effect request keeps CPU Normal, I/O Normal, memory 5, GPU Normal
+or the original affinity A. Its later external value is respectively
+AboveNormal, Low, 2, High or the least significant bit of A. Conflicting legacy
+applied metadata uses AboveNormal, Low, 2, BelowNormal or that affinity bit,
+respectively. Memory's conflict is 2, not the changed-history request 5.
+
+The following 24 names each run with both restore bodies and all five controls.
+They retain all 53 existing names and their adverse, retry and cleanup oracles.
+
+| Scenario | History and required result |
+| --- | --- |
+| `no-effect-original` | Genuine equal original/request; target omitted, peer restored once. |
+| `no-effect-external` | External drift before preview; target untouched, peer once. |
+| `no-effect-after-preview` | Drift at first Confirm; excluded target never enters Confirm. |
+| `no-effect-applied-equal` | Labelled equal legacy applied field; exclusion grants no ownership. |
+| `no-effect-applied-conflict` | Conflicting legacy field retains recovery; actual original resolves. |
+| `no-effect-proposed-missing` | Missing request plus valid legacy original remains unverified. |
+| `no-effect-proposed-null` | Null request plus valid legacy original remains unverified. |
+| `no-effect-proposed-invalid` | Invalid request plus valid legacy original remains unverified. |
+| `no-effect-applied-invalid` | Invalid legacy applied field prevents exclusion. |
+| `no-effect-applied-null` | Explicit null legacy applied field prevents exclusion. |
+| `no-effect-record-applied` | Real changed apply, then constructed matching equal-value record; existing verified-kept behavior. |
+| `no-effect-record-failed` | Same replay with failed outcome; pending, then original resolves. |
+| `no-effect-record-pending` | Same replay with pending outcome; pending, then original resolves. |
+| `no-effect-record-unknown` | Same replay with unknown outcome; pending, then original resolves. |
+| `no-effect-changed-absent` | Real target-only changed apply; remove whole list, retain recovery at request and drift. |
+| `no-effect-changed-empty` | Real target-only apply with empty-list replay; same recovery. |
+| `no-effect-changed-unmatched` | Remove target record, preserve genuine peer record; peer restores once. |
+| `no-effect-changed-absent-ended` | Separate absent-list history closes only after its original process ends. |
+| `no-effect-changed-empty-ended` | Separate empty-list history with known-ended resolution. |
+| `no-effect-changed-unmatched-ended` | Separate unmatched history with peer once and known-ended resolution. |
+| `no-effect-confirm-busy-retry` | Real native instance contention blocks original and kept previews; release permits fresh retry. |
+| `no-effect-confirm-busy-ended` | Both previews retain recovery; fresh known-ended pass closes without writes. |
+| `no-effect-confirm-wrapper-retry` | Two guarded backend-wrapper getter failures; fresh wrapper confirms original and restores peer once. |
+| `no-effect-confirm-wrapper-ended` | Same failures followed by fresh known-ended completion, without a peer write. |
+
+Two further names, `no-effect-affinity-decimal` and `no-effect-affinity-hex`, run
+only on affinity across both bodies. They replay the actual A as a decimal
+original or exact unsigned-bit-pattern hex request. They test existing signed64
+reader compatibility, not raw Profile schema conformance. No invented high-bit
+mask is written to hardware. Explicit incompatible `-Control` fails.
+
+Every true exclusion has zero target setters, confirmations, restored records
+and kept claims. A genuine peer restores exactly once across repeats. Uncertain
+histories also set the target to its original before preview, then change it
+back at Confirm: fresh confirmation must retain recovery. Only a later fresh
+original or known-ended pass closes it. Completed Game histories are repeated
+without reopening or resetting them. Partial Game attempts may have completed
+envelopes with public restorable status; pending-only repeats report failed
+and remain restorable. Full result, status and immutable backup checks apply
+together with native readbacks.
+
+The wrapper cases are constructed lifetime adversaries, not spontaneous Windows
+failures. Before closing the backend wrapper, the driver refuses references to
+either original process object, zero or shared handles, and a changed original
+native birth. It keeps the original owned and query handles. Both actual getter
+errors must be captured; a guard refusal or an unrelated exception is MISSING
+injection proof. Busy histories use a separate real actor; it blocks the peer
+as well until release. No cached preview can certify no-write completion.
+
+The new pre-fix 861 red is a separate pair, one per body: actual CPU
+Normal -> AboveNormal with an applied record, memory 5 -> 5 without a record,
+then external memory 2. CPU must restore Normal once while old 861 falsely
+keeps memory pending, with zero memory setters or kept claims. This adds no
+green histories and does not replace the 12 c50 negatives or b0 interleaving.
+`BeforeNoEffectSource` defaults empty. A nonempty value requires exactly
+`-Scenario no-effect-external -Control memoryPriority` with profile, game or all.
+Both producer and restore use that separately bound exact 861 source; status
+reader and driver remain current and carry separate paths, hashes and commits.
+The preserved Linux git archive alone is not a Windows export or native proof.
+Corrected fixture inputs require new receipts; historical sources, seals,
+binaries, Core/Host/private P1 vectors and old failed observations keep their
+original identities. Conditional alias evidence still requires actual differing
+successful path observations.
 
 Twelve separately reported old-c50 negative controls are the six base legacy
 shapes across both bodies, with the current driver and reviewed c50 product.
@@ -241,6 +329,22 @@ bash tools/validation/Background/test_restore_contracts.sh "$source" "$artifacts
 ```
 
 That command validates JSON against the schema. It proves no Windows behavior.
+Whole actual Profile backups saved as `producer-profile-backup.json` are also
+validated against `processProfileBackupManifest`. Its three optional additions
+are `originalMemoryPriority` and `proposedMemoryPriority` (integer or null), and
+`processStartTimeUtc` (string or null). Required fields and all other types stay
+the same. Raw Game backups and reader-compatible replays use different scopes;
+no projection hides undeclared fields. With `--negative-records`, the existing
+route rejects three single-field object-type copies of the first actual raw
+Profile backup through the same whole-file validator. They are contract
+artifacts, never restore inputs or extra histories. Perl JSON::PP `allow_bignum`
+keeps unrelated 64-bit values intact. `profile-backup-coverage.json` records
+`rawProfileMatched` and `rawProfileNegativeCount`. Zero raw coverage supports old
+directories but proves none of these additions. This PR's actual-native schema
+proof requires `rawProfileMatched > 0` and `rawProfileNegativeCount == 3`, genuine
+producer/source/engine and original backup hashes, alongside kept-record proof.
+This new route is AUTHORED/UNRUN until those actual artifacts exist.
+
 Its coverage receipt lists the actual kept controls and representations it saw;
 missing real producer variants remain unrun. Historical Linux outputs with
 simulated process I/O remain useful schema inputs, including unsafe historical

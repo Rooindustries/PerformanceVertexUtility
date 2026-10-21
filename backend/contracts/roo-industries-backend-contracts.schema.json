@@ -1335,9 +1335,21 @@
                   "null"
                 ]
               },
+              "originalMemoryPriority": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
               "proposedIoPriority": {
                 "type": [
                   "string",
+                  "null"
+                ]
+              },
+              "proposedMemoryPriority": {
+                "type": [
+                  "integer",
                   "null"
                 ]
               },
@@ -1359,6 +1371,12 @@
                   "type": "object",
                   "additionalProperties": true
                 }
+              },
+              "processStartTimeUtc": {
+                "type": [
+                  "string",
+                  "null"
+                ]
               },
               "capturedAtUtc": {
                 "type": "string",

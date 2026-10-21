@@ -3,10 +3,11 @@ param(
  [Parameter(Mandatory)][string]$ActorExe,[Parameter(Mandatory)][string]$SourceCommit,
  [string]$OriginalSource='',
  [string]$ReviewedSource='',
+ [string]$BeforeNoEffectSource='',
  [ValidateSet('profile','game','all')][string]$Kind='all',
  [ValidateSet('priorityClass','affinityMask','ioPriority','memoryPriority','gpuPriority','all')][string]$Control='all',
- [ValidateSet('normal','native-before','native-after-read','protected-launcher','protected-game','governor','malformed','unknown-schema','sharing','mutex-busy','mutex-denied','mutex-type','mutex-abandoned','identity-unknown','identity-denied','identity-reused','identity-ended','release-error','setter-denied','readback-mismatch','failed-drift','failed-target','unknown-drift','missing-outcome','failed-ended','pending-drift','pending-target','pending-ended','late-unverified','verified-external','original-after-preview','kept-changed-back','old-interleaving','failed-apply-readback','schema-records','duplicate-snapshot','image-alias','legacy-proposed-absent','legacy-applied-absent','legacy-proposed-empty','legacy-applied-empty','legacy-proposed-unmatched','legacy-applied-unmatched','confirm-name-mismatch','entry-pid-mismatch','entry-path-mismatch','entry-start-mismatch','legacy-proposed-absent-ended','legacy-applied-absent-ended','legacy-proposed-empty-ended','legacy-applied-empty-ended','legacy-proposed-unmatched-ended','legacy-applied-unmatched-ended')]
- [string[]]$Scenario=@('normal','native-before','native-after-read','protected-launcher','protected-game','governor','malformed','unknown-schema','sharing','mutex-busy','mutex-denied','mutex-type','mutex-abandoned','identity-unknown','identity-denied','identity-reused','identity-ended','release-error','setter-denied','readback-mismatch','failed-drift','failed-target','unknown-drift','missing-outcome','failed-ended','pending-drift','pending-target','pending-ended','late-unverified','verified-external','original-after-preview','kept-changed-back','old-interleaving','failed-apply-readback','schema-records','duplicate-snapshot','image-alias','legacy-proposed-absent','legacy-applied-absent','legacy-proposed-empty','legacy-applied-empty','legacy-proposed-unmatched','legacy-applied-unmatched','confirm-name-mismatch','entry-pid-mismatch','entry-path-mismatch','entry-start-mismatch','legacy-proposed-absent-ended','legacy-applied-absent-ended','legacy-proposed-empty-ended','legacy-applied-empty-ended','legacy-proposed-unmatched-ended','legacy-applied-unmatched-ended')
+ [ValidateSet('normal','native-before','native-after-read','protected-launcher','protected-game','governor','malformed','unknown-schema','sharing','mutex-busy','mutex-denied','mutex-type','mutex-abandoned','identity-unknown','identity-denied','identity-reused','identity-ended','release-error','setter-denied','readback-mismatch','failed-drift','failed-target','unknown-drift','missing-outcome','failed-ended','pending-drift','pending-target','pending-ended','late-unverified','verified-external','original-after-preview','kept-changed-back','old-interleaving','failed-apply-readback','schema-records','duplicate-snapshot','image-alias','legacy-proposed-absent','legacy-applied-absent','legacy-proposed-empty','legacy-applied-empty','legacy-proposed-unmatched','legacy-applied-unmatched','confirm-name-mismatch','entry-pid-mismatch','entry-path-mismatch','entry-start-mismatch','legacy-proposed-absent-ended','legacy-applied-absent-ended','legacy-proposed-empty-ended','legacy-applied-empty-ended','legacy-proposed-unmatched-ended','legacy-applied-unmatched-ended','no-effect-original','no-effect-external','no-effect-after-preview','no-effect-applied-equal','no-effect-applied-conflict','no-effect-proposed-missing','no-effect-proposed-null','no-effect-proposed-invalid','no-effect-applied-invalid','no-effect-applied-null','no-effect-record-applied','no-effect-record-failed','no-effect-record-pending','no-effect-record-unknown','no-effect-changed-absent','no-effect-changed-empty','no-effect-changed-unmatched','no-effect-changed-absent-ended','no-effect-changed-empty-ended','no-effect-changed-unmatched-ended','no-effect-confirm-busy-retry','no-effect-confirm-busy-ended','no-effect-confirm-wrapper-retry','no-effect-confirm-wrapper-ended','no-effect-affinity-decimal','no-effect-affinity-hex')]
+ [string[]]$Scenario=@('normal','native-before','native-after-read','protected-launcher','protected-game','governor','malformed','unknown-schema','sharing','mutex-busy','mutex-denied','mutex-type','mutex-abandoned','identity-unknown','identity-denied','identity-reused','identity-ended','release-error','setter-denied','readback-mismatch','failed-drift','failed-target','unknown-drift','missing-outcome','failed-ended','pending-drift','pending-target','pending-ended','late-unverified','verified-external','original-after-preview','kept-changed-back','old-interleaving','failed-apply-readback','schema-records','duplicate-snapshot','image-alias','legacy-proposed-absent','legacy-applied-absent','legacy-proposed-empty','legacy-applied-empty','legacy-proposed-unmatched','legacy-applied-unmatched','confirm-name-mismatch','entry-pid-mismatch','entry-path-mismatch','entry-start-mismatch','legacy-proposed-absent-ended','legacy-applied-absent-ended','legacy-proposed-empty-ended','legacy-applied-empty-ended','legacy-proposed-unmatched-ended','legacy-applied-unmatched-ended','no-effect-original','no-effect-external','no-effect-after-preview','no-effect-applied-equal','no-effect-applied-conflict','no-effect-proposed-missing','no-effect-proposed-null','no-effect-proposed-invalid','no-effect-applied-invalid','no-effect-applied-null','no-effect-record-applied','no-effect-record-failed','no-effect-record-pending','no-effect-record-unknown','no-effect-changed-absent','no-effect-changed-empty','no-effect-changed-unmatched','no-effect-changed-absent-ended','no-effect-changed-empty-ended','no-effect-changed-unmatched-ended','no-effect-confirm-busy-retry','no-effect-confirm-busy-ended','no-effect-confirm-wrapper-retry','no-effect-confirm-wrapper-ended','no-effect-affinity-decimal','no-effect-affinity-hex')
 )
 $ErrorActionPreference='Stop'
 if($env:OS -ne 'Windows_NT' -or $PSVersionTable.PSVersion.Major -ne 5 -or -not [Environment]::Is64BitProcess){throw 'Real Windows PowerShell5.1 x64 is required.'}
@@ -23,6 +24,11 @@ $results=New-Object System.Collections.Generic.List[object]
 $driverSourcePath=$PSCommandPath
 $priorityScenarios=@('image-alias','legacy-proposed-absent','legacy-applied-absent','legacy-proposed-empty','legacy-applied-empty','legacy-proposed-unmatched','legacy-applied-unmatched','confirm-name-mismatch','entry-pid-mismatch','entry-path-mismatch','entry-start-mismatch','legacy-proposed-absent-ended','legacy-applied-absent-ended','legacy-proposed-empty-ended','legacy-applied-empty-ended','legacy-proposed-unmatched-ended','legacy-applied-unmatched-ended')
 if($Control -notin @('all','priorityClass') -and @($Scenario|Where-Object {$priorityScenarios -contains $_}).Count){throw 'The seventeen new scenarios are explicitly priorityClass-only; incompatible -Control is not a skipped case.'}
+$noEffectScenarios=@('no-effect-original','no-effect-external','no-effect-after-preview','no-effect-applied-equal','no-effect-applied-conflict','no-effect-proposed-missing','no-effect-proposed-null','no-effect-proposed-invalid','no-effect-applied-invalid','no-effect-applied-null','no-effect-record-applied','no-effect-record-failed','no-effect-record-pending','no-effect-record-unknown','no-effect-changed-absent','no-effect-changed-empty','no-effect-changed-unmatched','no-effect-changed-absent-ended','no-effect-changed-empty-ended','no-effect-changed-unmatched-ended','no-effect-confirm-busy-retry','no-effect-confirm-busy-ended','no-effect-confirm-wrapper-retry','no-effect-confirm-wrapper-ended','no-effect-affinity-decimal','no-effect-affinity-hex')
+$affinityScenarios=@('no-effect-affinity-decimal','no-effect-affinity-hex')
+if($Control -notin @('all','affinityMask') -and @($Scenario|Where-Object {$affinityScenarios -contains $_}).Count){throw 'The two affinity representation scenarios require affinityMask; incompatible -Control is not skipped.'}
+if($BeforeNoEffectSource -and ($Scenario.Count -ne 1 -or $Scenario[0] -cne 'no-effect-external' -or $Control -cne 'memoryPriority')){throw 'BeforeNoEffectSource requires exactly no-effect-external and memoryPriority, with profile/game/all.'}
+if($BeforeNoEffectSource -and -not [IO.Directory]::Exists($BeforeNoEffectSource)){throw 'The exact preserved before-no-effect 861 source is required.'}
 function Save([string]$path,$value){[IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($path))|Out-Null;[IO.File]::WriteAllText($path,($value|ConvertTo-Json -Depth 60),$utf8)}
 function Require([bool]$ok,[string]$message){if(-not $ok){throw $message}}
 function Read-Ast([string]$path){$e=$null;$t=$null;$a=[Management.Automation.Language.Parser]::ParseFile($path,[ref]$t,[ref]$e);if($e.Count){throw ($e -join '; ')};return $a}
@@ -124,6 +130,284 @@ function New-Breakpoint($context,[string]$script,[string]$pattern,[scriptblock]$
  $context.breakpoints.Add($bp)|Out-Null
  return $bp
 }
+function Invoke-NoEffectHistory($context,[string]$kind,[string]$field,[string]$mode){
+ $directory=$context.directory
+ $backend=if($BeforeNoEffectSource){$BeforeNoEffectSource}else{$Source}
+ $backendCommit=if($BeforeNoEffectSource){'861de816a3ef8b1ee57491730dd09ec29be4a52b'}else{$SourceCommit}
+ $common=Join-Path $backend 'backend\scripts\ProcessProfile.Common.ps1'
+ $producerScript=Join-Path $backend ('backend\scripts\'+$(if($kind -eq 'game'){'Start-GameTuneSession.ps1'}else{'Apply-ProcessProfile.ps1'}))
+ $restoreScript=Join-Path $backend ('backend\scripts\'+$(if($kind -eq 'game'){'Stop-GameTuneSession.ps1'}else{'Restore-ProcessProfileBackup.ps1'}))
+ $changed=$mode -like 'no-effect-record-*' -or $mode -like 'no-effect-changed-*' -or $mode -like 'no-effect-confirm-*'
+ $withPeer=$mode -notin @('no-effect-changed-absent','no-effect-changed-empty','no-effect-changed-absent-ended','no-effect-changed-empty-ended')
+ $peer=if($field -eq 'priorityClass'){'memoryPriority'}else{'priorityClass'}
+ $suffix=switch($field){'priorityClass'{'PriorityClass'};'affinityMask'{'AffinityMask'};'ioPriority'{'IoPriority'};'memoryPriority'{'MemoryPriority'};'gpuPriority'{'GpuPriority'}}
+ $context.process.PriorityClass='Normal'
+ Require ((Read-Actual $context.process 'priorityClass') -ceq 'Normal') 'MISSING owned CPU original precondition.'
+ if($field -eq 'priorityClass' -and $withPeer){[RooIndustriesBackgroundOracle]::SetMemory($context.process,[uint32]2);Require ((Read-Actual $context.process 'memoryPriority') -eq 2) 'MISSING owned memory peer precondition.'}
+ if($field -eq 'ioPriority'){
+  $initialIo=if($changed){'Low'}else{'Normal'}
+  [RooIndustriesBackgroundOracle]::SetIo($context.process,(Convert-RooIndustriesIoPriorityToValue $initialIo -Restoring))
+  Require ((Read-Actual $context.process 'ioPriority') -ceq $initialIo) 'MISSING owned IO precondition.'
+ }
+ if($field -eq 'memoryPriority'){
+  $initialMemory=if($changed){2}else{5}
+  [RooIndustriesBackgroundOracle]::SetMemory($context.process,[uint32]$initialMemory)
+  Require ((Read-Actual $context.process 'memoryPriority') -eq $initialMemory) 'MISSING owned memory precondition.'
+ }
+ if($field -eq 'gpuPriority'){Set-RooIndustriesProcessGpuPriority $context.process 'Normal';Require ((Read-Actual $context.process 'gpuPriority') -ceq 'Normal') 'MISSING owned GPU precondition.'}
+ $original=Read-Actual $context.process $field
+ $peerOriginal=Read-Actual $context.process $peer
+ $desired=switch($field){'priorityClass'{'AboveNormal'};'affinityMask'{[long]($original -band (-$original))};'ioPriority'{'Normal'};'memoryPriority'{5};'gpuPriority'{'BelowNormal'}}
+ $external=if($changed){switch($field){'priorityClass'{'BelowNormal'};'affinityMask'{$original -band (-bnot [long]$desired)};'ioPriority'{'VeryLow'};'memoryPriority'{3};'gpuPriority'{'High'}}}else{switch($field){'priorityClass'{'AboveNormal'};'affinityMask'{$desired};'ioPriority'{'Low'};'memoryPriority'{2};'gpuPriority'{'High'}}}
+ $conflictingApplied=switch($field){'priorityClass'{'AboveNormal'};'affinityMask'{$desired};'ioPriority'{'Low'};'memoryPriority'{2};'gpuPriority'{'BelowNormal'}}
+ if($field -eq 'affinityMask'){
+  Require ($original -ne 0 -and $desired -ne 0 -and $desired -ne $original -and ($original -band (-bnot [long]$desired)) -ne 0) 'MISSING at least two actual allowed affinity bits.'
+ }
+ if($changed){Require (-not(Test-RooIndustriesControlValueEqual $field $original $desired) -and -not(Test-RooIndustriesControlValueEqual $field $external $original) -and -not(Test-RooIndustriesControlValueEqual $field $external $desired)) 'MISSING three distinct reachable changed values.'}
+ $requested=if($changed){$desired}else{$original}
+ Require (-not(Test-RooIndustriesControlValueEqual $field $original $external) -and
+     ($changed -or -not(Test-RooIndustriesControlValueEqual $field $original $conflictingApplied))) 'MISSING distinct no-effect drift/conflict values.'
+ $directSetter={param($value) switch($field){'priorityClass'{$context.process.PriorityClass=$value};'affinityMask'{$context.process.ProcessorAffinity=[IntPtr][long]$value};'ioPriority'{[RooIndustriesBackgroundOracle]::SetIo($context.process,(Convert-RooIndustriesIoPriorityToValue $value -Restoring))};'memoryPriority'{[RooIndustriesBackgroundOracle]::SetMemory($context.process,[uint32]$value)};'gpuPriority'{Set-RooIndustriesProcessGpuPriority $context.process $value}}}.GetNewClosure()
+ $foreground=[ordered]@{ruleId='restore-e2e';processNames=@('RestoreTarget.exe');priorityClass=$(if($field -eq 'priorityClass'){$requested}elseif($withPeer){'AboveNormal'}else{'Normal'});reason='Restore E2E fixture';reasonCodes=@('LIVE_VALIDATION')}
+ $foreground[$field]=$requested
+ if($peer -eq 'memoryPriority' -and $withPeer){$foreground.memoryPriority=5}
+ $profilePath=Join-Path $directory 'profile.json'
+ Save $profilePath @{schemaVersion=1;productName='Roo Industries Optimization Suite';profileId='restore-e2e';name='Restore E2E';profileKind='process-controls';risk='medium';protectedCatalogPath=(Join-Path $backend 'backend\profiles\protected-processes.json');foregroundGame=$foreground;targetGames=@();protectedCompanions=@();protectedPreviewProcessNames=@();safeCandidates=@();rules=@();rollbackPolicy=@{supported=$true;scope='process-controls';stateRoot=$context.state;restoreOriginalPriorityClass=$true};safety=@{confirmedApplyChanges=@('PriorityClass','Affinity','IoPriority','MemoryPriority','GpuPriority');continuousEnforcement=$true;runtimeService=$false}}
+ $before=Read-E2EControls $context.process
+ $apply=Invoke-Body $backend $(if($kind -eq 'game'){'Start-GameTuneSession.ps1'}else{'Apply-ProcessProfile.ps1'}) @{ProfilePath=$profilePath;TargetGameProcessName='RestoreTarget.exe';StateRoot=$context.state;OutputPath='';ConfirmApply=$true;PollIntervalSeconds=1;MaxDurationSeconds=1;SessionId=''} $context.data
+ Save (Join-Path $directory 'apply.json') $apply
+ $context.backup=if($kind -eq 'game'){$apply.backupManifestPath}else{$apply.backup.location};$context.session=if($kind -eq 'game'){$apply.sessionPath}else{''}
+ Require ([IO.File]::Exists($context.backup)) 'MISSING actual producer backup.'
+ $producerArtifact=Join-Path $directory $(if($kind -eq 'profile'){'producer-profile-backup.json'}else{'producer-game-backup.json'})
+ [IO.File]::WriteAllBytes($producerArtifact,[IO.File]::ReadAllBytes($context.backup))
+ $producerHash=Get-HarnessFileSha256 $producerArtifact
+ Require ((Get-HarnessFileSha256 $context.backup) -ceq $producerHash) 'Original producer copy differs.'
+ $backup=Get-Content -LiteralPath $context.backup -Raw|ConvertFrom-Json
+ $snapshots=@($backup.snapshots)
+ Require ($snapshots.Count -eq 1 -and $snapshots[0].processId -eq $context.process.Id) 'MISSING exactly one original producer snapshot.'
+ $snapshot=$snapshots[0]
+ $nativeBirth=[RooIndustriesValidationOwnership.Native]::Created($context.owned.handle).ToString()
+ $savedTime=[DateTime]::Parse([string]$snapshot.processStartTimeUtc,[Globalization.CultureInfo]::InvariantCulture,[Globalization.DateTimeStyles]::RoundtripKind)
+ Require ($nativeBirth -ceq $context.owned.Identity.creationTimeFileTimeUtc -and $savedTime.ToUniversalTime().ToFileTimeUtc().ToString() -ceq $nativeBirth -and (Test-RooIndustriesProcessNameEquals $snapshot.processName $context.process.ProcessName) -and [RooIndustriesValidationOwnership.Native]::Canonical([string]$snapshot.executablePath) -ieq $context.owned.Identity.imagePath -and $context.process.SessionId -eq (Get-Process -Id $PID).SessionId) 'MISSING actual producer native identity/session.'
+ Require ((Test-RooIndustriesControlValueEqual $field $snapshot.('original'+$suffix) $original) -and (Test-RooIndustriesControlValueEqual $field $snapshot.('proposed'+$suffix) $requested) -and (Test-RooIndustriesControlValueEqual $field (Read-Actual $context.process $field) $requested)) 'Producer target original/request/readback differs.'
+ $expectedControls=@();if($changed){$expectedControls+=@($field)};if($withPeer){$expectedControls+=@($peer)}
+ Require (@($snapshot.controlChanges).Count -eq $expectedControls.Count) 'Producer emitted an unexpected control count.'
+ foreach($name in $expectedControls){
+  $records=@($snapshot.controlChanges|Where-Object control -eq $name)
+  $expected=if($name -eq $field){$requested}elseif($peer -eq 'memoryPriority'){5}else{'AboveNormal'}
+  $expectedOriginal=if($name -eq $field){$original}else{$peerOriginal}
+  $expectedSuffix=switch($name){'priorityClass'{'PriorityClass'};'affinityMask'{'AffinityMask'};'ioPriority'{'IoPriority'};'memoryPriority'{'MemoryPriority'};'gpuPriority'{'GpuPriority'}}
+  Require ((Test-RooIndustriesControlValueEqual $name $snapshot.('original'+$expectedSuffix) $expectedOriginal) -and (Test-RooIndustriesControlValueEqual $name $snapshot.('proposed'+$expectedSuffix) $expected)) 'MISSING exact genuine producer flat original/request evidence.'
+  Require ($records.Count -eq 1 -and $records[0].outcome -ceq 'applied' -and -not $records[0].blocked -and (Test-RooIndustriesControlValueEqual $name $records[0].currentValue $expectedOriginal) -and (Test-RooIndustriesControlValueEqual $name $records[0].proposedValue $expected) -and (Test-RooIndustriesControlValueEqual $name (Read-Actual $context.process $name) $expected)) 'MISSING exact genuine producer record/native evidence.'
+ }
+ Require (@($snapshot.controlChanges|Where-Object control -eq $field).Count -eq $(if($changed){1}else{0})) 'Producer no-effect/changed target shape differs.'
+ $producerPeerText=if($withPeer){@($snapshot.controlChanges|Where-Object control -eq $peer)[0]|ConvertTo-Json -Depth 30 -Compress}else{$null}
+ Save (Join-Path $directory 'producer-evidence.json') @{kind='ACTUAL PRODUCER BEFORE REPLAY/EXTERNAL/UNDO';fixtureInputCorrection=$true;sourceCommit=$backendCommit;producerRoot=$backend;producerScript=$producerScript;producerScriptSha256=(Get-HarnessFileSha256 $producerScript);commonSha256=(Get-HarnessFileSha256 $common);driverPath=$driverSourcePath;driverSha256=(Get-HarnessFileSha256 $driverSourcePath);engine=$PSVersionTable.PSVersion.ToString();originalProcess=$context.owned.Identity;targetSession=$context.process.SessionId;before=$before;after=(Read-E2EControls $context.process);original=$original;requested=$requested;external=$external;conflictingApplied=$conflictingApplied;expectedControls=$expectedControls;backupPath=$context.backup;producerArtifact=$producerArtifact;producerBackupSha256=$producerHash;wholeProfileContract=($kind -eq 'profile');snapshot=$snapshot}
+ $replay=$mode -in @('no-effect-applied-equal','no-effect-applied-conflict','no-effect-proposed-missing','no-effect-proposed-null','no-effect-proposed-invalid','no-effect-applied-invalid','no-effect-applied-null','no-effect-affinity-decimal','no-effect-affinity-hex') -or $mode -like 'no-effect-record-*' -or $mode -like 'no-effect-changed-*'
+ if($replay){
+  if($mode -like 'no-effect-record-*'){
+   $record=@($snapshot.controlChanges|Where-Object control -eq $field)[0]
+   $record.proposedValue=$original;$record.outcome=$mode.Substring('no-effect-record-'.Length)
+   $snapshot.('proposed'+$suffix)=$original
+  }elseif($mode -like 'no-effect-changed-*'){
+   if($mode -like '*-absent*'){$snapshot.PSObject.Properties.Remove('controlChanges')}
+   elseif($mode -like '*-empty*'){$snapshot.controlChanges=@()}
+   else{$snapshot.controlChanges=@($snapshot.controlChanges|Where-Object control -ne $field);Require ($snapshot.controlChanges.Count -eq 1 -and ($snapshot.controlChanges[0]|ConvertTo-Json -Depth 30 -Compress) -ceq $producerPeerText) 'Replay changed genuine unmatched peer record.'}
+  }elseif($mode -eq 'no-effect-affinity-decimal'){$snapshot.originalAffinityMask=([long]$original).ToString([Globalization.CultureInfo]::InvariantCulture)}
+  elseif($mode -eq 'no-effect-affinity-hex'){$bits=[BitConverter]::ToUInt64([BitConverter]::GetBytes([long]$original),0);$snapshot.proposedAffinityMask='0x'+$bits.ToString('X16',[Globalization.CultureInfo]::InvariantCulture)}
+  else{
+   $appliedValue=if($mode -eq 'no-effect-applied-conflict'){$conflictingApplied}elseif($mode -eq 'no-effect-applied-invalid'){if($field -in @('affinityMask','memoryPriority')){$true}else{[pscustomobject]@{invalid=$true}}}elseif($mode -eq 'no-effect-applied-null'){$null}else{$original}
+   $snapshot|Add-Member -NotePropertyName ('applied'+$suffix) -NotePropertyValue $appliedValue -Force
+   if($mode -eq 'no-effect-proposed-missing'){$snapshot.PSObject.Properties.Remove('proposed'+$suffix)}
+   elseif($mode -eq 'no-effect-proposed-null'){$snapshot.('proposed'+$suffix)=$null}
+   elseif($mode -eq 'no-effect-proposed-invalid'){$snapshot.('proposed'+$suffix)=switch($field){'memoryPriority'{7};'affinityMask'{0};default{'not-an-allowed-value'}}}
+  }
+  Save $context.backup $backup
+  Save (Join-Path $directory 'saved-format-replay.json') @{kind='CONSTRUCTED SAVED-RECORD/LEGACY/REPRESENTATION REPLAY AFTER REAL APPLY';scenario=$mode;producerBackupSha256=$producerHash;producerArtifact=$producerArtifact;operativeBackupSha256=(Get-HarnessFileSha256 $context.backup);rawProfileContract=$false;limitation='Only unmodified actual Profile producer bytes use processProfileBackupManifest. Game and reader-compatible replays are separate.'}
+ }
+ $context.backupHash=Get-HarnessFileSha256 $context.backup
+ [IO.File]::WriteAllBytes((Join-Path $directory 'operative-backup.json'),[IO.File]::ReadAllBytes($context.backup))
+ $baseline=Read-E2EControls $context.process
+ $meter=@{setterAttempts=0;peerSetterAttempts=0;unlistedSetterAttempts=0;setterFailures=(New-Object System.Collections.Generic.List[object]);setters=@{};confirms=@{};phase='';phasePeer=0;hits=0;orderArmed=$false;orderHits=0;orderValue=$null;wrapperClosed=0;wrapperErrors=(New-Object System.Collections.Generic.List[object]);wrapperGuards=(New-Object System.Collections.Generic.List[object]);wrapperGuardFailure=$null}
+ $patterns=@{priorityClass='^\s*\$Process.PriorityClass = \[System.Diagnostics.ProcessPriorityClass\]::\$priority';affinityMask='^\s*\$Process.ProcessorAffinity = \[IntPtr\]';ioPriority='^\s*Set-RooIndustriesProcessIoPriority \$Process \$priority';memoryPriority='^\s*Set-RooIndustriesProcessMemoryPriority \$Process \$value';gpuPriority='^\s*Set-RooIndustriesProcessGpuPriority \$Process \$priority'}
+ foreach($name in $patterns.Keys){
+  $meter.setters[$name]=0;$meter.confirms[$name]=0;$observedControl=$name
+  $null=New-Breakpoint $context $common $patterns[$name] ({$meter.setters[$observedControl]++;if($observedControl -eq $field){$meter.setterAttempts++}elseif($withPeer -and $observedControl -eq $peer){$meter.peerSetterAttempts++}else{$meter.unlistedSetterAttempts++}}.GetNewClosure())
+ }
+ $orderingBreakpoint=New-Breakpoint $context $common '^\s*\$candidateConfirmed = \$false' ({
+  $confirmedControl=[string](Get-Variable control -ErrorAction Stop).Value
+  $meter.confirms[$confirmedControl]++
+  if($mode -eq 'no-effect-after-preview' -and $meter.hits -eq 0){$meter.hits++;& $directSetter $external;Require (Test-RooIndustriesControlValueEqual $field (Read-Actual $context.process $field) $external) 'After-preview external write did not read back.';Save (Join-Path $directory 'after-preview-owned-external.json') @{kind='OWNED EXTERNAL FIXTURE WRITE AT FIRST CONFIRM';control=$field;value=$external;originalProcess=$context.owned.Identity}}
+  if($meter.orderArmed -and $confirmedControl -eq $field){$meter.orderArmed=$false;$meter.orderHits++;& $directSetter $meter.orderValue;Require (Test-RooIndustriesControlValueEqual $field (Read-Actual $context.process $field) $meter.orderValue) 'Ordered target drift did not read back.';Save (Join-Path $directory 'ordered-owned-external.json') @{kind='OWNED EXTERNAL FIXTURE WRITE AFTER ALREADY-ORIGINAL PREVIEW';control=$field;value=$meter.orderValue;originalProcess=$context.owned.Identity}}
+ }.GetNewClosure())
+ function Set-NoEffectExternal($value,[string]$phase){
+  $beforeValues=Read-E2EControls $context.process
+  & $directSetter $value
+  $afterValues=Read-E2EControls $context.process
+  Save (Join-Path $directory ($phase+'-owned-external.json')) @{kind='OWNED EXTERNAL FIXTURE WRITE; OUTSIDE PRODUCT SETTERS';originalProcess=$context.owned.Identity;control=$field;requested=$value;before=$beforeValues;after=$afterValues}
+  Require ($afterValues[$field].available -and (Test-RooIndustriesControlValueEqual $field $afterValues[$field].value $value)) 'Owned external write did not read back.'
+ }
+ function Invoke-NoEffectPhase([string]$phase){
+  $meter.phase=$phase;$meter.phasePeer=$meter.peerSetterAttempts
+  $result=Undo $context $phase $backend
+  $ended=$context.process.HasExited
+  $values=if($ended){$null}else{Read-E2EControls $context.process}
+  $status=if($kind -eq 'game'){Get-Content -LiteralPath (Join-Path $directory ('status-'+$phase+'.json')) -Raw|ConvertFrom-Json}else{$null}
+  $observation=@{phase=$phase;result=$result;pending=(Is-Pending $context $result);values=$values;ended=$ended;reopenedStatus=$status;setters=$meter.setters.Clone();confirms=$meter.confirms.Clone();peerWrites=($meter.peerSetterAttempts-$meter.phasePeer);originalProcess=$context.owned.Identity;producerRoot=$backend;productCommit=$backendCommit;producerScriptSha256=(Get-HarnessFileSha256 $producerScript);restoreScript=$restoreScript;restoreScriptSha256=(Get-HarnessFileSha256 $restoreScript);commonSha256=(Get-HarnessFileSha256 $common);driverPath=$driverSourcePath;driverSha256=(Get-HarnessFileSha256 $driverSourcePath);statusReaderRoot=$(if($kind -eq 'game'){$Source}else{$null});statusReaderCommit=$(if($kind -eq 'game'){$SourceCommit}else{$null});statusReaderSha256=$(if($kind -eq 'game'){Get-HarnessFileSha256 (Join-Path $Source 'backend\scripts\Get-GameTuneSessionStatus.ps1')}else{$null});producerBackupSha256=(Get-HarnessFileSha256 $producerArtifact);operativeBackupSha256=(Get-HarnessFileSha256 $context.backup);engine=$PSVersionTable.PSVersion.ToString()}
+  Save (Join-Path $directory ($phase+'-readback.json')) $observation
+  Require ($observation.producerBackupSha256 -ceq $producerHash -and $observation.operativeBackupSha256 -ceq $context.backupHash -and (Get-HarnessFileSha256 (Join-Path $directory 'operative-backup.json')) -ceq $context.backupHash) 'Phase changed immutable producer/operative backup bytes.'
+  Require ($meter.setterAttempts -eq 0 -and $meter.unlistedSetterAttempts -eq 0) 'Target or unlisted control reached a product setter.'
+  if(-not $ended){
+   Require ($context.process.Handle -eq $context.owned.handle -and [RooIndustriesValidationOwnership.Native]::Created($context.owned.handle).ToString() -ceq $context.owned.Identity.creationTimeFileTimeUtc -and [RooIndustriesValidationOwnership.Native]::Image($context.owned.handle) -ieq $context.owned.Identity.imagePath) 'Original retained process identity changed.'
+   foreach($name in $patterns.Keys){
+    if($name -eq $field){continue}
+    $expected=if($withPeer -and $name -eq $peer -and $meter.peerSetterAttempts -gt 0){$peerOriginal}else{$baseline[$name].value}
+    Require ($values[$name].available -eq $baseline[$name].available) ('Unrequested availability changed: '+$name)
+    if($baseline[$name].available){Require (Test-RooIndustriesControlValueEqual $name $values[$name].value $expected) ('Unrequested/peer native value differs: '+$name)}
+   }
+  }
+  $restored=@($result.result.changedItems|ForEach-Object {@($_.restoredControls)})
+  Require (@($restored|Where-Object control -eq $field).Count -eq 0 -and $restored.Count -eq $observation.peerWrites -and $meter.peerSetterAttempts -le $(if($withPeer){1}else{0})) 'Restore record/peer write counts disagree or repeated.'
+  $kept=@(Get-RooIndustriesPropertyArray $result 'leftAsSetItems')+@(Get-RooIndustriesPropertyArray $result.result 'leftAsSetItems')
+  Require (@($kept|Where-Object {$_.control -ne $field}).Count -eq 0) 'Unrequested control received kept attribution.'
+  if($kind -eq 'game'){
+   $session=Get-Content -LiteralPath $context.session -Raw|ConvertFrom-Json
+   Require ($status.sessionId -ceq $result.sessionId -and $status.sessionPath -ceq $context.session -and $status.backupManifestPath -ceq $context.backup -and $session.sessionId -ceq $result.sessionId -and $session.status -ceq $result.sessionStatus) 'Reopened/persisted Game identifiers/status differ.'
+  }
+  return $observation
+ }
+ function Assert-NoEffectPending($observation,$expected,[int]$peerTotal){
+  Require ($observation.pending -and $meter.peerSetterAttempts -eq $peerTotal) 'Pending recovery/peer count differs.'
+  Require ($observation.values[$field].available -and (Test-RooIndustriesControlValueEqual $field $observation.values[$field].value $expected)) 'Pending target was changed.'
+  $result=$observation.result
+  foreach($container in @($result,$result.result,$observation.reopenedStatus)){Require (@(Get-RooIndustriesPropertyArray $container 'leftAsSetItems'|Where-Object control -eq $field).Count -eq 0) 'Unverified/refused target was certified kept.'}
+  $entries=@($result.preview)
+  $target=@($entries|ForEach-Object {@($_.controlChanges)+@($_.alreadyOriginal)+@($_.leftAsSet)}|Where-Object control -eq $field)
+  Require ($target.Count -eq 1) 'Uncertain target was omitted from preview groups.'
+  $attempt=if($observation.peerWrites -gt 0){'partial'}else{'failed'}
+  Require ($result.result.status -ceq $attempt) 'Pending attempt phase differs.'
+  if($kind -eq 'game'){
+   $envelope=if($attempt -ceq 'partial'){'completed'}else{'failed'}
+   $reopened=if($attempt -ceq 'partial'){'restorable'}else{'failed'}
+   Require ($result.restorable -and $result.status -ceq $envelope -and $result.sessionStatus -ceq $envelope -and $observation.reopenedStatus.restorable -and $observation.reopenedStatus.status -ceq $reopened) 'Pending Game attempt/envelope/public status tuple differs.'
+  }else{Require ($result.status -ceq $attempt -and $result.result.restorePendingCount -eq 1 -and @($result.result.pendingItems).Count -eq 1) 'Expected exactly one pending Profile snapshot.'}
+ }
+ function Assert-NoEffectComplete($observation,$expected,[int]$peerTotal,[switch]$Excluded,[switch]$Kept){
+  $result=$observation.result
+  Require (-not $observation.pending -and $meter.peerSetterAttempts -eq $peerTotal) 'Terminal recovery/peer count differs.'
+  if(-not $observation.ended){Require ($observation.values[$field].available -and (Test-RooIndustriesControlValueEqual $field $observation.values[$field].value $expected)) 'Terminal target readback differs.'}
+  foreach($container in $(if($kind -eq 'game'){@($result,$result.result)}else{@($result.result)})){
+   $targetKept=@(Get-RooIndustriesPropertyArray $container 'leftAsSetItems'|Where-Object control -eq $field)
+   Require ($targetKept.Count -eq $(if($Kept){1}else{0})) 'Terminal kept attribution differs.'
+  }
+  if($Excluded){
+   Require ($meter.confirms[$field] -eq 0) 'Excluded target entered live confirmation.'
+   $target=@($result.preview|ForEach-Object {@($_.controlChanges)+@($_.alreadyOriginal)+@($_.leftAsSet)}|Where-Object control -eq $field)
+   Require ($target.Count -eq 0) 'Excluded target retained a preview/change/kept/original record.'
+  }
+  if($kind -eq 'game'){Require ($result.result.status -ceq 'rolledBack' -and $result.status -ceq 'completed' -and $result.sessionStatus -ceq 'completed' -and -not $result.restorable -and $observation.reopenedStatus.status -ceq 'completed' -and -not $observation.reopenedStatus.restorable -and @($observation.reopenedStatus.leftAsSetItems|Where-Object control -eq $field).Count -eq $(if($Kept){1}else{0})) 'Terminal Game attempt/public status differs.'}
+  else{Require ($result.status -ceq 'success' -and $result.result.restorePendingCount -eq 0 -and @($result.result.pendingItems).Count -eq 0) 'Terminal Profile status/pending differs.'}
+ }
+ $confirmAdverse=$mode -like 'no-effect-confirm-*'
+ $busy=$mode -like 'no-effect-confirm-busy-*'
+ $wrapper=$mode -like 'no-effect-confirm-wrapper-*'
+ $wrapperBreakpoint=$null
+ if($confirmAdverse){
+  Set-NoEffectExternal $original 'before-adverse-original'
+  if($busy){$actor=New-Actor $context 'busy' $desired (Join-Path $context.data 'operations\no-effect\journal.json');$null=Wait-Actor $actor -Held}
+  if($wrapper){
+   $wrapperBreakpoint=New-Breakpoint $context $common '^\s*if \(-not \[RooIndustriesNativeProcessControl\]::GetProcessTimes\(\$queryHandle,' ({
+    if((Get-Variable control -ErrorAction Stop).Value -eq $field -and (Get-Variable pass -ErrorAction Stop).Value -eq 2 -and $meter.wrapperClosed -lt 2){
+     try{
+      $backendWrapper=(Get-Variable -Name 'Process' -ErrorAction Stop).Value
+      Require ($backendWrapper -is [Diagnostics.Process]) 'Expected the actual backend Process wrapper.'
+      Require (-not [object]::ReferenceEquals($backendWrapper,$context.process)) 'Refuse to close the original context process.'
+      Require (-not [object]::ReferenceEquals($backendWrapper,$context.owned.process)) 'Refuse to close the original owned process wrapper.'
+      $backendHandle=$backendWrapper.Handle
+      Require ($context.process.Handle -eq $context.owned.handle) 'Original retained handle changed before injection.'
+      Require ($backendHandle -ne [IntPtr]::Zero -and $backendHandle -ne $context.owned.handle) 'Refuse to close a wrapper sharing the original owned native handle.'
+      Require ([RooIndustriesValidationOwnership.Native]::Created($context.owned.handle).ToString() -ceq $context.owned.Identity.creationTimeFileTimeUtc) 'Original handle/birth changed before injection.'
+      $guard=@{phase=$meter.phase;control=$field;pass=2;guardPassed=$true;backendHandle=$backendHandle.ToInt64();originalHandle=$context.owned.handle.ToInt64();originalIdentity=$context.owned.Identity;closed=$false}
+      $meter.wrapperGuards.Add($guard)|Out-Null
+      $backendWrapper.Close()
+      $guard.closed=$true;$meter.wrapperClosed++
+      Require ($context.process.Handle -eq $context.owned.handle -and [RooIndustriesValidationOwnership.Native]::Created($context.owned.handle).ToString() -ceq $context.owned.Identity.creationTimeFileTimeUtc) 'Injection invalidated the original owned handle.'
+     }catch{$meter.wrapperGuardFailure=$_.Exception.ToString();Save (Join-Path $directory 'wrapper-injection-MISSING.json') @{error=$meter.wrapperGuardFailure;guards=@($meter.wrapperGuards.ToArray())};throw}
+    }
+   }.GetNewClosure())
+   $null=New-Breakpoint $context $common '^\s*\} catch \{ \$errors.Add\(\$_\.Exception.Message\)' ({
+    if((Get-Variable control -ErrorAction Stop).Value -eq $field -and $meter.wrapperClosed -gt $meter.wrapperErrors.Count -and $null -eq $meter.wrapperGuardFailure){
+     $failure=(Get-Variable -Name '_' -ErrorAction Stop).Value
+     $exception=$failure.Exception;$types=New-Object System.Collections.Generic.List[string]
+     while($exception){$types.Add($exception.GetType().FullName)|Out-Null;$exception=$exception.InnerException}
+     $meter.wrapperErrors.Add(@{phase=$meter.phase;control=$field;error=$failure.ToString();errorId=$failure.FullyQualifiedErrorId;exceptionTypes=@($types.ToArray());position=$failure.InvocationInfo.PositionMessage;line=$failure.InvocationInfo.Line;originalIdentity=$context.owned.Identity;originalHandle=$context.owned.handle.ToInt64();originalBirth=[RooIndustriesValidationOwnership.Native]::Created($context.owned.handle).ToString()})|Out-Null
+    }
+   }.GetNewClosure())
+  }
+  $first=Invoke-NoEffectPhase 'adverse-original';Assert-NoEffectPending $first $original 0
+  Require (@($first.result.preview|ForEach-Object {@($_.alreadyOriginal)}|Where-Object control -eq $field).Count -eq 1) 'Adverse original phase did not exercise alreadyOriginal preview.'
+  Set-NoEffectExternal $external 'adverse-external'
+  $second=Invoke-NoEffectPhase 'adverse-external';Assert-NoEffectPending $second $external 0
+  Require (@($second.result.preview|ForEach-Object {@($_.leftAsSet)}|Where-Object control -eq $field).Count -eq 1) 'Adverse external phase did not exercise leftAsSet preview.'
+  if($wrapper){
+   Save (Join-Path $directory 'wrapper-adversary.json') @{kind='CONSTRUCTED DISTINCT BACKEND WRAPPER DISPOSAL; NOT SPONTANEOUS OS FAILURE';guards=@($meter.wrapperGuards.ToArray());getterErrors=@($meter.wrapperErrors.ToArray());guardFailure=$meter.wrapperGuardFailure}
+   Require ($null -eq $meter.wrapperGuardFailure -and $meter.wrapperClosed -eq 2 -and $meter.wrapperErrors.Count -eq 2) 'MISSING both actual guarded getter failures.'
+   foreach($failure in $meter.wrapperErrors){Require ($failure.exceptionTypes -contains 'System.InvalidOperationException' -and ($failure.errorId -like '*HasExited*' -or $failure.errorId -like '*ProcessName*' -or $failure.line -like '*$Process.HasExited*' -or $failure.position -like '*$Process.HasExited*') -and $failure.originalBirth -ceq $context.owned.Identity.creationTimeFileTimeUtc) 'MISSING genuine backend HasExited/name getter failure; guard failure is not evidence.'}
+   Remove-PSBreakpoint $wrapperBreakpoint;$null=$context.breakpoints.Remove($wrapperBreakpoint)
+  }
+  if($mode.EndsWith('-ended',[StringComparison]::Ordinal)){Stop-OwnedProcess $context.owned;Require ($context.process.WaitForExit(5000)) 'Original target did not end.';$resolved=Invoke-NoEffectPhase 'adverse-ended';Assert-NoEffectComplete $resolved $original 0}
+  else{
+   if($busy){[IO.File]::WriteAllText($actor.release,'release');$receipt=Wait-Actor $actor;Require ($actor.process.ExitCode -eq 0) 'Original busy actor did not release.'}
+   Set-NoEffectExternal $original 'adverse-retry-original'
+   $resolved=Invoke-NoEffectPhase 'adverse-fresh-retry';Assert-NoEffectComplete $resolved $original 1
+  }
+ }elseif($mode -like 'no-effect-changed-*'){
+  $peerTotal=if($withPeer){1}else{0}
+  $first=Invoke-NoEffectPhase 'requested-first';Assert-NoEffectPending $first $desired $peerTotal
+  $repeat=Invoke-NoEffectPhase 'requested-repeat';Assert-NoEffectPending $repeat $desired $peerTotal
+  Set-NoEffectExternal $external 'later-drift'
+  $late=Invoke-NoEffectPhase 'later-drift';Assert-NoEffectPending $late $external $peerTotal
+  $repeat=Invoke-NoEffectPhase 'drift-repeat';Assert-NoEffectPending $repeat $external $peerTotal
+  Set-NoEffectExternal $original 'before-ordered-original'
+  $meter.orderValue=$desired;$meter.orderArmed=$true
+  $ordered=Invoke-NoEffectPhase 'original-preview-changed-back';Assert-NoEffectPending $ordered $desired $peerTotal
+  Require ($meter.orderHits -eq 1 -and @($ordered.result.preview|ForEach-Object {@($_.alreadyOriginal)}|Where-Object control -eq $field).Count -eq 1) 'Fresh changed-request confirmation ordering was not exercised.'
+  Remove-PSBreakpoint -Breakpoint $orderingBreakpoint
+  Require ($context.breakpoints.Remove($orderingBreakpoint)) 'Original ordering breakpoint was not tracked for removal.'
+  if($mode.EndsWith('-ended',[StringComparison]::Ordinal)){Stop-OwnedProcess $context.owned;Require ($context.process.WaitForExit(5000)) 'Original pending target did not end.';$resolved=Invoke-NoEffectPhase 'ended-resolution'}
+  else{Set-NoEffectExternal $original 'original-resolution';$resolved=Invoke-NoEffectPhase 'original-resolution'}
+  Assert-NoEffectComplete $resolved $original $peerTotal
+ }else{
+  $pending=$mode -in @('no-effect-applied-conflict','no-effect-proposed-missing','no-effect-proposed-null','no-effect-proposed-invalid','no-effect-applied-invalid','no-effect-applied-null','no-effect-record-failed','no-effect-record-pending','no-effect-record-unknown')
+  $kept=$mode -eq 'no-effect-record-applied'
+  if($mode -notin @('no-effect-original','no-effect-after-preview')){Set-NoEffectExternal $external 'before-preview-external'}
+  $expected=if($mode -eq 'no-effect-original'){$original}else{$external}
+  $first=Invoke-NoEffectPhase 'first'
+  if($pending){
+   Assert-NoEffectPending $first $expected 1
+   $repeat=Invoke-NoEffectPhase 'pending-repeat';Assert-NoEffectPending $repeat $expected 1
+   Set-NoEffectExternal $original 'before-ordered-original'
+   $meter.orderValue=$external;$meter.orderArmed=$true
+   $ordered=Invoke-NoEffectPhase 'original-preview-drift';Assert-NoEffectPending $ordered $external 1
+   Require ($meter.orderHits -eq 1 -and @($ordered.result.preview|ForEach-Object {@($_.alreadyOriginal)}|Where-Object control -eq $field).Count -eq 1) 'Unverified original-preview drift was not exercised.'
+   Remove-PSBreakpoint -Breakpoint $orderingBreakpoint
+   Require ($context.breakpoints.Remove($orderingBreakpoint)) 'Original ordering breakpoint was not tracked for removal.'
+   Set-NoEffectExternal $original 'original-resolution'
+   $resolved=Invoke-NoEffectPhase 'original-resolution';Assert-NoEffectComplete $resolved $original 1
+  }else{
+   Assert-NoEffectComplete $first $expected 1 -Excluded:(-not $kept) -Kept:$kept
+   if($mode -eq 'no-effect-after-preview'){Require ($meter.hits -eq 1) 'After-preview external seam was not reached.'}
+   $repeat=Invoke-NoEffectPhase 'completed-repeat';Assert-NoEffectComplete $repeat $expected 1 -Excluded:(-not $kept) -Kept:$kept
+   if($kind -eq 'game'){
+    $status=& (Join-Path $Source 'backend\scripts\Get-GameTuneSessionStatus.ps1') -SessionPath $context.session|ConvertFrom-Json
+    Save (Join-Path $directory 'status-completed-repeat-again.json') $status
+    Require ($status.status -ceq 'completed' -and -not $status.restorable -and $status.sessionId -ceq $repeat.result.sessionId) 'Repeated public status is not stably completed.'
+   }
+  }
+ }
+ Save (Join-Path $directory 'observations.json') @{kind=$kind;control=$field;scenario=$mode;sourceCommit=$backendCommit;driverSourceCommit=$SourceCommit;producerBackupSha256=$producerHash;operativeBackupSha256=$context.backupHash;original=$original;requested=$requested;external=$external;conflictingApplied=$conflictingApplied;targetSetterAttempts=$meter.setterAttempts;peerSetterAttempts=$meter.peerSetterAttempts;unlistedSetterAttempts=$meter.unlistedSetterAttempts;confirms=$meter.confirms;wrapperGuards=@($meter.wrapperGuards.ToArray());wrapperErrors=@($meter.wrapperErrors.ToArray());counterSemantics='Attempts only; all phases require native readbacks, full results and immutable bytes';fixtureInputCorrection=$true;nativeBehaviorSimulated=$false}
+ return $meter
+}
 function Run-Scenario([string]$kind,[string]$field,[string]$mode){ & {
  $directory=Join-Path $root ($kind+'-'+$field+'-'+$mode)
  Require (-not [IO.Directory]::Exists($directory)) 'Case output already exists; no automatic repeat.'
@@ -185,14 +469,31 @@ function Run-Scenario([string]$kind,[string]$field,[string]$mode){ & {
   }
 
   if($field -eq 'gpuPriority'){$clock=[Diagnostics.Stopwatch]::StartNew();while(-not [IO.File]::Exists($signal+'.gpu-ready')){if($clock.Elapsed.TotalSeconds -gt 10){throw 'GPU initialization is missing proof.'};Start-Sleep -Milliseconds 20}}
+  if($noEffectScenarios -contains $mode){
+   $meter=Invoke-NoEffectHistory $context $kind $field $mode
+  }else{
+  $context.process.PriorityClass='Normal'
+  Require ((Read-Actual $context.process 'priorityClass') -ceq 'Normal') 'Owned CPU original precondition failed.'
+  if($field -eq 'ioPriority'){
+   [RooIndustriesBackgroundOracle]::SetIo($context.process,(Convert-RooIndustriesIoPriorityToValue 'Low' -Restoring))
+   Require ((Read-Actual $context.process 'ioPriority') -ceq 'Low') 'Owned IO original precondition failed.'
+  }
+  if($field -eq 'memoryPriority' -or ($field -eq 'priorityClass' -and -not $priorityOnly)){
+   [RooIndustriesBackgroundOracle]::SetMemory($context.process,[uint32]2)
+   Require ((Read-Actual $context.process 'memoryPriority') -eq 2) 'Owned memory original/peer precondition failed.'
+  }
+  if($field -eq 'gpuPriority'){
+   Set-RooIndustriesProcessGpuPriority $context.process 'Normal'
+   Require ((Read-Actual $context.process 'gpuPriority') -ceq 'Normal') 'Owned GPU original precondition failed.'
+  }
   $original=Read-Actual $context.process $field
-  $desired=switch($field){'priorityClass'{'AboveNormal'};'affinityMask'{[long]($context.process.ProcessorAffinity.ToInt64() -band (-$context.process.ProcessorAffinity.ToInt64()))};'ioPriority'{'Low'};'memoryPriority'{2};'gpuPriority'{'BelowNormal'}}
+  $desired=switch($field){'priorityClass'{'AboveNormal'};'affinityMask'{[long]($context.process.ProcessorAffinity.ToInt64() -band (-$context.process.ProcessorAffinity.ToInt64()))};'ioPriority'{'Normal'};'memoryPriority'{5};'gpuPriority'{'BelowNormal'}}
   Require ($original.ToString() -ne $desired.ToString()) 'Fixture needs a different original to prove Undo.'
   $peer=if($field -eq 'priorityClass'){'memoryPriority'}else{'priorityClass'}
   $peerOriginal=Read-Actual $context.process $peer
   $foreground=[ordered]@{ruleId='restore-e2e';processNames=@('RestoreTarget.exe');priorityClass='AboveNormal';reason='Restore E2E fixture';reasonCodes=@('LIVE_VALIDATION')}
   $foreground[$field]=$desired
-  if($peer -eq 'memoryPriority' -and -not $priorityOnly){$foreground.memoryPriority=2}
+  if($peer -eq 'memoryPriority' -and -not $priorityOnly){$foreground.memoryPriority=5}
   Save (Join-Path $directory 'profile.json') @{schemaVersion=1;productName='Roo Industries Optimization Suite';profileId='restore-e2e';name='Restore E2E';profileKind='process-controls';risk='medium';protectedCatalogPath=(Join-Path $Source 'backend\profiles\protected-processes.json');foregroundGame=$foreground;targetGames=@();protectedCompanions=@();protectedPreviewProcessNames=@();safeCandidates=@();rules=@();rollbackPolicy=@{supported=$true;scope='process-controls';stateRoot=$context.state;restoreOriginalPriorityClass=$true};safety=@{confirmedApplyChanges=@('PriorityClass','Affinity','IoPriority','MemoryPriority','GpuPriority');continuousEnforcement=$true;runtimeService=$false}}
   $external=switch($field){'priorityClass'{'BelowNormal'};'affinityMask'{$original -band (-bnot [long]$desired)};'ioPriority'{'VeryLow'};'memoryPriority'{3};'gpuPriority'{'High'}}
   Require ($external.ToString() -ne $original.ToString() -and $external.ToString() -ne $desired.ToString() -and ($field -ne 'affinityMask' -or $external -ne 0)) 'Three distinct real values are required for this control.'
@@ -214,6 +515,22 @@ function Run-Scenario([string]$kind,[string]$field,[string]$mode){ & {
   Require ($snapshot.Count -eq 1) 'Expected exactly one immutable original snapshot.'
   $record=@($snapshot[0].controlChanges|Where-Object control -eq $field)
   Require ($record.Count -eq 1 -and $record[0].outcome -ceq $(if($mode -eq 'failed-apply-readback'){'failed'}else{'applied'})) 'Real apply did not verify target.'
+  if($kind -eq 'profile'){
+   [IO.File]::WriteAllBytes((Join-Path $directory 'producer-profile-backup.json'),[IO.File]::ReadAllBytes($context.backup))
+   Save (Join-Path $directory 'producer-profile-evidence.json') @{kind='UNMODIFIED ACTUAL PROFILE PRODUCER BEFORE REPLAY';sourceRoot=$Source;sourceCommit=$SourceCommit;producerScriptSha256=(Get-HarnessFileSha256 (Join-Path $Source 'backend\scripts\Apply-ProcessProfile.ps1'));commonSha256=(Get-HarnessFileSha256 (Join-Path $Source 'backend\scripts\ProcessProfile.Common.ps1'));driverPath=$driverSourcePath;driverSha256=(Get-HarnessFileSha256 $driverSourcePath);engine=$PSVersionTable.PSVersion.ToString();backupPath=$context.backup;producerBackupSha256=(Get-HarnessFileSha256 (Join-Path $directory 'producer-profile-backup.json'));originalProcess=$context.owned.Identity}
+  }
+  $expectedProducerControls=@($field)
+  if(-not $priorityOnly){$expectedProducerControls+=@($peer)}
+  Require (@($snapshot[0].controlChanges).Count -eq $expectedProducerControls.Count) 'Producer emitted an unexpected control count.'
+  foreach($expectedControl in $expectedProducerControls){
+   $actualRecord=@($snapshot[0].controlChanges|Where-Object control -eq $expectedControl)
+   Require ($actualRecord.Count -eq 1) 'Producer control identity/count differs.'
+   $expectedValue=if($expectedControl -eq $field){$desired}else{if($peer -eq 'memoryPriority'){5}else{'AboveNormal'}}
+   Require (Test-RooIndustriesControlValueEqual $expectedControl $actualRecord[0].proposedValue $expectedValue) 'Producer filtered or changed the intended request.'
+   if($mode -ne 'failed-apply-readback' -or $expectedControl -ne $field){
+    Require ($actualRecord[0].outcome -ceq 'applied' -and (Test-RooIndustriesControlValueEqual $expectedControl (Read-Actual $context.process $expectedControl) $expectedValue)) 'Genuine producer/readback evidence is missing.'
+   }
+  }
   if($legacyReplay -or $mode -eq 'image-alias'){
    [IO.File]::WriteAllBytes((Join-Path $directory 'producer-backup.json'),[IO.File]::ReadAllBytes($context.backup))
    $producerHash=Get-HarnessFileSha256 $context.backup
@@ -223,7 +540,7 @@ function Run-Scenario([string]$kind,[string]$field,[string]$mode){ & {
    $beforeIdentity=[pscustomobject]@{processId=$snapshot[0].processId;processName=$snapshot[0].processName;executablePath=$snapshot[0].executablePath;processStartTimeUtc=$snapshot[0].processStartTimeUtc;nativeBirth=$context.owned.Identity.creationTimeFileTimeUtc;originalPriorityClass=$snapshot[0].originalPriorityClass}
    if($unmatchedReplay){
     $peerRecord=@($snapshot[0].controlChanges|Where-Object control -eq 'memoryPriority')
-    Require ($peerRecord.Count -eq 1 -and $peerRecord[0].outcome -ceq 'applied' -and (Read-Actual $context.process 'memoryPriority') -eq 2) 'Missing genuine producer peer evidence.'
+    Require ($peerRecord.Count -eq 1 -and $peerRecord[0].outcome -ceq 'applied' -and (Read-Actual $context.process 'memoryPriority') -eq 5) 'Missing genuine producer peer evidence.'
     $producerPeerText=$peerRecord[0]|ConvertTo-Json -Depth 30 -Compress
     $snapshot[0].controlChanges=@($snapshot[0].controlChanges|Where-Object control -ne 'priorityClass')
    }elseif($legacyShape -in @('legacy-proposed-empty','legacy-applied-empty')){$snapshot[0].controlChanges=@()}
@@ -612,6 +929,7 @@ function Run-Scenario([string]$kind,[string]$field,[string]$mode){ & {
   }
   Require ((Get-FileHash -LiteralPath $context.backup -Algorithm SHA256).Hash -ceq $context.backupHash) 'Post-case fixture/journal cleanup changed original backup bytes.'
   Save (Join-Path $directory 'observations.json') @{sourceCommit=$SourceCommit;kind=$kind;control=$field;scenario=$mode;original=$original;requested=$desired;external=$external;firstReadback=$readback;targetSetterAttempts=($meter.setterAttempts-$baselineAttempts);peerSetterAttempts=($meter.peerSetterAttempts-$baselinePeer);counterSemantics='Breakpoint before setter: attempts only; successful OS writes require actual readback, not this counter';unlistedSetterAttempts=$meter.unlistedSetterAttempts;aliasRedReproduced=$aliasRedReproduced;identityTrace=@($identityTrace.ToArray());producerBackupSha256=$producerHash;denialPhases=@{injected=$denial.applied;restored=$denial.restored;originalAclPending=($null -ne $denial.acl);injectionPhase=$denial.injectionPhase;restorePhase=$denial.restorePhase;ownedIdentity=$context.owned.Identity};setterFailures=@($meter.setterFailures.ToArray());breakpointHits=$meter.hits;restoreSessionId=(Get-Process -Id $PID).SessionId;nativeBirth=$context.owned.Identity.creationTimeFileTimeUtc;backupSha256=$context.backupHash;engine=$PSVersionTable.PSVersion.ToString()}
+  }
  }catch{$bodyError=$_;Save (Join-Path $directory 'failure.json') @{error=$_.Exception.ToString();stack=$_.ScriptStackTrace}}
  finally{
   foreach($bp in $context.breakpoints){try{Remove-PSBreakpoint $bp}catch{$cleanups.Add($_.Exception.ToString())|Out-Null}}
@@ -683,11 +1001,15 @@ foreach($body in $kinds){foreach($field in $controls){foreach($case in $Scenario
  if($case -eq 'protected-game' -and $field -ne 'gpuPriority'){continue}
  if($case -eq 'protected-launcher' -and $field -ne 'memoryPriority'){continue}
  if($priorityScenarios -contains $case -and $field -ne 'priorityClass'){continue}
+ if($affinityScenarios -contains $case -and $field -ne 'affinityMask'){continue}
  $selected.Add(@{kind=$body;control=$field;scenario=$case})|Out-Null
 }}}
+$uniqueTriples=@{}
+foreach($case in $selected){$key=$case.kind+'|'+$case.control+'|'+$case.scenario;Require (-not $uniqueTriples.ContainsKey($key)) 'Duplicate selected history.';$uniqueTriples[$key]=$true}
 Save (Join-Path $root 'selection.json') @{sourceCommit=$SourceCommit;driverSha256=(Get-HarnessFileSha256 $driverSourcePath);scope='Authored selected triples; actual success requires each assertion and cleanup';expectedCaseCount=$selected.Count;cases=@($selected.ToArray())}
 foreach($case in $selected){Run-Scenario $case.kind $case.control $case.scenario}
 Require ($results.Count -eq $selected.Count) 'Actual completed triples differ from the selected source grid.'
+foreach($case in $selected){$casePath=Join-Path $root ($case.kind+'-'+$case.control+'-'+$case.scenario);$done=Get-Content -LiteralPath (Join-Path $casePath 'done.json') -Raw|ConvertFrom-Json;$cleanup=Get-Content -LiteralPath (Join-Path $casePath 'cleanup.json') -Raw|ConvertFrom-Json;Require ($done.passed -and $done.cleanupPassed -and $cleanup.targetCleanupSucceeded -and @($cleanup.errors).Count -eq 0) 'Selected history lacks its done/original cleanup proof.'}
 
 Save (Join-Path $root 'serialization-summary.json') @{sourceCommit=$SourceCommit;cases=@($results.ToArray());expectedCaseCount=$selected.Count;actualCaseCount=$results.Count;selectedTriples=@($selected.ToArray());engine=$PSVersionTable.PSVersion.ToString();nativeBehaviorSimulated=$false;passed=$true}
 'ROO_INDUSTRIES_RESTORE_SERIALIZATION_E2E_COMPLETE'

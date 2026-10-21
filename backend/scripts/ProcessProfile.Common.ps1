@@ -1148,10 +1148,73 @@ function Split-RooIndustriesLeftAsSetRestoreChanges {
     $left = New-Object System.Collections.Generic.List[object]
     $original = New-Object System.Collections.Generic.List[object]
     $seen = @{}
+    $savedChanges = @(Get-RooIndustriesPropertyArray $Snapshot 'controlChanges')
+    $savedListProperty = if ($null -ne $Snapshot) { $Snapshot.PSObject.Properties['controlChanges'] } else { $null }
+    $savedListValid = $null -eq $savedListProperty -or $savedListProperty.Value -is [array]
+    foreach ($savedChange in $savedChanges) {
+        $savedControl = Get-RooIndustriesPropertyValue $savedChange 'control' $null
+        if ($savedControl -isnot [string] -or $savedControl -notin @('priorityClass', 'affinityMask', 'ioPriority', 'memoryPriority', 'gpuPriority')) {
+            $savedListValid = $false
+            break
+        }
+    }
     foreach ($change in @(Get-RooIndustriesArray $Changes)) {
         $control = [string](Get-RooIndustriesPropertyValue $change 'control' '')
         if ($seen.ContainsKey($control)) { continue }
         $seen[$control] = $true
+        $suffix = switch ($control) {
+            'priorityClass' { 'PriorityClass' }
+            'affinityMask' { 'AffinityMask' }
+            'ioPriority' { 'IoPriority' }
+            'memoryPriority' { 'MemoryPriority' }
+            'gpuPriority' { 'GpuPriority' }
+            default { $null }
+        }
+        $matchingSaved = @($savedChanges | Where-Object { [string](Get-RooIndustriesPropertyValue $_ 'control' '') -eq $control })
+        if ($null -ne $Snapshot -and $savedListValid -and $null -ne $suffix -and $matchingSaved.Count -eq 0) {
+            $originalProperty = $Snapshot.PSObject.Properties['original' + $suffix]
+            $proposedProperty = $Snapshot.PSObject.Properties['proposed' + $suffix]
+            $legacyAppliedProperty = $Snapshot.PSObject.Properties['applied' + $suffix]
+            if ($null -ne $originalProperty -and $null -ne $proposedProperty) {
+                $properties = @($originalProperty, $proposedProperty)
+                if ($null -ne $legacyAppliedProperty) { $properties += $legacyAppliedProperty }
+                $validNoEffect = $true
+                foreach ($property in $properties) {
+                    $value = $property.Value
+                    $validValue = switch ($control) {
+                        'priorityClass' {
+                            $value -is [string] -and (Test-RooIndustriesPriorityAllowed $value -Restoring)
+                        }
+                        'affinityMask' {
+                            ($value -is [int] -or $value -is [long] -or
+                                ($value -is [string] -and $value -match '^(?:[+-]?[0-9]+|0[xX][0-9a-fA-F]{1,16})$')) -and
+                                (Test-RooIndustriesAffinityMaskAllowed $value)
+                        }
+                        'ioPriority' {
+                            $value -is [string] -and (Test-RooIndustriesIoPriorityAllowed $value -Restoring)
+                        }
+                        'memoryPriority' {
+                            ($value -is [int] -or $value -is [long] -or $value -is [string]) -and
+                                (Test-RooIndustriesMemoryPriorityAllowed $value)
+                        }
+                        'gpuPriority' {
+                            $value -is [string] -and (Test-RooIndustriesGpuPriorityAllowed $value)
+                        }
+                        default { $false }
+                    }
+                    if (-not $validValue) {
+                        $validNoEffect = $false
+                        break
+                    }
+                }
+                if ($validNoEffect -and
+                    (Test-RooIndustriesControlValueEqual $control $originalProperty.Value $proposedProperty.Value) -and
+                    ($null -eq $legacyAppliedProperty -or
+                        (Test-RooIndustriesControlValueEqual $control $originalProperty.Value $legacyAppliedProperty.Value))) {
+                    continue
+                }
+            }
+        }
         $process = Get-RooIndustriesPropertyValue $CurrentState 'process' $null
         $ownershipReason = if ($process -is [System.Diagnostics.Process]) { Get-RooIndustriesRestoreControlOwnershipReason $process $control -ForPreview } else { $null }
         if (-not [string]::IsNullOrWhiteSpace($ownershipReason)) {

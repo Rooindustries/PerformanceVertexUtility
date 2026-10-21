@@ -93,3 +93,10 @@ UI8/media gates must finish on the authorized Windows source before merge.
 Saved-format replay and owned junction launch checks are part of that manual
 gate. Keep c50 and b0 evidence separate; an un-reproduced alias case stays
 recorded as missing red.
+
+These manual checks cover a saved request that already matched the original
+value. The producer leaves that control out of its saved change list. Undo
+leaves its current value alone if another program changes it later, while
+restoring recorded changes on other controls. Changed requests with missing
+apply evidence stay recoverable. An already-original or kept value seen in a
+preview still needs a fresh check before recovery closes.
