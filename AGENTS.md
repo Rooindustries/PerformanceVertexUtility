@@ -26,6 +26,67 @@ The app sends no usage data. It goes online only to check for updates and downlo
 
 Backend scripts run on the Windows PowerShell 5.1 that ships with Windows. `tools/validation/check_powershell.ps1` checks 5.1 syntax.
 
+## Invariants
+
+These must hold on every commit of `main`. Each one names the code that enforces it and the check that proves it. A path that doesn't meet one yet is listed under "Known gaps". The PR that closes a gap removes that line in the same change.
+
+1. **Preview before change.** Nothing changes a PC until the user approved a preview of that exact change.
+   - Enforced by: `TweakEngine.Apply` takes only a saved preview and its review hash. It rebuilds the plan and refuses if a saved profile or any current value changed since the review, or if the catalog changed for a preview that selects settings; undo previews are allowed across catalog updates (`backend/native/Optimizer.Core/TweakEngine.cs`). Process controls and leftover cleanup apply only a reviewed preview the same way (`ProcessControlEngine.Apply`, `FileCleanupEngine.Apply`, `RegistryCleanupEngine.Apply`). Harness modules are dry runs unless `-ConfirmApply` is passed (`Invoke-ApplyModule` in `LeanClientOptimizer.ps1`). Game Tune starts when the user clicks Start for that game, and Stop undoes it.
+   - Checked by: `tools/validation/Tweaks`, `tools/validation/OptimizerCore` (`Test-OptimizerCore.ps1`), `Test-LegacyModuleRollback.ps1`.
+   - Known gaps:
+     - A confirmed harness apply re-reads its module manifest instead of the one the user previewed.
+     - Game Tune Start isn't bound to the game the user reviewed: it tunes whichever supported game is running when it executes.
+2. **Backup before apply.** Every prior value is saved before it changes, never after.
+   - Enforced by:
+     - Registry tweaks commit in one registry transaction together with the recovery state that holds each original value (`RegistryTweakStore.CommitRegistry` in `RegistryTweaks.cs`).
+     - Services, features, power, file permissions and other controls write a pending journal before the first change. If a step fails, rollback is attempted. If rollback can't finish (for example while Windows servicing waits for a restart), the journal stays and the app asks for recovery (`RegistryTweakStore.Commit`, `ControlTweaks.cs`).
+     - Process controls save a journal with each original value before the first write, and record each write's intent before making it (`ProcessControlEngine.Apply` and `Execute`).
+     - Leftover cleanup backs each entry up before deleting it (`FileCleanupEngine.Apply`, `RegistryCleanupEngine.Apply`).
+     - Harness modules write `backup.json` before applying (`New-ModuleBackup`).
+   - Checked by: `tools/validation/Tweaks`, `tools/validation/OptimizerCore` (`Test-OptimizerCore.ps1`), `tools/validation/AppSweepUi`, `Test-LegacyModuleRollback.ps1`.
+3. **Undo restores the exact prior value.** Undo writes back the saved original, with the same value kind and data, and checks it. If another program changed the setting after we applied ours, undo keeps that program's value and says which setting it left.
+   - Enforced by:
+     - Windows tweaks restore the saved original and read it back. DWORDs round-trip bit for bit, and a setting changed by someone else is reported as left changed (`TweakComposition.Resolve`, `LeftAsChanged`, the readback in `CommitRegistry`).
+     - The process governor leaves a value another program set and says "Left as another program set it." (`ProcessControlEngine.LeftAsSet`). Other process restores stop and report reconciliation when the value drifted (`ProcessControlEngine.Restore`).
+     - Cleanup restores verify their backups and refuse a conflicting destination (`FileCleanupEngine.Restore`, `RegistryCleanupEngine.Restore`).
+   - Checked by: `tools/validation/Tweaks`, `tools/validation/OptimizerCore` (`Test-OptimizerCore.ps1`), `tools/validation/AppSweepUi/GovernorChecks.cs`.
+   - Known gaps:
+     - Game Tune Stop and profile backup restores overwrite a value another program set afterwards. Background-limit restores already keep it.
+     - Harness rollback restores the manifest's value kind rather than the original kind, overwrites later changes, and doesn't verify restored values or service startup types. Registry keys created by apply stay in place; undo removes values without deleting parent keys or unrelated entries.
+4. **No surprise defaults.** A PC only gets what the user chose. Presets are fixed catalog entries.
+   - Enforced by: `tools/validation/check_windows_tweaks.py` requires the FPS preset to list exactly the measured winners in `backend/catalogs/fps-preset.json`. Each pick must be a real catalog option with benchmark evidence, and the setting known to break a PC after a reboot is excluded.
+   - A PR that changes what a PC gets by default says so in its first line.
+   - Known gaps: the harness manifest gap in 1.
+5. **Edition detection.** A setting a PC can't use shows as not available on that PC, never as an error or a retry that can't work.
+   - Enforced by: the engine reads the PC's build and edition from `CurrentBuildNumber` and `EditionID` (`RegistryTweaks.cs`), and offers only options whose build and edition gates match (`TweakEngine.Supported`). A Windows feature the PC doesn't have makes its choices unavailable instead of failing the read (`TweakControlRead.Allows`). A row with no option for this PC reports "No choice applies to this Windows version, edition or installed product.", and missing Windows components report "... is not installed" or "... is not available with ...". The app shows these as "Not available here" with no Retry (`PcLacks`, `UnavailableHere` and `CanRetry` in `WindowsTweaksViewModel.cs`).
+   - Checked by: `tools/validation/Tweaks` (catalog integration and feature checks), `tools/validation/WindowsTweaksUi`.
+   - Known gaps:
+     - "Consumer suggestions and promotions: Blocked" is offered on Pro, where Windows ignores the policy.
+     - Defender rows read as "Couldn't check" on Windows without Defender's PowerShell commands.
+6. **Bug report privacy.** A bug report leaves the PC only when the user clicks Send (`BugReportViewModel.SendAsync`). The description, editable specs and diagnostics must redact account profile paths, the current user and PC names, and account SIDs. Contact details the user supplies are kept as typed.
+   - Enforced by: the attached files (specs, tweak summary, log tails), description and editable specs go through `BugRedactor` before they're zipped or sent. It replaces:
+     - the user's profile path with `%USERPROFILE%`
+     - the user name with `<user>` and the PC name with `<pc-name>`
+     - S-1-5-21 account SIDs with `<sid>`
+     - other accounts' profile folders with `<user>`
+
+     The app log is redacted when it's written (`AppLog`).
+   - Checked by: `tools/validation/AppSweepUi/BugReportChecks.cs`.
+   - Known gaps:
+     - Another account's folder name stops being redacted at a space or apostrophe, and the app log uses its own narrower rules.
+     - Other accounts' profiles outside a drive's `Users` directory, including relocated and network profiles, aren't redacted.
+     - Account names and PC names of one character aren't redacted.
+     - Microsoft Entra account SIDs (`S-1-12-1-...`) aren't redacted.
+
+### Changing code an invariant depends on
+
+A PR that touches any of the code above:
+- Names the invariants it touches.
+- Traces every way into the changed behavior (each page and button, preset and profile, undo, recovery after a crash or restart, the harness) and every state its inputs can be in. Each one gets a case.
+- Writes the failing check on `main` first, then the fix that turns it green. Anything that applies or undoes a setting also runs apply, verify, undo and verify-restored on a Windows test PC before merge.
+- Briefs its reviewer with the diff, these invariants and the entry-point list, and asks them to break each one.
+- Gives every bug found a one-line root cause and a new invariant or regression check, so the same kind of bug can't come back.
+
 ## Ways to hurt a PC
 
 - Validation never runs real app uninstallers, deletes user data, imports real NVIDIA profiles, or changes services, registry settings or drivers as a side effect. Use disposable fixtures and probe processes, and remove everything you create, registry values included, in `finally`.
