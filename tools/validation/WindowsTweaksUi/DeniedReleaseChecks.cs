@@ -10,7 +10,7 @@ static class DeniedReleaseChecks
     {
         var consumer = catalog.Settings.Single(setting => setting.Id == "windows.a8268996c3eb9072");
         var extensions = catalog.Settings.Single(setting => setting.Id == "explorer.file-extensions");
-        foreach (var scenario in new[] { "registry-denied", "control-denied", "registry-unauthorized", "control-transition", "control-missing", "unknown-option" })
+        foreach (var scenario in new[] { "registry-denied", "control-denied", "registry-unauthorized", "control-transition", "control-reader-missing", "control-missing", "unknown-option" })
         {
             var controls = scenario.StartsWith("control", StringComparison.Ordinal);
             var service = new ControlAddress("service", "RooIndustriesUiModelFixture", "running");
@@ -43,6 +43,7 @@ static class DeniedReleaseChecks
                 "registry-denied" => new RegistryApiException("RegOpenKeyEx", 5),
                 "registry-unauthorized" => new UnauthorizedAccessException("Access to the registry key is denied."),
                 "control-transition" => new InvalidDataException("The service is transitioning. Try again after it settles: " + service.Target),
+                "control-reader-missing" => new Win32Exception(2, "The reader dependency could not be found."),
                 "control-missing" => new Win32Exception(1060),
                 _ => new Win32Exception(5),
             };
