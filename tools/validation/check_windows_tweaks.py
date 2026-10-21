@@ -8,12 +8,44 @@ from jsonschema import Draft202012Validator
 
 NEVER_IN_FPS_PRESET = {'windows.6ae403065279ea14'}
 
+
+def edition_overlap_failures(catalog, exceptions):
+    failures = []
+    for setting in catalog['settings']:
+        for option in setting['options']:
+            gates = option.get('availability', [])
+            overlaps = any(
+                '*' in wildcard['editions'] and '*' not in restricted['editions'] and
+                max(setting['minimumBuild'], wildcard['minimumBuild'], restricted['minimumBuild']) <=
+                min(setting['maximumBuild'], wildcard['maximumBuild'], restricted['maximumBuild'])
+                for wildcard in gates for restricted in gates
+            )
+            if overlaps and (setting['id'], option['id']) not in exceptions:
+                failures.append('A wildcard overrides an edition restriction for overlapping builds: ' + setting['id'] + '/' + option['id'])
+    return failures
+
+
 def check(root):
     failures = []
     catalog = json.loads((root / 'backend/catalogs/windows-tweaks.json').read_text())
     schema = json.loads((root / 'backend/contracts/roo-industries-backend-contracts.schema.json').read_text())
     validator = Draft202012Validator({'$defs': schema['$defs'], '$ref': '#/$defs/windowsTweaksCatalog'})
     settings = catalog['settings']
+    policy_editions = json.loads((root / 'backend/catalogs/windows-policy-editions.json').read_text())
+    exceptions = {(item['settingId'], item['optionId']) for item in policy_editions['allowedOverlaps'] if item.get('reference') and item.get('quote') and item.get('reason')}
+    failures.extend(edition_overlap_failures(catalog, exceptions))
+    wildcard = {'minimumBuild': 10240, 'maximumBuild': 26100, 'editions': ['*']}
+    restricted = {'minimumBuild': 26100, 'maximumBuild': 26200, 'editions': ['Enterprise']}
+    fixture = {'settings': [{'id': 'fixture', 'minimumBuild': 10240, 'maximumBuild': 26200, 'options': [{'id': 'blocked', 'availability': [wildcard, restricted]}]}]}
+    if not edition_overlap_failures(fixture, set()):
+        failures.append('Edition overlap check must reject a shared inclusive build endpoint.')
+    if edition_overlap_failures(fixture, {('fixture', 'blocked')}):
+        failures.append('Edition overlap check must allow an explicitly reviewed choice.')
+    if not edition_overlap_failures(fixture, {('fixture', 'another-choice')}):
+        failures.append('Edition overlap exceptions must not cover other choices of a setting.')
+    restricted['minimumBuild'] = 26101
+    if edition_overlap_failures(fixture, set()):
+        failures.append('Edition overlap check must allow disjoint build ranges.')
     powers = [setting for setting in settings if any(control['address']['kind'] == 'hibernation' for option in setting['options'] for control in option.get('controls', []))]
     modes = [setting for setting in powers if any('mode' in control['value'] for option in setting['options'] for control in option.get('controls', []))]
     startup = [setting for setting in powers if any('fastStartup' in control['value'] for option in setting['options'] for control in option.get('controls', []))]

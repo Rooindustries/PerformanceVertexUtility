@@ -1,6 +1,16 @@
 $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
 [Console]::OutputEncoding=[Text.UTF8Encoding]::new($false)
+function Stop-ChangedControl([string]$message){
+    $failure=[InvalidOperationException]::new($message)
+    $failure.Data['RooIndustriesControlChanged']=$true
+    throw $failure
+}
+function Get-ControlError($failure){
+    $result=@{error=$failure.Exception.Message}
+    if($failure.Exception.Data['RooIndustriesControlChanged'] -eq $true){$result.resourceChanged=$true}
+    return ($result|ConvertTo-Json -Compress)
+}
 function Invoke-SystemTool([string]$name,[string[]]$arguments){
     $output=& (Join-Path ([Environment]::GetFolderPath('System')) $name) @arguments 2>&1
     if($LASTEXITCODE -ne 0){throw ($name+' exited '+$LASTEXITCODE+': '+($output -join ' '))}
@@ -11,7 +21,7 @@ function Get-Adapters([string]$target='primary') {
         $ids=@($target.Substring(11).Split(';')|ForEach-Object {([guid]$_).ToString('D')})
         if($ids.Count -eq 0 -or $ids.Count -gt 64){throw 'Invalid captured adapter selection.'}
         $adapters=@(Get-NetAdapter -IncludeHidden|Where-Object {([guid]$_.InterfaceGuid).ToString('D') -in $ids}|Sort-Object InterfaceGuid)
-        if($adapters.Count -ne $ids.Count){throw 'A captured network adapter is missing.'}
+        if($adapters.Count -ne $ids.Count){Stop-ChangedControl 'A captured network adapter is missing.'}
         return $adapters
     }
     if($target -ne 'primary'){throw 'Unknown adapter selection.'}
@@ -300,7 +310,7 @@ try {
     if($request.action -eq 'read-batch'){
         $script:BatchDoh=$true;$index=0
         foreach($item in @($request.addresses)){
-            $text=try{(Read-Control $item)|ConvertTo-Json -Compress -Depth 30}catch{@{error=$_.Exception.Message}|ConvertTo-Json -Compress}
+            $text=try{(Read-Control $item)|ConvertTo-Json -Compress -Depth 30}catch{Get-ControlError $_}
             [Console]::Out.WriteLine('ROO_INDUSTRIES_CONTROL '+$index+' '+$text);[Console]::Out.Flush();$index++
         }
         exit 0
@@ -320,4 +330,4 @@ try {
         $current=Read-Control $request.address
     } elseif($request.action -ne 'read'){throw 'Unknown Windows control action.'}
     [Console]::Out.Write(($current|ConvertTo-Json -Compress -Depth 30))
-} catch { [Console]::Out.Write((@{error=$_.Exception.Message}|ConvertTo-Json -Compress));exit 0 }
+} catch { [Console]::Out.Write((Get-ControlError $_));exit 0 }

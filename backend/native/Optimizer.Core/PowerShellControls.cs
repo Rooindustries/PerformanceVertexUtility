@@ -146,7 +146,11 @@ static class PowerShellControls
     private static JsonElement Result(string output)
     {
         var result = OperationFiles.Deserialize<JsonElement>(Encoding.UTF8.GetBytes(output));
-        if (result.ValueKind == JsonValueKind.Object && result.TryGetProperty("error", out var failure)) throw new InvalidOperationException(failure.GetString());
+        if (result.ValueKind == JsonValueKind.Object && result.TryGetProperty("error", out var failure))
+        {
+            if (result.TryGetProperty("resourceChanged", out var changed) && changed.ValueKind == JsonValueKind.True) throw new TweakResourceChangedException(failure.GetString()!);
+            throw new InvalidOperationException(failure.GetString());
+        }
         return result;
     }
     private static string Encoded(object request) => Convert.ToBase64String(JsonSerializer.SerializeToUtf8Bytes(request, OperationFiles.Json));

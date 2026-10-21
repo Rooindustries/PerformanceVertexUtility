@@ -58,6 +58,11 @@ void Put(string name, RegistryAddress address, RegistryValueData data)
 }
 try
 {
+    if (args is [_, "--release-checks"])
+    {
+        CompositionChecks.Run(root, Check, Reject); ControlChecks.Run(root, Check, Reject);
+        Console.WriteLine($"Completed {count} release planning checks."); return;
+    }
     if (args is [_, "--catalog-matrix", var matrixOutput]) { CatalogMatrixChecks.Run(root, catalog, matrixOutput); return; }
     if (args is [_, "--preset-matrix", var presetOutput]) { CatalogMatrixChecks.Presets(root, catalog, presetOutput); return; }
     if (args is [_, "--restore-point-fixture", var restoreEvidence]) { RestorePointChecks.Native(restoreEvidence, Check); Console.WriteLine($"Completed {count} native restore-point checks."); return; }
