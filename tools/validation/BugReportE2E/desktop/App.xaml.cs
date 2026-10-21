@@ -162,7 +162,14 @@ public partial class App : Application
         failure = error;
         try
         {
-            if (boundary is not null) Atomic("failure.json", new { schemaVersion = 1, boundary.Nonce, sourceCommit = BuildBinding.SourceCommit, error = failure.ToString(), seen, native = true });
+            var exceptions = new List<object>();
+            Exception? detail = failure;
+            while (detail is not null && exceptions.Count < 16)
+            {
+                exceptions.Add(new { type = detail.GetType().FullName, message = detail.Message, hresult = detail.HResult, stackTrace = detail.StackTrace });
+                detail = detail.InnerException;
+            }
+            if (boundary is not null) Atomic("failure.json", new { schemaVersion = 1, boundary.Nonce, sourceCommit = BuildBinding.SourceCommit, error = failure.ToString(), exceptions, exceptionChainTruncated = detail is not null, seen, native = true });
         }
         catch (Exception receiptError)
         {
