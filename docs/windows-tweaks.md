@@ -117,9 +117,11 @@ unavailable during an edit. Read errors, pending reads, restarts, remote session
 and device or product requirements keep it in the plan with its saved original.
 The engine must check those requirements again before applying the edit.
 If an old choice needs restoring but its target cannot be read, the edit keeps
-its backup and offers to save choices only. Permission errors and unfinished
-service transitions also stop an explicit restore; a confirmed missing resource
-can still be released. A renamed catalog option keeps its old backup and allows
+its backup and offers to save choices only. Unreadable controls, including
+permission errors, unavailable providers and unfinished service transitions,
+also stop an explicit restore. A confirmed missing or changed target can be
+released without touching it so the rest of the profile can be restored.
+A renamed catalog option keeps its old backup and allows
 saving choices until the user restores that profile.
 
 To restore a profile, create another selections file containing `[]`, preview it

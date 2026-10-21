@@ -35,8 +35,8 @@ function Assert-AdapterExposes([object[]]$errors,[int]$count,[string]$setting,$a
     if($failures.Count -gt 0){throw $failures[0]}
     if($count -gt 0){return}
     $current=@(Get-NetAdapter -IncludeHidden|Where-Object {$_.InterfaceGuid -eq $adapter.InterfaceGuid -and $_.Name -ceq $adapter.Name})
-    if($current.Count -ne 1 -or $adapter.Hidden){Stop-ChangedControl ($setting+' configuration is unavailable for '+$adapter.Name)}
-    Stop-ChangedControl ('No devices expose '+$setting+' on the '+$adapter.Name+' adapter.')
+    if($current.Count -ne 1 -or $adapter.Hidden){throw ($setting+' configuration is unavailable for '+$adapter.Name)}
+    throw ('No devices expose '+$setting+' on the '+$adapter.Name+' adapter.')
 }
 function Get-CanonicalAddress([string]$value){
     if($value.Contains('/')){
@@ -62,7 +62,7 @@ function Get-PowerDevices {
         $id=($_.InstanceName -replace '_\d+$','').ToUpperInvariant()
         $classes.ContainsKey($id) -and $classes[$id] -notmatch '4d36e972'
     }|Sort-Object InstanceName)
-    if($devices.Count -eq 0){Stop-ChangedControl 'No devices expose the supported power-management property.'}
+    if($devices.Count -eq 0){throw 'No devices expose the supported power-management property.'}
     return $devices
 }
 function Get-MitigationFields {

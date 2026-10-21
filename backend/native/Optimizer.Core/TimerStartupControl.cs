@@ -32,7 +32,7 @@ public static class TimerStartupControl
         receipt.Owner.Verify();
         if (receipt.TaskName != name || receipt.Phase is not ("creating" or "created") || !Digest(receipt.ScriptHash) ||
             (receipt.Phase == "created" ? !Digest(receipt.DefinitionHash) : receipt.DefinitionHash != "")) throw new InvalidDataException("Timer startup ownership is incomplete.");
-        return receipt;
+        return receipt with { DefinitionHash = receipt.DefinitionHash.ToUpperInvariant(), ScriptHash = receipt.ScriptHash.ToUpperInvariant() };
     }
     private static bool Digest(string value) => value is { Length: 64 } && value.All(char.IsAsciiHexDigit);
     private static object ConnectScheduler()
@@ -179,7 +179,7 @@ public static class TimerStartupControl
             found = Find(scheduler, target.Name); dynamic task = found!;
             if (found is not null)
             {
-                if (receipt is not { Phase: "created" }) throw new TweakResourceChangedException("The timer startup task exists without confirmed ownership and was left intact.");
+                if (receipt is not { Phase: "created" }) throw new InvalidDataException("The timer startup task exists without confirmed ownership and was left intact.");
                 string scriptHash;
                 try { scriptHash = OperationFiles.HashFile(Path.Combine(target.Root, "startup.ps1")); }
                 catch (Exception error) when (error is FileNotFoundException or DirectoryNotFoundException) { throw new TweakResourceChangedException("The timer startup task or its script changed and was left intact."); }

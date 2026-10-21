@@ -35,7 +35,10 @@ public static class DownloadBlocker
                 try
                 {
                     var original = receipt.Original;
+                    var binding = original.Binding.Split(':');
                     if (original.Address.Kind != "file-acl" || FileAccessControl.Target(original.Address) != path || original.Value.EnumerateObject().Count() != 4 ||
+                        binding.Length != 3 || !ulong.TryParse(binding[0], out _) || binding[1].Length != 32 || !binding[1].All(char.IsAsciiHexDigit) || !long.TryParse(binding[2], out _) ||
+                        !string.Equals(original.Identity, "file-acl:" + binding[0] + ":" + binding[1], StringComparison.OrdinalIgnoreCase) ||
                         original.Value.GetProperty("flags").GetInt32() is < 0 or > ushort.MaxValue) throw new InvalidDataException("Download-folder original permissions are incomplete.");
                     _ = new System.Security.Principal.SecurityIdentifier(original.Value.GetProperty("owner").GetString()!);
                     _ = new System.Security.Principal.SecurityIdentifier(original.Value.GetProperty("group").GetString()!);
@@ -63,10 +66,10 @@ public static class DownloadBlocker
     {
         var target = Target(address); using var privileges = PrivilegeScope.FilePolicy();
         using var parent = FileLease.OpenPolicy(Path.GetDirectoryName(target.Path)!); var parentId = parent.ReadPolicy().Identity;
-        var current = Policy(target.Policy, target.Path); var receipt = Receipt(target.Receipt, target.Path); var active = false;
+        var receipt = Receipt(target.Receipt, target.Path); var current = Policy(target.Policy, target.Path); var active = false;
         if (receipt is not null && receipt.Phase != "retained")
         {
-            if (receipt.Phase == "creating" && current.Policy is not null) throw new TweakResourceChangedException("The folder exists without a confirmed creation receipt. Its contents and permissions were left intact.");
+            if (receipt.Phase == "creating" && current.Policy is not null) throw new InvalidDataException("The folder exists without a confirmed creation receipt. Its contents and permissions were left intact.");
             if (receipt.Phase != "creating")
             {
                 if (receipt.Original is null || receipt.Applied is null) throw new InvalidDataException("Download-folder ownership is incomplete.");
