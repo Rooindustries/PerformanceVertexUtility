@@ -70,7 +70,7 @@ static class CatalogMatrixChecks
             (option.Availability is null || option.Availability.Any(gate => Gate(gate.MinimumBuild, gate.MaximumBuild, gate.Editions, gate.Requirements))) &&
             (option.ValidUntilUtc is null || option.ValidUntilUtc > DateTime.UtcNow);
     }
-    private static Context ContextFor(TweakCatalog catalog, TweakSelection[] selections, bool partial)
+    private static Context ContextFor(TweakCatalog catalog, TweakSelection[] selections, bool partial, TweakSelection[]? optional)
     {
         var options = selections.Select(catalog.Resolve).ToArray();
         var gates = options.SelectMany(item => item.Option.Availability ?? []).ToArray();
@@ -79,12 +79,12 @@ static class CatalogMatrixChecks
         var requirements = gates.SelectMany(gate => gate.Requirements ?? []).Concat(options.SelectMany(item => item.Definition.Requirements ?? []));
         var edge = requirements.Where(text => text.StartsWith("edge:", StringComparison.Ordinal) || text.StartsWith("edge-profile:", StringComparison.Ordinal)).Select(text => (int?)int.Parse(text.Split(':')[1])).Append(150).Append(null).Distinct().ToArray();
         var contexts = from build in builds from edition in editions from version in edge select new Context(build, edition, version, version ?? 150);
-        return contexts.OrderByDescending(context => options.Count(item => Supported(item.Definition, item.Option, context))).FirstOrDefault(context => partial || options.All(item => Supported(item.Definition, item.Option, context)))
+        return contexts.OrderByDescending(context => options.Count(item => Supported(item.Definition, item.Option, context))).FirstOrDefault(context => partial || options.Where((_, index) => optional?.Contains(selections[index]) != true).All(item => Supported(item.Definition, item.Option, context)))
             ?? throw new InvalidDataException("The preset has no common Windows, edition and product context.");
     }
     private static void Exercise(string directory, TweakCatalog catalog, TweakSelection[] selections, TweakPreset? preset = null)
     {
-        var context = ContextFor(catalog, selections, preset?.AvailableOnly == true);
+        var context = ContextFor(catalog, selections, preset?.AvailableOnly == true, preset?.OptionalSelections);
         var expectedSelections = selections.Where(selection => { var item = catalog.Resolve(selection); return Supported(item.Definition, item.Option, context); }).Distinct().ToArray();
         var path = Path.Combine(directory, "fixture.json");
         var store = FileTweakStore.Create(path, context.Build, context.Edition);

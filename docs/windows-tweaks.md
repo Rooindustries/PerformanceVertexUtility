@@ -98,11 +98,13 @@ Create a new preview file, inspect it, then apply its exact SHA-256:
 `-PresetId explorer-details` can replace `-SelectionsPath`. The original presets `privacy-basics` and `activity-history-off` remain available. Generated source presets are included only when every required setting effect has an executor. Presets are named
 selections of the same controls, with no separate execution bodies.
 
-Source presets that select consumer blocking use `availableOnly`: they skip it
-on Home and Pro and report the omitted setting in `skipped`. Their other
-available choices still apply. A preset with no available choices is refused
-without changing an existing profile. Saved choices can retain an unavailable
-selection for later use on another edition, but cannot apply it here. Existing
+Strict source presets mark consumer blocking in `optionalSelections`: they skip
+that choice on Home and Pro and report it in `skipped`. Their other choices
+remain required, and a read failure still refuses the preset. Consumer blocking
+also remains required when its edition supports it. Presets already marked
+`availableOnly` keep their existing filtering. A preset with no available choices
+is refused without changing an existing profile. Saved choices can retain an
+unavailable selection for another edition, but cannot apply it here. Existing
 applied profiles can still be restored after the catalog changes.
 
 When editing an applied profile, unavailable old choices do not block its other

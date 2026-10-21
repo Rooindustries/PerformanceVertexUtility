@@ -125,8 +125,10 @@ public sealed class TweakEngine
             var available = Detect().Settings.ToDictionary(setting => setting.Id);
             if (choices.Any(choice => available[choice.SettingId].Error == FeaturesTimedOut)) throw new TimeoutException(FeaturesTimedOut);
             choices = choices.Where(choice => available[choice.SettingId].Supported && available[choice.SettingId].AvailableChoices?.Contains(choice.OptionId) == true).ToArray();
-            if (choices.Length == 0) throw new InvalidDataException("None of this preset's settings are available on this PC.");
         }
+        else if (preset.OptionalSelections is { } optional)
+            choices = choices.Where(choice => { if (!optional.Contains(choice)) return true; var resolved = _catalog.Resolve(choice); return Supported(resolved.Definition) && Supported(resolved.Option); }).ToArray();
+        if (choices.Length == 0) throw new InvalidDataException("None of this preset's settings are available on this PC.");
         return Plan(profileId, choices, operationId, created, revision) with { PresetId = presetId, Skipped = preset.Selections.Except(choices).Select(choice => _catalog.Resolve(choice).Definition.Name).Distinct().ToArray() };
     }
 

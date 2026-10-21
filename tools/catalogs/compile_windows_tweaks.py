@@ -135,8 +135,9 @@ def apply_policy_editions(catalog):
                 option['availability'] = gates
                 constrained.add((setting['id'], option['id']))
     for preset in catalog['presets']:
-        if any((item['settingId'], item['optionId']) in constrained for item in preset['selections']):
-            preset['availableOnly'] = True
+        optional = [item for item in preset['selections'] if (item['settingId'], item['optionId']) in constrained]
+        if optional and not preset.get('availableOnly', False):
+            preset['optionalSelections'] = optional
 
 
 WINDOWS_REFUSED_SERVICES = {'wermgr', 'waasmedicsvc'}

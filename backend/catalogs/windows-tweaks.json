@@ -78917,7 +78917,12 @@
           "optionId": "choice-6b253977ea5987f3"
         }
       ],
-      "availableOnly": true
+      "optionalSelections": [
+        {
+          "settingId": "windows.a8268996c3eb9072",
+          "optionId": "choice-6b253977ea5987f3"
+        }
+      ]
     },
     {
       "id": "fsos.mouse-throttling.36.enabled",
@@ -87804,7 +87809,12 @@
           "optionId": "choice-6b253977ea5987f3"
         }
       ],
-      "availableOnly": true
+      "optionalSelections": [
+        {
+          "settingId": "windows.a8268996c3eb9072",
+          "optionId": "choice-6b253977ea5987f3"
+        }
+      ]
     },
     {
       "id": "oosu.p097.297.source-default",
@@ -89985,7 +89995,12 @@
           "optionId": "choice-6b253977ea5987f3"
         }
       ],
-      "availableOnly": true
+      "optionalSelections": [
+        {
+          "settingId": "windows.a8268996c3eb9072",
+          "optionId": "choice-6b253977ea5987f3"
+        }
+      ]
     },
     {
       "id": "winutil.wpftweaksconsumerfeatures.10.source-default",
@@ -92154,7 +92169,12 @@
           "optionId": "choice-6b253977ea5987f3"
         }
       ],
-      "availableOnly": true
+      "optionalSelections": [
+        {
+          "settingId": "windows.a8268996c3eb9072",
+          "optionId": "choice-6b253977ea5987f3"
+        }
+      ]
     },
     {
       "id": "wpd.disablewindowsconsumerfeatures.16.source-default",
