@@ -7,6 +7,8 @@ ROOT = Path(__file__).resolve().parents[2]
 EXCLUDED = {
     'docs/internal/frontend/RooIndustries.OptimizationSuite.App/RooIndustries.OptimizationSuite.App.csproj': 'WinUI XAML compilation runs only on Windows; tools/scripts/Build-Frontend.ps1 builds it there.',
     'tools/validation/Release/ReleaseHostFixture/ReleaseHostFixture.csproj': 'Each scenario builds it with its own -p:FixtureProgram source.',
+    'tools/validation/BugReportE2E/applog/Roo70LogProof.csproj': 'Requires the original-frame RooIndustriesBindingFile; Invoke-BugReportE2E.ps1 builds the selected native scenario explicitly.',
+    'tools/validation/BugReportE2E/desktop/RenderedBugReport.csproj': 'Requires the original-frame RooIndustriesBindingFile and Windows WinUI; Invoke-BugReportE2E.ps1 builds the selected native scenario explicitly.',
 }
 
 
