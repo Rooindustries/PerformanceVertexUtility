@@ -156,7 +156,7 @@ function Invoke-Scenario([string]$Kind,[string]$Mode,[string]$RootStatus='applie
   if(-not$retained){Check (@($first.result.leftAsSetItems|Where-Object {$_.control -eq $control -and $_.currentValue -eq $external -and $_.processName -eq 'NativeTarget'}).Count -eq 1) "$name names the actual unowned external readback"}
   Check (@($script:Writes|Where-Object control -eq $peerControl).Count -eq $(if($uncertain){0}else{1})) "$name independent peer restoration follows per-control evidence"
   if($retained){
-   $reason=if($uncertain){$script:RooIndustriesLeftAsSetChangedBack}else{'Another saved change in Roo Industries still uses this control. Undo that change first, then try again.'}
+   $reason=if($uncertain){$script:RooIndustriesLeftAsSetChangedBack}else{$script:RooIndustriesProcessOperationManaged}
    Check (@($first.result.skippedItems|Where-Object { ($_.reason -split '; ') -contains ($control+': '+$reason) }).Count -eq 1) "$name reports the exact retryable ownership reason"
   }
   if($Mode -like 'arrival-*' -or $Mode -eq 'writer-arrival'){
