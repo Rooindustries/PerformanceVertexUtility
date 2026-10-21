@@ -24,6 +24,26 @@ public static class DownloadBlocker
         {
             var receipt = OperationFiles.Read<DownloadBlockerReceipt>(file); receipt.Owner.Verify();
             if (receipt.Path != path || receipt.Phase is not ("creating" or "created" or "active" or "restoring" or "retained")) throw new InvalidDataException("Download-folder ownership is incomplete.");
+            if (receipt.Phase == "creating")
+            {
+                if (!receipt.CreatedDirectory || receipt.Original is not null || receipt.Applied is not null || receipt.Attributes != 0) throw new InvalidDataException("Download-folder creation ownership is incomplete.");
+            }
+            else
+            {
+                if (receipt.Original is null || receipt.Applied is null || (receipt.Attributes & 16) == 0) throw new InvalidDataException("Download-folder ownership is incomplete.");
+                receipt.Original.Validate();
+                try
+                {
+                    var original = receipt.Original;
+                    if (original.Address.Kind != "file-acl" || FileAccessControl.Target(original.Address) != path || original.Value.EnumerateObject().Count() != 4 ||
+                        original.Value.GetProperty("flags").GetInt32() is < 0 or > ushort.MaxValue) throw new InvalidDataException("Download-folder original permissions are incomplete.");
+                    _ = new System.Security.Principal.SecurityIdentifier(original.Value.GetProperty("owner").GetString()!);
+                    _ = new System.Security.Principal.SecurityIdentifier(original.Value.GetProperty("group").GetString()!);
+                    if (!ControlValues.Equal(receipt.Applied.Value, original.Expand(ControlValues.From(new { denyMask = 0x116 })))) throw new InvalidDataException("Download-folder applied permissions differ from their original receipt.");
+                }
+                catch (Exception error) when (error is ArgumentException or InvalidOperationException or KeyNotFoundException or FormatException or OverflowException)
+                { throw new InvalidDataException("Download-folder original permissions are incomplete.", error); }
+            }
             return receipt;
         }
         catch (FileNotFoundException) { return null; }
