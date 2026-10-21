@@ -95,8 +95,40 @@ function Open-RegistryKey {
     return $root.OpenSubKey($subkey, [bool]$Writable)
 }
 
+function Get-RegistryRawValue {
+    param([Microsoft.Win32.RegistryKey]$Key, [string]$Name)
+    if (-not ('RooIndustries.LegacyRegistry.Native' -as [type])) {
+        Add-Type -TypeDefinition @'
+using System;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
+using Microsoft.Win32;
+using Microsoft.Win32.SafeHandles;
+namespace RooIndustries.LegacyRegistry {
+    public sealed class RawValue { public uint Kind; public byte[] Data; }
+    public static class Native {
+        [DllImport("advapi32.dll", EntryPoint="RegQueryValueExW", CharSet=CharSet.Unicode)]
+        private static extern int Query(SafeRegistryHandle key,string name,IntPtr reserved,out uint kind,[Out] byte[] data,ref uint length);
+        public static RawValue Read(RegistryKey key,string name) {
+            uint kind,length=8;byte[] data=new byte[8];
+            int error=Query(key.Handle,name,IntPtr.Zero,out kind,data,ref length);
+            if(error!=0)throw new Win32Exception(error);
+            Array.Resize(ref data,checked((int)length));
+            return new RawValue{Kind=kind,Data=data};
+        }
+    }
+}
+'@
+    }
+    return [RooIndustries.LegacyRegistry.Native]::Read($Key, $Name)
+}
+
 function ConvertTo-RegistrySnapshotData {
     param([string]$Kind, [object]$Value)
+    if ($Kind -in 'String','ExpandString','MultiString') {
+        $encoding = [Text.UTF8Encoding]::new($false, $true)
+        foreach ($text in @($Value)) { $null = $encoding.GetByteCount([string]$text) }
+    }
     switch ($Kind) {
         'DWord' { $Value = [BitConverter]::ToUInt32([BitConverter]::GetBytes([int]$Value), 0) }
         'QWord' { $Value = [BitConverter]::ToUInt64([BitConverter]::GetBytes([long]$Value), 0).ToString([Globalization.CultureInfo]::InvariantCulture) }
@@ -121,6 +153,14 @@ function Get-RegistryValueSnapshot {
             if ($kind -in 'String','ExpandString','MultiString','DWord','QWord','Binary') {
                 $oldValue = $key.GetValue($name, $null, [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
                 if ($null -eq $oldValue) { throw "Registry value disappeared while reading $($Item.path)\$($Item.name)" }
+                if ($kind -in 'DWord','QWord') {
+                    if (($kind -eq 'DWord' -and $oldValue -isnot [int]) -or ($kind -eq 'QWord' -and $oldValue -isnot [long])) { throw "Cannot back up registry numeric data exactly: $($Item.path)\$name" }
+                    $native = Get-RegistryRawValue $key $name
+                    $width = if ($kind -eq 'DWord') { 4 } else { 8 }
+                    if ($native.Kind -ne [int][Microsoft.Win32.RegistryValueKind]$kind -or $native.Data.Length -ne $width) { throw "Cannot back up registry numeric payload exactly: $($Item.path)\$name" }
+                    $number = if ($kind -eq 'DWord') { [BitConverter]::ToInt32($native.Data, 0) } else { [BitConverter]::ToInt64($native.Data, 0) }
+                    if ($number -ne $oldValue) { throw "Registry value changed while reading: $($Item.path)\$name" }
+                }
                 $oldValue = ConvertTo-RegistrySnapshotData $kind $oldValue
             }
         }
@@ -558,6 +598,7 @@ function Invoke-RollbackModule {
         try {
             $reason = if (Test-ProtectedRegistryPath $rv.path $manifest $rv.name) { 'protected setting' }
                 elseif ($rv.valueExists -isnot [bool]) { 'missing original existence evidence' }
+                elseif (-not $rv.PSObject.Properties['kind'] -and ([string]::IsNullOrEmpty([string]$rv.name) -or [Globalization.CultureInfo]::CurrentCulture.CompareInfo.Compare([string]$rv.name, '(default)', [Globalization.CompareOptions]::IgnoreCase) -eq 0)) { 'missing original existence evidence for legacy default alias' }
                 elseif ($rv.valueExists -and -not $rv.kind) { 'missing applied kind evidence in legacy backup' }
                 elseif (-not $rv.PSObject.Properties['desiredData'] -or -not $rv.type) { 'missing applied value evidence' }
                 else { $null }

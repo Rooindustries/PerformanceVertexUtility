@@ -31,7 +31,7 @@ $invalidOriginalCases=@(
     }
     @{label='DWord hex text';entry=@{kind='DWord';oldValue='0x10'}}
     @{label='DWord decimal text';entry=@{kind='DWord';oldValue='16'}}
-    @{label='DWord floating number';entry=@{kind='DWord';oldValue=[double]16}}
+    @{label='DWord floating number';entry=@{kind='DWord';oldValue=[double]16.5}}
     @{label='DWord Boolean';entry=@{kind='DWord';oldValue=$true}}
     @{label='DWord soft hyphen';entry=@{kind=('D'+[char]0x00ad+'Word');oldValue=1}}
     @{label='QWord hex text';entry=@{kind='QWord';oldValue='0x10'}}
