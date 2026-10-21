@@ -99,7 +99,13 @@ public sealed class BugRedactor
             {
                 var markerEnd = index;
                 while (run.AsSpan(markerEnd).StartsWith("%USERPROFILE%", StringComparison.OrdinalIgnoreCase)) markerEnd += 13;
-                if (markerEnd == run.Length || run[markerEnd] is '\\' or '/' or '"' or ':' or '<' or '>' or '|' or '?' or '*' || run[markerEnd] < ' ') break;
+                if (markerEnd == run.Length) break;
+                if (run[markerEnd] == '\\')
+                {
+                    var hex = markerEnd;
+                    while (run[hex] == '\\') hex++;
+                    if ((char)Convert.ToInt32(run.Substring(hex + 1, 4), 16) is '\\' or '/' or '"' or ':' or '<' or '>' or '|' or '?' or '*' or < ' ') break;
+                }
                 decoded.Append(run, index, markerEnd - index);
                 for (var cursor = index; cursor < markerEnd; cursor++) ends.Add(cursor + 1);
                 index = markerEnd;
@@ -120,7 +126,7 @@ public sealed class BugRedactor
         var text = decoded.ToString();
         matchEnd = runStart + (ends.Count == 0 ? 0 : ends[^1]);
         joinedDrive = matchEnd + 2 < input.Length && char.IsAsciiLetter(input[matchEnd]) && input[matchEnd + 1] == ':' && input[matchEnd + 2] is '\\' or '/';
-        if (text.Length == 0 || SharedProfiles.Contains(text) && !joinedDrive && (root.EndsWith('\\') || !run[..ends[^1]].Contains('\\'))) return null;
+        if (text.Length == 0 || SharedProfiles.Contains(text) && !joinedDrive && !run[..ends[^1]].Contains('\\')) return null;
         if (text.TrimEnd(' ', '.', ',', ';', '!', ')', ']', '}', '\'') is { Length: 1 } placeholder && placeholder[0] is '\u0001' or '\u0002' or '\u0003') return null;
         var rootIndex = match.Groups["root"].Index;
         var escapedRoot = rootIndex > 0 && input[rootIndex - 1] == '\\'
