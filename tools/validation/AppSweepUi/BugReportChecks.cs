@@ -593,6 +593,171 @@ static class BugReportChecks
         check(completed == redaction && redaction.IsCompletedSuccessfully && redaction.Result == longRoot + "<user>",
             "A 7 MB profile separator run preserves every separator and redacts within five seconds: completed="
                 + (completed == redaction) + " elapsedMs=" + clock.Elapsed.TotalMilliseconds.ToString("F2"));
+        await LegacyComponentBoundariesAsync(check, root);
+    }
+
+    private static async Task LegacyComponentBoundariesAsync(Action<bool, string> check, string root)
+    {
+        var redactor = new BugRedactor(@"C:\Users\Alice", "Alice", "GAMER-PC");
+        var relaxed = new JsonSerializerOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
+        var cases = new List<(string Input, string Expected, bool DefaultEncoder)>();
+        foreach (var profileRoot in new[] { @"C:\Users\", "C:/Users/" })
+        {
+            var separator = profileRoot[^1].ToString();
+            foreach (var marker in new[] { "<user>", "<USER>", "<pc-name>", "<Pc-Name>", "<sid>", "<SID>" })
+            foreach (var suffix in new[] { ".Zqxsmith", "-Zqxsmith", "(Zqxold)", " Zqxsmith" })
+                cases.Add((profileRoot + marker + suffix + separator + "x", profileRoot + "<user>" + (suffix.EndsWith(')') ? ")" : "") + separator + "x", false));
+            cases.Add((profileRoot + "<pc-name>.Zqxadmin" + separator + "x", profileRoot + "<user>" + separator + "x", false));
+            foreach (var suffix in new[] { "%USERPROFILE%Zqxsmith", "%USERPROFILE%.Zqxsmith" })
+                cases.Add((profileRoot + "<user>" + suffix + separator + "x", profileRoot + "<user>" + separator + "x", false));
+            cases.Add((profileRoot + @"<user>%USERPROFILE% C:\Users\Carol\x", profileRoot + @"<user> C:\Users\<user>\x", false));
+            foreach (var marker in new[] { "<user>", "<pc-name>", "<sid>" })
+            foreach (var suffix in new[] { "", ".", ")", ",;!)]}' " })
+                cases.Add((profileRoot + marker + suffix, profileRoot + marker + suffix, false));
+            foreach (var suffix in new[] { "", separator + "x", @"C:\Users\Carol\x" })
+                cases.Add((profileRoot + "<user>%USERPROFILE%" + suffix,
+                    profileRoot + "<user>%USERPROFILE%" + suffix.Replace("Carol", "<user>", StringComparison.Ordinal), false));
+        }
+        foreach (var original in new[] { @"C:\\Users\\" + "Alice.Zqxsmith" + @"\\x", "C:/Users/" + "Alice.Zqxsmith" + "/x" })
+        {
+            var legacy = original.Replace(@"C:\Users\Alice", "%USERPROFILE%", StringComparison.OrdinalIgnoreCase);
+            legacy = System.Text.RegularExpressions.Regex.Replace(legacy, @"(?<![\p{L}\p{N}_])Alice(?![\p{L}\p{N}_])", "<user>", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+            check(legacy.Contains("<user>.Zqxsmith", StringComparison.Ordinal), "The legacy log fixture applies the previous profile and whole-word identity rules before serialization");
+            cases.Add((legacy, original.Replace("Alice.Zqxsmith", "<user>", StringComparison.Ordinal), false));
+        }
+        foreach (var drive in new[] { "C", "D" })
+        foreach (var separator in new[] { @"\", "/" })
+        {
+            var profileRoot = drive + ":" + separator + "Users" + separator;
+            foreach (var (prefix, suffix) in new[] { ("Pub", @"\u006Cic"), ("Defaul", @"\u0074"), ("All Us", @"\u0065rs") })
+                cases.Add((profileRoot + prefix + suffix + separator + "x",
+                    profileRoot + "<user>" + (separator == @"\" ? suffix : "") + separator + "x", true));
+            foreach (var nextDrive in new[] { "C", "D" })
+            foreach (var nextSeparator in new[] { @"\", "/" })
+            {
+                var nextRoot = @"\u002" + nextDrive + ":" + nextSeparator + "Users" + nextSeparator;
+                var retainedRoot = separator == "/" && nextDrive == "D" ? ":" + nextSeparator + "Users" + nextSeparator : nextRoot;
+                cases.Add((profileRoot + "Bob" + nextRoot + "Carol" + nextSeparator + "x",
+                    profileRoot + "<user>" + retainedRoot + "<user>" + nextSeparator + "x", true));
+            }
+            foreach (var name in new[] { "Bob", "Émile", "O'Connor", "uFace" })
+                cases.Add((profileRoot + name + separator + "x", profileRoot + "<user>" + separator + "x", true));
+            foreach (var shared in new[] { "Public", "Default", "Default User", "All Users" })
+                cases.Add((profileRoot + shared + separator + "x", profileRoot + shared + separator + "x", true));
+        }
+        cases.Add((@"C:\Users\Bob\Ubeda\x", @"C:\Users\<user>\Ubeda\x", true));
+        foreach (var (name, escape) in new[] { ("Public", @"Pub\u006Cic"), ("Default", @"Defaul\u0074"), ("Default User", @"Defaul\u0074 User"), ("All Users", @"All Us\u0065rs") })
+        {
+            var encoded = @"""C:\\Users\\" + escape + @"\\x""";
+            check(JsonSerializer.Deserialize<string>(encoded) == @"C:\Users\" + name + @"\x", "The shared-name Unicode fixture has a provably shorter escape than its profile separator: " + name);
+            cases.Add((encoded, encoded, true));
+            cases.Add((@"""C:/Users/" + escape + @"/x""", @"""C:/Users/<user>/x""", true));
+        }
+        cases.Add((@"""C:\\Users\\B\u006Fb\\x""", @"""C:\\Users\\<user>\\x""", true));
+        var spanStart = cases.Count;
+        foreach (var drive in new[] { "C", "D" })
+        foreach (var separator in new[] { @"\", "/" })
+        foreach (var emoji in new[] { "😀", "😌" })
+        {
+            var profileRoot = drive + ":" + separator + "Users" + separator;
+            cases.Add((profileRoot + "Bob" + emoji + ":" + separator + "x", profileRoot + "<user>:" + separator + "x", true));
+            foreach (var nextDrive in new[] { "C", "D" })
+            foreach (var nextSeparator in new[] { @"\", "/" })
+            {
+                var nextRoot = nextDrive + ":" + nextSeparator + "Users" + nextSeparator;
+                cases.Add((profileRoot + "Bob" + emoji + nextRoot + "Carol" + nextSeparator + "x",
+                    profileRoot + "<user>" + nextRoot + "<user>" + nextSeparator + "x", true));
+            }
+        }
+        foreach (var value in Enumerable.Range(0, 32).Where(value => value is not (1 or 2 or 3)))
+        {
+            var control = ((char)value).ToString();
+            cases.Add((@"C:\Users\" + "Public" + @"C:\Users\Alice" + control, @"C:\Users\<user>%USERPROFILE%" + control, true));
+            var chain = @"C:\Users\<user>%USERPROFILE%%USERPROFILE%" + control;
+            cases.Add((chain, chain, false));
+        }
+        foreach (var profileRoot in new[] { @"C:\Users\", "C:/Users/" })
+        foreach (var suffix in new[] { "", profileRoot[^1] + "x", ".Zqxsmith" + profileRoot[^1] + "x" })
+        {
+            var chain = profileRoot + "<user>%USERPROFILE%%USERPROFILE%" + suffix;
+            cases.Add((chain, suffix.StartsWith('.') ? profileRoot + "<user>" + profileRoot[^1] + "x" : chain, false));
+        }
+        var spanInputs = cases.Skip(spanStart).Select(item => item.Input).ToHashSet(StringComparer.Ordinal);
+        foreach (var (raw, expected, defaultEncoder) in cases)
+        {
+            foreach (var options in defaultEncoder ? new JsonSerializerOptions?[] { null, relaxed } : new JsonSerializerOptions?[] { relaxed })
+            {
+                var input = raw;
+                var encoder = options is null ? "default" : "relaxed";
+                for (var depth = 0; depth <= 5; depth++)
+                {
+                    var actual = redactor.Redact(input);
+                    try
+                    {
+                        var decoded = actual;
+                        for (var level = 0; level < depth; level++) decoded = JsonSerializer.Deserialize<string>(decoded)!;
+                        check(decoded == expected && redactor.Redact(actual) == actual,
+                            "Legacy component boundary " + encoder + " depth " + depth + " " + JsonSerializer.Serialize(raw) + " => " + JsonSerializer.Serialize(decoded));
+                    }
+                    catch (Exception error) when (error is JsonException or InvalidOperationException)
+                    {
+                        check(false, "Invalid legacy component JSON " + encoder + " depth " + depth + " for " + JsonSerializer.Serialize(raw) + ": " + error.Message);
+                    }
+                    input = JsonSerializer.Serialize(input, options);
+                }
+            }
+            var fixture = Path.Combine(root, "legacy-boundary-" + Guid.NewGuid().ToString("N"));
+            var logs = Directory.CreateDirectory(Path.Combine(fixture, "logs")).FullName;
+            try
+            {
+                File.WriteAllText(Path.Combine(logs, "app.log.old"), raw + Environment.NewLine);
+                var sender = new FakeSender { Result = new(false, 404) };
+                var service = new BugReportService(Webhook, sender, Path.Combine(fixture, "reports"), logs, redactor);
+                BugSpec[] specs = [new("cpu", "Processor", raw)];
+                var attachment = service.CreateAttachment(specs, BugReportService.TweakSummaryJson([], false, null, [raw]));
+                var report = new BugReport("fixture", specs, "fixture#1", raw);
+                var saved = service.SaveReport(report, attachment);
+                foreach (var (path, isSaved) in new[] { (attachment.FilePath, false), (saved, true) })
+                {
+                    using var zip = ZipFile.OpenRead(path);
+                    try
+                    {
+                        using var values = JsonDocument.Parse(Read(zip, "specs.json"));
+                        using var summary = JsonDocument.Parse(Read(zip, "tweak-state.json"));
+                        check(values.RootElement.GetProperty("specs").GetProperty("cpu").GetString() == expected
+                            && summary.RootElement.GetProperty("lastErrors")[0].GetString() == expected,
+                            "Legacy boundary " + (isSaved ? "saved" : "attachment") + " specs and lastErrors are private valid JSON for " + JsonSerializer.Serialize(raw));
+                        if (spanInputs.Contains(raw))
+                            check(redactor.Redact(values.RootElement.GetProperty("specs").GetProperty("cpu").GetString()!) == expected
+                                && redactor.Redact(summary.RootElement.GetProperty("lastErrors")[0].GetString()!) == expected,
+                                "Span boundary decoded specs and lastErrors stay private and stable after another pass for " + JsonSerializer.Serialize(raw));
+                    }
+                    catch (Exception error) when (error is JsonException or InvalidOperationException)
+                    {
+                        check(false, "Invalid legacy boundary attachment JSON for " + JsonSerializer.Serialize(raw) + ": " + error.Message);
+                    }
+                    check(Read(zip, "logs/app.log.old") == expected + Environment.NewLine,
+                        "Legacy boundary " + (isSaved ? "saved" : "attachment") + " log has exact private output for " + JsonSerializer.Serialize(raw));
+                    if (spanInputs.Contains(raw))
+                        check(redactor.Redact(Read(zip, "logs/app.log.old")) == expected + Environment.NewLine,
+                            "Span boundary attached log stays private and stable after another pass for " + JsonSerializer.Serialize(raw));
+                    if (isSaved)
+                        check(Read(zip, "report.txt").Contains("What went wrong:" + Environment.NewLine + expected.Trim() + Environment.NewLine, StringComparison.Ordinal)
+                            && Read(zip, "report.txt").Contains("Discord or email: fixture#1", StringComparison.Ordinal),
+                            "Legacy boundary saved report has private text and unchanged contact for " + JsonSerializer.Serialize(raw));
+                }
+                var outcome = await service.SendAsync(report, attachment);
+                using var payload = JsonDocument.Parse(sender.Calls.Single().Payload);
+                var embed = payload.RootElement.GetProperty("embeds")[0];
+                var fields = embed.GetProperty("fields").EnumerateArray().ToArray();
+                check(outcome.Status == BugSendStatus.Rejected && sender.Calls.Count == 1
+                    && embed.GetProperty("description").GetString() == expected.Trim() && fields[0].GetProperty("value").GetString() == expected.Trim()
+                    && fields[1].GetProperty("value").GetString() == "fixture#1",
+                    "Legacy boundary fake send has private typed fields and unchanged contact for " + JsonSerializer.Serialize(raw));
+            }
+            finally { Directory.Delete(fixture, true); }
+            check(!Directory.Exists(fixture), "Legacy boundary fixture is removed for " + JsonSerializer.Serialize(raw));
+        }
     }
 
     private static string Read(ZipArchive zip, string name)
