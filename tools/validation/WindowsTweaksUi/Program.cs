@@ -48,6 +48,12 @@ TweakCatalog TwoSettingCatalog()
         [new("Fixture", "fixture", "isolated UI validation")]);
     return new(1, "two-setting-fixture", [Setting("first", "First setting", "First"), Setting("second", "Second setting", "Second")], []);
 }
+if (args is ["--denied-releases", var deniedRepo])
+{
+    try { await DeniedReleaseChecks.Run(root, OperationFiles.Read<TweakCatalog>(Path.Combine(deniedRepo, "backend/catalogs/windows-tweaks.json")), Check); Console.WriteLine($"Completed {count} denied release UI checks."); }
+    finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+    return;
+}
 if (args is ["--retained-profiles"])
 {
     try { await RetainedProfileChecks.Run(root, TwoSettingCatalog(), Check); Console.WriteLine($"Completed {count} retained profile UI checks."); }
@@ -86,6 +92,7 @@ try
     if (args is [var catalogRepo])
     {
         var catalog = OperationFiles.Read<TweakCatalog>(Path.Combine(Path.GetFullPath(catalogRepo), "backend/catalogs/windows-tweaks.json"));
+        await DeniedReleaseChecks.Run(root, catalog, Check);
         await RetainedRequirementChecks.Run(root, catalog, Check);
         ActionChecks.Run(catalog, Check);
         await PolicyProfileChecks.Run(root, catalog, Check);

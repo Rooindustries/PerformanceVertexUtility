@@ -20,6 +20,8 @@ namespace RooIndustries.OptimizationSuite.Services
         public bool Missing { get; set; } = true;
         public bool FailRead { get; set; }
         public bool FailApply { get; set; }
+        public Func<RegistryAddress, Exception?>? RegistryReadError { get; set; }
+        public Func<ControlAddress, Exception?>? ControlReadError { get; set; }
         public TweakRecovery? Recovery { get; set; }
         public int Applies { get; private set; }
         public int Previews { get; private set; }
@@ -42,7 +44,12 @@ namespace RooIndustries.OptimizationSuite.Services
                 var path = Path.Combine(root, "windows.json");
                 OperationFiles.Write(path, OperationFiles.Read<TweakFixture>(path) with { EdgeMajor = 150, EdgeProfileMajor = 150, OfficeMajor = 16 });
             }
-            Engine = new(Catalog, Windows);
+            Engine = new(Catalog, new FaultingStore(Path.Combine(root, "windows.json"), this));
+        }
+        sealed class FaultingStore(string path, Fixture fixture) : FileTweakStore(path), ITweakStore
+        {
+            public new TweakRead Read(RegistryAddress address) => fixture.RegistryReadError?.Invoke(address) is { } error ? throw error : base.Read(address);
+            public new TweakControlRead ReadControl(ControlAddress address) => fixture.ControlReadError?.Invoke(address) is { } error ? throw error : base.ReadControl(address);
         }
         public Task<TweakCatalogResult> ReadWindowsTweakCatalogAsync(bool fresh = false) => Task.FromResult(new TweakCatalogResult(Catalog, Catalog.Digest));
         public Task<TweakChoiceFile> ReadWindowsChoicesAsync() => Task.FromResult(Choices.Read());
