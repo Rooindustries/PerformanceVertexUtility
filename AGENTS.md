@@ -32,7 +32,7 @@ These must hold on every commit of `main`. Each one names the code that enforces
 
 1. **Preview before change.** Nothing changes a PC until the user approved a preview of that exact change.
    - Enforced by: `TweakEngine.Apply` takes only a saved preview and its review hash. It rebuilds the plan and refuses if a saved profile or any current value changed since the review, or if the catalog changed for a preview that selects settings; undo previews are allowed across catalog updates (`backend/native/Optimizer.Core/TweakEngine.cs`). Process controls and leftover cleanup apply only a reviewed preview the same way (`ProcessControlEngine.Apply`, `FileCleanupEngine.Apply`, `RegistryCleanupEngine.Apply`). Harness modules are dry runs unless `-ConfirmApply` is passed (`Invoke-ApplyModule` in `LeanClientOptimizer.ps1`). Game Tune starts when the user clicks Start for that game, and Stop undoes it.
-   - Checked by: `tools/validation/Tweaks`, `Test-LegacyModuleRollback.ps1`.
+   - Checked by: `tools/validation/Tweaks`, `tools/validation/OptimizerCore` (`Test-OptimizerCore.ps1`), `Test-LegacyModuleRollback.ps1`.
    - Known gaps:
      - A confirmed harness apply re-reads its module manifest instead of the one the user previewed.
      - Game Tune Start isn't bound to the game the user reviewed: it tunes whichever supported game is running when it executes.
@@ -43,16 +43,16 @@ These must hold on every commit of `main`. Each one names the code that enforces
      - Process controls save a journal with each original value before the first write, and record each write's intent before making it (`ProcessControlEngine.Apply` and `Execute`).
      - Leftover cleanup backs each entry up before deleting it (`FileCleanupEngine.Apply`, `RegistryCleanupEngine.Apply`).
      - Harness modules write `backup.json` before applying (`New-ModuleBackup`).
-   - Checked by: `tools/validation/Tweaks`, `tools/validation/AppSweepUi`, `Test-LegacyModuleRollback.ps1`.
+   - Checked by: `tools/validation/Tweaks`, `tools/validation/OptimizerCore` (`Test-OptimizerCore.ps1`), `tools/validation/AppSweepUi`, `Test-LegacyModuleRollback.ps1`.
 3. **Undo restores the exact prior value.** Undo writes back the saved original, with the same value kind and data, and checks it. If another program changed the setting after we applied ours, undo keeps that program's value and says which setting it left.
    - Enforced by:
      - Windows tweaks restore the saved original and read it back. DWORDs round-trip bit for bit, and a setting changed by someone else is reported as left changed (`TweakComposition.Resolve`, `LeftAsChanged`, the readback in `CommitRegistry`).
      - The process governor leaves a value another program set and says "Left as another program set it." (`ProcessControlEngine.LeftAsSet`). Other process restores stop and report reconciliation when the value drifted (`ProcessControlEngine.Restore`).
      - Cleanup restores verify their backups and refuse a conflicting destination (`FileCleanupEngine.Restore`, `RegistryCleanupEngine.Restore`).
-   - Checked by: `tools/validation/Tweaks`, `tools/validation/AppSweepUi/GovernorChecks.cs`.
+   - Checked by: `tools/validation/Tweaks`, `tools/validation/OptimizerCore` (`Test-OptimizerCore.ps1`), `tools/validation/AppSweepUi/GovernorChecks.cs`.
    - Known gaps:
      - Game Tune Stop and profile backup restores overwrite a value another program set afterwards. Background-limit restores already keep it.
-     - Harness rollback restores the manifest's value kind rather than the original kind, and overwrites later changes.
+     - Harness rollback restores the manifest's value kind rather than the original kind, overwrites later changes, and doesn't verify restored values or service startup types. Registry keys created by apply stay in place; undo removes values without deleting parent keys or unrelated entries.
 4. **No surprise defaults.** A PC only gets what the user chose. Presets are fixed catalog entries.
    - Enforced by: `tools/validation/check_windows_tweaks.py` requires the FPS preset to list exactly the measured winners in `backend/catalogs/fps-preset.json`. Each pick must be a real catalog option with benchmark evidence, and the setting known to break a PC after a reboot is excluded.
    - A PR that changes what a PC gets by default says so in its first line.
@@ -74,6 +74,7 @@ These must hold on every commit of `main`. Each one names the code that enforces
    - Checked by: `tools/validation/AppSweepUi/BugReportChecks.cs`.
    - Known gaps:
      - Another account's folder name stops being redacted at a space or apostrophe, and the app log uses its own narrower rules.
+     - Other accounts' profiles outside a drive's `Users` directory, including relocated and network profiles, aren't redacted.
      - Account names and PC names of one character aren't redacted.
      - Microsoft Entra account SIDs (`S-1-12-1-...`) aren't redacted.
 
@@ -82,7 +83,7 @@ These must hold on every commit of `main`. Each one names the code that enforces
 A PR that touches any of the code above:
 - Names the invariants it touches.
 - Traces every way into the changed behavior (each page and button, preset and profile, undo, recovery after a crash or restart, the harness) and every state its inputs can be in. Each one gets a case.
-- Writes the failing check on `main` first, then the fix that turns it green. Anything that applies or undoes a setting also runs apply, verify, undo and verify-restored on a real Windows PC before merge.
+- Writes the failing check on `main` first, then the fix that turns it green. Anything that applies or undoes a setting also runs apply, verify, undo and verify-restored on a Windows test PC before merge.
 - Briefs its reviewer with the diff, these invariants and the entry-point list, and asks them to break each one.
 - Gives every bug found a one-line root cause and a new invariant or regression check, so the same kind of bug can't come back.
 
