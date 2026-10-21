@@ -1339,7 +1339,9 @@
                 "type": [
                   "integer",
                   "null"
-                ]
+                ],
+                "minimum": 1,
+                "maximum": 5
               },
               "proposedIoPriority": {
                 "type": [
@@ -1351,7 +1353,9 @@
                 "type": [
                   "integer",
                   "null"
-                ]
+                ],
+                "minimum": 1,
+                "maximum": 5
               },
               "originalGpuPriority": {
                 "type": [

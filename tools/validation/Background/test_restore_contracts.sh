@@ -75,6 +75,12 @@ printf 'Restore contracts: %s matched, %s passed, %s failed\n' "$matched" "$((ma
 if [[ $matched == 0 ]]; then printf 'FAIL no matching restore envelopes found\n'; exit 1; fi
 [[ $failed == 0 ]]
 if [[ ${3:-} == --negative-records ]]; then
+  if [[ $raw_profile_matched -eq 0 ]]; then
+    jq -n '{rawProfileMatched:0,rawProfileNegativeCount:0,coverageComplete:false,missingProfile:true,scope:"No supplied whole Profile producer backup; combined negative coverage is incomplete."}' \
+      > "$report_dir/profile-backup-coverage.json"
+    printf 'FAIL Profile backup coverage requires an actual whole producer backup\n' >&2
+    exit 1
+  fi
   negative_root="$report_dir/negative-records"
   mkdir -p -- "$negative_root"
   controls="$report_dir/observed-kept-controls.jsonl"
@@ -117,6 +123,8 @@ if [[ ${3:-} == --negative-records ]]; then
   done
   raw_profile_negative_count=0
   raw_profile_source=''
+  raw_profile_memory_negative_count=0
+  raw_profile_memory_positive_count=0
   for file in "${files[@]}"; do
     [[ ${file##*/} == producer-profile-backup.json ]] || continue
     [[ $(jq -r '.actionId // empty' "$file") == performance.applyProfile ]] || continue
@@ -141,12 +149,58 @@ if [[ ${3:-} == --negative-records ]]; then
       jq -e '.matched==1 and .passed==0 and .failed==1' "$case_dir/contract-validation/summary.json" > /dev/null
       raw_profile_negative_count=$((raw_profile_negative_count+1))
     done
+    for field in originalMemoryPriority proposedMemoryPriority; do
+      for value in 0 6 1 5 null absent; do
+        case_dir="$negative_root/profile-$field-$value"
+        mkdir -- "$case_dir"
+        perl -MJSON::PP -e '
+          my ($field, $value, $path) = @ARGV;
+          open my $input, "<", $path or die $!;
+          local $/;
+          my $json = JSON::PP->new->allow_bignum;
+          my $data = $json->decode(<$input>);
+          die "Expected actual Profile snapshot" unless ref($data->{snapshots}) eq "ARRAY" && @{$data->{snapshots}};
+          if ($value eq "absent") { delete $data->{snapshots}[0]{$field}; }
+          else { $data->{snapshots}[0]{$field} = $json->decode($value); }
+          print $json->canonical->pretty->encode($data);
+        ' "$field" "$value" "$file" > "$case_dir/producer-profile-backup.json"
+        profile_status=0
+        bash "$0" "$source_dir" "$case_dir" > "$case_dir/validation.log" 2>&1 || profile_status=$?
+        printf '%s\n' "$profile_status" > "$case_dir/validation.exit"
+        if [[ $value == 0 || $value == 6 ]]; then
+          [[ $profile_status -eq 1 ]] || { printf 'FAIL out-of-range Profile memory value was not rejected: %s %s\n' "$field" "$value" >&2; exit 1; }
+          jq -e '.matched==1 and .passed==0 and .failed==1' "$case_dir/contract-validation/summary.json" > /dev/null
+          raw_profile_memory_negative_count=$((raw_profile_memory_negative_count+1))
+        else
+          [[ $profile_status -eq 0 ]] || { printf 'FAIL valid optional Profile memory value was rejected: %s %s\n' "$field" "$value" >&2; exit 1; }
+          jq -e '.matched==1 and .passed==1 and .failed==0' "$case_dir/contract-validation/summary.json" > /dev/null
+          raw_profile_memory_positive_count=$((raw_profile_memory_positive_count+1))
+        fi
+      done
+    done
     break
   done
-  jq -n --argjson matched "$raw_profile_matched" --argjson rejected "$raw_profile_negative_count" --arg source "$raw_profile_source" \
-    '{rawProfileMatched:$matched,rawProfileNegativeCount:$rejected,negativeSource:$source,scope:"Actual supplied whole Profile producer backups; three single-field wrong-type copies from the first actual source. No Game, replay or native-success inference."}' \
-    > "$report_dir/profile-backup-coverage.json"
   jq -s --argjson negativeCount "$negative_count" '{observed:.,negativeCount:$negativeCount,limitation:"Only actual supplied full producer envelopes and single-field negative copies; absent real control/legacy representations remain UNRUN"}' "$controls" > "$report_dir/kept-record-coverage.json"
   [[ $negative_count -gt 0 ]] || { printf 'FAIL no actual kept-record envelope was supplied\n'; exit 1; }
+  case_dir="$negative_root/profile-absent"
+  mkdir -- "$case_dir"
+  kept_source=$(jq -ers '.[0].source' "$controls")
+  cp -- "$kept_source" "$case_dir/envelope.json"
+  cmp -- "$kept_source" "$case_dir/envelope.json"
+  sha256sum -- "$kept_source" "$case_dir/envelope.json" > "$case_dir/original-bytes.sha256"
+  absence_status=0
+  bash "$0" "$source_dir" "$case_dir" --negative-records > "$case_dir/validation.log" 2>&1 || absence_status=$?
+  printf '%s\n' "$absence_status" > "$case_dir/validation.exit"
+  [[ $absence_status -eq 1 ]] || { printf 'FAIL combined negative validation did not refuse missing Profile coverage\n' >&2; exit 1; }
+  jq -e '.matched==1 and .passed==1 and .failed==0' "$case_dir/contract-validation/summary.json" > /dev/null
+  jq -e '.rawProfileMatched==0 and .rawProfileNegativeCount==0 and .coverageComplete==false and .missingProfile==true' "$case_dir/contract-validation/profile-backup-coverage.json" > /dev/null
+  jq -n --argjson matched "$raw_profile_matched" --argjson rejected "$raw_profile_negative_count" \
+    --argjson memoryRejected "$raw_profile_memory_negative_count" --argjson memoryAccepted "$raw_profile_memory_positive_count" --arg source "$raw_profile_source" \
+    '{rawProfileMatched:$matched,rawProfileNegativeCount:$rejected,rawProfileMemoryNegativeCount:$memoryRejected,rawProfileMemoryPositiveCount:$memoryAccepted,missingProfileRefused:true,coverageComplete:true,negativeSource:$source,scope:"Whole supplied Profile producer backups; three object-type refusals, four memory-range refusals, eight nullable/optional boundary acceptances and one missing-Profile refusal with an unchanged kept envelope. Derived copies are contract artifacts, not restore inputs or native proof."}' \
+    > "$report_dir/profile-backup-coverage.json"
+  [[ $raw_profile_matched -gt 0 && $raw_profile_negative_count -eq 3 && $raw_profile_memory_negative_count -eq 4 && $raw_profile_memory_positive_count -eq 8 ]] || {
+    printf 'FAIL incomplete Profile backup boundary coverage\n' >&2
+    exit 1
+  }
   printf 'Rejected %s single-field malformed complete envelopes\n' "$negative_count"
 fi

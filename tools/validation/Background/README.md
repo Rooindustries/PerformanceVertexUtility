@@ -331,19 +331,30 @@ bash tools/validation/Background/test_restore_contracts.sh "$source" "$artifacts
 That command validates JSON against the schema. It proves no Windows behavior.
 Whole actual Profile backups saved as `producer-profile-backup.json` are also
 validated against `processProfileBackupManifest`. Its three optional additions
-are `originalMemoryPriority` and `proposedMemoryPriority` (integer or null), and
-`processStartTimeUtc` (string or null). Required fields and all other types stay
-the same. Raw Game backups and reader-compatible replays use different scopes;
-no projection hides undeclared fields. With `--negative-records`, the existing
-route rejects three single-field object-type copies of the first actual raw
-Profile backup through the same whole-file validator. They are contract
-artifacts, never restore inputs or extra histories. Perl JSON::PP `allow_bignum`
-keeps unrelated 64-bit values intact. `profile-backup-coverage.json` records
-`rawProfileMatched` and `rawProfileNegativeCount`. Zero raw coverage supports old
-directories but proves none of these additions. This PR's actual-native schema
-proof requires `rawProfileMatched > 0` and `rawProfileNegativeCount == 3`, genuine
-producer/source/engine and original backup hashes, alongside kept-record proof.
-This new route is AUTHORED/UNRUN until those actual artifacts exist.
+are `originalMemoryPriority` and `proposedMemoryPriority` (integer 1 through 5,
+or null), and `processStartTimeUtc` (string or null). Required fields and all
+other types stay the same. Raw Game backups and reader-compatible replays use
+different scopes; no projection hides undeclared fields.
+
+With `--negative-records`, the same whole-file validator must reject three
+single-field object-type copies and four memory copies set to 0 or 6. It must
+accept eight memory copies set to 1, 5, null or absent, one field at a time.
+It also validates an unchanged complete kept-record envelope without a
+Profile backup, then requires the combined negative command to refuse that
+missing coverage and retain its report. These derived copies are contract
+artifacts, never restore inputs or extra native histories. Perl JSON::PP
+`allow_bignum` keeps unrelated 64-bit values intact.
+
+`profile-backup-coverage.json` records `rawProfileMatched`,
+`rawProfileNegativeCount`, `rawProfileMemoryNegativeCount`,
+`rawProfileMemoryPositiveCount`, `missingProfileRefused` and
+`coverageComplete`. Complete negative coverage requires a genuine Profile
+source, counts 3/4/8 and the missing-input refusal, alongside actual kept-record
+coverage. Default positive validation still supports old or Game-only artifact
+directories. Negative mode now refuses them when Profile coverage is missing.
+Schema proof also requires genuine producer/source/engine and original backup
+hashes. These new boundary cases are AUTHORED/UNRUN until those actual
+artifacts exist; schema acceptance proves no native restore behavior.
 
 Its coverage receipt lists the actual kept controls and representations it saw;
 missing real producer variants remain unrun. Historical Linux outputs with

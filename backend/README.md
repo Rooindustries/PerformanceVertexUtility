@@ -94,9 +94,14 @@ Saved-format replay and owned junction launch checks are part of that manual
 gate. Keep c50 and b0 evidence separate; an un-reproduced alias case stays
 recorded as missing red.
 
-These manual checks cover a saved request that already matched the original
-value. The producer leaves that control out of its saved change list. Undo
-leaves its current value alone if another program changes it later, while
-restoring recorded changes on other controls. Changed requests with missing
-apply evidence stay recoverable. An already-original or kept value seen in a
-preview still needs a fresh check before recovery closes.
+These manual checks cover a saved request that already matched its original
+value. The producer saves no change record for that control. When Undo reads
+an absent or valid saved change list with no matching record, it excludes the
+request only if the original and requested values are valid and equal, and
+any legacy applied value is also valid and equal. Undo leaves that control
+alone if another program changes it later, while restoring recorded changes
+on other controls. Conflicting or invalid legacy metadata keeps recovery
+available until a fresh check confirms the original value or the process has
+ended. Changed requests with missing apply evidence stay recoverable. An
+already-original or kept value seen in a preview still needs a fresh check
+before recovery closes.
