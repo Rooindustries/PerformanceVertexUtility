@@ -1110,11 +1110,11 @@ $script:RooIndustriesLeftAsSetChangedBack = 'Undo couldn''t confirm another prog
 $script:RooIndustriesProcessOperationManaged = 'Another saved change in Roo Industries still uses this control. Undo that change first, then try again.'
 
 function Get-RooIndustriesRestoreControlOwnershipReason {
-    param([System.Diagnostics.Process]$Process, [string]$Control)
+    param([System.Diagnostics.Process]$Process, [string]$Control, [switch]$ForPreview)
     try {
         if (Test-RooIndustriesGovernorOwnsControl $Process $Control) { return $script:RooIndustriesGovernorManaged }
         $native = switch ($Control) { 'priorityClass' { 'cpuPriority' } 'affinityMask' { 'affinity' } default { $Control } }
-        if (@(Get-RooIndustriesProcessOperationControls $Process) -contains $native) { return $script:RooIndustriesProcessOperationManaged }
+        if (@(Get-RooIndustriesProcessOperationControls $Process -ForPreview:$ForPreview) -contains $native) { return $script:RooIndustriesProcessOperationManaged }
     } catch { return $script:RooIndustriesLeftAsSetChangedBack }
     return $null
 }
@@ -1146,7 +1146,7 @@ function Split-RooIndustriesLeftAsSetRestoreChanges {
         if ($seen.ContainsKey($control)) { continue }
         $seen[$control] = $true
         $process = Get-RooIndustriesPropertyValue $CurrentState 'process' $null
-        $ownershipReason = if ($process -is [System.Diagnostics.Process]) { Get-RooIndustriesRestoreControlOwnershipReason $process $control } else { $null }
+        $ownershipReason = if ($process -is [System.Diagnostics.Process]) { Get-RooIndustriesRestoreControlOwnershipReason $process $control -ForPreview } else { $null }
         if (-not [string]::IsNullOrWhiteSpace($ownershipReason)) {
             $change.blocked = $true
             $change.blockedReason = $ownershipReason

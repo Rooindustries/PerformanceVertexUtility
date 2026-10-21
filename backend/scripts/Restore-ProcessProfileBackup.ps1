@@ -254,6 +254,7 @@ function New-BackupEnvelopeMetadata {
 }
 
 try {
+    $script:RooIndustriesProcessOperationPreview = $null
     $resolvedBackupPath = Resolve-RooIndustriesPath $BackupPath $BackupPath
     $backup = Read-RooIndustriesJsonFile $resolvedBackupPath
 

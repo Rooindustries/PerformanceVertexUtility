@@ -152,6 +152,7 @@ function New-GameTuneRestorePreview {
 }
 
 try {
+    $script:RooIndustriesProcessOperationPreview = $null
     $session = $null
     $resolvedSessionPath = $null
     if (-not [string]::IsNullOrWhiteSpace($SessionId) -or -not [string]::IsNullOrWhiteSpace($SessionPath)) {
