@@ -89,7 +89,9 @@ public sealed class WindowsControlStore : IControlStore
         dynamic scheduler = ConnectTasks();
         try
         {
-            dynamic task = scheduler.GetFolder(@"\").GetTask(address.Target);
+            dynamic task;
+            try { task = scheduler.GetFolder(@"\").GetTask(address.Target); }
+            catch (COMException error) when (error.HResult == unchecked((int)0x80070002)) { throw new FileNotFoundException("The captured scheduled task is missing.", address.Target, error); }
             var xml = XDocument.Parse((string)task.Xml);
             var ns = xml.Root!.Name.Namespace;
             xml.Root.Element(ns + "Settings")?.Element(ns + "Enabled")?.Remove();

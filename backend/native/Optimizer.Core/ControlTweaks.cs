@@ -5,6 +5,8 @@ using System.Text.Json.Serialization;
 
 namespace RooIndustries.Optimizer;
 
+internal sealed class TweakResourceChangedException(string message) : InvalidOperationException(message);
+
 public sealed record ControlAddress([property: JsonRequired] string Kind, [property: JsonRequired] string Target, [property: JsonRequired] string Property)
 {
     public void Validate()

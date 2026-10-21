@@ -34,7 +34,7 @@ public static class DownloadBlocker
         try
         {
             using var lease = FileLease.OpenPolicy(path); var info = lease.ReadPolicy();
-            if ((info.Attributes & 16) == 0) throw new InvalidDataException("The download-folder target is a file, not a directory.");
+            if ((info.Attributes & 16) == 0) throw new TweakResourceChangedException("The download-folder target is a file, not a directory.");
             return (FileAccessControl.Snapshot(address, lease), info.Attributes);
         }
         catch (Win32Exception error) when (error.NativeErrorCode is 2 or 3) { return (null, 0); }
@@ -46,12 +46,13 @@ public static class DownloadBlocker
         var current = Policy(target.Policy, target.Path); var receipt = Receipt(target.Receipt, target.Path); var active = false;
         if (receipt is not null && receipt.Phase != "retained")
         {
-            if (receipt.Phase == "creating" && current.Policy is not null) throw new InvalidDataException("The folder exists without a confirmed creation receipt. Its contents and permissions were left intact.");
+            if (receipt.Phase == "creating" && current.Policy is not null) throw new TweakResourceChangedException("The folder exists without a confirmed creation receipt. Its contents and permissions were left intact.");
             if (receipt.Phase != "creating")
             {
-                if (receipt.Original is null || receipt.Applied is null || current.Policy?.Id != receipt.Original.Id) throw new InvalidDataException("The owned download folder is missing or was replaced.");
+                if (receipt.Original is null || receipt.Applied is null) throw new InvalidDataException("Download-folder ownership is incomplete.");
+                if (current.Policy?.Id != receipt.Original.Id) throw new TweakResourceChangedException("The owned download folder is missing or was replaced.");
                 active = ControlValues.Equal(current.Policy.Value, receipt.Applied.Value);
-                if (!active && !ControlValues.Equal(current.Policy.Value, receipt.Original.Value)) throw new InvalidDataException("Download-folder permissions changed outside this profile.");
+                if (!active && !ControlValues.Equal(current.Policy.Value, receipt.Original.Value)) throw new TweakResourceChangedException("Download-folder permissions changed outside this profile.");
             }
         }
         return new(address, "download-blocker:" + target.Path.ToUpperInvariant(), parentId.Volume + ":" + parentId.Id, ControlValues.From(active),

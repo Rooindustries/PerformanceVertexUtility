@@ -291,7 +291,7 @@ public sealed class TweakEngine
     }
     internal static bool MayLeaveChanged(Exception error, bool readable, bool restoring, ControlAddress? address = null) =>
         error is not (TimeoutException or OperationCanceledException) && (error is not IOException || error is FileNotFoundException or DirectoryNotFoundException) &&
-        (readable || restoring && (error is FileNotFoundException or DirectoryNotFoundException or RegistryApiException { NativeErrorCode: 2 or 3 } ||
+        (readable || restoring && (address is not null && error is TweakResourceChangedException || error is FileNotFoundException or DirectoryNotFoundException or RegistryApiException { NativeErrorCode: 2 or 3 } ||
             address is { Kind: "service" } && error is System.ComponentModel.Win32Exception { NativeErrorCode: 1060 } ||
             address is { Kind: "file-acl" or "file-ownership" } && error is System.ComponentModel.Win32Exception { NativeErrorCode: 2 or 3 }));
     private static bool ChangedUnreadable(TweakRead? read, TweakHeldValue original)
