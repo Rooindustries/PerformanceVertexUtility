@@ -1,7 +1,7 @@
 param(
     [string]$HarnessPath = (Join-Path $PSScriptRoot '..\..\LeanClientOptimizer.ps1'),
     [ValidateSet('All','Selection','Drift','Registry','Recovery','SnapshotSafety','ApplyComparison')][string]$Scenario = 'All',
-    [ValidateSet('All','Signed','LegacyEvidence','Preflight','RegistryFailure','ServiceFailure','OriginalEvidence','ServiceExistence','SourceEvidence','JsonNumbers','LegacyNames')][string]$RecoveryCase = 'All',
+    [ValidateSet('All','Signed','LegacyEvidence','Preflight','RegistryFailure','ServiceFailure','ServiceRuntime','OriginalEvidence','ServiceExistence','SourceEvidence','JsonNumbers','LegacyNames')][string]$RecoveryCase = 'All',
     [string]$BaseHarnessPath = $env:ROO_INDUSTRIES_LEGACY_BASE_HARNESS,
     [string]$BaseHarnessSha256 = $env:ROO_INDUSTRIES_LEGACY_BASE_HARNESS_SHA256
 )
@@ -283,6 +283,7 @@ try {
     if ($Scenario -in 'All','Recovery') { & {
         . $HarnessPath -Action ListModules -ManifestPath $fixtureManifest -DataRoot $tempRoot -ModuleId 'fixture' | Out-Null
         $sourceServiceReader=${function:Get-ServiceSnapshot}
+        $sourceServiceRestorer=${function:Restore-ServiceSnapshot}
         function Open-RegistryKey {
             param($Path,[switch]$Writable,[switch]$Create)
             $key=[pscustomobject]@{}
@@ -580,6 +581,204 @@ try {
                 Assert ($retry.success -and @($retry.alreadyAtOriginal).Count -eq 1 -and $retry.restoredServices -eq $(if ($mode -eq 'readback') {1} else {2}) -and @($retry.leftAsChanged).Count -eq $(if ($mode -eq 'readback') {1} else {0})) ($mode+' service retry preserves drift and accurately reports the completed registry value')
             }
         }
+        if ($RecoveryCase -in 'All','ServiceRuntime') { & {
+            $savedManifestBytes=[IO.File]::ReadAllBytes($fixtureManifest)
+            $runtimeRegistryWriter=${function:Set-RegistrySnapshotData}
+            $rows=New-Object System.Collections.Generic.List[object]
+            function Get-ServiceSnapshot { param($Name) & $sourceServiceReader $Name }
+            function Restore-ServiceSnapshot { param($Snapshot) & $sourceServiceRestorer $Snapshot }
+            function Get-Service {
+                [CmdletBinding()]param([string]$Name)
+                if ($script:runtimeQueryFailure) { throw 'Fixture service query failed' }
+                if ($script:runtimeServices.ContainsKey($Name) -and $script:runtimeServices[$Name].exists) {
+                    $state=$script:runtimeServices[$Name]
+                    [pscustomobject]@{Name=$Name;DisplayName=$Name;StartType=$state.startup;Status=$state.status;ServicesDependedOn=@()}
+                }
+            }
+            function Get-CimInstance { param($ClassName,$Filter) $null }
+            function Add-RuntimeWrite {
+                param($Operation,$Name)
+                $script:runtimeCalls.Add([pscustomobject]@{operation=$Operation;name=$Name;errorAction=[string]$ErrorActionPreference}) | Out-Null
+                if ($script:runtimeApplying) {
+                    $files=@(Get-ChildItem -LiteralPath (Join-Path $DataRoot 'backups\fixture') -Filter backup.json -Recurse -File)
+                    $saved=if ($files.Count -eq 1) { Get-Content -LiteralPath $files[0].FullName -Raw | ConvertFrom-Json } else { $null }
+                    $script:runtimeBackupBeforeWrites=$script:runtimeBackupBeforeWrites -and $null -ne $saved -and $saved.applyRequested -eq $true -and $saved.services[0].startType -ceq 'Automatic' -and $saved.services[0].status -ceq $script:runtimeOriginalStatus
+                    if (@($saved.registry).Count) { $script:runtimeBackupBeforeWrites=$script:runtimeBackupBeforeWrites -and $saved.registry[0].oldValue -eq 1 }
+                }
+            }
+            function Set-Service {
+                [CmdletBinding()]param($Name,$StartupType)
+                Add-RuntimeWrite 'set' $Name
+                $script:runtimeServices[$Name].startup=[string]$StartupType
+            }
+            function Stop-Service {
+                [CmdletBinding()]param($Name,[switch]$Force)
+                Add-RuntimeWrite 'stop' $Name
+                $script:runtimeServices[$Name].status='Stopped'
+            }
+            function Start-Service {
+                [CmdletBinding()]param($Name)
+                Add-RuntimeWrite 'start' $Name
+                if ($Name -ceq 'FixtureSvc') {
+                    switch ($script:runtimeMode) {
+                        'nonterminating' { Write-Error 'Fixture service start rejected'; return }
+                        'throw' { throw 'Fixture service start threw' }
+                        'silent' { return }
+                        'Stopped' { $script:runtimeServices[$Name].status='Stopped'; return }
+                        'Paused' { $script:runtimeServices[$Name].status='Paused'; return }
+                        'StartPending' { $script:runtimeServices[$Name].status='StartPending'; return }
+                        'missing' { $script:runtimeServices[$Name].exists=$false; return }
+                        'query' { $script:runtimeQueryFailure=$true }
+                    }
+                }
+                $script:runtimeServices[$Name].status='Running'
+            }
+            function Get-RegistryValueSnapshot {
+                param($Item,[switch]$AllowChangedLayout)
+                $value=$script:recoveryValues[[string]$Item.name]
+                [pscustomobject]@{path=$Item.path;name=$Item.name;type=$Item.type;desiredData=$Item.data;valueExists=$value.valueExists;kind=$value.kind;oldValue=$value.oldValue}
+            }
+            function Set-RegistrySnapshotData {
+                param($Key,$Name,$Snapshot)
+                Add-RuntimeWrite 'registry' $Name
+                & $runtimeRegistryWriter $Key $Name $Snapshot
+                if (-not $script:runtimeApplying -and $Name -ceq 'First' -and $script:runtimeLateState) {
+                    $script:runtimeServices.FixtureSvc.startup=$script:runtimeLateState.startup
+                    $script:runtimeServices.FixtureSvc.status=$script:runtimeLateState.status
+                    $script:runtimeServices.FixtureSvc.exists=$script:runtimeLateState.exists
+                }
+            }
+            function Get-BenchmarkSnapshot { param($Label) @{label=$Label} }
+            function Invoke-SmokeTest { [pscustomobject]@{pass=$true} }
+            function New-ServiceRuntimeFixture {
+                param([string]$AppliedStartup='Disabled',[object]$OriginalStatus='Running',[switch]$ServicesOnly,[switch]$SingleService)
+                Reset-RecoveryFixture
+                $script:recoveryValues.First.oldValue=1
+                $script:runtimeServices=@{
+                    FixtureSvc=@{startup='Automatic';status=$OriginalStatus;exists=$true}
+                    SecondSvc=@{startup='Automatic';status='Running';exists=$true}
+                }
+                $script:runtimeCalls=New-Object System.Collections.Generic.List[object]
+                $script:runtimeMode='success';$script:runtimeQueryFailure=$false;$script:runtimeLateState=$null
+                $script:runtimeOriginalStatus=[string]$OriginalStatus;$script:runtimeBackupBeforeWrites=$true
+                $DataRoot=Join-Path $tempRoot ('service-runtime-'+[guid]::NewGuid().ToString('N'))
+                $registry=@()
+                if (-not $ServicesOnly) { $registry=@(@{path='HKCU\Fixture';name='First';type='REG_DWORD';data=2}) }
+                $services=@(@{name='FixtureSvc';startup=$AppliedStartup;targetState='Stopped'})
+                if (-not $SingleService) { $services+=@{name='SecondSvc';startup='Disabled';targetState='Stopped'} }
+                Write-JsonFile @{protected=@{services=@();registryPathPatterns=@()};modules=@(@{id='fixture';name='Fixture';registryValues=@($registry);services=$services})} $fixtureManifest
+                $ConfirmApply=$true;$script:runtimeApplying=$true
+                $applied=Invoke-ApplyModule
+                $script:runtimeApplying=$false
+                $bytes=[Convert]::ToBase64String([IO.File]::ReadAllBytes($applied.backupPath))
+                $saved=Get-Content -LiteralPath $applied.backupPath -Raw | ConvertFrom-Json
+                $producerSafe=$script:runtimeBackupBeforeWrites -and $saved.services[0].appliedStartup -ceq $AppliedStartup -and $saved.services[0].status -ceq [string]$OriginalStatus -and $script:runtimeServices.FixtureSvc.status -ceq 'Stopped'
+                $script:runtimeCalls.Clear()
+                [pscustomobject]@{root=$DataRoot;path=$applied.backupPath;bytes=$bytes;producerSafe=$producerSafe}
+            }
+            function Test-RuntimeBackup { param($Operation) [Convert]::ToBase64String([IO.File]::ReadAllBytes($Operation.path)) -ceq $Operation.bytes }
+            try {
+                foreach ($selection in 'explicit','latest') {
+                    foreach ($mode in 'nonterminating','throw','silent','Stopped','Paused','StartPending','missing','query','success') {
+                        $operation=New-ServiceRuntimeFixture
+                        $DataRoot=$operation.root;$BackupPath=if ($selection -ceq 'explicit') {$operation.path} else {''}
+                        $ConfirmApply=$false;$preview=Invoke-RollbackModule
+                        $previewSafe=$preview.success -and $preview.dryRun -and -not $preview.partial -and $preview.restoredRegistry -eq 1 -and $preview.restoredServices -eq 2 -and $script:runtimeCalls.Count -eq 0 -and (Test-RuntimeBackup $operation)
+                        $script:runtimeMode=$mode;$ConfirmApply=$true
+                        $result=Invoke-RollbackModule
+                        $calls=@($script:runtimeCalls.ToArray())
+                        $after=[pscustomobject]@{startup=$script:runtimeServices.FixtureSvc.startup;status=$script:runtimeServices.FixtureSvc.status;exists=$script:runtimeServices.FixtureSvc.exists}
+                        $failureSafe=if ($mode -ceq 'success') {
+                            $result.success -and -not $result.partial -and $result.restoredRegistry -eq 1 -and $result.restoredServices -eq 2 -and $result.failures.Count -eq 0 -and $result.pending.Count -eq 0 -and $after.status -ceq 'Running'
+                        } else {
+                            -not $result.success -and $result.partial -and $result.restoredRegistry -eq 1 -and $result.restoredServices -eq 0 -and $result.failures.Count -eq 1 -and $result.failures[0].name -ceq 'FixtureSvc' -and $result.failures[0].phase -ceq 'restore' -and $result.failures[0].mayHaveChanged -and $result.actions[1].status -ceq 'failed' -and $result.pending.Count -eq 1 -and $result.pending[0].name -ceq 'SecondSvc' -and $script:runtimeServices.SecondSvc.startup -ceq 'Disabled' -and @($calls|Where-Object {$_.name -ceq 'SecondSvc'}).Count -eq 0
+                        }
+                        $script:runtimeMode='success';$script:runtimeQueryFailure=$false;$script:runtimeCalls.Clear()
+                        $retry=Invoke-RollbackModule
+                        $retrySafe=if ($mode -ceq 'success') {
+                            $retry.success -and $retry.restoredRegistry -eq 0 -and $retry.restoredServices -eq 0 -and $retry.alreadyAtOriginal.Count -eq 3 -and $script:runtimeCalls.Count -eq 0
+                        } elseif ($mode -ceq 'query') {
+                            $retry.success -and -not $retry.partial -and $retry.restoredServices -eq 1 -and $retry.alreadyAtOriginal.Count -eq 2 -and $retry.leftAsChanged.Count -eq 0 -and @($script:runtimeCalls|Where-Object {$_.name -ceq 'FixtureSvc'}).Count -eq 0
+                        } else {
+                            $retry.success -and -not $retry.partial -and $retry.restoredRegistry -eq 0 -and $retry.restoredServices -eq 1 -and $retry.alreadyAtOriginal.Count -eq 1 -and $retry.alreadyAtOriginal[0].name -ceq 'First' -and $retry.leftAsChanged.Count -eq 1 -and $retry.leftAsChanged[0].name -ceq 'FixtureSvc' -and ($mode -ceq 'missing' -or $retry.leftAsChanged[0].reason -like '*runtime ownership*') -and @($script:runtimeCalls|Where-Object {$_.name -ceq 'FixtureSvc'}).Count -eq 0
+                        }
+                        $rows.Add([pscustomobject]@{family='failure';selection=$selection;mode=$mode;producerSafe=$operation.producerSafe;previewSafe=$previewSafe;outcomeSafe=$failureSafe;retrySafe=$retrySafe;after=$after;result=$result;retry=$retry;calls=$calls;retryCalls=@($script:runtimeCalls.ToArray());backupUnchanged=(Test-RuntimeBackup $operation)}) | Out-Null
+                    }
+                }
+                foreach ($state in 'Stopped','Running') {
+                    $operation=New-ServiceRuntimeFixture -AppliedStartup Automatic
+                    $DataRoot=$operation.root;$BackupPath=$operation.path
+                    $script:runtimeServices.FixtureSvc.status=$state
+                    $ConfirmApply=$false;$preview=Invoke-RollbackModule
+                    $previewSafe=$preview.success -and $preview.restoredServices -eq 1 -and $script:runtimeCalls.Count -eq 0
+                    $ConfirmApply=$true;$result=Invoke-RollbackModule
+                    $safe=$result.success -and $result.restoredServices -eq 1 -and @($script:runtimeCalls|Where-Object {$_.name -ceq 'FixtureSvc'}).Count -eq 0
+                    $safe=$safe -and $(if ($state -ceq 'Stopped') {$result.leftAsChanged.Count -eq 1 -and $result.leftAsChanged[0].name -ceq 'FixtureSvc' -and $result.leftAsChanged[0].reason -like '*runtime ownership*' -and $result.alreadyAtOriginal.Count -eq 0 -and $script:runtimeServices.FixtureSvc.status -ceq 'Stopped'} else {$result.alreadyAtOriginal.Count -eq 1 -and $result.alreadyAtOriginal[0].name -ceq 'FixtureSvc' -and $result.leftAsChanged.Count -eq 0})
+                    $rows.Add([pscustomobject]@{family='sameStartup';state=$state;producerSafe=$operation.producerSafe;previewSafe=$previewSafe;outcomeSafe=$safe;result=$result;calls=@($script:runtimeCalls.ToArray());backupUnchanged=(Test-RuntimeBackup $operation)}) | Out-Null
+                }
+                foreach ($late in @(@{startup='Automatic';status='Stopped';exists=$true},@{startup='Automatic';status='Running';exists=$true},@{startup='Manual';status='Stopped';exists=$true},@{startup='Disabled';status='Stopped';exists=$false})) {
+                    $operation=New-ServiceRuntimeFixture
+                    $DataRoot=$operation.root;$BackupPath=$operation.path;$script:runtimeLateState=$late
+                    $ConfirmApply=$false;$preview=Invoke-RollbackModule
+                    $previewSafe=$preview.success -and $preview.restoredRegistry -eq 1 -and $preview.restoredServices -eq 2 -and $script:runtimeCalls.Count -eq 0
+                    $ConfirmApply=$true;$result=Invoke-RollbackModule
+                    $safe=$result.success -and -not $result.partial -and $result.restoredRegistry -eq 1 -and $result.restoredServices -eq 1 -and @($script:runtimeCalls|Where-Object {$_.name -ceq 'FixtureSvc'}).Count -eq 0
+                    $safe=$safe -and $(if ($late.status -ceq 'Running') {$result.alreadyAtOriginal.Count -eq 1 -and $result.alreadyAtOriginal[0].name -ceq 'FixtureSvc' -and $result.actions[1].status -ceq 'alreadyAtOriginal' -and $result.leftAsChanged.Count -eq 0} else {$result.alreadyAtOriginal.Count -eq 0 -and $result.leftAsChanged.Count -eq 1 -and $result.leftAsChanged[0].name -ceq 'FixtureSvc' -and $result.actions[1].status -ceq 'leftAsChanged'})
+                    $rows.Add([pscustomobject]@{family='late';input=$late;producerSafe=$operation.producerSafe;previewSafe=$previewSafe;outcomeSafe=$safe;result=$result;calls=@($script:runtimeCalls.ToArray());backupUnchanged=(Test-RuntimeBackup $operation)}) | Out-Null
+                }
+                foreach ($state in 'Stopped','Paused','StartPending','StopPending','PausePending','ContinuePending','') {
+                    $operation=New-ServiceRuntimeFixture -OriginalStatus $state
+                    $DataRoot=$operation.root;$BackupPath=$operation.path
+                    if ($state -ceq '') {
+                        $saved=Get-Content -LiteralPath $BackupPath -Raw | ConvertFrom-Json
+                        $saved.services[0].PSObject.Properties.Remove('status')
+                        Write-JsonFile $saved $BackupPath
+                        $operation.bytes=[Convert]::ToBase64String([IO.File]::ReadAllBytes($BackupPath))
+                    }
+                    $ConfirmApply=$false;$preview=Invoke-RollbackModule
+                    $previewSafe=$preview.success -and $preview.restoredServices -eq 2 -and $script:runtimeCalls.Count -eq 0
+                    $ConfirmApply=$true;$result=Invoke-RollbackModule
+                    $calls=@($script:runtimeCalls.ToArray());$script:runtimeCalls.Clear()
+                    $retry=Invoke-RollbackModule
+                    $safe=$result.success -and $result.restoredRegistry -eq 1 -and $result.restoredServices -eq 2 -and $script:runtimeServices.FixtureSvc.startup -ceq 'Automatic' -and $script:runtimeServices.FixtureSvc.status -ceq 'Stopped' -and @($calls|Where-Object {$_.name -ceq 'FixtureSvc' -and $_.operation -in 'start','stop'}).Count -eq 0 -and $retry.success -and $retry.restoredServices -eq 0 -and $retry.alreadyAtOriginal.Count -eq 3 -and $script:runtimeCalls.Count -eq 0
+                    $rows.Add([pscustomobject]@{family='nonRunning';originalStatus=$state;producerSafe=$operation.producerSafe;previewSafe=$previewSafe;outcomeSafe=$safe;result=$result;retry=$retry;calls=$calls;backupUnchanged=(Test-RuntimeBackup $operation)}) | Out-Null
+                }
+                $operation=New-ServiceRuntimeFixture -ServicesOnly -SingleService
+                $DataRoot=$operation.root;$BackupPath=$operation.path;$ConfirmApply=$true;$script:runtimeMode='nonterminating'
+                $failed=Invoke-RollbackModule
+                $firstCurrent=ConvertTo-Json -InputObject $script:runtimeServices.FixtureSvc -Compress
+                $script:runtimeMode='success';$script:runtimeCalls.Clear()
+                $firstRetry=Invoke-RollbackModule;$firstCalls=@($script:runtimeCalls.ToArray())
+                $script:runtimeServices.FixtureSvc.startup='Disabled';$script:runtimeServices.FixtureSvc.status='Stopped'
+                $complete=Invoke-RollbackModule
+                $script:runtimeServices.FixtureSvc.status='Stopped'
+                $secondCurrent=ConvertTo-Json -InputObject $script:runtimeServices.FixtureSvc -Compress
+                $script:runtimeCalls.Clear();$secondRetry=Invoke-RollbackModule
+                $safe=-not $failed.success -and $failed.partial -and $complete.success -and $firstCurrent -ceq $secondCurrent -and $firstCalls.Count -eq 0 -and $script:runtimeCalls.Count -eq 0
+                foreach ($observed in $firstRetry,$secondRetry) { $safe=$safe -and $observed.success -and $observed.restoredServices -eq 0 -and $observed.alreadyAtOriginal.Count -eq 0 -and $observed.leftAsChanged.Count -eq 1 -and $observed.leftAsChanged[0].reason -like '*runtime ownership*' }
+                $rows.Add([pscustomobject]@{family='histories';producerSafe=$operation.producerSafe;outcomeSafe=$safe;firstCurrent=$firstCurrent;secondCurrent=$secondCurrent;backupBytes=$operation.bytes;failure=$failed;complete=$complete;firstRetry=$firstRetry;secondRetry=$secondRetry;firstCalls=$firstCalls;secondCalls=@($script:runtimeCalls.ToArray());backupUnchanged=(Test-RuntimeBackup $operation)}) | Out-Null
+                & {
+                    $operation=New-ServiceRuntimeFixture -ServicesOnly -SingleService
+                    $DataRoot=$operation.root;$BackupPath=$operation.path;$script:runtimeMode='nonterminating'
+                    $emitted=New-Object System.Collections.Generic.List[object]
+                    $caught=$null
+                    try { & $HarnessPath -Action RollbackModule -ModuleId fixture -ManifestPath $fixtureManifest -DataRoot $DataRoot -BackupPath $BackupPath -ConfirmApply | ForEach-Object {$emitted.Add($_) | Out-Null} } catch { $caught=$_.Exception }
+                    $detail=if ($caught) {$caught.Data['RollbackResult']} else {$null}
+                    $safe=$null -ne $caught -and $caught -is [InvalidOperationException] -and $emitted.Count -eq 1 -and -not $emitted[0].success -and $emitted[0].partial -and $emitted[0].restoredServices -eq 0 -and $emitted[0].failures[0].mayHaveChanged -and $null -ne $detail -and -not $detail.success -and $detail.backupPath -ceq $operation.path
+                    $rows.Add([pscustomobject]@{family='cli';producerSafe=$operation.producerSafe;outcomeSafe=$safe;thrown=($null -ne $caught);exceptionType=$(if($caught){$caught.GetType().FullName}else{$null});emitted=@($emitted.ToArray());detail=$detail;calls=@($script:runtimeCalls.ToArray());backupUnchanged=(Test-RuntimeBackup $operation);native=$false}) | Out-Null
+                }
+                Write-Output ('SERVICE_RUNTIME_FIXTURE_JSON '+(ConvertTo-Json -InputObject @($rows.ToArray()) -Depth 12 -Compress))
+                Assert (@($rows|Where-Object {-not $_.producerSafe -or -not $_.backupUnchanged}).Count -eq 0) 'Service runtime cases use complete pre-write backups and retain exact backup bytes'
+                Assert (@($rows|Where-Object {$_.PSObject.Properties['previewSafe'] -and -not $_.previewSafe}).Count -eq 0) 'Service runtime previews classify original and ambiguous state without writes'
+                Assert (@($rows|Where-Object {$_.family -ceq 'failure' -and -not $_.outcomeSafe}).Count -eq 0) 'Start and Running readback failures report verified counts partial failures and untouched pending services'
+                Assert (@($rows|Where-Object {$_.family -ceq 'failure' -and -not $_.retrySafe}).Count -eq 0) 'Service retries preserve unproven runtime changes while independent restoration continues'
+                Assert (@($rows|Where-Object {$_.family -ceq 'sameStartup' -and -not $_.outcomeSafe}).Count -eq 0) 'Matching original and applied startup never grants an unproven restart'
+                Assert (@($rows|Where-Object {$_.family -ceq 'late' -and -not $_.outcomeSafe}).Count -eq 0) 'Late original startup distinguishes verified Running from ambiguous runtime without service writes'
+                Assert (@($rows|Where-Object {$_.family -ceq 'nonRunning' -and -not $_.outcomeSafe}).Count -eq 0) 'Non-Running original services retain startup-only semantics and retry without new runtime commands'
+                Assert (@($rows|Where-Object {$_.family -ceq 'histories' -and -not $_.outcomeSafe}).Count -eq 0) 'Identical failed-start and external-stop evidence receives the same conservative retry disposition'
+                Assert (@($rows|Where-Object {$_.family -ceq 'cli' -and -not $_.outcomeSafe}).Count -eq 0) 'The whole service rollback CLI emits its failed result throws with structured details and retains the backup'
+            } finally { [IO.File]::WriteAllBytes($fixtureManifest,$savedManifestBytes) }
+        } }
     } }
     if ($Scenario -in 'All','Selection','Drift') { & {
         . $HarnessPath -Action ListModules -ManifestPath $fixtureManifest -DataRoot $tempRoot -ModuleId 'fixture' | Out-Null
