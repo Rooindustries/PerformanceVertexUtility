@@ -147,7 +147,12 @@ public sealed class FileLease : IDisposable
     public string[] Children()
     {
         if (!Standard(_handle).Directory) return [];
-        var names = new List<string>();
+        return DirectoryEntries(_handle).Select(entry => { RequireComponent(entry.Name); return System.IO.Path.Combine(Path, entry.Name); }).ToArray();
+    }
+
+    internal static (string Name, FileAttributes Attributes)[] DirectoryEntries(SafeFileHandle directory)
+    {
+        var names = new List<(string Name, FileAttributes Attributes)>();
         const int capacity = 65536;
         var buffer = Marshal.AllocHGlobal(capacity);
         try
@@ -155,7 +160,7 @@ public sealed class FileLease : IDisposable
             var restart = true;
             while (true)
             {
-                if (!GetFileInformationByHandleEx(_handle, restart ? 20 : 19, buffer, capacity))
+                if (!GetFileInformationByHandleEx(directory, restart ? 20 : 19, buffer, capacity))
                 {
                     var error = Marshal.GetLastWin32Error();
                     if (error == 18) break;
@@ -173,8 +178,7 @@ public sealed class FileLease : IDisposable
                     var name = Marshal.PtrToStringUni(entry + 88, length / 2)!;
                     if (name is not ("." or ".."))
                     {
-                        RequireComponent(name);
-                        names.Add(System.IO.Path.Combine(Path, name));
+                        names.Add((name, (FileAttributes)Marshal.ReadInt32(entry, 56)));
                         if (names.Count > 100000) throw new InvalidDataException("Directory exceeds the cleanup enumeration limit.");
                     }
                     if (next == 0) break;
@@ -184,7 +188,7 @@ public sealed class FileLease : IDisposable
             }
         }
         finally { Marshal.FreeHGlobal(buffer); }
-        return names.Order(StringComparer.OrdinalIgnoreCase).ToArray();
+        return names.OrderBy(entry => entry.Name, StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
     public void Backup(string destination)
@@ -316,6 +320,12 @@ public sealed class FileLease : IDisposable
         return result.OrderBy(stream => stream.Name, StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
+    internal static SafeFileHandle OpenMetadataChild(SafeFileHandle parent, string name)
+        => OpenRelative(parent, name, ReadAttributes | Synchronize, 7, 1, 0x00600020);
+
+    internal static SafeFileHandle OpenDirectoryChild(SafeFileHandle parent, string name)
+        => OpenRelative(parent, name, ReadData | ReadAttributes | Synchronize, 7, 1, 0x00600020);
+
     private static SafeFileHandle OpenRelative(SafeFileHandle parent, string name, uint access, uint sharing, uint disposition, uint options)
     {
         RequireComponent(name);
@@ -332,7 +342,7 @@ public sealed class FileLease : IDisposable
         finally { Marshal.FreeHGlobal(unicode); Marshal.FreeHGlobal(buffer); }
     }
 
-    private static void RequireComponent(string name)
+    internal static void RequireComponent(string name)
     {
         if (name is "" or "." or ".." || name.IndexOfAny(['\\', '/', ':', '\0']) >= 0 || name.EndsWith(' ') || name.EndsWith('.'))
             throw new InvalidDataException("A cleanup path contains an unsupported or ambiguous component.");
