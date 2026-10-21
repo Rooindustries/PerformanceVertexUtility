@@ -160,6 +160,8 @@ public partial class WindowsTweakRow : ObservableObject
     public string ActionNote => Action.Name == "Use Windows default" ? "Clears this local override. Another Windows policy may still control the setting." : "";
     public bool CanApplySelected => CanApplyChoice(Selected.Id);
     public bool CanApplyChoice(string id) => id.Length > 0 && Available && _observed?.AvailableChoices?.Contains(id) != false;
+    public bool CanRetainAppliedChoice(string id) => _observed is not { } status ||
+        (status.Error is { } error ? !PcLacks(error) : status.Supported && status.AvailableChoices?.Contains(id) != false);
     public string ChoiceStatus => _cannotRevert ? "Already on. This one can't be turned off from here." : Selected.Id.Length == 0 || CanApplySelected ? "" : "Selected · save for later";
     private bool _cannotRevert;
     partial void OnToggleOnChanged(bool value)
@@ -622,7 +624,7 @@ public partial class WindowsTweaksViewModel : ObservableObject
             if (!restore && selections.Length == 0) return;
             var selectedReady = restore ? selections : chosen.Where(item => item.Row.CanApplyChoice(item.Id)).Select(item => new TweakSelection(item.Row.Id, item.Id)).ToArray();
             var retained = restore ? Array.Empty<TweakSelection>() : (state?.Profiles.SingleOrDefault(profile => profile.Id == ProfileId.Trim())?.Selections ?? [])
-                .Where(selection => selectedReady.All(selected => selected.SettingId != selection.SettingId) && _all.Any(row => row.Id == selection.SettingId && row.CanApplyChoice(selection.OptionId))).ToArray();
+                .Where(selection => selectedReady.All(selected => selected.SettingId != selection.SettingId) && _all.Any(row => row.Id == selection.SettingId && row.CanRetainAppliedChoice(selection.OptionId))).ToArray();
             var ready = selectedReady.Concat(retained).ToArray();
             var deferred = restore ? Array.Empty<WindowsTweakRow>() : chosen.Where(item => !item.Row.CanApplyChoice(item.Id)).Select(item => item.Row).ToArray();
             _deferredDetail = string.Join("\n", deferred.Select(row => row.Name + ": " + (row.Detail.Length == 0 ? "This choice needs a matching Windows or app version." : row.Detail)));
