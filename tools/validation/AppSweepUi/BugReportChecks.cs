@@ -593,6 +593,20 @@ static class BugReportChecks
         check(completed == redaction && redaction.IsCompletedSuccessfully && redaction.Result == longRoot + "<user>",
             "A 7 MB profile separator run preserves every separator and redacts within five seconds: completed="
                 + (completed == redaction) + " elapsedMs=" + clock.Elapsed.TotalMilliseconds.ToString("F2"));
+        var width = 1 << 18;
+        var wideRoot = @"C:\Users" + new string('\\', width);
+        var wideUnit = new string('\\', width - 1) + "u0041";
+        var wideRun = new System.Text.StringBuilder("a");
+        var wideLength = 7 * 1024 * 1024 - wideRoot.Length;
+        while (wideRun.Length + wideUnit.Length <= wideLength) wideRun.Append(wideUnit);
+        wideRun.Append('a', wideLength - wideRun.Length);
+        var wideInput = wideRoot + wideRun;
+        var wideClock = System.Diagnostics.Stopwatch.StartNew();
+        var wideRedaction = Task.Run(() => other.Redact(wideInput));
+        var wideCompleted = await Task.WhenAny(wideRedaction, Task.Delay(TimeSpan.FromSeconds(5)));
+        check(wideCompleted == wideRedaction && wideRedaction.IsCompletedSuccessfully && wideRedaction.Result == wideRoot + "<user>",
+            "A 7 MB almost-matching profile separator run redacts within five seconds: width=" + width + " length=" + wideInput.Length
+                + " completed=" + (wideCompleted == wideRedaction) + " elapsedMs=" + wideClock.Elapsed.TotalMilliseconds.ToString("F2"));
         await LegacyComponentBoundariesAsync(check, root);
     }
 
@@ -728,6 +742,21 @@ static class BugReportChecks
         };
         cases.Add((emissionExact[0], @"C:/Users/<user>C:\Users\<user>\u0041pp", true));
         cases.Add((emissionExact[1], @"C:\Users/<user>.C:\Users\<user>\Ubedau0041", true));
+        foreach (var profileRoot in new[] { "C:/Users/", @"C:\\Users\\", @"C:\Users/" })
+        foreach (var marker in new[] { "<user>", "<USER>", "<pc-name>", "<Pc-Name>", "<sid>", "<SID>" })
+        foreach (var punctuation in new[] { "", " ", ".", "'", ",;!)]}' " })
+        foreach (var tail in new[] { @"\u0041pp", @"\Ubeda", @"\uFace" })
+            cases.Add((profileRoot + marker + punctuation + joinedOwn + tail,
+                profileRoot + marker.ToLowerInvariant() + punctuation + @"C:\Users\<user>" + tail, true));
+        foreach (var marker in new[] { "<user>", "<USER>", "<pc-name>", "<Pc-Name>", "<sid>", "<SID>" })
+        foreach (var tail in new[] { @"\u0041pp", @"\Ubeda", @"\uFace" })
+            cases.Add((@"C:\Users\" + marker + joinedOwn + tail,
+                @"C:\Users\" + marker.ToLowerInvariant() + "%USERPROFILE%" + tail, true));
+        foreach (var prefix in new[] { @"\\?\", @"\\.\", @"\??\" })
+        {
+            cases.Add((prefix + joinedOwn + @"\AppData\x", prefix + @"%USERPROFILE%\AppData\x", true));
+            cases.Add((prefix + @"C:\Users\" + "Zqxother" + @"\x", prefix + @"C:\Users\<user>\x", true));
+        }
         foreach (var profileRoot in new[] { "C:/Users/", @"C:\Users/", "C://Users//" })
         foreach (var (prefix, punctuation) in new[] { ("", ""), ("Zqxother", ""), ("Zqxother.", "."), ("Zqxother;", ";"), ("Zqxother'", "'"), ("Zqxother')", "')") })
         foreach (var tail in new[] { @"\u0041pp", @"\Ubeda", @"\uD83D\uDE00x", @"\x", "/x" })
@@ -772,6 +801,8 @@ static class BugReportChecks
             var owner = new BugRedactor(profile, ownName, "GAMER-PC");
             var unicodeCases = new List<(string Input, string Expected)>
             {
+                (@"C:/Users/<user>" + profile + @"\u0041pp", @"C:/Users/<user>C:\Users\<user>\u0041pp"),
+                (@"C:\\Users\\<pc-name>." + profile + @"\uFace", @"C:\\Users\\<pc-name>.C:\Users\<user>\uFace"),
                 (@"C:/Users/" + @"Zqxother" + profile + @"\x", @"C:/Users/<user>C:\Users\<user>\x"),
                 (@"C:\Users\" + @"Zqxother" + profile + @"\x", @"C:\Users\<user>%USERPROFILE%\x"),
                 (profile + @"\u0041pp", @"%USERPROFILE%\u0041pp"),
@@ -781,6 +812,8 @@ static class BugReportChecks
                 (@"C:/Users/" + @"ZqxotherC:\\Users\\" + ownName + "." + profile + @"\x", @"C:/Users/<user>C:\\Users\\<user>.C:\Users\<user>\x"),
                 (@"C:/Users/" + @"ZqxotherC:\\Users\\" + ownName + profile + @"C:\\Users\\" + ownName + @"\\x", @"C:/Users/<user>C:\\Users\\<user>C:\Users\<user>C:\\Users\\<user>\\x")
             };
+            foreach (var prefix in new[] { @"\\?\", @"\\.\", @"\??\" })
+                unicodeCases.Add((prefix + profile + @"\x", prefix + @"%USERPROFILE%\x"));
             unicodeCases.Add((JsonSerializer.Serialize(@"C:\Users/" + @"Zqxother'" + profile + @"\x", relaxed).Replace("'", @"\u0027", StringComparison.Ordinal),
                 JsonSerializer.Serialize(@"C:\Users/<user>'C:\Users\<user>\x", relaxed).Replace("'", @"\u0027", StringComparison.Ordinal)));
             foreach (var (input, expected) in unicodeCases)
