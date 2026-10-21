@@ -65,26 +65,26 @@ static class CatalogMatrixChecks
             return version >= int.Parse(parts[1]) && version <= int.Parse(parts[2]);
         }
         bool Gate(int minimum, int maximum, string[] editions, string[]? requirements) => context.Build >= minimum && context.Build <= maximum &&
-            (editions.Contains("*") || editions.Contains(context.Edition)) && (requirements ?? []).All(Requirement);
+            editions.Any(edition => edition.EndsWith('*') ? context.Edition.StartsWith(edition[..^1], StringComparison.OrdinalIgnoreCase) : string.Equals(edition, context.Edition, StringComparison.OrdinalIgnoreCase)) && (requirements ?? []).All(Requirement);
         return Gate(definition.MinimumBuild, definition.MaximumBuild, definition.Editions, definition.Requirements) &&
             (option.Availability is null || option.Availability.Any(gate => Gate(gate.MinimumBuild, gate.MaximumBuild, gate.Editions, gate.Requirements))) &&
             (option.ValidUntilUtc is null || option.ValidUntilUtc > DateTime.UtcNow);
     }
-    private static Context ContextFor(TweakCatalog catalog, TweakSelection[] selections, bool partial)
+    private static Context ContextFor(TweakCatalog catalog, TweakSelection[] selections, bool partial, TweakSelection[]? optional)
     {
         var options = selections.Select(catalog.Resolve).ToArray();
         var gates = options.SelectMany(item => item.Option.Availability ?? []).ToArray();
         var builds = options.Select(item => item.Definition.MinimumBuild).Concat(gates.Select(gate => gate.MinimumBuild)).Append(26200).Distinct().OrderDescending();
-        var editions = gates.SelectMany(gate => gate.Editions).Concat(options.SelectMany(item => item.Definition.Editions)).Where(edition => edition != "*").Prepend("Professional").Append("Enterprise").Distinct();
+        var editions = gates.SelectMany(gate => gate.Editions).Concat(options.SelectMany(item => item.Definition.Editions)).Where(edition => edition != "*").Select(edition => edition == "Server*" ? "ServerStandard" : edition.TrimEnd('*')).Prepend("Professional").Append("Enterprise").Distinct();
         var requirements = gates.SelectMany(gate => gate.Requirements ?? []).Concat(options.SelectMany(item => item.Definition.Requirements ?? []));
         var edge = requirements.Where(text => text.StartsWith("edge:", StringComparison.Ordinal) || text.StartsWith("edge-profile:", StringComparison.Ordinal)).Select(text => (int?)int.Parse(text.Split(':')[1])).Append(150).Append(null).Distinct().ToArray();
         var contexts = from build in builds from edition in editions from version in edge select new Context(build, edition, version, version ?? 150);
-        return contexts.OrderByDescending(context => options.Count(item => Supported(item.Definition, item.Option, context))).FirstOrDefault(context => partial || options.All(item => Supported(item.Definition, item.Option, context)))
+        return contexts.OrderByDescending(context => options.Count(item => Supported(item.Definition, item.Option, context))).FirstOrDefault(context => partial || options.Where((_, index) => optional?.Contains(selections[index]) != true).All(item => Supported(item.Definition, item.Option, context)))
             ?? throw new InvalidDataException("The preset has no common Windows, edition and product context.");
     }
     private static void Exercise(string directory, TweakCatalog catalog, TweakSelection[] selections, TweakPreset? preset = null)
     {
-        var context = ContextFor(catalog, selections, preset?.AvailableOnly == true);
+        var context = ContextFor(catalog, selections, preset?.AvailableOnly == true, preset?.OptionalSelections);
         var expectedSelections = selections.Where(selection => { var item = catalog.Resolve(selection); return Supported(item.Definition, item.Option, context); }).Distinct().ToArray();
         var path = Path.Combine(directory, "fixture.json");
         var store = FileTweakStore.Create(path, context.Build, context.Edition);

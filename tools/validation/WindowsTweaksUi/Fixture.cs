@@ -20,6 +20,8 @@ namespace RooIndustries.OptimizationSuite.Services
         public bool Missing { get; set; } = true;
         public bool FailRead { get; set; }
         public bool FailApply { get; set; }
+        public Func<RegistryAddress, Exception?>? RegistryReadError { get; set; }
+        public Func<ControlAddress, Exception?>? ControlReadError { get; set; }
         public TweakRecovery? Recovery { get; set; }
         public int Applies { get; private set; }
         public int Previews { get; private set; }
@@ -29,20 +31,25 @@ namespace RooIndustries.OptimizationSuite.Services
         public Func<Task>? BeforePreview { get; set; }
         public Action? AfterApply { get; set; }
         private readonly string _root;
-        public Fixture(string root, TweakCatalog? catalog = null)
+        public Fixture(string root, TweakCatalog? catalog = null, int build = 26200)
         {
             _root = root; Directory.CreateDirectory(root);
             var address = new RegistryAddress("CurrentUser", "Registry64", @"Software\RooIndustriesUiModelFixture", "value", "Enabled");
             var setting = new TweakDefinition("setting", "Office setting", "Apps", "Fixture", 10240, 26200, ["*"], "none",
                 [new("on", "On", [new(address, 1)]), new("off", "Off", [new(address, 0)])], [new("Fixture", "fixture", "isolated UI validation")]);
             Catalog = catalog ?? new(1, "fixture", [setting], [new("fixture-preset", "Fixture preset", [new("setting", "off")])]);
-            Choices = new(Path.Combine(root, "choices.json")); Windows = FileTweakStore.Create(Path.Combine(root, "windows.json"));
+            Choices = new(Path.Combine(root, "choices.json")); Windows = FileTweakStore.Create(Path.Combine(root, "windows.json"), build);
             if (catalog is not null)
             {
                 var path = Path.Combine(root, "windows.json");
                 OperationFiles.Write(path, OperationFiles.Read<TweakFixture>(path) with { EdgeMajor = 150, EdgeProfileMajor = 150, OfficeMajor = 16 });
             }
-            Engine = new(Catalog, Windows);
+            Engine = new(Catalog, new FaultingStore(Path.Combine(root, "windows.json"), this));
+        }
+        sealed class FaultingStore(string path, Fixture fixture) : FileTweakStore(path), ITweakStore
+        {
+            public new TweakRead Read(RegistryAddress address) => fixture.RegistryReadError?.Invoke(address) is { } error ? throw error : base.Read(address);
+            public new TweakControlRead ReadControl(ControlAddress address) => fixture.ControlReadError?.Invoke(address) is { } error ? throw error : base.ReadControl(address);
         }
         public Task<TweakCatalogResult> ReadWindowsTweakCatalogAsync(bool fresh = false) => Task.FromResult(new TweakCatalogResult(Catalog, Catalog.Digest));
         public Task<TweakChoiceFile> ReadWindowsChoicesAsync() => Task.FromResult(Choices.Read());

@@ -58197,23 +58197,26 @@
               "minimumBuild": 10240,
               "maximumBuild": 26200,
               "editions": [
-                "*"
+                "Enterprise*",
+                "Education*",
+                "IoTEnterprise*",
+                "Server*"
               ]
             },
             {
               "minimumBuild": 14393,
               "maximumBuild": 26200,
               "editions": [
-                "Enterprise",
-                "EnterpriseS",
-                "EnterpriseN",
-                "EnterpriseSN",
                 "Education",
                 "EducationN",
+                "Enterprise",
+                "EnterpriseN",
+                "EnterpriseS",
+                "EnterpriseSN",
                 "IoTEnterprise",
                 "IoTEnterpriseS",
-                "ServerStandard",
-                "ServerDatacenter"
+                "ServerDatacenter",
+                "ServerStandard"
               ]
             }
           ]
@@ -78913,6 +78916,12 @@
           "settingId": "windows.9ba2fc5ad6c98df6",
           "optionId": "choice-6b253977ea5987f3"
         }
+      ],
+      "optionalSelections": [
+        {
+          "settingId": "windows.a8268996c3eb9072",
+          "optionId": "choice-6b253977ea5987f3"
+        }
       ]
     },
     {
@@ -87799,6 +87808,12 @@
           "settingId": "windows.a8268996c3eb9072",
           "optionId": "choice-6b253977ea5987f3"
         }
+      ],
+      "optionalSelections": [
+        {
+          "settingId": "windows.a8268996c3eb9072",
+          "optionId": "choice-6b253977ea5987f3"
+        }
       ]
     },
     {
@@ -89979,6 +89994,12 @@
           "settingId": "windows.a8268996c3eb9072",
           "optionId": "choice-6b253977ea5987f3"
         }
+      ],
+      "optionalSelections": [
+        {
+          "settingId": "windows.a8268996c3eb9072",
+          "optionId": "choice-6b253977ea5987f3"
+        }
       ]
     },
     {
@@ -92143,6 +92164,12 @@
       "id": "wpd.disablewindowsconsumerfeatures.16.apply",
       "name": "WPD · Microsoft consumer experiences · apply",
       "selections": [
+        {
+          "settingId": "windows.a8268996c3eb9072",
+          "optionId": "choice-6b253977ea5987f3"
+        }
+      ],
+      "optionalSelections": [
         {
           "settingId": "windows.a8268996c3eb9072",
           "optionId": "choice-6b253977ea5987f3"

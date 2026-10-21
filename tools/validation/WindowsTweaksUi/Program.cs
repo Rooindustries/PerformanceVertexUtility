@@ -48,12 +48,35 @@ TweakCatalog TwoSettingCatalog()
         [new("Fixture", "fixture", "isolated UI validation")]);
     return new(1, "two-setting-fixture", [Setting("first", "First setting", "First"), Setting("second", "Second setting", "Second")], []);
 }
+if (args is ["--denied-releases", var deniedRepo])
+{
+    try { await DeniedReleaseChecks.Run(root, OperationFiles.Read<TweakCatalog>(Path.Combine(deniedRepo, "backend/catalogs/windows-tweaks.json")), Check, deniedRepo); Console.WriteLine($"Completed {count} denied release UI checks."); }
+    finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+    return;
+}
+if (args is ["--retained-profiles"])
+{
+    try { await RetainedProfileChecks.Run(root, TwoSettingCatalog(), Check); Console.WriteLine($"Completed {count} retained profile UI checks."); }
+    finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+    return;
+}
 if (args is ["--presentation", var presentationRepo])
 {
     var catalog = OperationFiles.Read<TweakCatalog>(Path.Combine(Path.GetFullPath(presentationRepo), "backend/catalogs/windows-tweaks.json"));
     ActionChecks.Run(catalog, Check);
     IconChecks.Run(presentationRepo, catalog, Check);
     Console.WriteLine($"Completed {count} presentation checks.");
+    return;
+}
+if (args is ["--policy-editions", var policyRepo])
+{
+    try
+    {
+        await RetainedRequirementChecks.Run(root, OperationFiles.Read<TweakCatalog>(Path.Combine(policyRepo, "backend/catalogs/windows-tweaks.json")), Check);
+        await PolicyProfileChecks.Run(root, OperationFiles.Read<TweakCatalog>(Path.Combine(policyRepo, "backend/catalogs/windows-tweaks.json")), Check);
+        Console.WriteLine($"Completed {count} policy profile UI checks.");
+    }
+    finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
     return;
 }
 if (args is ["--freshness"])
@@ -65,10 +88,14 @@ if (args is ["--freshness"])
 try
 {
     AppliedStateChecks.Run(Check);
+    await RetainedProfileChecks.Run(root, TwoSettingCatalog(), Check);
     if (args is [var catalogRepo])
     {
         var catalog = OperationFiles.Read<TweakCatalog>(Path.Combine(Path.GetFullPath(catalogRepo), "backend/catalogs/windows-tweaks.json"));
+        await DeniedReleaseChecks.Run(root, catalog, Check, catalogRepo);
+        await RetainedRequirementChecks.Run(root, catalog, Check);
         ActionChecks.Run(catalog, Check);
+        await PolicyProfileChecks.Run(root, catalog, Check);
         IconChecks.Run(catalogRepo, catalog, Check);
         if (catalog.Presets.SingleOrDefault(preset => preset.Id == WindowsTweaksViewModel.FpsPresetId) is { } fpsPreset)
         {

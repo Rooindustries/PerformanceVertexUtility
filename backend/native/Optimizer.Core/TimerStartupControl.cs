@@ -25,11 +25,16 @@ public static class TimerStartupControl
     private static string ReceiptPath(string root) => Path.Combine(root, "startup.json");
     private static TimerStartupReceipt? Receipt(string root, string name)
     {
-        if (!File.Exists(ReceiptPath(root))) return null;
-        var receipt = OperationFiles.Read<TimerStartupReceipt>(ReceiptPath(root)); receipt.Owner.Verify();
-        if (receipt.TaskName != name || receipt.Phase is not ("creating" or "created")) throw new InvalidDataException("Timer startup ownership is incomplete.");
-        return receipt;
+        TimerStartupReceipt receipt;
+        try { receipt = OperationFiles.Read<TimerStartupReceipt>(ReceiptPath(root)); }
+        catch (FileNotFoundException) { return null; }
+        catch (DirectoryNotFoundException) { return null; }
+        receipt.Owner.Verify();
+        if (receipt.TaskName != name || receipt.Phase is not ("creating" or "created") || !Digest(receipt.ScriptHash) ||
+            (receipt.Phase == "created" ? !Digest(receipt.DefinitionHash) : receipt.DefinitionHash != "")) throw new InvalidDataException("Timer startup ownership is incomplete.");
+        return receipt with { DefinitionHash = receipt.DefinitionHash.ToUpperInvariant(), ScriptHash = receipt.ScriptHash.ToUpperInvariant() };
     }
+    private static bool Digest(string value) => value is { Length: 64 } && value.All(char.IsAsciiHexDigit);
     private static object ConnectScheduler()
     {
         var scheduler = Activator.CreateInstance(Type.GetTypeFromProgID("Schedule.Service", true)!)!;
@@ -96,7 +101,6 @@ public static class TimerStartupControl
                             var receiptPath = ReceiptPath(root); var scriptPath = Path.Combine(root, "startup.ps1");
                             if (!File.Exists(receiptPath) || !PolicyRootSecurity.AdministratorOnlyEntry(receiptPath, false) || !PolicyRootSecurity.AdministratorOnlyEntry(scriptPath, false)) { older = true; continue; }
                             var receipt = OperationFiles.Read<TimerStartupReceipt>(receiptPath);
-                            static bool Digest(string value) => value is { Length: 64 } && value.All(char.IsAsciiHexDigit);
                             if (receipt.Owner.Machine != Environment.MachineName || receipt.Owner.UserSid != candidate.Sid || receipt.TaskName != name || receipt.Phase != "created" || !Digest(receipt.ScriptHash) || !Digest(receipt.DefinitionHash)) throw new InvalidDataException("The timer receipt does not match its Windows owner and task.");
                             if (!string.Equals(Fingerprint(found), receipt.DefinitionHash, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("The timer task fingerprint differs from its receipt.");
                             var startupRoot = root;
@@ -176,8 +180,11 @@ public static class TimerStartupControl
             if (found is not null)
             {
                 if (receipt is not { Phase: "created" }) throw new InvalidDataException("The timer startup task exists without confirmed ownership and was left intact.");
-                if (Fingerprint(found) != receipt.DefinitionHash || !File.Exists(Path.Combine(target.Root, "startup.ps1")) || OperationFiles.HashFile(Path.Combine(target.Root, "startup.ps1")) != receipt.ScriptHash)
-                    throw new InvalidDataException("The timer startup task or its script changed and was left intact.");
+                string scriptHash;
+                try { scriptHash = OperationFiles.HashFile(Path.Combine(target.Root, "startup.ps1")); }
+                catch (Exception error) when (error is FileNotFoundException or DirectoryNotFoundException) { throw new TweakResourceChangedException("The timer startup task or its script changed and was left intact."); }
+                if (!string.Equals(Fingerprint(found), receipt.DefinitionHash, StringComparison.OrdinalIgnoreCase) || !string.Equals(scriptHash, receipt.ScriptHash, StringComparison.OrdinalIgnoreCase))
+                    throw new TweakResourceChangedException("The timer startup task or its script changed and was left intact.");
             }
             return new(address, "timer-startup:" + target.Name, OperationOwner.Current().UserSid, ControlValues.From(found is not null && (bool)task.Enabled),
                 "Start the timer request at Windows sign-in", LostLease: found is null && receipt is not null);

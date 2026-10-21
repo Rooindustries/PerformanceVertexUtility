@@ -26,6 +26,25 @@ targets; missing primary-network evidence cannot become an all-adapter change.
 Detection reports observed configuration. It does not establish that a policy
 has taken effect in a running app or improved gaming performance.
 
+`backend/catalogs/windows-policy-editions.json` records Microsoft's registry-policy
+edition limits. The compiler applies them after combining all sources, so a
+wildcard from another source cannot bypass a limit. Home, Pro, Windows 10 S and Windows 11 SE editions no
+longer offer **Consumer suggestions and promotions: Blocked**. Enterprise,
+Education, IoT Enterprise and Server retain it. **Remove this override** remains
+available, including when the blocked value was set before this catalog update.
+An unsupported choice is excluded from the applicable current choices; its raw
+registry value remains in the observations.
+
+Edition gates match exact edition IDs, `*` for every edition, or a trailing `*`
+for a family, such as `Enterprise*` or `Server*`. This keeps evaluation, LTSC,
+multi-session and Azure variants in their supported families. Pro Education is
+part of the Pro family and does not match `Education*`.
+
+Location-aware search and driver exclusion keep their existing availability.
+Their Microsoft references describe MDM CSP editions without establishing an
+edition limit for the registry policy. The same file records these two explicit
+exceptions to the catalog's overlapping-edition-gate check.
+
 ## One setting, shared ownership
 
 The planner resolves registry handles to their native key identity, with the
@@ -78,6 +97,32 @@ Create a new preview file, inspect it, then apply its exact SHA-256:
 
 `-PresetId explorer-details` can replace `-SelectionsPath`. The original presets `privacy-basics` and `activity-history-off` remain available. Generated source presets are included only when every required setting effect has an executor. Presets are named
 selections of the same controls, with no separate execution bodies.
+
+Strict source presets mark consumer blocking in `optionalSelections`: they skip
+that choice on Home, Pro, Windows 10 S and Windows 11 SE and report it in `skipped`. Their other choices
+remain required, and a read failure still refuses the preset. Consumer blocking
+also remains required when its edition supports it. Presets already marked
+`availableOnly` keep their existing filtering. A preset with no available choices
+is refused without changing an existing profile. Saved choices can retain an
+unavailable selection for another edition, but cannot apply it here. Existing
+applied profiles can still be restored after the catalog changes.
+
+When editing an applied profile, unavailable old choices do not block its other
+changes. The review shows the restoration of their original values alongside
+the new changes, and approval is still required. Unavailable choices stay saved
+for later. Reviewing only unavailable choices saves them without changing the
+active profile; restoring that profile remains a separate action.
+Only catalog build, edition and expiry limits can make an existing choice
+unavailable during an edit. Read errors, pending reads, restarts, remote sessions
+and device or product requirements keep it in the plan with its saved original.
+The engine must check those requirements again before applying the edit.
+If an old choice needs restoring but its target cannot be read, the edit keeps
+its backup and offers to save choices only. Unreadable controls, including
+permission errors, unavailable providers and unfinished service transitions,
+also stop an explicit restore. A confirmed missing or changed target can be
+released without touching it so the rest of the profile can be restored.
+A renamed catalog option keeps its old backup and allows
+saving choices until the user restores that profile.
 
 To restore a profile, create another selections file containing `[]`, preview it
 with the same `ProfileId`, then use `-Action Restore` with that review's hash.

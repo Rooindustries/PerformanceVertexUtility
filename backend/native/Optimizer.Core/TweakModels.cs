@@ -12,7 +12,8 @@ public sealed record TweakAssignment([property: JsonRequired] RegistryAddress Ad
 public sealed record TweakAvailability([property: JsonRequired] int MinimumBuild, [property: JsonRequired] int MaximumBuild, [property: JsonRequired] string[] Editions, string[]? Requirements = null);
 public sealed record TweakOption([property: JsonRequired] string Id, [property: JsonRequired] string Name, [property: JsonRequired] TweakAssignment[] Changes, TweakAvailability[]? Availability = null, ControlAssignment[]? Controls = null, DateTime? ValidUntilUtc = null, string[]? DataLoss = null);
 public sealed record TweakSelection([property: JsonRequired] string SettingId, [property: JsonRequired] string OptionId);
-public sealed record TweakPreset([property: JsonRequired] string Id, [property: JsonRequired] string Name, [property: JsonRequired] TweakSelection[] Selections, bool AvailableOnly = false);
+public sealed record TweakPreset([property: JsonRequired] string Id, [property: JsonRequired] string Name, [property: JsonRequired] TweakSelection[] Selections, bool AvailableOnly = false,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] TweakSelection[]? OptionalSelections = null);
 public sealed record TweakDefinition([property: JsonRequired] string Id, [property: JsonRequired] string Name, [property: JsonRequired] string Category, [property: JsonRequired] string Description, [property: JsonRequired] int MinimumBuild, [property: JsonRequired] int MaximumBuild,
     [property: JsonRequired] string[] Editions, [property: JsonRequired] string Refresh, [property: JsonRequired] TweakOption[] Options, [property: JsonRequired] TweakSource[] Sources, string[]? Requirements = null, bool Advanced = false, string[]? Alternatives = null);
 public sealed record TweakIncompatibility([property: JsonRequired] TweakSelection[] Selections, [property: JsonRequired] string Reason);
@@ -53,6 +54,8 @@ public sealed record TweakCatalog([property: JsonRequired] int SchemaVersion, [p
         {
             if (string.IsNullOrWhiteSpace(preset.Id) || !presets.Add(preset.Id) || preset.Selections is not { Length: > 0 }) throw new InvalidDataException("Invalid or duplicate preset.");
             foreach (var selection in preset.Selections) Resolve(selection);
+            if (preset.OptionalSelections is { } optional && (optional.Length == 0 || optional.Distinct().Count() != optional.Length || optional.Any(selection => !preset.Selections.Contains(selection))))
+                throw new InvalidDataException("Optional preset choices must be distinct selections of that preset.");
         }
         foreach (var rule in Incompatible ?? [])
         {

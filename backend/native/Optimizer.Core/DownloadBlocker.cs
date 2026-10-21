@@ -24,6 +24,29 @@ public static class DownloadBlocker
         {
             var receipt = OperationFiles.Read<DownloadBlockerReceipt>(file); receipt.Owner.Verify();
             if (receipt.Path != path || receipt.Phase is not ("creating" or "created" or "active" or "restoring" or "retained")) throw new InvalidDataException("Download-folder ownership is incomplete.");
+            if (receipt.Phase == "creating")
+            {
+                if (!receipt.CreatedDirectory || receipt.Original is not null || receipt.Applied is not null || receipt.Attributes != 0) throw new InvalidDataException("Download-folder creation ownership is incomplete.");
+            }
+            else
+            {
+                if (receipt.Original is null || receipt.Applied is null || (receipt.Attributes & 16) == 0) throw new InvalidDataException("Download-folder ownership is incomplete.");
+                receipt.Original.Validate();
+                try
+                {
+                    var original = receipt.Original;
+                    var binding = original.Binding.Split(':');
+                    if (original.Address.Kind != "file-acl" || FileAccessControl.Target(original.Address) != path || original.Value.EnumerateObject().Count() != 4 ||
+                        binding.Length != 3 || !ulong.TryParse(binding[0], out _) || binding[1].Length != 32 || !binding[1].All(char.IsAsciiHexDigit) || !long.TryParse(binding[2], out _) ||
+                        !string.Equals(original.Identity, "file-acl:" + binding[0] + ":" + binding[1], StringComparison.OrdinalIgnoreCase) ||
+                        original.Value.GetProperty("flags").GetInt32() is < 0 or > ushort.MaxValue) throw new InvalidDataException("Download-folder original permissions are incomplete.");
+                    _ = new System.Security.Principal.SecurityIdentifier(original.Value.GetProperty("owner").GetString()!);
+                    _ = new System.Security.Principal.SecurityIdentifier(original.Value.GetProperty("group").GetString()!);
+                    if (!ControlValues.Equal(receipt.Applied.Value, original.Expand(ControlValues.From(new { denyMask = 0x116 })))) throw new InvalidDataException("Download-folder applied permissions differ from their original receipt.");
+                }
+                catch (Exception error) when (error is ArgumentException or InvalidOperationException or KeyNotFoundException or FormatException or OverflowException)
+                { throw new InvalidDataException("Download-folder original permissions are incomplete.", error); }
+            }
             return receipt;
         }
         catch (FileNotFoundException) { return null; }
@@ -34,7 +57,7 @@ public static class DownloadBlocker
         try
         {
             using var lease = FileLease.OpenPolicy(path); var info = lease.ReadPolicy();
-            if ((info.Attributes & 16) == 0) throw new InvalidDataException("The download-folder target is a file, not a directory.");
+            if ((info.Attributes & 16) == 0) throw new TweakResourceChangedException("The download-folder target is a file, not a directory.");
             return (FileAccessControl.Snapshot(address, lease), info.Attributes);
         }
         catch (Win32Exception error) when (error.NativeErrorCode is 2 or 3) { return (null, 0); }
@@ -43,15 +66,16 @@ public static class DownloadBlocker
     {
         var target = Target(address); using var privileges = PrivilegeScope.FilePolicy();
         using var parent = FileLease.OpenPolicy(Path.GetDirectoryName(target.Path)!); var parentId = parent.ReadPolicy().Identity;
-        var current = Policy(target.Policy, target.Path); var receipt = Receipt(target.Receipt, target.Path); var active = false;
+        var receipt = Receipt(target.Receipt, target.Path); var current = Policy(target.Policy, target.Path); var active = false;
         if (receipt is not null && receipt.Phase != "retained")
         {
             if (receipt.Phase == "creating" && current.Policy is not null) throw new InvalidDataException("The folder exists without a confirmed creation receipt. Its contents and permissions were left intact.");
             if (receipt.Phase != "creating")
             {
-                if (receipt.Original is null || receipt.Applied is null || current.Policy?.Id != receipt.Original.Id) throw new InvalidDataException("The owned download folder is missing or was replaced.");
+                if (receipt.Original is null || receipt.Applied is null) throw new InvalidDataException("Download-folder ownership is incomplete.");
+                if (current.Policy?.Id != receipt.Original.Id) throw new TweakResourceChangedException("The owned download folder is missing or was replaced.");
                 active = ControlValues.Equal(current.Policy.Value, receipt.Applied.Value);
-                if (!active && !ControlValues.Equal(current.Policy.Value, receipt.Original.Value)) throw new InvalidDataException("Download-folder permissions changed outside this profile.");
+                if (!active && !ControlValues.Equal(current.Policy.Value, receipt.Original.Value)) throw new TweakResourceChangedException("Download-folder permissions changed outside this profile.");
             }
         }
         return new(address, "download-blocker:" + target.Path.ToUpperInvariant(), parentId.Volume + ":" + parentId.Id, ControlValues.From(active),
