@@ -34,9 +34,10 @@ static class RetainedRequirementChecks
         var extensionRow = model.Rows.Single(row => row.Id == extensions.Id); extensionRow.Selected = extensionRow.Choices.Single(choice => choice.Id == "hide");
         var before = OperationFiles.HashFile(path);
         await model.ReviewCommand.ExecuteAsync(null);
-        check(fixture.LastPreviewSelections?.Contains(new(remote.Id, allowed.Id)) == true && !model.HasReview && model.Changes.Count == 0,
+        check(fixture.LastPreviewSelections?.Contains(new(remote.Id, allowed.Id)) == true && model.ApplyLabel == "Save choices" && model.Changes.Count == 0,
             "Editing another setting over RDP retains the local-session choice and refuses the review");
-        check(OperationFiles.HashFile(path) == before && fixture.Windows.Read(address).Value!.Bytes.SequenceEqual(BitConverter.GetBytes(0u)),
+        model.Approved = true; await model.ApplyCommand.ExecuteAsync(null);
+        check(fixture.Applies == 1 && OperationFiles.HashFile(path) == before && fixture.Windows.Read(address).Value!.Bytes.SequenceEqual(BitConverter.GetBytes(0u)),
             "A refused remote-session edit preserves the allowed RDP value and exact backup state");
         data = OperationFiles.Read<TweakFixture>(path); OperationFiles.Write(path, data with { RemoteSession = false });
         await model.RefreshCommand.ExecuteAsync(null);
