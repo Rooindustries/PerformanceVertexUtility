@@ -1122,17 +1122,18 @@ function Get-RooIndustriesRestoreControlOwnershipReason {
 function Get-RooIndustriesAppliedControlValue {
     param($Snapshot, [string]$Control)
     $recorded = @(Get-RooIndustriesPropertyArray $Snapshot 'controlChanges' | Where-Object { [string](Get-RooIndustriesPropertyValue $_ 'control' '') -eq $Control })
+    $verified = if ($recorded.Count -eq 0) { $true } else { [string](Get-RooIndustriesPropertyValue $recorded[-1] 'outcome' '') -ceq 'applied' }
     if ($recorded.Count -gt 0) {
         $value = Get-RooIndustriesPropertyValue $recorded[-1] 'proposedValue' $null
-        if (-not [string]::IsNullOrWhiteSpace([string]$value)) { return [pscustomobject]@{ known = $true; value = $value } }
+        if (-not [string]::IsNullOrWhiteSpace([string]$value)) { return [pscustomobject]@{ known = $true; value = $value; verified = $verified } }
     }
     $field = switch ($Control) { 'priorityClass' { 'PriorityClass' } 'affinityMask' { 'AffinityMask' } 'ioPriority' { 'IoPriority' } 'memoryPriority' { 'MemoryPriority' } 'gpuPriority' { 'GpuPriority' } default { $null } }
     foreach ($prefix in 'applied', 'proposed') {
         if ($null -eq $field) { break }
         $value = Get-RooIndustriesPropertyValue $Snapshot ($prefix + $field) $null
-        if ($null -ne $value -and -not [string]::IsNullOrWhiteSpace([string]$value)) { return [pscustomobject]@{ known = $true; value = $value } }
+        if ($null -ne $value -and -not [string]::IsNullOrWhiteSpace([string]$value)) { return [pscustomobject]@{ known = $true; value = $value; verified = $verified } }
     }
-    return [pscustomobject]@{ known = $false; value = $null }
+    return [pscustomobject]@{ known = $false; value = $null; verified = $false }
 }
 
 function Split-RooIndustriesLeftAsSetRestoreChanges {
@@ -1166,7 +1167,7 @@ function Split-RooIndustriesLeftAsSetRestoreChanges {
             $left.Add([pscustomobject]@{ control = $control; currentValue = $current; appliedValue = $applied.value; originalValue = $savedOriginal; outcome = 'leftAsSet'; reason = $script:RooIndustriesLeftAsSet }) | Out-Null
             continue
         }
-        if (-not $readable) {
+        if (-not $readable -or -not $applied.known -or -not $applied.verified) {
             $change.blocked = $true
             $change.blockedReason = if (-not [string]::IsNullOrWhiteSpace($validationReason)) { $validationReason } else { $script:RooIndustriesLeftAsSetChangedBack }
         }

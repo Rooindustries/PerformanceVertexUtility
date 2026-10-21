@@ -156,7 +156,11 @@ function Invoke-DecisionScenario([string]$Kind,[string]$Outcome,[string]$Bulk,[s
    foreach($statement in $ast.EndBlock.Statements){if($statement -is [System.Management.Automation.Language.FunctionDefinitionAst] -or (($path -like '*Common.ps1' -or $path -like '*Stop-GameTuneSession.ps1') -and $statement -is [System.Management.Automation.Language.AssignmentStatementAst])){. ([scriptblock]::Create($statement.Extent.Text))}}
   }
   $snapshot=[pscustomobject]@{processId=1001;processName='Target';originalPriorityClass='Normal';proposedPriorityClass='AboveNormal'}
-  if(-not$Legacy){$snapshot|Add-Member -NotePropertyName controlChanges -NotePropertyValue @([pscustomobject]@{control='priorityClass';proposedValue='AboveNormal';outcome=$Outcome})}
+  if(-not$Legacy){
+   $record=[pscustomobject]@{control='priorityClass';proposedValue='AboveNormal'}
+   if($Outcome -ne 'missing'){$record|Add-Member -NotePropertyName outcome -NotePropertyValue $Outcome}
+   $snapshot|Add-Member -NotePropertyName controlChanges -NotePropertyValue @($record)
+  }
   if($Gpu){$snapshot|Add-Member -NotePropertyName originalGpuPriority -NotePropertyValue 'Normal';$snapshot.controlChanges+= [pscustomobject]@{control='gpuPriority';proposedValue='High';outcome=$Outcome}}
   $backupFile=Join-Path $directory 'backup.json';$sessionFile=Join-Path $directory 'session.json'
   Save $directory 'backup' ([pscustomobject]@{actionId='performance.gameTune.startSession';dryRun=$false;sessionId='decision-session';profileId='decision-profile';backupId='decision-backup';createdAtUtc='2026-10-01T00:00:00Z';snapshots=@($snapshot)})
@@ -217,7 +221,8 @@ function Invoke-DecisionScenario([string]$Kind,[string]$Outcome,[string]$Bulk,[s
   Save $directory 'first' $first
   if($Kind -eq 'game'){[IO.File]::Copy($sessionFile,(Join-Path $directory 'session-first.json'),$true)}
   Save $directory 'first-observation' @{proof='Simulated process I/O; real restore bodies, JSON persistence and status body';identityCalls=$script:DecisionCalls;injectionReached=$script:DecisionInjected;freshReads=$script:DecisionReads;priority=$script:DecisionPriority;gpu=$script:DecisionGpu;writes=@($script:DecisionWrites.ToArray())}
-  $uncertain=$Gpu -or $Bulk -in @('null','throw') -or ($Bulk -eq 'Normal' -and $Fresh -in @('AboveNormal','null','throw','empty'))
+  $unverified=-not$Legacy -and $Outcome -cne 'applied'
+  $uncertain=$Gpu -or $Bulk -in @('null','throw') -or ($Bulk -eq 'Normal' -and $Fresh -in @('AboveNormal','null','throw','empty')) -or ($unverified -and $Bulk -eq 'AboveNormal')
   $pending=if($Kind -eq 'profile'){$first.result.restorePendingCount -eq 1}else{$first.restorable}
   $finished=if($Kind -eq 'profile'){$first.status -eq 'success' -and $first.result.restorePendingCount -eq 0}else{$first.status -eq 'completed' -and -not$first.restorable}
   if($Ended){
@@ -230,7 +235,7 @@ function Invoke-DecisionScenario([string]$Kind,[string]$Outcome,[string]$Bulk,[s
    $external=$Fresh -eq 'BelowNormal' -and $Bulk -notin @('null','throw')
    Check (@($first.result.leftAsSetItems).Count -eq $(if($external){1}else{0})) "$name certifies only a readable external value"
    if($external){Check ($first.result.leftAsSetItems[0].processName -eq 'Target' -and $first.result.leftAsSetItems[0].currentValue -eq 'BelowNormal') "$name names the actual external target/value"}
-   $expectedWrites=if($Bulk -eq 'AboveNormal'){1}else{0}
+   $expectedWrites=if($Bulk -eq 'AboveNormal' -and -not$unverified){1}else{0}
    Check (@($script:DecisionWrites|Where-Object control -eq 'priorityClass').Count -eq $expectedWrites) "$name writes CPU only when owned and readable"
    if($expectedWrites){Check ($script:DecisionPriority -eq 'Normal') "$name restores the saved CPU original"}
    if($Bulk -eq 'Normal'){Check ($script:DecisionReads -gt 0) "$name freshly verifies an original-value preview"}
@@ -244,29 +249,158 @@ function Invoke-DecisionScenario([string]$Kind,[string]$Outcome,[string]$Bulk,[s
   }
   if($uncertain -and -not$Ended){
    $script:DecisionWrites.Clear();$script:DecisionCalls=0;$script:DecisionReads=0
-   $script:DecisionPriority=if($Gpu){'Normal'}else{'AboveNormal'};$script:DecisionFresh=$script:DecisionPriority;$script:DecisionGpuAvailable=$true
+   if($unverified){
+    $script:DecisionPriority='AboveNormal';$script:DecisionFresh='AboveNormal'
+    $repeat=Invoke-DecisionUndo;Save $directory 'repeat' $repeat
+    Save $directory 'repeat-observation' @{priority=$script:DecisionPriority;writes=@($script:DecisionWrites.ToArray())}
+    Check ($(if($Kind -eq 'profile'){$repeat.result.restorePendingCount -eq 1 -and $repeat.status -eq 'failed'}else{$repeat.restorable -and $repeat.result.status -eq 'failed'}) -and $script:DecisionPriority -eq 'AboveNormal' -and $script:DecisionWrites.Count -eq 0 -and @(Get-RooIndustriesPropertyArray $repeat.result 'leftAsSetItems').Count -eq 0) "$name repeated unverified target equality stays pending without a write"
+    $script:DecisionCalls=0;$script:DecisionReads=0
+   }
+   $script:DecisionPriority=if($Gpu -or $unverified){'Normal'}else{'AboveNormal'};$script:DecisionFresh=$script:DecisionPriority;$script:DecisionGpuAvailable=$true
    $retry=Invoke-DecisionUndo;Save $directory 'retry' $retry
    Save $directory 'retry-observation' @{priority=$script:DecisionPriority;gpu=$script:DecisionGpu;writes=@($script:DecisionWrites.ToArray())}
    Check ($(if($Kind -eq 'profile'){$retry.status -eq 'success' -and $retry.result.restorePendingCount -eq 0}else{-not$retry.restorable -and $retry.status -eq 'completed'})) "$name explicit readable retry finishes recovery"
-   Check ($script:DecisionWrites.Count -eq 1 -and $script:DecisionWrites[0].control -eq $(if($Gpu){'gpuPriority'}else{'priorityClass'}) -and $script:DecisionWrites[0].value -eq 'Normal') "$name retry writes exactly the unresolved field"
+   if($unverified){Check ($script:DecisionWrites.Count -eq 0 -and $script:DecisionPriority -eq 'Normal' -and $script:DecisionReads -gt 0) "$name fresh original resolves an unverified apply without writing"}
+   else{Check ($script:DecisionWrites.Count -eq 1 -and $script:DecisionWrites[0].control -eq $(if($Gpu){'gpuPriority'}else{'priorityClass'}) -and $script:DecisionWrites[0].value -eq 'Normal') "$name retry writes exactly the unresolved field"}
   }
   $decisionCases.Add([pscustomobject]@{name=$name;status=$first.result.status;uncertain=$uncertain;injectionReached=$script:DecisionInjected})|Out-Null
  }
 }
 foreach($kind in 'profile','game'){
- foreach($outcome in 'pending','failed'){
+ foreach($outcome in 'pending','failed','unknown','missing'){
   foreach($bulk in 'AboveNormal','BelowNormal','Normal','null','throw'){Invoke-DecisionScenario $kind $outcome $bulk}
  }
- foreach($outcome in 'applied','pending','failed'){
+ foreach($outcome in 'applied','pending','failed','unknown','missing'){
   foreach($fresh in 'AboveNormal','BelowNormal','null','throw','empty'){Invoke-DecisionScenario $kind $outcome 'Normal' $fresh}
  }
  Invoke-DecisionScenario $kind 'applied' 'AboveNormal' -Gpu
+ Invoke-DecisionScenario $kind 'applied' 'AboveNormal'
  Invoke-DecisionScenario $kind 'legacy' 'BelowNormal' -Legacy
  Invoke-DecisionScenario $kind 'legacy' 'Normal' 'AboveNormal' -Legacy
  Invoke-DecisionScenario $kind 'applied' 'AboveNormal' -Ended
 }
-Save $OutRoot 'summary' @{proof='Dependency simulation, not a real Windows gate';cases=@($observations.ToArray());previewCases=@($previewCases.ToArray());decisionCases=@($decisionCases.ToArray());failures=@($failures.ToArray())}
+$applyFailureCases=New-Object System.Collections.Generic.List[object]
+function Invoke-ApplyFailureScenario([string]$Kind,[string]$FailureMode,[string]$Resolution){
+ $name=$Kind+'-apply-'+$FailureMode+'-'+$Resolution
+ $directory=Join-Path $OutRoot $name;[IO.Directory]::CreateDirectory($directory)|Out-Null
+ & {
+  foreach($path in 'backend/scripts/OperationState.Common.ps1','backend/scripts/ProcessProfile.Common.ps1','backend/scripts/GameTuneSession.Common.ps1','backend/scripts/Restore-ProcessProfileBackup.ps1','backend/scripts/Stop-GameTuneSession.ps1'){
+   foreach($statement in (Read-Ast $path).EndBlock.Statements){if($statement -is [System.Management.Automation.Language.FunctionDefinitionAst] -or (($path -like '*Common.ps1' -or $path -like '*Stop-GameTuneSession.ps1') -and $statement -is [System.Management.Automation.Language.AssignmentStatementAst])){. ([scriptblock]::Create($statement.Extent.Text))}}
+  }
+  $live=[Diagnostics.Process]::GetCurrentProcess()
+  $script:FailurePhase='apply';$script:FailureMemory=5;$script:FailureCpu='AboveNormal';$script:FailureReads=0
+  $script:FailureHeld=$false;$script:FailureGates=0;$script:FailureReleases=0;$script:FailureOutside=0
+  $script:FailureApplyEvents=New-Object System.Collections.Generic.List[object]
+  $script:FailureWrites=New-Object System.Collections.Generic.List[object]
+  function Test-RooIndustriesGovernorOwnsControl {
+   param($Process,$Control)
+   $refuse=$script:FailurePhase -eq 'apply' -and $FailureMode -eq 'before-setter' -and $Control -eq 'memoryPriority'
+   if($script:FailurePhase -eq 'apply'){$script:FailureApplyEvents.Add([pscustomobject]@{operation='governor-guard';refused=$refuse;value=$script:FailureMemory})|Out-Null}
+   return $refuse
+  }
+  function Set-RooIndustriesProcessMemoryPriority {
+   param($Process,$Value)
+   if($script:FailurePhase -ne 'apply'){throw 'Only the actual apply helper may use this simulated setter.'}
+   $script:FailureMemory=[int]$Value
+   $script:FailureApplyEvents.Add([pscustomobject]@{operation='memory-setter';value=$script:FailureMemory})|Out-Null
+  }
+  function Get-RooIndustriesProcessControlReadback {
+   param($Process,$Control)
+   if($script:FailurePhase -eq 'apply'){
+    $script:FailureApplyEvents.Add([pscustomobject]@{operation='final-readback';value=$script:FailureMemory})|Out-Null
+    throw 'Simulated final readback failed after the memory setter.'
+   }
+   $script:FailureReads++
+   if(-not$script:FailureHeld){$script:FailureOutside++;throw 'Restore certification read escaped its simulated gate.'}
+   if($Control -eq 'memoryPriority'){return $script:FailureMemory}
+   return $script:FailureCpu
+  }
+  function Enter-RooIndustriesGovernorGate {
+   param($Seconds)
+   if($script:FailureHeld){throw 'Unexpected nested simulated gate.'}
+   $script:FailureHeld=$true;$script:FailureGates++
+   return [pscustomobject]@{fixtureGate=$true}
+  }
+  function Exit-RooIndustriesGovernorGate {
+   param($Gate)
+   if($null -ne $Gate){$script:FailureHeld=$false;$script:FailureReleases++}
+  }
+  $failedChange=New-RooIndustriesControlChange 'memoryPriority' 5 2 'applyMemoryPriority' 'Simulated owned memory apply.'
+  $applyError=$null
+  try{Invoke-RooIndustriesProcessControlChange $live $failedChange}catch{$applyError=$_.Exception.Message}
+  Save $directory 'helper-produced-failed-change' $failedChange
+  Save $directory 'helper-failure-order' @{proof='Actual production mutation helper; simulated governor guard, memory setter and final readback. No real OS control writes.';error=$applyError;valueAfterHelper=$script:FailureMemory;events=@($script:FailureApplyEvents.ToArray())}
+  Check ($failedChange.outcome -ceq 'failed' -and -not[string]::IsNullOrWhiteSpace($applyError)) "$name actual mutation helper persisted its failed outcome"
+  if($FailureMode -eq 'before-setter'){
+   Check ($applyError -ceq $script:RooIndustriesGovernorManaged -and $script:FailureMemory -eq 5 -and @($script:FailureApplyEvents|Where-Object operation -eq 'memory-setter').Count -eq 0 -and @($script:FailureApplyEvents|Where-Object operation -eq 'final-readback').Count -eq 0) "$name governor refusal happened before any setter/readback"
+   $script:FailureMemory=2
+  }else{
+   Check ($script:FailureMemory -eq 2 -and ($script:FailureApplyEvents.operation -join ',') -ceq 'governor-guard,memory-setter,final-readback') "$name setter succeeded before the actual helper caught readback failure"
+  }
+  $script:FailurePhase='restore'
+  $snapshot=[pscustomobject]@{processId=$live.Id;processName=$live.ProcessName;executablePath=$live.MainModule.FileName;processStartTimeUtc=$live.StartTime.ToUniversalTime().ToString('o');originalPriorityClass='Normal';proposedPriorityClass='AboveNormal';originalMemoryPriority=5;proposedMemoryPriority=2;controlChanges=@([pscustomobject]@{control='priorityClass';proposedValue='AboveNormal';outcome='applied'},$failedChange)}
+  $backupFile=Join-Path $directory 'backup.json';$sessionFile=Join-Path $directory 'session.json'
+  Save $directory 'backup' ([pscustomobject]@{actionId='performance.gameTune.startSession';dryRun=$false;sessionId='failed-apply-session';profileId='failed-apply-profile';backupId='failed-apply-backup';createdAtUtc='2026-10-01T00:00:00Z';snapshots=@($snapshot)})
+  Save $directory 'session' ([pscustomobject]@{sessionId='failed-apply-session';profileId='failed-apply-profile';dryRun=$false;restorable=$true;status='completed';sessionStatus='completed';backupManifestPath=$backupFile;changedItems=@();restoredItems=@();skippedItems=@();completedAtUtc=$null})
+  $savedBackup=[IO.File]::ReadAllText($backupFile)
+  Check ((Read-RooIndustriesJsonFile $backupFile).snapshots[0].controlChanges[1].outcome -ceq 'failed') "$name real backup contains the unchanged helper-produced failure"
+  function Resolve-RooIndustriesPath {param($Path,$DefaultPath) return $Path}
+  function Resolve-RooIndustriesGameTuneSessionFile {param($SessionId,$SessionPath,$StateRoot) return $sessionFile}
+  function Resolve-RooIndustriesGameTuneStateRoot {param($StateRoot) return $directory}
+  function Get-FailureState {return [pscustomobject]@{process=$live;priorityClass=$script:FailureCpu;memoryPriority=$script:FailureMemory;memoryPriorityAvailable=$true;gpuPriorityAvailable=$false}}
+  function Get-FailureCandidate {return [pscustomobject]@{process=$live;exists=$true;matches=$true;instanceEnded=$false;reason=$null;blockedReason=$null;currentPriorityClass=$script:FailureCpu;currentMemoryPriority=$script:FailureMemory;currentControlState=(Get-FailureState)}}
+  function Get-RestoreCandidate {param($Snapshot) return Get-FailureCandidate}
+  function Get-RooIndustriesGameTuneLiveProcessIdentity {param($Entry) return Get-FailureCandidate}
+  function Get-RooIndustriesProcessControlState {param($ProcessId,$Unused,[switch]$ReadGpu) return Get-FailureState}
+  function Invoke-RooIndustriesProcessControlChange {
+   param($Process,$Change)
+   $script:FailureWrites.Add([pscustomobject]@{control=$Change.control;value=$Change.proposedValue})|Out-Null
+   if($Change.control -eq 'memoryPriority'){$script:FailureMemory=[int]$Change.proposedValue}else{$script:FailureCpu=[string]$Change.proposedValue}
+   $Change.outcome='applied'
+  }
+  function Write-RooIndustriesJsonOutput {param($Value,$OutputPath) return $Value}
+  function Invoke-FailureUndo {
+   $ConfirmApply=$true;$BackupPath=$backupFile;$SessionPath=$sessionFile;$SessionId='failed-apply-session';$StateRoot=$directory;$OutputPath=''
+   $path=if($Kind -eq 'profile'){'backend/scripts/Restore-ProcessProfileBackup.ps1'}else{'backend/scripts/Stop-GameTuneSession.ps1'}
+   $body=(Read-Ast $path).EndBlock.Statements|Where-Object {$_ -is [System.Management.Automation.Language.TryStatementAst]}|Select-Object -Last 1
+   return & ([scriptblock]::Create($body.Extent.Text))
+  }
+  function Save-FailureStatus([string]$Label,$Undo){
+   if($Kind -ne 'game'){return}
+   [IO.File]::Delete((Join-Path $directory 'events.jsonl'))
+   $SessionId='failed-apply-session';$SessionPath=$sessionFile;$StateRoot=$directory;$OutputPath=''
+   $body=(Read-Ast 'backend/scripts/Get-GameTuneSessionStatus.ps1').EndBlock.Statements|Where-Object {$_ -is [System.Management.Automation.Language.TryStatementAst]}|Select-Object -Last 1
+   $status=& ([scriptblock]::Create($body.Extent.Text));Save $directory $Label $status
+   Check ($status.restorable -eq $Undo.restorable -and $status.restoreAttempted -and ($status.leftAsSetItems|ConvertTo-Json -Depth 20 -Compress) -ceq ($Undo.leftAsSetItems|ConvertTo-Json -Depth 20 -Compress)) "$name $Label reopens persisted exact recovery/kept evidence without logs"
+  }
+  function Save-FailureObservation([string]$Label){Save $directory $Label @{memory=$script:FailureMemory;priority=$script:FailureCpu;restoreWrites=@($script:FailureWrites.ToArray());freshReads=$script:FailureReads;gates=$script:FailureGates;releases=$script:FailureReleases;outsideReads=$script:FailureOutside;held=$script:FailureHeld;proof='Real restore functions/body/persistence/status; process identity, getters/setters and gate dependencies simulated on Linux. Independent CPU is another verified control of the same process.'}}
+  $first=Invoke-FailureUndo;Save $directory 'first' $first;Save-FailureObservation 'first-observation';Save-FailureStatus 'status-first' $first
+  $pending=if($Kind -eq 'profile'){$first.result.restorePendingCount -eq 1}else{$first.restorable}
+  Check ($pending -and $first.result.status -eq 'partial' -and $script:FailureMemory -eq 2 -and @(Get-RooIndustriesPropertyArray $first.result 'leftAsSetItems').Count -eq 0) "$name target equality keeps recovery without external certification"
+  Check (@($script:FailureWrites|Where-Object control -eq 'memoryPriority').Count -eq 0 -and $script:FailureCpu -eq 'Normal' -and @($script:FailureWrites|Where-Object control -eq 'priorityClass').Count -eq 1) "$name writes no uncertain memory and restores verified CPU once"
+  Check (@(Get-RooIndustriesPropertyArray $first.result 'skippedItems'|Where-Object {$_.reason -eq ('memoryPriority: '+$script:RooIndustriesLeftAsSetChangedBack)}).Count -eq 1) "$name records the existing unconfirmed-control reason"
+  $repeat=Invoke-FailureUndo;Save $directory 'repeat' $repeat;Save-FailureObservation 'repeat-observation';Save-FailureStatus 'status-repeat' $repeat
+  $pending=if($Kind -eq 'profile'){$repeat.result.restorePendingCount -eq 1}else{$repeat.restorable}
+  Check ($pending -and $repeat.result.status -eq 'failed' -and $script:FailureMemory -eq 2 -and $script:FailureWrites.Count -eq 1 -and @(Get-RooIndustriesPropertyArray $repeat.result 'leftAsSetItems').Count -eq 0) "$name repeated explicit Undo cannot turn a failed apply into write authority"
+  $script:FailureMemory=if($Resolution -eq 'original'){5}else{3}
+  $retry=Invoke-FailureUndo;Save $directory 'retry' $retry;Save-FailureObservation 'retry-observation';Save-FailureStatus 'status-retry' $retry
+  $finished=if($Kind -eq 'profile'){$retry.status -eq 'success' -and $retry.result.restorePendingCount -eq 0}else{$retry.status -eq 'completed' -and -not$retry.restorable}
+  Check ($finished -and $script:FailureWrites.Count -eq 1 -and @($script:FailureWrites|Where-Object control -eq 'memoryPriority').Count -eq 0) "$name fresh $Resolution resolves without an uncertain write or repeated CPU write"
+  $left=@(Get-RooIndustriesPropertyArray $retry.result 'leftAsSetItems')
+  if($Resolution -eq 'external'){
+   Check ($left.Count -eq 1 -and $left[0].control -eq 'memoryPriority' -and $left[0].processName -ceq $live.ProcessName -and $left[0].currentValue -eq 3 -and $retry.result.summary.Contains($live.ProcessName+' memory priority (3)')) "$name fresh external memory3 is preserved and named"
+  }else{Check ($left.Count -eq 0 -and $script:FailureMemory -eq 5) "$name original memory5 closes without a kept claim"}
+  Check ($script:FailureReads -gt 0 -and $script:FailureGates -eq $script:FailureReleases -and -not$script:FailureHeld -and $script:FailureOutside -eq 0) "$name every fresh certification read stays gated and releases its gate"
+  Check ([IO.File]::ReadAllText($backupFile) -ceq $savedBackup) "$name failed apply journal remains unchanged across all Undos"
+  foreach($label in 'first','repeat','retry'){Check ([IO.File]::ReadAllText((Join-Path $directory ($label+'.json'))) -notmatch '"verified"\s*:') "$name $label keeps verification metadata internal"}
+  $applyFailureCases.Add([pscustomobject]@{name=$name;helperOutcome=$failedChange.outcome;applySetterCalls=@($script:FailureApplyEvents|Where-Object operation -eq 'memory-setter').Count;firstStatus=$first.result.status;repeatStatus=$repeat.result.status;finalStatus=$retry.result.status;memoryWrites=@($script:FailureWrites|Where-Object control -eq 'memoryPriority').Count;cpuWrites=@($script:FailureWrites|Where-Object control -eq 'priorityClass').Count;finalMemory=$script:FailureMemory;kept=$left.Count})|Out-Null
+ }
+}
+foreach($kind in 'profile','game'){foreach($failureMode in 'before-setter','after-setter'){foreach($resolution in 'original','external'){Invoke-ApplyFailureScenario $kind $failureMode $resolution}}}
+
+Save $OutRoot 'summary' @{proof='Dependency simulation, not a real Windows gate';cases=@($observations.ToArray());previewCases=@($previewCases.ToArray());decisionCases=@($decisionCases.ToArray());applyFailureCases=@($applyFailureCases.ToArray());failures=@($failures.ToArray())}
 if($failures.Count){throw ($failures -join '; ')}
 "Completed $($observations.Count) profile confirmation integration scenarios."
 "Completed $($previewCases.Count) restore preview contract branches."
 "Completed $($decisionCases.Count) shared restore-decision scenarios."
+"Completed $($applyFailureCases.Count) actual-helper failure-order scenarios."
