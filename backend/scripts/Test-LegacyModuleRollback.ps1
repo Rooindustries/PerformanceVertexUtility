@@ -1,7 +1,7 @@
 param(
     [string]$HarnessPath = (Join-Path $PSScriptRoot '..\..\LeanClientOptimizer.ps1'),
     [ValidateSet('All','Selection','Drift','Registry','Recovery','ApplyComparison')][string]$Scenario = 'All',
-    [ValidateSet('All','Signed','LegacyEvidence','Preflight','RegistryFailure','ServiceFailure')][string]$RecoveryCase = 'All',
+    [ValidateSet('All','Signed','LegacyEvidence','Preflight','RegistryFailure','ServiceFailure','OriginalEvidence','ServiceExistence','SourceEvidence')][string]$RecoveryCase = 'All',
     [string]$BaseHarnessPath = $env:ROO_INDUSTRIES_LEGACY_BASE_HARNESS,
     [string]$BaseHarnessSha256 = $env:ROO_INDUSTRIES_LEGACY_BASE_HARNESS_SHA256
 )
@@ -23,6 +23,31 @@ $legacyDwordCases=@(
     @{label='signed minimum';data=[int]::MinValue;raw=[int]::MinValue;encoded=[uint32]2147483648},
     @{label='unsigned maximum';data='4294967295';raw=[int]-1;encoded=[uint32]::MaxValue}
 )
+$invalidOriginalCases=@(
+    foreach ($kind in 'String','ExpandString','MultiString','DWord','QWord','Binary') {
+        @{label=($kind+' null');entry=@{kind=$kind;oldValue=$null}}
+        @{label=($kind+' missing');entry=@{kind=$kind}}
+        @{label=($kind+' case');entry=@{kind=$kind.ToLowerInvariant();oldValue=1}}
+    }
+    @{label='DWord hex text';entry=@{kind='DWord';oldValue='0x10'}}
+    @{label='DWord decimal text';entry=@{kind='DWord';oldValue='16'}}
+    @{label='DWord floating number';entry=@{kind='DWord';oldValue=[double]16}}
+    @{label='DWord Boolean';entry=@{kind='DWord';oldValue=$true}}
+    @{label='DWord soft hyphen';entry=@{kind=('D'+[char]0x00ad+'Word');oldValue=1}}
+    @{label='QWord hex text';entry=@{kind='QWord';oldValue='0x10'}}
+    @{label='QWord leading zero';entry=@{kind='QWord';oldValue='016'}}
+    @{label='QWord number';entry=@{kind='QWord';oldValue=16}}
+    @{label='QWord signed text';entry=@{kind='QWord';oldValue='-1'}}
+    @{label='String number';entry=@{kind='String';oldValue=7}}
+    @{label='ExpandString array';entry=@{kind='ExpandString';oldValue=@('text')}}
+    @{label='MultiString scalar';entry=@{kind='MultiString';oldValue='one'}}
+    @{label='MultiString numeric element';entry=@{kind='MultiString';oldValue=@('one',2)}}
+    @{label='MultiString null element';entry=@{kind='MultiString';oldValue=@('one',$null)}}
+    @{label='MultiString nested arrays';entry=@{kind='MultiString';oldValue=@(@('one','two'),@('three'))}}
+    @{label='Binary whitespace';entry=@{kind='Binary';oldValue="Zg==`n"}}
+    @{label='Binary padding bits';entry=@{kind='Binary';oldValue='Zh=='}}
+    @{label='Binary array';entry=@{kind='Binary';oldValue=@()}}
+)
 try {
     New-Item -ItemType Directory -Path $tempRoot | Out-Null
     $fixtureManifest = Join-Path $tempRoot 'manifest.json'
@@ -31,6 +56,7 @@ try {
     }) } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $fixtureManifest -Encoding UTF8
     if ($Scenario -in 'All','Recovery') { & {
         . $HarnessPath -Action ListModules -ManifestPath $fixtureManifest -DataRoot $tempRoot -ModuleId 'fixture' | Out-Null
+        $sourceServiceReader=${function:Get-ServiceSnapshot}
         function Open-RegistryKey {
             param($Path,[switch]$Writable,[switch]$Create)
             $key=[pscustomobject]@{}
@@ -40,9 +66,18 @@ try {
         function Get-RegistryValueSnapshot { param($Item) $script:recoveryValues[$Item.name] }
         function Set-RegistrySnapshotData {
             param($Key,$Name,$Snapshot)
+            $raw=Convert-RegistrySnapshotData $Snapshot
             $script:recoveryWrites++
             if ($Name -ceq $script:failureName -and $script:failureMode -eq 'throw') { throw 'Fixture registry write failed' }
-            $script:recoveryValues[$Name]=[pscustomobject]@{valueExists=$Snapshot.valueExists;kind=$Snapshot.kind;oldValue=$Snapshot.oldValue}
+            $kind=[string][Microsoft.Win32.RegistryValueKind]$Snapshot.kind
+            $stored=$raw
+            switch ($kind) {
+                'DWord' { $stored=[BitConverter]::ToUInt32([BitConverter]::GetBytes([int]$raw),0) }
+                'QWord' { $stored=[BitConverter]::ToUInt64([BitConverter]::GetBytes([long]$raw),0).ToString([Globalization.CultureInfo]::InvariantCulture) }
+                'Binary' { $stored=[Convert]::ToBase64String([byte[]]$raw) }
+                'MultiString' { $stored=[string[]]$raw }
+            }
+            $script:recoveryValues[$Name]=[pscustomobject]@{valueExists=$Snapshot.valueExists;kind=$kind;oldValue=$stored}
             if ($Name -ceq $script:failureName -and $script:failureMode -eq 'readback') { $script:recoveryValues[$Name]=[pscustomobject]@{valueExists=$true;kind='String';oldValue='Later'} }
         }
         function Get-ServiceSnapshot { param($Name) [pscustomobject]@{name=$Name;exists=$true;startType=$script:recoveryServices[$Name];status='Running'} }
@@ -65,6 +100,97 @@ try {
         $second=@{path='HKCU\Fixture';name='Second';type='REG_DWORD';desiredData=2;oldValue=0;kind='DWord';valueExists=$true}
         $service=@{name='FixtureSvc';exists=$true;startType='Automatic';status='Running';appliedStartup='Disabled'}
         $BackupPath=Join-Path $tempRoot 'recovery-backup.json'
+        if ($RecoveryCase -in 'All','OriginalEvidence') {
+            $rows=New-Object System.Collections.Generic.List[object]
+            foreach ($case in $invalidOriginalCases) {
+                Reset-RecoveryFixture
+                $entry=@{path='HKCU\Fixture';name='Second';type='REG_DWORD';desiredData=2;valueExists=$true}+$case.entry
+                Write-JsonFile @{moduleId='fixture';registry=@($first,$entry);services=@($service)} $BackupPath
+                $hash=(Get-FileHash $BackupPath).Hash
+                $ConfirmApply=$false
+                $preview=Invoke-RollbackModule
+                $previewSafe=-not $preview.success -and $preview.restoredRegistry -eq 0 -and $preview.restoredServices -eq 0 -and $preview.failures[0].phase -ceq 'preflight' -and $script:recoveryWrites -eq 0 -and $script:serviceWrites -eq 0
+                $ConfirmApply=$true
+                $result=Invoke-RollbackModule
+                $rows.Add([pscustomobject]@{label=$case.label;previewSafe=$previewSafe;success=$result.success;partial=$result.partial;phase=$result.failures[0].phase;error=$result.failures[0].error;registryWrites=$script:recoveryWrites;serviceWrites=$script:serviceWrites;first=$script:recoveryValues.First;second=$script:recoveryValues.Second;pending=@($result.pending).Count;backupUnchanged=((Get-FileHash $BackupPath).Hash -ceq $hash)})
+            }
+            Write-Output ('ORIGINAL_EVIDENCE_FIXTURE_JSON '+(ConvertTo-Json -InputObject @($rows.ToArray()) -Depth 7 -Compress))
+            Assert (@($rows|Where-Object {-not $_.previewSafe}).Count -eq 0) 'Malformed original evidence fails preview before any setting write'
+            Assert (@($rows|Where-Object {$_.success -or $_.partial -or $_.phase -cne 'preflight' -or $_.error -notlike '*original*evidence*' -or $_.registryWrites -ne 0 -or $_.serviceWrites -ne 0 -or $_.first.oldValue -ne 2 -or $_.second.oldValue -ne 2 -or $_.pending -ne 2 -or -not $_.backupUnchanged}).Count -eq 0) 'Malformed original evidence blocks all writes including the independent service and retains backup bytes'
+            $valid=@(
+                @{kind='String';oldValue=''},@{kind='String';oldValue='7'},
+                @{kind='ExpandString';oldValue=''},@{kind='ExpandString';oldValue='%PATH%\fixture'},
+                @{kind='MultiString';oldValue=@()},@{kind='MultiString';oldValue=@('')},@{kind='MultiString';oldValue=@('One','two')},
+                @{kind='DWord';oldValue=0},@{kind='DWord';oldValue=[uint32]2147483648},@{kind='DWord';oldValue=[uint32]::MaxValue},
+                @{kind='QWord';oldValue='0'},@{kind='QWord';oldValue='9007199254740993'},@{kind='QWord';oldValue='9223372036854775808'},@{kind='QWord';oldValue='18446744073709551615'},
+                @{kind='Binary';oldValue=''},@{kind='Binary';oldValue='AH+A/w=='}
+            )
+            foreach ($case in $valid) {
+                Reset-RecoveryFixture
+                $entry=@{path='HKCU\Fixture';name='Second';type='REG_DWORD';desiredData=2;valueExists=$true}+$case
+                Write-JsonFile @{moduleId='fixture';registry=@($first,$entry);services=@($service)} $BackupPath
+                $hash=(Get-FileHash $BackupPath).Hash
+                $ConfirmApply=$false
+                $preview=Invoke-RollbackModule
+                Assert ($preview.success -and $preview.restoredRegistry -eq 2 -and $preview.restoredServices -eq 1 -and $script:recoveryWrites -eq 0 -and $script:serviceWrites -eq 0) ($case.kind+' canonical original previews without writes')
+                $ConfirmApply=$true
+                $result=Invoke-RollbackModule
+                Assert ($result.success -and $result.restoredRegistry -eq 2 -and $result.restoredServices -eq 1 -and $script:recoveryValues.Second.kind -ceq $case.kind -and (ConvertTo-Json -InputObject $script:recoveryValues.Second.oldValue -Compress) -ceq (ConvertTo-Json -InputObject $case.oldValue -Compress) -and (Get-FileHash $BackupPath).Hash -ceq $hash) ($case.kind+' canonical original restores exact data without changing backup bytes')
+            }
+        }
+        if ($RecoveryCase -in 'All','ServiceExistence') {
+            $rows=New-Object System.Collections.Generic.List[object]
+            foreach ($case in @(@{label='missing'},@{label='null';value=$null},@{label='text false';value='false'},@{label='text true';value='true'},@{label='number zero';value=0},@{label='number one';value=1},@{label='empty array';value=@()})) {
+                Reset-RecoveryFixture
+                $entry=@{name='SecondSvc';startType='Automatic';status='Running';appliedStartup='Disabled'}
+                if ($case.ContainsKey('value')) { $entry.exists=$case.value }
+                Write-JsonFile @{moduleId='fixture';registry=@();services=@($entry,$service)} $BackupPath
+                $hash=(Get-FileHash $BackupPath).Hash
+                $ConfirmApply=$false
+                $preview=Invoke-RollbackModule
+                $previewSafe=$preview.success -and $preview.restoredServices -eq 1 -and @($preview.leftAsChanged).Count -eq 1 -and $preview.leftAsChanged[0].reason -like '*existence*evidence*' -and $script:serviceWrites -eq 0
+                $ConfirmApply=$true
+                $result=Invoke-RollbackModule
+                $rows.Add([pscustomobject]@{label=$case.label;previewSafe=$previewSafe;success=$result.success;restoredServices=$result.restoredServices;leftCount=@($result.leftAsChanged).Count;reason=$result.leftAsChanged[0].reason;serviceWrites=$script:serviceWrites;second=$script:recoveryServices.SecondSvc;backupUnchanged=((Get-FileHash $BackupPath).Hash -ceq $hash)})
+            }
+            Write-Output ('SERVICE_EXISTENCE_FIXTURE_JSON '+(ConvertTo-Json -InputObject @($rows.ToArray()) -Depth 5 -Compress))
+            Assert (@($rows|Where-Object {-not $_.previewSafe -or -not $_.success -or $_.restoredServices -ne 1 -or $_.leftCount -ne 1 -or $_.reason -notlike '*existence*evidence*' -or $_.serviceWrites -ne 1 -or $_.second -cne 'Disabled' -or -not $_.backupUnchanged}).Count -eq 0) 'Missing or invalid service existence is reported without blocking the independent proven service'
+            Reset-RecoveryFixture
+            Write-JsonFile @{moduleId='fixture';registry=@();services=@(@{name='SecondSvc';exists=$false;startType='Automatic';status='Running';appliedStartup='Disabled'},$service)} $BackupPath
+            $hash=(Get-FileHash $BackupPath).Hash
+            $ConfirmApply=$false
+            $preview=Invoke-RollbackModule
+            $ConfirmApply=$true
+            $result=Invoke-RollbackModule
+            Assert ($preview.restoredServices -eq 1 -and $result.success -and $result.restoredServices -eq 1 -and @($result.leftAsChanged).Count -eq 0 -and @($result.actions).Count -eq 1 -and $script:serviceWrites -eq 1 -and $script:recoveryServices.SecondSvc -ceq 'Disabled' -and (Get-FileHash $BackupPath).Hash -ceq $hash) 'Boolean false records an absent original service and grants no action'
+        }
+        if ($RecoveryCase -in 'All','SourceEvidence') { & {
+            $ManifestPath=Join-Path $tempRoot 'source-manifest.json'
+            $DataRoot=Join-Path $tempRoot 'source-evidence'
+            $manifest=Get-Content $fixtureManifest -Raw | ConvertFrom-Json
+            $manifest.modules[0].registryValues=@()
+            $manifest.modules[0].services=@(foreach ($name in 'FixtureSvc','NoCimFixtureSvc','MissingFixtureSvc') { @{name=$name;startup='Disabled';targetState='Stopped'} })
+            Write-JsonFile $manifest $ManifestPath
+            $script:sourceTypes=@{FixtureSvc='Automatic';NoCimFixtureSvc='Manual'}
+            function Get-Service {
+                param($Name)
+                if ($script:sourceTypes.ContainsKey($Name)) { [pscustomobject]@{Name=$Name;DisplayName=($Name+' display');Status='Running';StartType=$script:sourceTypes[$Name];ServicesDependedOn=@([pscustomobject]@{Name='FixtureDependency'})} }
+            }
+            function Get-CimInstance { param($ClassName,$Filter) if ($Filter -ceq "Name='FixtureSvc'") { [pscustomobject]@{StartMode='Auto';ProcessId=0;PathName='C:\OwnedFixture\service.exe'} } }
+            function Get-ServiceSnapshot { param($Name) & $sourceServiceReader $Name }
+            function Set-Service { param($Name,$StartupType) $script:sourceTypes[$Name]=$StartupType }
+            function Stop-Service { param($Name,[switch]$Force) }
+            function Get-BenchmarkSnapshot { param($Label) @{label=$Label} }
+            function Invoke-SmokeTest { @() }
+            $ConfirmApply=$true
+            $applied=Invoke-ApplyModule
+            $backup=Get-Content $applied.backupPath -Raw | ConvertFrom-Json
+            $run=@(Get-ChildItem (Join-Path $DataRoot 'runs') -File | Where-Object { (Get-Content $_.FullName -Raw|ConvertFrom-Json).backupPath -ceq $applied.backupPath })
+            Assert (@($backup.services).Count -eq 3 -and $backup.services[0].exists -is [bool] -and $backup.services[0].exists -and $backup.services[0].appliedStartup -ceq 'Disabled' -and $backup.services[0].startType -ceq 'Automatic' -and $backup.services[0].dependsOn[0] -ceq 'FixtureDependency' -and $null -eq $backup.services[1].pathName -and $backup.services[1].processId -eq 0 -and $backup.services[2].exists -is [bool] -and -not $backup.services[2].exists) 'Real backup producer saves populated and absent service fields from OS boundary fixtures'
+            Assert ($run.Count -eq 1 -and @($applied.actions).Count -eq 3 -and -not $applied.dryRun -and $applied.after.label -ceq 'post-fixture') 'Real apply producer saves reachable run fields and the exact backup reference'
+            Write-Output ('SERVICE_BACKUP_FIXTURE_JSON '+(ConvertTo-Json -InputObject ([IO.File]::ReadAllText($applied.backupPath)) -Compress))
+            Write-Output ('APPLY_RUN_FIXTURE_JSON '+(ConvertTo-Json -InputObject ([IO.File]::ReadAllText($run[0].FullName)) -Compress))
+        } }
         if ($RecoveryCase -in 'All','Signed') {
             foreach ($case in $legacyDwordCases) {
                 Reset-RecoveryFixture
@@ -349,6 +475,31 @@ try {
             . $HarnessPath -Action ListModules -ManifestPath $fixtureManifest -DataRoot $tempRoot -ModuleId 'fixture' | Out-Null
             function Get-BenchmarkSnapshot { param($Label) @{label=$Label} }
             function Invoke-SmokeTest { @() }
+            & {
+                $BackupPath=Join-Path $tempRoot 'malformed-original.json'
+                $rows=New-Object System.Collections.Generic.List[object]
+                function Get-ServiceSnapshot { param($Name) [pscustomobject]@{name=$Name;exists=$true;startType='Disabled';status='Running'} }
+                function Restore-ServiceSnapshot { param($Snapshot) $script:malformedServiceWrites++ }
+                foreach ($case in $invalidOriginalCases) {
+                    $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($subkey,$true)
+                    try { foreach ($name in 'First','Second') { $key.SetValue($name,2,[Microsoft.Win32.RegistryValueKind]::DWord) } } finally { $key.Dispose() }
+                    $firstEntry=@{path=$regPath;name='First';type='REG_DWORD';desiredData=2;valueExists=$true;kind='DWord';oldValue=1}
+                    $badEntry=@{path=$regPath;name='Second';type='REG_DWORD';desiredData=2;valueExists=$true}+$case.entry
+                    Write-JsonFile @{moduleId='fixture';registry=@($firstEntry,$badEntry);services=@(@{name='FixtureSvc';exists=$true;startType='Automatic';status='Running';appliedStartup='Disabled'})} $BackupPath
+                    $hash=(Get-FileHash $BackupPath).Hash
+                    $script:malformedServiceWrites=0
+                    $ConfirmApply=$false
+                    $preview=Invoke-RollbackModule
+                    $ConfirmApply=$true
+                    $result=Invoke-RollbackModule
+                    $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($subkey)
+                    try {
+                        $rows.Add([pscustomobject]@{label=$case.label;previewSafe=(-not $preview.success -and $preview.restoredRegistry -eq 0 -and $preview.restoredServices -eq 0);success=$result.success;phase=$result.failures[0].phase;firstKind=[string]$key.GetValueKind('First');first=$key.GetValue('First');secondKind=[string]$key.GetValueKind('Second');second=$key.GetValue('Second');serviceWrites=$script:malformedServiceWrites;backupUnchanged=((Get-FileHash $BackupPath).Hash -ceq $hash)})
+                    } finally { $key.Dispose() }
+                }
+                Write-Output ('REAL_ORIGINAL_EVIDENCE_FIXTURE_JSON '+(ConvertTo-Json -InputObject @($rows.ToArray()) -Depth 6 -Compress))
+                Assert (@($rows|Where-Object {-not $_.previewSafe -or $_.success -or $_.phase -cne 'preflight' -or $_.firstKind -cne 'DWord' -or $_.first -ne 2 -or $_.secondKind -cne 'DWord' -or $_.second -ne 2 -or $_.serviceWrites -ne 0 -or -not $_.backupUnchanged}).Count -eq 0) 'Malformed originals leave real registry values and the independent fake service untouched'
+            }
             $cases=@(
                 @{label='String numeric';kind='String';data='7';expected='7'},
                 @{label='DWORD max';kind='DWord';data=[int]-1;expected=[uint32]::MaxValue},
