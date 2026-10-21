@@ -12,9 +12,10 @@ static class DeniedReleaseChecks
 {
     public static async Task Run(string root, TweakCatalog catalog, Action<bool, string> check, string repo)
     {
+        TimerReceiptDigests(root, check);
         var consumer = catalog.Settings.Single(setting => setting.Id == "windows.a8268996c3eb9072");
         var extensions = catalog.Settings.Single(setting => setting.Id == "explorer.file-extensions");
-        foreach (var scenario in new[] { "registry-denied", "control-denied", "registry-unauthorized", "control-transition", "control-reader-missing", "control-missing", "unknown-option", "control-adapter-missing", "control-adapter-batch-missing", "control-blocker-changed", "control-timer-changed", "control-helper-denied", "control-timer-malformed", "control-blocker-malformed" })
+        foreach (var scenario in new[] { "registry-denied", "control-denied", "registry-unauthorized", "control-transition", "control-reader-missing", "control-missing", "unknown-option", "control-adapter-missing", "control-adapter-batch-missing", "control-blocker-changed", "control-timer-changed", "control-helper-denied", "control-timer-malformed", "control-blocker-malformed", "control-blocker-file-malformed" })
         {
             var controls = scenario.StartsWith("control", StringComparison.Ordinal);
             var knownChanged = scenario is "control-adapter-missing" or "control-adapter-batch-missing" or "control-blocker-changed" or "control-timer-changed";
@@ -57,6 +58,7 @@ static class DeniedReleaseChecks
                 "control-timer-changed" => HelperFailure("{\"error\":\"The timer startup task or its script changed and was left intact.\",\"resourceChanged\":true}"),
                 "control-helper-denied" => HelperFailure("{\"error\":\"Access is denied.\"}"),
                 "control-timer-malformed" or "control-blocker-malformed" => ReceiptFailure(directory, scenario == "control-timer-malformed"),
+                "control-blocker-file-malformed" => ReplacedBlockerFailure(),
                 _ => new Win32Exception(5),
             };
             if (controls) fixture.ControlReadError = target => target == service ? Failure() : null;
@@ -95,13 +97,40 @@ static class DeniedReleaseChecks
         var path = Path.Combine(root, "startup.json"); var owner = OperationOwner.Current(); var digest = new string('A', 64);
         var target = Path.Combine(Path.GetTempPath(), "roo-industries-file-controls-11111111222233334444555555555555", "downloads");
         var address = new ControlAddress("file-acl", "fixture:" + target, "permissions");
-        var original = new TweakControlRead(address, "file-acl:1:1", "1:1:1", ControlValues.From(new { owner = owner.UserSid, group = "S-1-5-18", flags = 0, dacl = "AgAIAAAAAAA=" }));
+        var original = new TweakControlRead(address, "file-acl:1:00000000000000000000000000000001", "1:00000000000000000000000000000001:1", ControlValues.From(new { owner = owner.UserSid, group = "S-1-5-18", flags = 0, dacl = "AgAIAAAAAAA=" }));
         if (timer) OperationFiles.Write(path, new TimerStartupReceipt(owner, "fixture-task", "created", null!, digest));
         else OperationFiles.Write(path, new DownloadBlockerReceipt(owner, target, "active", true, original, ControlValues.From(new { }), 16));
         var type = typeof(TweakEngine).Assembly.GetType(timer ? "RooIndustries.Optimizer.TimerStartupControl" : "RooIndustries.Optimizer.DownloadBlocker", throwOnError: true)!;
         try { type.GetMethod("Receipt", BindingFlags.NonPublic | BindingFlags.Static)!.Invoke(null, timer ? [root, "fixture-task"] : [path, target]); }
         catch (TargetInvocationException error) when (error.InnerException is { } inner) { return inner; }
         return HelperFailure("{\"error\":\"Malformed ownership evidence was mistaken for outside changes.\",\"resourceChanged\":true}");
+    }
+    private static void TimerReceiptDigests(string root, Action<bool, string> check)
+    {
+        var directory = Path.Combine(root, "digest-receipts"); Directory.CreateDirectory(directory);
+        var owner = OperationOwner.Current(); var digest = new string('A', 64);
+        var method = typeof(TimerStartupControl).GetMethod("Receipt", BindingFlags.NonPublic | BindingFlags.Static)!;
+        foreach (var phase in new[] { "creating", "created" })
+        {
+            OperationFiles.Write(Path.Combine(directory, "startup.json"), new TimerStartupReceipt(owner, "fixture-task", phase, phase == "created" ? digest.ToLowerInvariant() : "", digest.ToLowerInvariant()));
+            var receipt = (TimerStartupReceipt)method.Invoke(null, [directory, "fixture-task"])!;
+            check(receipt.ScriptHash == digest && receipt.DefinitionHash == (phase == "created" ? digest : ""), "Timer " + phase + " receipts supply canonical digests to removal and creation retry");
+        }
+    }
+    private static Exception ReplacedBlockerFailure()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "roo-industries-file-controls-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
+        var path = Path.Combine(root, "downloads"); File.WriteAllText(path, "replacement file stays unchanged");
+        var address = new ControlAddress("file-acl", "fixture:" + path, "permissions"); var owner = OperationOwner.Current();
+        var original = new TweakControlRead(address, "file-acl:1:00000000000000000000000000000001", "1:00000000000000000000000000000001:1", ControlValues.From(new { owner = owner.UserSid, group = "S-1-5-18", flags = 0, dacl = "AgAIAAAAAAA=" }));
+        OperationFiles.Write(path + ".blocker.json", new DownloadBlockerReceipt(owner, path, "active", true, original, ControlValues.From(new { }), 16));
+        try
+        {
+            try { DownloadBlocker.Read(new("download-blocker", "fixture:" + path, "blocked")); }
+            catch (Exception error) { return error; }
+            throw new InvalidOperationException("The malformed replacement fixture must be refused.");
+        }
+        finally { Directory.Delete(root, true); }
     }
     private static Exception HelperFailure(string output)
     {
