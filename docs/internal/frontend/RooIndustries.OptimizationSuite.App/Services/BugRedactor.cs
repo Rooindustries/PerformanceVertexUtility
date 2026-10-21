@@ -54,7 +54,7 @@ public sealed class BugRedactor
             if (found is { } change && change.Value == "%USERPROFILE%" && previousPrivate && previousBoundary == change.Start && previousSeparator != separator)
                 found = (change.Start, change.End, root + User);
             if (found is { } add) changes.Add(add);
-            previousPrivate = found is not { } kept || kept.Value.EndsWith(User, StringComparison.Ordinal);
+            previousPrivate = placeholder || found is not { } kept || kept.Value.EndsWith(User, StringComparison.Ordinal);
             previousSeparator = separator;
             previousBoundary = boundary;
         }
@@ -141,8 +141,26 @@ public sealed class BugRedactor
                 c = (char)Convert.ToInt32(run.Substring(escape + 1, 4), 16); next = escape + 5;
             }
             else { c = run[index]; next = index + 1; }
-            if (c is '\\' or '/' or '"' or ':' or '<' or '>' or '|' or '?' or '*' || c < ' ' && !(next == index + 1 && c is '\u0001' or '\u0002' or '\u0003')) break;
-            if (next == index + 1 && c is '\u0001' or '\u0002' or '\u0003') placeholderSeen = true;
+            var encodedMarker = false;
+            if (c == '<' && next > index + 1)
+            {
+                var kind = run.AsSpan(next).StartsWith("user", StringComparison.OrdinalIgnoreCase) ? User
+                    : run.AsSpan(next).StartsWith("pc-name", StringComparison.OrdinalIgnoreCase) ? PcName
+                    : run.AsSpan(next).StartsWith("sid", StringComparison.OrdinalIgnoreCase) ? Sid : null;
+                if (kind is not null)
+                {
+                    var close = next + (kind == User ? 4 : kind == PcName ? 7 : 3);
+                    var end = close;
+                    while (end < run.Length && run[end] == '\\') end++;
+                    if (end - close == next - index - 5 && end + 5 <= run.Length
+                        && run.AsSpan(end, 5).Equals("u003e", StringComparison.OrdinalIgnoreCase))
+                    {
+                        c = kind[0]; next = end + 5; encodedMarker = true;
+                    }
+                }
+            }
+            if (c is '\\' or '/' or '"' or ':' or '<' or '>' or '|' or '?' or '*' || c < ' ' && !((next == index + 1 || encodedMarker) && c is '\u0001' or '\u0002' or '\u0003')) break;
+            if ((next == index + 1 || encodedMarker) && c is '\u0001' or '\u0002' or '\u0003') placeholderSeen = true;
             decoded.Append(c); index = next; ends.Add(index);
         }
         var text = decoded.ToString();
@@ -150,7 +168,7 @@ public sealed class BugRedactor
         boundaryEnd = matchEnd;
         joinedDrive = matchEnd + 2 < input.Length && char.IsAsciiLetter(input[matchEnd]) && input[matchEnd + 1] == ':' && input[matchEnd + 2] is '\\' or '/';
         if (text.Length == 0 || SharedProfiles.Contains(text) && !joinedDrive && !run[..ends[^1]].Contains('\\')) return null;
-        if (text.TrimEnd(' ', '.', ',', ';', '!', ')', ']', '}', '\'') is { Length: 1 } placeholder && placeholder[0] is '\u0001' or '\u0002' or '\u0003') { placeholderOnly = true; return null; }
+        if (text.TrimEnd(' ', '.', ',', ';', '!', ')', ']', '}', '\'') is { Length: 1 } placeholder && placeholder[0] is '\u0001' or '\u0002' or '\u0003') { placeholderOnly = true; return (runStart, runStart + ends[0], placeholder); }
         var rootIndex = match.Groups["root"].Index;
         var device = rootIndex;
         while (device > 0 && input[device - 1] == '\\') device--;
