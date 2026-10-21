@@ -49,10 +49,10 @@ These must hold on every commit of `main`. Each one names the code that enforces
      - Windows tweaks restore the saved original and read it back. DWORDs round-trip bit for bit, and a setting changed by someone else is reported as left changed (`TweakComposition.Resolve`, `LeftAsChanged`, the readback in `CommitRegistry`).
      - The process governor leaves a value another program set and says "Left as another program set it." (`ProcessControlEngine.LeftAsSet`). Other process restores stop and report reconciliation when the value drifted (`ProcessControlEngine.Restore`).
      - Cleanup restores verify their backups and refuse a conflicting destination (`FileCleanupEngine.Restore`, `RegistryCleanupEngine.Restore`).
-   - Checked by: `tools/validation/Tweaks`, `tools/validation/OptimizerCore` (`Test-OptimizerCore.ps1`), `tools/validation/AppSweepUi/GovernorChecks.cs`.
+     - Harness rollback verifies restored registry kinds/data and service startup types, preserves later changes, and reports missing legacy ownership evidence (`Invoke-RollbackModule`). It removes only its values, keeping parent keys and unrelated entries.
+   - Checked by: `tools/validation/Tweaks`, `tools/validation/OptimizerCore` (`Test-OptimizerCore.ps1`), `tools/validation/AppSweepUi/GovernorChecks.cs`, `Test-LegacyModuleRollback.ps1`.
    - Known gaps:
      - Game Tune Stop and profile backup restores overwrite a value another program set afterwards. Background-limit restores already keep it.
-     - Harness rollback restores the manifest's value kind rather than the original kind, overwrites later changes, and doesn't verify restored values or service startup types. Registry keys created by apply stay in place; undo removes values without deleting parent keys or unrelated entries.
 4. **No surprise defaults.** A PC only gets what the user chose. Presets are fixed catalog entries.
    - Enforced by: `tools/validation/check_windows_tweaks.py` requires the FPS preset to list exactly the measured winners in `backend/catalogs/fps-preset.json`. Each pick must be a real catalog option with benchmark evidence, and the setting known to break a PC after a reboot is excluded.
    - A PR that changes what a PC gets by default says so in its first line.
