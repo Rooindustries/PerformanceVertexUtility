@@ -45,17 +45,19 @@ public sealed class BugRedactor
         var changes = new List<(int Start, int End, string Value)>();
         string? previousSeparator = null;
         var previousBoundary = -1;
+        var previousPrivate = false;
         foreach (Match match in ProfileSegment.Matches(text))
-            if (Profile(match, text, out var boundary, out var root) is { } change)
-            {
-                var separator = root[(match.Groups["sep"].Index - match.Groups["root"].Index)..];
-                if (change.Value == "%USERPROFILE%" && changes.Count > 0 && changes[^1].Value.EndsWith(User, StringComparison.Ordinal)
-                    && previousBoundary == change.Start && previousSeparator != separator)
-                    change = (change.Start, change.End, root + User);
-                changes.Add(change);
-                previousSeparator = separator;
-                previousBoundary = boundary;
-            }
+        {
+            var found = Profile(match, text, out var boundary, out var root, out var placeholder);
+            if (found is null && !placeholder) continue;
+            var separator = root[(match.Groups["sep"].Index - match.Groups["root"].Index)..];
+            if (found is { } change && change.Value == "%USERPROFILE%" && previousPrivate && previousBoundary == change.Start && previousSeparator != separator)
+                found = (change.Start, change.End, root + User);
+            if (found is { } add) changes.Add(add);
+            previousPrivate = found is not { } kept || kept.Value.EndsWith(User, StringComparison.Ordinal);
+            previousSeparator = separator;
+            previousBoundary = boundary;
+        }
         changes.Sort((left, right) => left.Start != right.Start ? left.Start.CompareTo(right.Start) : left.End.CompareTo(right.End));
         var merged = new List<(int Start, int End, string Value)>();
         foreach (var change in changes)
@@ -81,9 +83,10 @@ public sealed class BugRedactor
         return text.Replace(User, "<user>").Replace(PcName, "<pc-name>").Replace(Sid, "<sid>");
     }
 
-    private (int Start, int End, string Value)? Profile(Match match, string input, out int boundaryEnd, out string root)
+    private (int Start, int End, string Value)? Profile(Match match, string input, out int boundaryEnd, out string root, out bool placeholderOnly)
     {
         root = match.Groups["root"].Value;
+        placeholderOnly = false;
         var run = match.Groups["run"].Value;
         var runStart = match.Groups["run"].Index;
         var matchEnd = runStart + run.Length;
@@ -103,8 +106,12 @@ public sealed class BugRedactor
             }
         }
         var separator = root[(match.Groups["sep"].Index - match.Groups["root"].Index)..];
-        var delimiter = run.IndexOf(separator, StringComparison.Ordinal);
-        if (delimiter >= 0) run = run[..delimiter];
+        if (separator[0] == '\\')
+            for (int index = 0, count = 0; index < run.Length; index++)
+            {
+                count = run[index] == '\\' ? count + 1 : 0;
+                if (count == separator.Length) { run = run[..(index - count + 1)]; break; }
+            }
         var decoded = new StringBuilder();
         var ends = new List<int>();
         var placeholderSeen = false;
@@ -143,9 +150,11 @@ public sealed class BugRedactor
         boundaryEnd = matchEnd;
         joinedDrive = matchEnd + 2 < input.Length && char.IsAsciiLetter(input[matchEnd]) && input[matchEnd + 1] == ':' && input[matchEnd + 2] is '\\' or '/';
         if (text.Length == 0 || SharedProfiles.Contains(text) && !joinedDrive && !run[..ends[^1]].Contains('\\')) return null;
-        if (text.TrimEnd(' ', '.', ',', ';', '!', ')', ']', '}', '\'') is { Length: 1 } placeholder && placeholder[0] is '\u0001' or '\u0002' or '\u0003') return null;
+        if (text.TrimEnd(' ', '.', ',', ';', '!', ')', ']', '}', '\'') is { Length: 1 } placeholder && placeholder[0] is '\u0001' or '\u0002' or '\u0003') { placeholderOnly = true; return null; }
         var rootIndex = match.Groups["root"].Index;
-        var escapedRoot = rootIndex > 0 && input[rootIndex - 1] == '\\'
+        var device = rootIndex;
+        while (device > 0 && input[device - 1] == '\\') device--;
+        var escapedRoot = rootIndex > 0 && input[rootIndex - 1] == '\\' && !(device > 1 && input[device - 1] is '?' or '.' && input[device - 2] is '\\' or '?')
             || rootIndex >= 5 && input[rootIndex - 5] == '\\' && (input[rootIndex - 4] == 'u' || input[rootIndex - 4] == 'U')
                 && Uri.IsHexDigit(input[rootIndex - 3]) && Uri.IsHexDigit(input[rootIndex - 2]) && Uri.IsHexDigit(input[rootIndex - 1]);
         if (!escapedRoot && text.Equals(_own, StringComparison.OrdinalIgnoreCase) && NormalizeRoot(root) == _ownRoot)
