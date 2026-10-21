@@ -110,10 +110,14 @@ namespace RooIndustries.LegacyRegistry {
         [DllImport("advapi32.dll", EntryPoint="RegQueryValueExW", CharSet=CharSet.Unicode)]
         private static extern int Query(SafeRegistryHandle key,string name,IntPtr reserved,out uint kind,[Out] byte[] data,ref uint length);
         public static RawValue Read(RegistryKey key,string name) {
-            uint kind,length=8;byte[] data=new byte[8];
-            int error=Query(key.Handle,name,IntPtr.Zero,out kind,data,ref length);
+            uint kind,length=0;
+            int error=Query(key.Handle,name,IntPtr.Zero,out kind,null,ref length);
             if(error!=0)throw new Win32Exception(error);
-            Array.Resize(ref data,checked((int)length));
+            byte[] data=new byte[checked((int)length)];
+            uint readKind,readLength=length;
+            error=Query(key.Handle,name,IntPtr.Zero,out readKind,data,ref readLength);
+            if(error!=0)throw new Win32Exception(error);
+            if(readKind!=kind||readLength!=length)throw new InvalidOperationException("Registry value changed during raw read");
             return new RawValue{Kind=kind,Data=data};
         }
     }
@@ -153,15 +157,21 @@ function Get-RegistryValueSnapshot {
             if ($kind -in 'String','ExpandString','MultiString','DWord','QWord','Binary') {
                 $oldValue = $key.GetValue($name, $null, [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
                 if ($null -eq $oldValue) { throw "Registry value disappeared while reading $($Item.path)\$($Item.name)" }
+                if (($kind -eq 'DWord' -and $oldValue -isnot [int]) -or ($kind -eq 'QWord' -and $oldValue -isnot [long])) { throw "Cannot back up registry numeric data exactly: $($Item.path)\$name" }
+                $encoded = ConvertTo-RegistrySnapshotData $kind $oldValue
+                $native = if ($kind -ne 'Binary') { Get-RegistryRawValue $key $name } else { $null }
+                if ($native -and $native.Kind -ne [int][Microsoft.Win32.RegistryValueKind]$kind) { throw "Registry kind changed while reading: $($Item.path)\$name" }
                 if ($kind -in 'DWord','QWord') {
-                    if (($kind -eq 'DWord' -and $oldValue -isnot [int]) -or ($kind -eq 'QWord' -and $oldValue -isnot [long])) { throw "Cannot back up registry numeric data exactly: $($Item.path)\$name" }
-                    $native = Get-RegistryRawValue $key $name
                     $width = if ($kind -eq 'DWord') { 4 } else { 8 }
-                    if ($native.Kind -ne [int][Microsoft.Win32.RegistryValueKind]$kind -or $native.Data.Length -ne $width) { throw "Cannot back up registry numeric payload exactly: $($Item.path)\$name" }
+                    if ($native.Data.Length -ne $width) { throw "Cannot back up registry numeric payload exactly: $($Item.path)\$name" }
                     $number = if ($kind -eq 'DWord') { [BitConverter]::ToInt32($native.Data, 0) } else { [BitConverter]::ToInt64($native.Data, 0) }
                     if ($number -ne $oldValue) { throw "Registry value changed while reading: $($Item.path)\$name" }
+                } elseif ($kind -in 'String','ExpandString','MultiString') {
+                    $text = if ($kind -eq 'MultiString') { ((@($oldValue) | ForEach-Object { $_ + [char]0 }) -join '') + [char]0 } else { [string]$oldValue + [char]0 }
+                    $bytes = [Text.Encoding]::Unicode.GetBytes($text)
+                    if (-not [string]::Equals([Convert]::ToBase64String($bytes), [Convert]::ToBase64String($native.Data), [StringComparison]::Ordinal)) { throw "Cannot back up registry text bytes exactly: $($Item.path)\$name" }
                 }
-                $oldValue = ConvertTo-RegistrySnapshotData $kind $oldValue
+                $oldValue = $encoded
             }
         }
     } finally {
