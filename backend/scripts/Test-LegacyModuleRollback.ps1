@@ -113,7 +113,33 @@ $canonicalTextCases=@(
     @{label='MultiString empty elements';kind='MultiString';raw=[string[]]@('','');bytes=[byte[]]@(0,0,0,0,0,0)}
     @{label='String long text';kind='String';raw=('A'*65);bytes=(Get-FixtureRegistryBytes 'String' ('A'*65))}
 )
-$unsafeSnapshotCases += $unsafeTextSnapshotCases + $rawQueryFailureCases
+$numericLayoutCases=@($unsafeSnapshotCases|Where-Object {$_.label -match '^(DWord|QWord) (short|oversized)'})
+$coherenceCases=@(
+    @{label='Binary native None';kind='Binary';raw=[byte[]]@(1,2);bytes=[byte[]]@(1,2);nativeKind=0}
+    @{label='Binary native big endian';kind='Binary';raw=[byte[]]@(1,2);bytes=[byte[]]@(1,2);nativeKind=5}
+    @{label='Binary changed to DWord';kind='Binary';raw=[int]5;bytes=[byte[]]@(5,0,0,0);nativeKind=4}
+    @{label='Binary changed to QWord';kind='Binary';raw=[long]7;bytes=[byte[]]@(7,0,0,0,0,0,0,0);nativeKind=11}
+    @{label='Binary changed to String';kind='Binary';raw='12';bytes=[byte[]]@(49,0,50,0,0,0);nativeKind=1}
+    @{label='Binary changed to MultiString';kind='Binary';raw=[string[]]@('1','2');bytes=[byte[]]@(49,0,0,0,50,0,0,0,0,0);nativeKind=7}
+    @{label='Binary managed DWord';kind='Binary';raw=[int]5;bytes=[byte[]]@(5)}
+    @{label='Binary managed object array';kind='Binary';raw=[object[]]@(1,2);bytes=[byte[]]@(1,2)}
+    @{label='Binary raw data changed';kind='Binary';raw=[byte[]]@(1,2);bytes=[byte[]]@(1,3)}
+    @{label='Binary native query error';kind='Binary';raw=[byte[]]@(1,2);bytes=[byte[]]@(1,2);nativeError='first query error 5'}
+    @{label='Binary native null result';kind='Binary';raw=[byte[]]@(1,2);bytes=[byte[]]@(1,2);nativeNull=$true}
+    @{label='Binary native null data';kind='Binary';raw=[byte[]]@(1,2);bytes=[byte[]]@(1,2);nativeData=$null;overrideNativeData=$true}
+    @{label='Binary native object data';kind='Binary';raw=[byte[]]@(1,2);bytes=[byte[]]@(1,2);nativeData=[object[]]@(1,2);overrideNativeData=$true}
+    @{label='String managed number';kind='String';raw=[int]12;bytes=[byte[]]@(49,0,50,0,0,0)}
+    @{label='ExpandString managed number';kind='ExpandString';raw=[int]12;bytes=[byte[]]@(49,0,50,0,0,0)}
+    @{label='MultiString managed object array';kind='MultiString';raw=[object[]]@('A');bytes=[byte[]]@(65,0,0,0,0,0)}
+    @{label='MultiString managed null element';kind='MultiString';raw=[string[]]@($null);bytes=[byte[]]@(0,0,0,0)}
+    @{label='DWord managed QWord';kind='DWord';raw=[long]1;bytes=[byte[]]@(1,0,0,0)}
+    @{label='QWord managed DWord';kind='QWord';raw=[int]1;bytes=[byte[]]@(1,0,0,0,0,0,0,0)}
+)
+$canonicalRawCases=$canonicalTextCases+@(
+    @{label='Binary empty';kind='Binary';raw=[byte[]]@();bytes=[byte[]]@()}
+    @{label='Binary full byte range';kind='Binary';raw=[byte[]]@(0,127,128,255);bytes=[byte[]]@(0,127,128,255)}
+)
+$unsafeSnapshotCases += $unsafeTextSnapshotCases + $rawQueryFailureCases + $coherenceCases
 $legacyDefaultNames=@($null,'','(default)','(Default)','(DEFAULT)',('(def'+[char]0x00ad+'ault)'))
 try {
     New-Item -ItemType Directory -Path $tempRoot | Out-Null
@@ -138,8 +164,17 @@ try {
         }
         function Get-RegistryRawValue {
             param($Key,$Name)
+            if ($Name -ceq 'Second' -and $script:safetyLateCase) {
+                $script:safetyLateReads++
+                if ($script:safetyLateReads -eq 2) {
+                    $case=$script:safetyLateCase
+                    $script:safetyValues.Second=@{kind=$case.kind;raw=$case.raw;bytes=$case.bytes;nativeKind=$(if($case.ContainsKey('nativeKind')){$case.nativeKind}else{[int][Microsoft.Win32.RegistryValueKind]$case.kind});nativeError=$case.nativeError}
+                }
+            }
             if ($script:safetyValues[$Name].nativeError) { throw $script:safetyValues[$Name].nativeError }
-            [pscustomobject]@{Kind=$script:safetyValues[$Name].nativeKind;Data=$script:safetyValues[$Name].bytes}
+            if ($script:safetyValues[$Name].nativeNull) { return $null }
+            $data=if ($script:safetyValues[$Name].overrideNativeData) { ,$script:safetyValues[$Name].nativeData } else { ,$script:safetyValues[$Name].bytes }
+            [pscustomobject]@{Kind=$script:safetyValues[$Name].nativeKind;Data=$data}
         }
         function Set-RegistrySnapshotData {
             param($Key,$Name,$Snapshot)
@@ -156,9 +191,10 @@ try {
             param($Case)
             $script:safetyValues=@{
                 First=@{kind='DWord';raw=[int]1;bytes=[byte[]]@(1,0,0,0);nativeKind=4}
-                Second=@{kind=$Case.kind;raw=$Case.raw;bytes=$Case.bytes;nativeKind=$(if($Case.ContainsKey('nativeKind')){$Case.nativeKind}else{[int][Microsoft.Win32.RegistryValueKind]$Case.kind});nativeError=$Case.nativeError}
+                Second=@{kind=$Case.kind;raw=$Case.raw;bytes=$Case.bytes;nativeKind=$(if($Case.ContainsKey('nativeKind')){$Case.nativeKind}else{[int][Microsoft.Win32.RegistryValueKind]$Case.kind});nativeError=$Case.nativeError;nativeNull=$Case.nativeNull;nativeData=$Case.nativeData;overrideNativeData=$Case.overrideNativeData}
             }
             $script:safetyRegistryWrites=0;$script:safetyServiceWrites=0;$script:safetyStartup='Automatic'
+            $script:safetyLateCase=$null;$script:safetyLateReads=0
         }
         $rows=New-Object System.Collections.Generic.List[object]
         foreach ($case in $unsafeSnapshotCases) {
@@ -171,12 +207,15 @@ try {
             $refused=$false;$message='';$applied=$null;$restored=$null
             try { $applied=Invoke-ApplyModule } catch {$refused=$true;$message=$_.Exception.Message}
             if ($applied) { $BackupPath=$applied.backupPath;$restored=Invoke-RollbackModule }
-            $rows.Add([pscustomobject]@{label=$case.label;managedType=$case.raw.GetType().FullName;nativeKind=$script:safetyValues.Second.nativeKind;beforeBytes=$before;afterBytes=[Convert]::ToBase64String($script:safetyValues.Second.bytes);previewSafe=$previewSafe;refused=$refused;error=$message;registryWrites=$script:safetyRegistryWrites;serviceWrites=$script:safetyServiceWrites;first=$script:safetyValues.First.raw;rollbackSuccess=$restored.success})
+            $rows.Add([pscustomobject]@{label=$case.label;managedType=$case.raw.GetType().FullName;beforeKind=$(if($case.ContainsKey('nativeKind')){$case.nativeKind}else{[int][Microsoft.Win32.RegistryValueKind]$case.kind});afterKind=$script:safetyValues.Second.nativeKind;beforeBytes=$before;afterBytes=[Convert]::ToBase64String($script:safetyValues.Second.bytes);previewSafe=$previewSafe;refused=$refused;error=$message;registryWrites=$script:safetyRegistryWrites;serviceWrites=$script:safetyServiceWrites;first=$script:safetyValues.First.raw;rollbackSuccess=$restored.success})
         }
         Write-Output ('SNAPSHOT_SAFETY_FIXTURE_JSON '+(ConvertTo-Json -InputObject @($rows.ToArray()) -Depth 5 -Compress))
         $applyRows=$rows
         $rows=New-Object System.Collections.Generic.List[object]
-        foreach ($case in @($unsafeTextSnapshotCases)+@($rawQueryFailureCases)) {
+        $layoutCases=@($unsafeTextSnapshotCases)+@($numericLayoutCases)
+        $failureCases=@($rawQueryFailureCases)+@($coherenceCases)+@($unsafeSnapshotCases|Where-Object {$_.label -match ' lone '})
+        foreach ($case in $layoutCases+$failureCases) {
+            $expectLeft=$case.label -in @($layoutCases|ForEach-Object {$_.label})
             Reset-SafetyFixture $case
             $script:safetyValues.First.raw=[int]2
             $script:safetyValues.First.bytes=[byte[]]@(2,0,0,0)
@@ -190,13 +229,32 @@ try {
             $before=[Convert]::ToBase64String($case.bytes)
             $ConfirmApply=$false
             $preview=Invoke-RollbackModule
-            $previewSafe=-not $preview.success -and $preview.failures[0].phase -ceq 'preflight' -and $script:safetyRegistryWrites -eq 0 -and $script:safetyServiceWrites -eq 0
+            $previewSafe=$script:safetyRegistryWrites -eq 0 -and $script:safetyServiceWrites -eq 0 -and $(if($expectLeft){$preview.success -and $preview.restoredRegistry -eq 1 -and $preview.restoredServices -eq 1 -and $preview.leftAsChanged.Count -eq 1 -and $preview.leftAsChanged[0].name -ceq 'Second'}else{-not $preview.success -and $preview.failures[0].phase -ceq 'preflight' -and $preview.restoredRegistry -eq 0 -and $preview.restoredServices -eq 0})
             $ConfirmApply=$true
             $result=Invoke-RollbackModule
-            $rows.Add([pscustomobject]@{label=$case.label;previewSafe=$previewSafe;success=$result.success;partial=$result.partial;phase=$result.failures[0].phase;registryWrites=$script:safetyRegistryWrites;serviceWrites=$script:safetyServiceWrites;first=$script:safetyValues.First.raw;beforeBytes=$before;afterBytes=[Convert]::ToBase64String($script:safetyValues.Second.bytes);backupUnchanged=((Get-FileHash $BackupPath).Hash -ceq $hash)})
+            $retry=Invoke-RollbackModule
+            $outcomeSafe=if($expectLeft){$result.success -and -not $result.partial -and $result.restoredRegistry -eq 1 -and $result.restoredServices -eq 1 -and $result.leftAsChanged.Count -eq 1 -and $result.leftAsChanged[0].name -ceq 'Second' -and $script:safetyRegistryWrites -eq 1 -and $script:safetyServiceWrites -eq 1 -and $script:safetyValues.First.raw -eq 1 -and $script:safetyStartup -ceq 'Automatic' -and $retry.success -and $retry.restoredRegistry -eq 0 -and $retry.restoredServices -eq 0 -and $retry.leftAsChanged.Count -eq 1 -and @($retry.alreadyAtOriginal|Where-Object {$_.name -ceq 'Second'}).Count -eq 0}else{-not $result.success -and -not $result.partial -and $result.failures[0].phase -ceq 'preflight' -and -not $result.failures[0].mayHaveChanged -and $script:safetyRegistryWrites -eq 0 -and $script:safetyServiceWrites -eq 0 -and $script:safetyValues.First.raw -eq 2 -and $script:safetyStartup -ceq 'Disabled' -and -not $retry.success}
+            $rows.Add([pscustomobject]@{label=$case.label;expectLeft=$expectLeft;previewSafe=$previewSafe;outcomeSafe=$outcomeSafe;success=$result.success;partial=$result.partial;phase=$result.failures[0].phase;restoredRegistry=$result.restoredRegistry;restoredServices=$result.restoredServices;left=@($result.leftAsChanged);alreadyAtOriginal=@($result.alreadyAtOriginal);retryLeft=@($retry.leftAsChanged);retryAlreadyAtOriginal=@($retry.alreadyAtOriginal);registryWrites=$script:safetyRegistryWrites;serviceWrites=$script:safetyServiceWrites;first=$script:safetyValues.First.raw;beforeKind=$(if($case.ContainsKey('nativeKind')){$case.nativeKind}else{[int][Microsoft.Win32.RegistryValueKind]$case.kind});afterKind=$script:safetyValues.Second.nativeKind;beforeBytes=$before;afterBytes=[Convert]::ToBase64String($script:safetyValues.Second.bytes);backupUnchanged=((Get-FileHash $BackupPath).Hash -ceq $hash)})
         }
         Write-Output ('RAW_CURRENT_FIXTURE_JSON '+(ConvertTo-Json -InputObject @($rows.ToArray()) -Depth 5 -Compress))
         $currentRows=$rows
+        $rows=New-Object System.Collections.Generic.List[object]
+        foreach ($late in @($unsafeTextSnapshotCases|Select-Object -First 1)+@($rawQueryFailureCases)) {
+            Reset-SafetyFixture @{kind='String';raw='A';bytes=[byte[]]@(65,0,0,0)}
+            $script:safetyValues.First.raw=[int]2;$script:safetyValues.First.bytes=[byte[]]@(2,0,0,0);$script:safetyStartup='Disabled'
+            $script:safetyLateCase=$late
+            $hash=(Get-FileHash $BackupPath).Hash
+            $ConfirmApply=$true
+            $result=Invoke-RollbackModule
+            $expectLeft=$late.label -ceq 'String missing terminator'
+            $failureSafe=if($expectLeft){$result.success -and $result.restoredRegistry -eq 1 -and $result.restoredServices -eq 1 -and $result.leftAsChanged.Count -eq 1 -and $result.actions[1].status -ceq 'leftAsChanged' -and $script:safetyServiceWrites -eq 1}else{-not $result.success -and $result.partial -and $result.restoredRegistry -eq 1 -and $result.restoredServices -eq 0 -and $result.failures[0].phase -ceq 'restore' -and -not $result.failures[0].mayHaveChanged -and $result.pending.Count -eq 1 -and $result.pending[0].type -ceq 'service' -and $script:safetyServiceWrites -eq 0}
+            $afterFailure=[Convert]::ToBase64String($script:safetyValues.Second.bytes)
+            $retry=Invoke-RollbackModule
+            $retrySafe=if($expectLeft){$retry.success -and $retry.leftAsChanged.Count -eq 1 -and $retry.restoredRegistry -eq 0 -and $retry.restoredServices -eq 0}else{-not $retry.success -and -not $retry.partial -and $retry.failures[0].phase -ceq 'preflight' -and $retry.restoredRegistry -eq 0 -and $retry.restoredServices -eq 0}
+            $rows.Add([pscustomobject]@{label=$late.label;expectLeft=$expectLeft;outcomeSafe=$failureSafe;retrySafe=$retrySafe;success=$result.success;partial=$result.partial;restoredRegistry=$result.restoredRegistry;restoredServices=$result.restoredServices;failure=@($result.failures);pending=@($result.pending);left=@($result.leftAsChanged);retryAlreadyAtOriginal=@($retry.alreadyAtOriginal);registryWrites=$script:safetyRegistryWrites;serviceWrites=$script:safetyServiceWrites;first=$script:safetyValues.First.raw;expectedBytes=[Convert]::ToBase64String($late.bytes);afterBytes=$afterFailure;afterRetryBytes=[Convert]::ToBase64String($script:safetyValues.Second.bytes);backupUnchanged=((Get-FileHash $BackupPath).Hash -ceq $hash)})
+        }
+        Write-Output ('RAW_LATE_CURRENT_FIXTURE_JSON '+(ConvertTo-Json -InputObject @($rows.ToArray()) -Depth 7 -Compress))
+        $lateRows=$rows
         $pair='A'+[char]0xd83c+[char]0xdfae+'B'
         $valid=@(
             @{kind='String';raw=''},@{kind='String';raw=$pair},@{kind='ExpandString';raw='%PATH%\fixture'},@{kind='ExpandString';raw=$pair},
@@ -204,7 +262,7 @@ try {
             @{kind='DWord';raw=[int]0},@{kind='DWord';raw=[int]::MinValue},@{kind='DWord';raw=[int]-1},
             @{kind='QWord';raw=[long]0},@{kind='QWord';raw=[long]::MinValue},@{kind='QWord';raw=[long]-1}
         )
-        foreach ($case in @($valid)+@($canonicalTextCases)) {
+        foreach ($case in @($valid)+@($canonicalRawCases)) {
             if (-not $case.ContainsKey('bytes')) { $case.bytes=Get-FixtureRegistryBytes $case.kind $case.raw }
             Reset-SafetyFixture $case
             $before=[Convert]::ToBase64String($case.bytes)
@@ -216,9 +274,10 @@ try {
             Assert ($result.success -and $result.restoredRegistry -eq 2 -and $result.restoredServices -eq 1 -and $script:safetyValues.Second.kind -ceq $case.kind -and [Convert]::ToBase64String($script:safetyValues.Second.bytes) -ceq $before -and (Get-FileHash $BackupPath).Hash -ceq $hash) ($case.kind+' valid Unicode or fixed-width original survives actual backup and rollback')
         }
         Assert (@($applyRows|Where-Object {-not $_.previewSafe}).Count -eq 0) 'Unsafe original data previews without writes or a backup'
-        Assert (@($applyRows|Where-Object {-not $_.refused -or $_.registryWrites -ne 0 -or $_.serviceWrites -ne 0 -or $_.first -ne 1 -or $_.beforeBytes -cne $_.afterBytes}).Count -eq 0) 'Non-round-trippable originals and unstable raw reads refuse apply before any setting write'
-        Assert (@($currentRows|Where-Object {-not $_.previewSafe}).Count -eq 0) 'Non-round-trippable current text and raw read failures refuse rollback preview before writes'
-        Assert (@($currentRows|Where-Object {$_.success -or $_.partial -or $_.phase -cne 'preflight' -or $_.registryWrites -ne 0 -or $_.serviceWrites -ne 0 -or $_.first -ne 2 -or $_.beforeBytes -cne $_.afterBytes -or -not $_.backupUnchanged}).Count -eq 0) 'Raw-text rollback preflight preserves every current value, service and original backup'
+        Assert (@($applyRows|Where-Object {-not $_.refused -or $_.registryWrites -ne 0 -or $_.serviceWrites -ne 0 -or $_.first -ne 1 -or $_.beforeKind -ne $_.afterKind -or $_.beforeBytes -cne $_.afterBytes}).Count -eq 0) 'Non-round-trippable originals and incoherent managed/native reads refuse apply before any setting write'
+        Assert (@($currentRows|Where-Object {-not $_.previewSafe}).Count -eq 0) 'Rollback preview distinguishes later physical-layout drift from unreadable evidence without writes'
+        Assert (@($currentRows|Where-Object {-not $_.outcomeSafe -or $_.beforeKind -ne $_.afterKind -or $_.beforeBytes -cne $_.afterBytes -or -not $_.backupUnchanged}).Count -eq 0) 'Later physical-layout drift preserves bytes and backup while independent undo continues; read failures stop safely'
+        Assert (@($lateRows|Where-Object {-not $_.outcomeSafe -or -not $_.retrySafe -or $_.registryWrites -ne 1 -or $_.first -ne 1 -or $_.expectedBytes -cne $_.afterBytes -or $_.afterBytes -cne $_.afterRetryBytes -or -not $_.backupUnchanged}).Count -eq 0) 'Runtime physical-layout drift continues independent undo while late read failures retain truthful partial and retry results'
     } }
     if ($Scenario -in 'All','Recovery') { & {
         . $HarnessPath -Action ListModules -ManifestPath $fixtureManifest -DataRoot $tempRoot -ModuleId 'fixture' | Out-Null
@@ -729,7 +788,7 @@ public static class RooIndustriesLegacyFixtureRaw {
                 function Set-ServiceFromManifest {param($Item) $script:rawServiceWrites++;$script:rawStartup=$Item.startup}
                 function Restore-ServiceSnapshot {param($Snapshot) $script:rawServiceWrites++;$script:rawStartup=$Snapshot.startType}
                 $rows=New-Object System.Collections.Generic.List[object]
-                foreach ($case in $unsafeSnapshotCases|Where-Object {$_.label -notlike '*raw*changed' -and -not $_.nativeError}) {
+                foreach ($case in $unsafeSnapshotCases|Where-Object {$_.label -notlike '*raw*changed' -and -not $_.nativeError -and $coherenceCases -notcontains $_}) {
                     $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($subkey,$true)
                     try {
                         $key.SetValue('First',1,[Microsoft.Win32.RegistryValueKind]::DWord)
@@ -751,7 +810,7 @@ public static class RooIndustriesLegacyFixtureRaw {
                 Write-Output ('REAL_RAW_SNAPSHOT_FIXTURE_JSON '+(ConvertTo-Json -InputObject @($rows.ToArray()) -Depth 5 -Compress))
                 Assert (@($rows|Where-Object {-not $_.refused -or -not $_.previewSafe -or $_.first -ne 1 -or $_.serviceWrites -ne 0 -or $_.kind -ne $_.afterKind -or $_.beforeBytes -cne $_.afterBytes}).Count -eq 0) 'Unsafe raw registry data refuses confirmed apply without changing any original bytes'
                 $rows=New-Object System.Collections.Generic.List[object]
-                foreach ($case in $canonicalTextCases) {
+                foreach ($case in $canonicalRawCases) {
                     $script:rawServiceWrites=0;$script:rawStartup='Automatic'
                     $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($subkey,$true)
                     try {
@@ -770,7 +829,63 @@ public static class RooIndustriesLegacyFixtureRaw {
                     } finally {$key.Dispose()}
                 }
                 Write-Output ('REAL_CANONICAL_TEXT_FIXTURE_JSON '+(ConvertTo-Json -InputObject @($rows.ToArray()) -Depth 5 -Compress))
-                Assert (@($rows|Where-Object {-not $_.success -or $_.restored -ne 2 -or $_.restoredServices -ne 1 -or $_.serviceWrites -ne 2 -or $_.startup -cne 'Automatic' -or $_.kind -ne $_.expectedKind -or $_.beforeBytes -cne $_.afterBytes -or -not $_.backupUnchanged}).Count -eq 0) 'Canonical raw text including embedded NULs and empty array elements restores byte-for-byte'
+                Assert (@($rows|Where-Object {-not $_.success -or $_.restored -ne 2 -or $_.restoredServices -ne 1 -or $_.serviceWrites -ne 2 -or $_.startup -cne 'Automatic' -or $_.kind -ne $_.expectedKind -or $_.beforeBytes -cne $_.afterBytes -or -not $_.backupUnchanged}).Count -eq 0) 'Canonical raw text and Binary including empty payloads restore byte-for-byte'
+                $rows=New-Object System.Collections.Generic.List[object]
+                foreach ($case in @($unsafeTextSnapshotCases)+@($numericLayoutCases)) {
+                    $script:rawServiceWrites=0;$script:rawStartup='Disabled'
+                    $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($subkey,$true)
+                    try {
+                        $key.SetValue('First',2,[Microsoft.Win32.RegistryValueKind]::DWord)
+                        [RooIndustriesLegacyFixtureRaw]::Write($key,'Value',[uint32][Microsoft.Win32.RegistryValueKind]$case.kind,$case.bytes)
+                    } finally {$key.Dispose()}
+                    $BackupPath=Join-Path $tempRoot 'raw-current-real.json'
+                    Write-JsonFile @{moduleId='fixture';registry=@(
+                        @{path=$regPath;name='First';type='REG_DWORD';desiredData=2;valueExists=$true;kind='DWord';oldValue=1},
+                        @{path=$regPath;name='Value';type='REG_SZ';desiredData='A';valueExists=$true;kind='String';oldValue='Original'}
+                    );services=@(@{name='FixtureSvc';exists=$true;startType='Automatic';status='Running';appliedStartup='Disabled'})} $BackupPath
+                    $hash=(Get-FileHash $BackupPath).Hash
+                    $ConfirmApply=$false
+                    $preview=Invoke-RollbackModule
+                    $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($subkey)
+                    try {$previewSafe=$preview.success -and $preview.restoredRegistry -eq 1 -and $preview.restoredServices -eq 1 -and $preview.leftAsChanged.Count -eq 1 -and $key.GetValue('First') -eq 2 -and $script:rawServiceWrites -eq 0} finally {$key.Dispose()}
+                    $ConfirmApply=$true
+                    $result=Invoke-RollbackModule
+                    $retry=Invoke-RollbackModule
+                    $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($subkey)
+                    try {
+                        $after=[RooIndustriesLegacyFixtureRaw]::Read($key,'Value')
+                        $rows.Add([pscustomobject]@{label=$case.label;previewSafe=$previewSafe;success=$result.success;partial=$result.partial;restored=$result.restoredRegistry;restoredServices=$result.restoredServices;left=@($result.leftAsChanged);retryLeft=@($retry.leftAsChanged);retryRestored=$retry.restoredRegistry;retryRestoredServices=$retry.restoredServices;retryAlreadyAtOriginal=@($retry.alreadyAtOriginal);first=$key.GetValue('First');serviceWrites=$script:rawServiceWrites;startup=$script:rawStartup;kind=$after.Kind;expectedKind=[int][Microsoft.Win32.RegistryValueKind]$case.kind;beforeBytes=[Convert]::ToBase64String($case.bytes);afterBytes=[Convert]::ToBase64String($after.Data);backupUnchanged=((Get-FileHash $BackupPath).Hash -ceq $hash)})
+                    } finally {$key.Dispose()}
+                }
+                Write-Output ('REAL_RAW_CURRENT_FIXTURE_JSON '+(ConvertTo-Json -InputObject @($rows.ToArray()) -Depth 7 -Compress))
+                Assert (@($rows|Where-Object {-not $_.previewSafe -or -not $_.success -or $_.partial -or $_.restored -ne 1 -or $_.restoredServices -ne 1 -or $_.left.Count -ne 1 -or $_.left[0].name -cne 'Value' -or $_.retryLeft.Count -ne 1 -or $_.retryRestored -ne 0 -or $_.retryRestoredServices -ne 0 -or @($_.retryAlreadyAtOriginal|Where-Object {$_.name -ceq 'Value'}).Count -ne 0 -or $_.first -ne 1 -or $_.serviceWrites -ne 1 -or $_.startup -cne 'Automatic' -or $_.kind -ne $_.expectedKind -or $_.beforeBytes -cne $_.afterBytes -or -not $_.backupUnchanged}).Count -eq 0) 'Later noncanonical raw text and numeric layouts stay intact while independent registry and fake service undo completes'
+                & {
+                    $sourceRawReader=${function:Get-RegistryRawValue}
+                    $script:lateRealReads=0
+                    function Get-RegistryRawValue {
+                        param($Key,$Name)
+                        if ($Name -ceq 'Value') {
+                            $script:lateRealReads++
+                            if ($script:lateRealReads -eq 2) {
+                                $writer=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($subkey,$true)
+                                try {[RooIndustriesLegacyFixtureRaw]::Write($writer,'Value',1,[byte[]]@(65,0))} finally {$writer.Dispose()}
+                            }
+                        }
+                        & $sourceRawReader $Key $Name
+                    }
+                    $script:rawServiceWrites=0;$script:rawStartup='Disabled'
+                    $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($subkey,$true)
+                    try {$key.SetValue('First',2,[Microsoft.Win32.RegistryValueKind]::DWord);$key.SetValue('Value','A',[Microsoft.Win32.RegistryValueKind]::String)} finally {$key.Dispose()}
+                    $hash=(Get-FileHash $BackupPath).Hash
+                    $ConfirmApply=$true
+                    $result=Invoke-RollbackModule
+                    $retry=Invoke-RollbackModule
+                    $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($subkey)
+                    try {
+                        $after=[RooIndustriesLegacyFixtureRaw]::Read($key,'Value')
+                        Assert ($result.success -and $result.restoredRegistry -eq 1 -and $result.restoredServices -eq 1 -and $result.leftAsChanged.Count -eq 1 -and $result.actions[1].status -ceq 'leftAsChanged' -and $retry.success -and $retry.leftAsChanged.Count -eq 1 -and $retry.restoredRegistry -eq 0 -and $retry.restoredServices -eq 0 -and @($retry.alreadyAtOriginal|Where-Object {$_.name -ceq 'Value'}).Count -eq 0 -and $key.GetValue('First') -eq 1 -and $script:rawServiceWrites -eq 1 -and $after.Kind -eq 1 -and [Convert]::ToBase64String($after.Data) -ceq 'QQA=' -and (Get-FileHash $BackupPath).Hash -ceq $hash) 'A real raw edit between preflight and runtime is preserved while independent undo continues'
+                    } finally {$key.Dispose()}
+                }
             }
             & {
                 $BackupPath=Join-Path $tempRoot 'legacy-default-real.json'
