@@ -114,6 +114,7 @@ $canonicalTextCases=@(
     @{label='String long text';kind='String';raw=('A'*65);bytes=(Get-FixtureRegistryBytes 'String' ('A'*65))}
 )
 $numericLayoutCases=@($unsafeSnapshotCases|Where-Object {$_.label -match '^(DWord|QWord) (short|oversized)'})
+$nullStringElement=[string[]]::new(1)
 $coherenceCases=@(
     @{label='Binary native None';kind='Binary';raw=[byte[]]@(1,2);bytes=[byte[]]@(1,2);nativeKind=0}
     @{label='Binary native big endian';kind='Binary';raw=[byte[]]@(1,2);bytes=[byte[]]@(1,2);nativeKind=5}
@@ -131,7 +132,7 @@ $coherenceCases=@(
     @{label='String managed number';kind='String';raw=[int]12;bytes=[byte[]]@(49,0,50,0,0,0)}
     @{label='ExpandString managed number';kind='ExpandString';raw=[int]12;bytes=[byte[]]@(49,0,50,0,0,0)}
     @{label='MultiString managed object array';kind='MultiString';raw=[object[]]@('A');bytes=[byte[]]@(65,0,0,0,0,0)}
-    @{label='MultiString managed null element';kind='MultiString';raw=[string[]]@($null);bytes=[byte[]]@(0,0,0,0)}
+    @{label='MultiString managed null element';kind='MultiString';raw=$nullStringElement;bytes=[byte[]]@(0,0,0,0)}
     @{label='DWord managed QWord';kind='DWord';raw=[long]1;bytes=[byte[]]@(1,0,0,0)}
     @{label='QWord managed DWord';kind='QWord';raw=[int]1;bytes=[byte[]]@(1,0,0,0,0,0,0,0)}
 )

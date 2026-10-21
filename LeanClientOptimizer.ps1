@@ -142,8 +142,26 @@ function ConvertTo-RegistrySnapshotData {
     return ,$Value
 }
 
+function Test-RegistryRawLayout {
+    param([string]$Kind, [byte[]]$Data)
+    $length = $Data.Length
+    switch ($Kind) {
+        'DWord' { return $length -eq 4 }
+        'QWord' { return $length -eq 8 }
+        'Binary' { return $true }
+    }
+    if ($length -lt 2 -or $length % 2 -ne 0 -or $Data[$length-1] -ne 0 -or $Data[$length-2] -ne 0) { return $false }
+    if ($Kind -eq 'MultiString' -and $length -ne 2) { return $length -ge 4 -and $Data[$length-3] -eq 0 -and $Data[$length-4] -eq 0 }
+    return $true
+}
+
+function Test-RegistryChangedLayout {
+    param([object]$Snapshot)
+    return $Snapshot.PSObject.TypeNames.Contains('RooIndustries.LegacyRegistry.ChangedLayout')
+}
+
 function Get-RegistryValueSnapshot {
-    param([object]$Item)
+    param([object]$Item, [switch]$AllowChangedLayout)
     $name = [string]$Item.name
     $key = Open-RegistryKey $Item.path
     $exists = $null -ne $key
@@ -155,17 +173,33 @@ function Get-RegistryValueSnapshot {
             $valueExists = $true
             $kind = [string]$key.GetValueKind($name)
             if ($kind -in 'String','ExpandString','MultiString','DWord','QWord','Binary') {
+                $native = Get-RegistryRawValue $key $name
+                if ($null -eq $native -or $native.Data -isnot [byte[]] -or ($native.Kind -isnot [int] -and $native.Kind -isnot [uint32])) { throw "Invalid native registry read: $($Item.path)\$name" }
+                if ($native.Kind -ne [int][Microsoft.Win32.RegistryValueKind]$kind) { throw "Registry kind changed while reading: $($Item.path)\$name" }
+                if (-not (Test-RegistryRawLayout $kind $native.Data)) {
+                    if (-not $AllowChangedLayout) { throw "Cannot back up registry raw layout exactly: $($Item.path)\$name" }
+                    $changed = [pscustomobject]@{ valueExists=$true; kind=$kind; oldValue=$null }
+                    $changed.PSObject.TypeNames.Insert(0, 'RooIndustries.LegacyRegistry.ChangedLayout')
+                    return $changed
+                }
                 $oldValue = $key.GetValue($name, $null, [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
                 if ($null -eq $oldValue) { throw "Registry value disappeared while reading $($Item.path)\$($Item.name)" }
-                if (($kind -eq 'DWord' -and $oldValue -isnot [int]) -or ($kind -eq 'QWord' -and $oldValue -isnot [long])) { throw "Cannot back up registry numeric data exactly: $($Item.path)\$name" }
+                $managedType = switch ($kind) {
+                    'String' { [string] }
+                    'ExpandString' { [string] }
+                    'MultiString' { [string[]] }
+                    'Binary' { [byte[]] }
+                    'DWord' { [int] }
+                    'QWord' { [long] }
+                }
+                if ($oldValue.GetType() -ne $managedType) { throw "Registry managed type changed while reading: $($Item.path)\$name" }
+                if ($kind -eq 'MultiString') { foreach ($part in $oldValue) { if ($null -eq $part) { throw "Invalid registry string array: $($Item.path)\$name" } } }
                 $encoded = ConvertTo-RegistrySnapshotData $kind $oldValue
-                $native = if ($kind -ne 'Binary') { Get-RegistryRawValue $key $name } else { $null }
-                if ($native -and $native.Kind -ne [int][Microsoft.Win32.RegistryValueKind]$kind) { throw "Registry kind changed while reading: $($Item.path)\$name" }
                 if ($kind -in 'DWord','QWord') {
-                    $width = if ($kind -eq 'DWord') { 4 } else { 8 }
-                    if ($native.Data.Length -ne $width) { throw "Cannot back up registry numeric payload exactly: $($Item.path)\$name" }
                     $number = if ($kind -eq 'DWord') { [BitConverter]::ToInt32($native.Data, 0) } else { [BitConverter]::ToInt64($native.Data, 0) }
                     if ($number -ne $oldValue) { throw "Registry value changed while reading: $($Item.path)\$name" }
+                } elseif ($kind -eq 'Binary') {
+                    if (-not [string]::Equals($encoded, [Convert]::ToBase64String($native.Data), [StringComparison]::Ordinal)) { throw "Registry binary data changed while reading: $($Item.path)\$name" }
                 } elseif ($kind -in 'String','ExpandString','MultiString') {
                     $text = if ($kind -eq 'MultiString') { ((@($oldValue) | ForEach-Object { $_ + [char]0 }) -join '') + [char]0 } else { [string]$oldValue + [char]0 }
                     $bytes = [Text.Encoding]::Unicode.GetBytes($text)
@@ -226,6 +260,7 @@ function Set-RegistrySnapshotData {
 
 function Test-RegistrySnapshotEqual {
     param([object]$Expected, [object]$Actual)
+    if ((Test-RegistryChangedLayout $Expected) -or (Test-RegistryChangedLayout $Actual)) { return $false }
     if ($Expected.valueExists -ne $Actual.valueExists) { return $false }
     if (-not $Expected.valueExists) { return $true }
     if (-not [string]::Equals($Expected.kind, $Actual.kind, [StringComparison]::Ordinal)) { return $false }
@@ -618,15 +653,17 @@ function Invoke-RollbackModule {
                 continue
             }
             $expected = Get-ManifestRegistrySnapshot ([pscustomobject]@{ type=$rv.type; data=$rv.desiredData })
-            $current = Get-RegistryValueSnapshot $rv
+            $null = ConvertTo-RegistrySnapshotData $expected.kind (Convert-RegistrySnapshotData $expected)
+            $current = Get-RegistryValueSnapshot $rv -AllowChangedLayout
             $original = $null
             try { $original = Get-RegistryRestoreSnapshot $rv } catch { if (Test-RegistrySnapshotEqual $expected $current) { throw } }
             if ($null -ne $original -and (Test-RegistrySnapshotEqual $original $current)) {
                 $alreadyAtOriginal.Add([pscustomobject]$target) | Out-Null
                 Write-Host "Already at original value: $($rv.path)\$($rv.name)"
             } elseif (-not (Test-RegistrySnapshotEqual $expected $current)) {
-                $leftAsChanged.Add([pscustomobject]($target + @{ reason='current kind or data changed' })) | Out-Null
-                Write-Host "Left as changed: $($rv.path)\$($rv.name)"
+                $reason = if (Test-RegistryChangedLayout $current) { 'current raw layout cannot have been applied' } else { 'current kind or data changed' }
+                $leftAsChanged.Add([pscustomobject]($target + @{ reason=$reason })) | Out-Null
+                Write-Host "Left as changed: $($rv.path)\$($rv.name) ($reason)"
             } else {
                 $action = [pscustomobject]($target + @{ action='restore'; status='planned' })
                 $actions.Add($action) | Out-Null
@@ -683,16 +720,17 @@ function Invoke-RollbackModule {
         $writing = $false
         try {
             if ($item.target.type -eq 'registry') {
-                $current = Get-RegistryValueSnapshot $item.snapshot
+                $current = Get-RegistryValueSnapshot $item.snapshot -AllowChangedLayout
                 if (Test-RegistrySnapshotEqual $item.original $current) {
                     $alreadyAtOriginal.Add([pscustomobject]$item.target) | Out-Null
                     $item.action.status = 'alreadyAtOriginal'
                     continue
                 }
                 if (-not (Test-RegistrySnapshotEqual $item.applied $current)) {
-                    $leftAsChanged.Add([pscustomobject]($item.target + @{ reason='changed after preflight' })) | Out-Null
+                    $reason = if (Test-RegistryChangedLayout $current) { 'current raw layout cannot have been applied' } else { 'changed after preflight' }
+                    $leftAsChanged.Add([pscustomobject]($item.target + @{ reason=$reason })) | Out-Null
                     $item.action.status = 'leftAsChanged'
-                    Write-Host "Left as changed: $($item.target.path)\$($item.target.name)"
+                    Write-Host "Left as changed: $($item.target.path)\$($item.target.name) ($reason)"
                     continue
                 }
                 $attempted++
