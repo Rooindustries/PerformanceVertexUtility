@@ -48,6 +48,12 @@ TweakCatalog TwoSettingCatalog()
         [new("Fixture", "fixture", "isolated UI validation")]);
     return new(1, "two-setting-fixture", [Setting("first", "First setting", "First"), Setting("second", "Second setting", "Second")], []);
 }
+if (args is ["--retained-profiles"])
+{
+    try { await RetainedProfileChecks.Run(root, TwoSettingCatalog(), Check); Console.WriteLine($"Completed {count} retained profile UI checks."); }
+    finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+    return;
+}
 if (args is ["--presentation", var presentationRepo])
 {
     var catalog = OperationFiles.Read<TweakCatalog>(Path.Combine(Path.GetFullPath(presentationRepo), "backend/catalogs/windows-tweaks.json"));
@@ -75,6 +81,7 @@ if (args is ["--freshness"])
 try
 {
     AppliedStateChecks.Run(Check);
+    await RetainedProfileChecks.Run(root, TwoSettingCatalog(), Check);
     if (args is [var catalogRepo])
     {
         var catalog = OperationFiles.Read<TweakCatalog>(Path.Combine(Path.GetFullPath(catalogRepo), "backend/catalogs/windows-tweaks.json"));
