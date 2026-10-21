@@ -54,7 +54,7 @@ public sealed class BugRedactor
             if (found is { } change && change.Value == "%USERPROFILE%" && previousPrivate && previousBoundary == change.Start && previousSeparator != separator)
                 found = (change.Start, change.End, root + User);
             if (found is { } add) changes.Add(add);
-            previousPrivate = placeholder || found is not { } kept || kept.Value.EndsWith(User, StringComparison.Ordinal);
+            previousPrivate = placeholder || found is not { } kept || kept.Value.EndsWith(User, StringComparison.Ordinal) || previousPrivate && kept.Value == "%USERPROFILE%" && previousBoundary == kept.Start;
             previousSeparator = separator;
             previousBoundary = boundary;
         }
@@ -115,13 +115,14 @@ public sealed class BugRedactor
         var decoded = new StringBuilder();
         var ends = new List<int>();
         var placeholderSeen = false;
+        var macroTail = 0;
         for (var index = 0; index < run.Length;)
         {
             if (placeholderSeen && run.AsSpan(index).StartsWith("%USERPROFILE%", StringComparison.OrdinalIgnoreCase))
             {
                 var markerEnd = index;
                 while (run.AsSpan(markerEnd).StartsWith("%USERPROFILE%", StringComparison.OrdinalIgnoreCase)) markerEnd += 13;
-                if (markerEnd == run.Length) break;
+                if (markerEnd == run.Length) { macroTail = markerEnd; break; }
                 if (run[markerEnd] == '\\')
                 {
                     var hex = markerEnd;
@@ -165,7 +166,7 @@ public sealed class BugRedactor
         }
         var text = decoded.ToString();
         matchEnd = runStart + (ends.Count == 0 ? 0 : ends[^1]);
-        boundaryEnd = matchEnd;
+        boundaryEnd = macroTail > 0 ? runStart + macroTail : matchEnd;
         joinedDrive = matchEnd + 2 < input.Length && char.IsAsciiLetter(input[matchEnd]) && input[matchEnd + 1] == ':' && input[matchEnd + 2] is '\\' or '/';
         if (text.Length == 0 || SharedProfiles.Contains(text) && !joinedDrive && !run[..ends[^1]].Contains('\\')) return null;
         if (text.TrimEnd(' ', '.', ',', ';', '!', ')', ']', '}', '\'') is { Length: 1 } placeholder && placeholder[0] is '\u0001' or '\u0002' or '\u0003') { placeholderOnly = true; return (runStart, runStart + ends[0], placeholder); }

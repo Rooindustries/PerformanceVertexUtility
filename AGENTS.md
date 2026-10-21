@@ -73,6 +73,8 @@ These must hold on every commit of `main`. Each one names the code that enforces
    - Checked by: `tools/validation/AppSweepUi/BugReportChecks.cs`.
    - Known gaps:
      - Other accounts' profiles outside a drive's `Users` directory, including relocated and network profiles, aren't redacted.
+     - Old log entries with `%USERPROFILE%` followed by a name suffix can expose that suffix.
+     - Paths with mixed separator runs, a dot component, or three backslashes before `n`, `r`, `t`, `b` or `f` can leave an account name visible.
      - Account names and PC names of one character aren't redacted.
      - Microsoft Entra account SIDs (`S-1-12-1-...`) aren't redacted.
 
