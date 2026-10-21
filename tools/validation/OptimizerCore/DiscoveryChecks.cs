@@ -1,8 +1,18 @@
+using System.Diagnostics;
 using Microsoft.Win32;
 using RooIndustries.Optimizer;
 
 static class DiscoveryChecks
 {
+    [System.Runtime.InteropServices.DllImport("kernel32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode, SetLastError = true)]
+    private static extern bool GetVolumeNameForVolumeMountPoint(string mountPoint, System.Text.StringBuilder volumeName, uint length);
+
+    private static bool IsLink(string path)
+    {
+        try { return (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0; }
+        catch (Exception error) when (error is FileNotFoundException or DirectoryNotFoundException) { return false; }
+    }
+
     public static void Run(Action<bool, string> check)
     {
         var root = Path.Combine(Path.GetTempPath(), "roo-industries-discovery-" + Guid.NewGuid().ToString("N"));
@@ -31,9 +41,9 @@ static class DiscoveryChecks
                 unrelated.SetValue("PrefixOnly", "\"" + install + "-Other\\main.exe\"");
             }
             var application = new CleanupApplication { AppId = "fixture:discovery", DisplayName = "Roo Industries Example", Publisher = "Roo Industries", InstallLocation = install, PackageFamilyName = null };
-            var peer = new CleanupApplication { AppId = "fixture:other", DisplayName = "Independent add-on", Publisher = "Roo Industries", InstallLocation = other, PackageFamilyName = null };
+            var peer = new CleanupApplication { AppId = "fixture:other", DisplayName = "Independent add-on", Publisher = "Roo Industries", InstallLocation = other + @"\\", PackageFamilyName = null };
             var independentPeer = peer with { AppId = "fixture:independent", DisplayName = "Independent tool", InstallLocation = independent };
-            var scan = new LeftoverDiscovery(application, [peer, independentPeer]).Scan(CancellationToken.None, [local, programs],
+            var scan = new LeftoverDiscovery(application, [peer, independentPeer]).Scan(CancellationToken.None, [local, programs, Path.Combine(root, "absent-scope")],
                 [new("CurrentUser", "Registry64", registryRoot, "key", null), new("CurrentUser", "Registry32", registryRoot, "key", null)]);
             if (!scan.Complete) Console.WriteLine(string.Join("\n", scan.Errors));
             check(scan.Complete, "Bounded discovery reports complete coverage only after all configured scopes were read");
@@ -54,6 +64,87 @@ static class DiscoveryChecks
         check(!Directory.Exists(root) && hive.OpenSubKey(registryRoot) is null, "Discovery validation leaves no file or registry fixtures");
         ProductBoundaries(check);
         UncRoaming(check);
+        JunctionAlias(check);
+        AliasOwnershipChecks.Run(check);
+        PublishedPathChecks.Run(check, []);
+    }
+
+    private static void JunctionAlias(Action<bool, string> check)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "roo-industries-discovery-junction-" + Guid.NewGuid().ToString("N"));
+        var real = Path.Combine(root, "real");
+        var alias = Path.Combine(root, "alias");
+        var shared = Path.Combine(real, "Roo Industries Example");
+        Directory.CreateDirectory(shared);
+        try
+        {
+            AliasOwnershipChecks.Junction(alias, real);
+            check(Directory.Exists(Path.Combine(alias, "Roo Industries Example")) && (File.GetAttributes(alias) & FileAttributes.ReparsePoint) != 0, "Junction fixture shows the same folder under a second path");
+            var application = new CleanupApplication { AppId = "fixture:junction", DisplayName = "Roo Industries Example", Publisher = "Roo Industries", InstallLocation = shared, PackageFamilyName = null };
+            var peer = new CleanupApplication { AppId = "fixture:alias", DisplayName = "Independent alias tool", Publisher = "Other", InstallLocation = Path.Combine(alias, "Roo Industries Example"), PackageFamilyName = null };
+            var scan = new LeftoverDiscovery(application, [peer]).Scan(CancellationToken.None, [], []);
+            check(scan.Candidates.Single(item => item.Target == shared).SharedOwners.Contains(peer.DisplayName), "An app installed through a junction to the removed app's folder stays a shared owner");
+            var slashed = peer with { AppId = "fixture:slashed", DisplayName = "Slashed alias tool", InstallLocation = peer.InstallLocation!.Replace('\\', '/') };
+            var slashScan = new LeftoverDiscovery(application, [slashed]).Scan(CancellationToken.None, [], []);
+            check(slashScan.Candidates.Single(item => item.Target == shared).SharedOwners.Contains(slashed.DisplayName), "An app whose install path uses forward slashes through a junction stays a shared owner");
+            var extended = peer with { AppId = "fixture:extended", DisplayName = "Extended path alias tool", InstallLocation = @"\\?\" + peer.InstallLocation };
+            var extendedScan = new LeftoverDiscovery(application, [extended]).Scan(CancellationToken.None, [], []);
+            check(extendedScan.Candidates.Single(item => item.Target == shared).SharedOwners.Contains(extended.DisplayName), "An app whose install path has a \\\\?\\ prefix through a junction stays a shared owner");
+            var broken = new CleanupApplication { AppId = "fixture:nul", DisplayName = "Broken path tool", Publisher = "Other", InstallLocation = real + "\\\0invalid", PackageFamilyName = null };
+            var nulScan = new LeftoverDiscovery(application, [broken]).Scan(CancellationToken.None, [], []);
+            check(!nulScan.Candidates.Single(item => item.Target == shared).SharedOwners.Contains(broken.DisplayName), "An app whose install path has an embedded NUL never becomes an owner of the folder before the NUL");
+            var nas = Path.Combine(root, "nas");
+            var linked = false;
+            try { Directory.CreateSymbolicLink(nas, @"\\192.0.2.1\OfflineShare"); linked = true; }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException) { Console.WriteLine("SKIP A local link to an unreachable network share does not stall leftover discovery (" + error.Message.Trim() + ")"); }
+            if (linked)
+            {
+                var linkedTool = new CleanupApplication { AppId = "fixture:linked", DisplayName = "Linked share tool", Publisher = "Other", InstallLocation = Path.Combine(nas, "Tool"), PackageFamilyName = null };
+                var linkWatch = Stopwatch.StartNew();
+                var linkedScan = new LeftoverDiscovery(application, [linkedTool]).Scan(CancellationToken.None, [], []);
+                linkWatch.Stop();
+                check(linkWatch.ElapsedMilliseconds < 500, "A local link to an unreachable network share is never followed, so leftover discovery does not wait on it (" + linkWatch.ElapsedMilliseconds + " ms)");
+                check(!linkedScan.Candidates.Single(item => item.Target == shared).OwnershipComplete,
+                    "An uninspected network share cannot certify exclusive local ownership");
+                var chain = Path.Combine(root, "chain");
+                AliasOwnershipChecks.Junction(chain, Path.Combine(nas, "Tool"));
+                var chainedTool = new CleanupApplication { AppId = "fixture:chained", DisplayName = "Chained share tool", Publisher = "Other", InstallLocation = chain, PackageFamilyName = null };
+                var chainWatch = Stopwatch.StartNew();
+                var chainScan = new LeftoverDiscovery(application, [chainedTool]).Scan(CancellationToken.None, [], []);
+                chainWatch.Stop();
+                check((File.GetAttributes(chain) & FileAttributes.ReparsePoint) != 0 && chainWatch.ElapsedMilliseconds < 500 && !chainScan.Candidates.Single(item => item.Target == shared).OwnershipComplete,
+                    "A local junction whose target goes through a link to a network share is never followed (" + chainWatch.ElapsedMilliseconds + " ms)");
+                var volumeName = new System.Text.StringBuilder(64);
+                if (GetVolumeNameForVolumeMountPoint(Path.GetPathRoot(nas)!, volumeName, (uint)volumeName.Capacity))
+                {
+                    var volumeChain = Path.Combine(root, "volume-chain");
+                    AliasOwnershipChecks.Junction(volumeChain, volumeName + Path.Combine(nas, "Tool")[Path.GetPathRoot(nas)!.Length..]);
+                    if (IsLink(volumeChain))
+                    {
+                        var volumeTool = new CleanupApplication { AppId = "fixture:volume", DisplayName = "Volume path share tool", Publisher = "Other", InstallLocation = volumeChain, PackageFamilyName = null };
+                        var volumeWatch = Stopwatch.StartNew();
+                        var volumeScan = new LeftoverDiscovery(application, [volumeTool]).Scan(CancellationToken.None, [], []);
+                        volumeWatch.Stop();
+                        check(volumeWatch.ElapsedMilliseconds < 500 && !volumeScan.Candidates.Single(item => item.Target == shared).OwnershipComplete,
+                            "An unproved volume path stays unknown without following its link to a network share (" + volumeWatch.ElapsedMilliseconds + " ms)");
+                    }
+                    else check(false, "The volume-path junction fixture must be created");
+                }
+            }
+        }
+        finally
+        {
+            if (Directory.Exists(alias)) Directory.Delete(alias);
+            try { Directory.Delete(Path.Combine(root, "chain")); } catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
+            try { Directory.Delete(Path.Combine(root, "volume-chain")); } catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
+            try { Directory.Delete(Path.Combine(root, "nas")); } catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
+            Directory.Delete(root, true);
+        }
+        check(!Directory.Exists(root), "Junction validation leaves no file fixtures");
+        var offline = new CleanupApplication { AppId = "fixture:offline", DisplayName = "Offline share tool", Publisher = "Other", InstallLocation = @"\\192.0.2.1\OfflineShare\Tool", PackageFamilyName = null };
+        var watch = Stopwatch.StartNew();
+        _ = new LeftoverDiscovery(new CleanupApplication { AppId = "fixture:local", DisplayName = "Roo Industries Example", Publisher = "Roo Industries", InstallLocation = null, PackageFamilyName = null }, [offline]);
+        check(watch.ElapsedMilliseconds < 2000, "An app installed on an unreachable network share does not stall leftover discovery (" + watch.ElapsedMilliseconds + " ms)");
     }
 
     private static void UncRoaming(Action<bool, string> check)

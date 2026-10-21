@@ -5,6 +5,17 @@ using RooIndustries.Optimizer;
 
 static class PrivilegeChecks
 {
+    internal static void WithoutPrivileges(Action action, params string[] names)
+    {
+        var previous = new List<(string Name, bool Enabled)>();
+        try
+        {
+            foreach (var name in names) previous.Add((name, SetPrivilege(name, false)));
+            action();
+        }
+        finally { foreach (var saved in previous.AsEnumerable().Reverse()) SetPrivilege(saved.Name, saved.Enabled); }
+    }
+
     public static void Run(Action<bool, string> check)
     {
         PrivilegeRestoreFailure(check);

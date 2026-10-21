@@ -63,6 +63,7 @@ public sealed class ApplicationCleanup(Func<CleanupContext> currentContext,
         if (itemIds.Length == 0 || itemIds.Distinct(StringComparer.Ordinal).Count() != itemIds.Length) throw new InvalidDataException("Select distinct leftover items.");
         var context = currentContext();
         context.Verify();
+        var inventoryHash = context.InventoryHash;
         var scan = Scan(context, CancellationToken.None);
         var selection = itemIds.Select(id => scan.Candidates.SingleOrDefault(item => item.ItemId == id)
             ?? throw new InvalidDataException("A selected leftover is no longer present in discovery.")).ToArray();
@@ -74,7 +75,7 @@ public sealed class ApplicationCleanup(Func<CleanupContext> currentContext,
         CleanupAuthority Authority()
         {
             Exclusions().RequireAllowed(selection);
-            return VerifyContext(context.Source, context.Application.AppId, context.Authority.ProviderIdentityHash, context.InventoryHash).Authority;
+            return VerifyContext(context.Source, context.Application.AppId, context.Authority.ProviderIdentityHash, inventoryHash, selection).Authority;
         }
         var registryTargets = selection.Where(item => item.Registry is not null).Select(item => item.Registry!).ToArray();
         var fileTargets = selection.Where(item => item.Registry is null).Select(item => item.Target).ToArray();
@@ -92,7 +93,7 @@ public sealed class ApplicationCleanup(Func<CleanupContext> currentContext,
         {
             SchemaVersion = 1, Owner = OperationOwner.Current(), OperationId = operationId, Source = context.Source,
             AppId = context.Application.AppId, DisplayName = context.Application.DisplayName, ProviderIdentityHash = context.Authority.ProviderIdentityHash,
-            InventoryHash = context.InventoryHash, Selection = selection, Registry = registry, Files = files,
+            InventoryHash = inventoryHash, Selection = selection, Registry = registry, Files = files,
         };
         OperationFiles.Write(outputPath, result);
         return result;
@@ -123,7 +124,7 @@ public sealed class ApplicationCleanup(Func<CleanupContext> currentContext,
         CleanupAuthority Authority()
         {
             Exclusions().RequireAllowed(preview.Selection);
-            return VerifyContext(preview.Source, preview.AppId, preview.ProviderIdentityHash, preview.InventoryHash).Authority;
+            return VerifyContext(preview.Source, preview.AppId, preview.ProviderIdentityHash, preview.InventoryHash, preview.Selection).Authority;
         }
         try
         {
@@ -221,13 +222,15 @@ public sealed class ApplicationCleanup(Func<CleanupContext> currentContext,
 
     private CleanupExclusionMatcher Exclusions() => new(currentExclusions?.Invoke() ?? CleanupExclusions.Empty);
 
-    private CleanupContext VerifyContext(string source, string appId, string identityHash, string? inventoryHash)
+    private CleanupContext VerifyContext(string source, string appId, string identityHash, string? inventoryHash, LeftoverCandidate[]? selection = null)
     {
         var current = currentContext();
         current.Verify();
         current.Authority.Verify(appId, identityHash);
         if (!string.Equals(source, current.Source, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("The cleanup belongs to another removal workflow.");
         if (inventoryHash is not null && current.InventoryHash != inventoryHash) throw new InvalidDataException("Installed app ownership changed after review. Scan leftovers again.");
+        var paths = selection?.Where(item => item.Registry is null).Select(item => item.Target).ToArray();
+        if (paths is { Length: > 0 }) new LeftoverDiscovery(current.Application, current.Peers).RequireFileOwnership(paths);
         return current;
     }
 
