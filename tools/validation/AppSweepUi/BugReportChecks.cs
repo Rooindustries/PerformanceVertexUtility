@@ -607,6 +607,17 @@ static class BugReportChecks
         check(wideCompleted == wideRedaction && wideRedaction.IsCompletedSuccessfully && wideRedaction.Result == wideRoot + "<user>",
             "A 7 MB almost-matching profile separator run redacts within five seconds: width=" + width + " length=" + wideInput.Length
                 + " completed=" + (wideCompleted == wideRedaction) + " elapsedMs=" + wideClock.Elapsed.TotalMilliseconds.ToString("F2"));
+        var markerMacroInput = new System.Text.StringBuilder("C:/Users/<user>");
+        const string encodedMarkerTail = @"\u003Cpc-name\u003E" + "Zqxlong/x";
+        while (markerMacroInput.Length + 13 + encodedMarkerTail.Length <= 7 * 1024 * 1024) markerMacroInput.Append("%USERPROFILE%");
+        var markerPadding = 7 * 1024 * 1024 - markerMacroInput.Length - encodedMarkerTail.Length;
+        markerMacroInput.Append(@"\u003Cpc-name\u003E").Append('A', markerPadding).Append("Zqxlong/x");
+        var markerClock = System.Diagnostics.Stopwatch.StartNew();
+        var markerRedaction = Task.Run(() => other.Redact(markerMacroInput.ToString()));
+        var markerCompleted = await Task.WhenAny(markerRedaction, Task.Delay(TimeSpan.FromSeconds(5)));
+        check(markerCompleted == markerRedaction && markerRedaction.IsCompletedSuccessfully && markerRedaction.Result == "C:/Users/<user>/x",
+            "A 7 MB marker and macro chain before an encoded marker stays private within five seconds: completed="
+                + (markerCompleted == markerRedaction) + " elapsedMs=" + markerClock.Elapsed.TotalMilliseconds.ToString("F2"));
         await LegacyComponentBoundariesAsync(check, root);
     }
 
@@ -725,6 +736,39 @@ static class BugReportChecks
         cases.Add((@"""C:\\Users\\<user>%USERPROFILE%\u0027" + reviewerSuffix + @"\\x""", @"""C:\\Users\\<user>\\x""", false));
         cases.Add((@"C:/Users/<user>%USERPROFILE%\uD83D\uDE00" + reviewerSuffix + "/x", "C:/Users/<user>/x", false));
         cases.Add((@"Z://Users//<sid>Qx%USERPROFILE%\\u007F\\u007FZv", "Z://Users//<user>", false));
+        var postMacroMarkers = new[] { "<user>", "<USER>", "<pc-name>", "<Pc-Name>", "<sid>", "<SID>" };
+        foreach (var profileRoot in new[] { @"C:\Users\", "C:/Users/" })
+        foreach (var marker in postMacroMarkers)
+        foreach (var macro in new[] { "%USERPROFILE%", "%USERPROFILE%%USERPROFILE%" })
+        {
+            var separator = profileRoot[^1].ToString();
+            foreach (var suffix in new[] { marker + "Zqxsmith", "'Zqxsmith", "😀Zqxsmith", "\u007FZqxsmith", "AZqxsmith" })
+                cases.Add((profileRoot + marker + macro + suffix + separator + "x", profileRoot + "<user>" + separator + "x", true));
+        }
+        foreach (var (open, close) in new[] { ("003C", "003E"), ("003c", "003e") })
+        foreach (var marker in postMacroMarkers)
+        foreach (var macro in new[] { "%USERPROFILE%", "%USERPROFILE%%USERPROFILE%" })
+        {
+            var escapedMarker = @"\u" + open + marker[1..^1] + @"\u" + close;
+            var escapedUser = @"\u" + open + "user" + @"\u" + close;
+            cases.Add(("C:/Users/<user>" + macro + escapedMarker + "Zqxbob/x", "C:/Users/<user>/x", true));
+            cases.Add(("C:/Users/" + escapedUser + macro + escapedMarker + "Zqx Bob O'Neil/x", "C:/Users/<user>/x", true));
+            cases.Add((@"C:\\Users\\" + escapedUser + macro + escapedMarker + "Zqx Bob O'Neil" + @"\\x", @"C:\\Users\\<user>\\x", true));
+        }
+        var defaultPostMacroInput = JsonSerializer.Serialize("C:/Users/<user>%USERPROFILE%<user>" + "Zqxbob/x");
+        cases.Add((defaultPostMacroInput, JsonSerializer.Serialize("C:/Users/<user>/x", relaxed), true));
+        foreach (var marker in postMacroMarkers)
+        foreach (var macro in new[] { "%USERPROFILE%", "%USERPROFILE%%USERPROFILE%" })
+            cases.Add((JsonSerializer.Serialize(@"C:\Users\<user>" + macro + marker + "Zqx Bob O'Neil" + @"\x"),
+                JsonSerializer.Serialize(@"C:\Users\<user>\x", relaxed), true));
+        foreach (var macro in new[] { "%USERPROFILE%", "%USERPROFILE%%USERPROFILE%" })
+        foreach (var suffix in new[] { @"\u003Cusername\u003EZqxtail/x", @"\u003Cusers\u003EZqxtail/x", @"\u003Cuser", @"\u003Cuser\\u003EZqxtail/x",
+            @"\u003Cpc-nam\u003EZqxtail/x", @"\u0001Zqxtail/x", @"\u0022Zqxtail/x", @"\u003AZqxtail/x", @"\u005cZqxtail/x", @"\u002fZqxtail/x",
+            @"\u000AZqxtail/x", ": denied", "\"quoted", "/x", "\tline", "\nline" })
+        {
+            var input = "C:/Users/<user>" + macro + suffix;
+            cases.Add((input, input, true));
+        }
         foreach (var profileRoot in new[] { @"C:\Users\\", @"C:/Users\\", @"C:\\Users\\", "C://Users//" })
         {
             var separator = profileRoot.EndsWith('/') ? "//" : @"\";
