@@ -1,6 +1,9 @@
 param(
     [string]$HarnessPath = (Join-Path $PSScriptRoot '..\..\LeanClientOptimizer.ps1'),
-    [ValidateSet('All','Selection','Drift','Registry')][string]$Scenario = 'All'
+    [ValidateSet('All','Selection','Drift','Registry','Recovery','ApplyComparison')][string]$Scenario = 'All',
+    [ValidateSet('All','Signed','LegacyEvidence','Preflight','RegistryFailure','ServiceFailure')][string]$RecoveryCase = 'All',
+    [string]$BaseHarnessPath = $env:ROO_LEGACY_BASE_HARNESS,
+    [string]$BaseHarnessSha256 = $env:ROO_LEGACY_BASE_HARNESS_SHA256
 )
 $ErrorActionPreference = 'Stop'
 $tempRoot = Join-Path ([IO.Path]::GetTempPath()) ('roo-industries-legacy-rollback-' + [guid]::NewGuid().ToString('N'))
@@ -14,13 +17,162 @@ $legacyQwordCases=@(
     @{label='signed minimum';data='-9223372036854775808';raw=[long]::MinValue;encoded='9223372036854775808'},
     @{label='unsigned maximum';data='18446744073709551615';raw=[long]-1;encoded='18446744073709551615'}
 )
+$legacyDwordCases=@(
+    @{label='signed number';data=[int]-1;raw=[int]-1;encoded=[uint32]::MaxValue},
+    @{label='signed text';data='-1';raw=[int]-1;encoded=[uint32]::MaxValue},
+    @{label='signed minimum';data=[int]::MinValue;raw=[int]::MinValue;encoded=[uint32]2147483648},
+    @{label='unsigned maximum';data='4294967295';raw=[int]-1;encoded=[uint32]::MaxValue}
+)
 try {
     New-Item -ItemType Directory -Path $tempRoot | Out-Null
     $fixtureManifest = Join-Path $tempRoot 'manifest.json'
     @{ protected = @{ services = @(); registryPathPatterns = @() }; modules = @(@{
         id = 'fixture'; name = 'Fixture'; registryValues = @(@{ path = 'HKCU\Fixture'; name = 'Value'; type = 'REG_DWORD'; data = 2 }); services = @()
     }) } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $fixtureManifest -Encoding UTF8
-    if ($Scenario -ne 'Registry') { & {
+    if ($Scenario -in 'All','Recovery') { & {
+        . $HarnessPath -Action ListModules -ManifestPath $fixtureManifest -DataRoot $tempRoot -ModuleId 'fixture' | Out-Null
+        function Open-RegistryKey {
+            param($Path,[switch]$Writable,[switch]$Create)
+            $key=[pscustomobject]@{}
+            $key | Add-Member ScriptMethod DeleteValue { param($Name,$ThrowOnMissing) $script:recoveryWrites++;$script:recoveryValues[$Name]=[pscustomobject]@{valueExists=$false;kind=$null;oldValue=$null} }
+            $key | Add-Member ScriptMethod Dispose {} -PassThru
+        }
+        function Get-RegistryValueSnapshot { param($Item) $script:recoveryValues[$Item.name] }
+        function Set-RegistrySnapshotData {
+            param($Key,$Name,$Snapshot)
+            $script:recoveryWrites++
+            if ($Name -ceq $script:failureName -and $script:failureMode -eq 'throw') { throw 'Fixture registry write failed' }
+            $script:recoveryValues[$Name]=[pscustomobject]@{valueExists=$Snapshot.valueExists;kind=$Snapshot.kind;oldValue=$Snapshot.oldValue}
+            if ($Name -ceq $script:failureName -and $script:failureMode -eq 'readback') { $script:recoveryValues[$Name]=[pscustomobject]@{valueExists=$true;kind='String';oldValue='Later'} }
+        }
+        function Get-ServiceSnapshot { param($Name) [pscustomobject]@{name=$Name;exists=$true;startType=$script:recoveryServices[$Name];status='Running'} }
+        function Restore-ServiceSnapshot {
+            param($Snapshot)
+            $script:serviceWrites++
+            if ($Snapshot.name -ceq $script:failureName -and $script:failureMode -eq 'throw') { throw 'Fixture service write failed' }
+            $script:recoveryServices[$Snapshot.name]=$Snapshot.startType
+            if ($Snapshot.name -ceq $script:failureName -and $script:failureMode -eq 'readback') { $script:recoveryServices[$Snapshot.name]='Manual' }
+        }
+        function Reset-RecoveryFixture {
+            $script:recoveryValues=@{
+                First=[pscustomobject]@{valueExists=$true;kind='DWord';oldValue=2}
+                Second=[pscustomobject]@{valueExists=$true;kind='DWord';oldValue=2}
+            }
+            $script:recoveryServices=@{FixtureSvc='Disabled';SecondSvc='Disabled'}
+            $script:recoveryWrites=0;$script:serviceWrites=0;$script:failureName='';$script:failureMode=''
+        }
+        $first=@{path='HKCU\Fixture';name='First';type='REG_DWORD';desiredData=2;oldValue=1;kind='DWord';valueExists=$true}
+        $second=@{path='HKCU\Fixture';name='Second';type='REG_DWORD';desiredData=2;oldValue=0;kind='DWord';valueExists=$true}
+        $service=@{name='FixtureSvc';exists=$true;startType='Automatic';status='Running';appliedStartup='Disabled'}
+        $BackupPath=Join-Path $tempRoot 'recovery-backup.json'
+        if ($RecoveryCase -in 'All','Signed') {
+            foreach ($case in $legacyDwordCases) {
+                Reset-RecoveryFixture
+                $snapshot=[pscustomobject]@{path='HKCU\Fixture';name='First';type='REG_DWORD';desiredData=2;oldValue=$case.data;valueExists=$true}
+                Restore-RegistryValue $snapshot
+                Assert ($script:recoveryValues.First.kind -ceq 'DWord' -and $script:recoveryValues.First.oldValue -eq $case.encoded) ('Legacy DWORD '+$case.label+' helper preserves the provider integer bits')
+            }
+            foreach ($type in 'REG_DWORD','REG_QWORD') {
+                $refused=$false
+                try { Get-ManifestRegistrySnapshot ([pscustomobject]@{type=$type;data='-1'}) | Out-Null } catch { $refused=$true }
+                Assert $refused ($type+' manifest conversion remains strict')
+            }
+            & {
+                Reset-RecoveryFixture
+                $ModuleId='M6-svchost-grouping'
+                $oldFirst=@{path='HKCU\Fixture';name='First';type='REG_DWORD';desiredData=2;oldValue=0;valueExists=$true}
+                $oldSecond=@{path='HKCU\Fixture';name='Second';type='REG_DWORD';desiredData=4294967295;oldValue=[int]-1;valueExists=$true}
+                $script:recoveryValues.Second=[pscustomobject]@{valueExists=$true;kind='DWord';oldValue=[uint32]::MaxValue}
+                Write-JsonFile @{moduleId=$ModuleId;registry=@($oldFirst,$oldSecond);services=@($service)} $BackupPath
+                $ConfirmApply=$true
+                $result=Invoke-RollbackModule
+                Assert ($result.success -and $result.restoredRegistry -eq 0 -and @($result.leftAsChanged).Count -eq 2 -and $result.restoredServices -eq 1 -and $script:recoveryWrites -eq 0) 'An M6-shaped signed legacy backup preserves unproven values without blocking the independent service'
+            }
+        }
+        if ($RecoveryCase -in 'All','LegacyEvidence') {
+            foreach ($history in 'DWord/QWord','String/ExpandString') {
+                $left=if ($history -eq 'String/ExpandString') { '0' } else { [int]0 }
+                $right=if ($history -eq 'String/ExpandString') { '0' } else { [long]0 }
+                $a=[ordered]@{path='HKCU\Fixture';name='First';type='REG_DWORD';desiredData=1;oldValue=$left;valueExists=$true}
+                $b=[ordered]@{path='HKCU\Fixture';name='First';type='REG_DWORD';desiredData=1;oldValue=$right;valueExists=$true}
+                $jsonA=ConvertTo-Json -InputObject $a -Compress
+                $jsonB=ConvertTo-Json -InputObject $b -Compress
+                Assert ([string]::Equals($jsonA,$jsonB,[StringComparison]::Ordinal)) ($history+' histories have identical kindless JSON')
+                $historyRows=New-Object System.Collections.Generic.List[object]
+                foreach ($entry in @($a,$b)) {
+                    Reset-RecoveryFixture
+                    $script:recoveryValues.First=[pscustomobject]@{valueExists=$true;kind=$(if ($history -eq 'String/ExpandString') {'String'} else {'DWord'});oldValue=$(if ($history -eq 'String/ExpandString') {'1'} else {1})}
+                    Write-JsonFile @{moduleId='fixture';registry=@($entry);services=@($service)} $BackupPath
+                    $hash=(Get-FileHash $BackupPath).Hash
+                    $ConfirmApply=$false
+                    $preview=Invoke-RollbackModule
+                    $previewSafe=$preview.restoredRegistry -eq 0 -and @($preview.leftAsChanged).Count -eq 1 -and $preview.leftAsChanged[0].reason -like '*kind*evidence*' -and $script:recoveryWrites -eq 0
+                    $ConfirmApply=$true
+                    $result=Invoke-RollbackModule
+                    $historyRows.Add([pscustomobject]@{history=$history;oldValueType=($jsonA|ConvertFrom-Json).oldValue.GetType().FullName;previewSafe=$previewSafe;registryWrites=$script:recoveryWrites;currentValue=$script:recoveryValues.First.oldValue;restoredRegistry=$result.restoredRegistry;restoredServices=$result.restoredServices;leftCount=@($result.leftAsChanged).Count;reason=$result.leftAsChanged[0].reason;backupUnchanged=((Get-FileHash $BackupPath).Hash -ceq $hash)})
+                }
+                Write-Output ('LEGACY_EVIDENCE_FIXTURE_JSON '+(ConvertTo-Json -InputObject @($historyRows.ToArray()) -Depth 5 -Compress))
+                Assert (@($historyRows|Where-Object {-not $_.previewSafe}).Count -eq 0) ($history+' preview refuses to infer applied kind')
+                Assert (@($historyRows|Where-Object {$_.restoredRegistry -ne 0 -or $_.leftCount -ne 1 -or $_.registryWrites -ne 0 -or $_.restoredServices -ne 1 -or -not $_.backupUnchanged}).Count -eq 0) ($history+' confirmed rollback preserves both histories and restores the independent service')
+            }
+            Reset-RecoveryFixture
+            Write-JsonFile @{moduleId='fixture';registry=@(@{path='HKCU\Fixture';name='First';type='REG_DWORD';desiredData=2;valueExists=$false});services=@()} $BackupPath
+            $ConfirmApply=$true
+            $result=Invoke-RollbackModule
+            Assert ($result.success -and $result.restoredRegistry -eq 1 -and -not $script:recoveryValues.First.valueExists) 'A legacy known-create contract removes only the unchanged applied value'
+            Reset-RecoveryFixture
+            Write-JsonFile @{moduleId='fixture';registry=@(@{path='HKCU\Fixture';name='First';type='REG_DWORD';desiredData=2;kind='DWord';oldValue=1});services=@()} $BackupPath
+            $result=Invoke-RollbackModule
+            Assert ($result.restoredRegistry -eq 0 -and $script:recoveryWrites -eq 0 -and $result.leftAsChanged[0].reason -like '*existence*evidence*') 'Missing original-existence evidence cannot be treated as an absent-before value'
+        }
+        if ($RecoveryCase -in 'All','Preflight') {
+            foreach ($invalid in 'binary','service') {
+                Reset-RecoveryFixture
+                $bad=if ($invalid -eq 'binary') { @{path='HKCU\Fixture';name='Second';type='REG_DWORD';desiredData=2;kind='Binary';oldValue='%%%';valueExists=$true} } else { $second }
+                $svc=if ($invalid -eq 'service') { @{name='FixtureSvc';exists=$true;startType='Invalid';status='Running';appliedStartup='Disabled'} } else { $service }
+                Write-JsonFile @{moduleId='fixture';registry=@($first,$bad);services=@($svc)} $BackupPath
+                $ConfirmApply=$true
+                $threw=$false;$result=$null
+                try { $result=Invoke-RollbackModule } catch { $threw=$true }
+                Assert (-not $threw -and -not $result.success -and $null -ne $result.failures -and @($result.failures).Count -eq 1 -and $result.failures[0].phase -ceq 'preflight' -and $script:recoveryWrites -eq 0 -and $script:serviceWrites -eq 0 -and $script:recoveryValues.First.oldValue -eq 2) ($invalid+' failure is reported before any setting write')
+            }
+        }
+        if ($RecoveryCase -in 'All','RegistryFailure') {
+            foreach ($mode in 'throw','readback','external') {
+                Reset-RecoveryFixture
+                $script:failureName='Second';$script:failureMode=if ($mode -eq 'readback') {'readback'} else {'throw'}
+                Write-JsonFile @{moduleId='fixture';registry=@($first,$second);services=@($service)} $BackupPath
+                $hash=(Get-FileHash $BackupPath).Hash
+                $ConfirmApply=$true
+                $threw=$false;$result=$null
+                try { $result=Invoke-RollbackModule } catch { $threw=$true }
+                Assert (-not $threw -and -not $result.success -and $result.partial -and $result.restoredRegistry -eq 1 -and $result.restoredServices -eq 0 -and @($result.failures).Count -eq 1 -and $result.failures[0].name -ceq 'Second' -and @($result.pending).Count -eq 1 -and $script:recoveryValues.First.oldValue -eq 1 -and (Get-FileHash $BackupPath).Hash -ceq $hash) ($mode+' registry failure reports verified writes and untouched service with the backup retained')
+                $script:failureMode=''
+                if ($mode -eq 'external') { $script:recoveryValues.First=[pscustomobject]@{valueExists=$true;kind='DWord';oldValue=9} }
+                $retry=Invoke-RollbackModule
+                if ($mode -eq 'external') {
+                    Assert ($retry.success -and $script:recoveryValues.First.oldValue -eq 9 -and @($retry.leftAsChanged).Count -eq 1 -and @($retry.alreadyAtOriginal).Count -eq 0 -and $retry.restoredRegistry -eq 1 -and $retry.restoredServices -eq 1) 'Retry preserves an external edit to a previously restored value'
+                } else {
+                    Assert ($retry.success -and @($retry.alreadyAtOriginal).Count -eq 1 -and $retry.alreadyAtOriginal[0].name -ceq 'First' -and $retry.restoredRegistry -eq $(if ($mode -eq 'readback') {0} else {1}) -and $retry.restoredServices -eq 1 -and @($retry.leftAsChanged).Count -eq $(if ($mode -eq 'readback') {1} else {0})) ($mode+' retry identifies already-original values and safely finishes independent work')
+                }
+            }
+        }
+        if ($RecoveryCase -in 'All','ServiceFailure') {
+            foreach ($mode in 'throw','readback') {
+                Reset-RecoveryFixture
+                $script:failureName='FixtureSvc';$script:failureMode=$mode
+                Write-JsonFile @{moduleId='fixture';registry=@($first);services=@($service,@{name='SecondSvc';exists=$true;startType='Automatic';status='Running';appliedStartup='Disabled'})} $BackupPath
+                $ConfirmApply=$true
+                $threw=$false;$result=$null
+                try { $result=Invoke-RollbackModule } catch { $threw=$true }
+                Assert (-not $threw -and -not $result.success -and $result.partial -and $result.restoredRegistry -eq 1 -and $result.restoredServices -eq 0 -and @($result.failures).Count -eq 1 -and @($result.pending).Count -eq 1 -and $script:recoveryServices.SecondSvc -ceq 'Disabled') ($mode+' service failure reports the failed and pending services after verified registry restoration')
+                $script:failureMode=''
+                $retry=Invoke-RollbackModule
+                Assert ($retry.success -and @($retry.alreadyAtOriginal).Count -eq 1 -and $retry.restoredServices -eq $(if ($mode -eq 'readback') {1} else {2}) -and @($retry.leftAsChanged).Count -eq $(if ($mode -eq 'readback') {1} else {0})) ($mode+' service retry preserves drift and accurately reports the completed registry value')
+            }
+        }
+    } }
+    if ($Scenario -in 'All','Selection','Drift') { & {
         . $HarnessPath -Action ListModules -ManifestPath $fixtureManifest -DataRoot $tempRoot -ModuleId 'fixture' | Out-Null
         if ($Scenario -ne 'Selection') { & {
             function Open-RegistryKey {
@@ -36,8 +188,8 @@ try {
                 $script:legacyQwordValue='2'
                 $backup=@{moduleId='fixture';timestamp=(Get-Date).ToString('o');registry=@(@{path='HKCU\Fixture';name='Value';type='REG_QWORD';desiredData=2;oldValue=$case.data;valueExists=$true});services=@()}
                 Write-JsonFile $backup $BackupPath
-                $restored=Invoke-RollbackModule
-                Assert ($script:legacyQwordValue -ceq $case.encoded -and $restored.restoredRegistry -eq 1 -and @($restored.leftAsChanged).Count -eq 0) ('Legacy QWORD '+$case.label+' restores through the real rollback and readback path')
+                Restore-RegistryValue ([pscustomobject]$backup.registry[0])
+                Assert ($script:legacyQwordValue -ceq $case.encoded) ('Legacy QWORD '+$case.label+' helper preserves the provider integer bits')
             }
         } }
         # Only operating-system calls are replaced; backup selection and apply/rollback execute the real harness.
@@ -278,12 +430,13 @@ try {
             $BackupPath=$applied.backupPath
             $legacy=Get-Content $BackupPath -Raw | ConvertFrom-Json
             $legacy.registry[0].PSObject.Properties.Remove('kind')
+            $originalBackup=[IO.File]::ReadAllText($BackupPath)
             $legacy.PSObject.Properties.Remove('applyRequested')
             Write-JsonFile $legacy $BackupPath
             $BackupPath=''
             $restored=Invoke-RollbackModule
             $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($subkey)
-            try { Assert ($key.GetValue('Value') -eq 1 -and $restored.backupPath -eq $applied.backupPath) 'Legacy backups retain restore behavior and latest selection through a confirmed run' } finally { $key.Dispose() }
+            try { Assert ($key.GetValue('Value') -eq 2 -and $restored.backupPath -eq $applied.backupPath -and $restored.restoredRegistry -eq 0 -and $restored.leftAsChanged[0].reason -like '*kind*evidence*') 'Legacy latest selection preserves an existing value without applied-kind evidence' } finally { $key.Dispose() }
             & {
                 $BackupPath=Join-Path $tempRoot 'legacy-qword-real.json'
                 foreach ($case in $legacyQwordCases) {
@@ -291,10 +444,68 @@ try {
                     try { $key.SetValue('Value',[long]2,[Microsoft.Win32.RegistryValueKind]::QWord) } finally { $key.Dispose() }
                     $backup=@{moduleId='fixture';timestamp=(Get-Date).ToString('o');registry=@(@{path=$regPath;name='Value';type='REG_QWORD';desiredData=2;oldValue=$case.data;valueExists=$true});services=@()}
                     Write-JsonFile $backup $BackupPath
-                    $restored=Invoke-RollbackModule
+                    Restore-RegistryValue ([pscustomobject]$backup.registry[0])
                     $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($subkey)
-                    try { Assert ($key.GetValueKind('Value') -eq [Microsoft.Win32.RegistryValueKind]::QWord -and $key.GetValue('Value') -eq $case.raw -and $restored.restoredRegistry -eq 1 -and @($restored.leftAsChanged).Count -eq 0) ('Legacy QWORD '+$case.label+' restores its original bits in the real registry') } finally { $key.Dispose() }
+                    try { Assert ($key.GetValueKind('Value') -eq [Microsoft.Win32.RegistryValueKind]::QWord -and $key.GetValue('Value') -eq $case.raw) ('Legacy QWORD '+$case.label+' helper preserves its bits in the real registry') } finally { $key.Dispose() }
                 }
+                foreach ($case in $legacyDwordCases) {
+                    $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($subkey,$true)
+                    try { $key.SetValue('Value',2,[Microsoft.Win32.RegistryValueKind]::DWord) } finally { $key.Dispose() }
+                    $snapshot=[pscustomobject]@{path=$regPath;name='Value';type='REG_DWORD';desiredData=2;oldValue=$case.data;valueExists=$true}
+                    Restore-RegistryValue $snapshot
+                    $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($subkey)
+                    try { Assert ($key.GetValueKind('Value') -eq [Microsoft.Win32.RegistryValueKind]::DWord -and $key.GetValue('Value') -eq $case.raw) ('Legacy DWORD '+$case.label+' helper preserves its bits in the real registry') } finally { $key.Dispose() }
+                }
+            }
+            [IO.File]::WriteAllText($applied.backupPath,$originalBackup)
+            & {
+                $BackupPath=Join-Path $tempRoot 'real-recovery.json'
+                foreach ($history in 'String/ExpandString','DWord/QWord') {
+                    $legacyValue=if ($history -eq 'String/ExpandString') { '0' } else { 0 }
+                    $entry=@{path=$regPath;name='Value';type='REG_DWORD';desiredData=1;oldValue=$legacyValue;valueExists=$true}
+                    $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($subkey,$true)
+                    try {
+                        if ($history -eq 'String/ExpandString') { $key.SetValue('Value','1',[Microsoft.Win32.RegistryValueKind]::String) }
+                        else { $key.SetValue('Value',1,[Microsoft.Win32.RegistryValueKind]::DWord) }
+                    } finally { $key.Dispose() }
+                    Write-JsonFile @{moduleId='fixture';registry=@($entry);services=@()} $BackupPath
+                    $ConfirmApply=$false
+                    $preview=Invoke-RollbackModule
+                    $ConfirmApply=$true
+                    $result=Invoke-RollbackModule
+                    $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($subkey)
+                    try { Assert ($preview.restoredRegistry -eq 0 -and $result.restoredRegistry -eq 0 -and $result.leftAsChanged[0].reason -like '*kind*evidence*' -and $key.GetValue('Value') -eq 1) ($history+' indistinguishable legacy histories are preserved in the real registry') } finally { $key.Dispose() }
+                }
+                $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($subkey,$true)
+                try { $key.SetValue('Value',2,[Microsoft.Win32.RegistryValueKind]::DWord) } finally { $key.Dispose() }
+                Write-JsonFile @{moduleId='fixture';registry=@(@{path=$regPath;name='Value';type='REG_DWORD';desiredData=2;valueExists=$false});services=@()} $BackupPath
+                $result=Invoke-RollbackModule
+                $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($subkey)
+                try { Assert ($result.restoredRegistry -eq 1 -and 'Value' -notin $key.GetValueNames()) 'A legacy absent-before value uses the explicit old-create kind and is removed' } finally { $key.Dispose() }
+                $entries=@(
+                    @{path=$regPath;name='First';type='REG_DWORD';desiredData=2;kind='DWord';oldValue=1;valueExists=$true},
+                    @{path=$regPath;name='Second';type='REG_DWORD';desiredData=2;kind='Binary';oldValue='%%%';valueExists=$true}
+                )
+                $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($subkey,$true)
+                try { foreach ($name in 'First','Second') { $key.SetValue($name,2,[Microsoft.Win32.RegistryValueKind]::DWord) } } finally { $key.Dispose() }
+                Write-JsonFile @{moduleId='fixture';registry=$entries;services=@()} $BackupPath
+                $result=Invoke-RollbackModule
+                $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($subkey)
+                try { Assert (-not $result.success -and $result.failures[0].phase -ceq 'preflight' -and $key.GetValue('First') -eq 2 -and $key.GetValue('Second') -eq 2) 'Real-registry preflight failure leaves every value untouched' } finally { $key.Dispose() }
+                $cliFailed=$false
+                try { & $HarnessPath -Action RollbackModule -ModuleId fixture -ManifestPath $fixtureManifest -DataRoot $tempRoot -BackupPath $BackupPath -ConfirmApply | Out-Null } catch { $cliFailed=$_.Exception.Data['RollbackResult'].success -eq $false }
+                Assert $cliFailed 'The RollbackModule CLI exposes the failed result and raises an error'
+                $entries[1].kind='DWord';$entries[1].oldValue=0
+                Write-JsonFile @{moduleId='fixture';registry=$entries;services=@()} $BackupPath
+                $hash=(Get-FileHash $BackupPath).Hash
+                & {
+                    $realWriter=${function:Set-RegistrySnapshotData}
+                    function Set-RegistrySnapshotData { param($Key,$Name,$Snapshot) if ($Name -cne 'Second') { & $realWriter $Key $Name $Snapshot } }
+                    $result=Invoke-RollbackModule
+                    Assert (-not $result.success -and $result.partial -and $result.restoredRegistry -eq 1 -and $result.failures[0].name -ceq 'Second' -and (Get-FileHash $BackupPath).Hash -ceq $hash) 'A real readback failure reports the verified first restore and retains its backup'
+                }
+                $retry=Invoke-RollbackModule
+                Assert ($retry.success -and $retry.restoredRegistry -eq 1 -and $retry.alreadyAtOriginal[0].name -ceq 'First') 'Real-registry retry distinguishes an already-original value from later drift'
             }
             $BackupPath=$applied.backupPath
             $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($subkey,$true)
@@ -419,6 +630,47 @@ try {
             [Microsoft.Win32.Registry]::CurrentUser.DeleteSubKeyTree($subkey,$false)
         }
         Assert ($null -eq [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($subkey)) 'The real-registry fixture is removed'
+    } }
+    if ($Scenario -eq 'ApplyComparison' -or ($Scenario -eq 'All' -and $BaseHarnessPath)) { & {
+        if ($env:OS -ne 'Windows_NT') { throw 'The base/new apply comparison requires Windows.' }
+        if (-not $BaseHarnessPath -or $BaseHarnessSha256 -notmatch '^[a-fA-F0-9]{64}$' -or (Get-FileHash -LiteralPath $BaseHarnessPath).Hash -ine $BaseHarnessSha256) { throw 'The exact base harness source receipt is required.' }
+        $comparisonSubkey='Software\RooIndustriesFixture-'+[guid]::NewGuid().ToString('N')
+        $comparisonPath='HKCU\'+$comparisonSubkey
+        $rows=New-Object System.Collections.Generic.List[object]
+        try {
+            foreach ($case in 'absent UInt32 max','present UInt32 max','existing String') {
+                foreach ($flavor in 'base','new') { & {
+                    $key=[Microsoft.Win32.Registry]::CurrentUser.CreateSubKey($comparisonSubkey)
+                    try {
+                        $key.DeleteValue('Value',$false)
+                        if ($case -eq 'present UInt32 max') { $key.SetValue('Value',[int]-1,[Microsoft.Win32.RegistryValueKind]::DWord) }
+                        if ($case -eq 'existing String') { $key.SetValue('Value','7',[Microsoft.Win32.RegistryValueKind]::String) }
+                    } finally { $key.Dispose() }
+                    $desired=if ($case -eq 'existing String') { 2 } else { [uint32]::MaxValue }
+                    $comparisonManifest=Join-Path $tempRoot 'apply-comparison-manifest.json'
+                    @{protected=@{services=@();registryPathPatterns=@()};modules=@(@{id='fixture';name='Fixture';registryValues=@(@{path=$comparisonPath;name='Value';type='REG_DWORD';data=$desired});services=@()})}|ConvertTo-Json -Depth 8|Set-Content $comparisonManifest
+                    $candidate=if ($flavor -eq 'base') {$BaseHarnessPath} else {$HarnessPath}
+                    . $candidate -Action ListModules -ManifestPath $comparisonManifest -DataRoot (Join-Path $tempRoot ('comparison-'+$flavor+'-'+[guid]::NewGuid().ToString('N'))) -ModuleId fixture | Out-Null
+                    function Get-BenchmarkSnapshot { param($Label) @{label=$Label} }
+                    function Invoke-SmokeTest { @() }
+                    $ConfirmApply=$true
+                    $failure=$null
+                    try { Invoke-ApplyModule | Out-Null } catch { $failure=$_.Exception.Message }
+                    $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($comparisonSubkey)
+                    try {
+                        $exists='Value' -in $key.GetValueNames()
+                        $kind=if ($exists) {[string]$key.GetValueKind('Value')} else {$null}
+                        $data=if (-not $exists) {$null} elseif ($kind -eq 'DWord') {[BitConverter]::ToUInt32([BitConverter]::GetBytes([int]$key.GetValue('Value')),0).ToString([Globalization.CultureInfo]::InvariantCulture)} else {[string]$key.GetValue('Value')}
+                    } finally { $key.Dispose() }
+                    $rows.Add([pscustomobject]@{case=$case;flavor=$flavor;error=$failure;exists=$exists;kind=$kind;data=$data})
+                    if ($flavor -eq 'new') { Assert ($null -eq $failure -and $kind -ceq 'DWord' -and $data -ceq ([string]$desired)) ('New apply writes exact DWORD data for '+$case) }
+                    elseif ($case -eq 'existing String') { Assert ($null -eq $failure -and $kind -ceq 'String' -and $data -ceq '2') 'The actual base provider keeps an existing String kind on DWORD apply' }
+                    else { Assert (($null -eq $failure -and $kind -ceq 'DWord' -and $data -ceq '4294967295') -or ($failure -and (($case -eq 'absent UInt32 max' -and -not $exists) -or ($case -eq 'present UInt32 max' -and $kind -ceq 'DWord' -and $data -ceq '4294967295')))) ('Actual base UInt32-max outcome is captured for '+$case) }
+                } }
+            }
+            Write-Output ('BASE_NEW_APPLY_FIXTURE_JSON '+(ConvertTo-Json -InputObject @{baseHarnessSha256=$BaseHarnessSha256;results=@($rows.ToArray())} -Depth 6 -Compress))
+        } finally { [Microsoft.Win32.Registry]::CurrentUser.DeleteSubKeyTree($comparisonSubkey,$false) }
+        Assert ($null -eq [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($comparisonSubkey)) 'The apply-comparison fixture is removed'
     } }
 } finally {
     if (Test-Path -LiteralPath $tempRoot) { Remove-Item -LiteralPath $tempRoot -Recurse -Force }
