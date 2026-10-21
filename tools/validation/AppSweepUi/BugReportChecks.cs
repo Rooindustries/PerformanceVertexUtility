@@ -716,22 +716,87 @@ static class BugReportChecks
             foreach (var shared in new[] { "Public", "Default", "Default User", "All Users" })
                 cases.Add((profileRoot + shared + separator + "x", profileRoot + shared + separator + "x", true));
         }
+        var emissionStart = cases.Count;
+        var joinedName = "Zqxown " + "Smith";
+        var joinedOwn = @"C:\Users\" + joinedName;
+        var emissionRedactor = new BugRedactor(joinedOwn, joinedName, "GAMER-PC");
+        var emissionExact = new[]
+        {
+            @"C:/Users/" + joinedOwn + @"\u0041pp",
+            @"C:\Users/u0012345\u0041ppé." + joinedOwn + @"\Ubedau0041"
+        };
+        cases.Add((emissionExact[0], @"C:/Users/<user>C:\Users\<user>\u0041pp", true));
+        cases.Add((emissionExact[1], @"C:\Users/<user>.C:\Users\<user>\Ubedau0041", true));
+        foreach (var profileRoot in new[] { "C:/Users/", @"C:\Users/", "C://Users//" })
+        foreach (var (prefix, punctuation) in new[] { ("", ""), ("Zqxother", ""), ("Zqxother.", "."), ("Zqxother;", ";"), ("Zqxother'", "'"), ("Zqxother')", "')") })
+        foreach (var tail in new[] { @"\u0041pp", @"\Ubeda", @"\uD83D\uDE00x", @"\x", "/x" })
+        {
+            var input = profileRoot + prefix + joinedOwn + tail;
+            var expected = profileRoot + "<user>" + punctuation + @"C:\Users\<user>" + tail;
+            cases.Add((input, expected, true));
+            cases.Add(("Scanning \"" + input + "\"", "Scanning \"" + expected + "\"", true));
+            cases.Add(("Scanning '" + input + "'", "Scanning '" + expected + "'", true));
+            if (punctuation == "'")
+                cases.Add((JsonSerializer.Serialize(input, relaxed).Replace("'", @"\u0027", StringComparison.Ordinal),
+                    JsonSerializer.Serialize(expected, relaxed).Replace("'", @"\u0027", StringComparison.Ordinal), true));
+        }
+        foreach (var punctuation in new[] { "", ".", ";", "'" })
+        foreach (var tail in new[] { @"\u0041pp", @"\Ubeda", @"\uD83D\uDE00x", @"\x", "/x" })
+        {
+            var input = @"C:/Users/ZqxotherC:\\Users\\" + joinedName + punctuation + joinedOwn + tail;
+            var expected = @"C:/Users/<user>C:\\Users\\<user>" + punctuation + @"C:\Users\<user>" + tail;
+            cases.Add((input, expected, true));
+            var fourthRoot = @"C:\\Users\\";
+            var fourthTail = tail.Replace(@"\", @"\\", StringComparison.Ordinal);
+            cases.Add((@"C:/Users/ZqxotherC:\\Users\\" + joinedName + punctuation + joinedOwn + punctuation + fourthRoot + joinedName + fourthTail,
+                @"C:/Users/<user>C:\\Users\\<user>" + punctuation + @"C:\Users\<user>" + punctuation + fourthRoot + "<user>" + fourthTail, true));
+            if (punctuation.Length > 0)
+            {
+                var escape = punctuation == "." ? @"\u002E" : punctuation == ";" ? @"\u003B" : @"\u0027";
+                cases.Add((JsonSerializer.Serialize(input, relaxed).Replace(punctuation, escape, StringComparison.Ordinal),
+                    JsonSerializer.Serialize(expected, relaxed).Replace(punctuation, escape, StringComparison.Ordinal), true));
+            }
+        }
+        foreach (var tail in new[] { @"\u0041pp", @"\Ubeda", @"\x", "/x" })
+        {
+            cases.Add((@"C:\Users\Zqxother" + joinedOwn + tail, @"C:\Users\<user>%USERPROFILE%" + tail, true));
+            cases.Add((joinedOwn + tail, "%USERPROFILE%" + tail, true));
+            cases.Add((@"C:/Users/Zqxother""" + joinedOwn + tail, @"C:/Users/<user>""%USERPROFILE%" + tail, true));
+        }
+        foreach (var shared in new[] { "Public", "Default", "Default User", "All Users" })
+            cases.Add((@"C:\Users\" + shared + @"\boundary-control", @"C:\Users\" + shared + @"\boundary-control", true));
+        var emissionInputs = cases.Skip(emissionStart).Select(item => item.Input).ToHashSet(StringComparer.Ordinal);
+        bool WholeUnicode(string value)
+        {
+            for (var index = 0; index < value.Length; index++)
+            {
+                if (char.IsHighSurrogate(value[index]))
+                {
+                    if (++index >= value.Length || !char.IsLowSurrogate(value[index])) return false;
+                }
+                else if (char.IsLowSurrogate(value[index])) return false;
+            }
+            return true;
+        }
         var spanInputs = cases.Skip(spanStart).Select(item => item.Input).ToHashSet(StringComparer.Ordinal);
         foreach (var (raw, expected, defaultEncoder) in cases)
         {
+            var activeRedactor = emissionInputs.Contains(raw) ? emissionRedactor : redactor;
             foreach (var options in defaultEncoder ? new JsonSerializerOptions?[] { null, relaxed } : new JsonSerializerOptions?[] { relaxed })
             {
                 var input = raw;
                 var encoder = options is null ? "default" : "relaxed";
                 for (var depth = 0; depth <= 5; depth++)
                 {
-                    var actual = redactor.Redact(input);
+                    var actual = activeRedactor.Redact(input);
                     try
                     {
                         var decoded = actual;
                         for (var level = 0; level < depth; level++) decoded = JsonSerializer.Deserialize<string>(decoded)!;
-                        check(decoded == expected && redactor.Redact(actual) == actual,
-                            "Legacy component boundary " + encoder + " depth " + depth + " " + JsonSerializer.Serialize(raw) + " => " + JsonSerializer.Serialize(decoded));
+                        check(decoded == expected && activeRedactor.Redact(actual) == actual,
+                            (emissionInputs.Contains(raw) ? "Joined profile emission " : "Legacy component boundary ") + encoder + " depth " + depth + " " + JsonSerializer.Serialize(raw) + " => " + JsonSerializer.Serialize(decoded));
+                        if (emissionInputs.Contains(raw))
+                            check(WholeUnicode(actual) && WholeUnicode(decoded!), "Joined profile emission keeps complete Unicode scalars at " + encoder + " depth " + depth + " for " + JsonSerializer.Serialize(raw));
                         if (spanInputs.Contains(raw) && raw.StartsWith('"'))
                             check(JsonSerializer.Deserialize<string>(decoded!) == JsonSerializer.Deserialize<string>(expected),
                                 "An encoded macro component remains valid inner JSON at " + encoder + " depth " + depth + " for " + JsonSerializer.Serialize(raw));
@@ -749,7 +814,7 @@ static class BugReportChecks
             {
                 File.WriteAllText(Path.Combine(logs, "app.log.old"), raw + Environment.NewLine);
                 var sender = new FakeSender { Result = new(false, 404) };
-                var service = new BugReportService(Webhook, sender, Path.Combine(fixture, "reports"), logs, redactor);
+                var service = new BugReportService(Webhook, sender, Path.Combine(fixture, "reports"), logs, activeRedactor);
                 BugSpec[] specs = [new("cpu", "Processor", raw)];
                 var attachment = service.CreateAttachment(specs, BugReportService.TweakSummaryJson([], false, null, [raw]));
                 var report = new BugReport("fixture", specs, "fixture#1", raw);
@@ -766,8 +831,8 @@ static class BugReportChecks
                             "Legacy boundary " + (isSaved ? "saved" : "attachment") + " specs and lastErrors are private valid JSON for " + JsonSerializer.Serialize(raw));
                         if (spanInputs.Contains(raw))
                         {
-                            check(redactor.Redact(values.RootElement.GetProperty("specs").GetProperty("cpu").GetString()!) == expected
-                                && redactor.Redact(summary.RootElement.GetProperty("lastErrors")[0].GetString()!) == expected,
+                            check(activeRedactor.Redact(values.RootElement.GetProperty("specs").GetProperty("cpu").GetString()!) == expected
+                                && activeRedactor.Redact(summary.RootElement.GetProperty("lastErrors")[0].GetString()!) == expected,
                                 "Span boundary decoded specs and lastErrors stay private and stable after another pass for " + JsonSerializer.Serialize(raw));
                             if (raw.StartsWith('"'))
                                 check(JsonSerializer.Deserialize<string>(values.RootElement.GetProperty("specs").GetProperty("cpu").GetString()!) == JsonSerializer.Deserialize<string>(expected)
@@ -782,7 +847,7 @@ static class BugReportChecks
                     check(Read(zip, "logs/app.log.old") == expected + Environment.NewLine,
                         "Legacy boundary " + (isSaved ? "saved" : "attachment") + " log has exact private output for " + JsonSerializer.Serialize(raw));
                     if (spanInputs.Contains(raw))
-                        check(redactor.Redact(Read(zip, "logs/app.log.old")) == expected + Environment.NewLine,
+                        check(activeRedactor.Redact(Read(zip, "logs/app.log.old")) == expected + Environment.NewLine,
                             "Span boundary attached log stays private and stable after another pass for " + JsonSerializer.Serialize(raw));
                     if (isSaved)
                         check(Read(zip, "report.txt").Contains("What went wrong:" + Environment.NewLine + expected.Trim() + Environment.NewLine, StringComparison.Ordinal)
