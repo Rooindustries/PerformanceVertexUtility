@@ -775,7 +775,19 @@ public static class RooIndustriesLegacyFixtureRaw {
         if(error!=0)throw new Win32Exception(error);if(actual!=length)throw new InvalidOperationException("Fixture value changed during read");
         return new RooIndustriesLegacyFixtureValue{Kind=kind,Data=data};
     }
-    public static void Write(RegistryKey key,string name,uint kind,byte[] data) {int error=Set(key.Handle.DangerousGetHandle(),name,0,kind,data,(uint)data.Length);if(error!=0)throw new Win32Exception(error);}
+    public static void Write(RegistryKey key,string name,uint kind,byte[] data) {
+        byte[] backing=new byte[checked(data.Length+4)];
+        Buffer.BlockCopy(data,0,backing,0,data.Length);
+        backing[data.Length]=0x42;
+        int error=Set(key.Handle.DangerousGetHandle(),name,0,kind,backing,(uint)data.Length);
+        if(error!=0)throw new Win32Exception(error);
+        RooIndustriesLegacyFixtureValue observed=Read(key,name);
+        bool exact=observed.Kind==kind&&observed.Data.Length==data.Length;
+        for(int index=0;exact&&index<data.Length;index++)exact=observed.Data[index]==data[index];
+        if(!exact)throw new InvalidOperationException(String.Format(
+            "Fixture producer mismatch: requested kind={0} bytes={1}; observed kind={2} bytes={3}",
+            kind,Convert.ToBase64String(data),observed.Kind,Convert.ToBase64String(observed.Data)));
+    }
 }
 '@
             }
