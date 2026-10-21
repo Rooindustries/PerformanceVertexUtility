@@ -19,18 +19,22 @@ function Invoke-Scenario([string]$Kind,[string]$Mode,[string]$RootStatus='applie
   function Test-RooIndustriesGovernorOwnsControl {param($Process,$Control) return $false}
   $live=[Diagnostics.Process]::GetCurrentProcess()
   $identity=[pscustomobject]@{processId=$live.Id;creationTimeFileTimeUtc=[string]$live.StartTime.ToUniversalTime().ToFileTimeUtc();executablePath=$live.MainModule.FileName}
-  $memory=$Mode -like 'protected-*'
-  $control=if($memory){'memoryPriority'}else{'priorityClass'}
-  $native=if($memory){'memoryPriority'}else{'cpuPriority'}
-  $original=if($memory){5}else{'Normal'};$target=if($memory){2}else{'AboveNormal'};$external=if($memory){1}else{'High'}
-  $peerControl=if($memory){'priorityClass'}else{'memoryPriority'};$peerOriginal=if($memory){'Normal'}else{5};$peerTarget=if($memory){'AboveNormal'}else{2}
+  $memory=$Mode -eq 'protected-launcher';$gpu=$Mode -eq 'protected-game'
+  $control=if($memory){'memoryPriority'}elseif($gpu){'gpuPriority'}else{'priorityClass'}
+  $native=if($memory){'memoryPriority'}elseif($gpu){'gpuPriority'}else{'cpuPriority'}
+  $original=if($memory){5}else{'Normal'};$target=if($memory){2}elseif($gpu){'BelowNormal'}else{'AboveNormal'};$external=if($memory){1}else{'High'}
+  $cpuPeer=$memory -or $gpu
+  $peerControl=if($cpuPeer){'priorityClass'}else{'memoryPriority'};$peerOriginal=if($cpuPeer){'Normal'}else{5};$peerTarget=if($cpuPeer){'AboveNormal'}else{2}
   $script:Values=@{};$script:Values[$control]=if($Mode -in @('original','arrival-original')){$original}elseif($Mode -eq 'writer-arrival'){$target}else{$external};$script:Values[$peerControl]=$peerTarget
   $script:Retry=$false;$script:CandidateCalls=0;$script:Injected=0;$script:Held=$false;$script:Acquired=0;$script:Released=0;$script:OutsideReads=0
   $script:Writes=New-Object System.Collections.Generic.List[object]
   $script:Attempts=New-Object System.Collections.Generic.List[object]
-  $journalRelative=switch($Mode){'protected-launcher'{'game-session-fixture/launcher-journal.json'};'protected-game'{'game-session-fixture/games/instance/memoryPriority/journal.json'};default{'process-fixture/journal.json'}}
-  $journalPath=Join-Path (Join-Path $dataRoot 'operations') $journalRelative
+  $operationsRoot=Join-Path $dataRoot 'operations'
+  $sessionRoot=Join-Path (Join-Path $operationsRoot 'game-session-0123456789abcdef0123456789abcdef') 'session'
+  $journalPath=switch($Mode){'protected-launcher'{Join-Path $sessionRoot 'launcher-journal.json'};'protected-game'{Join-Path (Join-Path (Join-Path (Join-Path $sessionRoot 'games') ($identity.processId.ToString()+'-'+$identity.creationTimeFileTimeUtc)) 'gpuPriority') 'journal.json'};default{Join-Path (Join-Path $operationsRoot 'process-fixture') 'journal.json'}}
+  $journalRelative=$journalPath.Substring($operationsRoot.Length+1)
   $journal=[pscustomobject]@{schemaVersion=1;status=$RootStatus;preview=[pscustomobject]@{identity=$identity};changes=@([pscustomobject]@{name=$native;status=$ChangeStatus;original=$target;desired=$external;observed=$external})}
+  if($gpu){$journal.changes[0].original=1;$journal.changes[0].desired=4;$journal.changes[0].observed=4}
   function Write-Journal {
    [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($journalPath))|Out-Null
    [IO.File]::WriteAllText($journalPath,(ConvertTo-Json -InputObject $journal -Depth 30),$utf8)
@@ -41,6 +45,8 @@ function Invoke-Scenario([string]$Kind,[string]$Mode,[string]$RootStatus='applie
    'different-pid'{$identity.processId++}
    'different-creation'{$identity.creationTimeFileTimeUtc=[string]([long]$identity.creationTimeFileTimeUtc+1)}
    'different-path'{$identity.executablePath+='.different'}
+   'different-creation-path'{$identity.creationTimeFileTimeUtc=[string]([long]$identity.creationTimeFileTimeUtc+1);$identity.executablePath+='.different'}
+   'different-pid-path'{$identity.processId++;$identity.executablePath+='.different'}
    'unknown-schema'{$journal.schemaVersion=2}
    'unknown-root'{$journal.status='unknown'}
    'unknown-change'{$journal.changes[0].status='unknown'}
@@ -55,7 +61,7 @@ function Invoke-Scenario([string]$Kind,[string]$Mode,[string]$RootStatus='applie
    'array-root'{$journal=@($journal)}
   }
   $uncertain=$Mode -in @('unknown-schema','unknown-root','unknown-change','unknown-control','missing-identity','invalid-pid','invalid-creation','relative-path','scalar-changes','null-change','scalar-root','array-root','malformed-json','unreadable-journal','directory-error','enumeration-error')
-  $claim=if($Mode -eq 'table'){$RootStatus -in @('applying','applied','needsReconciliation') -and ($ChangeStatus -in @('applyIntent','applied','restoreIntent') -or ($RootStatus -eq 'applying' -and $ChangeStatus -eq 'pending'))}else{$Mode -notin @('different-pid','different-creation','different-path','cpuSets','missing-journal','missing-operations','unrelated-file')}
+  $claim=if($Mode -eq 'table'){$RootStatus -in @('applying','applied','needsReconciliation') -and ($ChangeStatus -in @('applyIntent','applied','restoreIntent') -or ($RootStatus -eq 'applying' -and $ChangeStatus -eq 'pending'))}else{$Mode -notin @('different-pid','different-creation','different-creation-path','different-pid-path','cpuSets','missing-journal','missing-operations','unrelated-file')}
   $retained=$claim -or $uncertain
   if($Mode -notin @('arrival-left','arrival-original','writer-arrival','missing-operations','directory-error','enumeration-error','unrelated-file')){Write-Journal}
   if($Mode -eq 'missing-journal'){[IO.File]::Delete($journalPath)}
@@ -73,18 +79,19 @@ function Invoke-Scenario([string]$Kind,[string]$Mode,[string]$RootStatus='applie
   if([IO.File]::Exists($journalPath)){[IO.File]::Copy($journalPath,(Join-Path $directory 'journal-first.txt'),$true)}
   $changes=@([pscustomobject]@{control=$control;proposedValue=$target;outcome='applied'},[pscustomobject]@{control=$peerControl;proposedValue=$peerTarget;outcome='applied'})
   $snapshot=[pscustomobject]@{processId=$live.Id;processName='NativeTarget';originalPriorityClass='Normal';originalMemoryPriority=5;controlChanges=$changes}
+  if($gpu){$snapshot|Add-Member -NotePropertyName originalGpuPriority -NotePropertyValue 'Normal';$snapshot|Add-Member -NotePropertyName proposedGpuPriority -NotePropertyValue 'BelowNormal'}
   $backupFile=Join-Path $directory 'backup.json';$sessionFile=Join-Path $directory 'session.json'
   Save $directory 'backup' ([pscustomobject]@{actionId='performance.gameTune.startSession';dryRun=$false;sessionId='operation-session';profileId='operation-profile';backupId='operation-backup';createdAtUtc='2026-10-01T00:00:00Z';snapshots=@($snapshot)})
   Save $directory 'session' ([pscustomobject]@{sessionId='operation-session';profileId='operation-profile';sessionPath=$sessionFile;backupManifestPath=$backupFile;dryRun=$false;status='completed';sessionStatus='completed';restorable=$true;restoredItems=@();skippedItems=@();completedAtUtc=$null;changedItems=@([pscustomobject]@{processName='HistoricalApply';appliedControls=@([pscustomobject]@{control='priorityClass';currentValue='Normal';proposedValue='AboveNormal';outcome='applied'})})})
   function Resolve-RooIndustriesPath {param($Path,$DefaultPath) return $Path}
   function Resolve-RooIndustriesGameTuneSessionFile {param($SessionId,$SessionPath,$StateRoot) return $sessionFile}
   function Resolve-RooIndustriesGameTuneStateRoot {param($StateRoot) return $directory}
-  function Get-FixtureState {return [pscustomobject]@{priorityClass=$script:Values['priorityClass'];memoryPriority=$script:Values['memoryPriority'];memoryPriorityAvailable=$true;process=$live}}
+  function Get-FixtureState {return [pscustomobject]@{priorityClass=$script:Values['priorityClass'];memoryPriority=$script:Values['memoryPriority'];memoryPriorityAvailable=$true;gpuPriority=$script:Values['gpuPriority'];gpuPriorityAvailable=$gpu;gpuPriorityStatus=if($gpu){0}else{$null};process=$live}}
   function Get-FixtureCandidate {
    $script:CandidateCalls++
    if($script:CandidateCalls -eq 2 -and $Mode -like 'arrival-*' -and -not$script:Retry){Write-Journal;$script:Injected++}
    $state=Get-FixtureState
-   return [pscustomobject]@{exists=$true;matches=$true;instanceEnded=$false;process=$live;currentPriorityClass=$state.priorityClass;currentMemoryPriority=$state.memoryPriority;currentControlState=$state;blockedReason=$null;reason=$null}
+   return [pscustomobject]@{exists=$true;matches=$true;instanceEnded=$false;process=$live;currentPriorityClass=$state.priorityClass;currentMemoryPriority=$state.memoryPriority;currentGpuPriority=$state.gpuPriority;currentControlState=$state;blockedReason=$null;reason=$null}
   }
   function Get-RestoreCandidate {param($Snapshot) return Get-FixtureCandidate}
   function Get-RooIndustriesGameTuneLiveProcessIdentity {param($Entry) return Get-FixtureCandidate}
@@ -112,9 +119,14 @@ function Invoke-Scenario([string]$Kind,[string]$Mode,[string]$RootStatus='applie
    $value=& ([scriptblock]::Create($body.Extent.Text));Save $directory $Label $value;return $value
   }
   $expectedFirst=if($Mode -eq 'writer-arrival'){$external}else{$script:Values[$control]}
+  $readerControls=$null
+  if($Mode -in @('protected-launcher','protected-game','different-path','different-creation-path','different-pid-path')){
+   $readerControls=@(Get-RooIndustriesProcessOperationControls $live)
+   Check (($readerControls -contains $native) -eq $claim -and $readerControls -notcontains $(if($cpuPeer){'cpuPriority'}else{'memoryPriority'})) "$name actual reader distinguishes same and different process instances per control"
+  }
   $first=Invoke-Undo;Save $directory 'first' $first
   if([IO.File]::Exists($journalPath)){[IO.File]::Copy($journalPath,(Join-Path $directory 'journal-first.txt'),$true)}
-  Save $directory 'first-observation' @{proof='Real saved journal files/reader, restore/persistence/status; simulated Linux process I/O and gate; enumeration-error alone injects directory denial';values=$script:Values;writes=@($script:Writes.ToArray());attempts=@($script:Attempts.ToArray());injectionReached=$script:Injected;acquired=$script:Acquired;released=$script:Released;outsideCertificationReads=$script:OutsideReads;held=$script:Held;retained=$retained;uncertain=$uncertain}
+  Save $directory 'first-observation' @{proof='Real saved journal files/reader, restore/persistence/status; simulated Linux process I/O and gate; enumeration-error alone injects directory denial; no native GPU proof';sessionRoot=$sessionRoot;journalPath=$journalPath;journalRelative=$journalRelative;readerControls=$readerControls;values=$script:Values;writes=@($script:Writes.ToArray());attempts=@($script:Attempts.ToArray());injectionReached=$script:Injected;acquired=$script:Acquired;released=$script:Released;outsideCertificationReads=$script:OutsideReads;held=$script:Held;retained=$retained;uncertain=$uncertain}
   $pending=if($Kind -eq 'profile'){$first.result.restorePendingCount -eq 1}else{$first.restorable}
   Check ($pending -eq $retained) "$name recovery follows real saved-operation evidence"
   if($retained){Check ($first.result.status -in @('partial','failed')) "$name retained recovery reports an incomplete Undo"}
@@ -149,7 +161,7 @@ function Invoke-Scenario([string]$Kind,[string]$Mode,[string]$RootStatus='applie
  }
 }
 foreach($kind in 'profile','game'){
- foreach($mode in 'apply-once','original','arrival-left','arrival-original','writer-arrival','protected-launcher','protected-game','alias','cpuSets','different-pid','different-creation','different-path','missing-journal','missing-operations','unrelated-file','unknown-schema','unknown-root','unknown-change','unknown-control','missing-identity','invalid-pid','invalid-creation','relative-path','scalar-changes','null-change','scalar-root','array-root','malformed-json','unreadable-journal','directory-error','enumeration-error'){if($Modes.Count -eq 0 -or $mode -in $Modes){Invoke-Scenario $kind $mode}}
+ foreach($mode in 'apply-once','original','arrival-left','arrival-original','writer-arrival','protected-launcher','protected-game','alias','cpuSets','different-pid','different-creation','different-path','different-creation-path','different-pid-path','missing-journal','missing-operations','unrelated-file','unknown-schema','unknown-root','unknown-change','unknown-control','missing-identity','invalid-pid','invalid-creation','relative-path','scalar-changes','null-change','scalar-root','array-root','malformed-json','unreadable-journal','directory-error','enumeration-error'){if($Modes.Count -eq 0 -or $mode -in $Modes){Invoke-Scenario $kind $mode}}
  if($Modes.Count -eq 0 -or 'table' -in $Modes){foreach($root in 'applying','applied','needsReconciliation','restored','expired'){foreach($change in 'pending','unchanged','applyIntent','applied','restoreIntent','restored','leftAsSet'){Invoke-Scenario $kind 'table' $root $change}}}
 }
 & {

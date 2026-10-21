@@ -68,8 +68,9 @@ function Get-RooIndustriesProcessOperationControls {
         if ($operation.Name -like 'process-*') {
             $journals.Add((Join-Path $operation.FullName 'journal.json')) | Out-Null
         } elseif ($operation.Name -like 'game-session-*') {
-            $journals.Add((Join-Path $operation.FullName 'launcher-journal.json')) | Out-Null
-            foreach ($instance in @(& $directories (Join-Path $operation.FullName 'games'))) {
+            $session = Join-Path $operation.FullName 'session'
+            $journals.Add((Join-Path $session 'launcher-journal.json')) | Out-Null
+            foreach ($instance in @(& $directories (Join-Path $session 'games'))) {
                 foreach ($field in @(& $directories $instance.FullName)) {
                     $journals.Add((Join-Path $field.FullName 'journal.json')) | Out-Null
                 }
@@ -113,9 +114,8 @@ function Get-RooIndustriesProcessOperationControls {
         }
         if ($processId -ne $Process.Id) { continue }
         $liveCreation = $Process.StartTime.ToUniversalTime().ToFileTimeUtc()
-        $liveExecutable = $Process.MainModule.FileName
-        if ($liveCreation -le 0 -or [string]::IsNullOrWhiteSpace($liveExecutable)) { throw [IO.InvalidDataException]::new('The live process identity could not be read.') }
-        if ($creation -ne $liveCreation -or -not [string]::Equals($executable, $liveExecutable, [StringComparison]::OrdinalIgnoreCase)) { continue }
+        if ($liveCreation -le 0) { throw [IO.InvalidDataException]::new('The live process identity could not be read.') }
+        if ($creation -ne $liveCreation) { continue }
         foreach ($control in $attempted) { [void]$owned.Add($control) }
     }
     return @($owned)
