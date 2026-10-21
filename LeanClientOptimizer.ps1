@@ -95,6 +95,17 @@ function Open-RegistryKey {
     return $root.OpenSubKey($subkey, [bool]$Writable)
 }
 
+function ConvertTo-RegistrySnapshotData {
+    param([string]$Kind, [object]$Value)
+    switch ($Kind) {
+        'DWord' { $Value = [BitConverter]::ToUInt32([BitConverter]::GetBytes([int]$Value), 0) }
+        'QWord' { $Value = [BitConverter]::ToUInt64([BitConverter]::GetBytes([long]$Value), 0).ToString([Globalization.CultureInfo]::InvariantCulture) }
+        'Binary' { $Value = [Convert]::ToBase64String([byte[]]$Value) }
+        'MultiString' { $Value = [string[]]$Value }
+    }
+    return ,$Value
+}
+
 function Get-RegistryValueSnapshot {
     param([object]$Item)
     $name = [string]$Item.name
@@ -110,12 +121,7 @@ function Get-RegistryValueSnapshot {
             if ($kind -in 'String','ExpandString','MultiString','DWord','QWord','Binary') {
                 $oldValue = $key.GetValue($name, $null, [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
                 if ($null -eq $oldValue) { throw "Registry value disappeared while reading $($Item.path)\$($Item.name)" }
-                switch ($kind) {
-                    'DWord' { $oldValue = [BitConverter]::ToUInt32([BitConverter]::GetBytes([int]$oldValue), 0) }
-                    'QWord' { $oldValue = [BitConverter]::ToUInt64([BitConverter]::GetBytes([long]$oldValue), 0).ToString([Globalization.CultureInfo]::InvariantCulture) }
-                    'Binary' { $oldValue = [Convert]::ToBase64String([byte[]]$oldValue) }
-                    'MultiString' { $oldValue = [string[]]$oldValue }
-                }
+                $oldValue = ConvertTo-RegistrySnapshotData $kind $oldValue
             }
         }
     } finally {
@@ -215,7 +221,21 @@ function Get-RegistryRestoreSnapshot {
             }
             $expected = Get-ManifestRegistrySnapshot ([pscustomobject]@{ type=$Snapshot.type; data=$legacyValue })
         }
-        $null = Convert-RegistrySnapshotData $expected
+        $evidenceError = "Missing or invalid original value evidence: $($Snapshot.path)\$($Snapshot.name)"
+        $kinds = [string[]]@('String','ExpandString','MultiString','DWord','QWord','Binary')
+        if ($expected.kind -isnot [string] -or [Array]::IndexOf($kinds, $expected.kind) -lt 0 -or -not $expected.PSObject.Properties['oldValue'] -or $null -eq $expected.oldValue) { throw $evidenceError }
+        $value = $expected.oldValue
+        if ($expected.kind -ceq 'MultiString') {
+            if ($value -isnot [array]) { throw $evidenceError }
+            foreach ($part in $value) { if ($part -isnot [string]) { throw $evidenceError } }
+        } elseif ($expected.kind -ceq 'DWord') {
+            if ($value -isnot [int] -and $value -isnot [long] -and $value -isnot [uint32] -and $value -isnot [uint64]) { throw $evidenceError }
+        } elseif ($value -isnot [string]) { throw $evidenceError }
+        try {
+            $decoded = Convert-RegistrySnapshotData $expected
+            $canonical = [pscustomobject]@{ valueExists=$true; kind=$expected.kind; oldValue=(ConvertTo-RegistrySnapshotData $expected.kind $decoded) }
+            if (-not (Test-RegistrySnapshotEqual $expected $canonical)) { throw 'Noncanonical original encoding' }
+        } catch { throw ($evidenceError + ': ' + $_.Exception.Message) }
     }
     return $expected
 }
@@ -567,8 +587,13 @@ function Invoke-RollbackModule {
         }
     }
     foreach ($svc in @($backup.services)) {
-        if (-not $svc.exists) { continue }
         $target = @{ type='service'; name=$svc.name }
+        if ($svc.exists -isnot [bool]) {
+            $leftAsChanged.Add([pscustomobject]($target + @{ reason='missing original existence evidence' })) | Out-Null
+            Write-Host "Left as changed: service $($svc.name) (missing original existence evidence)"
+            continue
+        }
+        if (-not $svc.exists) { continue }
         try {
             $blocked = Test-ProtectedService $svc.name $manifest
             $current = @(if (-not $blocked) { Get-ServiceSnapshot $svc.name | Where-Object { $_.exists -and $_.name -ieq $svc.name } })
