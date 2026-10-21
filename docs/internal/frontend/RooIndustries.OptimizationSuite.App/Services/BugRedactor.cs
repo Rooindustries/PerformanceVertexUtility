@@ -127,7 +127,9 @@ public sealed class BugRedactor
                 {
                     var hex = markerEnd;
                     while (run[hex] == '\\') hex++;
-                    if ((char)Convert.ToInt32(run.Substring(hex + 1, 4), 16) is '\\' or '/' or '"' or ':' or '<' or '>' or '|' or '?' or '*' or < ' ') break;
+                    var after = (char)Convert.ToInt32(run.Substring(hex + 1, 4), 16);
+                    if (after is '\\' or '/' or '"' or ':' or '>' or '|' or '?' or '*' or < ' '
+                        || after == '<' && EncodedMarker(run, markerEnd, hex + 5, out _) < 0) break;
                 }
                 decoded.Append(run, index, markerEnd - index);
                 for (var cursor = index; cursor < markerEnd; cursor++) ends.Add(cursor + 1);
@@ -143,22 +145,9 @@ public sealed class BugRedactor
             }
             else { c = run[index]; next = index + 1; }
             var encodedMarker = false;
-            if (c == '<' && next > index + 1)
+            if (c == '<' && next > index + 1 && EncodedMarker(run, index, next, out var kind) is var markerNext and >= 0)
             {
-                var kind = run.AsSpan(next).StartsWith("user", StringComparison.OrdinalIgnoreCase) ? User
-                    : run.AsSpan(next).StartsWith("pc-name", StringComparison.OrdinalIgnoreCase) ? PcName
-                    : run.AsSpan(next).StartsWith("sid", StringComparison.OrdinalIgnoreCase) ? Sid : null;
-                if (kind is not null)
-                {
-                    var close = next + (kind == User ? 4 : kind == PcName ? 7 : 3);
-                    var end = close;
-                    while (end < run.Length && run[end] == '\\') end++;
-                    if (end - close == next - index - 5 && end + 5 <= run.Length
-                        && run.AsSpan(end, 5).Equals("u003e", StringComparison.OrdinalIgnoreCase))
-                    {
-                        c = kind[0]; next = end + 5; encodedMarker = true;
-                    }
-                }
+                c = kind; next = markerNext; encodedMarker = true;
             }
             if (c is '\\' or '/' or '"' or ':' or '<' or '>' or '|' or '?' or '*' || c < ' ' && !((next == index + 1 || encodedMarker) && c is '\u0001' or '\u0002' or '\u0003')) break;
             if ((next == index + 1 || encodedMarker) && c is '\u0001' or '\u0002' or '\u0003') placeholderSeen = true;
@@ -182,6 +171,20 @@ public sealed class BugRedactor
         while (length > 0 && text[length - 1] is ' ' or '.' or ',' or ';' or '!' or ')' or ']' or '}' or '\'') length--;
         if (length == 0) length = text.Length;
         return (runStart, runStart + ends[length - 1], User);
+    }
+
+    private static int EncodedMarker(string run, int index, int next, out char kind)
+    {
+        var name = run.AsSpan(next).StartsWith("user", StringComparison.OrdinalIgnoreCase) ? User
+            : run.AsSpan(next).StartsWith("pc-name", StringComparison.OrdinalIgnoreCase) ? PcName
+            : run.AsSpan(next).StartsWith("sid", StringComparison.OrdinalIgnoreCase) ? Sid : null;
+        kind = name?[0] ?? '\0';
+        if (name is null) return -1;
+        var close = next + (name == User ? 4 : name == PcName ? 7 : 3);
+        var end = close;
+        while (end < run.Length && run[end] == '\\') end++;
+        return end - close == next - index - 5 && end + 5 <= run.Length
+            && run.AsSpan(end, 5).Equals("u003e", StringComparison.OrdinalIgnoreCase) ? end + 5 : -1;
     }
 
     private static string NormalizeRoot(string path) => Regex.Replace(path.Replace('/', '\\'), @"\\+", "\\").TrimEnd('\\').ToUpperInvariant();
