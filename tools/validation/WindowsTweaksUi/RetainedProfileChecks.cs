@@ -7,12 +7,12 @@ static class RetainedProfileChecks
 {
     public static async Task Run(string root, TweakCatalog catalog, Action<bool, string> check)
     {
-        foreach (var scenario in new[] { "registry-error", "service-transition", "restart", "checking", "timeout", "unobserved" })
+        foreach (var scenario in new[] { "adapter-switch", "registry-error", "service-transition", "restart", "checking", "timeout", "unobserved" })
         {
             var service = new ControlAddress("service", "RooIndustriesUiModelFixture", "running");
             var second = catalog.Settings.Single(setting => setting.Id == "second");
             var registry = second.Options.Single(option => option.Id == "on").Changes.Single().Address;
-            var controls = scenario != "registry-error";
+            var controls = scenario is not ("registry-error" or "adapter-switch");
             var subset = controls ? catalog with { Settings = catalog.Settings.Select(setting => setting.Id != second.Id ? setting : setting with
             {
                 Options = [new("on", "Running", [], Controls: [new(service, ControlValues.From(true))]), new("off", "Stopped", [], Controls: [new(service, ControlValues.From(false))])],
@@ -36,6 +36,7 @@ static class RetainedProfileChecks
                 : status with { Supported = false, ConfiguredChoices = [], AvailableChoices = [], Error = scenario switch
                 {
                     "registry-error" => "A setting changed while being read.",
+                    "adapter-switch" => "No devices expose this setting.",
                     "service-transition" => "The service is transitioning. Try again after it settles: " + service.Target,
                     "checking" => TweakEngine.FeaturesPending,
                     _ => TweakEngine.FeaturesTimedOut,

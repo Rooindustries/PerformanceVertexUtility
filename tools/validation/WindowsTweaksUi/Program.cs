@@ -66,6 +66,7 @@ if (args is ["--policy-editions", var policyRepo])
 {
     try
     {
+        await RetainedRequirementChecks.Run(root, OperationFiles.Read<TweakCatalog>(Path.Combine(policyRepo, "backend/catalogs/windows-tweaks.json")), Check);
         await PolicyProfileChecks.Run(root, OperationFiles.Read<TweakCatalog>(Path.Combine(policyRepo, "backend/catalogs/windows-tweaks.json")), Check);
         Console.WriteLine($"Completed {count} policy profile UI checks.");
     }
@@ -85,6 +86,7 @@ try
     if (args is [var catalogRepo])
     {
         var catalog = OperationFiles.Read<TweakCatalog>(Path.Combine(Path.GetFullPath(catalogRepo), "backend/catalogs/windows-tweaks.json"));
+        await RetainedRequirementChecks.Run(root, catalog, Check);
         ActionChecks.Run(catalog, Check);
         await PolicyProfileChecks.Run(root, catalog, Check);
         IconChecks.Run(catalogRepo, catalog, Check);
