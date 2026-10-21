@@ -624,9 +624,11 @@ public partial class WindowsTweaksViewModel : ObservableObject
             var retained = restore ? Array.Empty<TweakSelection>() : (state?.Profiles.SingleOrDefault(profile => profile.Id == ProfileId.Trim())?.Selections ?? [])
                 .Where(selection =>
                 {
-                    if (selectedReady.Any(selected => selected.SettingId == selection.SettingId) || _catalog!.Settings.All(definition => definition.Id != selection.SettingId)) return false;
-                    var resolved = _catalog.Resolve(selection);
-                    return _inspection is null || TweakEngine.SupportsWindows(resolved.Definition, resolved.Option, _inspection.Context);
+                    if (selectedReady.Any(selected => selected.SettingId == selection.SettingId)) return false;
+                    var definition = _catalog!.Settings.SingleOrDefault(item => item.Id == selection.SettingId);
+                    if (definition is null) return false;
+                    var option = definition.Options.SingleOrDefault(item => item.Id == selection.OptionId);
+                    return option is null || _inspection is null || TweakEngine.SupportsWindows(definition, option, _inspection.Context);
                 }).ToArray();
             var ready = selectedReady.Concat(retained).ToArray();
             var deferred = restore ? Array.Empty<WindowsTweakRow>() : chosen.Where(item => !ready.Contains(new TweakSelection(item.Row.Id, item.Id))).Select(item => item.Row).ToArray();

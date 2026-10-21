@@ -28,7 +28,7 @@ has taken effect in a running app or improved gaming performance.
 
 `backend/catalogs/windows-policy-editions.json` records Microsoft's registry-policy
 edition limits. The compiler applies them after combining all sources, so a
-wildcard from another source cannot bypass a limit. Home and Pro editions no
+wildcard from another source cannot bypass a limit. Home, Pro, Windows 10 S and Windows 11 SE editions no
 longer offer **Consumer suggestions and promotions: Blocked**. Enterprise,
 Education, IoT Enterprise and Server retain it. **Remove this override** remains
 available, including when the blocked value was set before this catalog update.
@@ -99,7 +99,7 @@ Create a new preview file, inspect it, then apply its exact SHA-256:
 selections of the same controls, with no separate execution bodies.
 
 Strict source presets mark consumer blocking in `optionalSelections`: they skip
-that choice on Home and Pro and report it in `skipped`. Their other choices
+that choice on Home, Pro, Windows 10 S and Windows 11 SE and report it in `skipped`. Their other choices
 remain required, and a read failure still refuses the preset. Consumer blocking
 also remains required when its edition supports it. Presets already marked
 `availableOnly` keep their existing filtering. A preset with no available choices
@@ -116,6 +116,11 @@ Only catalog build, edition and expiry limits can make an existing choice
 unavailable during an edit. Read errors, pending reads, restarts, remote sessions
 and device or product requirements keep it in the plan with its saved original.
 The engine must check those requirements again before applying the edit.
+If an old choice needs restoring but its target cannot be read, the edit keeps
+its backup and offers to save choices only. Permission errors and unfinished
+service transitions also stop an explicit restore; a confirmed missing resource
+can still be released. A renamed catalog option keeps its old backup and allows
+saving choices until the user restores that profile.
 
 To restore a profile, create another selections file containing `[]`, preview it
 with the same `ProfileId`, then use `-Action Restore` with that review's hash.

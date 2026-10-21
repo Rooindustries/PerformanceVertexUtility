@@ -118,10 +118,11 @@ public static class ControlPlanning
             var before = (state?.Profiles ?? []).SelectMany(profile => profile.Controls ?? []).Where(claim => claim.Target.Id == id).ToArray();
             var asks = (claims ?? []).Any(claim => !before.Any(old => ReferenceEquals(old, claim)));
             requestsLinked |= (claims ?? []).Any(claim => Linked(claim.Target.Address) && !before.Any(old => old.SettingId == claim.SettingId && old.OptionId == claim.OptionId));
-            TweakControlRead observed; (JsonElement Desired, JsonElement? Restore, string[]? LeftAsChanged, JsonElement? Applied) composed = default;
+            TweakControlRead observed; var readable = false; var address = (claims?.First().Target ?? original!.Original).Address;
+            (JsonElement Desired, JsonElement? Restore, string[]? LeftAsChanged, JsonElement? Applied) composed = default;
             try
             {
-                observed = read((claims?.First().Target ?? original!.Original).Address); observed.Validate();
+                observed = read(address); observed.Validate(); readable = true;
                 if (!observed.RestartPending)
                 {
                     if (observed.Id != id) throw new InvalidDataException("A Windows control changed outside this profile: " + observed.Address.Target);
@@ -131,7 +132,7 @@ public static class ControlPlanning
                     if (observed.Address.Kind == "hibernation") { HibernationControl.Validate(observed.Value); HibernationControl.Validate(composed.Desired); }
                 }
             }
-            catch (Exception error) when (!asks && original is not null && error is not (TimeoutException or OperationCanceledException) && (error is not IOException || error is FileNotFoundException or DirectoryNotFoundException))
+            catch (Exception error) when (!asks && original is not null && TweakEngine.MayLeaveChanged(error, readable, profiles.All(profile => profile.Id != profileId), address))
             {
                 left.AddRange(before.Where(claim => claims?.Any(kept => ReferenceEquals(kept, claim)) != true).Select(claim => claim.SettingId));
                 if (claims is not null) next.Add(original);

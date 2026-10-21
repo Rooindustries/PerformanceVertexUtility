@@ -181,9 +181,10 @@ public sealed class TweakEngine
         var profiles = (state?.Profiles ?? []).Where(profile => profile.Id != profileId).ToList();
         var affected = (state?.Profiles.SingleOrDefault(profile => profile.Id == profileId)?.Claims ?? []).Select(claim => claim.Target.Id).ToHashSet(StringComparer.Ordinal);
         var reads = new Dictionary<string, TweakRead>(StringComparer.Ordinal);
+        TweakRead? attemptedRead = null;
         TweakRead Capture(RegistryAddress address)
         {
-            var read = Read(address);
+            var read = _store.Read(Local(address)); attemptedRead = read; read.Validate();
             if (reads.TryGetValue(read.Id, out var previous) && !previous.Same(read)) throw new InvalidDataException("A setting changed while preparing the plan.");
             reads[read.Id] = read;
             return read;
@@ -222,14 +223,15 @@ public sealed class TweakEngine
             if (!affected.Contains(id)) { next.Add(original!); continue; }
             var oldClaims = (state?.Profiles ?? []).SelectMany(profile => profile.Claims).Where(claim => claim.Target.Id == id).ToArray();
             var asks = (desired ?? []).Any(claim => !oldClaims.Any(old => ReferenceEquals(old, claim)));
-            TweakRead observed; TweakResolution after;
+            TweakRead observed; TweakResolution after; var readable = false; attemptedRead = null;
             try
             {
                 observed = Capture((desired?.First().Target ?? original!.Original).Address);
+                readable = true;
                 if (observed.Id != id) throw new InvalidDataException("A registry target now resolves to a different resource.");
                 after = TweakComposition.Resolve(observed, original, oldClaims, desired ?? []);
             }
-            catch (Exception error) when (!asks && original is not null && error is not (TimeoutException or OperationCanceledException) && (error is not IOException || error is FileNotFoundException or DirectoryNotFoundException))
+            catch (Exception error) when (!asks && original is not null && MayLeaveChanged(error, readable || ChangedUnreadable(attemptedRead, original), selections.Length == 0))
             {
                 left.AddRange(oldClaims.Where(claim => desired?.Any(kept => ReferenceEquals(kept, claim)) != true).Select(claim => claim.SettingId));
                 if (desired is not null) next.Add(original);
@@ -286,6 +288,18 @@ public sealed class TweakEngine
             if (states.Any(values => halves.All(half => Effective(half, values)) && !Original(values)))
                 throw new InvalidDataException(string.Join(" and ", options.Select(item => item.Definition.Name)) + " cannot be used together. " + rule.Reason);
         }
+    }
+    internal static bool MayLeaveChanged(Exception error, bool readable, bool restoring, ControlAddress? address = null) =>
+        error is not (TimeoutException or OperationCanceledException) && (error is not IOException || error is FileNotFoundException or DirectoryNotFoundException) &&
+        (readable || restoring && (error is FileNotFoundException or DirectoryNotFoundException or RegistryApiException { NativeErrorCode: 2 or 3 } ||
+            address is { Kind: "service" } && error is System.ComponentModel.Win32Exception { NativeErrorCode: 1060 } ||
+            address is { Kind: "file-acl" or "file-ownership" } && error is System.ComponentModel.Win32Exception { NativeErrorCode: 2 or 3 }));
+    private static bool ChangedUnreadable(TweakRead? read, TweakHeldValue original)
+    {
+        if (read is null || read.Value is not { Recoverable: false, Bytes: not null } value || read.Id != original.Original.Id ||
+            !string.Equals(value.Name, read.Address.ValueName, StringComparison.OrdinalIgnoreCase) || TweakRead.SameValue(value, original.Applied)) return false;
+        try { (read with { Value = original.Applied }).Validate(); return true; }
+        catch (InvalidDataException) { return false; }
     }
     public static bool SupportsWindows(TweakDefinition definition, TweakOption option, TweakContext context) =>
         WindowsRange(definition.MinimumBuild, definition.MaximumBuild, definition.Editions, context) && Unexpired(option) &&
