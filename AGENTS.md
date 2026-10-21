@@ -72,7 +72,6 @@ These must hold on every commit of `main`. Each one names the code that enforces
      The app log is redacted when it's written (`AppLog`).
    - Checked by: `tools/validation/AppSweepUi/BugReportChecks.cs`.
    - Known gaps:
-     - Another account's folder name stops being redacted at a space or apostrophe, and the app log uses its own narrower rules.
      - Other accounts' profiles outside a drive's `Users` directory, including relocated and network profiles, aren't redacted.
      - Account names and PC names of one character aren't redacted.
      - Microsoft Entra account SIDs (`S-1-12-1-...`) aren't redacted.

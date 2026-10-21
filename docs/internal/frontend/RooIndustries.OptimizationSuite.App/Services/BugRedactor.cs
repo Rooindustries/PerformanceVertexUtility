@@ -43,8 +43,19 @@ public sealed class BugRedactor
         text = text.Replace(User, @"\u0001").Replace(PcName, @"\u0002").Replace(Sid, @"\u0003");
         text = text.Replace("<user>", User, StringComparison.OrdinalIgnoreCase).Replace("<pc-name>", PcName, StringComparison.OrdinalIgnoreCase).Replace("<sid>", Sid, StringComparison.OrdinalIgnoreCase);
         var changes = new List<(int Start, int End, string Value)>();
+        string? previousSeparator = null;
+        var previousBoundary = -1;
         foreach (Match match in ProfileSegment.Matches(text))
-            if (Profile(match, text) is { } change) changes.Add(change);
+            if (Profile(match, text, out var boundary, out var root) is { } change)
+            {
+                var separator = root[(match.Groups["sep"].Index - match.Groups["root"].Index)..];
+                if (change.Value == "%USERPROFILE%" && changes.Count > 0 && changes[^1].Value.EndsWith(User, StringComparison.Ordinal)
+                    && previousBoundary == change.Start && previousSeparator != separator)
+                    change = (change.Start, change.End, root + User);
+                changes.Add(change);
+                previousSeparator = separator;
+                previousBoundary = boundary;
+            }
         changes.Sort((left, right) => left.Start != right.Start ? left.Start.CompareTo(right.Start) : left.End.CompareTo(right.End));
         var merged = new List<(int Start, int End, string Value)>();
         foreach (var change in changes)
@@ -70,12 +81,13 @@ public sealed class BugRedactor
         return text.Replace(User, "<user>").Replace(PcName, "<pc-name>").Replace(Sid, "<sid>");
     }
 
-    private (int Start, int End, string Value)? Profile(Match match, string input)
+    private (int Start, int End, string Value)? Profile(Match match, string input, out int boundaryEnd, out string root)
     {
-        var root = match.Groups["root"].Value;
+        root = match.Groups["root"].Value;
         var run = match.Groups["run"].Value;
         var runStart = match.Groups["run"].Index;
         var matchEnd = runStart + run.Length;
+        boundaryEnd = matchEnd;
         var joinedDrive = matchEnd + 2 < input.Length && char.IsAsciiLetter(input[matchEnd]) && input[matchEnd + 1] == ':' && input[matchEnd + 2] is '\\' or '/';
         if (run.Length == 0) return joinedDrive ? (runStart, runStart, User) : null;
         var slashes = root.Length - root.TrimEnd('\\').Length;
@@ -90,6 +102,9 @@ public sealed class BugRedactor
                 run = new string('\\', escape) + run;
             }
         }
+        var separator = root[(match.Groups["sep"].Index - match.Groups["root"].Index)..];
+        var delimiter = run.IndexOf(separator, StringComparison.Ordinal);
+        if (delimiter >= 0) run = run[..delimiter];
         var decoded = new StringBuilder();
         var ends = new List<int>();
         var placeholderSeen = false;
@@ -125,6 +140,7 @@ public sealed class BugRedactor
         }
         var text = decoded.ToString();
         matchEnd = runStart + (ends.Count == 0 ? 0 : ends[^1]);
+        boundaryEnd = matchEnd;
         joinedDrive = matchEnd + 2 < input.Length && char.IsAsciiLetter(input[matchEnd]) && input[matchEnd + 1] == ':' && input[matchEnd + 2] is '\\' or '/';
         if (text.Length == 0 || SharedProfiles.Contains(text) && !joinedDrive && !run[..ends[^1]].Contains('\\')) return null;
         if (text.TrimEnd(' ', '.', ',', ';', '!', ')', ']', '}', '\'') is { Length: 1 } placeholder && placeholder[0] is '\u0001' or '\u0002' or '\u0003') return null;
