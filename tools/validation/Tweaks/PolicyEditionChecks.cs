@@ -65,7 +65,7 @@ static class PolicyEditionChecks
         var current = new TweakEngine(subset, proStore);
         check(current.Detect().Settings.Single().ConfiguredChoices.Length == 0, "A profile applied with an old catalog cannot make an ignored policy look applicable");
         var singleton = catalog.Presets.First(preset => preset.Selections.SequenceEqual(new[] { selected }));
-        check(catalog.Presets.Where(preset => preset.Selections.Contains(selected)).All(preset => preset.AvailableOnly), "Every preset selecting consumer blocking explicitly skips unavailable choices");
+        check(catalog.Presets.Where(preset => preset.Id is "wpd.all-settings" or "wpd.recommended").All(preset => preset.AvailableOnly), "Existing available-only WPD presets retain their original filtering behavior");
         var beforeSingleton = OperationFiles.HashFile(proPath);
         reject(() => new TweakEngine(subset with { Presets = [singleton] }, proStore).PreviewPreset("old-profile", singleton.Id), "An entirely unavailable preset refuses instead of restoring an existing profile");
         check(OperationFiles.HashFile(proPath) == beforeSingleton, "An entirely unavailable preset preserves the old profile and override");
@@ -79,6 +79,17 @@ static class PolicyEditionChecks
         check(choices.Save(catalog, "saved", [], saved.Revision).Profiles.Length == 0, "An unavailable saved choice can still be removed");
         var mixed = catalog.Presets.Single(preset => preset.Id == "fsos.consumer-features.35.disabled");
         var definitions = mixed.Selections.Select(selection => catalog.Resolve(selection).Definition).ToArray();
+        var sibling = catalog.Resolve(mixed.Selections.First(selection => selection != selected)).Option.Changes.Single().Address;
+        foreach (var (edition, unreadable) in new[] { ("Professional", sibling), ("Enterprise", sibling), ("Enterprise", address) })
+        {
+            var path = Path.Combine(root, "consumer-required-read-" + edition + "-" + (unreadable == address ? "consumer" : "sibling") + ".json");
+            FileTweakStore.Create(path, 26100, edition);
+            var engine = new TweakEngine(catalog with { Settings = definitions, Presets = [mixed], Incompatible = null }, new UnreadablePolicyStore(path, unreadable));
+            var before = OperationFiles.HashFile(path);
+            reject(() => engine.PreviewPreset("required", mixed.Id), "A strict source preset refuses an unreadable required " + (unreadable == address ? "consumer policy" : "sibling") + " on " + edition);
+            check(OperationFiles.HashFile(path) == before, "A required read failure preserves all fixture values and recovery data on " + edition);
+        }
+        check(!mixed.AvailableOnly && !singleton.AvailableOnly, "Source presets skip only the constrained choice and keep their other choices required");
         foreach (var edition in new[] { "Professional", "Enterprise" })
         {
             var store = FileTweakStore.Create(Path.Combine(root, "consumer-preset-" + edition + ".json"), 26100, edition);
@@ -92,5 +103,10 @@ static class PolicyEditionChecks
         var strict = catalog.Presets.Single(preset => preset.Id == "explorer-details");
         var strictEngine = new TweakEngine(catalog with { Settings = strict.Selections.Select(selection => catalog.Resolve(selection).Definition).ToArray(), Presets = [strict], Incompatible = null }, FileTweakStore.Create(Path.Combine(root, "consumer-unrelated.json"), 26100, "Professional"));
         check(!strict.AvailableOnly && strictEngine.PreviewPreset("strict", strict.Id).Selections.Length == strict.Selections.Length, "Unrelated strict presets retain every choice on Pro");
+    }
+
+    sealed class UnreadablePolicyStore(string path, RegistryAddress unreadable) : FileTweakStore(path), ITweakStore
+    {
+        public new TweakRead Read(RegistryAddress address) => address == unreadable ? throw new IOException("The required registry value could not be read.") : base.Read(address);
     }
 }
