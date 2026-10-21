@@ -24,7 +24,7 @@ public static class BuildBinding {
   $output=Join-Path $BuildOut $kind;$null=New-HarnessDirectory $output ('report-e2e-'+$kind+'-build') 'frame'
   $intermediate=Join-Path $BuildOut ('intermediate\'+$kind);$null=New-HarnessDirectory $intermediate ('report-e2e-'+$kind+'-intermediate') 'frame'
   $project=if($kind -ceq 'applog'){'applog\Roo70LogProof.csproj'}else{'desktop\RenderedBugReport.csproj'}
-  $arguments=@('build',(Join-Path $FixtureRoot $project),'-c','Release','-p:EnableWindowsTargeting=true',('-p:RooIndustriesBindingFile='+$bindingFile),'-o',$output,'--artifacts-path',$intermediate)
+  $arguments=@('build',(Join-Path $FixtureRoot $project),'-c','Release','--disable-build-servers','-p:EnableWindowsTargeting=true',('-p:RooIndustriesBindingFile='+$bindingFile),'-o',$output,'--artifacts-path',$intermediate)
   if($kind -ceq 'desktop'){$arguments+=@('-p:Platform=x64','-r','win-x64')}
   $native=Invoke-RooIndustriesOwnedCommand $dotnet $arguments $FixtureRoot $OutRoot ('report-e2e-'+$kind+'-build') 600
   $expected=if($kind -ceq 'applog'){'Roo70LogProof.dll'}else{'Roo70.RenderedBugReportFixture.exe'}

@@ -76,7 +76,8 @@ public partial class App : Application
             await ScenarioDriver.Wait(() =>
             {
                 var boxes = Descendants(currentPage).OfType<TextBox>().ToArray();
-                return boxes.Single(x => AutomationProperties.GetAutomationId(x) == "BugDescription").Text == vm.Description
+                return ScenarioDriver.CanonicalDescription(vm.Description) == ScenarioDriver.Description
+                    && ScenarioDriver.CanonicalDescription(boxes.Single(x => AutomationProperties.GetAutomationId(x) == "BugDescription").Text) == ScenarioDriver.Description
                     && boxes.Single(x => AutomationProperties.GetAutomationId(x) == "BugContact").Text == vm.Contact
                     && boxes.Single(x => (x.Header as string) == "Processor").Text == ScenarioDriver.Raw;
             }, "Seeded actual bound textboxes did not update.");

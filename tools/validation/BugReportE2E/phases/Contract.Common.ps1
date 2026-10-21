@@ -36,6 +36,11 @@ function Assert-RooIndustriesExact($Actual,$Expected,[string]$Field){
  }
  if($Expected -is [array]){Assert-RooIndustries (@($Actual).Count -eq $Expected.Count) ($Field+' item count differs.');for($i=0;$i -lt $Expected.Count;$i++){Assert-RooIndustriesExact $Actual[$i] $Expected[$i] ($Field+'['+$i+']')};return}
  if($Expected -is [bool]){Assert-RooIndustries ($Actual -is [bool] -and $Actual -eq $Expected) ($Field+' boolean differs.');return}
+ if($Field -cin @('State.model.Description','receipt.State.Description','bottom.State.model.Description','UIA.BugDescription')){
+  Assert-RooIndustries ($Actual -is [string] -and $Expected -is [string]) ($Field+' must be text.')
+  Assert-RooIndustries ($Actual.Replace("`r`n","`n").Replace("`r","`n") -ceq $Expected.Replace("`r`n","`n").Replace("`r","`n")) ($Field+' differs.')
+  return
+ }
  Assert-RooIndustries ($null -ne $Actual -and [string]$Actual -ceq [string]$Expected) ($Field+' differs.')
 }
 function New-RooIndustriesExpectedState([string]$Name,[string]$Data,[long]$AttachedBytes){

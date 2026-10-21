@@ -65,7 +65,7 @@ try{
   . (Join-Path $fixture 'phases\Run-RenderedBugReport.ps1') $Source $fixture $build $OutRoot $data $ui $capture
   if($ReaderAdverse){Assert-RooIndustries ($script:RooIndustriesReaderContext.Consumed -and $null -ne $script:RooIndustriesReaderContext.Proof) 'Selected rendered reader proof was not consumed.';$script:RooIndustriesReaderProofs.Add($script:RooIndustriesReaderContext.Proof);$script:RooIndustriesReaderContext=$null}
  }}
- if($ReaderAdverse){Assert-RooIndustries ($script:RooIndustriesReaderProofs.Count -eq @($selected.Values|Where-Object {$_}).Count -and @($script:RooIndustriesReaderProofs|Select-Object -ExpandProperty kind -Unique).Count -eq $script:RooIndustriesReaderProofs.Count) 'Exactly one actual reader proof per selected phase is required.'}
+ if($ReaderAdverse){Assert-RooIndustries ($script:RooIndustriesReaderProofs.Count -eq @($selected.Values|Where-Object {$_}).Count -and @($script:RooIndustriesReaderProofs|ForEach-Object {$_['kind']}|Select-Object -Unique).Count -eq $script:RooIndustriesReaderProofs.Count) 'Exactly one actual reader proof per selected phase is required.'}
 
  $passed=$true
 }catch{$errors.Add($_.Exception.ToString());$passed=$false}

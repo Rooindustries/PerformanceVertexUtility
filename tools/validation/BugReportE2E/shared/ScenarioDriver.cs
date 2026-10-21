@@ -39,6 +39,7 @@ public static class ScenarioDriver
     public static readonly string ExpectedLog = string.Join("\n", ExpectedRaw, ExpectedForward, ExpectedR9, @"%USERPROFILE%\AppData\x.log", "<user> <pc-name> <sid>") + "\n";
     public static readonly string[] Names = ["offline-empty", "offline-attached", "offline-saved", "online-failed", "online-fallback-saved", "online-sent"];
     public static void Require(bool condition, string message) { if (!condition) throw new InvalidOperationException(message); }
+    public static string CanonicalDescription(string value) => value.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n');
     public static void RequireDisabledLog()
     {
         Require(typeof(AppLog).GetField("_enabled", BindingFlags.NonPublic | BindingFlags.Static)?.GetValue(null) is false, "Actual AppLog must remain disabled.");
@@ -85,10 +86,13 @@ public static class ScenarioDriver
         }
         async Task Seed(Surface surface)
         {
-            surface.Model.Description = Description;
             surface.Model.Contact = Contact;
             surface.Model.Specs.Single(x => x.Key == "cpu").Value = Raw;
-            await surface.SeedVisible();
+            foreach (var description in new[] { Description.Replace("\n", "\r\n", StringComparison.Ordinal), Description.Replace('\n', '\r'), Description })
+            {
+                surface.Model.Description = description;
+                await surface.SeedVisible();
+            }
         }
         var offline = await Create("offline", false, 404);
         Require(offline.Surface.Model.OfflineOnly && !offline.Surface.Model.OnlineAvailable && !offline.Surface.Model.CanSend
@@ -140,7 +144,7 @@ public static class ScenarioDriver
         var call = sender.Calls[0];
         using var payload = JsonDocument.Parse(call.Payload);
         var embed = payload.RootElement.GetProperty("embeds")[0];
-        Require(embed.GetProperty("description").GetString() == ExpectedDescription, "Typed description privacy mismatch.");
+        Require(embed.GetProperty("description").GetString() is string description && CanonicalDescription(description) == ExpectedDescription, "Typed description privacy mismatch.");
         var fields = embed.GetProperty("fields").EnumerateArray().ToArray();
         Require(fields.Single(x => x.GetProperty("name").GetString() == "Processor").GetProperty("value").GetString() == ExpectedRaw, "Typed specs privacy mismatch.");
         Require(fields.Single(x => x.GetProperty("name").GetString() == "Discord or email").GetProperty("value").GetString() == Contact, "Intentional contact changed.");
@@ -175,7 +179,7 @@ public static class ScenarioDriver
             var text = Read("report.txt");
             Require(text.Contains("Discord or email: " + Contact + Environment.NewLine, StringComparison.Ordinal)
                 && text.Contains("Processor: " + ExpectedRaw + Environment.NewLine, StringComparison.Ordinal)
-                && text.Contains("What went wrong:" + Environment.NewLine + ExpectedDescription + Environment.NewLine, StringComparison.Ordinal), "Saved report/contact mismatch.");
+                && CanonicalDescription(text).Contains("What went wrong:\n" + ExpectedDescription + "\n", StringComparison.Ordinal), "Saved report/contact mismatch.");
             RequirePrivate(text);
         }
         var files = new List<EvidenceFile> { SaveEvidence(evidence, name + ".zip", bytes) };
