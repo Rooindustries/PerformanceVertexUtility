@@ -49,7 +49,7 @@ These must hold on every commit of `main`. Each one names the code that enforces
      - Windows tweaks restore the saved original and read it back. DWORDs round-trip bit for bit, and a setting changed by someone else is reported as left changed (`TweakComposition.Resolve`, `LeftAsChanged`, the readback in `CommitRegistry`).
      - The process governor leaves a value another program set and says "Left as another program set it." (`ProcessControlEngine.LeftAsSet`). Other process restores stop and report reconciliation when the value drifted (`ProcessControlEngine.Restore`).
      - Cleanup restores verify their backups and refuse a conflicting destination (`FileCleanupEngine.Restore`, `RegistryCleanupEngine.Restore`).
-     - Harness rollback verifies restored registry kinds/data and service startup types, preserves later changes, and reports missing legacy ownership evidence (`Invoke-RollbackModule`). It removes only its values, keeping parent keys and unrelated entries.
+     - Harness rollback verifies restored registry kinds/data and original service startup plus Running when required, preserves later changes and ambiguous runtime states, and reports missing ownership evidence (`Invoke-RollbackModule`). Other original service runtime states keep startup-only behavior. It removes only its values, keeping parent keys and unrelated entries.
    - Checked by: `tools/validation/Tweaks`, `tools/validation/OptimizerCore` (`Test-OptimizerCore.ps1`), `tools/validation/AppSweepUi/GovernorChecks.cs`, `Test-LegacyModuleRollback.ps1`.
    - Known gaps:
      - Game Tune Stop and profile backup restores overwrite a value another program set afterwards. Background-limit restores already keep it.

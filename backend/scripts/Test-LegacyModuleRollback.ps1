@@ -760,6 +760,24 @@ try {
                 & {
                     $operation=New-ServiceRuntimeFixture -ServicesOnly -SingleService
                     $DataRoot=$operation.root;$BackupPath=$operation.path;$script:runtimeMode='nonterminating'
+                    $cliServices=$script:runtimeServices;$cliCalls=$script:runtimeCalls
+                    Set-Item Function:\Get-Service -Value {
+                        [CmdletBinding()]param([string]$Name)
+                        if ($cliServices.ContainsKey($Name) -and $cliServices[$Name].exists) {
+                            $state=$cliServices[$Name]
+                            [pscustomobject]@{Name=$Name;DisplayName=$Name;StartType=$state.startup;Status=$state.status;ServicesDependedOn=@()}
+                        }
+                    }.GetNewClosure()
+                    Set-Item Function:\Set-Service -Value {
+                        [CmdletBinding()]param($Name,$StartupType)
+                        $cliCalls.Add([pscustomobject]@{operation='set';name=$Name;errorAction=[string]$ErrorActionPreference}) | Out-Null
+                        $cliServices[$Name].startup=[string]$StartupType
+                    }.GetNewClosure()
+                    Set-Item Function:\Start-Service -Value {
+                        [CmdletBinding()]param($Name)
+                        $cliCalls.Add([pscustomobject]@{operation='start';name=$Name;errorAction=[string]$ErrorActionPreference}) | Out-Null
+                        Write-Error 'Fixture service start rejected'
+                    }.GetNewClosure()
                     $emitted=New-Object System.Collections.Generic.List[object]
                     $caught=$null
                     try { & $HarnessPath -Action RollbackModule -ModuleId fixture -ManifestPath $fixtureManifest -DataRoot $DataRoot -BackupPath $BackupPath -ConfirmApply | ForEach-Object {$emitted.Add($_) | Out-Null} } catch { $caught=$_.Exception }

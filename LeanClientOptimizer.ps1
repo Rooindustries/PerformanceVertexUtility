@@ -391,6 +391,11 @@ function Set-ServiceFromManifest {
     }
 }
 
+function Test-ServiceRestoreComplete {
+    param([object]$Snapshot, [object]$Current)
+    return ($Current.startType -eq $Snapshot.startType -and (-not ($Snapshot.status -eq 'Running') -or $Current.status -eq 'Running'))
+}
+
 function Restore-ServiceSnapshot {
     param([object]$Snapshot)
     if (-not $Snapshot.exists) { return }
@@ -404,7 +409,7 @@ function Restore-ServiceSnapshot {
         Set-Service -Name $Snapshot.name -StartupType $startup
     }
     if ($Snapshot.status -eq 'Running') {
-        Start-Service -Name $Snapshot.name -ErrorAction SilentlyContinue
+        Start-Service -Name $Snapshot.name -ErrorAction Stop
     }
 }
 
@@ -688,14 +693,18 @@ function Invoke-RollbackModule {
             if ($blocked -or $svc.appliedStartup -notin 'Disabled','Manual','Automatic' -or $current.Count -ne 1) {
                 $leftAsChanged.Add([pscustomobject]($target + @{ reason='protected, missing, or applied startup evidence unavailable' })) | Out-Null
                 Write-Host "Left as changed: service $($svc.name) (applied startup unavailable or changed)"
+            } elseif (Test-ServiceRestoreComplete $svc $current[0]) {
+                $alreadyAtOriginal.Add([pscustomobject]$target) | Out-Null
+                Write-Host "Already at original service settings: $($svc.name)"
+            } elseif ($current[0].startType -eq $svc.startType) {
+                $reason = 'original startup matches; recorded Running state is unverified and runtime ownership is unavailable'
+                $leftAsChanged.Add([pscustomobject]($target + @{ reason=$reason })) | Out-Null
+                Write-Host "Left as changed: service $($svc.name) ($reason)"
             } elseif ($current[0].startType -eq $svc.appliedStartup) {
                 if ($svc.startType -notin 'Disabled','Manual','Automatic') { throw "Unsupported original service startup: $($svc.name)" }
                 $action = [pscustomobject]($target + @{ action='restore'; status='planned' })
                 $actions.Add($action) | Out-Null
                 $work.Add([pscustomobject]@{ target=$target; snapshot=$svc; action=$action }) | Out-Null
-            } elseif ($current[0].startType -eq $svc.startType) {
-                $alreadyAtOriginal.Add([pscustomobject]$target) | Out-Null
-                Write-Host "Already at original startup: service $($svc.name)"
             } else {
                 $leftAsChanged.Add([pscustomobject]($target + @{ reason='current startup changed' })) | Out-Null
                 Write-Host "Left as changed: service $($svc.name)"
@@ -740,22 +749,25 @@ function Invoke-RollbackModule {
             } else {
                 $svc = $item.snapshot
                 $current = @(Get-ServiceSnapshot $svc.name | Where-Object { $_.exists -and $_.name -ieq $svc.name })
-                if ($current.Count -ne 1 -or $current[0].startType -ne $svc.appliedStartup) {
-                    if ($current.Count -eq 1 -and $current[0].startType -eq $svc.startType) {
-                        $alreadyAtOriginal.Add([pscustomobject]$item.target) | Out-Null
-                        $item.action.status = 'alreadyAtOriginal'
-                    } else {
-                        $leftAsChanged.Add([pscustomobject]($item.target + @{ reason='changed after preflight' })) | Out-Null
-                        $item.action.status = 'leftAsChanged'
-                        Write-Host "Left as changed: service $($svc.name)"
-                    }
+                if ($current.Count -eq 1 -and (Test-ServiceRestoreComplete $svc $current[0])) {
+                    $alreadyAtOriginal.Add([pscustomobject]$item.target) | Out-Null
+                    $item.action.status = 'alreadyAtOriginal'
+                    continue
+                }
+                if ($current.Count -ne 1 -or $current[0].startType -ne $svc.appliedStartup -or $current[0].startType -eq $svc.startType) {
+                    $reason = if ($current.Count -eq 1 -and $current[0].startType -eq $svc.startType) {
+                        'original startup matches; recorded Running state is unverified and runtime ownership is unavailable'
+                    } else { 'changed after preflight' }
+                    $leftAsChanged.Add([pscustomobject]($item.target + @{ reason=$reason })) | Out-Null
+                    $item.action.status = 'leftAsChanged'
+                    Write-Host "Left as changed: service $($svc.name) ($reason)"
                     continue
                 }
                 $attempted++
                 $writing = $true
                 Restore-ServiceSnapshot $svc
                 $verified = @(Get-ServiceSnapshot $svc.name | Where-Object { $_.exists -and $_.name -ieq $svc.name })
-                if ($verified.Count -ne 1 -or $verified[0].startType -ne $svc.startType) { throw "Service restore verification failed: $($svc.name)" }
+                if ($verified.Count -ne 1 -or -not (Test-ServiceRestoreComplete $svc $verified[0])) { throw "Service restore verification failed: $($svc.name)" }
                 $serviceCount++
             }
             $item.action.status = 'restored'
