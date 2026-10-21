@@ -14,7 +14,7 @@ static class DeniedReleaseChecks
     {
         var consumer = catalog.Settings.Single(setting => setting.Id == "windows.a8268996c3eb9072");
         var extensions = catalog.Settings.Single(setting => setting.Id == "explorer.file-extensions");
-        foreach (var scenario in new[] { "registry-denied", "control-denied", "registry-unauthorized", "control-transition", "control-reader-missing", "control-missing", "unknown-option", "control-adapter-missing", "control-adapter-batch-missing", "control-blocker-changed", "control-timer-changed", "control-helper-denied" })
+        foreach (var scenario in new[] { "registry-denied", "control-denied", "registry-unauthorized", "control-transition", "control-reader-missing", "control-missing", "unknown-option", "control-adapter-missing", "control-adapter-batch-missing", "control-blocker-changed", "control-timer-changed", "control-helper-denied", "control-timer-malformed", "control-blocker-malformed" })
         {
             var controls = scenario.StartsWith("control", StringComparison.Ordinal);
             var knownChanged = scenario is "control-adapter-missing" or "control-adapter-batch-missing" or "control-blocker-changed" or "control-timer-changed";
@@ -56,6 +56,7 @@ static class DeniedReleaseChecks
                 "control-blocker-changed" => HelperFailure("{\"error\":\"Download-folder permissions changed outside this profile.\",\"resourceChanged\":true}"),
                 "control-timer-changed" => HelperFailure("{\"error\":\"The timer startup task or its script changed and was left intact.\",\"resourceChanged\":true}"),
                 "control-helper-denied" => HelperFailure("{\"error\":\"Access is denied.\"}"),
+                "control-timer-malformed" or "control-blocker-malformed" => ReceiptFailure(directory, scenario == "control-timer-malformed"),
                 _ => new Win32Exception(5),
             };
             if (controls) fixture.ControlReadError = target => target == service ? Failure() : null;
@@ -88,6 +89,19 @@ static class DeniedReleaseChecks
             await model.ReviewRestoreCommand.ExecuteAsync(null); model.Approved = true; await model.ApplyCommand.ExecuteAsync(null);
             check(fixture.Windows.ReadState()!.Profiles.Length == 0, "The edited profile still has a complete explicit undo after " + scenario);
         }
+    }
+    private static Exception ReceiptFailure(string root, bool timer)
+    {
+        var path = Path.Combine(root, "startup.json"); var owner = OperationOwner.Current(); var digest = new string('A', 64);
+        var target = Path.Combine(Path.GetTempPath(), "roo-industries-file-controls-11111111222233334444555555555555", "downloads");
+        var address = new ControlAddress("file-acl", "fixture:" + target, "permissions");
+        var original = new TweakControlRead(address, "file-acl:1:1", "1:1:1", ControlValues.From(new { owner = owner.UserSid, group = "S-1-5-18", flags = 0, dacl = "AgAIAAAAAAA=" }));
+        if (timer) OperationFiles.Write(path, new TimerStartupReceipt(owner, "fixture-task", "created", null!, digest));
+        else OperationFiles.Write(path, new DownloadBlockerReceipt(owner, target, "active", true, original, ControlValues.From(new { }), 16));
+        var type = typeof(TweakEngine).Assembly.GetType(timer ? "RooIndustries.Optimizer.TimerStartupControl" : "RooIndustries.Optimizer.DownloadBlocker", throwOnError: true)!;
+        try { type.GetMethod("Receipt", BindingFlags.NonPublic | BindingFlags.Static)!.Invoke(null, timer ? [root, "fixture-task"] : [path, target]); }
+        catch (TargetInvocationException error) when (error.InnerException is { } inner) { return inner; }
+        return HelperFailure("{\"error\":\"Malformed ownership evidence was mistaken for outside changes.\",\"resourceChanged\":true}");
     }
     private static Exception HelperFailure(string output)
     {
