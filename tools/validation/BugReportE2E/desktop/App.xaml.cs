@@ -19,6 +19,7 @@ public partial class App : Application
     private Window? window;
     private BugReportPage? page;
     private OwnedBoundary? boundary;
+    private Exception? failure;
     private readonly List<string> seen = new();
     public App()
     {
@@ -114,7 +115,7 @@ public partial class App : Application
             var checkpointId = Guid.NewGuid().ToString("N");
             var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(window!);
             ScenarioDriver.Require(hwnd != IntPtr.Zero, "No actual fixture HWND.");
-            Atomic("checkpoint.json", new { schemaVersion = 1, boundary!.Nonce, sourceCommit = BuildBinding.SourceCommit,
+            Atomic(receipt.Name + "-" + view + "-checkpoint.json", new { schemaVersion = 1, boundary!.Nonce, sourceCommit = BuildBinding.SourceCommit,
                 fixturePid = process.Id, creationTimeFileTimeUtc = process.StartTime.ToUniversalTime().ToFileTimeUtc().ToString(),
                 windowHandle = hwnd.ToInt64().ToString(), checkpointId, name = receipt.Name, view,
                 receipt = semantic, receiptSha256 = Hash(Encoding.UTF8.GetBytes(semantic)), state = FullState(vm), stateSha256 = Hash(Encoding.UTF8.GetBytes(initial)),
@@ -127,7 +128,7 @@ public partial class App : Application
                 if (clock.Elapsed > TimeSpan.FromSeconds(30)) throw new TimeoutException("Bound acknowledgment missing.");
                 await Task.Delay(50);
             }
-            using var json = JsonDocument.Parse(File.ReadAllText(ack));
+            using var json = JsonDocument.Parse(FixtureFiles.ReadShared(ack));
             var root = json.RootElement;
             ScenarioDriver.Require(root.GetProperty("schemaVersion").GetInt32() == 1 && root.GetProperty("nonce").GetString() == boundary.Nonce
                 && root.GetProperty("checkpointId").GetString() == checkpointId && root.GetProperty("action").GetString() == "continue", "Acknowledgment binding mismatch.");
@@ -151,16 +152,25 @@ public partial class App : Application
     private static string Hash(byte[] bytes) => Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
     private void Atomic(string name, object value)
     {
-        var target = Path.Combine(boundary!.Output, name);
-        var temporary = target + "." + Guid.NewGuid().ToString("N") + ".tmp";
-        File.WriteAllText(temporary, JsonSerializer.Serialize(value));
-        File.Move(temporary, target, true);
+        FixtureFiles.WriteNew(Path.Combine(boundary!.Output, name), value);
     }
     private void Fail(Exception error)
     {
         Environment.ExitCode = 1;
-        if (boundary is not null) Atomic("failure.json", new { schemaVersion = 1, boundary.Nonce, sourceCommit = BuildBinding.SourceCommit, error = error.ToString(), seen, native = true });
-        window?.Close();
-        Exit();
+        if (failure is not null) return;
+        failure = error;
+        try
+        {
+            if (boundary is not null) Atomic("failure.json", new { schemaVersion = 1, boundary.Nonce, sourceCommit = BuildBinding.SourceCommit, error = failure.ToString(), seen, native = true });
+        }
+        catch (Exception receiptError)
+        {
+            Console.Error.WriteLine("ROO70_RENDERED_FAILED: " + failure + Environment.NewLine + "Failure receipt: " + receiptError);
+        }
+        finally
+        {
+            try { window?.Close(); }
+            finally { Exit(); }
+        }
     }
 }

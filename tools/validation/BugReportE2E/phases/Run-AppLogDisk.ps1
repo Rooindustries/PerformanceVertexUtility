@@ -19,12 +19,14 @@ try{
  Assert-RooIndustries ($receipt.path -ieq (Join-Path $leaf 'logs\app.log') -and $receipt.ownedLogRoot -ieq $leaf -and $receipt.frameRoot -ieq $script:Harness.Root -and (ConvertTo-RooIndustriesSha256 $receipt.assemblySha256) -ceq (Get-RooIndustriesFileSha256 $dll)) 'AppLog sink/assembly escaped original binding.'
  $profile=[Environment]::GetFolderPath([Environment+SpecialFolder]::UserProfile);$user=[Environment]::UserName;$machine=[Environment]::MachineName
  Assert-RooIndustries ($receipt.environment.profile -ceq $profile -and $receipt.environment.user -ceq $user -and $receipt.environment.machine -ceq $machine) 'Private native environment binding differs.'
+ $userExpected=[regex]::Replace($user,'(?<![\p{L}\p{N}_])'+[regex]::Escape($machine)+'(?![\p{L}\p{N}_])','<pc-name>',[Text.RegularExpressions.RegexOptions]::IgnoreCase -bor [Text.RegularExpressions.RegexOptions]::CultureInvariant)
+ if($userExpected -ceq $user){$userExpected='<user>'}
  $expectedCases=@(
   @('raw',('C:\Users\'+"Zqx Bob O'Neil\AppData\x.log"),'C:\Users\<user>\AppData\x.log'),
   @('forward',('C:/Users/'+'Zqxbob/AppData/x.log'),'C:/Users/<user>/AppData/x.log'),
   @('r9','C:/Users/\u003Cuser\u003E%USERPROFILE%\u003Cuser\u003EZqxbob/x','C:/Users/<user>/x'),
   @('own',($profile+'\AppData\x.log'),'%USERPROFILE%\AppData\x.log'),
-  @('user',$user,'<user>'),@('machine',$machine,'<pc-name>'),
+  @('user',$user,$userExpected),@('machine',$machine,'<pc-name>'),
   @('sid','S-1-5-21-11-22-33-44','<sid>'),
   @('shared','C:/Users/Public/x.log','C:/Users/Public/x.log'),
   @('already-redacted','C:/Users/<user>/x.log','C:/Users/<user>/x.log'))

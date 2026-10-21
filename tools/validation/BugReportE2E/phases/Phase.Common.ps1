@@ -7,6 +7,17 @@ function Get-RooIndustriesOriginalFile([string]$Path){
  $probe.Dispose()
  return $entries[0]
 }
+function Publish-RooIndustriesText([string]$Path,[string]$Text,[string]$Purpose){
+ $pendingPath=$Path+'.'+[guid]::NewGuid().ToString('N')+'.pending'
+ $pending=New-HarnessText $pendingPath $Text ($Purpose+'-pending') 'frame'
+ $pendingAgain=Get-RooIndustriesOriginalFile $pendingPath
+ Assert-RooIndustries ($pendingAgain.id -ceq $pending.id -and $pendingAgain.identity.id -ceq $pending.identity.id -and $pendingAgain.identity.hash -ceq $pending.identity.hash) 'Original pending file changed before publication.'
+ [IO.File]::Move((Get-HarnessLongPath $pendingPath),(Get-HarnessLongPath $Path))
+ $published=Register-HarnessFile $Path $Purpose 'frame'
+ Assert-RooIndustries ($published.identity.id -ceq $pending.identity.id -and $published.identity.hash -ceq $pending.identity.hash -and -not(Test-HarnessPath $pendingPath)) 'Closed publication lost original file identity.'
+ Set-HarnessEntryState $pending.id 'absent'
+ return $published
+}
 function Assert-RooIndustriesOwnedDirectory([string]$Path){
  $plain=Get-HarnessPlainPath $Path
  Assert-RooIndustries (Test-RooIndustriesBelow $plain $script:Harness.Root) 'Directory is outside original frame.'
@@ -131,7 +142,7 @@ function Start-RooIndustriesReaderHolder([string]$Kind,[string]$Source,[string]$
  $script:RooIndustriesReaderHolders.Add($owned)
  $imageHash=Get-RooIndustriesFileSha256 $owned.Identity.imagePath
  Write-HarnessResult $OutRoot ('reader-'+$Kind+'-holder-process.json') @{identity=$owned.Identity;ledgerId=$owned.LedgerId;sourceCommit=$script:RooIndustriesCommit;sourceManifestSha256=(ConvertTo-RooIndustriesSha256 $script:Harness.Manifest);uiNonce=$binding.uiNonce;invocationNonce=$binding.invocationNonce;holderDll=$dllEntry;imageSha256=$imageHash;leaf=$leaf}|Out-Null
- $stagedPath=Join-Path $leaf 'ready-staged.json';$path=Join-Path $leaf 'ready.json';$releasePath=Join-Path $leaf 'release-ready.json';$pendingPath=Join-Path $leaf 'release-ready.pending';$deadline=[DateTime]::UtcNow.AddSeconds(10)
+ $stagedPath=Join-Path $leaf 'ready-staged.json';$path=Join-Path $leaf 'ready.json';$releasePath=Join-Path $leaf 'release-ready.json';$deadline=[DateTime]::UtcNow.AddSeconds(10)
  while(-not(Test-HarnessPath $stagedPath)){Assert-RooIndustries (-not$owned.process.HasExited -and [DateTime]::UtcNow -lt $deadline) 'Original reader holder did not stage readiness within ten seconds.';Start-Sleep -Milliseconds 25}
  Assert-RooIndustries ([DateTime]::UtcNow -le $deadline) 'Original reader readiness exceeded ten seconds.'
  Assert-RooIndustriesReaderHolder $owned $imageHash
@@ -144,13 +155,10 @@ function Start-RooIndustriesReaderHolder([string]$Kind,[string]$Source,[string]$
  $stagedAgain=Get-RooIndustriesOriginalFile $stagedPath
  Assert-RooIndustries ($stagedAgain.id -ceq $staged.id -and $stagedAgain.identity.id -ceq $staged.identity.id -and $stagedAgain.identity.hash -ceq $staged.identity.hash) 'Original staged file changed before owner release.'
  $release=@{protocol='roo-industries-report-ready-release/v1';sourceCommit=$script:RooIndustriesCommit;nonce=$binding.uiNonce;kind=$Kind;pid=[int]$owned.Identity.pid;stagedSha256=(ConvertTo-RooIndustriesSha256 $staged.identity.hash)}
- $pending=New-HarnessText $pendingPath ($release|ConvertTo-Json -Compress) 'report-e2e-reader-release-pending' 'frame'
- $pendingAgain=Get-RooIndustriesOriginalFile $pendingPath
- Assert-RooIndustries ($pendingAgain.id -ceq $pending.id -and $pendingAgain.identity.id -ceq $pending.identity.id -and $pendingAgain.identity.hash -ceq $pending.identity.hash) 'Original release temporary changed before publication.'
- [IO.File]::Move((Get-HarnessLongPath $pendingPath),(Get-HarnessLongPath $releasePath))
- $releaseEntry=Register-HarnessFile $releasePath 'report-e2e-reader-release' 'frame'
- Assert-RooIndustries ($releaseEntry.identity.id -ceq $pending.identity.id -and $releaseEntry.identity.hash -ceq $pending.identity.hash -and -not(Test-HarnessPath $pendingPath)) 'Closed release publication lost its original file identity.'
- Set-HarnessEntryState $pending.id 'absent'
+ $releaseEntry=Publish-RooIndustriesText $releasePath ($release|ConvertTo-Json -Compress) 'report-e2e-reader-release'
+ $pendingEntries=@(Get-HarnessEntries|Where-Object {$_.kind -ceq 'file' -and $_.state -ceq 'absent' -and $_.nonce -ceq $script:Harness.Nonce -and $_.purpose -ceq 'report-e2e-reader-release-pending' -and $_.identity.id -ceq $releaseEntry.identity.id -and $_.identity.hash -ceq $releaseEntry.identity.hash})
+ Assert-RooIndustries ($pendingEntries.Count -eq 1 -and -not(Test-HarnessPath $pendingEntries[0].identity.path)) 'Original closed release pending ledger differs.'
+ $pending=$pendingEntries[0]
  while(-not(Test-HarnessPath $path)){Assert-RooIndustries (-not$owned.process.HasExited -and [DateTime]::UtcNow -lt $deadline) 'Original reader holder did not publish readiness within ten seconds.';Start-Sleep -Milliseconds 25}
  Assert-RooIndustries ([DateTime]::UtcNow -le $deadline) 'Original reader readiness exceeded ten seconds.'
  Assert-RooIndustriesReaderHolder $owned $imageHash

@@ -22,7 +22,7 @@ function Assert-RooIndustriesButton($Window,[string]$Id,[bool]$Visible,[bool]$En
  if($Visible){Assert-RooIndustries ($visibleElements.Count -eq 1) ('Actual button missing/ambiguous: '+$Id);Assert-RooIndustriesVisible $visibleElements[0];Assert-RooIndustries ($visibleElements[0].Current.IsEnabled -eq $Enabled) ('Actual button enabled state differs: '+$Id)}else{Assert-RooIndustries ($visibleElements.Count -eq 0) ('Collapsed control unexpectedly visible: '+$Id)}
  return @{id=$Id;presentCount=$elements.Count;visibleCount=$visibleElements.Count;enabled=$(if($Visible){$visibleElements[0].Current.IsEnabled}else{$null});expectedVisible=$Visible;expectedEnabled=$Enabled}
 }
-$owned=$null;$recorder=$null;$seenIds=New-Object System.Collections.Generic.List[string];$observed=New-Object System.Collections.Generic.List[object];$timer=[Diagnostics.Stopwatch]::StartNew();$done=$false
+$owned=$null;$stdout=$null;$stderr=$null;$recorder=$null;$seenIds=New-Object System.Collections.Generic.List[string];$observed=New-Object System.Collections.Generic.List[object];$timer=[Diagnostics.Stopwatch]::StartNew();$done=$false
 $frames=Join-Path $CaptureOut 'video-frames';$null=New-HarnessDirectory $frames 'roo70-owned-window-video' 'frame'
 try{
  $exe=Join-Path $BuildOut 'desktop\Roo70.RenderedBugReportFixture.exe';$null=Get-RooIndustriesOriginalFile $exe;Assert-HarnessInstallStart $exe
@@ -37,7 +37,7 @@ try{
  $topHash=$null
   foreach($view in 'top','bottom'){
    Assert-HarnessHostLease;Assert-RooIndustries ($timer.Elapsed.TotalSeconds -lt 300) 'Total native UI lifetime exceeded five minutes.'
-   $deadline=[DateTime]::UtcNow.AddSeconds(20);$checkpoint=$null;$path=Join-Path $UiOutput 'checkpoint.json'
+   $deadline=[DateTime]::UtcNow.AddSeconds(20);$checkpoint=$null;$path=Join-Path $UiOutput ($name+'-'+$view+'-checkpoint.json')
    do{
     Assert-RooIndustries (-not$owned.process.HasExited) 'Owned fixture exited before next checkpoint.'
     Assert-RooIndustries (-not(Test-HarnessPath (Join-Path $UiOutput 'failure.json'))) 'Fixture reported failure.'
@@ -79,7 +79,7 @@ try{
    $observed.Add(@{name=$name;view=$view;checkpointId=$checkpoint.checkpointId;windowHandle=$checkpoint.windowHandle;pid=$owned.Identity.pid;creation=$owned.Identity.creationTimeFileTimeUtc;sourceCommit=$script:RooIndustriesCommit;sourceManifestSha256=(ConvertTo-RooIndustriesSha256 $script:Harness.Manifest);uiNonce=$binding.uiNonce;checkpointSha256=(ConvertTo-RooIndustriesSha256 $immutable.identity.hash);receiptSha256=(ConvertTo-RooIndustriesSha256 $checkpoint.receiptSha256);carriedProducerStateSha256=(ConvertTo-RooIndustriesSha256 $checkpoint.stateSha256);independentAllStateAndSpecsVerified=$true;screen=$shotEntry;dimensions=$dimensions;uia=@($uia.ToArray())})
    $seenIds.Add($checkpoint.checkpointId)
    Assert-RooIndustries ([DateTime]::UtcNow -lt $deadline) 'Checkpoint UIA/capture exceeded its bounded ack deadline.'
-   $null=New-HarnessText (Join-Path $UiOutput ('ack-'+$checkpoint.checkpointId+'.json')) (@{schemaVersion=1;nonce=$binding.uiNonce;checkpointId=$checkpoint.checkpointId;action='continue'}|ConvertTo-Json -Compress) 'roo70-checkpoint-ack' 'frame'
+   $null=Publish-RooIndustriesText (Join-Path $UiOutput ('ack-'+$checkpoint.checkpointId+'.json')) (@{schemaVersion=1;nonce=$binding.uiNonce;checkpointId=$checkpoint.checkpointId;action='continue'}|ConvertTo-Json -Compress) 'roo70-checkpoint-ack'
   }
  }
  Assert-RooIndustries ($owned.process.WaitForExit(10000)) 'Owned fixture did not exit after twelve acknowledgments.'
@@ -91,6 +91,7 @@ try{
  Assert-RooIndustries ($exit -eq 0 -and -not(Test-HarnessPath (Join-Path $UiOutput 'failure.json'))) 'WinUI native failure or nonzero exit.'
  $finalPath=Join-Path $UiOutput 'final-result.json';$final=Get-Content -LiteralPath $finalPath -Raw|ConvertFrom-Json
  Assert-RooIndustries ($final.schemaVersion -eq 1 -and $final.sourceCommit -ceq $script:RooIndustriesCommit -and $final.Nonce -ceq $binding.uiNonce -and $final.native -eq $true -and $final.productionStartupProved -eq $false -and $final.positiveMarker -ceq 'ROO_INDUSTRIES_BUG_REPORT_RENDERED_6COMPLETE' -and ($final.seen -join ',') -ceq ($script:RooIndustriesScenes -join ',') -and $observed.Count -eq 12) 'No exact six-scene native completion.'
+ Assert-RooIndustries (@(Get-HarnessChildren $UiOutput -File -Filter '*-checkpoint.json').Count -eq 12) 'Exactly twelve actual checkpoint files required.'
  $null=Copy-HarnessFile $finalPath (Join-Path $CaptureOut 'final-result.json') 'roo70-native-final' 'frame'
  $movie=Join-Path $CaptureOut 'bug-report-interaction.mp4'
  $video=Invoke-RooIndustriesOwnedCommand $ffmpeg.Source @('-n','-framerate','15','-i',(Join-Path $frames 'frame-%07d.jpg'),'-vf','pad=ceil(iw/2)*2:ceil(ih/2)*2','-c:v','libx264','-pix_fmt','yuv420p','-t','10',$movie) $CaptureOut $CaptureOut 'roo70-encode-video' 60
@@ -111,7 +112,7 @@ try{
    Stop-OwnedProcess $owned
    Assert-RooIndustries ($owned.process.WaitForExit(5000)) 'Original owned UI process failed to end.'
    Set-HarnessEntryState $owned.LedgerId 'absent'
-   foreach($stream in @(@($stdout,'stdout'),@($stderr,'stderr'))){$logPath=Join-Path $CaptureOut ('ui-'+$stream[1]+'.log');if($stream[0].Wait(3000) -and -not(Test-HarnessPath $logPath)){$null=New-HarnessText $logPath ($stream[0].GetAwaiter().GetResult()) 'roo70-retained-ui-output' 'frame'}}
+   foreach($stream in @(@($stdout,'stdout'),@($stderr,'stderr'))){$logPath=Join-Path $CaptureOut ('ui-'+$stream[1]+'.log');if($stream[0] -and $stream[0].Wait(3000) -and -not(Test-HarnessPath $logPath)){$null=New-HarnessText $logPath ($stream[0].GetAwaiter().GetResult()) 'roo70-retained-ui-output' 'frame'}}
   }
  }
  foreach($root in @($DataRoot,$UiOutput,$CaptureOut)){if(Test-HarnessPath $root){$null=Register-RooIndustriesTree $root 'roo70-retained-native-resource'}}

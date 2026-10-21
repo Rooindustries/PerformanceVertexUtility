@@ -14,6 +14,7 @@
   <ItemGroup>
     <Compile Include="Program.cs" />
     <Compile Include="BrandCompatibility.cs" />
+    <Compile Include="../shared/FixtureFiles.cs" Link="Shared/FixtureFiles.cs" />
     <Compile Include="../shared/ReaderAdverse.cs" Link="Shared/ReaderAdverse.cs" />
     <Compile Include="../../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/AppLog.cs" Link="AppLog.cs" />
     <Compile Include="../../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/BugRedactor.cs" Link="BugRedactor.cs" />

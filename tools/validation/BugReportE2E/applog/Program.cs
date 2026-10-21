@@ -55,13 +55,16 @@ internal static class Program
             var machine = Environment.MachineName;
             if (string.IsNullOrWhiteSpace(profile)) throw new InvalidOperationException("Actual profile root is unavailable.");
             if (user.Length < 2 || machine.Length < 2) throw new InvalidOperationException("Actual user and machine names must each have at least two characters.");
+            var userExpected = Regex.Replace(user, @"(?<![\p{L}\p{N}_])" + Regex.Escape(machine) + @"(?![\p{L}\p{N}_])",
+                "<pc-name>", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            if (userExpected == user) userExpected = "<user>";
             LogCase[] cases =
             [
                 new LogCase("raw", @"C:\Users\" + @"Zqx Bob O'Neil\AppData\x.log", @"C:\Users\<user>\AppData\x.log"),
                 new LogCase("forward", "C:/Users/" + "Zqxbob/AppData/x.log", "C:/Users/<user>/AppData/x.log"),
                 new LogCase("r9", @"C:/Users/\u003Cuser\u003E%USERPROFILE%\u003Cuser\u003EZqxbob/x", "C:/Users/<user>/x"),
                 new LogCase("own", profile + @"\AppData\x.log", @"%USERPROFILE%\AppData\x.log"),
-                new LogCase("user", user, "<user>"),
+                new LogCase("user", user, userExpected),
                 new LogCase("machine", machine, "<pc-name>"),
                 new LogCase("sid", "S-1-5-21-11-22-33-44", "<sid>"),
                 new LogCase("shared", "C:/Users/Public/x.log", "C:/Users/Public/x.log"),

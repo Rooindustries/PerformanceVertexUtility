@@ -81,13 +81,21 @@ finally{
  foreach($path in @($created.ToArray())){try{$null=Register-RooIndustriesTree $path 'report-e2e-retained-output'}catch{$errors.Add($_.Exception.ToString())}}
  try{$null=Assert-RooIndustriesSource $Source;Assert-HarnessHostLease}catch{$errors.Add($_.Exception.ToString())}
  try{$cleanup=Complete-HarnessInvocation $(if($passed -and $errors.Count -eq 0){'pass'}else{'fail'}) -Cleanup;if($cleanup -cne 'pass'){$errors.Add('Invocation cleanup/status failed.')}}catch{$cleanup='fail';$errors.Add($_.Exception.ToString())}
- try{$null=Assert-RooIndustriesSource $Source;Assert-HarnessHostLease}catch{$errors.Add($_.Exception.ToString());$cleanup='fail';$null=Complete-HarnessInvocation 'fail' -Cleanup}
+ try{$null=Assert-RooIndustriesSource $Source;Assert-HarnessHostLease}catch{
+  $errors.Add($_.Exception.ToString());$cleanup='fail'
+  try{$null=Complete-HarnessInvocation 'fail' -Cleanup}catch{$errors.Add($_.Exception.ToString())}
+ }
  $passed=$passed -and $errors.Count -eq 0 -and $cleanup -ceq 'pass'
  if($validOutput){
+  try{
   $proofs=@{}
   if($passed -and $selected.AppLog){$proofs.AppLog=Read-HarnessLatestResult 'applog-proof.json' -Nonce $script:Harness.Nonce}
   if($passed -and $selected.Rendered){$proofs.Rendered=Read-HarnessLatestResult 'rendered-proof.json' -Nonce $script:Harness.Nonce}
   Write-HarnessResult $OutRoot 'report-e2e-final.json' @{schemaVersion=1;sourceCommit=$script:RooIndustriesCommit;sourceManifestSha256=(ConvertTo-RooIndustriesSha256 $script:Harness.Manifest);requestedScenario=$Scenario;selected=$selected;phases=@($phases.ToArray());proofs=$proofs;uiNonce=$script:Harness.FrameId;invocationNonce=$script:Harness.Nonce;invocationCleanup=$cleanup;passed=$passed;errors=@($errors.ToArray());elapsedMs=$clock.ElapsedMilliseconds;utc=[DateTime]::UtcNow.ToString('o');native=$true;productionStartupProved=$false;readerAdverseRequested=[bool]$ReaderAdverse;readerProofs=@($script:RooIndustriesReaderProofs.ToArray());normalStreamCompletionProved=(-not$ReaderAdverse -and $passed);readerAdverseProof=$(if($ReaderAdverse -and $passed){'Actual duplicated-writer release observed; inherited launch not proved'}else{'unrun or failed'});readerHolderHelperBuildSelected=($ReaderAdverse -and $Scenario -ceq 'Rendered');wholeWindowReleased=$false}|Out-Null
+  }catch{
+   $errors.Add($_.Exception.ToString());$passed=$false;$cleanup='fail'
+   try{$null=Complete-HarnessInvocation 'fail' -Cleanup}catch{$errors.Add($_.Exception.ToString())}
+  }
  }
 }
 if(-not$passed){throw ('Report E2E failed; retain original frame evidence. '+($errors -join '; '))}

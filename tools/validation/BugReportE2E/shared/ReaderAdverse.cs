@@ -28,10 +28,10 @@ public static class ReaderAdverse
         using var process = Process.GetCurrentProcess();
         var image = Environment.ProcessPath ?? throw new InvalidOperationException("Holder process image is unavailable.");
         var stagedPath = Path.Combine(leaf, "ready-staged.json");
-        var stagedHash = WriteNew(stagedPath, new
+        var stagedHash = FixtureFiles.WriteNew(stagedPath, new
         {
             schemaVersion = 1, sourceCommit = BuildBinding.SourceCommit, frameRoot = frame, nonce, kind,
-            pid = process.Id, creationTimeFileTimeUtc = Birth(process.SafeHandle), imageSha256 = Hash(ReadShared(image)), readyMarker = ReadyMarker
+            pid = process.Id, creationTimeFileTimeUtc = Birth(process.SafeHandle), imageSha256 = Hash(FixtureFiles.ReadShared(image)), readyMarker = ReadyMarker
         });
         var releasePath = Path.Combine(leaf, "release-ready.json");
         while (!File.Exists(releasePath))
@@ -41,7 +41,7 @@ public static class ReaderAdverse
         }
         if (clock.Elapsed >= TimeSpan.FromSeconds(10)) throw new TimeoutException("Original staged readiness deadline exceeded.");
         if ((File.GetAttributes(releasePath) & FileAttributes.ReparsePoint) != 0) throw new InvalidDataException("Owner release file is linked.");
-        using var releaseDocument = JsonDocument.Parse(ReadShared(releasePath));
+        using var releaseDocument = JsonDocument.Parse(FixtureFiles.ReadShared(releasePath));
         var release = releaseDocument.RootElement;
         Shape(release, "protocol", "sourceCommit", "nonce", "kind", "pid", "stagedSha256");
         Match(release, "protocol", "roo-industries-report-ready-release/v1");
@@ -75,7 +75,7 @@ public static class ReaderAdverse
         using (var readyAccess = Native.CreateFile(readyPath, 0x80010000, 5, IntPtr.Zero, 3, 0x00200000, IntPtr.Zero))
         {
             Check(!readyAccess.IsInvalid, "Open original ready access for shared read");
-            readyBytes = ReadShared(readyPath);
+            readyBytes = FixtureFiles.ReadShared(readyPath);
         }
         if (Hash(readyBytes) != readyHash) throw new InvalidOperationException("Holder ready hash differs.");
         using var readyDocument = JsonDocument.Parse(readyBytes);
@@ -93,18 +93,18 @@ public static class ReaderAdverse
         var imagePath = new StringBuilder(32768);
         var imageLength = imagePath.Capacity;
         Check(Native.QueryFullProcessImageName(target, 0, imagePath, ref imageLength), "Read original holder image");
-        if (Hash(ReadShared(imagePath.ToString())) != imageHash) throw new InvalidOperationException("Original holder image hash differs.");
+        if (Hash(FixtureFiles.ReadShared(imagePath.ToString())) != imageHash) throw new InvalidOperationException("Original holder image hash differs.");
         var stdout = Writer(-11);
         var stderr = Writer(-12);
         Check(Native.DuplicateHandle(Native.GetCurrentProcess(), stdout, target, out var remoteStdout, 0, false, 2), "Duplicate stdout into original holder");
         Check(Native.DuplicateHandle(Native.GetCurrentProcess(), stderr, target, out var remoteStderr, 0, false, 2), "Duplicate stderr into original holder");
         using var parent = Process.GetCurrentProcess();
         var assembly = Assembly.GetExecutingAssembly().Location;
-        WriteNew(Path.Combine(leaf, "attached.json"), new
+        FixtureFiles.WriteNew(Path.Combine(leaf, "attached.json"), new
         {
             protocol = Protocol, sourceCommit = BuildBinding.SourceCommit, frameRoot = frame, nonce, kind,
             holderPid = pid, holderCreationTimeFileTimeUtc = birth, holderImageSha256 = imageHash, readySha256 = readyHash,
-            parentPid = parent.Id, parentCreationTimeFileTimeUtc = Birth(parent.SafeHandle), parentAssemblySha256 = Hash(ReadShared(assembly)),
+            parentPid = parent.Id, parentCreationTimeFileTimeUtc = Birth(parent.SafeHandle), parentAssemblySha256 = Hash(FixtureFiles.ReadShared(assembly)),
             stdoutIsPipe = true, stderrIsPipe = true, stdoutDuplicated = true, stderrDuplicated = true, readyShareDeleteVerified = true,
             stdoutRemoteHandle = remoteStdout.ToInt64().ToString(CultureInfo.InvariantCulture), stderrRemoteHandle = remoteStderr.ToInt64().ToString(CultureInfo.InvariantCulture),
             utc = DateTime.UtcNow.ToString("o", CultureInfo.InvariantCulture)
@@ -176,25 +176,6 @@ public static class ReaderAdverse
         var text = Text(value, name);
         if (!Regex.IsMatch(text, "\\A[a-f0-9]{64}\\z", RegexOptions.CultureInvariant)) throw new InvalidDataException("Reader hash must be lowercase SHA256.");
         return text;
-    }
-    private static byte[] ReadShared(string path)
-    {
-        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
-        using var memory = new MemoryStream();
-        stream.CopyTo(memory);
-        return memory.ToArray();
-    }
-    private static string WriteNew(string path, object value)
-    {
-        var temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
-        var bytes = JsonSerializer.SerializeToUtf8Bytes(value);
-        using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
-        {
-            stream.Write(bytes);
-            stream.Flush(true);
-        }
-        File.Move(temporary, path);
-        return Hash(bytes);
     }
     private static string Hash(byte[] value) => Convert.ToHexString(SHA256.HashData(value)).ToLowerInvariant();
     private static void Check(bool success, string operation)
