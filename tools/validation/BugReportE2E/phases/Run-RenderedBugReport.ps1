@@ -243,11 +243,11 @@ try{
  $refreshProof=@(Assert-RooIndustriesAttachmentRefresh $final)
  $null=Get-RooIndustriesOriginalFile $finalPath;$null=Get-RooIndustriesOriginalFile $finalEntry.identity.path
  $movie=Join-Path $CaptureOut 'bug-report-interaction.mp4'
- $video=Invoke-RooIndustriesOwnedCommand $ffmpeg.Source @('-n','-framerate','15','-i',(Join-Path $frames 'frame-%07d.jpg'),'-vf','pad=ceil(iw/2)*2:ceil(ih/2)*2','-c:v','libx264','-pix_fmt','yuv420p','-t','10',$movie) $CaptureOut $CaptureOut 'roo70-encode-video' 60
+ $video=Invoke-RooIndustriesOwnedCommand $ffmpeg.Source @('-n','-framerate','15','-i',(Join-Path $frames 'frame-%07d.jpg'),'-vf','pad=ceil(iw/2)*2:ceil(ih/2)*2,scale=in_range=pc:out_range=tv','-c:v','libx264','-pix_fmt','yuv420p','-color_range','tv','-t','10',$movie) $CaptureOut $CaptureOut 'roo70-encode-video' 60
  Assert-RooIndustries ((Get-HarnessItem $movie).Length -gt 0) 'Encoded interaction video missing.'
  $movieEntry=Register-HarnessFile $movie 'roo70-owned-ui-video' 'frame'
  $metadata=Invoke-RooIndustriesOwnedCommand $ffmpeg.Source @('-v','info','-i',$movie,'-f','null','-') $CaptureOut $CaptureOut 'roo70-video-metadata' 30
- Assert-RooIndustries ($metadata.stderr -match 'Duration: 00:00:10\.' -and $metadata.stderr -match 'Video: h264' -and $metadata.stderr -match 'yuv420p') 'Actual encoded video metadata differs.'
+ Assert-RooIndustries ($metadata.stderr -match 'Duration: 00:00:10\.' -and $metadata.stderr -match '\bVideo: h264\b[^\r\n]*\byuv420p\(tv(?:,|\))') 'Actual encoded video metadata differs.'
  Assert-RooIndustries (@(Get-HarnessChildren $CaptureOut -File -Filter '*.png').Count -eq 16) 'Exactly sixteen actual screenshots required.'
  $null=Register-RooIndustriesTree $frames 'roo70-actual-video-frame'
  Write-HarnessResult $CaptureOut 'rendered-proof.json' @{readerAdverse=$read.readerAdverse;sourceCommit=$script:RooIndustriesCommit;binaryFiles=$build.files;sourceManifestSha256=(ConvertTo-RooIndustriesSha256 $script:Harness.Manifest);uiNonce=$binding.uiNonce;invocationNonce=$binding.invocationNonce;nativeExit=$exit;checkpoints=@($observed.ToArray());nativeFinal=$finalEntry;attachmentRefreshMarker=$final.attachmentRefreshMarker;attachmentRefresh=$refreshProof;fallbackProof=$refreshProof[3].fallbackProof;movie=$movieEntry;actualFrames=$frameCount;actualSeconds=$seconds;skipped=$skipped;actualNative=$true;productionStartupProved=$false;leadAndSolVision='PENDING';stateHash='carried producer hash; all model/spec fields independently compared, not PS reserialized'}|Out-Null
