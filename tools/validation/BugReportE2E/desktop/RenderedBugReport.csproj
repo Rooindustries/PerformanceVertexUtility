@@ -19,6 +19,7 @@
 <Compile Include="../../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/AppLog.cs" Link="Services/AppLog.cs" />
 <Compile Include="../../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Helpers/Format.cs" Link="Helpers/Format.cs" />
 <Compile Include="../../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Converters/Converters.cs" Link="Converters/Converters.cs" />
+<EmbeddedResource Include="../../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/MainWindow.xaml" LogicalName="Roo70Fixture.ProductionMainWindow.xaml" />
 <Page Include="../../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Views/BugReportPage.xaml" Link="Views/BugReportPage.xaml" />
 <Page Include="../../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Resources/Theme.BlackoutGold.xaml" Link="Resources/Theme.BlackoutGold.xaml" />
 <Page Include="../../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Resources/Brand.xaml" Link="Resources/Brand.xaml" />

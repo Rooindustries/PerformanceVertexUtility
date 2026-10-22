@@ -2,6 +2,11 @@ param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$Fixtu
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'Phase.Common.ps1')
 $binding=Enter-RooIndustriesPhase $Source $FixtureRoot $BuildOut $OutRoot
+$mainWindowSha256=''
+if($script:RooIndustriesScenario -in @('All','Rendered')){
+ $mainWindowSha256=Get-RooIndustriesFileSha256 (Join-Path $Source 'docs\internal\frontend\RooIndustries.OptimizationSuite.App\MainWindow.xaml')
+ Assert-RooIndustries ($mainWindowSha256 -cmatch '^[a-f0-9]{64}$') 'Original MainWindow compile binding invalid.'
+}
 try{
  Assert-RooIndustries (@(Get-HarnessTree $BuildOut).Count -eq 0) 'BuildOut must be fresh; never rebuild in place.'
  Assert-RooIndustries ($script:RooIndustriesCommit -cmatch '^[a-f0-9]{40}$' -and $binding.appLogSha256 -cmatch '^[a-f0-9]{64}$' -and $binding.redactorSha256 -cmatch '^[a-f0-9]{64}$') 'Compile binding values invalid.'
@@ -13,6 +18,7 @@ public static class BuildBinding {
     public const string SourceCommit = "$script:RooIndustriesCommit";
     public const string AppLogSha256 = "$($binding.appLogSha256)";
     public const string RedactorSha256 = "$($binding.redactorSha256)";
+    public const string MainWindowSha256 = "$mainWindowSha256";
 }
 "@
  $null=New-HarnessText $bindingFile $code 'report-e2e-compile-binding' 'frame'

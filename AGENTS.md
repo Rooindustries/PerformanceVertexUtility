@@ -119,7 +119,7 @@ Anything that reads or changes the registry, services, process, I/O or GPU prior
 
 From Linux, `tools/validation/windows_ssh.py` checks the machine name, stages tracked source and runs a validation script (see `backend/README.md`). Add `--include-frontend` for suites that compile desktop sources. Test the AMD and NVIDIA paths on their own PCs; one doesn't prove the other. Compiling the app isn't a UI check: launch it, take screenshots and look at them.
 
-For report privacy changes, run `tools/validation/BugReportE2E/Invoke-BugReportE2E.ps1` through the existing `windows_ssh.py interactive-frame` command with `Source`, `OutRoot`, `ExpectedCommit` and `Scenario=All`. Follow [the report E2E recipe](tools/validation/BugReportE2E/README.md): use a granted Windows window, the original preclaimed frame/lease and empty original-ledger output; retrieve proof before original-ledger cleanup. Linux preparation does not prove the nine disk writes or six rendered scenes.
+For report privacy changes, run `tools/validation/BugReportE2E/Invoke-BugReportE2E.ps1` through the existing `windows_ssh.py interactive-frame` command with `Source`, `OutRoot`, `ExpectedCommit` and `Scenario=All`. Follow [the report E2E recipe](tools/validation/BugReportE2E/README.md): use a granted Windows window, the original preclaimed frame/lease and empty original-ledger output; retrieve proof before original-ledger cleanup. Linux preparation does not prove the nine disk writes or eight rendered scenes.
 
 ## How we ship
 

@@ -7,6 +7,25 @@ foreach($path in @($DataRoot,$UiOutput,$CaptureOut)){$null=Assert-RooIndustriesO
 Assert-RooIndustriesBinding $script:Harness.Root $script:Harness.FrameId $script:Harness.Nonce $binding.manifest.frameId $DataRoot $UiOutput $CaptureOut @(Get-HarnessTree $DataRoot).Count @(Get-HarnessTree $UiOutput).Count
 Assert-RooIndustries (@(Get-HarnessTree $CaptureOut).Count -eq 0) 'Capture directory must be fresh.'
 $buildFile=Join-Path $OutRoot 'build-desktop-binding.json';$build=Get-RooIndustriesBuild $BuildOut $OutRoot 'desktop'
+$mainWindowPath=Join-Path $Source 'docs\internal\frontend\RooIndustries.OptimizationSuite.App\MainWindow.xaml'
+[xml]$mainWindowSource=Read-HarnessInputText $mainWindowPath
+$presentation='http://schemas.microsoft.com/winfx/2006/xaml/presentation';$names='http://schemas.microsoft.com/winfx/2006/xaml'
+Assert-RooIndustries ($mainWindowSource.DocumentElement.LocalName -ceq 'Window' -and $mainWindowSource.DocumentElement.NamespaceURI -ceq $presentation) 'Original MainWindow XML root differs.'
+$hostRoots=@($mainWindowSource.DocumentElement.ChildNodes|Where-Object {$_ -is [Xml.XmlElement]})
+Assert-RooIndustries ($hostRoots.Count -eq 1 -and $hostRoots[0].LocalName -ceq 'Grid' -and $hostRoots[0].NamespaceURI -ceq $presentation) 'Original MainWindow Grid root differs.'
+$hostSource=$hostRoots[0]
+Assert-RooIndustries ($hostSource.Attributes.Count -eq 3 -and $hostSource.GetAttribute('Name',$names) -ceq 'RootGrid' -and @($hostSource.Attributes|Where-Object {-not(($_.LocalName -ceq 'Name' -and $_.NamespaceURI -ceq $names) -or ($_.Name -cin @('RequestedTheme','Background') -and $_.NamespaceURI -ceq ''))}).Count -eq 0 -and @($hostSource.ChildNodes|Where-Object {$_ -is [Xml.XmlElement] -and $_.LocalName -ceq 'Grid.Resources' -and $_.NamespaceURI -ceq $presentation}).Count -eq 0) 'Original host attributes require an explicit fixture update.'
+$hostTheme=$hostSource.GetAttribute('RequestedTheme');$hostBackground=$hostSource.GetAttribute('Background')
+Assert-RooIndustries (@('Dark','Light') -ccontains $hostTheme) 'Original host needs an explicit supported theme.'
+Assert-RooIndustries ($hostBackground -cmatch '^\{StaticResource ([A-Za-z_][A-Za-z0-9_]*)\}$') 'Original host background resource differs.'
+$hostBrushKey=$Matches[1]
+[xml]$themeSource=Read-HarnessInputText (Join-Path $Source 'docs\internal\frontend\RooIndustries.OptimizationSuite.App\Resources\Theme.BlackoutGold.xaml')
+$brushes=@($themeSource.DocumentElement.ChildNodes|Where-Object {$_ -is [Xml.XmlElement] -and $_.LocalName -ceq 'SolidColorBrush' -and $_.NamespaceURI -ceq $presentation -and $_.GetAttribute('Key',$names) -ceq $hostBrushKey})
+Assert-RooIndustries ($brushes.Count -eq 1) 'Shared host background brush missing or ambiguous.'
+$hostColor=$brushes[0].GetAttribute('Color')
+Assert-RooIndustries ($hostColor -cmatch '^#(?:[a-fA-F0-9]{6}|[a-fA-F0-9]{8})$') 'Shared host background color is unsupported.'
+if($hostColor.Length -eq 7){$hostColor='#FF'+$hostColor.Substring(1)}
+$expectedHost=@{mainWindowSha256=(Get-RooIndustriesFileSha256 $mainWindowPath);rootName=$hostSource.GetAttribute('Name',$names);requestedTheme=$hostTheme;actualHostTheme=$hostTheme;actualPageTheme=$hostTheme;backgroundResourceKey=$hostBrushKey;backgroundColor=$hostColor.ToUpperInvariant();pageIsDirectChild=$true}
 $ffmpeg=Get-Command ffmpeg -CommandType Application -ErrorAction SilentlyContinue
 Assert-RooIndustries ($null -ne $ffmpeg) 'Existing ffmpeg/libx264 required; install nothing.'
 $encoders=Invoke-RooIndustriesOwnedCommand $ffmpeg.Source @('-hide_banner','-encoders') $CaptureOut $CaptureOut 'roo70-ffmpeg-prerequisite' 10
@@ -195,6 +214,7 @@ try{
    $zipHash=if($zipBytes){Get-RooIndustriesFileSha256 $zip}else{$null}
    if($name -ceq 'online-sent'){Assert-RooIndustries (-not(Test-HarnessPath $zip)) 'Successful scene still has its outgoing ZIP.'}
    $expected=Assert-RooIndustriesCheckpoint $checkpoint $identity $name $view @($seenIds.ToArray()) $zipBytes
+   Assert-RooIndustriesExact $checkpoint.host $expectedHost 'Host'
    if($view -ceq 'top'){$topHash=ConvertTo-RooIndustriesSha256 $checkpoint.stateSha256}else{Assert-RooIndustries ((ConvertTo-RooIndustriesSha256 $checkpoint.stateSha256) -ceq $topHash) 'Producer-carried state hash changed during top/bottom navigation.';Assert-RooIndustriesExact $checkpoint.state $expected 'bottom.State'}
    $immutable=Copy-HarnessFile $path (Join-Path $CaptureOut ($name+'-'+$view+'-checkpoint.json')) 'roo70-immutable-checkpoint' 'frame'
    Assert-RooIndustries ([RooIndustriesTour.Desktop]::Focus([IntPtr]::new([long]$checkpoint.windowHandle))) 'Owned window could not receive foreground focus.'
@@ -235,6 +255,7 @@ try{
  $null=Get-RooIndustriesOriginalFile $finalEntry.identity.path;$final=Read-HarnessInputText $finalEntry.identity.path|ConvertFrom-Json
  Assert-RooIndustries ($final.schemaVersion -eq 1 -and $final.sourceCommit -ceq $script:RooIndustriesCommit -and $final.Nonce -ceq $binding.uiNonce -and $final.native -eq $true -and $final.productionStartupProved -eq $false -and $final.positiveMarker -ceq 'ROO_INDUSTRIES_BUG_REPORT_RENDERED_8COMPLETE' -and ($final.seen -join ',') -ceq ($script:RooIndustriesScenes -join ',') -and $observed.Count -eq 16) 'No exact eight-scene native completion.'
  Assert-RooIndustries ($final.fixturePid -eq $owned.Identity.pid -and [string]$final.creationTimeFileTimeUtc -ceq $owned.Identity.creationTimeFileTimeUtc -and [string]$final.windowHandle -ceq $observed[0].windowHandle) 'Final refresh evidence lost original process/HWND binding.'
+  Assert-RooIndustriesExact $final.host $expectedHost 'Final.Host'
  Assert-RooIndustries (@(Get-HarnessChildren $UiOutput -File -Filter '*-checkpoint.json').Count -eq 16 -and @(Get-HarnessChildren $UiOutput -File -Filter 'ack-*.json').Count -eq 16 -and @($seenIds.ToArray()|Sort-Object -Unique).Count -eq 16) 'Exactly sixteen unique actual checkpoint/ack pairs required.'
  foreach($checkpointId in $seenIds.ToArray()){
   $ackPath=Join-Path $UiOutput ('ack-'+$checkpointId+'.json');$null=Get-RooIndustriesOriginalFile $ackPath
@@ -250,7 +271,7 @@ try{
  Assert-RooIndustries ($metadata.stderr -match 'Duration: 00:00:10\.' -and $metadata.stderr -match '\bVideo: h264\b[^\r\n]*\byuv420p\(tv(?:,|\))') 'Actual encoded video metadata differs.'
  Assert-RooIndustries (@(Get-HarnessChildren $CaptureOut -File -Filter '*.png').Count -eq 16) 'Exactly sixteen actual screenshots required.'
  $null=Register-RooIndustriesTree $frames 'roo70-actual-video-frame'
- Write-HarnessResult $CaptureOut 'rendered-proof.json' @{readerAdverse=$read.readerAdverse;sourceCommit=$script:RooIndustriesCommit;binaryFiles=$build.files;sourceManifestSha256=(ConvertTo-RooIndustriesSha256 $script:Harness.Manifest);uiNonce=$binding.uiNonce;invocationNonce=$binding.invocationNonce;nativeExit=$exit;checkpoints=@($observed.ToArray());nativeFinal=$finalEntry;attachmentRefreshMarker=$final.attachmentRefreshMarker;attachmentRefresh=$refreshProof;fallbackProof=$refreshProof[3].fallbackProof;movie=$movieEntry;actualFrames=$frameCount;actualSeconds=$seconds;skipped=$skipped;actualNative=$true;productionStartupProved=$false;leadAndSolVision='PENDING';stateHash='carried producer hash; all model/spec fields independently compared, not PS reserialized'}|Out-Null
+  Write-HarnessResult $CaptureOut 'rendered-proof.json' @{readerAdverse=$read.readerAdverse;sourceCommit=$script:RooIndustriesCommit;binaryFiles=$build.files;sourceManifestSha256=(ConvertTo-RooIndustriesSha256 $script:Harness.Manifest);uiNonce=$binding.uiNonce;invocationNonce=$binding.invocationNonce;nativeExit=$exit;checkpoints=@($observed.ToArray());nativeFinal=$finalEntry;host=$final.host;attachmentRefreshMarker=$final.attachmentRefreshMarker;attachmentRefresh=$refreshProof;fallbackProof=$refreshProof[3].fallbackProof;movie=$movieEntry;actualFrames=$frameCount;actualSeconds=$seconds;skipped=$skipped;actualNative=$true;productionStartupProved=$false;leadAndSolVision='PENDING';stateHash='carried producer hash; all model/spec fields independently compared, not PS reserialized'}|Out-Null
  $done=$true
 }catch{
  Write-HarnessResult $CaptureOut 'rendered-failure.json' @{error=$_.Exception.ToString();stack=$_.ScriptStackTrace;sourceCommit=$script:RooIndustriesCommit;observed=@($observed.ToArray())}|Out-Null
