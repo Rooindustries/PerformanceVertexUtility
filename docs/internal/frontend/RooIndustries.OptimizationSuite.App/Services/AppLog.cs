@@ -1,7 +1,6 @@
 using System;
 using System.IO;
 using System.Linq;
-using System.Text.RegularExpressions;
 using System.Threading;
 
 namespace RooIndustries.OptimizationSuite.Services;
@@ -16,10 +15,7 @@ public static class AppLog
     public const string Failed = "Something went wrong. Details were saved to the app log (Settings, Open logs folder).";
     public const string TimedOut = "This took too long and was stopped. Try again. If you were changing something, check Undo changes first.";
 
-    private static readonly (Regex Pattern, string Replacement)[] Identity = new[] { (Environment.MachineName, "<pc-name>"), (Environment.UserName, "<user>") }
-        .Where(item => item.Item1 is { Length: >= 2 })
-        .Select(item => (new Regex(@"(?<![\p{L}\p{N}_])" + Regex.Escape(item.Item1) + @"(?![\p{L}\p{N}_])", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant), item.Item2))
-        .ToArray();
+    private static readonly Lazy<BugRedactor> Redactor = new(BugRedactor.Current);
 
     public static string Folder => Path.Combine(RooIndustries.Optimizer.BrandCompatibility.LocalDataRoot, "logs");
     public static string FilePath => Path.Combine(Folder, "app.log");
@@ -51,9 +47,7 @@ public static class AppLog
         if (string.IsNullOrWhiteSpace(detail) || !Volatile.Read(ref _enabled)) return;
         try
         {
-            var profile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-            var text = string.IsNullOrEmpty(profile) ? detail : detail.Replace(profile, "%USERPROFILE%", StringComparison.OrdinalIgnoreCase);
-            foreach (var (pattern, replacement) in Identity) text = pattern.Replace(text, replacement);
+            var text = Redactor.Value.Redact(detail);
             lock (Gate)
             {
                 Directory.CreateDirectory(Folder);

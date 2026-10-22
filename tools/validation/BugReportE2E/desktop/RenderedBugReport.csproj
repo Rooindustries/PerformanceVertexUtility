@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+<PropertyGroup>
+<StartupHookSupport>false</StartupHookSupport><OutputType>WinExe</OutputType><TargetFramework>net8.0-windows10.0.19041.0</TargetFramework><TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+<RootNamespace>RooIndustries.OptimizationSuite</RootNamespace><AssemblyName>Roo70.RenderedBugReportFixture</AssemblyName><ApplicationManifest>app.manifest</ApplicationManifest>
+<Platforms>x64</Platforms><Platform>x64</Platform><RuntimeIdentifier>win-x64</RuntimeIdentifier><UseWinUI>true</UseWinUI><Nullable>enable</Nullable><ImplicitUsings>enable</ImplicitUsings><LangVersion>latest</LangVersion>
+<WindowsPackageType>None</WindowsPackageType><EnableMsixTooling>true</EnableMsixTooling><DefaultLanguage>en-US</DefaultLanguage><ConcurrentGarbageCollection>false</ConcurrentGarbageCollection><IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+</PropertyGroup>
+<ItemGroup>
+<PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.260529003" />
+<PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.4654" />
+<PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.2" />
+<ProjectReference Include="../../../../backend/native/Optimizer.Core/Optimizer.Core.csproj" />
+<Compile Include="../shared/*.cs" Link="Shared/%(Filename)%(Extension)" />
+<Compile Include="../../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Views/BugReportPage.xaml.cs" Link="Views/BugReportPage.xaml.cs" />
+<Compile Include="../../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Views/ResponsiveContentSizer.cs" Link="Views/ResponsiveContentSizer.cs" />
+<Compile Include="../../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/ViewModels/BugReportViewModel.cs" Link="ViewModels/BugReportViewModel.cs" />
+<Compile Include="../../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/BugReportService.cs" Link="Services/BugReportService.cs" />
+<Compile Include="../../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/BugRedactor.cs" Link="Services/BugRedactor.cs" />
+<Compile Include="../../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/AppLog.cs" Link="Services/AppLog.cs" />
+<Compile Include="../../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Helpers/Format.cs" Link="Helpers/Format.cs" />
+<Compile Include="../../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Converters/Converters.cs" Link="Converters/Converters.cs" />
+<EmbeddedResource Include="../../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/MainWindow.xaml" LogicalName="Roo70Fixture.ProductionMainWindow.xaml" />
+<Page Include="../../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Views/BugReportPage.xaml" Link="Views/BugReportPage.xaml" />
+<Page Include="../../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Resources/Theme.BlackoutGold.xaml" Link="Resources/Theme.BlackoutGold.xaml" />
+<Page Include="../../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Resources/Brand.xaml" Link="Resources/Brand.xaml" />
+<Page Include="../../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Resources/Styles.xaml" Link="Resources/Styles.xaml" />
+<Content Include="../../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Assets/Fonts/roboto-flex-latin-opsz-normal.ttf" Link="Assets/Fonts/roboto-flex-latin-opsz-normal.ttf" CopyToOutputDirectory="PreserveNewest" />
+<RuntimeHostConfigurationOption Include="System.GC.ConserveMemory" Value="5" />
+<Compile Include="$(RooIndustriesBindingFile)" Link="SourceBinding.cs" />
+</ItemGroup><Target Name="RequireRooIndustriesBinding" BeforeTargets="CoreCompile">
+<Error Condition="'$(RooIndustriesBindingFile)' == '' Or !Exists('$(RooIndustriesBindingFile)')" Text="RooIndustriesBindingFile must identify the original frame's generated source binding." />
+</Target>
+</Project>

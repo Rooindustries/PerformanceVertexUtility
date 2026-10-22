@@ -90,7 +90,8 @@
         "tools/validation/Update/run_harness_checks.py",
         "tools/validation/Update/run_manual_install.py",
         "tools/validation/Update/run_shipped.py",
-        "tools/validation/Update/run_trace_checks.py"
+        "tools/validation/Update/run_trace_checks.py",
+        "tools/validation/BugReportE2E/applog/Program.cs"
       ],
       "reason": "Windows harness staging and host-lease root; existing frames, cleanup ownership and path-length guards depend on this exact path spelling, including its source escaping."
     },
@@ -116,7 +117,9 @@
         "tools/validation/Release/Test-SourceReadBoundary.py",
         "tools/validation/Release/Test-WindowsSshInlineLimit.py",
         "tools/validation/Update/Clear-UpdateFrame.ps1",
-        "tools/validation/Update/Harness.Common.ps1"
+        "tools/validation/Update/Harness.Common.ps1",
+        "tools/validation/BugReportE2E/shared/OwnedBoundary.cs",
+        "tools/validation/BugReportE2E/phases/Contract.Common.ps1"
       ],
       "reason": "Windows harness staging and host-lease root; existing frames, cleanup ownership and path-length guards depend on this exact path spelling, including its source escaping."
     },

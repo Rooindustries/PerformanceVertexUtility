@@ -72,8 +72,9 @@ These must hold on every commit of `main`. Each one names the code that enforces
      The app log is redacted when it's written (`AppLog`).
    - Checked by: `tools/validation/AppSweepUi/BugReportChecks.cs`.
    - Known gaps:
-     - Another account's folder name stops being redacted at a space or apostrophe, and the app log uses its own narrower rules.
      - Other accounts' profiles outside a drive's `Users` directory, including relocated and network profiles, aren't redacted.
+     - Old log entries with `%USERPROFILE%` followed by a name suffix can expose that suffix.
+     - Paths with mixed separator runs, a dot component, or three backslashes before `n`, `r`, `t`, `b` or `f` can leave an account name visible.
      - Account names and PC names of one character aren't redacted.
      - Microsoft Entra account SIDs (`S-1-12-1-...`) aren't redacted.
 
@@ -117,6 +118,8 @@ Anything that reads or changes the registry, services, process, I/O or GPU prior
 ```
 
 From Linux, `tools/validation/windows_ssh.py` checks the machine name, stages tracked source and runs a validation script (see `backend/README.md`). Add `--include-frontend` for suites that compile desktop sources. Test the AMD and NVIDIA paths on their own PCs; one doesn't prove the other. Compiling the app isn't a UI check: launch it, take screenshots and look at them.
+
+For report privacy changes, run `tools/validation/BugReportE2E/Invoke-BugReportE2E.ps1` through the existing `windows_ssh.py interactive-frame` command with `Source`, `OutRoot`, `ExpectedCommit` and `Scenario=All`. Follow [the report E2E recipe](tools/validation/BugReportE2E/README.md): use a granted Windows window, the original preclaimed frame/lease and empty original-ledger output; retrieve proof before original-ledger cleanup. Linux preparation does not prove the nine disk writes or eight rendered scenes.
 
 ## How we ship
 

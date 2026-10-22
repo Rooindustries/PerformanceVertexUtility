@@ -14,6 +14,7 @@
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/DataGeneration.cs" Link="DataGeneration.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Views/ChangeWatch.cs" Link="ChangeWatch.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/AppLog.cs" Link="AppLog.cs" />
+    <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/BugRedactor.cs" Link="BugRedactor.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/HostOutput.cs" Link="HostOutput.cs" />
     <EmbeddedResource Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Assets/Tweaks/presentation.json" LogicalName="RooIndustries.TweakPresentation.json" />
     <EmbeddedResource Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Assets/Tweaks/icons.json" LogicalName="RooIndustries.TweakIcons.json" />

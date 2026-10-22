@@ -128,6 +128,11 @@ public partial class BugReportViewModel : ObservableObject
         try
         {
             var outcome = await _service.SendAsync(Report(), _attachment);
+            if (outcome.Attachment is { } attachment)
+            {
+                _attachment = attachment;
+                AttachmentText = "Attached " + attachment.FileName + " (" + Format.Bytes(attachment.Bytes) + ")";
+            }
             var seconds = Math.Max(1, (int)Math.Ceiling(outcome.Wait.TotalSeconds));
             switch (outcome.Status)
             {
