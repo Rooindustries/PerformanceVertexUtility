@@ -23,7 +23,7 @@ public sealed record BugAttachment(string FilePath, long Bytes)
 }
 public sealed record BugSendResult(bool Sent, int? StatusCode = null, TimeSpan? RetryAfter = null, string? Error = null);
 public enum BugSendStatus { Sent, NotConfigured, NeedsDetails, Throttled, RateLimited, Offline, Rejected }
-public sealed record BugSendOutcome(BugSendStatus Status, TimeSpan Wait = default);
+public sealed record BugSendOutcome(BugSendStatus Status, TimeSpan Wait = default, BugAttachment? Attachment = null);
 
 public interface IBugReportSender
 {
@@ -241,14 +241,14 @@ public sealed class BugReportService
         {
             var retry = _now() + (result.RetryAfter ?? SendInterval);
             if (retry > _nextSendUtc) _nextSendUtc = retry;
-            return new(BugSendStatus.RateLimited, WaitBeforeSend);
+            return new(BugSendStatus.RateLimited, WaitBeforeSend, current);
         }
         if (result.StatusCode is null)
         {
             _nextSendUtc = DateTime.MinValue;
-            return new(BugSendStatus.Offline);
+            return new(BugSendStatus.Offline, Attachment: current);
         }
-        return new(BugSendStatus.Rejected);
+        return new(BugSendStatus.Rejected, Attachment: current);
     }
 
     public string SaveReport(BugReport report, BugAttachment attachment)
