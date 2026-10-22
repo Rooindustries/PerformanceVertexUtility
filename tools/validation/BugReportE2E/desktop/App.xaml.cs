@@ -33,12 +33,16 @@ public partial class App : Application
             boundary = OwnedBoundary.Parse(Environment.GetCommandLineArgs().Skip(1).ToArray());
             ScenarioDriver.RequireDisabledLog();
             window = new Window { Title = "ROO70 isolated bug-report fixture " + boundary.Nonce };
-            await ScenarioDriver.RunAsync(boundary.Data, boundary.Output, CreateSurface, CaptureAsync,
+            var run = await ScenarioDriver.RunAsync(boundary.Data, boundary.Output, CreateSurface, CaptureAsync,
                 "Native planned: exact XAML/page handlers via ButtonAutomationPeer; VM input seeding is not UIA typing; isolated bootstrap");
-            ScenarioDriver.Require(seen.SequenceEqual(ScenarioDriver.Names), "Six captured scenes required in order.");
+            ScenarioDriver.Require(seen.SequenceEqual(ScenarioDriver.Names), "Eight captured scenes required in order.");
+            using var process = Process.GetCurrentProcess();
             Atomic("final-result.json", new { schemaVersion = 1, boundary.Nonce, sourceCommit = BuildBinding.SourceCommit,
+                fixturePid = process.Id, creationTimeFileTimeUtc = process.StartTime.ToUniversalTime().ToFileTimeUtc().ToString(),
+                windowHandle = WinRT.Interop.WindowNative.GetWindowHandle(window).ToInt64().ToString(),
+                attachmentRefresh = run.AttachmentRefresh, attachmentRefreshMarker = "ROO_INDUSTRIES_BUG_REPORT_ATTACHMENT_REFRESH_COMPLETE",
                 seen, native = true, productionStartupProved = false, proofSeam = "Minimal App + fake Live/Operations/FakeSender; actual page/VM/service/parser/resources; seeded inputs",
-                positiveMarker = "ROO_INDUSTRIES_BUG_REPORT_RENDERED_6COMPLETE" });
+                positiveMarker = "ROO_INDUSTRIES_BUG_REPORT_RENDERED_8COMPLETE" });
             ReaderAdverse.AttachIfRequested(boundary.Frame, boundary.Nonce, "rendered");
             window.Close();
             Exit();
@@ -73,18 +77,23 @@ public partial class App : Application
         }
         async Task SeedVisible()
         {
+            var expectedCpu = vm.Specs.Single(x => x.Key == "cpu").Value;
             await ScenarioDriver.Wait(() =>
             {
                 var boxes = Descendants(currentPage).OfType<TextBox>().ToArray();
                 return ScenarioDriver.CanonicalDescription(vm.Description) == ScenarioDriver.Description
                     && ScenarioDriver.CanonicalDescription(boxes.Single(x => AutomationProperties.GetAutomationId(x) == "BugDescription").Text) == ScenarioDriver.Description
                     && boxes.Single(x => AutomationProperties.GetAutomationId(x) == "BugContact").Text == vm.Contact
-                    && boxes.Single(x => (x.Header as string) == "Processor").Text == ScenarioDriver.Raw;
+                    && boxes.Single(x => (x.Header as string) == "Processor").Text == expectedCpu;
             }, "Seeded actual bound textboxes did not update.");
         }
         return new Surface(vm, () => Invoke("BugAttachLogs", () => vm.AttachmentText.StartsWith("Attached ", StringComparison.Ordinal)),
             () => Invoke("BugSave", () => vm.HasSavedReport),
-            () => Invoke("BugSend", () => sender.Calls.Count == 1 && vm.Status != "Sending your report..."), SeedVisible);
+            () =>
+            {
+                var expectedCalls = sender.Calls.Count + 1;
+                return Invoke("BugSend", () => sender.Calls.Count == expectedCalls && vm.Status != "Sending your report...");
+            }, SeedVisible);
     }
     private async Task CaptureAsync(SceneReceipt receipt, BugReportViewModel vm)
     {

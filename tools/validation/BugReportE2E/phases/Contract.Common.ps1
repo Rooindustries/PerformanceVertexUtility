@@ -1,4 +1,4 @@
-$script:RooIndustriesScenes=@('offline-empty','offline-attached','offline-saved','online-failed','online-fallback-saved','online-sent')
+$script:RooIndustriesScenes=@('offline-empty','offline-attached','offline-saved','online-rate-limited','online-offline','online-failed','online-fallback-saved','online-sent')
 function Assert-RooIndustries([bool]$Ok,[string]$Message){if(-not$Ok){throw $Message}}
 function ConvertTo-RooIndustriesSha256([string]$Value){
  Assert-RooIndustries ($Value -cmatch '^[a-fA-F0-9]{64}$') 'SHA256 must contain exactly 64 hexadecimal characters.'
@@ -43,18 +43,36 @@ function Assert-RooIndustriesExact($Actual,$Expected,[string]$Field){
  }
  Assert-RooIndustries ($null -ne $Actual -and [string]$Actual -ceq [string]$Expected) ($Field+' differs.')
 }
+function Get-RooIndustriesSceneCase([string]$Name){
+ switch -CaseSensitive ($Name){
+  'offline-empty' {return @{Suffix='';Calls=0;Status=''}}
+  'offline-attached' {return @{Suffix='';Calls=0;Status=''}}
+  'offline-saved' {return @{Suffix='';Calls=0;Status=''}}
+  'online-rate-limited' {return @{Suffix=' | rate-limited';Calls=1;Status='Too many reports are being sent right now. Try again in 120 seconds, or save the report to a file.'}}
+  'online-offline' {return @{Suffix=' | offline';Calls=2;Status="Couldn't send the report. Check your internet connection and try again, or save the report to a file and send it yourself."}}
+  'online-failed' {return @{Suffix=' | rejected';Calls=3;Status="The report couldn't be delivered. Try again later, or save the report to a file and send it yourself."}}
+  'online-fallback-saved' {return @{Suffix=' | rejected';Calls=3;Status=''}}
+  'online-sent' {return @{Suffix=' | later';Calls=4;Status='Thanks! Your report was sent to the developers.'}}
+  default {throw 'Unknown scene.'}
+ }
+}
+function Get-RooIndustriesAttachmentLabel([string]$Name,[long]$Length){
+ Assert-RooIndustries ($Length -gt 0) 'Attached ZIP must not be empty.'
+ $bytes=[double]$Length;$unit=0;$units=@('B','KB','MB','GB','TB');while($bytes -ge 1024 -and $unit -lt 4){$bytes/=1024;$unit++}
+ $size=$bytes.ToString($(if($unit -ge 3){'0.0'}else{'0'}),[Globalization.CultureInfo]::InvariantCulture)+' '+$units[$unit]
+ return 'Attached '+$Name+' ('+$size+')'
+}
 function New-RooIndustriesExpectedState([string]$Name,[string]$Data,[long]$AttachedBytes){
  Assert-RooIndustries ($script:RooIndustriesScenes -ccontains $Name) 'Unknown scene.'
  $raw='C:\Users\'+"Zqx Bob O'Neil\AppData\x.log";$forward='C:/Users/'+'Zqxbob/AppData/x.log';$r9='C:/Users/\u003Cuser\u003E%USERPROFILE%\u003Cuser\u003EZqxbob/x'
  $empty=$Name -ceq 'offline-empty';$sent=$Name -ceq 'online-sent';$online=$Name.StartsWith('online-');$saved=$Name -in @('offline-saved','online-fallback-saved')
- $zip='roo-industries-bug-report-20261021-010203.zip';$savedName='roo-industries-bug-report-20261021-010203-saved-010203.zip'
- $scenario=if(-not$online){'offline'}elseif($sent){'sent'}else{'failed'}
+ $zip='roo-industries-bug-report-20261021-010203.zip';$savedName='roo-industries-bug-report-20261021-010203-saved-'+$(if($online){'010404'}else{'010203'})+'.zip'
+ $scenario=if(-not$online){'offline'}else{'failed'}
  $path=$null;if($saved){$path=$Data+'\'+$scenario+'\reports\saved\'+$savedName}
- $bytes=[double]$AttachedBytes;$unit=0;$units=@('B','KB','MB','GB','TB');while($bytes -ge 1024 -and $unit -lt 4){$bytes/=1024;$unit++}
- $size=$bytes.ToString($(if($unit -ge 3){'0.0'}else{'0'}),[Globalization.CultureInfo]::InvariantCulture)+' '+$units[$unit]
- $attachment=if($empty -or $sent){'No logs attached yet.'}else{'Attached '+$zip+' ('+$size+')'}
- $status=if($saved){'Saved '+$savedName+'. Select Open folder, then send that file to the developers.'}elseif($Name -ceq 'online-failed'){"The report couldn't be delivered. Try again later, or save the report to a file and send it yourself."}elseif($sent){'Thanks! Your report was sent to the developers.'}else{''}
- $cpu=if($empty){'Fixture CPU'}else{$raw}
+ $attachment=if($empty -or $sent){'No logs attached yet.'}else{Get-RooIndustriesAttachmentLabel $zip $AttachedBytes}
+ $case=Get-RooIndustriesSceneCase $Name
+ $status=if($saved){'Saved '+$savedName+'. Select Open folder, then send that file to the developers.'}else{$case.Status}
+ $cpu=if($empty){'Fixture CPU'}else{$raw+$case.Suffix}
  $model=@{OnlineAvailable=$online;OfflineOnly=(-not$online);Busy=$false;LoadingSpecs=$false;CanAttach=$true;CanSend=(-not($empty -or $sent));ShowSave=(-not$sent);HasSavedReport=$saved;SavedPath=$path;Description=$(if($empty -or $sent){''}else{$raw+"`n"+$forward+"`n"+$r9});Contact=$(if($empty -or $sent){''}else{'retain-contact@example.com'});AttachmentText=$attachment;Status=$status;Cpu=$cpu;SpecCount=9}
  $specs=@(@{Key='windows';Label='Windows';Value='Fixture Windows'},@{Key='cpu';Label='Processor';Value=$cpu},@{Key='gpu';Label='Graphics and driver';Value='Unknown'},@{Key='ram';Label='Memory';Value='Unknown'},@{Key='motherboard';Label='Motherboard';Value='Unknown'},@{Key='bios';Label='BIOS version';Value='Unknown'},@{Key='drive';Label='System drive';Value='Unknown'},@{Key='display';Label='Main display';Value='Unknown'},@{Key='app';Label='App version';Value='0.10.0-beta fixture'})
  return @{model=$model;specs=$specs}
@@ -68,7 +86,7 @@ function Assert-RooIndustriesCheckpoint($Checkpoint,$Identity,[string]$Name,[str
  Assert-RooIndustriesExact $Checkpoint.state $expected 'State'
  foreach($value in @($Checkpoint.state.model.Description,$Checkpoint.state.model.Contact,$Checkpoint.state.model.Cpu,$Checkpoint.state.model.AttachmentText,$Checkpoint.state.model.Status)){Assert-RooIndustriesScalars $value}
  $receipt=$Checkpoint.receipt|ConvertFrom-Json
- Assert-RooIndustries ($receipt.Name -ceq $Name -and $receipt.SenderCalls -eq $(if($Name.StartsWith('online-')){1}else{0}) -and $receipt.Scope -ceq 'Native planned: exact XAML/page handlers via ButtonAutomationPeer; VM input seeding is not UIA typing; isolated bootstrap') 'Receipt scene/sender/scope differs.'
+ Assert-RooIndustries ($receipt.Name -ceq $Name -and $receipt.SenderCalls -eq (Get-RooIndustriesSceneCase $Name).Calls -and $receipt.Scope -ceq 'Native planned: exact XAML/page handlers via ButtonAutomationPeer; VM input seeding is not UIA typing; isolated bootstrap') 'Receipt scene/sender/scope differs.'
  Assert-RooIndustriesExact $receipt.State $expected.model 'receipt.State'
  foreach($file in @($receipt.Evidence)){Assert-RooIndustries ($file.Sha256 -cmatch '^[a-f0-9]{64}$' -and $file.Bytes -gt 0) 'Invalid evidence file hash/size.'}
  if($View -ceq 'top'){Assert-RooIndustries ($Checkpoint.scrollOffset -eq 0) 'Top scroll is not zero.'}else{Assert-RooIndustries ($Checkpoint.scrollableHeight -gt 0 -and $Checkpoint.scrollOffset -gt 0 -and [Math]::Abs($Checkpoint.scrollOffset-$Checkpoint.scrollableHeight) -lt 2) 'Bottom scroll is not bounded at bottom.'}
