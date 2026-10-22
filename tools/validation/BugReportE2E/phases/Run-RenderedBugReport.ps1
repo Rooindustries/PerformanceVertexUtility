@@ -8,7 +8,7 @@ Assert-RooIndustriesBinding $script:Harness.Root $script:Harness.FrameId $script
 Assert-RooIndustries (@(Get-HarnessTree $CaptureOut).Count -eq 0) 'Capture directory must be fresh.'
 $buildFile=Join-Path $OutRoot 'build-desktop-binding.json';$build=Get-RooIndustriesBuild $BuildOut $OutRoot 'desktop'
 $mainWindowPath=Join-Path $Source 'docs\internal\frontend\RooIndustries.OptimizationSuite.App\MainWindow.xaml'
-[xml]$mainWindowSource=Read-HarnessInputText $mainWindowPath
+[xml]$mainWindowSource=Read-RooIndustriesSourceText $Source 'docs/internal/frontend/RooIndustries.OptimizationSuite.App/MainWindow.xaml' $binding.manifest
 $presentation='http://schemas.microsoft.com/winfx/2006/xaml/presentation';$names='http://schemas.microsoft.com/winfx/2006/xaml'
 Assert-RooIndustries ($mainWindowSource.DocumentElement.LocalName -ceq 'Window' -and $mainWindowSource.DocumentElement.NamespaceURI -ceq $presentation) 'Original MainWindow XML root differs.'
 $hostRoots=@($mainWindowSource.DocumentElement.ChildNodes|Where-Object {$_ -is [Xml.XmlElement]})
@@ -19,13 +19,13 @@ $hostTheme=$hostSource.GetAttribute('RequestedTheme');$hostBackground=$hostSourc
 Assert-RooIndustries (@('Dark','Light') -ccontains $hostTheme) 'Original host needs an explicit supported theme.'
 Assert-RooIndustries ($hostBackground -cmatch '^\{StaticResource ([A-Za-z_][A-Za-z0-9_]*)\}$') 'Original host background resource differs.'
 $hostBrushKey=$Matches[1]
-[xml]$themeSource=Read-HarnessInputText (Join-Path $Source 'docs\internal\frontend\RooIndustries.OptimizationSuite.App\Resources\Theme.BlackoutGold.xaml')
+[xml]$themeSource=Read-RooIndustriesSourceText $Source 'docs/internal/frontend/RooIndustries.OptimizationSuite.App/Resources/Theme.BlackoutGold.xaml' $binding.manifest
 $brushes=@($themeSource.DocumentElement.ChildNodes|Where-Object {$_ -is [Xml.XmlElement] -and $_.LocalName -ceq 'SolidColorBrush' -and $_.NamespaceURI -ceq $presentation -and $_.GetAttribute('Key',$names) -ceq $hostBrushKey})
 Assert-RooIndustries ($brushes.Count -eq 1) 'Shared host background brush missing or ambiguous.'
 $hostColor=$brushes[0].GetAttribute('Color')
 Assert-RooIndustries ($hostColor -cmatch '^#(?:[a-fA-F0-9]{6}|[a-fA-F0-9]{8})$') 'Shared host background color is unsupported.'
 if($hostColor.Length -eq 7){$hostColor='#FF'+$hostColor.Substring(1)}
-$expectedHost=@{mainWindowSha256=(Get-RooIndustriesFileSha256 $mainWindowPath);rootName=$hostSource.GetAttribute('Name',$names);requestedTheme=$hostTheme;actualHostTheme=$hostTheme;actualPageTheme=$hostTheme;backgroundResourceKey=$hostBrushKey;backgroundColor=$hostColor.ToUpperInvariant();pageIsDirectChild=$true}
+$expectedHost=@{mainWindowSha256=(ConvertTo-RooIndustriesSha256 $binding.manifest.files.'docs/internal/frontend/RooIndustries.OptimizationSuite.App/MainWindow.xaml');rootName=$hostSource.GetAttribute('Name',$names);requestedTheme=$hostTheme;actualHostTheme=$hostTheme;actualPageTheme=$hostTheme;backgroundResourceKey=$hostBrushKey;backgroundColor=$hostColor.ToUpperInvariant();pageIsDirectChild=$true}
 $ffmpeg=Get-Command ffmpeg -CommandType Application -ErrorAction SilentlyContinue
 Assert-RooIndustries ($null -ne $ffmpeg) 'Existing ffmpeg/libx264 required; install nothing.'
 $encoders=Invoke-RooIndustriesOwnedCommand $ffmpeg.Source @('-hide_banner','-encoders') $CaptureOut $CaptureOut 'roo70-ffmpeg-prerequisite' 10

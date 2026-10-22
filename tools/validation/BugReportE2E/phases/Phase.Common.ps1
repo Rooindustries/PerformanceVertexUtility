@@ -44,6 +44,23 @@ function Assert-RooIndustriesSource([string]$Source){
  Assert-RooIndustries ($files.Count -eq @($manifest.files.PSObject.Properties).Count+1 -and $context.frame.sourceFileCount -eq @($manifest.files.PSObject.Properties).Count) 'Immutable source file count differs.'
  return $manifest
 }
+function Read-RooIndustriesSourceText([string]$Source,[string]$Relative,$Manifest){
+ Assert-RooIndustriesRelative $Relative
+ $context=$global:RooIndustriesVerificationInvocationContext
+ Assert-RooIndustries ($null -ne $context -and (Get-HarnessPlainPath $Source) -ieq $context.frame.stagingPath -and $Manifest.commit -ceq $script:RooIndustriesCommit -and $Manifest.frameId -ceq $script:Harness.FrameId) 'Original source text binding differs.'
+ $expected=@($Manifest.files.PSObject.Properties|Where-Object {$_.Name -ceq $Relative})
+ Assert-RooIndustries ($expected.Count -eq 1) ('Source text is not in the original manifest: '+$Relative)
+ $hash=ConvertTo-RooIndustriesSha256 $expected[0].Value
+ $stream=[IO.File]::Open((Get-HarnessLongPath (Join-Path $Source $Relative)),[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::Read)
+ $sha=[Security.Cryptography.SHA256]::Create();$reader=$null
+ try{
+  $actual=[BitConverter]::ToString($sha.ComputeHash($stream)).Replace('-','').ToLowerInvariant()
+  Assert-RooIndustries ($actual -ceq $hash) ('Original source text hash differs: '+$Relative)
+  $stream.Position=0
+  $reader=[IO.StreamReader]::new($stream,[Text.UTF8Encoding]::new($false,$true),$true,4096,$true)
+  return $reader.ReadToEnd()
+ }finally{if($reader){$reader.Dispose()};$sha.Dispose();$stream.Dispose()}
+}
 function Enter-RooIndustriesPhase([string]$Source,[string]$FixtureRoot,[string]$BuildOut,[string]$OutRoot){
  Assert-RooIndustries ($null -ne $script:Harness -and $PSVersionTable.PSVersion.Major -eq 5 -and $PSVersionTable.PSVersion.Minor -eq 1 -and [IntPtr]::Size -eq 8) 'Original Windows PowerShell 5.1 x64 Harness invocation required.'
  Assert-HarnessHostLease
