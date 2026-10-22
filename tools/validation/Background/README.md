@@ -407,15 +407,15 @@ missing real producer variants remain unrun. Historical Linux outputs with
 simulated process I/O remain useful schema inputs, including unsafe historical
 outcomes, and remain labelled as historical.
 
-`Test-ProfileRestoreConfirmation.ps1`, `Test-ProfileRestoreIdentityRecovery.ps1`,
-`Test-RestoreGovernorOwnership.ps1`, `Test-RestoreProcessOperationOwnership.ps1`
-and `Test-RestoreOwnershipScale.ps1` contain historical dependency simulations.
-They are not automatic Background E2E discovery by `Test-Baseline.ps1`. The
-Baseline workflow runs its declared Linux checks and optional Windows matrix.
-The manual real restore group above is a separate required gate. C6 still
-requires 40 real processes, two controls, 125 histories and each whole Undo
-under 45 seconds. UI8, screenshots, interaction video and both actual vision
-reviews remain separate required Windows gates.
+`Test-RestoreActorReceipt.ps1` checks receipt waiting with real disposable child processes and atomic file publication on Linux or Windows. Run it with a new evidence directory:
+
+```powershell
+pwsh -NoProfile -File tools/validation/Background/Test-RestoreActorReceipt.ps1 -Source $Source -OutRoot $NewOwnedEvidence -SourceCommit $Commit
+```
+
+This checks the shared receipt consumer. It does not run the native actor or prove Windows process ownership or restore behavior. The real Windows group remains required.
+
+The retired Linux-only [Profile confirmation](https://github.com/Rooindustries/PerformanceVertexUtility/blob/8159820c33531fa476a3aefa987a3b8094ecfae6/tools/validation/Background/Test-ProfileRestoreConfirmation.ps1) and [identity recovery](https://github.com/Rooindustries/PerformanceVertexUtility/blob/8159820c33531fa476a3aefa987a3b8094ecfae6/tools/validation/Background/Test-ProfileRestoreIdentityRecovery.ps1) simulations remain in Git history. Their old receipts apply only to their recorded source inputs. `Test-RestoreGovernorOwnership.ps1`, `Test-RestoreProcessOperationOwnership.ps1` and `Test-RestoreOwnershipScale.ps1` are historical simulations, not current native proof. These Background checks are not automatically discovered by `Test-Baseline.ps1`. The Baseline workflow runs its declared Linux checks and optional Windows matrix. The manual real restore group is a separate required gate. C6 still requires 40 real processes, two controls, 125 histories and each whole Undo under 45 seconds. UI8, screenshots, interaction video and both actual vision reviews remain separate required Windows gates.
 
 The Global governor gate coordinates supported actors for the current SID.
 The unchanged Local process-instance mutex coordinates direct Core actors in

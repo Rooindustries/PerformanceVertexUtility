@@ -155,12 +155,20 @@ function New-Actor($context,[string]$mode,$value,[string]$journal){
  Require ($process.SessionId -eq (Get-Process -Id $PID).SessionId -and $context.process.SessionId -eq $process.SessionId) 'Actor/restore/target Local mutex sessions differ.'
  return $actor
 }
-function Wait-Actor($actor,[switch]$Held){
+function Read-ActorReceipt($actor){
  $clock=[Diagnostics.Stopwatch]::StartNew()
  while(-not [IO.File]::Exists($actor.output)){
-  if($actor.process.HasExited -or $clock.Elapsed.TotalSeconds -gt 10){throw 'Actor did not produce its original receipt.'};Start-Sleep -Milliseconds 10
+  if($actor.process.HasExited){
+   if(-not [IO.File]::Exists($actor.output)){throw 'Actor did not produce its original receipt.'}
+   break
+  }
+  if($clock.Elapsed.TotalSeconds -gt 10){throw 'Actor did not produce its original receipt.'}
+  Start-Sleep -Milliseconds 10
  }
- $record=Get-Content -LiteralPath $actor.output -Raw|ConvertFrom-Json
+ return (Get-Content -LiteralPath $actor.output -Raw|ConvertFrom-Json)
+}
+function Wait-Actor($actor,[switch]$Held){
+ $record=Read-ActorReceipt $actor
  Require ($record.sourceCommit -ceq $SourceCommit -and $record.nonce -ceq $actor.nonce -and $record.actorPid -eq $actor.owned.Identity.pid -and $record.actorBirth -ceq $actor.owned.Identity.creationTimeFileTimeUtc -and $record.targetPid -eq $actor.target.pid -and $record.nativeBirth -ceq $actor.target.creationTimeFileTimeUtc -and $record.executablePath -ieq [RooIndustriesValidationOwnership.Native]::Plain([string]$actor.target.imagePath)) 'Actor receipt does not bind its original actor/target/frame identities.'
  Require ($record.actorSessionId -eq (Get-Process -Id $PID).SessionId -and $record.restoreSessionId -eq $record.actorSessionId -and $record.targetSessionId -eq $record.actorSessionId) 'Actor receipt has another terminal session.'
  if(-not $Held){

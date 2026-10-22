@@ -34,9 +34,7 @@ function Set-ChangeBreakpoint($p,[string]$Command,[string]$Value){
  $race=@{done=$false;process=$p;value=$Value}
  return Set-PSBreakpoint -Command $Command -Action ({if(-not$race.done){$race.done=$true;$race.process.PriorityClass=$race.value}}.GetNewClosure())
 }
-function Set-ChangeLineBreakpoint($p,[string]$Script,[string]$Value){
- $line=@(Select-String -LiteralPath $Script -Pattern '^\s*\$entryControlChanges = @\(')
- if($line.Count -ne 1){throw ('Expected one restore control-change line in '+$Script+', found '+$line.Count)}
+function Set-ConfirmationChangeBreakpoint($p,[string]$Value){
  $race=@{done=$false;process=$p;value=$Value}
  return Set-PSBreakpoint -Command Confirm-RooIndustriesRestoreControl -Action ({if(-not$race.done){$race.done=$true;$race.process.PriorityClass=$race.value}}.GetNewClosure())
 }
@@ -76,7 +74,7 @@ function Invoke-GameScenario([string]$name,[ValidateSet('before','race','back','
    $preview=Invoke-E2EBackend 'Stop-GameTuneSession.ps1' -SessionPath $start.sessionPath|ConvertFrom-Json;Save $directory 'preview' $preview
    $entry=@($preview.preview|Where-Object processId -eq $p.Id)|Select-Object -First 1
    if($Mode -notin @('original','pending') -and (-not$entry -or @($entry.controlChanges|Where-Object control -eq 'priorityClass').Count -or @($entry.leftAsSet|Where-Object {$_.control -eq 'priorityClass' -and $_.currentValue -eq 'BelowNormal'}).Count -ne 1)){throw 'Game Tune undo preview still proposes overwriting the priority another program set'}
-   if($Mode -in @('back','original')){$breakpoint=Set-ChangeLineBreakpoint $p (Join-Path $Source 'backend\scripts\Stop-GameTuneSession.ps1') 'AboveNormal'}
+   if($Mode -in @('back','original')){$breakpoint=Set-ConfirmationChangeBreakpoint $p 'AboveNormal'}
   }
   $undo=Invoke-E2EBackend 'Stop-GameTuneSession.ps1' -SessionPath $start.sessionPath -ConfirmApply|ConvertFrom-Json;Save $directory 'undo' $undo
   $breakpointHits=0;if($breakpoint){$breakpointHits=$breakpoint.HitCount;Remove-PSBreakpoint $breakpoint;$breakpoint=$null}
@@ -149,7 +147,7 @@ function Invoke-ProfileScenario([string]$name,[ValidateSet('before','race','back
   }
   if($Mode -eq 'race'){$breakpoint=Set-ChangeBreakpoint $kept.process 'Invoke-RooIndustriesProcessControlChange' 'BelowNormal'}else{
    $kept.process.PriorityClass=if($Mode -eq 'original'){'Normal'}else{'BelowNormal'}
-   if($Mode -in @('back','original')){$breakpoint=Set-ChangeLineBreakpoint $kept.process (Join-Path $Source 'backend\scripts\Restore-ProcessProfileBackup.ps1') 'AboveNormal'}
+   if($Mode -in @('back','original')){$breakpoint=Set-ConfirmationChangeBreakpoint $kept.process 'AboveNormal'}
   }
   $undo=Invoke-E2EBackend 'Restore-ProcessProfileBackup.ps1' -BackupPath $apply.backup.location -ConfirmApply|ConvertFrom-Json;Save $directory 'undo' $undo
   $breakpointHits=0;if($breakpoint){$breakpointHits=$breakpoint.HitCount;Remove-PSBreakpoint $breakpoint;$breakpoint=$null}
