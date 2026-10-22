@@ -10,7 +10,6 @@ using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -24,50 +23,11 @@ public sealed record BugAttachment(string FilePath, long Bytes)
 }
 public sealed record BugSendResult(bool Sent, int? StatusCode = null, TimeSpan? RetryAfter = null, string? Error = null);
 public enum BugSendStatus { Sent, NotConfigured, NeedsDetails, Throttled, RateLimited, Offline, Rejected }
-public sealed record BugSendOutcome(BugSendStatus Status, TimeSpan Wait = default);
+public sealed record BugSendOutcome(BugSendStatus Status, TimeSpan Wait = default, BugAttachment? Attachment = null);
 
 public interface IBugReportSender
 {
     Task<BugSendResult> SendAsync(string webhookUrl, string payloadJson, string zipPath, CancellationToken cancellationToken);
-}
-
-public sealed class BugRedactor
-{
-    private readonly (Regex Pattern, string Replacement)[] _rules;
-
-    public BugRedactor(string? profilePath, string? userName, string? machineName)
-    {
-        var rules = new List<(Regex, string)>();
-        var profile = profilePath?.TrimEnd('\\', '/');
-        if (!string.IsNullOrWhiteSpace(profile))
-        {
-            foreach (var form in new[] { profile, profile.Replace("\\", "\\\\"), profile.Replace('\\', '/') }.Distinct())
-                rules.Add((new Regex(Regex.Escape(form), RegexOptions.IgnoreCase | RegexOptions.CultureInvariant), "%USERPROFILE%"));
-        }
-        foreach (var (value, replacement) in new[] { (machineName?.Trim(), "<pc-name>"), (userName?.Trim(), "<user>") })
-        {
-            if (value is not { Length: >= 2 }) continue;
-            rules.Add((Word(value), replacement));
-            var escaped = JsonEncodedText.Encode(value).ToString();
-            if (escaped != value) rules.Add((Word(escaped), replacement));
-        }
-        rules.Add((OtherProfiles, "<user>"));
-        rules.Add((new Regex(@"S-1-5-21(-\d+){3,4}", RegexOptions.CultureInvariant), "<sid>"));
-        _rules = rules.ToArray();
-    }
-
-    public static BugRedactor Current() => new(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), Environment.UserName, Environment.MachineName);
-
-    public string Redact(string text)
-    {
-        foreach (var (pattern, replacement) in _rules) text = pattern.Replace(text, replacement);
-        return text;
-    }
-
-    private static readonly Regex OtherProfiles = new(@"(?<=\b[A-Za-z]:(?:\\{1,2}|/)Users(?:\\{1,2}|/))(?!(?:Public|Default|Default User|All Users)(?:[\\/""]|$))[^\\/""'\s]+", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
-
-    private static Regex Word(string value)
-        => new(@"(?<![\p{L}\p{N}_])" + Regex.Escape(value) + @"(?![\p{L}\p{N}_])", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 }
 
 public sealed class DiscordWebhookSender : IBugReportSender
@@ -281,14 +241,14 @@ public sealed class BugReportService
         {
             var retry = _now() + (result.RetryAfter ?? SendInterval);
             if (retry > _nextSendUtc) _nextSendUtc = retry;
-            return new(BugSendStatus.RateLimited, WaitBeforeSend);
+            return new(BugSendStatus.RateLimited, WaitBeforeSend, current);
         }
         if (result.StatusCode is null)
         {
             _nextSendUtc = DateTime.MinValue;
-            return new(BugSendStatus.Offline);
+            return new(BugSendStatus.Offline, Attachment: current);
         }
-        return new(BugSendStatus.Rejected);
+        return new(BugSendStatus.Rejected, Attachment: current);
     }
 
     public string SaveReport(BugReport report, BugAttachment attachment)

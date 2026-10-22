@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <UseAppHost>false</UseAppHost>
+    <DebugType>portable</DebugType>
+    <Deterministic>true</Deterministic>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Program.cs" />
+    <Compile Include="BrandCompatibility.cs" />
+    <Compile Include="../shared/FixtureFiles.cs" Link="Shared/FixtureFiles.cs" />
+    <Compile Include="../shared/ReaderAdverse.cs" Link="Shared/ReaderAdverse.cs" />
+    <Compile Include="../../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/AppLog.cs" Link="AppLog.cs" />
+    <Compile Include="../../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/BugRedactor.cs" Link="BugRedactor.cs" />
+  <Compile Include="$(RooIndustriesBindingFile)" Link="SourceBinding.cs" />
+</ItemGroup>
+<Target Name="RequireRooIndustriesBinding" BeforeTargets="CoreCompile">
+<Error Condition="'$(RooIndustriesBindingFile)' == '' Or !Exists('$(RooIndustriesBindingFile)')" Text="RooIndustriesBindingFile must identify the original frame's generated source binding." />
+</Target>
+</Project>
