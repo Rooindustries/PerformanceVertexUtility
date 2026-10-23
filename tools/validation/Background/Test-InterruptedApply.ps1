@@ -1,4 +1,4 @@
-param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutRoot,[int]$Probes=60,[string[]]$Cases=@('boundaries','timeout','killed','closed','rebooted','other-program','stale-journal','race','full'))
+param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutRoot,[string]$BackendSource='',[int]$Probes=60,[string[]]$Cases=@('startup-race','boundaries','timeout','killed','closed','rebooted','other-program','stale-journal','race','full'))
 $ErrorActionPreference='Stop'
 . (Join-Path $Source 'tools\validation\LoadTimes\CleanupOwnership.Common.ps1')
 Add-Type -Path (Join-Path $Source 'tools\validation\Background\Oracle.cs')
@@ -8,10 +8,11 @@ $directory=Join-Path $OutRoot 'interrupted-apply';[IO.Directory]::CreateDirector
 $utf8=[Text.UTF8Encoding]::new($false);$owned=[Collections.Generic.List[object]]::new();$results=[ordered]@{}
 $tag=[Guid]::NewGuid().ToString('N').Substring(0,6)
 $dotnet=Join-Path $env:USERPROFILE '.dotnet\dotnet.exe';$env:DOTNET_CLI_TELEMETRY_OPTOUT='1'
-& $dotnet publish (Join-Path $Source 'tools\validation\ClientBoundary\ClientBoundary.csproj') -c Release -p:UseSharedCompilation=false -r win-x64 --self-contained false -o (Join-Path $directory 'probe') *> (Join-Path $directory 'probe-build.log')
+if(-not$BackendSource){$BackendSource=$Source}
+& $dotnet publish (Join-Path $BackendSource 'tools\validation\ClientBoundary\ClientBoundary.csproj') -c Release -p:UseSharedCompilation=false -r win-x64 --self-contained false --artifacts-path (Join-Path $directory 'build') -o (Join-Path $directory 'probe') *> (Join-Path $directory 'probe-build.log')
 if($LASTEXITCODE){throw 'Client probe build failed'}
 $probe=Join-Path $directory 'probe\ClientBoundary.dll'
-$root=Join-Path $directory 'repo';[IO.Directory]::CreateDirectory($root)|Out-Null;Copy-Item (Join-Path $Source 'backend') (Join-Path $root 'backend') -Recurse
+$root=Join-Path $directory 'repo';[IO.Directory]::CreateDirectory($root)|Out-Null;Copy-Item (Join-Path $BackendSource 'backend') (Join-Path $root 'backend') -Recurse
 $finishing='The last apply is still finishing. Try again in a moment.'
 
 function Save($name,$value){[IO.File]::WriteAllText((Join-Path $directory ($name+'.json')),($value|ConvertTo-Json -Depth 45),$utf8)}
@@ -58,6 +59,41 @@ function RestoreAll($fixtures,$before,$settings,$name,$keep=@{}){
 function StopFixtures($fixtures){foreach($p in $fixtures){Stop-OwnedProcess ($owned|Where-Object {$_.Identity.pid -eq $p.Id}|Select-Object -First 1)}}
 
 try {
+ if($Cases -contains 'startup-race'){
+  $fixtures=Fixtures 'startup-race' 1;Profile $fixtures;$before=Before $fixtures;$settings=Settings 'startup-race'
+  $applyPath=Join-Path $root 'backend\scripts\Apply-ProcessProfile.ps1';$applyText=[IO.File]::ReadAllText($applyPath)
+  $apps=@();$scripts=@()
+  try {
+   foreach($label in 'old','new'){
+    $marker=Join-Path $settings ($label+'-started.txt');$release=$marker+'.release'
+    $pause="[IO.File]::WriteAllText('$($marker.Replace("'","''"))','started'); while(-not [IO.File]::Exists('$($release.Replace("'","''"))')){Start-Sleep -Milliseconds 20}"
+    [IO.File]::WriteAllText($applyPath,$applyText.Replace(". (Join-Path `$PSScriptRoot 'ProcessProfile.Common.ps1')",". (Join-Path `$PSScriptRoot 'ProcessProfile.Common.ps1')`r`n"+$pause),$utf8)
+    $app=StartApply $settings ('startup-'+$label+'-apply');$apps+=,$app;$script=ScriptOf $app;$scripts+=,$script;$deadline=[DateTime]::UtcNow.AddSeconds(90)
+    while(-not(Test-Path -LiteralPath $marker)){if($script.process.HasExited -or [DateTime]::UtcNow -gt $deadline){throw ('The '+$label+' apply never reached startup')};Start-Sleep -Milliseconds 20}
+    $journal=Join-Path $settings 'process-profile-apply.json'
+    if(-not(Test-Path -LiteralPath $journal)){throw 'The app did not save a journal before dispatch'}
+    $saved=Get-Content -Raw -LiteralPath $journal|ConvertFrom-Json;Save ('startup-'+$label+'-journal') $saved
+    if($label -eq 'old'){
+     $oldGeneration=$saved.generation;Stop-OwnedProcess $app;$null=$app.process.WaitForExit(15000)
+     $unstarted=Service 'inspect' $settings 'startup-relaunch';if($unstarted.pending -or $unstarted.recovery){throw 'An unstarted apply blocked the next apply'}
+    }else{
+     if($saved.generation -ceq $oldGeneration){throw 'The replacement apply did not get a new generation'}
+     $hash=(Get-FileHash -LiteralPath $journal).Hash
+     [IO.File]::WriteAllText((Join-Path $settings 'old-started.txt.release'),'continue',$utf8)
+     if(-not$scripts[0].process.WaitForExit(120000)){throw 'The old apply did not finish after resuming'}
+     $changed=(Changed $fixtures).Count;$backupExists=Test-Path -LiteralPath $saved.path
+     Save 'startup-old-resumed' @{oldGeneration=$oldGeneration;newGeneration=$saved.generation;changed=$changed;newBackupExists=$backupExists;journalHash=(Get-FileHash -LiteralPath $journal).Hash;expectedJournalHash=$hash}
+     if($changed -or $backupExists -or (Get-FileHash -LiteralPath $journal).Hash -cne $hash){throw 'The old apply consumed the newer journal or changed a process'}
+     [IO.File]::WriteAllText($release,'continue',$utf8)
+     if(-not$app.process.WaitForExit(120000)){throw 'The replacement apply did not finish'}
+     $newResult=Get-Content -Raw (Join-Path $directory 'startup-new-apply.json')|ConvertFrom-Json
+     if($newResult.result.Error -or -not$newResult.result.RecoveryPath -or (Changed $fixtures).Count -ne 1){throw 'The replacement apply did not keep its own restore point'}
+    }
+   }
+   [IO.File]::WriteAllText($applyPath,$applyText,$utf8)
+   $null=Offered $settings 'startup-final-relaunch';$results['startup-race']=RestoreAll $fixtures $before $settings 'startup-restore'
+  }finally{foreach($app in $apps){Stop-OwnedProcess $app};foreach($script in $scripts){Stop-OwnedProcess $script};[IO.File]::WriteAllText($applyPath,$applyText,$utf8);StopFixtures $fixtures}
+ }
  if($Cases -contains 'boundaries'){
   $applyPath=Join-Path $root 'backend\scripts\Apply-ProcessProfile.ps1';$commonPath=Join-Path $root 'backend\scripts\ProcessProfile.Common.ps1';$statePath=Join-Path $root 'backend\scripts\OperationState.Common.ps1'
   $applyText=[IO.File]::ReadAllText($applyPath);$commonText=[IO.File]::ReadAllText($commonPath);$stateText=[IO.File]::ReadAllText($statePath);$boundaryFailures=@()

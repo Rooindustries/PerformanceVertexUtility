@@ -5,6 +5,7 @@ param(
     [string]$OutputPath = '',
     [string]$StateRoot = '',
     [string]$RecoveryJournal = '',
+    [string]$RecoveryGeneration = '',
     [switch]$ConfirmApply
 )
 
@@ -127,7 +128,11 @@ try {
     if ($ConfirmApply -and -not [string]::IsNullOrWhiteSpace($RecoveryJournal)) {
         $journalLock = Lock-RooIndustriesOperation $RecoveryJournal
         if (-not [IO.File]::Exists($RecoveryJournal)) { throw 'The app already closed this apply. Nothing was changed.' }
-        $journalBackupPath = [string](Get-RooIndustriesPropertyValue (Read-RooIndustriesOperationJson $RecoveryJournal).data 'path' '')
+        $journal = (Read-RooIndustriesOperationJson $RecoveryJournal).data
+        if ([string]::IsNullOrWhiteSpace($RecoveryGeneration) -or [string](Get-RooIndustriesPropertyValue $journal 'generation' '') -cne $RecoveryGeneration) {
+            throw 'This process apply is no longer current. Nothing was changed.'
+        }
+        $journalBackupPath = [string](Get-RooIndustriesPropertyValue $journal 'path' '')
         if ([string]::IsNullOrWhiteSpace($journalBackupPath) -or -not [IO.Path]::IsPathRooted($journalBackupPath) -or [IO.File]::Exists($journalBackupPath)) {
             throw 'The apply journal does not name a new backup. Nothing was changed.'
         }

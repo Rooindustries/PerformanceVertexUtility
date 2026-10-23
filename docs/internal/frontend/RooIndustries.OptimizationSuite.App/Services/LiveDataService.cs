@@ -248,7 +248,8 @@ public sealed class LiveDataService
         var result = await RunBackendScriptResultAsync(
             "Apply-ProcessProfile.ps1",
             ct,
-            "-ConfirmApply -Preset " + preset + " -RecoveryJournal " + QuotePowerShell(ProcessApplyPath)).ConfigureAwait(false);
+            "-ConfirmApply -Preset " + preset + " -RecoveryJournal " + QuotePowerShell(ProcessApplyPath)
+                + " -RecoveryGeneration " + QuotePowerShell(generation)).ConfigureAwait(false);
         (ProcessProfileRecovery? Recovery, string? Error) settled;
         try { settled = SettleProcessApply(TimeSpan.FromSeconds(15)); }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
