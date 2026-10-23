@@ -135,14 +135,14 @@ public static class TimerControl
         if (!Read(before.Address).Same(before)) throw new InvalidDataException("Timer ownership changed after review.");
         if (desired.GetBoolean()) Start(roots); else Stop(roots);
     }
-    private static void Start(Roots roots)
+    private static void Start(Roots roots, bool autostart = false)
     {
         var existing = State(roots);
         using var prior = existing is null ? null : Running(existing);
         if (prior is not null) throw new InvalidOperationException("An existing timer worker has not stopped.");
         var assembly = Assembly.GetEntryAssembly()?.Location ?? throw new InvalidDataException("Timer worker packaging is unavailable.");
         var launch = new TimerLaunch(OperationOwner.Current(), Guid.NewGuid().ToString("N"), roots.Control, assembly, OperationFiles.HashFile(assembly));
-        var path = Path.Combine(roots.Control, "launch.json");
+        var path = Path.Combine(autostart ? roots.State : roots.Control, "launch.json");
         var executable = Environment.ProcessPath ?? throw new InvalidDataException("Timer host executable is unavailable.");
         var command = new StringBuilder().Append('"').Append(executable).Append('"');
         if (Path.GetFileNameWithoutExtension(executable).Equals("dotnet", StringComparison.OrdinalIgnoreCase)) command.Append(" \"").Append(assembly).Append('"');
@@ -174,8 +174,8 @@ public static class TimerControl
         }
         catch
         {
-            OperationFiles.Write(Path.Combine(roots.Control, "stop.json"), launch);
-            if (!worker.WaitForExit(5000)) { worker.Kill(); worker.WaitForExit(); }
+            if (!autostart) OperationFiles.Write(Path.Combine(roots.Control, "stop.json"), launch);
+            if (!worker.WaitForExit(autostart ? 0 : 5000)) { worker.Kill(); worker.WaitForExit(); }
             throw;
         }
     }
@@ -240,8 +240,6 @@ public static class TimerControl
         catch (Exception error) when (error is Win32Exception or InvalidOperationException or NotSupportedException) { return null; }
     }
     public static void RunWorker(string launchPath)
-        => RunWorker(launchPath, null);
-    private static void RunWorker(string launchPath, Action? ready)
     {
         var launch = OperationFiles.Read<TimerLaunch>(launchPath); launch.Owner.Verify();
         var roots = RootsOf(launch.Root);
@@ -268,7 +266,6 @@ public static class TimerControl
                 if (applied.Elapsed > TimeSpan.FromSeconds(2)) throw new InvalidOperationException("Windows did not apply the 0.5 ms timer request (current interval " + (current / 10000.0).ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) + " ms).");
                 Thread.Sleep(50);
             }
-            ready?.Invoke();
             while (true)
             {
                 var path = Path.Combine(roots.Control, "stop.json");
@@ -298,11 +295,12 @@ public static class TimerControl
         Directory.CreateDirectory(roots.State);
         using var guard = OperationFiles.Lock(Path.Combine(roots.State, "control"));
         var state = State(roots); using var running = state is null ? null : Running(state);
-        if (running is not null) return;
-        var assembly = Assembly.GetEntryAssembly()!.Location;
-        var launch = new TimerLaunch(OperationOwner.Current(), Guid.NewGuid().ToString("N"), roots.Control, assembly, OperationFiles.HashFile(assembly));
-        var path = Path.Combine(roots.State, "launch.json"); OperationFiles.Write(path, launch);
-        RunWorker(path, guard.Dispose);
+        if (running is not null)
+        {
+            if (state is { Acquired: true, Released: false, Error: null }) return;
+            throw new IOException("The existing timer worker has not confirmed acquisition.");
+        }
+        Start(roots, autostart: true);
     }
     private static ProcessInfo LaunchWorker(string executable, StringBuilder command, bool userToken)
     {
