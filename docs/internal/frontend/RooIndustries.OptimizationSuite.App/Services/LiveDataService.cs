@@ -1267,13 +1267,6 @@ public sealed class LiveDataService
             throw;
         }
 
-        if (generation != _cleanupReviewGeneration)
-        {
-            TryDeleteDirectory(dir);
-            var error = "The selected app changed; review its inputs again.";
-            LastError = error;
-            return new(null, error);
-        }
         var officialHash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(official.Json)));
         var cleanupHash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(cleanup.Json)));
         return new(new(dir, officialPath, manifestPath, officialHash, cleanupHash), null);

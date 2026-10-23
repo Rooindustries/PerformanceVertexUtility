@@ -267,7 +267,7 @@ The inventory contains 376 setting/control records, 267 application/package reco
 
 New reusable checks are `Test-ProcessCpuSets.ps1`, `Test-BulkUninstall.ps1`, `Test-InstalledAppIdentity.ps1`, `Test-NativeGovernorRestoreOwnership.ps1` and `Test-UpstreamSettingsCatalog.ps1`. The combined cleanup regression now includes a vendor fixture that changes an existing file and creates a new file. Tests use disposable processes, registrations represented by fixture markers, and isolated journals; actual installed applications are inventoried read-only.
 
-The bulk tests also cover post-removal scan, reviewed file deletion, exact restoration, stale review hashes, reinstallation and cross-app rejection. `Test-ClientCleanupBoundary.ps1` compiles the desktop services into a disposable command-line test and checks recovery-ticket handling for live, ended, replaced and incomplete process identities.
+The bulk tests also cover post-removal scan, reviewed file deletion, exact restoration, stale review hashes, reinstallation and cross-app rejection. `Test-ClientCleanupBoundary.ps1` compiles the desktop services into a disposable command-line test. It checks recovery-ticket handling for live, ended, replaced and incomplete process identities, and that picking another app while Apply prepares still runs only the reviewed app's cleanup.
 
 Windows PowerShell 5.1 and the Windows APIs are the execution surfaces. Linux parsing and schema checks establish source/contract properties only. Vendor MSI/Appx removal, protected games, hardware performance, reboot behavior and UI journeys require separate Windows validation. Current task evidence and any pending machine access are kept in the development handoff rather than represented as product guarantees.
 
