@@ -54159,7 +54159,7 @@
       "options": [
         {
           "id": "choice-c4697634bc8964cb",
-          "name": "Remove this override",
+          "name": "Windows default",
           "changes": [
             {
               "address": {
@@ -54169,7 +54169,7 @@
                 "kind": "value",
                 "valueName": "value"
               },
-              "dword": null
+              "dword": 0
             }
           ],
           "availability": [
