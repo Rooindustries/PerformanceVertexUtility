@@ -39,8 +39,9 @@ static class EditionLimitedChecks
                 diagnosticRow.ActionChoices.Any(choice => choice.Id == required.Id && choice.Name == "Required diagnostic data"),
                 "Windows diagnostic data offers Off only where Windows honors it and Required diagnostic data everywhere: " + edition);
             model.ShowAdvanced = false;
-            check(model.Rows.Any(row => row.Id == tips.Id) == !limitedHere && model.Rows.Any(row => row.Id == spotlight.Id) == !limitedHere,
-                "Simple mode hides tips and spotlight only where Windows ignores them: " + edition);
+            foreach (var definition in new[] { tips, spotlight })
+                check(model.Rows.Any(row => row.Id == definition.Id) == (!limitedHere && !definition.Advanced),
+                    definition.Name + " follows edition availability and catalog visibility in simple mode: " + edition);
         }
         var held = new Fixture(Path.Combine(root, "edition-held"), subset, 26100, "Core") { Missing = false };
         var tipsAddress = tips.Options.Single(option => option.Changes.Single().Dword == 1).Changes.Single().Address;
