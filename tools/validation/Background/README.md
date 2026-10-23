@@ -112,22 +112,34 @@ downloads off must invite another Download, without claiming a scheduled retry.
 the app's cancellation path, by killing the app and its script, and by closing the app
 while the script keeps running. A second Apply must be refused until that script ends.
 Relaunch after the script ends must offer Restore, and Restore must return each probe's CPU priority,
-affinity, I/O and memory priority to the exact original. It also covers the probes
-closing before Restore (it says so and finishes), another program changing an
-unwritten priority (Restore keeps it), a broken, stale or misplaced apply journal (set
-aside with its bytes kept, or cleared when nothing changed), two applies at once (one
-restore point), the timing of a full apply, and an empty `backend\state`. The
-`boundaries` case pauses before and after the real CPU, affinity, I/O, memory and GPU
-writes, backup creation and replacement, and result output. The journal cases also
-check missing fields, null values and unknown versions. Pass
-`--arguments '{"Cases":["timeout"]}'` to run named cases. The separate
-`other-program` case changes a priority already written by Apply; run it as a merge
-gate after PR #76 supplies that restore behavior. It is excluded from the default
-case list until that dependency lands. `interrupted-apply-ui`
+affinity, I/O and memory priority to the exact original. Apply saves each control's
+outcome right after its write, so a cut leaves at most one control written but
+unconfirmed. Restore keeps that one pending, as PR #76 requires: the check allows only
+that control, verifies every other probe first, then closes its probe and requires the
+next Restore to finish. It also covers the probes closing before Restore (it says so
+and finishes), another program changing an unwritten priority (Restore keeps it pending
+until that probe closes), another program changing a priority Apply saved as applied
+(`other-program`: Restore keeps it and names it), a broken, stale or misplaced apply
+journal (set aside with its bytes kept, or cleared when nothing changed), two applies
+at once (one restore point), the timing of a full apply, and an empty `backend\state`.
+The `boundaries` case pauses before and after the real CPU, affinity, I/O, memory and
+GPU writes, backup creation and replacement, and result output. A pause after a write
+and before its saved outcome expects that control to stay unconfirmed.
+`replace-failure` fails the first backup replacement after a real process write once.
+The journal cases also check missing fields, null values and unknown versions. Pass
+`--arguments '{"Cases":["timeout"]}'` to run named cases. `interrupted-apply-ui`
 repeats the cut against a built app stage (`AppStage`, from `Build-Release.ps1
 -UpdateFeedUrl ''`) and captures the Background apps card: `Label` `before` expects no
 Restore, `after` expects the offer, clicks Restore, checks every probe and records the
 interaction with ffmpeg.
+
+`Test-InterruptedApplyJournal.ps1 -Out <dir>` runs on Linux or Windows without touching
+real processes. It runs the real `Apply-ProcessProfile.ps1` with a fixed preview and
+in-memory process reads and writes, ends the script between two control writes the way
+a kill would, then asks the real Restore rules (`Get-RooIndustriesAppliedControlValue`
+and `Split-RooIndustriesLeftAsSetRestoreChanges`) about the backup left on disk. Every
+control written before the cut must be restorable, and every unwritten one must need no
+write. Pass `-Source` to check another source copy.
 
 Direction checks must catch Windows CPU enum values being mistaken for priority
 order, a low CPU value suppressing independently needed I/O or memory changes,

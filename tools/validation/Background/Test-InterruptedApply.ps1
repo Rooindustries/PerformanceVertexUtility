@@ -1,4 +1,4 @@
-param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutRoot,[string]$BackendSource='',[int]$Probes=60,[string[]]$Cases=@('startup-race','journal-path','boundaries','replace-failure','timeout','killed','closed','rebooted','unwritten','stale-journal','race','full'))
+param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutRoot,[string]$BackendSource='',[int]$Probes=60,[string[]]$Cases=@('startup-race','journal-path','boundaries','replace-failure','timeout','killed','closed','rebooted','unwritten','other-program','stale-journal','race','full'))
 $ErrorActionPreference='Stop'
 . (Join-Path $Source 'tools\validation\LoadTimes\CleanupOwnership.Common.ps1')
 Add-Type -Path (Join-Path $Source 'tools\validation\Background\Oracle.cs')
@@ -59,8 +59,17 @@ function WaitChange($fixtures,$script){$deadline=[DateTime]::UtcNow.AddSeconds(1
 function MidApply($fixtures,$name){$count=(Changed $fixtures).Count;$results[$name+'-changedAtCut']=$count;if($count -lt 1 -or $count -ge $fixtures.Count){throw ('The cut did not land mid-apply: '+$count+' of '+$fixtures.Count+' changed')}}
 function KillApply($settings,$fixtures,$name){$app=StartApply $settings ($name+'-apply');$script=ScriptOf $app;WaitChange $fixtures $script;Stop-OwnedProcess $app;Stop-OwnedProcess $script;$null=$app.process.WaitForExit(15000);$null=$script.process.WaitForExit(15000);MidApply $fixtures $name}
 function Offered($settings,$name){$inspect=Service 'inspect' $settings $name;if(-not$inspect.recovery -or -not$inspect.pending -or -not(Test-Path -LiteralPath $inspect.recovery.Path)){throw ('Restore was not offered after relaunch: '+$name)};$inspect}
-function RestoreAll($fixtures,$before,$settings,$name,$keep=@{}){
- $restore=Service 'restore' $settings $name;$raw=$restore.result.Value|ConvertFrom-Json
+function RestoreAll($fixtures,$before,$settings,$name,$keep=@{},[string]$Unconfirmed=''){
+ $restore=Service 'restore' $settings $name;$raw=$restore.result.Value|ConvertFrom-Json;$script:firstRestore=$raw
+ if($Unconfirmed -and $raw.result.restorePendingCount -eq 1){
+  $cut=@($fixtures|Where-Object {$_.Id -eq @($raw.result.pendingItems)[0].processId})[0]
+  $left=@(foreach($p in $fixtures){if($p.HasExited){continue};$now=Read $p;foreach($field in 'priorityClass','affinityMask','ioPriority','memoryPriority'){$expected=if($keep.ContainsKey($p.Id) -and $field -eq 'priorityClass'){$keep[$p.Id]}else{$before[$p.Id][$field]};if([string]$now[$field] -cne [string]$expected){$p.ProcessName+' '+$field}}})
+  $want=switch($Unconfirmed){'*'{@($left|Where-Object {$cut -and $_ -like ($cut.ProcessName+' *')})};'kept'{@()};'gpuPriority'{@()};default{@($cut.ProcessName+' '+$Unconfirmed)}}
+  if(-not$cut -or -not$restore.pending -or $left.Count -gt 1 -or ($left -join ',') -cne ($want -join ',') -or ($Unconfirmed -eq 'kept' -and -not$keep.ContainsKey($cut.Id))){throw ('Restore kept more than the one unconfirmed control: '+$name+' left '+($left -join ', '))}
+  Save ($name+'-unconfirmed') @{processId=$cut.Id;left=$left;result=$raw}
+  StopFixtures @($cut);$null=$cut.WaitForExit(15000)
+  $restore=Service 'restore' $settings ($name+'-after-close');$raw=$restore.result.Value|ConvertFrom-Json
+ }elseif($Unconfirmed -and $Unconfirmed -ne '*'){throw ('Restore did not keep the unconfirmed control: '+$name+' pending '+$raw.result.restorePendingCount)}
  if($restore.result.Error -or $restore.pending -or $raw.status -ne 'success' -or $raw.result.restorePendingCount -ne 0){throw ('Restore did not finish: '+$name+' '+$restore.result.Error+' '+$raw.result.summary)}
  $after=@{};foreach($p in $fixtures){if($p.HasExited){continue};$now=Read $p;$after[[string]$p.Id]=$now;$expected=@{};foreach($field in $before[$p.Id].Keys){$expected[$field]=$before[$p.Id][$field]};if($keep.ContainsKey($p.Id)){$expected.priorityClass=$keep[$p.Id]};if(-not(Same $now $expected)){throw ('Restore left '+$p.ProcessName+' different from its original: '+($now|ConvertTo-Json -Compress))}}
  $state=State $settings;if($state.journal -or $state.pointer){throw ('Restore left a journal or pointer: '+$name)}
@@ -172,8 +181,9 @@ try {
      if($point -eq 'backup-before'){
       $inspect=Service 'inspect' $settings ($name+'-relaunch');if($inspect.pending -or $inspect.recovery -or -not(Same $atCut $before[$fixtures[0].Id])){throw 'An apply killed before its backup left changes or blocked Apply'}
      }else{
-      $null=Offered $settings ($name+'-relaunch');$null=RestoreAll $fixtures $before $settings ($name+'-restore')
-      if([RooIndustriesBackgroundOracle]::Gpu($fixtures[0]) -ne $gpuBefore){throw ('Restore changed the original GPU priority at '+$point)}
+      $unconfirmed=if($point -match '^(priorityClass|affinityMask|ioPriority|memoryPriority|gpuPriority)-(written|after)$'){$Matches[1]}elseif($point -eq 'backup-replacing'){'priorityClass'}else{''}
+      $null=Offered $settings ($name+'-relaunch');$null=RestoreAll $fixtures $before $settings ($name+'-restore') @{} $unconfirmed
+      if(-not$fixtures[0].HasExited -and [RooIndustriesBackgroundOracle]::Gpu($fixtures[0]) -ne $gpuBefore){throw ('Restore changed the original GPU priority at '+$point)}
      }
      $results[$name]='passed'
     } catch {$boundaryFailures+=($point+': '+$_.Exception.Message);$results[$name]=$_.Exception.Message}
@@ -193,7 +203,7 @@ try {
      $displace=if($code -eq 1176){'[IO.File]::Delete($full)'}else{'[IO.File]::Move($full,$full+''.failed-old'')'}
      $replace='[IO.File]::Replace($temporary,$full,[System.Management.Automation.Language.NullString]::Value)'
      if(-not$stateText.Contains($replace)){throw 'The real replacement call was not found'}
-     $instrumented=$stateText.Replace($replace,($displace+"; throw [IO.IOException]::new('Fixture replacement failure', $hresult)"))
+     $instrumented=$stateText.Replace($replace,("if(-not`$global:rooReplaceFailed){`$global:rooReplaceFailed=`$true;"+$displace+"; throw [IO.IOException]::new('Fixture replacement failure', $hresult)}; "+$replace))
      if($mode -eq '1177-move'){
       $move='[IO.File]::Move($temporary,$full)';$position=$instrumented.LastIndexOf($move)
       if($position -ne $instrumented.IndexOf($move)){$instrumented=$instrumented.Insert($position,"throw [IO.IOException]::new('Fixture fallback rename failure', -2147024891); ")}
@@ -203,7 +213,7 @@ try {
      $changed=(Changed $fixtures).Count;Save ($name+'-state') @{changed=$changed;recoveryPath=$apply.result.RecoveryPath}
      if($changed -ne 1){throw ('The replacement failure did not follow a real process change: '+$mode)}
      if(-not$apply.result.RecoveryPath){throw ('Replacement failure lost the restore point: '+$mode)}
-     if($mode -eq '1177-move' -and -not$apply.result.Error){throw 'The failed fallback rename was not reported'}
+     if($mode -eq '1177-move' -and -not$apply.result.Error -and [string]$apply.result.Value -notmatch 'Fixture fallback rename failure'){throw 'The failed fallback rename was not reported'}
      [IO.File]::WriteAllText($statePath,$stateText,$utf8)
      $null=Offered $settings ($name+'-relaunch');$results[$name]=RestoreAll $fixtures $before $settings ($name+'-restore')
     }catch{$replaceFailures+=($mode+': '+$_.Exception.Message);$results[$name]=$_.Exception.Message}
@@ -221,12 +231,12 @@ try {
    if([string]$cut.result.Error -notlike 'This took too long and was stopped.*'){throw ('The cut apply did not report the time limit: '+$cut.result.Error)}
    if(-not$cut.recovery -or -not$cut.pending -or -not$cut.result.RecoveryPath){throw 'The timed-out apply offered no Restore'}
    $inspect=Offered $settings 'timeout-relaunch';if($inspect.recovery.Path -ne $cut.recovery.Path){throw 'Relaunch offered a different Restore'}
-   $results.timeout=RestoreAll $fixtures $before $settings 'timeout-restore'
+   $results.timeout=RestoreAll $fixtures $before $settings 'timeout-restore' @{} '*'
   } finally {StopFixtures $fixtures}
  }
  if($Cases -contains 'killed'){
   $fixtures=Fixtures 'killed';Profile $fixtures;$before=Before $fixtures;$settings=Settings 'killed'
-  try {KillApply $settings $fixtures 'killed';Save 'killed-state' (State $settings);$null=Offered $settings 'killed-relaunch';$results.killed=RestoreAll $fixtures $before $settings 'killed-restore'}
+  try {KillApply $settings $fixtures 'killed';Save 'killed-state' (State $settings);$null=Offered $settings 'killed-relaunch';$results.killed=RestoreAll $fixtures $before $settings 'killed-restore' @{} '*'}
   finally {StopFixtures $fixtures}
  }
  if($Cases -contains 'closed'){
@@ -271,16 +281,19 @@ try {
    $target=@($fixtures|Where-Object {$_.Refresh();[string]$_.PriorityClass -eq 'Normal'})[0];$target.PriorityClass='Idle';Save 'unwritten-other-program' (Read $target)
    [IO.File]::WriteAllText($commonPath,$commonText,$utf8)
    $inspect=Offered $settings 'unwritten-relaunch';Save 'unwritten-backup' (Get-Content -Raw -LiteralPath $inspect.recovery.Path|ConvertFrom-Json)
-   $results.unwritten=RestoreAll $fixtures $before $settings 'unwritten-restore' @{$target.Id='Idle'}
+   $results.unwritten=RestoreAll $fixtures $before $settings 'unwritten-restore' @{$target.Id='Idle'} 'kept'
   }finally{if($app){Stop-OwnedProcess $app};if($script){Stop-OwnedProcess $script};[IO.File]::WriteAllText($commonPath,$commonText,$utf8);StopFixtures $fixtures}
  }
  if($Cases -contains 'other-program'){
   $fixtures=Fixtures 'other';Profile $fixtures;$before=Before $fixtures;$settings=Settings 'other-program'
   try {
    $cut=Cut $fixtures $settings 'other-program-apply';MidApply $fixtures 'other-program'
-   $target=@(Changed $fixtures)[0];$target.PriorityClass='Idle';Save 'other-program-target' (Read $target)
-   $null=Offered $settings 'other-program-relaunch'
-   $results['other-program']=RestoreAll $fixtures $before $settings 'other-program-restore' @{$target.Id='Idle'}
+   $inspect=Offered $settings 'other-program-relaunch';$backup=Get-Content -Raw -LiteralPath $inspect.recovery.Path|ConvertFrom-Json
+   $saved=@($backup.snapshots|Where-Object {@($_.controlChanges|Where-Object {$_.control -eq 'priorityClass' -and $_.outcome -ceq 'applied'}).Count}|ForEach-Object {$_.processId})
+   $target=@($fixtures|Where-Object {$saved -contains $_.Id})[0];if(-not$target){throw 'No priority was saved as applied before the cut'}
+   $target.PriorityClass='Idle';Save 'other-program-target' (Read $target)
+   $results['other-program']=RestoreAll $fixtures $before $settings 'other-program-restore' @{$target.Id='Idle'} '*'
+   if(@($script:firstRestore.result.leftAsSetItems|Where-Object {$_.processId -eq $target.Id -and $_.control -eq 'priorityClass' -and [string]$_.currentValue -eq 'Idle'}).Count -ne 1){throw 'Restore did not name the priority another program set'}
   } finally {StopFixtures $fixtures}
  }
  if($Cases -contains 'stale-journal'){
