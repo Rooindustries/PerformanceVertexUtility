@@ -23,7 +23,7 @@ function Invoke-CimMethod {
  if($Namespace -cne 'root/Microsoft/Windows/Defender' -or $ClassName -cne 'MSFT_MpPreference' -or $MethodName -cne 'Set' -or @($Arguments.Keys).Count -ne 1 -or $Arguments['SubmitSamplesConsent'] -isnot [byte]){throw ('Unexpected CIM call: '+$Namespace+' '+$ClassName+'.'+$MethodName)}
  $fixture.calls=[int]$fixture.calls+1;$fixture.consent=[int]$Arguments['SubmitSamplesConsent']
  [IO.File]::WriteAllText($env:ROO_INDUSTRIES_FIXTURE_DEFENDER,($fixture|ConvertTo-Json -Compress))
- [pscustomobject]@{ReturnValue=[uint32]0}
+ [pscustomobject]@{ReturnValue=$(if($fixture.empty){$null}else{[uint32]0})}
 }
 
 """;
@@ -82,7 +82,7 @@ function Invoke-CimMethod {
         using (var existing = Registry.CurrentUser.OpenSubKey(Parent)) parentExisted = existing is not null;
         try
         {
-            void Defender(string? provider, string? service, int consent, int calls = 0) => File.WriteAllText(state, JsonSerializer.Serialize(new { consent, provider, service, calls }));
+            void Defender(string? provider, string? service, int consent, int calls = 0, bool empty = false) => File.WriteAllText(state, JsonSerializer.Serialize(new { consent, provider, service, calls, empty }));
             JsonElement Saved() => JsonDocument.Parse(File.ReadAllText(state)).RootElement;
             Defender(null, "Running", 1);
             var none = Path.Combine(folder.FullName, "no-modules");
@@ -160,6 +160,14 @@ function Invoke-CimMethod {
             Defender(null, "Running", 2, 1);
             engine.Apply(undo, OperationFiles.HashFile(undo));
             check(Saved().GetProperty("consent").GetInt32() == 1 && store.ReadState()?.Profiles.Length == 0 && store.Recovery().Pending is null, "The same reviewed undo finishes once Defender's service runs again");
+
+            Defender(null, "Running", 1, empty: true);
+            apply = Review(engine.Preview("defender-fixture", [new("defender", "set")]));
+            var emptyApply = Error(() => engine.Apply(apply, OperationFiles.HashFile(apply)));
+            var emptyApplied = Saved().GetProperty("consent").GetInt32() == 2 && Applied();
+            var emptyUndo = Error(() => { var path = Review(engine.Preview("defender-fixture", [])); engine.Apply(path, OperationFiles.HashFile(path)); });
+            check(emptyApply == "no error" && emptyApplied && emptyUndo == "no error" && Saved().GetProperty("consent").GetInt32() == 1 && Saved().GetProperty("calls").GetInt32() == 2 && store.ReadState()?.Profiles.Length == 0 && store.Recovery().Pending is null,
+                "A Defender change whose provider result has an empty return value applies and undoes once Windows reads the new value back: " + emptyApply + " | " + emptyUndo);
         }
         finally
         {
