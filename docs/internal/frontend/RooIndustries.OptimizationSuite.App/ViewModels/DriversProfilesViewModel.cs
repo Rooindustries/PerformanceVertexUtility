@@ -212,6 +212,7 @@ public partial class DriversProfilesViewModel : PageViewModelBase
             : NvidiaGateSummary;
         try
         {
+            using var running = RunningChanges.Begin();
             var response = await App.Live.ApplyNvidiaProfileResultAsync(
                 NvidiaProfileId,
                 NvidiaExportReviewed,
@@ -234,6 +235,11 @@ public partial class DriversProfilesViewModel : PageViewModelBase
             }
             NvidiaActionTitle = completed ? "Profile applied" : _nvidiaRecovery is not null ? "Apply needs attention" : "Apply held";
             NvidiaActionDetail = SummarizeNvidiaAction(response.Value, "Apply finished. No profile was imported.");
+        }
+        catch (InvalidOperationException error) when (error.Message == RunningChanges.Installing)
+        {
+            NvidiaActionTitle = "Apply not confirmed";
+            NvidiaActionDetail = error.Message;
         }
         finally
         {
@@ -264,6 +270,7 @@ public partial class DriversProfilesViewModel : PageViewModelBase
             : "Approve the exact profile first. Restore stays locked until that approval is selected.";
         try
         {
+            using var running = RunningChanges.Begin();
             var response = await App.Live.RestoreNvidiaProfileResultAsync(recovery, NvidiaProfileApproved);
             _nvidiaRecovery = await App.Live.ReadNvidiaProfileRecoveryAsync(NvidiaProfileId);
             OnPropertyChanged(nameof(CanRestoreNvidiaProfile));
@@ -281,6 +288,11 @@ public partial class DriversProfilesViewModel : PageViewModelBase
             }
             NvidiaActionTitle = "Profile restored";
             NvidiaActionDetail = SummarizeNvidiaAction(response.Value, "Restore finished. No profile was imported.");
+        }
+        catch (InvalidOperationException error) when (error.Message == RunningChanges.Installing)
+        {
+            NvidiaActionTitle = "Restore not confirmed";
+            NvidiaActionDetail = error.Message;
         }
         finally
         {

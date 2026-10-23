@@ -684,23 +684,28 @@ public partial class WindowsTweaksViewModel : ObservableObject
         var choicesSaved = false;
         var windowsApplied = false;
         var restoring = _restoringChoices;
+        var recovering = _reviewingRecovery;
         try
         {
-            if (_reviewingRecovery)
-            {
-                await App.Operations.RecoverWindowsTweaksAsync(_recovery!.PendingHash!);
-                Invalidate(); Busy = false; await RefreshAsync(); await WaitForLoadAsync(); return;
-            }
             var choiceOnly = _review is null;
             var deferred = _deferredDetail;
-            if (!restoring && _reviewedChoices is not null)
+            TweakApplyResult? result = null;
+            using (RunningChanges.Begin())
             {
-                _savedChoices = await App.Operations.SaveWindowsChoicesAsync(_catalog!, ProfileId.Trim(), _reviewedChoices, _savedChoices?.Revision);
-                choicesSaved = true;
+                if (recovering) await App.Operations.RecoverWindowsTweaksAsync(_recovery!.PendingHash!);
+                else
+                {
+                    if (!restoring && _reviewedChoices is not null)
+                    {
+                        _savedChoices = await App.Operations.SaveWindowsChoicesAsync(_catalog!, ProfileId.Trim(), _reviewedChoices, _savedChoices?.Revision);
+                        choicesSaved = true;
+                    }
+                    result = _review is null ? null : await App.Operations.ApplyWindowsTweaksAsync(_review, AcceptedDataLoss);
+                    windowsApplied = result is not null;
+                    if (restoring && _reviewedChoices is not null) _savedChoices = await App.Operations.SaveWindowsChoicesAsync(_catalog!, ProfileId.Trim(), _reviewedChoices, _savedChoices?.Revision);
+                }
             }
-            var result = _review is null ? null : await App.Operations.ApplyWindowsTweaksAsync(_review, AcceptedDataLoss);
-            windowsApplied = result is not null;
-            if (restoring && _reviewedChoices is not null) _savedChoices = await App.Operations.SaveWindowsChoicesAsync(_catalog!, ProfileId.Trim(), _reviewedChoices, _savedChoices?.Revision);
+            if (recovering) { Invalidate(); Busy = false; await RefreshAsync(); await WaitForLoadAsync(); return; }
             _inspection = null; Invalidate();
             Busy = false; await RefreshAsync(); await WaitForLoadAsync();
             if (_inspection is null) { Status = "Settings saved; current values could not be reloaded."; return; }
