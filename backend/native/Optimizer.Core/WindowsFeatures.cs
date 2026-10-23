@@ -214,7 +214,7 @@ sealed class FileDism(string path) : DismServicing
     public override int OpenSession(out uint session) { session = 1; return 0; }
     public override int GetFeatures(uint session, out (string Name, int State)[] features) { features = _states.Select(item => (item.Key, item.Value)).ToArray(); return 0; }
     public override int GetFeatureParents(uint session, string feature, out string[] parents) { parents = []; return 0; }
-    public override int GetFeatureState(uint session, string feature, out int state) { state = _states[feature]; return 0; }
+    public override int GetFeatureState(uint session, string feature, out int state) { if (_states.TryGetValue(feature, out state)) return 0; state = -1; return unchecked((int)0x800F080C); }
     public override int EnableFeatures(uint session, string features) => Refused;
     public override int DisableFeatures(uint session, string features, bool removePayload) => Refused;
     public override int CloseSession(uint session) => 0;
