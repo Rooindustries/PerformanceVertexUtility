@@ -124,7 +124,7 @@ internal sealed class LaunchGpuHandles : IDisposable
     }
 
     internal static IEnumerable<string> Retained(ProtectedSessionPreview plan)
-        => plan.Controls.Where(pair => pair.Key == "gpuPriority" || pair.Key == "ioPriority" && pair.Value.GetInt32() > LaunchPriorities.MaxIoPriority).Select(pair => pair.Key);
+        => plan.Controls.Where(pair => pair.Key == "gpuPriority" || ProtectedSessions.RuntimeIo(pair.Key, pair.Value)).Select(pair => pair.Key);
 
     internal static bool Initializing(ControlRead read, RunningProcess identity)
         => !read.Known && read.Error is { Api: "D3DKMTGetProcessSchedulingPriorityClass", CodeKind: "ntstatus", Code: 0xC000000D }
@@ -249,9 +249,9 @@ internal sealed class LaunchProcessSnapshot : IDisposable
     internal (int Pid, ulong Sequence)[] Find(string image)
     {
         int status; uint needed;
-        while ((status = NtQuerySystemInformation(BasicProcessInformation, _buffer, _capacity, out needed)) != 0 && needed > _capacity)
+        while ((status = NtQuerySystemInformation(BasicProcessInformation, _buffer, _capacity, out needed)) != 0 && (needed > _capacity || status == unchecked((int)0xC0000004)))
         {
-            if (needed > Limit) throw new InvalidDataException("Process enumeration exceeded its size limit.");
+            if (needed > Limit || _capacity >= Limit) throw new InvalidDataException("Process enumeration exceeded its size limit.");
             _capacity = Math.Min(Limit, Math.Max(_capacity * 2, needed)); _buffer = Marshal.ReAllocHGlobal(_buffer, (IntPtr)_capacity);
         }
         if (status != 0) throw new InvalidOperationException($"Windows couldn't list new processes (NTSTATUS 0x{status:X8}).");

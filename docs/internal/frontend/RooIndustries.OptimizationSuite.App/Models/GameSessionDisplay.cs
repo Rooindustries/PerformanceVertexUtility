@@ -36,6 +36,7 @@ public static class GameSessionDisplay
         var games = state.Games.Where(game => !game.Exited).ToArray();
         if (pendingAffinity is not null && !CoresMatch(status, pendingAffinity))
             return games.Length == 0 ? "Core selection pending · launch the game normally" : "Core switch pending · waiting for readback";
+        if (state.Refused is { Count: > 0 }) return "Partially applied · check each control";
         if (games.Length == 0) return state.Status == "armed" ? "Ready · launch the game normally" : "Preparing the session";
         var applied = state.Preview.Controls.All(control => games.All(game =>
         {

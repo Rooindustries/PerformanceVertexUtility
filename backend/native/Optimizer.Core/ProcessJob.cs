@@ -53,6 +53,17 @@ public sealed class ProcessJob : IDisposable
         Check(IsProcessInJob(process, _handle, out var inside), "IsProcessInJob");
         return inside;
     }
+    public int[] ProcessIds()
+    {
+        const int size = 8 + 8 * 4096;
+        var buffer = Marshal.AllocHGlobal(size);
+        try
+        {
+            Check(QueryInformationJobObject(_handle, 3, buffer, size, IntPtr.Zero), "QueryInformationJobObject(process list)");
+            return Enumerable.Range(0, Marshal.ReadInt32(buffer, 4)).Select(index => checked((int)Marshal.ReadIntPtr(buffer, 8 + index * IntPtr.Size).ToInt64())).ToArray();
+        }
+        finally { Marshal.FreeHGlobal(buffer); }
+    }
     public ulong ReadAffinity()
     {
         Check(QueryInformationJobObject(_handle, 2, out var info, (uint)Marshal.SizeOf<Limits>(), IntPtr.Zero), "QueryInformationJobObject");
@@ -103,5 +114,6 @@ public sealed class ProcessJob : IDisposable
     [DllImport("kernel32.dll", SetLastError = true)] private static extern bool SetInformationJobObject(JobHandle job, int kind, ref Limits value, uint size);
     [DllImport("kernel32.dll", SetLastError = true)] private static extern bool SetInformationJobObject(JobHandle job, int kind, ref CompletionPort value, uint size);
     [DllImport("kernel32.dll", SetLastError = true)] private static extern bool QueryInformationJobObject(JobHandle job, int kind, out Limits value, uint size, IntPtr returned);
+    [DllImport("kernel32.dll", SetLastError = true)] private static extern bool QueryInformationJobObject(JobHandle job, int kind, IntPtr value, int size, IntPtr returned);
     [DllImport("kernel32.dll")] private static extern bool CloseHandle(IntPtr handle);
 }

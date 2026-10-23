@@ -42,6 +42,14 @@ public sealed class ProcessTarget : IDisposable
 
     internal int ProcessId => _pid;
 
+    internal int ParentProcessId()
+    {
+        EnsureRunning();
+        var information = new byte[48];
+        CheckStatus(NtQueryBasicInformation(_handle, 0, information, information.Length, IntPtr.Zero), "NtQueryInformationProcess(ProcessBasicInformation)");
+        return checked((int)BitConverter.ToInt64(information, 40));
+    }
+
     internal uint Granted() => GrantedAccess(_handle, _access);
 
     internal long CopyTo(ProcessHandle destination)
@@ -385,6 +393,7 @@ public sealed class ProcessTarget : IDisposable
     [DllImport("ntdll.dll")] private static extern int NtQueryObject(ProcessHandle handle, int informationClass, byte[] information, int length, out int returned);
     [DllImport("ntdll.dll")] private static extern int NtQueryInformationProcess(ProcessHandle process, int informationClass, ref int value, int size, IntPtr returned);
     [DllImport("ntdll.dll")] private static extern int NtSetInformationProcess(ProcessHandle process, int informationClass, ref int value, int size);
+    [DllImport("ntdll.dll", EntryPoint = "NtQueryInformationProcess")] private static extern int NtQueryBasicInformation(ProcessHandle process, int informationClass, byte[] value, int size, IntPtr returned);
     [DllImport("gdi32.dll")] private static extern int D3DKMTGetProcessSchedulingPriorityClass(ProcessHandle process, out int value);
     [DllImport("gdi32.dll")] private static extern int D3DKMTSetProcessSchedulingPriorityClass(ProcessHandle process, int value);
     [DllImport("advapi32.dll", SetLastError=true)] private static extern bool OpenProcessToken(ProcessHandle process, uint access, out SafeAccessTokenHandle token);

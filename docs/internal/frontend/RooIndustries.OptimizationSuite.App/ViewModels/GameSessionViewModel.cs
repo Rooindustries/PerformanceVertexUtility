@@ -24,7 +24,7 @@ public partial class GameSessionSetting : ObservableObject
     {
         Name = name;
         Options = new[] { new ControlOption("Keep current", null) }.Concat(ProcessControlsViewModel.Options(name)
-            .Where(option => LaunchSupported(name, option.Value))).ToArray();
+            .Where(option => LaunchSupported(name, option.Value)).Select(option => name == "ioPriority" ? option with { Label = option.Label.Split(" · ")[0] } : option)).ToArray();
         _selected = Options[0];
     }
 
@@ -276,7 +276,7 @@ public partial class GameSessionViewModel : ObservableObject
             ReviewSummary = Path.GetFileName(_review.Plan.GamePath) + " via " + Path.GetFileName(_review.Plan.Launcher.ExecutablePath) + "\n" +
                 string.Join("\n", Settings.Where(setting => setting.Selected.Value is not null).Select(setting => setting.Label + ": " + setting.Selected.Label)) +
                 "\nCores: " + AffinityMask.Trim() + "\nLauncher core limits and I/O/memory defaults also affect its other new child processes. Launch priorities apply to this game filename." +
-                (controls.TryGetValue("ioPriority", out var io) && io.GetInt32() > LaunchPriorities.MaxIoPriority ? "\nHigh I/O priority is set on the game once it starts and stays until you select Stop and restore." : "") +
+                (controls.TryGetValue("ioPriority", out var io) && io.GetInt32() > LaunchPriorities.MaxIoPriority ? "\nHigh I/O priority is set on the game once it starts and stays until you select Stop and restore. If the game restarts itself, the new copy gets it too and Stop puts it back. Other programs the game starts, such as a crash reporter, also start with High I/O and keep it until they close." : "") +
                 (KeepArmed ? "\nSaved for next time: these exact settings turn back on whenever " + Path.GetFileName(_review.Plan.Launcher.ExecutablePath) + " opens while the app is open. After a PC restart, open the app once and they're back. To stop them, select Turn off and restore under Saved launch settings." : "");
             Status = "Review these settings, then select Start."; Detail = "Launch the game normally after the session reports Ready.";
         }
@@ -407,6 +407,9 @@ public partial class GameSessionViewModel : ObservableObject
         if (current.HostRunning == false || _pendingAffinity is not null && GameSessionDisplay.CoresMatch(current, _pendingAffinity)) _pendingAffinity = null;
         _current = current; Status = GameSessionDisplay.Title(current, _pendingAffinity); Fields.Clear();
         Detail = current.Error ?? (current.State is { } state ? string.Join("\n", state.Errors) : "No session state was returned. Refresh before retrying.");
+        if (current.State is { Refused: { Count: > 0 } refused } refusing)
+            Detail = string.Join("\n", new[] { Detail }.Where(text => text.Length != 0).Concat(refused.Select(id =>
+                Path.GetFileName(refusing.Preview.GamePath) + " (PID " + id + ") didn't let the app check it, so only the CPU limit and launch priorities reach it.")));
         if (current.State is { } session)
         {
             foreach (var game in session.Games.Where(game => !game.Exited))
