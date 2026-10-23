@@ -1114,6 +1114,8 @@ $script:RooIndustriesLeftAsSet = 'Left as another program set it.'
 $script:RooIndustriesChangedExternally = 'The control changed externally; its current value was preserved.'
 $script:RooIndustriesLeftAsSetChangedBack = 'Undo couldn''t confirm another program still holds it, so it was left alone. Run Undo again.'
 $script:RooIndustriesProcessOperationManaged = 'Another saved change still uses this control. Undo that change first, then try again.'
+$script:RooIndustriesUnprovenWrite = 'The app can''t tell whether it set this value, so it was left alone. It resets when that app restarts.'
+$script:RooIndustriesGovernorBusy = 'Background limits were busy, so this setting was left alone. Try again in a moment.'
 
 function Get-RooIndustriesRestoreControlOwnershipReason {
     param([System.Diagnostics.Process]$Process, [string]$Control, [switch]$ForPreview)
@@ -1121,7 +1123,10 @@ function Get-RooIndustriesRestoreControlOwnershipReason {
         if (Test-RooIndustriesGovernorOwnsControl $Process $Control) { return $script:RooIndustriesGovernorManaged }
         $native = switch ($Control) { 'priorityClass' { 'cpuPriority' } 'affinityMask' { 'affinity' } default { $Control } }
         if (@(Get-RooIndustriesProcessOperationControls $Process -ForPreview:$ForPreview) -contains $native) { return $script:RooIndustriesProcessOperationManaged }
-    } catch { return $script:RooIndustriesLeftAsSetChangedBack }
+    } catch {
+        if ($_.Exception -is [IO.InvalidDataException]) { return $_.Exception.Message }
+        return $script:RooIndustriesLeftAsSetChangedBack
+    }
     return $null
 }
 
@@ -1238,7 +1243,7 @@ function Split-RooIndustriesLeftAsSetRestoreChanges {
         }
         if (-not $readable -or -not $applied.known -or -not $applied.verified) {
             $change.blocked = $true
-            $change.blockedReason = if (-not [string]::IsNullOrWhiteSpace($validationReason)) { $validationReason } else { $script:RooIndustriesLeftAsSetChangedBack }
+            $change.blockedReason = if (-not [string]::IsNullOrWhiteSpace($validationReason)) { $validationReason } elseif ($readable) { $script:RooIndustriesUnprovenWrite } else { $script:RooIndustriesLeftAsSetChangedBack }
         }
         $restore.Add($change) | Out-Null
     }
@@ -1315,7 +1320,7 @@ function Confirm-RooIndustriesRestoreControl {
     $queryHandle = [IntPtr]::Zero
     try {
         $gate = Enter-RooIndustriesGovernorGate -Seconds 2
-        if ($null -eq $gate) { throw $script:RooIndustriesGovernorManaged }
+        if ($null -eq $gate) { throw $script:RooIndustriesGovernorBusy }
         $originalField = switch ($control) {
             'priorityClass' { 'originalPriorityClass' }
             'affinityMask' { 'originalAffinityMask' }
@@ -1381,7 +1386,7 @@ function Confirm-RooIndustriesRestoreControl {
                 if (Test-RooIndustriesControlValueEqual $control $now $original) {
                     $candidateConfirmed = $true
                 } elseif (-not $applied.known -or -not $applied.verified) {
-                    throw $script:RooIndustriesLeftAsSetChangedBack
+                    throw $script:RooIndustriesUnprovenWrite
                 } elseif (-not (Test-RooIndustriesControlValueEqual $control $now $applied.value)) {
                     $candidateConfirmed = $true
                     $candidateLeft = [pscustomobject]@{ control = $control; currentValue = $now; appliedValue = $applied.value; originalValue = $original; outcome = 'leftAsSet'; reason = $script:RooIndustriesLeftAsSet }
