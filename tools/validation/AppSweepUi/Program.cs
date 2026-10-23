@@ -29,6 +29,13 @@ if (args is ["governor-left-as-set"])
     return;
 }
 
+if (args is ["poll-guard"])
+{
+    await PollGuardChecks.RunAsync(Check);
+    Console.WriteLine($"Completed {count} poll guard checks.");
+    return;
+}
+
 if (args is ["firmware-fixture", var uiFixture, var uiRoot]) { Console.WriteLine(FirmwarePageChecks.Prepare(uiFixture, uiRoot)); return; }
 
 if (args is ["firmware", var firmwareFixture])
@@ -1554,5 +1561,6 @@ await CleanupRunChecks.RunAsync(Check);
 await RevisitChecks.RunAsync(Check);
 await BugReportChecks.RunAsync(Check);
 await UpdateInstallChecks.RunAsync(Check);
+await PollGuardChecks.RunAsync(Check);
 
 Console.WriteLine($"Completed {count} app sweep UI checks.");
