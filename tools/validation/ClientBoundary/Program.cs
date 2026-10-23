@@ -12,6 +12,7 @@ if (args is [var hostDll, var hostAction, "-"] && Path.GetFileName(hostDll) == "
 if (Path.GetFileName(System.Reflection.Assembly.GetEntryAssembly()?.Location) == "Optimizer.Host.dll") { await HostFixture.Run(args); return; }
 if (args is [_, "--game-session-display"]) { GameSessionChecks.Display(); return; }
 if (args is [var gameRepo, "--game-sessions"]) { await GameSessionChecks.Run(gameRepo); return; }
+if (args is [var redRepo, "--main-red"]) { await MainRedChecks.Run(redRepo); return; }
 if (args is [_, "--background-priority"]) { PriorityChecks.Run(); return; }
 if (args is [var boundsRepo, "--bounds", .. var boundsFilter]) { await BoundChecks.Run(boundsRepo, boundsFilter.FirstOrDefault()); return; }
 if (args is [_, "--child-environment", var childScenario, var childMode]) { await ChildEnvironmentChecks.Run(childScenario, childMode); return; }
