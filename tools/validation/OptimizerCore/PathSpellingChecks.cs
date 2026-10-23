@@ -11,15 +11,12 @@ static class PathSpellingChecks
 {
     const string App = "Roo Industries Spelling";
     const string Peer = "Independent spelling tool";
-    const string TestParent = "Software\\RooIndustriesPathSpellingTests";
 
     public static void Run(Action<bool, string> check)
     {
         var root = TestFixtures.InheritingRoot("path-spelling");
-        var registryRoot = TestParent + "\\" + Guid.NewGuid().ToString("N");
+        var registryRoot = "Software\\RooIndustriesPathSpellingTests-" + Guid.NewGuid().ToString("N");
         using var hive = RegistryKey.OpenBaseKey(RegistryHive.CurrentUser, RegistryView.Registry64);
-        bool ownParent;
-        using (var existing = hive.OpenSubKey(TestParent)) ownParent = existing is null;
         ApplicationCleanupPreview? appeared = null;
         try
         {
@@ -126,9 +123,6 @@ static class PathSpellingChecks
         {
             if (appeared?.Registry is { } part) hive.DeleteSubKeyTree(OperationFiles.Read<RegistryCleanupPreview>(part.PreviewPath).Receipt.KeyPath, false);
             hive.DeleteSubKeyTree(registryRoot, false);
-            if (ownParent)
-                using (var parent = hive.OpenSubKey(TestParent))
-                    if (parent is not null && parent.SubKeyCount == 0 && parent.ValueCount == 0) hive.DeleteSubKey(TestParent, false);
             Directory.Delete(root, true);
         }
         using (var left = hive.OpenSubKey(registryRoot))
