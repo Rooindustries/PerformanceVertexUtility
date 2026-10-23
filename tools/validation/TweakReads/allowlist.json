@@ -1,0 +1,125 @@
+{
+  "schemaVersion": 1,
+  "rows": [
+    {
+      "settingId": "windows.09240c8c2144ffde",
+      "state": "windows-default",
+      "cause": "Windows default is the text 2147483648 (Num Lock off at sign-in); the choices write 2 or 0."
+    },
+    {
+      "settingId": "windows.12a2f7d075db4a7a",
+      "state": "device-defaults",
+      "cause": "USB drivers set this on some devices and leave it unset on others; a per-device mix reads as Custom value."
+    },
+    {
+      "settingId": "windows.16775bf1b44a5304",
+      "state": "device-defaults",
+      "cause": "Power saving is on for most devices and off for a few by default; a per-device mix reads as Custom value."
+    },
+    {
+      "settingId": "windows.190ec8140565cdbe",
+      "state": "windows-default",
+      "cause": "Windows keeps this policy at 0 in its default policy store; no choice writes 0."
+    },
+    {
+      "settingId": "windows.1ae61e2b2036d4b2",
+      "state": "windows-default",
+      "cause": "Windows 11 ships this server's encrypted DNS template with automatic upgrade off; the row only knows its own template with it on."
+    },
+    {
+      "settingId": "windows.1ebf12e827d8a37f",
+      "state": "windows-default",
+      "cause": "Automatic DNS keeps NameServer as an empty string; the row only knows the value removed."
+    },
+    {
+      "settingId": "windows.1fc843db3914d26b",
+      "state": "windows-default",
+      "cause": "Windows 11 ships this server's encrypted DNS template with automatic upgrade off; the row only knows its own template with it on."
+    },
+    {
+      "settingId": "windows.2c463a1ebb8644e1",
+      "state": "windows-default",
+      "cause": "Windows 11 ships this server's encrypted DNS template with automatic upgrade off; the row only knows its own template with it on."
+    },
+    {
+      "settingId": "windows.3fb0eec8d707ecf1",
+      "state": "windows-default",
+      "cause": "Windows 11 ships this server's encrypted DNS template with automatic upgrade off; the row only knows its own template with it on."
+    },
+    {
+      "settingId": "windows.485ae250b9a25d16",
+      "state": "windows-default",
+      "cause": "Windows 11 ships this server's encrypted DNS template with automatic upgrade off; the row only knows its own template with it on."
+    },
+    {
+      "settingId": "windows.55c7e34207106885",
+      "state": "windows-default",
+      "cause": "Windows 11 ships this server's encrypted DNS template with automatic upgrade off; the row only knows its own template with it on."
+    },
+    {
+      "settingId": "windows.7f3f80851197aecc",
+      "state": "device-defaults",
+      "cause": "The adapter keeps large send offload version 1 off and IPv4 and IPv6 on by default; the choices set all three alike."
+    },
+    {
+      "settingId": "windows.83d4b1b8f7a55f84",
+      "state": "device-defaults",
+      "cause": "USB drivers set this on some devices and leave it unset on others; a per-device mix reads as Custom value."
+    },
+    {
+      "settingId": "windows.99fc768e912827aa",
+      "state": "windows-default",
+      "cause": "Windows 11 ships this server's encrypted DNS template with automatic upgrade off; the row only knows its own template with it on."
+    },
+    {
+      "settingId": "windows.a550397cede16b37",
+      "state": "windows-default",
+      "cause": "Windows 11 ships this server's encrypted DNS template with automatic upgrade off; the row only knows its own template with it on."
+    },
+    {
+      "settingId": "windows.b048256362718da0",
+      "state": "windows-default",
+      "cause": "Windows keeps KeyboardDelay as text, default 1; the choices write numbers (a write-type fix, outside read-only work)."
+    },
+    {
+      "settingId": "windows.be56eca0a275ca30",
+      "state": "windows-default",
+      "cause": "Windows 11 ships this server's encrypted DNS template with automatic upgrade off; the row only knows its own template with it on."
+    },
+    {
+      "settingId": "windows.c7158276464d2b3b",
+      "state": "choice-88665aca77848447",
+      "cause": "The recorded PC has SysMain disabled, and the app refuses memory compression without SysMain, so this choice has no written state to read here."
+    },
+    {
+      "settingId": "windows.c858b5629e74495c",
+      "state": "device-defaults",
+      "cause": "USB drivers set this on some devices and leave it unset on others; a per-device mix reads as Custom value."
+    },
+    {
+      "settingId": "windows.d0239e1369742570",
+      "state": "windows-default",
+      "cause": "Windows 11 ships this server's encrypted DNS template with automatic upgrade off; the row only knows its own template with it on."
+    },
+    {
+      "settingId": "windows.d564e4921d5ee555",
+      "state": "windows-default",
+      "cause": "Windows default is 3670016 (0x380000); the only choice writes the installed memory size."
+    },
+    {
+      "settingId": "windows.e8bde2f9b55b5777",
+      "state": "windows-default",
+      "cause": "Windows 11 ships this server's encrypted DNS template with automatic upgrade off; the row only knows its own template with it on."
+    },
+    {
+      "settingId": "windows.ec55a129b83d4bc9",
+      "state": "windows-default",
+      "cause": "Windows 11 ships this server's encrypted DNS template with automatic upgrade off; the row only knows its own template with it on."
+    },
+    {
+      "settingId": "windows.f5b1784349813d36",
+      "state": "device-defaults",
+      "cause": "USB drivers set this on some devices and leave it unset on others; a per-device mix reads as Custom value."
+    }
+  ]
+}
