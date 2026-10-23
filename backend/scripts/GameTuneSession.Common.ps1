@@ -297,3 +297,124 @@ function New-RooIndustriesGameTuneResult {
         artifacts = @(Get-RooIndustriesArray $Artifacts)
     }
 }
+
+function Test-RooIndustriesGameTuneSameInstance {
+    param(
+        [object]$Reviewed,
+        [object]$Current
+    )
+    return [int](Get-RooIndustriesPropertyValue $Reviewed 'processId' 0) -eq [int](Get-RooIndustriesPropertyValue $Current 'processId' -1) -and
+        (Test-RooIndustriesProcessNameEquals ([string](Get-RooIndustriesPropertyValue $Reviewed 'processName' '')) ([string](Get-RooIndustriesPropertyValue $Current 'processName' ''))) -and
+        [string](Get-RooIndustriesPropertyValue $Reviewed 'executablePath' '') -eq [string](Get-RooIndustriesPropertyValue $Current 'executablePath' '') -and
+        (Test-RooIndustriesProcessStartTime (Get-RooIndustriesPropertyValue $Reviewed 'processStartTimeUtc' $null) (Get-RooIndustriesPropertyValue $Current 'processStartTimeUtc' $null))
+}
+
+function Get-RooIndustriesGameTunePlanKey {
+    param([object]$Entry)
+    $controls = @(Get-RooIndustriesPreviewControlChanges $Entry | ForEach-Object {
+        "$([string](Get-RooIndustriesPropertyValue $_ 'control' ''))=$([string](Get-RooIndustriesPropertyValue $_ 'currentValue' $null))>$([string](Get-RooIndustriesPropertyValue $_ 'proposedValue' $null))|$([bool](Get-RooIndustriesPropertyValue $_ 'blocked' $false))"
+    } | Sort-Object)
+    return "$([string](Get-RooIndustriesPropertyValue $Entry 'classification' ''))|$([bool](Get-RooIndustriesPropertyValue $Entry 'blocked' $false))|$([bool](Get-RooIndustriesPropertyValue $Entry 'protected' $false))|$($controls -join ';')"
+}
+
+function New-RooIndustriesGameTuneReview {
+    param(
+        [object[]]$Preview,
+        [string]$ProfileId,
+        [string]$ProfilePath,
+        [string]$TargetGameProcessName
+    )
+    $entries = New-Object System.Collections.Generic.List[object]
+    foreach ($entry in @(Get-RooIndustriesArray $Preview)) {
+        $isGame = [string](Get-RooIndustriesPropertyValue $entry 'classification' '') -eq 'gameTarget'
+        if (-not $isGame -and -not (Test-RooIndustriesGameTuneEntryAllowed $entry).allowed) { continue }
+        $entries.Add([pscustomobject]@{
+            processId = [int](Get-RooIndustriesPropertyValue $entry 'processId' 0)
+            processName = [string](Get-RooIndustriesPropertyValue $entry 'processName' '')
+            executablePath = Get-RooIndustriesPropertyValue $entry 'executablePath' $null
+            processStartTimeUtc = Get-RooIndustriesPropertyValue $entry 'processStartTimeUtc' $null
+            classification = [string](Get-RooIndustriesPropertyValue $entry 'classification' '')
+            ruleId = Get-RooIndustriesPropertyValue $entry 'ruleId' $null
+            blocked = [bool](Get-RooIndustriesPropertyValue $entry 'blocked' $false)
+            protected = [bool](Get-RooIndustriesPropertyValue $entry 'protected' $false)
+            controlChanges = @(Get-RooIndustriesPreviewControlChanges $entry)
+        }) | Out-Null
+    }
+    return [pscustomobject]@{
+        schemaVersion = 1
+        kind = 'game-tune-review'
+        reviewId = [guid]::NewGuid().ToString('N')
+        createdAtUtc = Get-RooIndustriesUtcStamp
+        profileId = $ProfileId
+        profilePath = $ProfilePath
+        profileSha256 = (Get-FileHash -LiteralPath $ProfilePath -Algorithm SHA256).Hash.ToLowerInvariant()
+        targetGameProcessName = if ([string]::IsNullOrWhiteSpace($TargetGameProcessName)) { $null } else { $TargetGameProcessName }
+        entries = @($entries.ToArray())
+    }
+}
+
+function Read-RooIndustriesGameTuneReview {
+    param(
+        [string]$ReviewPath,
+        [string]$ReviewSha256,
+        [string]$ProfilePath,
+        [string]$TargetGameProcessName
+    )
+    $outOfDate = New-RooIndustriesIssue 'GAME_TUNE_REVIEW_OUT_OF_DATE' 'Your review is missing or out of date, so nothing changed. Review again, then start.' 'error' 'performance.gameTune' $ReviewPath $true 'Review again, then start.' $null
+    if ([string]::IsNullOrWhiteSpace($ReviewPath) -or $ReviewSha256 -notmatch '^[a-fA-F0-9]{64}$') { return [pscustomobject]@{ review = $null; problem = $outOfDate } }
+    try { $review = (Read-RooIndustriesOperationJson $ReviewPath $ReviewSha256).data }
+    catch { return [pscustomobject]@{ review = $null; problem = $outOfDate } }
+    if ([int](Get-RooIndustriesPropertyValue $review 'schemaVersion' 0) -ne 1 -or [string](Get-RooIndustriesPropertyValue $review 'kind' '') -ne 'game-tune-review') {
+        return [pscustomobject]@{ review = $null; problem = $outOfDate }
+    }
+    $reviewedProfile = [string](Get-RooIndustriesPropertyValue $review 'profilePath' '')
+    $profileMatches = -not [string]::IsNullOrWhiteSpace($reviewedProfile) -and
+        [string]::Equals([IO.Path]::GetFullPath($reviewedProfile), [IO.Path]::GetFullPath($ProfilePath), [StringComparison]::OrdinalIgnoreCase) -and
+        [string](Get-RooIndustriesPropertyValue $review 'profileSha256' '') -eq (Get-FileHash -LiteralPath $ProfilePath -Algorithm SHA256).Hash -and
+        [string](Get-RooIndustriesPropertyValue $review 'targetGameProcessName' '') -eq [string]$TargetGameProcessName
+    if (-not $profileMatches) {
+        return [pscustomobject]@{ review = $null; problem = (New-RooIndustriesIssue 'GAME_TUNE_REVIEW_PLAN_CHANGED' 'The game profile changed after you reviewed it, so nothing changed. Review again, then start.' 'error' 'performance.gameTune' $ProfilePath $true 'Review again, then start.' $null) }
+    }
+    return [pscustomobject]@{ review = $review; problem = $null }
+}
+
+function Get-RooIndustriesGameTuneReviewProblem {
+    param(
+        [object]$Review,
+        [object[]]$Preview
+    )
+    $reviewedEntries = @(Get-RooIndustriesPropertyArray $Review 'entries')
+    if (@($reviewedEntries | Where-Object { [string](Get-RooIndustriesPropertyValue $_ 'classification' '') -eq 'gameTarget' }).Count -eq 0) {
+        return New-RooIndustriesIssue 'GAME_TUNE_REVIEW_NO_GAME' 'No game was running when you reviewed, so nothing changed. Start your game, then review and start again.' 'error' 'performance.gameTune' $null $true 'Start your game, then review again.' $null
+    }
+    foreach ($reviewed in $reviewedEntries) {
+        $name = [string](Get-RooIndustriesPropertyValue $reviewed 'processName' 'An app')
+        $isGame = [string](Get-RooIndustriesPropertyValue $reviewed 'classification' '') -eq 'gameTarget'
+        $current = @(Get-RooIndustriesArray $Preview | Where-Object { Test-RooIndustriesGameTuneSameInstance $reviewed $_ })
+        if ($current.Count -gt 0) {
+            $changed = (Get-RooIndustriesGameTunePlanKey $current[0]) -ne (Get-RooIndustriesGameTunePlanKey $reviewed)
+        } else {
+            $live = Get-RooIndustriesGameTuneLiveProcessIdentity $reviewed
+            $changed = $live.exists -and $live.matches
+            if (-not $changed -and $isGame) {
+                return New-RooIndustriesIssue 'GAME_TUNE_REVIEWED_GAME_GONE' "$name closed or restarted after you reviewed it, so nothing changed. Review again, then start." 'error' 'performance.gameTune' $name $true 'Review again, then start.' $null
+            }
+        }
+        if ($changed) {
+            return New-RooIndustriesIssue 'GAME_TUNE_REVIEW_PLAN_CHANGED' "$name's settings are different from when you reviewed them, so nothing changed. Review again, then start." 'error' 'performance.gameTune' $name $true 'Review again, then start.' $null
+        }
+    }
+    return $null
+}
+
+function Select-RooIndustriesGameTuneReviewedChanges {
+    param(
+        [object]$Review,
+        [object]$PreviewEntry,
+        [object[]]$Changes
+    )
+    $reviewed = @(Get-RooIndustriesPropertyArray $Review 'entries' | Where-Object { Test-RooIndustriesGameTuneSameInstance $_ $PreviewEntry })
+    if ($reviewed.Count -eq 0) { return @() }
+    $approved = @(Get-RooIndustriesPreviewControlChanges $reviewed[0] | ForEach-Object { "$([string](Get-RooIndustriesPropertyValue $_ 'control' ''))>$([string](Get-RooIndustriesPropertyValue $_ 'proposedValue' $null))" })
+    return @(Get-RooIndustriesArray $Changes | Where-Object { $approved -contains "$([string](Get-RooIndustriesPropertyValue $_ 'control' ''))>$([string](Get-RooIndustriesPropertyValue $_ 'proposedValue' $null))" })
+}

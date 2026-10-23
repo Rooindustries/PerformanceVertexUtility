@@ -50,6 +50,8 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
     [ObservableProperty] private bool _restoreAvailable;
     [NotifyPropertyChangedFor(nameof(CanStartMatchTune))]
     [ObservableProperty] private bool _hasGameRunning;
+    [NotifyPropertyChangedFor(nameof(CanStartMatchTune))]
+    [ObservableProperty] private bool _matchTuneReviewed;
     [ObservableProperty] private string _matchTuneStatus = "No game priorities checked yet";
     [ObservableProperty] private string _matchTuneDetail =
         "Raises the game CPU priority with normal memory priority, leaves OBS and Discord unchanged, and lowers CPU and memory priority for updaters and browser helpers. Game launchers are left unchanged.";
@@ -65,6 +67,8 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
     private string? _lastBackupId;
     private string? _lastBackupGeneration;
     private SessionRestoreEvidence? _matchTuneRestore;
+    private GameTuneReview? _matchTuneReview;
+    private (string Status, string Detail)? _matchTuneRefusal;
     private SessionRestoreEvidence? _governorRestore;
 
     private sealed record SessionRestoreEvidence(
@@ -84,7 +88,7 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
     public bool CanApplyProcessProfile => CanRunProcessAction && !RestoreAvailable && !App.Live.ProcessProfileRestorePending;
     public bool CanRestoreProfile => !ActionBusy && RestoreAvailable;
     public bool CanCheckMatchTune => !ActionBusy;
-    public bool CanStartMatchTune => !ActionBusy && HasGameRunning;
+    public bool CanStartMatchTune => !ActionBusy && HasGameRunning && MatchTuneReviewed;
     public bool CanRestoreMatchTune => !ActionBusy && MatchTuneRestoreAvailable;
     public bool CanCheckGovernor => !ActionBusy;
     public bool CanStartGovernor => !ActionBusy;
@@ -331,10 +335,12 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
         ActionBusy = true;
         MatchTuneStatus = "Checking game priorities";
         MatchTuneDetail = "Checking the match profile without changing process priority.";
+        SetMatchTuneReview(null);
+        _matchTuneRefusal = null;
         try
         {
-            var response = await App.Live.RunGameTuneSessionResultAsync(false, 3, 1);
-            if (response.Value is null || response.Error is not null
+            var (response, review) = await App.Live.ReviewGameTuneSessionResultAsync(3, 1);
+            if (response.Value is null || response.Error is not null || review is null
                 || !SessionEnvelopeMatches(response.Value, "performance.gameTune.startSession", true))
             {
                 MatchTuneStatus = "Game priority check not confirmed";
@@ -343,6 +349,7 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
             }
             MatchTuneStatus = "Game priorities checked";
             MatchTuneDetail = SummarizeSessionAction(response.Value, "Checked the game priority settings. Nothing changed.");
+            SetMatchTuneReview(review);
         }
         finally
         {
@@ -353,19 +360,24 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
     [RelayCommand]
     private async Task StartMatchTuneAsync()
     {
-        if (!CanStartMatchTune)
+        var review = _matchTuneReview;
+        if (!CanStartMatchTune || review is null)
         {
-            MatchTuneStatus = "Start a game first";
-            MatchTuneDetail = "The app can check the plan anytime, but game priority only applies once a foreground game is detected.";
+            MatchTuneStatus = HasGameRunning ? "Review first" : "Start a game first";
+            MatchTuneDetail = HasGameRunning
+                ? "Review game priority first so you can see what will change before you start."
+                : "The app can check the plan anytime, but game priority only applies once a foreground game is detected.";
             return;
         }
 
+        SetMatchTuneReview(null);
+        _matchTuneRefusal = null;
         ActionBusy = true;
         MatchTuneStatus = "Starting game priorities";
         MatchTuneDetail = "For a short match run, the app can raise the game and leave streaming apps unchanged.";
         try
         {
-            var response = await App.Live.RunGameTuneSessionResultAsync(true, 12, 2);
+            var response = await App.Live.StartGameTuneSessionResultAsync(review, 12, 2);
             var observedRecovery = ReadSessionRestoreEvidence(response.Value, "gameTune");
             if (response.Value is null || response.Error is not null
                 || !SessionEnvelopeMatches(response.Value, "performance.gameTune.startSession", false))
@@ -377,6 +389,12 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
             }
             MatchTuneStatus = SessionStatusTitle(response.Value, "Game priorities finished");
             MatchTuneDetail = SummarizeSessionAction(response.Value, "Ran the game priorities and wrote a restore point when anything changed.");
+            if (ExtractString(response.Value, "status") == "refused")
+            {
+                _matchTuneRefusal = (MatchTuneStatus, MatchTuneDetail);
+                SetMatchTuneRestore(_matchTuneRestore is not null && ValidateSessionRestoreEvidence(_matchTuneRestore) ? _matchTuneRestore : null);
+                return;
+            }
             SetMatchTuneRestore(observedRecovery);
             RestoreHint = MatchTuneRestoreAvailable ? "Session restore is available" : "No verified game-session backup";
         }
@@ -595,6 +613,7 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
 
     private async Task RefreshSessionStatusesAsync()
     {
+        SetMatchTuneReview(null);
         var game = await App.Live.GetGameTuneSessionStatusResultAsync();
         var gameValid = game.Value is not null && game.Error is null
             && SessionEnvelopeMatches(game.Value, "performance.gameTune.sessionStatus", null);
@@ -602,6 +621,11 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
         MatchTuneDetail = gameValid
             ? SummarizeSessionAction(game.Value, "No game priorities has changed this PC yet.")
             : game.Error ?? "The game-session status returned invalid evidence.";
+        if (_matchTuneRefusal is { } refusal)
+        {
+            (MatchTuneStatus, MatchTuneDetail) = refusal;
+            _matchTuneRefusal = null;
+        }
         var gameRecovery = ReadSessionRestoreEvidence(game.Value, "gameTune");
         SetMatchTuneRestore(gameRecovery ?? (!gameValid && _matchTuneRestore is not null && ValidateSessionRestoreEvidence(_matchTuneRestore) ? _matchTuneRestore : null));
 
@@ -744,6 +768,7 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
                 "failed" => "Needs attention",
                 "notFound" => fallback,
                 "preview" => "Plan ready",
+                "refused" => "Not started",
                 "rolledBack" or "restored" => "Restored",
                 null or "" => fallback,
                 _ => status!,
@@ -818,6 +843,12 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
     {
         _matchTuneRestore = evidence;
         MatchTuneRestoreAvailable = evidence is not null;
+    }
+
+    private void SetMatchTuneReview(GameTuneReview? review)
+    {
+        _matchTuneReview = review;
+        MatchTuneReviewed = review is not null;
     }
 
     private void SetGovernorRestore(SessionRestoreEvidence? evidence)

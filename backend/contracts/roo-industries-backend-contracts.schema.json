@@ -1650,7 +1650,8 @@
           "enum": [
             "running",
             "completed",
-            "failed"
+            "failed",
+            "refused"
           ]
         },
         "sessionStatus": {
@@ -1658,7 +1659,8 @@
           "enum": [
             "running",
             "completed",
-            "failed"
+            "failed",
+            "refused"
           ]
         },
         "startedAtUtc": {
@@ -1772,6 +1774,123 @@
           "items": {
             "type": "object",
             "additionalProperties": true
+          }
+        },
+        "preview": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "review": {
+          "$ref": "#/$defs/gameTuneSessionReview"
+        }
+      }
+    },
+    "gameTuneSessionReview": {
+      "title": "Game Tune Reviewed Plan",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "kind",
+        "reviewId",
+        "createdAtUtc",
+        "profileId",
+        "profilePath",
+        "profileSha256",
+        "targetGameProcessName",
+        "entries"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "kind": {
+          "const": "game-tune-review"
+        },
+        "reviewId": {
+          "type": "string"
+        },
+        "createdAtUtc": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "profileId": {
+          "type": "string"
+        },
+        "profilePath": {
+          "type": "string"
+        },
+        "profileSha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "targetGameProcessName": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "entries": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "processId",
+              "processName",
+              "executablePath",
+              "processStartTimeUtc",
+              "classification",
+              "ruleId",
+              "blocked",
+              "protected",
+              "controlChanges"
+            ],
+            "properties": {
+              "processId": {
+                "type": "integer"
+              },
+              "processName": {
+                "type": "string"
+              },
+              "executablePath": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "processStartTimeUtc": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "classification": {
+                "type": "string"
+              },
+              "ruleId": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "blocked": {
+                "type": "boolean"
+              },
+              "protected": {
+                "type": "boolean"
+              },
+              "controlChanges": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
           }
         }
       }

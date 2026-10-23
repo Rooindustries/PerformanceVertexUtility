@@ -5,6 +5,8 @@ param(
     [string]$OutputPath = '',
     [string]$StateRoot = '',
     [string]$TargetGameProcessName = '',
+    [string]$ReviewPath = '',
+    [string]$ReviewSha256 = '',
     [switch]$ConfirmApply
 )
 
@@ -20,6 +22,41 @@ function Write-SessionState {
     Write-RooIndustriesGameTuneJsonFile $State (Join-Path $SessionDirectory 'session.json')
 }
 
+function New-RefusedEnvelope {
+    param([object]$Problem)
+    return [pscustomobject]@{
+        actionId = 'performance.gameTune.startSession'
+        schemaVersion = 1
+        productName = $script:RooIndustriesProcessProductName
+        correlationId = $null
+        sessionId = $null
+        dryRun = (-not $ConfirmApply)
+        profileId = $profileId
+        profilePath = $resolvedProfilePath
+        targetGameProcessName = if ([string]::IsNullOrWhiteSpace($TargetGameProcessName)) { $null } else { $TargetGameProcessName }
+        status = 'refused'
+        sessionStatus = 'refused'
+        startedAtUtc = $startedAtUtc
+        completedAtUtc = Get-RooIndustriesUtcStamp
+        pollIntervalSeconds = $PollIntervalSeconds
+        maxDurationSeconds = $MaxDurationSeconds
+        pollCount = 0
+        stateRoot = $null
+        sessionPath = $null
+        backupManifestPath = $null
+        restorable = $false
+        changedItems = @()
+        skippedItems = @()
+        restoredItems = @()
+        polls = @()
+        backup = $null
+        result = $null
+        warnings = @()
+        errors = @($Problem)
+        logs = @((New-RooIndustriesLog "Game Tune did not start: $($Problem.message)" 'warning'))
+    }
+}
+
 try {
     if ($PollIntervalSeconds -lt 1) { $PollIntervalSeconds = 1 }
     if ($MaxDurationSeconds -lt 1) { $MaxDurationSeconds = 1 }
@@ -30,6 +67,25 @@ try {
     $profileId = [string](Get-RooIndustriesPropertyValue $profile 'profileId' 'game-session')
     $sessionId = New-RooIndustriesGameTuneSessionId $profileId
     $startedAtUtc = Get-RooIndustriesUtcStamp
+    $previewArgs = @{ ProfilePath = $resolvedProfilePath }
+    if (-not [string]::IsNullOrWhiteSpace($TargetGameProcessName)) {
+        $previewArgs['TargetGameProcessName'] = $TargetGameProcessName
+    }
+    $review = $null
+    $reviewedPreview = $null
+    if (-not [string]::IsNullOrWhiteSpace($ReviewPath) -or -not [string]::IsNullOrWhiteSpace($ReviewSha256)) {
+        $reviewInput = Read-RooIndustriesGameTuneReview $ReviewPath $ReviewSha256 $resolvedProfilePath $TargetGameProcessName
+        $problem = $reviewInput.problem
+        if ($null -eq $problem) {
+            $review = $reviewInput.review
+            $reviewedPreview = & (Join-Path $PSScriptRoot 'Preview-ProcessProfile.ps1') @previewArgs | ConvertFrom-Json
+            $problem = Get-RooIndustriesGameTuneReviewProblem $review @(Get-RooIndustriesPropertyArray $reviewedPreview 'preview')
+        }
+        if ($null -ne $problem) {
+            Write-RooIndustriesJsonOutput (New-RefusedEnvelope $problem) $OutputPath
+            return
+        }
+    }
     $sessionDirectory = $null
     $sessionStatePath = $null
     $backupPath = $null
@@ -103,14 +159,17 @@ try {
 
     $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
     $pollIndex = 0
+    $lastPreview = @()
     while ($true) {
         $pollIndex++
         $pollStartedAtUtc = Get-RooIndustriesUtcStamp
-        $previewArgs = @{ ProfilePath = $resolvedProfilePath }
-        if (-not [string]::IsNullOrWhiteSpace($TargetGameProcessName)) {
-            $previewArgs['TargetGameProcessName'] = $TargetGameProcessName
+        if ($null -ne $reviewedPreview) {
+            $previewEnvelope = $reviewedPreview
+            $reviewedPreview = $null
+        } else {
+            $previewEnvelope = & (Join-Path $PSScriptRoot 'Preview-ProcessProfile.ps1') @previewArgs | ConvertFrom-Json
         }
-        $previewEnvelope = & (Join-Path $PSScriptRoot 'Preview-ProcessProfile.ps1') @previewArgs | ConvertFrom-Json
+        $lastPreview = @(Get-RooIndustriesPropertyArray $previewEnvelope 'preview')
         foreach ($warning in @(Get-RooIndustriesPropertyArray $previewEnvelope 'warnings')) { $warnings.Add($warning) | Out-Null }
         foreach ($errorItem in @(Get-RooIndustriesPropertyArray $previewEnvelope 'errors')) { $errors.Add($errorItem) | Out-Null }
 
@@ -130,6 +189,7 @@ try {
         try {
             foreach ($entry in @(if ($gateMissed) { @() } else { Get-RooIndustriesPropertyArray $previewEnvelope 'preview' })) {
                 $entryControlChanges = @(Get-RooIndustriesPreviewControlChanges $entry)
+                if ($null -ne $review) { $entryControlChanges = @(Select-RooIndustriesGameTuneReviewedChanges $review $entry $entryControlChanges) }
                 if ($entryControlChanges.Count -eq 0) { continue }
 
                 $allowed = Test-RooIndustriesGameTuneEntryAllowed $entry
@@ -365,6 +425,11 @@ try {
         warnings = @($warnings.ToArray())
         errors = @($errors.ToArray())
         logs = @($logs.ToArray())
+    }
+
+    if (-not $ConfirmApply) {
+        $envelope | Add-Member -NotePropertyName preview -NotePropertyValue $lastPreview
+        $envelope | Add-Member -NotePropertyName review -NotePropertyValue (New-RooIndustriesGameTuneReview $lastPreview $profileId $resolvedProfilePath $TargetGameProcessName)
     }
 
     if ($ConfirmApply) {
