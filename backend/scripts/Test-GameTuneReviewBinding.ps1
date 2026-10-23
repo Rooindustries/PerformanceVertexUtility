@@ -11,9 +11,9 @@ function Add-Check([bool]$Condition, [string]$Pass, [string]$Fail) {
 }
 
 $suffix = [guid]::NewGuid().ToString('N').Substring(0, 6)
-$gameA = "RooTuneGameA$suffix.exe"
-$gameB = "RooTuneGameB$suffix.exe"
-$helper = "RooTuneHelper$suffix.exe"
+$gameA = "RooIndustriesTuneGameA$suffix.exe"
+$gameB = "RooIndustriesTuneGameB$suffix.exe"
+$helper = "RooIndustriesTuneHelper$suffix.exe"
 $root = Join-Path ([IO.Path]::GetTempPath()) "roo-industries-game-tune-review-$suffix"
 $probes = New-Object System.Collections.Generic.List[System.Diagnostics.Process]
 $profilePath = Join-Path $root 'profile.json'
