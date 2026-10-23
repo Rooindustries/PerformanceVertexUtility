@@ -135,7 +135,13 @@ try:
             path = urlparse(self.path).path
             if failures.get(path):
                 status = failures[path].pop(0)
-                if status:
+                if status == 'truncated':
+                    body = (work / 'blob' / path[1:]).read_bytes()
+                    self.send_response(200)
+                    self.send_header('Content-Length', str(len(body)))
+                    self.end_headers()
+                    self.wfile.write(body[:len(body) // 2])
+                elif status:
                     self.send_error(status)
                 return
             blob = work / 'blob' / path[1:]
@@ -204,9 +210,9 @@ try:
             def still_live():
                 if (work / 'blob' / flow_path).read_bytes() != bad.read_bytes():
                     return 'the refused rollback changed the feed'
-            for failure, status in [('503', 503), ('dropped', 0)]:
+            for failure, status, reason in [('503', 503, ''), ('dropped', 0, ''), ('truncated', 'truncated', 'Published response ended early')]:
                 failures['/' + flow_path] = [status]
-                run(flow + '-feed-' + failure + '-rollback-refused', tool, rollback, 1, "Couldn't read the live feed (", lambda: 'the feed failure was not served' if failures['/' + flow_path] else still_live(), upload_env)
+                run(flow + '-feed-' + failure + '-rollback-refused', tool, rollback, 1, "Couldn't read the live feed (" + reason, lambda: 'the feed failure was not served' if failures['/' + flow_path] else still_live(), upload_env)
             run(flow + '-unlisted-rollback-refused', tool, rollback, 1, 'The live beta 0.11.1-beta is not in released-versions.txt. Add it there before rolling back', still_live, armed_env)
             for version in ['0.11.1-beta', '0.11.1-alpha']:
                 publish_case(flow + '-live-' + version + '-refused', tool, version, 1, 'is not newer than the live beta 0.11.1-beta', bad.read_bytes(), flow_path, origin, armed_env, ['--yes-publish'])

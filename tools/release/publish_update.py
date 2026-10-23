@@ -240,6 +240,8 @@ def fetch(url, limit):
         data = response.read(limit + 1)
         if len(data) > limit:
             raise ValueError("Published response exceeds its bound")
+        if response.length:
+            raise ValueError("Published response ended early")
         return data
 
 

@@ -33,6 +33,6 @@ This stops new downloads within about a minute. An app that already downloaded t
 
 If a publish stops after the installer upload, the immutable installer path can't be uploaded again. Run `set-feed` with the new manifest to finish it, then add its version to `released-versions.txt`.
 
-If publish stops after the feed upload, run `verify` against the live feed, then add the version to `released-versions.txt`.
+If publish stops after the feed upload, download the live feed (`curl -o live.json "$(cat tools/release/update-feed.txt)"`), check it with `verify --manifest live.json --feed-url "$(cat tools/release/update-feed.txt)"`, and if it shows the new version, add that version to `released-versions.txt`.
 
 Before publication, run the [release upgrade rehearsal](../validation/Update/README.md#release-upgrade-rehearsal) with the signed manifest and matching installer as inputs. Run its read-only preflight first. Use an exclusive test window for `-MoveAsideExistingState`, and require `restore-verification` with `restored: true`, an empty `cleanupErrors` list and a passing invocation. Retain its ownership ledger and data archives. After publication, repeat with `-LiveFeed` to prove the real old app downloads and installs the live release.
