@@ -312,7 +312,9 @@ public partial class GameSessionViewModel : ObservableObject
 
     public async Task TurnOffProfileAsync(LaunchProfileRow row)
     {
-        if (Busy) return;
+        while (Busy) await Task.Delay(100);
+        if (Profiles.FirstOrDefault(item => item.Root == row.Root) is not { } current) return;
+        row = current;
         Busy = true;
         string status, detail;
         try
