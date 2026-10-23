@@ -60,6 +60,7 @@ function Interrupted([string]$Name, [switch]$AppOwner, [int]$Duration = 120) {
     $controller = Start-Process "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -ArgumentList '-NoProfile','-EncodedCommand',$encoded -WindowStyle Hidden -PassThru
     $owned.Add($controller) | Out-Null
     $sessionPath = Wait-For { $path = Get-RooIndustriesGameTuneLatestSessionFile (Join-Path $state 'game-tune-sessions'); if ($path -and (Priority $game) -eq 'AboveNormal') { $path } }
+    Wait-For { try { $backup = [string](Read-RooIndustriesJsonFile $sessionPath).backupManifestPath; $backup -and (Test-Path -LiteralPath $backup) -and @((Read-RooIndustriesJsonFile $backup).snapshots | ForEach-Object { $_.controlChanges } | Where-Object outcome -eq 'applied').Count } catch { $false } } | Out-Null
     return [pscustomobject]@{ Game = $game; Controller = $controller; App = $appController; Path = $sessionPath; Directory = $directory }
 }
 function Status($Run, [switch]$Recover) {
