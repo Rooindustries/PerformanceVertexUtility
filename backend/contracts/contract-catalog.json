@@ -122,6 +122,13 @@
       "status": "draft"
     },
     {
+      "name": "launch preset catalog",
+      "definitionRef": "roo-industries-backend-contracts.schema.json#/$defs/launchPresetCatalog",
+      "workflow": "game tune runtime",
+      "summary": "Fixed, named sets of Games tab session choices that fill the session form; a preset changes nothing until the user reviews and starts the session.",
+      "status": "draft"
+    },
+    {
       "name": "process governor profile",
       "definitionRef": "roo-industries-backend-contracts.schema.json#/$defs/processGovernorProfile",
       "workflow": "process governor",

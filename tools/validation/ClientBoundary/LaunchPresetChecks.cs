@@ -20,7 +20,7 @@ static class LaunchPresetChecks
         var schema = JsonNode.Parse(File.ReadAllText(Path.Combine(repo, "backend", "contracts", "roo-industries-backend-contracts.schema.json")))!;
         var choices = schema["$defs"]!["launchPresetCatalog"]!["properties"]!["presets"]!["items"]!["properties"]!["settings"]!["properties"]!.AsObject()
             .SelectMany(pair => pair.Value!["enum"]!.AsArray().Select(value => (Name: pair.Key, Value: value!.ToJsonString()))).ToArray();
-        Check(choices.Select(choice => choice.Name).Distinct().SequenceEqual(LaunchPresetCatalog.SettingNames), "The catalog schema lists the game session form's settings, in the form's order");
+        Check(choices.Select(choice => choice.Name).Distinct().SequenceEqual(LaunchPresetCatalog.SettingNames), "The catalog schema and the loader list the same game session settings, in the same order");
         var folder = Directory.CreateTempSubdirectory("roo-industries-launch-presets-");
         try
         {
