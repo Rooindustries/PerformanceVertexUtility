@@ -83,35 +83,43 @@ def main():
     receipt = windows.upload_frame(args.host, args.expected_machine, 'roo-industries-restart-check', True, args.parent)
     (args.out_dir / 'frame.json').write_text(json.dumps(receipt, indent=2))
     status = 'fail'
+    phase = 'lease'
     try:
         lease(args, receipt)
         modes = [mode for mode in args.checks.split(',') if mode]
         if modes:
+            phase = 'checks'
             script = CHECKS.replace('__SOURCE__', windows.ps_literal(receipt['stagingPath'])).replace('__MODES__', ','.join(windows.ps_literal(mode) for mode in modes))
-            try:
-                checks = windows.invoke(args.host, args.expected_machine, script, timeout=2400)
-            except subprocess.CalledProcessError as error:
-                (args.out_dir / 'checks.log').write_text((error.stdout or '') + (error.stderr or ''))
-                raise
+            checks = windows.invoke(args.host, args.expected_machine, script, timeout=2400)
             (args.out_dir / 'checks.log').write_text(checks.stdout)
             print('\n'.join(line for line in checks.stdout.splitlines() if line.startswith(('PASS', 'FAIL', 'ROO_INDUSTRIES_CHECK', 'Completed', 'Unhandled'))), flush=True)
         if not args.skip_capture:
+            phase = 'capture'
             result = windows.interactive_frame(args.host, args.expected_machine, receipt, 'tools/validation/WindowsTweaksUi/Capture-RestartCheck.ps1',
                                                {'Source': receipt['stagingPath'], 'OutRoot': receipt['runRoot'] + r'\capture', 'Label': args.label, 'ExpectedOutcome': args.expected_outcome}, 30)
             (args.out_dir / 'capture.log').write_text(result.stdout)
             evidence = next(line.split(' ', 2)[2] for line in result.stdout.splitlines() if line.startswith('ROO_INDUSTRIES_RESTART_CAPTURE pass '))
+            phase = 'encode'
             encode(args, evidence)
+            phase = 'download'
             windows.run_transport(args.host, 'scp', ['-r', args.host + ':' + evidence.replace('\\', '/'), str(args.out_dir / 'evidence')],
                                   timeout=windows.TRANSFER_TIMEOUT, capture_output=True)
         status = 'pass'
+    except subprocess.CalledProcessError as error:
+        (args.out_dir / (phase + '.log')).write_text((error.stdout or '') + (error.stderr or ''))
+        raise
     finally:
-        clear = '& ' + windows.ps_literal(receipt['stagingPath'] + r'\tools\validation\Update\Clear-UpdateFrame.ps1') + ' -Frame ' + windows.ps_literal(receipt['runRoot']) + ' -ExpectedMachine ' + windows.ps_literal(args.expected_machine)
-        try:
-            closed = windows.invoke(args.host, args.expected_machine, clear, timeout=windows.CLEANUP_TIMEOUT)
-        except subprocess.CalledProcessError as error:
-            (args.out_dir / 'cleanup.log').write_text((error.stdout or '') + (error.stderr or ''))
-            raise
-        (args.out_dir / 'cleanup.log').write_text(closed.stdout)
+        if status != 'pass' and phase in ('capture', 'encode', 'download'):
+            print('Retained source frame and capture evidence: ' + receipt['runRoot'], flush=True)
+        else:
+            clear = '& ' + windows.ps_literal(receipt['stagingPath'] + r'\tools\validation\Update\Clear-UpdateFrame.ps1') + ' -Frame ' + windows.ps_literal(receipt['runRoot']) + ' -ExpectedMachine ' + windows.ps_literal(args.expected_machine)
+            try:
+                closed = windows.invoke(args.host, args.expected_machine, clear, timeout=windows.CLEANUP_TIMEOUT)
+                (args.out_dir / 'cleanup.log').write_text(closed.stdout)
+            except subprocess.CalledProcessError as error:
+                (args.out_dir / 'cleanup.log').write_text((error.stdout or '') + (error.stderr or ''))
+                if status == 'pass':
+                    raise
         print('restart check ' + status + ': ' + str(args.out_dir), flush=True)
 
 
