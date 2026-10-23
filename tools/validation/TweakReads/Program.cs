@@ -36,6 +36,13 @@ caught.Clear();
 Walk(catalog, split, new(1, [new(split.Id, "next-number", "fixture", [new(splitAddress, 4, ControlValues.From(3670017))]), new(split.Id, "as-text", "fixture", [new(splitAddress, 1, ControlValues.From("3670016"))])], []), caught);
 if (!caught.Keys.SequenceEqual([split.Id + " as-text", split.Id + " next-number"]))
     throw new InvalidOperationException("A value next to a Windows default read as that default: " + string.Join("; ", caught.Select(pair => pair.Key + " " + pair.Value)));
+var usb = definitions["windows.83d4b1b8f7a55f84"];
+var usbAddress = usb.Options[0].Changes[0].Address;
+var usbPaths = new[] { "0000", ReadStore.Device }.SelectMany(hub => new[] { "0000", ReadStore.Device }.Select(port => usbAddress with { KeyPath = usbAddress.KeyPath + "\\" + hub + "\\" + port + "\\Device Parameters" })).ToArray();
+caught.Clear();
+Walk(catalog, usb, new(1, [new(usb.Id, "all-five", "fixture", usbPaths.Select(path => new KnownValue(path, 4, ControlValues.From(5))).ToArray())], []), caught);
+if (!caught.Keys.SequenceEqual([usb.Id + " all-five"]) || !caught[usb.Id + " all-five"].StartsWith("Custom value: 5", StringComparison.Ordinal))
+    throw new InvalidOperationException("Every device set to one unknown value must read as that custom value: " + string.Join("; ", caught.Select(pair => pair.Key + " " + pair.Value)));
 walked = 0; unplanned.Clear();
 var offenders = new SortedDictionary<string, string>(StringComparer.Ordinal);
 foreach (var definition in catalog.Settings) Walk(catalog, definition, known, offenders);
@@ -129,7 +136,7 @@ sealed record ReadAllowlist([property: JsonRequired] int SchemaVersion, [propert
 
 sealed class ReadStore : ITweakStore
 {
-    private const string Device = "{11111111-2222-3333-4444-555555555555}";
+    public const string Device = "{11111111-2222-3333-4444-555555555555}";
     private readonly Dictionary<string, RegistryValueData> _values = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, KnownControlRead> _controls = new(StringComparer.Ordinal);
     public TweakContext Context { get; }

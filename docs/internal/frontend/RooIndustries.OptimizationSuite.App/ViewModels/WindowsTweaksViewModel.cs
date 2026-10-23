@@ -136,6 +136,9 @@ public partial class WindowsTweakRow : ObservableObject
             ? data is { Type: 4, Bytes.Length: 4 } && value.TryGetUInt32(out var number) && BitConverter.ToUInt32(data.Bytes) == number
             : value.ValueKind == System.Text.Json.JsonValueKind.String && data is { Type: 1 or 2 } && data.Bytes.Length % 2 == 0 && System.Text.Encoding.Unicode.GetString(data.Bytes).TrimEnd('\0') == value.GetString()))
         && (status.Controls ?? []).All(control => defaults.TryGetValue(control.Address.Property, out var value) && ControlValues.Equal(control.Value, value));
+    private bool PerDevice => Definition.Options.Any(option => option.Changes.Any(change => change.Selector is not null) || (option.Controls ?? []).Any(control => control.Address.Kind is "device-power" or "network-adapter"));
+    private static bool DevicesDiffer(TweakSettingStatus status) => status.Observations is [var first, _, ..] observed && observed.Any(read => !TweakRead.SameValue(read.Value, first.Value))
+        || status.Controls is [{ Value.ValueKind: System.Text.Json.JsonValueKind.Object } control] && control.Value.EnumerateObject().Select(device => device.Value.GetRawText()).Distinct(StringComparer.Ordinal).Count() > 1;
     private static string? ServiceState(TweakControlRead control) => (control.Address.Property, control.Value.ValueKind) switch
     {
         ("startup", System.Text.Json.JsonValueKind.Number) => control.Value.GetInt32() switch { 0 => "Boot", 1 => "System", 2 => "Automatic", 3 => "Manual", 4 => "Disabled", _ => null },
@@ -240,6 +243,7 @@ public partial class WindowsTweakRow : ObservableObject
         if (status is { Error: null, ConfiguredChoices.Length: 0, Controls: [{ Address.Kind: "mitigations", Value.ValueKind: System.Text.Json.JsonValueKind.Object } policy] } && MitigationFields(Definition) is { Length: > 0 } fields
             && fields.All(field => policy.Value.TryGetProperty(field, out var value) && (value.ValueKind == System.Text.Json.JsonValueKind.String && value.GetString() == "NOTSET" || value.ValueKind == System.Text.Json.JsonValueKind.False)) && NoRawPolicy(policy.Value)) Current = "Windows default";
         if (Current == "Custom value" && status is { Error: null } && Presentation.Defaults is { } defaults && WindowsDefault(status, defaults)) Current = "Windows default";
+        if (Current == "Custom value" && status is { Error: null } && PerDevice && DevicesDiffer(status)) Current = "Varies by device";
         if (Current == "Custom value" && status is { Error: null, Controls: null or [] } && status.Observations is [var first, ..] found
             && found.All(read => read.Value is not null && TweakRead.SameValue(read.Value, first.Value)) && RegistryText(first.Value!) is { } value) Current = "Custom value: " + value;
         if (_onlyDefaultHere) Detail = "This Windows edition or version doesn't use this setting. You can keep a saved choice for a matching installation.";
