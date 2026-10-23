@@ -1301,7 +1301,7 @@ try {
         function Get-FakeStatus { (@('Probe','ProbeDep','ProbeDepChild','ProbeIdle')|ForEach-Object {$_+'='+$script:fakeServices[$_].startup+'/'+$script:fakeServices[$_].status}) -join ' ' }
         $processScript=Join-Path $tempRoot 'dependent-process.ps1'
         $processBody=@'
-param($Harness,$FixtureManifest,$Root,$Backup,$State,$Result,[switch]$Interrupt,[switch]$CompletionInterrupt)
+param($Harness,$FixtureManifest,$Root,$Backup,$State,$Result,[switch]$Interrupt,[switch]$CompletionInterrupt,[ValidateSet('None','BeforeRead','AfterRead','AfterCompletion')][string]$Barrier='None',[switch]$Latest)
 $ErrorActionPreference='Stop'
 . $Harness -Action ListModules -ManifestPath $FixtureManifest -DataRoot $Root -ModuleId fixture | Out-Null
 $script:fakeServices=Import-Clixml -LiteralPath $State
@@ -1321,6 +1321,29 @@ function Start-Service {
 }
 $ModuleId='fixture';$ManifestPath=$FixtureManifest;$DataRoot=$Root;$BackupPath=$Backup;$ConfirmApply=$true
 $script:processBackup=$Backup
+$script:markerRegressed=$false
+$script:backupReads=0
+function Wait-DependentBarrier {
+    [IO.File]::WriteAllText(($Result+'.ready'),'ready')
+    $clock=[Diagnostics.Stopwatch]::StartNew()
+    while (-not (Test-Path -LiteralPath ($Result+'.release'))) {
+        if ($clock.Elapsed.TotalSeconds -gt 30) { throw 'Dependent process barrier timed out' }
+        Start-Sleep -Milliseconds 20
+    }
+    $script:fakeServices=Import-Clixml -LiteralPath $State
+}
+function Get-Content {
+    [CmdletBinding()]param($LiteralPath,[switch]$Raw)
+    if ($LiteralPath -ceq $script:processBackup) {
+        $script:backupReads++
+        $selectedRead=if ($Latest) {2} else {1}
+        if ($script:backupReads -eq $selectedRead -and $Barrier -eq 'BeforeRead') { Wait-DependentBarrier }
+        $bytes=Microsoft.PowerShell.Management\Get-Content -LiteralPath $LiteralPath -Raw:$Raw
+        if ($script:backupReads -eq $selectedRead -and $Barrier -eq 'AfterRead') { Wait-DependentBarrier }
+        return $bytes
+    }
+    Microsoft.PowerShell.Management\Get-Content -LiteralPath $LiteralPath -Raw:$Raw
+}
 $write=${function:Write-JsonFile}
 function Write-JsonFile {
     param($Object,$Path)
@@ -1329,11 +1352,22 @@ function Write-JsonFile {
         $child=$Object.services[0].dependents|Where-Object name -CEQ ProbeDepChild
         if ($Interrupt -and $child.restoreAttempted -eq $true -and $child.restoreComplete -ne $true) { exit 91 }
         if ($CompletionInterrupt -and $dependent.restoreComplete -eq $true) { exit 92 }
+        $previous=[IO.File]::ReadAllText($Path)|ConvertFrom-Json
+        foreach ($old in $previous.services[0].dependents) {
+            $next=@($Object.services[0].dependents|Where-Object name -CEQ $old.name)[0]
+            foreach ($marker in 'restoreAttempted','restoreComplete') {
+                if ($old.$marker -eq $true -and $next.$marker -ne $true) { $script:markerRegressed=$true }
+            }
+        }
     }
     & $write $Object $Path
+    if ($Path -ceq $script:processBackup -and $Barrier -eq 'AfterCompletion' -and $dependent.restoreComplete -eq $true) { Wait-DependentBarrier }
 }
-$restored=Invoke-RollbackModule
-@{result=$restored;calls=@($script:serviceCalls)} | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $Result -Encoding UTF8
+if ($Latest) { $BackupPath='' }
+$restored=$null;$failure=$null
+try { $restored=Invoke-RollbackModule } catch { $failure=$_.Exception.Message }
+@{result=$restored;calls=@($script:serviceCalls);error=$failure;markerRegressed=$script:markerRegressed;backupReads=$script:backupReads} | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $Result -Encoding UTF8
+if ($failure) { exit 2 }
 if (-not $restored.success) { exit 1 }
 '@
         Set-Content -LiteralPath $processScript -Value $processBody -Encoding UTF8
@@ -1341,7 +1375,7 @@ if (-not $restored.success) { exit 1 }
             $state=Join-Path $DataRoot 'service-state.xml'
             $result=Join-Path $DataRoot 'process-result.json'
             $script:fakeServices | Export-Clixml -LiteralPath $state
-            $exe=Join-Path $PSHOME $(if ($env:OS -eq 'Windows_NT') {'powershell.exe'} else {'pwsh'})
+            $exe=[Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
             $arguments='-NoProfile -File "'+$processScript+'" -Harness "'+$HarnessPath+'" -FixtureManifest "'+$ManifestPath+'" -Root "'+$DataRoot+'" -Backup "'+$BackupPath+'" -State "'+$state+'" -Result "'+$result+'"'
             if ($Interrupt) { $arguments+=' -Interrupt' }
             if ($CompletionInterrupt) { $arguments+=' -CompletionInterrupt' }
@@ -1353,6 +1387,151 @@ if (-not $restored.success) { exit 1 }
         }
         $restoredState='Probe=Automatic/Running ProbeDep=Manual/Running ProbeDepChild=Manual/Running ProbeIdle=Manual/Stopped'
 
+        foreach ($latest in $false,$true) { & {
+            param($Latest)
+            $DataRoot=Reset-DependentFixture
+            $applied=Invoke-ReviewedApply
+            $BackupPath=$applied.backupPath
+            $state=Join-Path $DataRoot 'overlap-state.xml'
+            $firstResult=Join-Path $DataRoot 'first-result.json'
+            $secondResult=Join-Path $DataRoot 'second-result.json'
+            $script:fakeServices|Export-Clixml -LiteralPath $state
+            $exe=[Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
+            $arguments='-NoProfile -File "'+$processScript+'" -Harness "'+$HarnessPath+'" -FixtureManifest "'+$ManifestPath+'" -Root "'+$DataRoot+'" -Backup "'+$BackupPath+'" -State "'+$state+'"'
+            $first=Start-Process -FilePath $exe -ArgumentList ($arguments+' -Result "'+$firstResult+'" -Barrier BeforeRead') -PassThru -NoNewWindow
+            $second=$null
+            try {
+                $clock=[Diagnostics.Stopwatch]::StartNew()
+                while (-not (Test-Path -LiteralPath ($firstResult+'.ready'))) {
+                    if ($first.HasExited -or $clock.Elapsed.TotalSeconds -gt 15) { throw 'First Undo did not reach the read barrier' }
+                    Start-Sleep -Milliseconds 20
+                }
+                $hash=(Get-FileHash -LiteralPath $BackupPath).Hash
+                $files=@(Get-ChildItem -LiteralPath (Split-Path $BackupPath -Parent)|ForEach-Object Name) -join ','
+                $calls=$script:serviceCalls.Count
+                $ConfirmApply=$false;$preview=Invoke-RollbackModule
+                Test-DependentCase ($preview.success -and $preview.restoredServices -eq 3 -and $script:serviceCalls.Count -eq $calls -and (Get-FileHash -LiteralPath $BackupPath).Hash -ceq $hash -and (@(Get-ChildItem -LiteralPath (Split-Path $BackupPath -Parent)|ForEach-Object Name) -join ',') -ceq $files) 'Preview stays read-only while another process owns confirmed Undo'
+                & {
+                    $BackupPath=Join-Path $DataRoot 'independent-backup.json'
+                    Write-JsonFile @{moduleId='fixture';registry=@();services=@()} $BackupPath
+                    $ConfirmApply=$true;$independent=Invoke-RollbackModule
+                    Test-DependentCase ($independent.success -and $script:serviceCalls.Count -eq $calls) 'A different selected backup is not blocked by the held lock'
+                }
+                $latestArgument=if ($Latest) {' -Latest'} else {''}
+                $clock.Restart()
+                $second=Start-Process -FilePath $exe -ArgumentList ($arguments+' -Result "'+$secondResult+'" -Barrier AfterRead'+$latestArgument) -PassThru -NoNewWindow
+                while (-not $second.HasExited -and -not (Test-Path -LiteralPath ($secondResult+'.ready'))) {
+                    if ($clock.Elapsed.TotalSeconds -gt 10) { throw 'Competing Undo neither refused nor reached the read barrier' }
+                    Start-Sleep -Milliseconds 20
+                }
+                $staleRead=Test-Path -LiteralPath ($secondResult+'.ready')
+                if (-not $staleRead) {
+                    $second.WaitForExit()
+                    $busy=Get-Content -LiteralPath $secondResult -Raw|ConvertFrom-Json
+                    $expectedReads=if ($Latest) {1} else {0}
+                    Test-DependentCase ($second.ExitCode -eq 2 -and $busy.error -like '*backup*busy*Undo*' -and @($busy.calls).Count -eq 0 -and $busy.backupReads -eq $expectedReads -and $clock.Elapsed.TotalSeconds -lt 10 -and (Get-FileHash -LiteralPath $BackupPath).Hash -ceq $hash) 'A competing confirmed Undo refuses as busy before its selected-backup read or any service write'
+                }
+                [IO.File]::WriteAllText(($firstResult+'.release'),'continue')
+                if (-not $first.WaitForExit(20000)) { throw 'First Undo did not finish' }
+                $firstOutput=Get-Content -LiteralPath $firstResult -Raw|ConvertFrom-Json
+                $saved=Get-Content -LiteralPath $BackupPath -Raw|ConvertFrom-Json
+                Test-DependentCase ($first.ExitCode -eq 0 -and $firstOutput.result.success -and -not $firstOutput.markerRegressed -and @($saved.services[0].dependents|Where-Object restoreComplete -EQ $true).Count -eq 2) 'The lock holder completes both dependents across atomic backup replacements'
+                $completedHash=(Get-FileHash -LiteralPath $BackupPath).Hash
+                $script:fakeServices=Import-Clixml -LiteralPath $state
+                Stop-Service -Name ProbeDepChild -Force
+                $script:fakeServices|Export-Clixml -LiteralPath $state
+                Test-DependentCase ($script:fakeServices.ProbeDep.status -ceq 'Running' -and $script:fakeServices.ProbeDepChild.status -ceq 'Stopped') 'The external stop affects only the child after both completions are saved'
+                if ($staleRead) {
+                    [IO.File]::WriteAllText(($secondResult+'.release'),'continue')
+                    if (-not $second.WaitForExit(20000)) { throw 'Delayed Undo did not finish' }
+                    $script:fakeServices=Import-Clixml -LiteralPath $state
+                    $replayed=Get-Content -LiteralPath $secondResult -Raw|ConvertFrom-Json
+                } else { $replayed=Invoke-DependentProcess }
+                Write-Host ('OVERLAP latest='+$Latest+' busy='+(-not $staleRead)+' firstCompletions='+@($saved.services[0].dependents|Where-Object restoreComplete -EQ $true).Count+' secondCalls='+(@($replayed.calls) -join ',')+' markerRegressed='+$replayed.markerRegressed+' finalChild='+$script:fakeServices.ProbeDepChild.status)
+                Test-DependentCase ($replayed.result.success -and $replayed.result.restoredServices -eq 0 -and @($replayed.calls).Count -eq 0 -and -not $replayed.markerRegressed -and $script:fakeServices.ProbeDepChild.status -ceq 'Stopped' -and (Get-FileHash -LiteralPath $BackupPath).Hash -ceq $completedHash) ('Overlapping Undo cannot move ownership evidence backwards or restart the externally stopped child (latest='+$Latest+')')
+            } finally {
+                foreach ($process in @($first,$second)) {
+                    if ($null -eq $process) { continue }
+                    if (-not $process.HasExited) { Stop-Process -Id $process.Id -Force; $process.WaitForExit() }
+                    $process.Dispose()
+                }
+            }
+        } $latest }
+
+        & {
+            $DataRoot=Reset-DependentFixture
+            $applied=Invoke-ReviewedApply
+            $BackupPath=$applied.backupPath
+            $state=Join-Path $DataRoot 'crash-state.xml'
+            $result=Join-Path $DataRoot 'crash-result.json'
+            $script:fakeServices|Export-Clixml -LiteralPath $state
+            $exe=[Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
+            $arguments='-NoProfile -File "'+$processScript+'" -Harness "'+$HarnessPath+'" -FixtureManifest "'+$ManifestPath+'" -Root "'+$DataRoot+'" -Backup "'+$BackupPath+'" -State "'+$state+'"'
+            $process=Start-Process -FilePath $exe -ArgumentList ($arguments+' -Result "'+$result+'" -Barrier AfterCompletion') -PassThru -NoNewWindow
+            try {
+                $clock=[Diagnostics.Stopwatch]::StartNew()
+                while (-not (Test-Path -LiteralPath ($result+'.ready'))) {
+                    if ($process.HasExited -or $clock.Elapsed.TotalSeconds -gt 15) { throw 'Undo did not reach the completion barrier' }
+                    Start-Sleep -Milliseconds 20
+                }
+                $saved=Get-Content -LiteralPath $BackupPath -Raw|ConvertFrom-Json
+                Test-DependentCase (@($saved.services[0].dependents|Where-Object {$_.name -ceq 'ProbeDep' -and $_.restoreComplete -eq $true}).Count -eq 1 -and @($saved.services[0].dependents|Where-Object {$_.name -ceq 'ProbeDepChild' -and $_.restoreAttempted -eq $true}).Count -eq 0) 'The process is paused after durable completion and before its child is attempted'
+                $hash=(Get-FileHash -LiteralPath $BackupPath).Hash
+                $busyResult=Join-Path $DataRoot 'crash-busy-result.json'
+                $contender=Start-Process -FilePath $exe -ArgumentList ($arguments+' -Result "'+$busyResult+'"') -Wait -PassThru -NoNewWindow
+                try {
+                    $busy=Get-Content -LiteralPath $busyResult -Raw|ConvertFrom-Json
+                    Test-DependentCase ($contender.ExitCode -eq 2 -and $busy.error -like '*backup*busy*Undo*' -and @($busy.calls).Count -eq 0 -and $busy.backupReads -eq 0 -and (Get-FileHash -LiteralPath $BackupPath).Hash -ceq $hash) 'The same lock stays exclusive after atomic attempt and completion saves'
+                } finally { $contender.Dispose() }
+                Stop-Process -Id $process.Id -Force
+                $process.WaitForExit()
+            } finally {
+                if (-not $process.HasExited) { Stop-Process -Id $process.Id -Force; $process.WaitForExit() }
+                $process.Dispose()
+            }
+            $script:fakeServices=Import-Clixml -LiteralPath $state
+            $replayed=Invoke-DependentProcess
+            $saved=Get-Content -LiteralPath $BackupPath -Raw|ConvertFrom-Json
+            Test-DependentCase ($replayed.result.restoredServices -eq 1 -and (@($replayed.calls) -join ',') -ceq 'start ProbeDepChild' -and -not $replayed.markerRegressed -and (Get-FakeStatus) -ceq $restoredState -and @($saved.services[0].dependents|Where-Object restoreComplete -EQ $true).Count -eq 2) 'Killing the lock holder releases the lock and fresh Undo resumes only the unfinished child'
+        }
+
+        & {
+            $DataRoot=Reset-DependentFixture
+            $applied=Invoke-ReviewedApply
+            $BackupPath=$applied.backupPath
+            $hash=(Get-FileHash -LiteralPath $BackupPath).Hash
+            $calls=$script:serviceCalls.Count
+            $ConfirmApply=$true
+            & {
+                function Get-Content {
+                    [CmdletBinding()]param($LiteralPath,[switch]$Raw)
+                    if ($LiteralPath -ceq $BackupPath) { throw 'Fixture backup read failure' }
+                    Microsoft.PowerShell.Management\Get-Content -LiteralPath $LiteralPath -Raw:$Raw
+                }
+                $refused=$false
+                try { Invoke-RollbackModule|Out-Null } catch { $refused=$_.Exception.Message -ceq 'Fixture backup read failure' }
+                Test-DependentCase ($refused -and $script:serviceCalls.Count -eq $calls -and (Get-FileHash -LiteralPath $BackupPath).Hash -ceq $hash) 'A throw after locking leaves the backup and services untouched'
+            }
+            $replayed=Invoke-DependentProcess
+            Test-DependentCase ($replayed.result.restoredServices -eq 3 -and (Get-FakeStatus) -ceq $restoredState) 'A throw releases the lock for a fresh Undo process'
+        }
+
+        & {
+            $DataRoot=Reset-DependentFixture
+            $applied=Invoke-ReviewedApply
+            $BackupPath=$applied.backupPath
+            $hash=(Get-FileHash -LiteralPath $BackupPath).Hash
+            $calls=$script:serviceCalls.Count
+            $lockPath=$BackupPath+'.undo.lock'
+            New-Item -ItemType Directory -Path $lockPath|Out-Null
+            $ConfirmApply=$true;$refused=$false
+            try { Invoke-RollbackModule|Out-Null } catch { $refused=$true }
+            Test-DependentCase ($refused -and $script:serviceCalls.Count -eq $calls -and (Get-FileHash -LiteralPath $BackupPath).Hash -ceq $hash) 'An unusable lock path refuses Undo before service or backup changes'
+            Remove-Item -LiteralPath $lockPath
+            $replayed=Invoke-DependentProcess
+            Test-DependentCase ($replayed.result.restoredServices -eq 3 -and (Get-FakeStatus) -ceq $restoredState) 'Undo can resume after the lock path is repaired'
+        }
+
         $DataRoot=Reset-DependentFixture
         $applied=Invoke-ReviewedApply
         Test-DependentCase ((Get-FakeStatus) -ceq 'Probe=Disabled/Stopped ProbeDep=Manual/Stopped ProbeDepChild=Manual/Stopped ProbeIdle=Manual/Stopped') 'Apply stops the service and the dependents running on it'
@@ -1363,8 +1542,9 @@ if (-not $restored.success) { exit 1 }
         $ConfirmApply=$false
         $calls=$script:serviceCalls.Count
         $hash=(Get-FileHash -LiteralPath $BackupPath).Hash
+        $files=@(Get-ChildItem -LiteralPath (Split-Path $BackupPath -Parent)|ForEach-Object Name) -join ','
         $preview=Invoke-RollbackModule
-        Test-DependentCase ($preview.success -and $preview.restoredServices -eq 3 -and @($preview.actions|Where-Object {$_.type -eq 'dependent'}).Count -eq 2 -and $script:serviceCalls.Count -eq $calls -and (Get-FileHash -LiteralPath $BackupPath).Hash -ceq $hash) 'Undo preview plans the dependent restarts without changing anything'
+        Test-DependentCase ($preview.success -and $preview.restoredServices -eq 3 -and @($preview.actions|Where-Object {$_.type -eq 'dependent'}).Count -eq 2 -and $script:serviceCalls.Count -eq $calls -and (Get-FileHash -LiteralPath $BackupPath).Hash -ceq $hash -and (@(Get-ChildItem -LiteralPath (Split-Path $BackupPath -Parent)|ForEach-Object Name) -join ',') -ceq $files) 'Undo preview plans the dependent restarts without changing anything'
         $ConfirmApply=$true
         $restored=Invoke-RollbackModule
         Test-DependentCase ($restored.success -and $restored.restoredServices -eq 3 -and (Get-FakeStatus) -ceq $restoredState) ('Undo restarts the dependents that were running and leaves the idle one stopped ('+(Get-FakeStatus)+')')
