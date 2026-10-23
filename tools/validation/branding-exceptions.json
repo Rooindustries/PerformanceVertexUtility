@@ -83,6 +83,7 @@
         "tools/validation/Release/Invoke-BlackwellEpochRecovery.ps1",
         "tools/validation/Release/Test-SourceReadBoundary.py",
         "tools/validation/Tour/run_tour.py",
+        "tools/validation/ThemeSwitch/run_theme.py",
         "tools/validation/Update/Clear-UpdateFrame.ps1",
         "tools/validation/Update/Harness.Common.ps1",
         "tools/validation/Update/Invoke-HarnessChecks.ps1",
