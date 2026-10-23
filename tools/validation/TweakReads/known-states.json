@@ -4097,7 +4097,7 @@
           "property": "blocked"
         },
         "identity": "download-blocker:C:\\PROGRAM FILES\\LOGIDOWNLOADASSISTANT",
-        "binding": "17767302149972357043:33000000000001000000000000000000",
+        "binding": "11111111111111111111:33000000000001000000000000000000",
         "value": false,
         "displayName": "Restrict new writes to LogiDownloadAssistant",
         "allowedValues": null,
@@ -4121,8 +4121,8 @@
           "target": "store-search",
           "property": "permissions"
         },
-        "identity": "file-acl:17767302149972357043:BF650600000037000000000000000000",
-        "binding": "17767302149972357043:BF650600000037000000000000000000:134371952343420020",
+        "identity": "file-acl:11111111111111111111:BF650600000037000000000000000000",
+        "binding": "11111111111111111111:BF650600000037000000000000000000:134371952343420020",
         "value": {
           "owner": "S-1-5-21-111111111-222222222-333333333-1001",
           "group": "S-1-5-21-111111111-222222222-333333333-513",
@@ -4152,7 +4152,7 @@
           "property": "blocked"
         },
         "identity": "download-blocker:C:\\WINDOWS\\INSTALLER\\RAZER",
-        "binding": "17767302149972357043:A90C0000000001000000000000000000",
+        "binding": "11111111111111111111:A90C0000000001000000000000000000",
         "value": false,
         "displayName": "Restrict new writes to Razer",
         "allowedValues": null,
@@ -4202,7 +4202,7 @@
           "property": "selection"
         },
         "identity": "power-selection:S-1-5-21-111111111-222222222-333333333-1001",
-        "binding": "8c831057-e42b-e8ac-65f7-06733dbfb550",
+        "binding": "77777777-8888-9999-0000-111111111111",
         "value": {
           "active": "8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c",
           "plan": null,
