@@ -13,6 +13,8 @@ void Check(bool condition, string message)
     Console.WriteLine("PASS " + message);
 }
 
+if (args is ["bug-report"]) { await BugReportChecks.RunAsync(Check); Console.WriteLine($"Completed {count} bug report checks."); return; }
+
 if (args is ["bug-report-folder"]) { await BugReportChecks.OpenFolderAsync(Check); Console.WriteLine($"Completed {count} bug report folder checks."); return; }
 
 if (args is ["governor-actions"])
