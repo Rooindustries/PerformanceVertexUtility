@@ -229,8 +229,12 @@ public sealed class ApplicationCleanup(Func<CleanupContext> currentContext,
         current.Authority.Verify(appId, identityHash);
         if (!string.Equals(source, current.Source, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("The cleanup belongs to another removal workflow.");
         if (inventoryHash is not null && current.InventoryHash != inventoryHash) throw new InvalidDataException("Installed app ownership changed after review. Scan leftovers again.");
-        var paths = selection?.Where(item => item.Registry is null).Select(item => item.Target).ToArray();
-        if (paths is { Length: > 0 }) new LeftoverDiscovery(current.Application, current.Peers).RequireFileOwnership(paths);
+        if (selection is not null)
+        {
+            var discovery = new LeftoverDiscovery(current.Application, current.Peers);
+            discovery.RequireFileOwnership(selection.Where(item => item.Registry is null).Select(item => item.Target));
+            discovery.RequireRegistryOwnership(selection.Where(item => item.Registry is not null));
+        }
         return current;
     }
 
