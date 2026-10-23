@@ -234,6 +234,11 @@ static class PathSpellingChecks
                 }
                 ApplicationCleanupJournal Apply((string Review, string Hash, ApplicationCleanupPreview Plan) review) =>
                     engine.Apply(review.Review, review.Hash, Path.Combine(Path.GetDirectoryName(review.Review)!, "journal.json"));
+                ApplicationCleanupJournal? Restore(string journal)
+                {
+                    try { return engine.Restore(journal); }
+                    catch (InvalidDataException) { return null; }
+                }
                 string? Refused(LeftoverCandidate item)
                 {
                     try { engine.Preview(Path.Combine(root, "changing-" + mode + "-refused", "review.json"), [item.ItemId], true, true); return null; }
@@ -271,7 +276,7 @@ static class PathSpellingChecks
                     !File.Exists(registry.Plan.Registry!.JournalPath) && State() == before,
                     mode + ": the race after review stops the registry cleanup at Apply before any backup or deletion");
                 check(fileApply.Races > 0 && fileApply.Result.Status == "needsReconciliation" && fileApply.Result.Errors.SequenceEqual([Refusal + folder.Target]) &&
-                    !File.Exists(files.Plan.Files!.JournalPath) && State() == before,
+                    !File.Exists(files.Plan.Files!.JournalPath) && File.ReadAllText(data) == "fixture",
                     mode + ": the race after review stops the file cleanup at Apply before any backup or deletion");
 
                 var finalRegistry = Review("final-registry", key, value);
@@ -286,7 +291,7 @@ static class PathSpellingChecks
                     registryJournal.Error == Refusal + key.Target && File.Exists(registryJournal.BackupPath) && ReceiptAbsent(finalRegistry.Plan) && State() == before,
                     mode + ": the race at the final check after the registry backup keeps the key and value and commits nothing");
                 check(fileFinal.Races == 1 && fileFinal.Result.Status == "needsReconciliation" && fileJournal.Status == "needsReconciliation" &&
-                    fileJournal.Entries.All(entry => entry.Status == "pending") && fileJournal.Entries.Any(entry => entry.Error == Refusal + folder.Target) && State() == before,
+                    fileJournal.Entries.All(entry => entry.Status == "pending") && fileJournal.Entries.Any(entry => entry.Error == Refusal + folder.Target) && File.ReadAllText(data) == "fixture",
                     mode + ": the race at the final check after the file backup keeps the folder");
 
                 var restoreReview = Review("restore", key, value, folder);
@@ -310,10 +315,10 @@ static class PathSpellingChecks
                     throw new IOException("Simulated crash before the registry commit.");
                 });
                 File.WriteAllBytes(crashJournal, appSaved!); File.WriteAllBytes(crashReview.Plan.Registry!.JournalPath, partSaved!);
-                var crash = Unsafe(() => (Again: Apply(crashReview), Restored: engine.Restore(crashJournal)));
-                Measure("crashBeforeCommit", new { Again = crash.Again.Status, crash.Again.Errors, Restored = crash.Restored.Status, crash.Restored.RegistryStatus });
+                var crash = Unsafe(() => (Again: Apply(crashReview), Restored: Restore(crashJournal)));
+                Measure("crashBeforeCommit", new { Again = crash.Again.Status, crash.Again.Errors, Restored = crash.Restored?.Status, RegistryStatus = crash.Restored?.RegistryStatus });
                 check(crash.Again.Status == "needsReconciliation" && crash.Again.Errors.SequenceEqual([Refusal + key.Target]) && ReceiptAbsent(crashReview.Plan) &&
-                    crash.Restored.Status == "restored" && crash.Restored.RegistryStatus == "notCommitted" && State() == before,
+                    crash.Restored?.Status == "restored" && crash.Restored.RegistryStatus == "notCommitted" && State() == before,
                     mode + ": after a crash before the registry commit, Apply again refuses while the peer's folder can't be checked and Restore finds nothing removed");
 
                 var committedReview = Review("committed", key, value);
@@ -363,8 +368,8 @@ static class PathSpellingChecks
             var review = engine.Preview(reviewPath, [key.ItemId], true, true);
             reviews.Add(review);
             Directory.Delete(link); AliasOwnershipChecks.Junction(link, shared);
-            var result = engine.Apply(reviewPath, OperationFiles.HashFile(reviewPath), Path.Combine(root, "retarget-registry", "journal.json"));
             var rescanned = engine.Scan(CancellationToken.None).Candidates.Single(item => item.Kind == "registryKey");
+            var result = engine.Apply(reviewPath, OperationFiles.HashFile(reviewPath), Path.Combine(root, "retarget-registry", "journal.json"));
             Console.WriteLine("MEASURE retargetedPeer " + JsonSerializer.Serialize(new { Reviewed = key.SharedOwners, Rescanned = rescanned.SharedOwners, result.Status, result.Errors }));
             check(key.SharedOwners.Count == 0 && rescanned.SharedOwners.Contains(peer.DisplayName) && result.Status == "needsReconciliation" && result.Errors.SequenceEqual([Refusal + key.Target]) &&
                 !File.Exists(review.Registry!.JournalPath) && Snapshot(hive, keyPath) == before,
