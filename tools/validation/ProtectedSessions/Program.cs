@@ -26,7 +26,7 @@ var evidence=Path.Combine(repo,"artifacts","validation","protected-session-clean
 var fixture=new FixtureScope(root,evidence);var launcherCopy=new FixtureCopy(gamePath,launcherPath);
 var ownedProcesses=new Dictionary<Process,FixtureProcess>();
 ulong originalMask=0,firstMask=0,secondMask=0;
-Process? launcher=null,worker=null;var activeRoots=new List<string>();var session=new ProtectedSessions(_=>false);int passed=0;
+Process? launcher=null,worker=null;var activeRoots=new List<string>();var sameName=new List<(FixtureProcess Process,string Root)>();var session=new ProtectedSessions(_=>false);int passed=0;
 void Check(bool ok,string text){if(!ok)throw new InvalidOperationException(text);Console.WriteLine("PASS "+text);passed++;}
 void Until(Func<bool> condition,string text,int seconds=20){var clock=Stopwatch.StartNew();while(!condition()){if(clock.Elapsed.TotalSeconds>seconds)throw new TimeoutException(text);Thread.Sleep(100);}}
 JsonElement V<T>(T value)=>JsonSerializer.SerializeToElement(value,OperationFiles.Json);
@@ -59,6 +59,16 @@ try{
  Check(File.Exists(Path.Combine(root,BrandCompatibility.LauncherLeasePrefix+plan.Launcher.ProcessId+"-"+plan.Launcher.CreationTimeFileTimeUtc+".lock")),"The session keeps its launcher lock inside the protected recovery folder");
  Check(!worker.HasExited&&State(target).JobStatus=="applied"&&worker.MainWindowHandle==IntPtr.Zero,"Worker is armed without an automatic expiry or visible window");
  File.Delete(preview);Check(State(target).Status=="armed","The session retains reviewed bytes independently of the caller preview file");
+ if(OperatingSystem.IsWindowsVersionAtLeast(10,0,26100,4770))Check(Directory.Exists(Path.Combine(target,"gpu-handles")),"GPU launch capture watches for the game");else Console.WriteLine("SKIP GPU launch capture needs Windows 11 build 26100.4770 or later");
+ var otherBin=Directory.CreateDirectory(Path.Combine(root,"same-name")).FullName;var otherGame=Path.Combine(otherBin,Path.GetFileName(gamePath));
+ foreach(var file in Directory.GetFiles(bin,"*.dll").Concat(Directory.GetFiles(bin,"*.json")))File.Copy(file,Path.Combine(otherBin,Path.GetFileName(file)));File.Copy(gamePath,otherGame);
+ Environment.SetEnvironmentVariable("DOTNET_ROOT_X64",Path.GetDirectoryName(dotnet));var sid=System.Security.Principal.WindowsIdentity.GetCurrent().User!.Value;
+ foreach(var refusing in new[]{true,false}){var folder=Directory.CreateDirectory(Path.Combine(root,refusing?"same-name-refusing":"same-name-plain")).FullName;sameName.Add((FixtureProcess.Create(otherGame,["--game",folder,"none"],refusing?"D:(D;;0x200;;;"+sid+")(A;;0x1FFFFF;;;"+sid+")(A;;0x1FFFFF;;;BA)(A;;0x1FFFFF;;;SY)":null,evidence),folder));Until(()=>File.Exists(Path.Combine(folder,"ready.json")),"Same-name program did not start");}
+ var refusingPid=OperationFiles.Read<JsonElement>(Path.Combine(root,"same-name-refusing","ready.json")).GetProperty("pid").GetInt32();bool refused=false;try{using var fresh=new ProcessTarget(refusingPid,readControls:["gpuPriority"]);}catch(RooIndustries.Optimization.CpuSets.NativeFailure failure)when(failure.Api=="OpenProcess"&&failure.NativeErrorCode==5){refused=true;}
+ Check(refused,"One copy refuses a GPU-control handle, like a Windows service or protected program with that name");
+ string? ended=null;var watch=Stopwatch.StartNew();while(ended is null&&watch.Elapsed.TotalSeconds<6){var live=State(target);if(worker.HasExited||live.Status!="armed"||live.Errors.Count!=0)ended=live.Status+": "+string.Join("; ",live.Errors);Thread.Sleep(250);}
+ Check(ended is null,"Programs with the game's file name from another folder, one refusing GPU access, leave the armed session running"+(ended is null?"":" ("+ended+")"));
+ Check(State(target).Games.Count==0&&!Directory.EnumerateFiles(target,"*.transfer.json",SearchOption.AllDirectories).Any(),"The session keeps no game record or GPU handle for those programs");
  using(var game=Launch(1)){
   Until(()=>State(target).Status=="active","Requested controls were not independently applied");
   Check(game.PriorityClass==ProcessPriorityClass.AboveNormal&&Oracle.Io(game)==2&&Oracle.Memory(game)==5&&Oracle.Gpu(game)==3&&Oracle.Affinity(game)==firstMask,"Actual launch, GPU and strict-affinity values match the request");
@@ -82,6 +92,7 @@ try{
   session.Command(target,"affinity",new(0,"0x"+firstMask.ToString("X")));Until(()=>Oracle.Affinity(game)==firstMask,"First CPU-subset restoration failed");
   File.WriteAllText(Path.Combine(root,"game-1","stop"),"");CheckGame(game,1);
  }
+ foreach(var item in sameName)File.WriteAllText(Path.Combine(item.Root,"stop"),"");Check(sameName.All(item=>item.Process.Wait(15000)),"The same-name programs exit after the game got its settings beside them");
  Until(()=>State(target).Status=="armed","Session did not rearm after game exit");
  Oracle.SetMemory(launcher,2);Oracle.SetIo(launcher,1);
  Until(()=>Oracle.Memory(launcher)==5&&Oracle.Io(launcher)==2,"Launcher defaults were not sustained after a reset");
@@ -125,10 +136,11 @@ try{
   ()=>Step(()=>{if(launcher is not null){File.WriteAllText(Path.Combine(root,"stop-launcher"),"");if(!launcher.WaitForExit(15000))ownedProcesses[launcher].Stop();launcher.Dispose();}}),
   ()=>Step(()=>{foreach(var target in activeRoots){if(File.Exists(Path.Combine(target,"session.json"))){FixtureScope.AwaitRecovery(target,evidence);var saved=session.Status(target).State!;session.Recover(target,saved.Preview.OperationId);}}}),
   ()=>Step(()=>{foreach(var identity in ownedProcesses.Values)identity.Stop();}),
+  ()=>Step(()=>{foreach(var(probe,_) in sameName)probe.Stop();}),
   ()=>{fixture.Cleanup(finished);},
   ()=>{launcherCopy.Remove();},
   ()=>{if(finished && holder is not null && Directory.Exists(holderDir))Directory.Delete(holderDir,true);},
-  ()=>{foreach(var identity in ownedProcesses.Values)identity.Dispose();});
+  ()=>{foreach(var identity in ownedProcesses.Values)identity.Dispose();foreach(var(probe,_) in sameName)probe.Dispose();});
 
 }
 
