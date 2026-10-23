@@ -5,6 +5,7 @@ $ProgressPreference='SilentlyContinue'
 $nonce=Initialize-HarnessInvocation 'high-io-inspect' $OutRoot
 Assert-HarnessHostLease
 Ensure-HarnessOutputDirectory $OutRoot
+foreach($folder in 'artifacts','backend\bin'){Ensure-HarnessOutputDirectory (Join-Path $Source $folder)}
 $directory=New-HarnessEvidenceDirectory $OutRoot 'high-io-inspect'
 Add-Type -AssemblyName UIAutomationClient,UIAutomationTypes,System.Drawing
 Add-Type @'
@@ -145,6 +146,7 @@ try{
   Start-Sleep -Milliseconds 300
  }
  $test.process.WaitForExit();$evidence.testExit=$test.process.ExitCode
+ Copy-Item -LiteralPath (Join-Path $Source 'artifacts') -Destination (Join-Path $directory 'source-artifacts') -Recurse
  $evidence.testPassed=[bool](@($lines|Where-Object {$_ -match '^High I/O session assertions: \d+'}).Count)
  $failed=@($evidence.pauses|Where-Object {$_.taskManagerError -or $_.processExplorerError -or -not $_.taskManager.matches})
  if($evidence.pauses.Count -eq 3 -and -not$failed.Count -and $evidence.testPassed){$status='pass'}
