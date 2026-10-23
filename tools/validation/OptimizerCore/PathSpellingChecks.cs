@@ -135,6 +135,7 @@ static class PathSpellingChecks
             else Console.WriteLine("SKIP Shared-owner spelling fixtures have no available 8.3 aliases");
             ProtectedRoots(check, root);
             RealRoots(check);
+            ChangingAncestors(check, root);
         }
         finally
         {
@@ -144,6 +145,62 @@ static class PathSpellingChecks
         }
         using (var left = hive.OpenSubKey(registryRoot))
             check(!Directory.Exists(root) && left is null, "Path spelling checks remove their folders, aliases and registry keys");
+    }
+
+    static void ChangingAncestors(Action<bool, string> check, string root)
+    {
+        foreach (var mode in new[] { "network", "cycle" })
+        {
+            var target = Directory.CreateDirectory(Path.Combine(root, "Changing App " + mode)).FullName;
+            var data = Path.Combine(target, "settings.txt");
+            File.WriteAllText(data, "fixture");
+            var parent = Directory.CreateDirectory(Path.Combine(root, "Changing Parent " + mode)).FullName;
+            var peerPath = Path.Combine(parent, "Missing Peer");
+            var linked = false; var absences = 0;
+            var observed = new List<NativeFiles.PathWalk>();
+            var expected = mode == "network" ? NativeFiles.PathWalk.OffComputer : NativeFiles.PathWalk.Unknown;
+            try
+            {
+                CleanupPath.AfterResolveForTest = (path, walk) =>
+                {
+                    if (string.Equals(path, peerPath, StringComparison.OrdinalIgnoreCase) && walk == NativeFiles.PathWalk.Absent)
+                    {
+                        absences++;
+                        Directory.Delete(parent);
+                        Directory.CreateSymbolicLink(parent, mode == "network" ? @"\\192.0.2.139\ChangingAncestorFixture" : parent);
+                        linked = true;
+                    }
+                    else if (string.Equals(path, parent, StringComparison.OrdinalIgnoreCase) && linked)
+                    {
+                        observed.Add(walk);
+                        Directory.Delete(parent); Directory.CreateDirectory(parent); linked = false;
+                    }
+                };
+                var application = new CleanupApplication { AppId = "fixture:changing-" + mode, DisplayName = "Changing App " + mode, Publisher = "Fixture", InstallLocation = target, PackageFamilyName = null };
+                var peer = application with { AppId = "fixture:changing-peer", DisplayName = "Independent changing tool", InstallLocation = peerPath };
+                var scan = new LeftoverDiscovery(application, [peer]).Scan(CancellationToken.None, [], []);
+                var candidate = scan.Candidates.Single(item => item.Target == target);
+                var authority = new CleanupAuthority
+                {
+                    AppId = application.AppId, ProviderIdentityHash = new string('E', 64), Owner = OperationOwner.Current(),
+                    ProviderQueryComplete = true, RegistrationPresent = false, RebootPending = false, RemoverRunning = false, RemovalResolved = true,
+                };
+                var context = new CleanupContext(Path.Combine(root, "changing-queue.json"), authority, application, [peer], true);
+                var engine = new ApplicationCleanup(() => context, [], []);
+                var refused = false;
+                try { engine.Preview(Path.Combine(root, "review-changing-" + mode, "review.json"), [candidate.ItemId], true, true); }
+                catch (InvalidDataException) { refused = true; }
+                var intact = File.ReadAllText(data) == "fixture";
+                Console.WriteLine("MEASURE changingAncestor " + JsonSerializer.Serialize(new { Scenario = mode, Absences = absences, AncestorResults = observed.Select(value => value.ToString()).ToArray(), candidate.OwnershipComplete, PreviewRefused = refused, Intact = intact }));
+                check(absences > 0 && observed.Count == absences && observed.All(value => value == expected) && !candidate.OwnershipComplete && refused && intact,
+                    mode + ": an unsafe ancestor observed after an absent peer keeps ownership incomplete and refuses cleanup preview");
+            }
+            finally
+            {
+                CleanupPath.AfterResolveForTest = null;
+                if (linked) { Directory.Delete(parent); Directory.CreateDirectory(parent); }
+            }
+        }
     }
 
     static void ProtectedRoots(Action<bool, string> check, string root)
