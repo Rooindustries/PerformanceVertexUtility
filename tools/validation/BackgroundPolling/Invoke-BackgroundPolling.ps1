@@ -22,6 +22,7 @@ $app = $null; $receipt = $null; $watch = $null; $window = $null; $sessionRoot = 
 $A = [Windows.Automation.AutomationElement]; $TS = [Windows.Automation.TreeScope]; $CT = [Windows.Automation.ControlType]
 $hostNames = 'dotnet.exe', 'Optimizer.Host.exe'
 $settled = 0
+$held = @{}
 
 function Save([string]$name, $value) { [IO.File]::WriteAllText((Join-Path $directory $name), ($value | ConvertTo-Json -Depth 30), $utf8) }
 function WaitFor([scriptblock]$probe, [double]$seconds, [string]$what) { $deadline = [DateTime]::UtcNow.AddSeconds($seconds); while ([DateTime]::UtcNow -lt $deadline) { try { $v = & $probe } catch { $v = $null }; if ($v) { return $v }; Start-Sleep -Milliseconds 100 }; throw ('Timed out: ' + $what) }
@@ -70,15 +71,23 @@ function Case([string]$name, [long]$from, [long]$to, [int]$minimum, [int]$maximu
     $other = @($watch.Polled() | Where-Object { $_.Name -notin $hostNames -and $_.Created -ge $from -and $_.Created -lt $to } | ForEach-Object { $_.Name })
     $result = [ordered]@{ case = $name; seconds = [Math]::Round(($to - $from) / 1e7, 2); hostStarts = $traced.Count; expectedMinimum = $minimum; expectedMaximum = $maximum
         polledHostStarts = $polled.Count; actions = @($polled | ForEach-Object { Action $_.CommandLine }); otherChildren = $other; from = $from; to = $to }
+    $result.foreground = $script:held
+    $result.otherAppProcesses = @(Get-Process RooIndustries.OptimizationSuite.* -ErrorAction SilentlyContinue | Where-Object { $_.Id -ne $app.Id }).Count
     foreach ($key in $extra.Keys) { $result[$key] = $extra[$key] }
-    $result.passed = $traced.Count -ge $minimum -and $traced.Count -le $maximum -and $extra.passed -ne $false
+    $result.passed = $traced.Count -ge $minimum -and $traced.Count -le $maximum -and $extra.passed -ne $false -and $result.otherAppProcesses -eq 0
+    $script:held = @{}
     $cases.Add($result) | Out-Null
     Save 'cases.json' $cases
     Save 'focus.json' $focusLog
 }
-function Window([IntPtr]$target, [string]$what, [int]$seconds) { $from = Focus $target $what; Start-Sleep -Seconds $seconds; return @($from, (Now)) }
+function Hold([IntPtr]$expected, [double]$seconds) {
+    $deadline = [DateTime]::UtcNow.AddSeconds($seconds); $samples = 0; $away = 0; $appInFront = 0
+    while ([DateTime]::UtcNow -lt $deadline) { $front = [BackgroundPollingUi]::GetForegroundWindow(); $samples++; if ($front -ne $expected) { $away++ }; if ($front -eq $appWindow) { $appInFront++ }; Start-Sleep -Milliseconds 100 }
+    $script:held = @{ samples = $samples; awayFromExpected = $away; appInFront = $appInFront }
+}
+function Window([IntPtr]$target, [string]$what, [int]$seconds) { $from = Focus $target $what; Hold $target $seconds; return @($from, (Now)) }
 function ActiveBaseline([string]$name) { $span = Window $appWindow 'app' 10; Case $name $span[0] $span[1] 3 8 }
-function Inactive([string]$name) { Window $probeWindow 'probe' $InactiveSeconds | Out-Null; Case $name $script:settled (Now) 0 0 @{ appMinimizedDuringWindow = [BackgroundPollingUi]::IsIconic($appWindow) } }
+function Inactive([string]$name) { Window $probeWindow 'probe' $InactiveSeconds | Out-Null; Case $name $script:settled (Now) 0 0 @{ appMinimizedDuringWindow = [BackgroundPollingUi]::IsIconic($appWindow); passed = $script:held.appInFront -eq 0 } }
 function ReactivateOnce([string]$name) {
     $from = Focus $appWindow 'app'
     Start-Sleep -Milliseconds 1200
@@ -165,8 +174,8 @@ try {
             if (-not $inFlight) { Focus $probeWindow 'probe' | Out-Null; Start-Sleep -Seconds 3 }
         }
         if (-not $inFlight) { throw 'No status read was caught in flight at deactivation.' }
-        Start-Sleep -Seconds 10
-        Case 'games-read-in-flight-at-deactivation' $inFlight.deactivated (Now) 0 0 @{ inFlight = $inFlight }
+        Hold $probeWindow 10
+        Case 'games-read-in-flight-at-deactivation' $inFlight.deactivated (Now) 0 0 @{ inFlight = $inFlight; passed = $script:held.appInFront -eq 0 }
 
         $from = Now
         for ($i = 0; $i -lt 10; $i++) { Focus $appWindow 'app' | Out-Null; Start-Sleep -Milliseconds 300; Focus $probeWindow 'probe' | Out-Null; Start-Sleep -Milliseconds 300 }
@@ -176,8 +185,8 @@ try {
         Focus $appWindow 'app' | Out-Null
         [BackgroundPollingUi]::ShowWindow($appWindow, 6) | Out-Null
         WaitFor { [BackgroundPollingUi]::IsIconic($appWindow) } 10 'minimized app' | Out-Null
-        $from = Now; Start-Sleep -Seconds 20
-        Case 'games-minimized' $from (Now) 0 0
+        $from = Now; Hold $probeWindow 20
+        Case 'games-minimized' $from (Now) 0 0 @{ passed = $script:held.appInFront -eq 0 -and [BackgroundPollingUi]::IsIconic($appWindow) }
         $from = Now
         [BackgroundPollingUi]::ShowWindow($appWindow, 9) | Out-Null
         Focus $appWindow 'app' | Out-Null; Start-Sleep -Seconds 3
