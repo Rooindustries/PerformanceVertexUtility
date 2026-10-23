@@ -116,6 +116,19 @@ static class PathSpellingChecks
             catch (InvalidDataException) { again = true; }
             check(again && Snapshot(hive, appearKey) == appearBefore, "A fresh review with that peer installed refuses both the key and the folder");
 
+            var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+            var windowsFolder = new[] { "Windows NT", "Windows Defender", "Windows Mail", "Windows Photo Viewer" }.Select(name => Path.Combine(programFiles, name)).FirstOrDefault(Directory.Exists);
+            var windowsShort = windowsFolder is null ? null : ShortPath(windowsFolder);
+            if (windowsShort is null || string.Equals(windowsShort, windowsFolder, StringComparison.OrdinalIgnoreCase)) Console.WriteLine("SKIP No Windows folder under Program Files has an 8.3 alias on this volume");
+            else
+            {
+                var windowsScope = registryRoot + "\\windows-owned";
+                using (var created = hive.CreateSubKey(windowsScope + "\\Settings")) created.SetValue("Tool", "\"" + Path.Combine(windowsShort, "tool.exe") + "\"");
+                var owned = new LeftoverDiscovery(application with { InstallLocation = windowsShort }, []).Scan(CancellationToken.None, [], [new("CurrentUser", "Registry64", windowsScope, "key", null)]);
+                check(owned.Candidates.Length == 0 && LeftoverDiscovery.MicrosoftOwnedPath(Path.Combine(windowsShort, "Roo Industries Example")),
+                    "An app installed in a Windows-owned folder given by its 8.3 alias offers neither that folder nor values that name it");
+            }
+
             ProtectedRoots(check, root);
             RealRoots(check);
         }
@@ -137,14 +150,14 @@ static class PathSpellingChecks
         var ordinary = Directory.CreateDirectory(Path.Combine(root, "Ordinary Spelling App")).FullName;
         File.WriteAllText(Path.Combine(ordinary, "data.txt"), "fixture");
         var parentShort = Alias(check, parent, "PROTEC~1");
-        var tempShort = Alias(check, temp, "PROTEC~1");
+        var tempShort = Path.Combine(parent, Path.GetFileName(Alias(check, temp, "PROTTEMP", force: true)));
         var ordinaryShort = Alias(check, ordinary, "ORDINA~1");
         foreach (var (name, tmp, paths) in new[] { ("long-temp-short-candidates", temp, new[] { tempShort, parentShort, ordinaryShort }), ("short-temp-long-candidates", tempShort, new[] { temp, parent, ordinary }) })
         {
             using var result = JsonDocument.Parse(Probe(check, name, tmp, paths));
             var outcomes = result.RootElement.GetProperty("Outcomes").EnumerateArray().Select(item => item.GetString()!).ToArray();
             Console.WriteLine("MEASURE protectedSpelling " + JsonSerializer.Serialize(new { Scenario = name, Outcomes = outcomes }));
-            check(string.Equals(result.RootElement.GetProperty("Temp").GetString()!.TrimEnd('\\'), tmp, StringComparison.OrdinalIgnoreCase), name + ": the probe's temp folder is the disposable protected root");
+            check(string.Equals(Path.GetFullPath(result.RootElement.GetProperty("Temp").GetString()!).TrimEnd('\\'), Path.GetFullPath(tmp), StringComparison.OrdinalIgnoreCase), name + ": the probe's temp folder is the disposable protected root");
             check(outcomes[0].StartsWith("refused: A shared system", StringComparison.Ordinal), name + ": the protected temp folder is refused before its files are read, however it is spelled");
             check(outcomes[1].StartsWith("refused: A shared system", StringComparison.Ordinal), name + ": a folder that contains the protected temp folder is refused before its files are read");
             check(outcomes[2] == "previewed 2", name + ": an ordinary disposable app folder stays previewable through either spelling");
@@ -195,19 +208,14 @@ static class PathSpellingChecks
             if (brief is null || string.Equals(brief, real, StringComparison.OrdinalIgnoreCase)) { Console.WriteLine("SKIP " + folder + " has no 8.3 alias on this volume"); continue; }
             check(FileCleanupEngine.IsProtectedPath(brief), "The 8.3 alias of the real " + folder + " folder stays a protected cleanup root");
         }
-        var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
-        var windowsFolder = new[] { "Windows NT", "Windows Defender", "Windows Mail", "Windows Photo Viewer" }.Select(name => Path.Combine(programFiles, name)).FirstOrDefault(Directory.Exists);
-        var windowsShort = windowsFolder is null ? null : ShortPath(windowsFolder);
-        if (windowsShort is null || string.Equals(windowsShort, windowsFolder, StringComparison.OrdinalIgnoreCase)) Console.WriteLine("SKIP No Windows folder under Program Files has an 8.3 alias on this volume");
-        else check(LeftoverDiscovery.MicrosoftOwnedPath(Path.Combine(windowsShort, "Roo Industries Example")), "A Windows-owned folder under Program Files stays Windows-owned through its 8.3 alias");
         var localLow = Path.Combine(RooIndustries.Optimizer.RuntimeEnvironment.Profile, "AppData", "LocalLow");
         check(FileCleanupEngine.IsProtectedPath(localLow) && !FileCleanupEngine.IsProtectedPath(Path.Combine(localLow, "Roo Industries Example")),
             "LocalLow itself is a protected cleanup root while an app folder inside it stays eligible");
     }
 
-    static string Alias(Action<bool, string> check, string path, string name)
+    static string Alias(Action<bool, string> check, string path, string name, bool force = false)
     {
-        if (string.Equals(Path.GetFileName(ShortPath(path)), Path.GetFileName(path), StringComparison.OrdinalIgnoreCase))
+        if (force || string.Equals(Path.GetFileName(ShortPath(path)), Path.GetFileName(path), StringComparison.OrdinalIgnoreCase))
         {
             using var handle = CreateFile(path, 0x10000000, 7, IntPtr.Zero, 3, 0x02000000, IntPtr.Zero);
             var assigned = false; var error = 0;
@@ -219,7 +227,8 @@ static class PathSpellingChecks
             check(assigned, "Disposable fixture " + Path.GetFileName(path) + " gets an explicit 8.3 alias (error " + error + ")");
         }
         var brief = ShortPath(path);
-        check(brief is not null && !string.Equals(Path.GetFileName(brief), Path.GetFileName(path), StringComparison.OrdinalIgnoreCase) && Path.GetFileName(brief).Contains('~'),
+        var leaf = Path.GetFileName(brief);
+        check(leaf is not null && !string.Equals(leaf, Path.GetFileName(path), StringComparison.OrdinalIgnoreCase) && (force ? string.Equals(leaf, name, StringComparison.OrdinalIgnoreCase) : leaf.Contains('~')),
             "Disposable fixture " + Path.GetFileName(path) + " has an actual 8.3 alias");
         return brief!;
     }
