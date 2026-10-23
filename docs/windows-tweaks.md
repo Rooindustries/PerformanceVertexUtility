@@ -185,8 +185,17 @@ receipt; `tweak-recover` requires confirmation and its exact pending hash.
 
 Windows feature changes can require a restart. An accepted pending target is
 reported separately from a completed change. The journal remains until a fresh
-read after restart confirms the target. Pending servicing blocks another
-feature change or restoration. No automatic restart occurs.
+read after restart shows each changed feature's final state. Pending servicing
+blocks another feature change or restoration. No automatic restart occurs.
+When Windows undid a change during the restart, the check releases that
+feature's ownership, keeps the rest of the profile, closes the journal and
+adds a notice. A feature Windows no longer lists is released only when a
+direct DISM check confirms it is absent or superseded. A partially installed
+changed feature keeps the journal and every claim until servicing finishes.
+An unrelated partially installed feature does not block normal reads or applies.
+A feature in a state this app didn't set, or a restore Windows undid, keeps
+the journal and names the feature so the user can set it in Turn Windows
+features on or off and check again.
 
 Hibernation uses `powercfg` and captures actual file mode plus five raw power
 registry values, including their absence. Hibernation and Fast Startup share
@@ -236,7 +245,9 @@ The separately approved native fixture switches are `--registry-fixture`,
 `--controls-fixture` and `--power-fixture` on
 `tools/validation/Tweaks/Tweaks.csproj`. They refuse unexpected baseline state
 and clean only their owned test resources. They are not part of the ordinary
-file-fixture run.
+file-fixture run. `--feature-restart-fixture` is: it drives the real recovery
+store in a disposable current-user key with simulated Windows feature states,
+so no feature changes and no restart happens.
 
 Catalog contracts and negative controls run with:
 
