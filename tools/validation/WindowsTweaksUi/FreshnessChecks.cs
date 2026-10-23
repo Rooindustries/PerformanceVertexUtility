@@ -730,6 +730,35 @@ static class FreshnessChecks
             if (!passed) Console.WriteLine("  simple mode lists [" + string.Join(", ", simple) + "], defender " + (missing is null ? "missing" : missing.CanRetry + "/" + missing.UnavailableHere + "/" + missing.Current + "/" + missing.Detail) + ", failing " + (failed is null ? "missing" : failed.CanRetry + "/" + failed.Current));
             return passed;
         });
+        await Scenario("Defender whose PowerShell module is installed but fails to load keeps Couldn't check with a retry, even when the load error names a missing file, and a network row with the same failure keeps its read-failure wording", async () =>
+        {
+            const string defender = "windows.171a004ed11767da", damaged = "windows.3c9ad96209a9da2f", network = "windows.bcd77ad54a7accc0", thrown = "The Defender provider dependency could not be loaded.";
+            var modules = Path.Combine(root, "broken-defender-modules"); var module = Directory.CreateDirectory(Path.Combine(modules, "BrokenDefender")).FullName;
+            File.WriteAllText(Path.Combine(module, "BrokenDefender.psd1"), "@{RootModule='BrokenDefender.psm1';ModuleVersion='1.0';FunctionsToExport=@('Get-MpPreference','Set-MpPreference')}");
+            File.WriteAllText(Path.Combine(module, "BrokenDefender.psm1"), "throw '" + thrown + "'");
+            var loadError = await HelperError(modules, new ControlAddress("defender", "system", "SubmitSamplesConsent"));
+            var missingFile = loadError.Replace(thrown, "Could not load file or assembly 'MpProvider'. The system cannot find the file specified. (Exception from HRESULT: 0x80070002)", StringComparison.Ordinal);
+            RegistryAddress Address(string name) => new("CurrentUser", "Registry64", @"Software\RooIndustriesUiModelFixture", "value", name);
+            TweakDefinition Setting(string id, string category = "System") => new(id, id, category, "Fixture", 10240, 26200, ["*"], "none",
+                [new("on", "On", [new(Address(id), 1)]), new("off", "Off", [new(Address(id), 0)])], [new("Fixture", "fixture", "isolated UI validation")], null, false);
+            var fixture = new Fixture(Path.Combine(root, "unloaded-defender-module"), new TweakCatalog(1, "unloaded-defender", [Setting(defender), Setting(damaged), Setting(network, "Network")], [])) { Missing = false };
+            fixture.TransformStatus = inspection => inspection with { Settings = inspection.Settings.Select(status => status.Id switch
+            {
+                defender => status with { Error = loadError, Supported = false },
+                damaged => status with { Error = missingFile, Supported = false },
+                network => status with { Error = loadError.Replace("Microsoft Defender Antivirus", "Network adapter configuration", StringComparison.Ordinal), Supported = false },
+                _ => status,
+            }).ToArray() };
+            App.Operations = fixture; var model = new WindowsTweaksViewModel(); await model.ShowAsync();
+            model.ShowAdvanced = false;
+            var simple = model.Rows.Select(row => row.Id).ToArray();
+            model.ShowAdvanced = true;
+            var rows = new[] { defender, damaged, network }.Select(id => model.Rows.SingleOrDefault(row => row.Id == id)).ToArray();
+            var passed = loadError.Contains(thrown, StringComparison.Ordinal) && simple.Order().SequenceEqual(new[] { defender, damaged, network }.Order())
+                && rows.All(row => row is { CanRetry: true, UnavailableHere: false, Current: "Couldn't check" }) && rows[2]?.Detail == "Windows could not read this preference. Refresh to try again.";
+            if (!passed) Console.WriteLine("  helper said " + loadError + "; simple mode lists [" + string.Join(", ", simple) + "], rows " + string.Join(" | ", rows.Select(row => row is null ? "missing" : row.CanRetry + "/" + row.UnavailableHere + "/" + row.Current)));
+            return passed;
+        });
         await Scenario("A service Windows never lets administrators change is unavailable here without a retry, while a service that is still starting keeps Couldn't check", async () =>
         {
             const string locked = "windows.b356c3123766a188", settling = "windows.4e3841a2d61ce3f9";
@@ -757,5 +786,20 @@ static class FreshnessChecks
             return passed;
         });
         check(failures.Count == 0, "Windows tweaks freshness checks (" + failures.Count + " failed: " + string.Join("; ", failures) + ")");
+    }
+    private static async Task<string> HelperError(string modules, ControlAddress address)
+    {
+        using var resource = typeof(TweakEngine).Assembly.GetManifestResourceStream("Optimizer.Core.WindowsControls.ps1") ?? throw new FileNotFoundException("The Windows control helper is missing.");
+        var script = Path.Combine(Path.GetDirectoryName(modules)!, "broken-defender-helper.ps1");
+        File.WriteAllText(script, "Import-Module Microsoft.PowerShell.Utility; $global:PSModuleAutoLoadingPreference='None'; $env:PSModulePath='" + modules.Replace("'", "''", StringComparison.Ordinal) + "'\n" + new StreamReader(resource).ReadToEnd());
+        var start = new System.Diagnostics.ProcessStartInfo(Path.Combine(Environment.SystemDirectory, @"WindowsPowerShell\v1.0\powershell.exe")) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
+        foreach (var item in new[] { "-NoProfile", "-NonInteractive", "-EncodedCommand", Convert.ToBase64String(System.Text.Encoding.Unicode.GetBytes("& ([ScriptBlock]::Create([IO.File]::ReadAllText('" + script.Replace("'", "''", StringComparison.Ordinal) + "')))")) }) start.ArgumentList.Add(item);
+        start.Environment["ROO_INDUSTRIES_CONTROL_REQUEST"] = Convert.ToBase64String(System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(new { action = "read", address }, OperationFiles.Json));
+        using var process = System.Diagnostics.Process.Start(start) ?? throw new IOException("Could not start the fixture control helper.");
+        var output = process.StandardOutput.ReadToEndAsync(); var errors = process.StandardError.ReadToEndAsync();
+        await process.WaitForExitAsync();
+        if (process.ExitCode != 0) throw new IOException(await errors);
+        using var result = System.Text.Json.JsonDocument.Parse(await output);
+        return result.RootElement.TryGetProperty("error", out var error) ? error.GetString() ?? "" : "read";
     }
 }

@@ -1,4 +1,4 @@
-"""Stage this checkout on a Windows test PC, run the missing-command checks and film the Defender row with Defender's PowerShell module hidden."""
+"""Stage this checkout on a Windows test PC, run the missing-command checks and film the Defender row with Defender's PowerShell module hidden, or with a Defender module that fails to load."""
 import argparse
 import json
 import subprocess
@@ -58,9 +58,11 @@ def main():
     parser.add_argument('--parent', required=True, help='Existing admin-protected staging parent')
     parser.add_argument('--lease-minutes', type=float, default=40)
     parser.add_argument('--skip-checks', action='store_true')
+    parser.add_argument('--before-fix', action='store_true', help='Expect the row as it read before the fix')
+    parser.add_argument('--broken-module', action='store_true', help="Put a Defender module that fails to load on the app's module path")
     args = parser.parse_args()
     args.out_dir.mkdir(parents=True, exist_ok=False)
-    receipt = windows.upload_frame(args.host, args.expected_machine, 'roo-industries-unavailable-row', True, args.parent)
+    receipt = windows.upload_frame(args.host, args.expected_machine, 'roo-industries-ur', True, args.parent)
     (args.out_dir / 'frame.json').write_text(json.dumps(receipt, indent=2))
     status = 'fail'
     try:
@@ -81,7 +83,8 @@ def main():
                     or {marker[1] for marker in markers} != expected):
                 raise RuntimeError('Remote checks failed or returned incomplete results: ' + json.dumps(markers))
         result = windows.interactive_frame(args.host, args.expected_machine, receipt, 'tools/validation/WindowsTweaksUi/Capture-UnavailableRow.ps1',
-                                           {'Source': receipt['stagingPath'], 'OutRoot': receipt['runRoot'] + r'\capture', 'Label': args.label}, 30)
+                                           {'Source': receipt['stagingPath'], 'OutRoot': receipt['runRoot'] + r'\capture', 'Label': args.label,
+                                            **({'BeforeFix': True} if args.before_fix else {}), **({'BrokenModule': True} if args.broken_module else {})}, 30)
         (args.out_dir / 'capture.log').write_text(result.stdout)
         evidence = next(line.split(' ', 2)[2] for line in result.stdout.splitlines() if line.startswith('ROO_INDUSTRIES_ROW_CAPTURE pass '))
         windows.run_transport(args.host, 'scp', ['-r', args.host + ':' + evidence.replace('\\', '/'), str(args.out_dir / 'evidence')],

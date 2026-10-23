@@ -46,7 +46,8 @@ $stray=@($lines | Where-Object { $_ -notmatch '^ROO_INDUSTRIES_CONTROL \d+ ' })
 if($stray.Count -lt 1){throw ('The fixture output line did not reach standard output: '+($lines -join ' | '))}
 if(@($stray | Where-Object { [array]::IndexOf($lines,$_) -lt $firstIndex -or [array]::IndexOf($lines,$_) -gt $secondIndex }).Count){throw ('Output from one batch read leaked next to another address: '+($lines -join ' | '))}
 Write-Host ('PASS batched reads keep request order and keep each read''s stray output before its own result ('+$stray.Count+' stray lines before the second result)')
-$hidden='Import-Module Microsoft.PowerShell.Utility; $global:PSModuleAutoLoadingPreference=''None'''
+function Modules([string]$path){'Import-Module Microsoft.PowerShell.Utility; $global:PSModuleAutoLoadingPreference=''None''; $env:PSModulePath='''+$path.Replace("'","''")+''''}
+$hidden=Modules (Join-Path ([IO.Path]::GetTempPath()) ('roo-industries-no-modules-'+[guid]::NewGuid().ToString('N')))
 $guarded=[ordered]@{
  'Windows Firewall'=[ordered]@{kind='firewall-profile';target='Public';property='enabled'}
  'Exploit protection'=[ordered]@{kind='mitigations';target='system';property='policy'}
@@ -88,6 +89,17 @@ $present=Run-Helper $source
 $parsed=$present|ConvertFrom-Json
 if($null -ne $parsed.error -or $parsed.value -ne 2){throw ('Windows with the Defender commands must still read and change the Defender row: '+$present)}
 Write-Host 'PASS Windows with the Defender commands still reads and changes the Defender row'
+$fixture=[IO.Directory]::CreateDirectory((Join-Path ([IO.Path]::GetTempPath()) ('roo-industries-broken-module-'+[guid]::NewGuid().ToString('N')))).FullName
+try{
+ $module=[IO.Directory]::CreateDirectory((Join-Path $fixture 'BrokenDefender')).FullName
+ [IO.File]::WriteAllText((Join-Path $module 'BrokenDefender.psd1'),"@{RootModule='BrokenDefender.psm1';ModuleVersion='1.0';FunctionsToExport=@('Get-MpPreference','Set-MpPreference')}")
+ [IO.File]::WriteAllText((Join-Path $module 'BrokenDefender.psm1'),"throw 'The Defender provider dependency could not be loaded.'")
+ $providers=Modules $fixture
+ $request=@{action='read-batch';addresses=@($defender,[ordered]@{kind='defender';target='system';property='MAPSReporting'})}
+ $failed=@((Run-Helper $source) -split "`r?`n" | Where-Object { $_ -match '^ROO_INDUSTRIES_CONTROL \d+ ' } | ForEach-Object { ($_ -replace '^ROO_INDUSTRIES_CONTROL \d+ ','')|ConvertFrom-Json })
+ if($failed.Count -ne 2 -or @($failed|Where-Object {[string]$_.error -notlike '*The Defender provider dependency could not be loaded.*' -or [string]$_.error -ceq (Unavailable 'Microsoft Defender Antivirus')}).Count){throw ('Defender reads whose module is installed but fails to load must report the load error, not not available: '+($failed|ConvertTo-Json -Compress))}
+ Write-Host 'PASS Defender reads report the load error, not not available, when Defender''s module is installed but fails to load'
+}finally{[IO.Directory]::Delete($fixture,$true)}
 $getters=@{'firewall-profile'='Get-NetFirewallProfile';'mitigations'='Get-ProcessMitigation';'defender'='Get-MpPreference';'device-power'='Get-PnpDevice';'dns-over-https'='Get-DnsClientDohServerAddress';'teredo'='Get-NetTeredoConfiguration';'memory'='Get-MMAgent';'reserved-storage'='Get-WindowsReservedStorageState';'network-adapter'='Get-NetAdapter'}
 $providers=''
 $local=@($guarded.Values|Where-Object { $_.kind -ne 'windows-feature' })

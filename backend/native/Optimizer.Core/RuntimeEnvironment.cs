@@ -68,7 +68,8 @@ public static class RuntimeEnvironment
     public static string PowerShellPrelude => "$env:PSModulePath='" + ModulePath.Replace("'", "''") + "'; "
 #if ROO_INDUSTRIES_TEST_HOOKS
         + (Environment.GetEnvironmentVariable("ROO_INDUSTRIES_TEST_MODULES") is { Length: > 0 } modules
-            ? "Import-Module " + string.Join(",", modules.Split(';').Select(module => "'" + module.Replace("'", "''") + "'")) + "; $global:PSModuleAutoLoadingPreference='None'; " : "")
+            ? "Import-Module " + string.Join(",", modules.Split(';').Select(module => "'" + module.Replace("'", "''") + "'")) + "; $global:PSModuleAutoLoadingPreference='None'; $env:PSModulePath='" +
+                (Environment.GetEnvironmentVariable("ROO_INDUSTRIES_TEST_MODULE_PATH") ?? Path.Combine(Path.GetTempPath(), "roo-industries-no-modules-" + Guid.NewGuid().ToString("N"))).Replace("'", "''") + "'; " : "")
 #endif
         ;
 
