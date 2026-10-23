@@ -61,7 +61,12 @@ function Get-Priority([System.Diagnostics.Process]$Process) {
 function Invoke-Review([string]$Name) {
     $dry = & (Join-Path $PSScriptRoot 'Start-GameTuneSession.ps1') -ProfilePath $profilePath -PollIntervalSeconds 1 -MaxDurationSeconds 1 | ConvertFrom-Json
     $path = Join-Path $root "$Name-review.json"
-    Write-RooIndustriesOperationJson $dry.review $path
+    $data = $dry.review
+    if ($null -eq $data) {
+        $preview = & (Join-Path $PSScriptRoot 'Preview-ProcessProfile.ps1') -ProfilePath $profilePath | ConvertFrom-Json
+        $data = [pscustomobject]@{ schemaVersion = 1; kind = 'game-tune-review'; profileId = $preview.profileId; profilePath = $profilePath; profileSha256 = (Get-FileHash $profilePath).Hash; targetGameProcessName = $null; entries = @($preview.preview | Where-Object { $_.classification -eq 'gameTarget' -or @($_.controlChanges).Count -gt 0 }) }
+    }
+    Write-RooIndustriesOperationJson $data $path
     return [pscustomobject]@{ Envelope = $dry; Path = $path; Sha256 = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash }
 }
 
@@ -76,6 +81,10 @@ function Test-Refused([object]$Start, [string]$Code, [string]$Label) {
     Add-Check ($envelope.status -eq 'refused' -and $envelope.dryRun -eq $false -and @($envelope.errors).Count -eq 1 -and $envelope.errors[0].code -eq $Code -and @($envelope.changedItems).Count -eq 0 -and $envelope.restorable -eq $false -and $null -eq $envelope.sessionPath -and -not (Test-Path -LiteralPath $Start.StateRoot)) `
         "$Label refuses with $Code and writes no session" `
         "$Label did not refuse cleanly: status $($envelope.status), code $(@($envelope.errors | ForEach-Object { $_.code }) -join ','), changed $(@($envelope.changedItems).Count), state $(Test-Path -LiteralPath $Start.StateRoot)"
+    if ($envelope.restorable -and $envelope.sessionPath) {
+        $undo = & (Join-Path $PSScriptRoot 'Stop-GameTuneSession.ps1') -SessionPath $envelope.sessionPath -ConfirmApply | ConvertFrom-Json
+        Add-Check (-not $undo.restorable) "$Label cleans up the unexpected apply" "$Label left changes after Stop"
+    }
 }
 
 try {

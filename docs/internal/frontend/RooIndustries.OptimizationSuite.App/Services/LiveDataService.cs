@@ -315,6 +315,8 @@ public sealed class LiveDataService
             GameTuneTiming(maxDurationSeconds, pollIntervalSeconds)
                 + " -ReviewPath " + QuotePowerShell(review.Path)
                 + " -ReviewSha256 " + QuotePowerShell(review.Sha256)
+                + " -ControllerProcessId " + Environment.ProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                + " -ControllerStartTimeUtc " + QuotePowerShell(Process.GetCurrentProcess().StartTime.ToUniversalTime().ToString("o", System.Globalization.CultureInfo.InvariantCulture))
                 + " -ConfirmApply");
 
     private static string GameTuneTiming(int maxDurationSeconds, int pollIntervalSeconds)
@@ -335,10 +337,10 @@ public sealed class LiveDataService
                 + " -ConfirmApply");
 
     public Task<LiveDataResult<string>> GetGameTuneSessionStatusResultAsync(CancellationToken ct = default)
-        => RunBackendScriptResultAsync("Get-GameTuneSessionStatus.ps1", ct);
+        => RunBackendScriptResultAsync("Get-GameTuneSessionStatus.ps1", ct, "-RecoverInterrupted");
 
     public Task<GameTuneSessionStatus?> GetGameTuneSessionStatusAsync(CancellationToken ct = default)
-        => RunAsync<GameTuneSessionStatus>("Get-GameTuneSessionStatus.ps1", ct);
+        => RunAsync<GameTuneSessionStatus>("Get-GameTuneSessionStatus.ps1", ct, "-RecoverInterrupted");
 
     public Task<LiveDataResult<string>> RunProcessGovernorSessionResultAsync(bool confirmApply, int maxDurationSeconds, int pollIntervalSeconds, int sampleIntervalMilliseconds, CancellationToken ct = default)
     {

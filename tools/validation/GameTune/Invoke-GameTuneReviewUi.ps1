@@ -19,6 +19,8 @@ $profilePath=Join-Path $Source 'backend\profiles\game-session.profile.json'
 $profileBytes=[IO.File]::ReadAllBytes($profilePath)
 $reviewPath=Join-Path (Get-RooIndustriesLocalDataRoot) 'settings\game-tune-review.json'
 $reviewExisted=Test-Path -LiteralPath $reviewPath
+$reviewBytes=if($reviewExisted){[IO.File]::ReadAllBytes($reviewPath)}else{$null}
+$stateRoot=Join-Path $Source 'backend\state'
 $frames=Join-Path $OutRoot 'frames';$stopFile=Join-Path $OutRoot 'frames.stop'
 $owned=[Collections.Generic.List[object]]::new();$app=$null;$receipt=$null;$recorder=$null;$window=$null
 function Save([string]$name,$value){[IO.File]::WriteAllText((Join-Path $OutRoot $name),($value|ConvertTo-Json -Depth 20),$utf8)}
@@ -30,10 +32,11 @@ function Activate($e){if(-not$e){throw 'Missing UI element'};try{$e.GetCurrentPa
 function Nav([string]$name){Activate (WaitFor {@(All|Where-Object {$_.Current.Name -eq $name -and $_.Current.ControlType -eq $CT::ListItem})|Select-Object -First 1} 45 $name)}
 function Card{$texts=@(Texts);$i=[Array]::IndexOf($texts,'Game priority');if($i -lt 0 -or $i+2 -ge $texts.Count){return $null};[pscustomobject]@{status=$texts[$i+1];detail=$texts[$i+2];start=(Button 'Start game priority').Current.IsEnabled}}
 function Shot([string]$name){$r=$window.Current.BoundingRectangle;$b=[Drawing.Bitmap]::new([int]$r.Width,[int]$r.Height);$g=[Drawing.Graphics]::FromImage($b);try{$g.CopyFromScreen([int]$r.X,[int]$r.Y,0,0,$b.Size);$b.Save((Join-Path $OutRoot ($name+'.png')),[Drawing.Imaging.ImageFormat]::Png)}finally{$g.Dispose();$b.Dispose()};Save ($name+'-card.json') (Card)}
-function Probe([string]$folder){$directory=Join-Path $OutRoot $folder;[IO.Directory]::CreateDirectory($directory)|Out-Null;$exe=Join-Path $directory 'Overwatch.exe';if(-not(Test-Path $exe)){Copy-Item "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" $exe};$p=Start-Process $exe -ArgumentList '-NoProfile','-WindowStyle','Hidden','-Command','Start-Sleep -Seconds 600' -WindowStyle Hidden -PassThru;$owned.Add((New-OwnedProcess $p));Start-Sleep -Milliseconds 800;$p.PriorityClass='Normal';return $p}
+function Probe([string]$folder){$directory=Join-Path $OutRoot $folder;[IO.Directory]::CreateDirectory($directory)|Out-Null;$exe=Join-Path $directory 'Overwatch.exe';if(-not(Test-Path $exe)){Copy-Item "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" $exe};$command="Add-Type -AssemblyName System.Windows.Forms;`$w=New-Object Windows.Forms.Form;`$w.Text='Disposable game $folder';`$w.Width=400;`$w.Height=200;`$w.ShowDialog()|Out-Null";$encoded=[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command));$p=Start-Process $exe -ArgumentList '-NoProfile','-EncodedCommand',$encoded -WindowStyle Hidden -PassThru;$owned.Add((New-OwnedProcess $p));WaitFor {$p.Refresh();$p.MainWindowHandle -ne [IntPtr]::Zero} 30 'probe window'|Out-Null;$p.PriorityClass='Normal';return $p}
 function Read($p){$p.Refresh();[pscustomobject]@{pid=$p.Id;path=$p.Path;priorityClass=[string]$p.PriorityClass}}
 try {
  Assert-NoUnownedAppProcess
+ if(@(Get-ChildItem -LiteralPath $stateRoot -Recurse -File -ErrorAction SilentlyContinue).Count){throw 'The staged backend state is not empty; refusing to share it'}
  if(@(Get-Process Overwatch -ErrorAction SilentlyContinue).Count){throw 'A process named Overwatch is already running; refusing to share the fixture name'}
  $profile=[Text.Encoding]::UTF8.GetString($profileBytes).TrimStart([char]0xfeff)|ConvertFrom-Json
  $profile.foregroundGame.processNames=@('Overwatch.exe');$profile.rules=@();$profile.safeCandidates=@()
@@ -66,7 +69,9 @@ try {
  $aAtReview=Read $a
  Stop-OwnedProcess ($owned|Where-Object {$_.Identity.pid -eq $a.Id}|Select-Object -First 1)
  $b=Probe 'probe-b'
+ [RooIndustriesGameTuneUi]::SetForegroundWindow($b.MainWindowHandle)|Out-Null
  Start-Sleep -Seconds 1
+ [RooIndustriesGameTuneUi]::SetForegroundWindow($handle)|Out-Null
  Activate (WaitFor {$e=Button 'Start game priority';if($e -and $e.Current.IsEnabled){$e}} 30 'Start enabled')
  $started=WaitFor {$c=Card;if($c -and $c.status -notin $reviewed.status,'Starting game priorities' -and (Button 'Review game priority').Current.IsEnabled){$c}} 120 'Start result'
  Start-Sleep -Seconds 8
@@ -92,6 +97,7 @@ try {
  if($app){Stop-OwnedValidationApp $app $receipt}
  foreach($o in $owned){Stop-OwnedProcess $o}
  [IO.File]::WriteAllBytes($profilePath,$profileBytes)
- if(-not$reviewExisted -and (Test-Path -LiteralPath $reviewPath)){Remove-Item -LiteralPath $reviewPath}
+ if($reviewExisted){[IO.File]::WriteAllBytes($reviewPath,$reviewBytes)}elseif(Test-Path -LiteralPath $reviewPath){Remove-Item -LiteralPath $reviewPath}
+ if($app -and (Test-Path -LiteralPath (Join-Path $stateRoot 'game-tune-sessions'))){Remove-Item -LiteralPath (Join-Path $stateRoot 'game-tune-sessions') -Recurse -Force}
  Save 'cleanup.json' @{appStopped=if($app){$app.HasExited}else{$true};probesExited=@($owned|ForEach-Object {$_.process.HasExited});profileRestored=((Get-FileHash $profilePath).Hash -eq [BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash($profileBytes)).Replace('-',''));reviewFileRemoved=($reviewExisted -or -not(Test-Path -LiteralPath $reviewPath))}
 }

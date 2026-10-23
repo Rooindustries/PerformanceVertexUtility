@@ -7,6 +7,8 @@ param(
     [string]$TargetGameProcessName = '',
     [string]$ReviewPath = '',
     [string]$ReviewSha256 = '',
+    [int]$ControllerProcessId = 0,
+    [string]$ControllerStartTimeUtc = '',
     [switch]$ConfirmApply
 )
 
@@ -67,6 +69,11 @@ try {
     $profileId = [string](Get-RooIndustriesPropertyValue $profile 'profileId' 'game-session')
     $sessionId = New-RooIndustriesGameTuneSessionId $profileId
     $startedAtUtc = Get-RooIndustriesUtcStamp
+    $workerStartTimeUtc = (Get-Process -Id $PID).StartTime.ToUniversalTime().ToString('o')
+    if ($ControllerProcessId -gt 0) {
+        $controller = Get-Process -Id $ControllerProcessId -ErrorAction Stop
+        if (-not (Test-RooIndustriesProcessStartTime $ControllerStartTimeUtc ($controller.StartTime.ToUniversalTime().ToString('o')))) { throw 'The game session controller changed before Start.' }
+    }
     $previewArgs = @{ ProfilePath = $resolvedProfilePath }
     if (-not [string]::IsNullOrWhiteSpace($TargetGameProcessName)) {
         $previewArgs['TargetGameProcessName'] = $TargetGameProcessName
@@ -139,6 +146,11 @@ try {
         dryRun = (-not $ConfirmApply)
         sessionStatus = 'running'
         status = 'running'
+        ownerProcessId = if ($ControllerProcessId -gt 0) { $ControllerProcessId } else { $PID }
+        ownerStartTimeUtc = if ($ControllerProcessId -gt 0) { $ControllerStartTimeUtc } else { $workerStartTimeUtc }
+        workerProcessId = $PID
+        workerStartTimeUtc = $workerStartTimeUtc
+        recoverWhenOwnerEnds = ($ControllerProcessId -gt 0)
         startedAtUtc = $startedAtUtc
         completedAtUtc = $null
         pollIntervalSeconds = $PollIntervalSeconds
@@ -160,6 +172,7 @@ try {
     $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
     $pollIndex = 0
     $lastPreview = @()
+    $interrupted = $false
     while ($true) {
         $pollIndex++
         $pollStartedAtUtc = Get-RooIndustriesUtcStamp
@@ -187,6 +200,11 @@ try {
             }
         }
         try {
+            if ($ConfirmApply -and -not $gateMissed) {
+                $saved = Read-RooIndustriesJsonFile $sessionStatePath
+                $interrupted = [string](Get-RooIndustriesPropertyValue $saved 'sessionStatus' '') -ne 'running' -or (Test-RooIndustriesGameTuneOwnerEnded $state.ownerProcessId $state.ownerStartTimeUtc)
+                if ($interrupted) { break }
+            }
             foreach ($entry in @(if ($gateMissed) { @() } else { Get-RooIndustriesPropertyArray $previewEnvelope 'preview' })) {
                 $entryControlChanges = @(Get-RooIndustriesPreviewControlChanges $entry)
                 if ($null -ne $review) { $entryControlChanges = @(Select-RooIndustriesGameTuneReviewedChanges $review $entry $entryControlChanges) }
@@ -350,7 +368,7 @@ try {
             $polls.Add($poll) | Out-Null
             $logEntry = New-RooIndustriesLog "Game Tune poll $pollIndex completed with $($pollChanged.Count) changed item(s), $($pollWouldApply.Count) dry-run item(s), and $($pollSkipped.Count) skipped item(s)."
             $logs.Add($logEntry) | Out-Null
-            if ($ConfirmApply) {
+            if ($ConfirmApply -and -not $gateMissed) {
                 Add-RooIndustriesGameTuneLogFileEntry $sessionDirectory $logEntry
                 $state.pollCount = $pollIndex
                 $state.changedItems = @($changed.ToArray())
@@ -371,6 +389,7 @@ try {
         Start-Sleep -Seconds $PollIntervalSeconds
     }
 
+    if ($ConfirmApply -and (Test-RooIndustriesGameTuneOwnerEnded $state.ownerProcessId $state.ownerStartTimeUtc)) { $interrupted = $true }
     $sessionStatus = if ($errors.Count -gt 0) { 'failed' } else { 'completed' }
     $resultStatus = if ($ConfirmApply) {
         if ($changed.Count -gt 0 -and $skipped.Count -gt 0) { 'partial' }
@@ -432,20 +451,39 @@ try {
         $envelope | Add-Member -NotePropertyName review -NotePropertyValue (New-RooIndustriesGameTuneReview $lastPreview $profileId $resolvedProfilePath $TargetGameProcessName)
     }
 
-    if ($ConfirmApply) {
-        $state.sessionStatus = $sessionStatus
-        $state.status = $sessionStatus
-        $state.completedAtUtc = $completedAtUtc
-        $state.pollCount = $pollIndex
-        $state.changedItems = @($changed.ToArray())
-        $state.skippedItems = @($skipped.ToArray())
-        $state.restoredItems = @($restored.ToArray())
-        $state.backupManifestPath = $backupPath
-        $state.restorable = ($null -ne $backupMetadata)
-        $state.warnings = @($warnings.ToArray())
-        $state.errors = @($errors.ToArray())
-        $state.logs = @($logs.ToArray())
-        Write-SessionState $state $sessionDirectory
+    if ($ConfirmApply -and -not $interrupted) {
+        $finalGate = Enter-RooIndustriesGovernorGate
+        if ($null -eq $finalGate) { throw 'Game Tune could not save its final state while another process was using it. Its saved recovery was kept.' }
+        try {
+            $current = Read-RooIndustriesJsonFile $sessionStatePath
+            $interrupted = [string](Get-RooIndustriesPropertyValue $current 'sessionStatus' '') -ne 'running' -or (Test-RooIndustriesGameTuneOwnerEnded $state.ownerProcessId $state.ownerStartTimeUtc)
+            if (-not $interrupted) {
+                $state.sessionStatus = $sessionStatus
+                $state.status = $sessionStatus
+                $state.completedAtUtc = $completedAtUtc
+                $state.pollCount = $pollIndex
+                $state.changedItems = @($changed.ToArray())
+                $state.skippedItems = @($skipped.ToArray())
+                $state.restoredItems = @($restored.ToArray())
+                $state.backupManifestPath = $backupPath
+                $state.restorable = ($null -ne $backupMetadata)
+                $state.warnings = @($warnings.ToArray())
+                $state.errors = @($errors.ToArray())
+                $state.logs = @($logs.ToArray())
+                Write-SessionState $state $sessionDirectory
+            }
+        } finally { Exit-RooIndustriesGovernorGate $finalGate }
+    }
+
+    if ($ConfirmApply -and $interrupted) {
+        $state = Repair-RooIndustriesInterruptedGameTuneSession (Read-RooIndustriesJsonFile $sessionStatePath) $sessionStatePath
+        $envelope.status = $state.sessionStatus
+        $envelope.sessionStatus = $state.sessionStatus
+        $envelope.restorable = $state.restorable
+        $envelope.restoredItems = @(Get-RooIndustriesPropertyArray $state 'restoredItems')
+        $envelope.errors = @(Get-RooIndustriesPropertyArray $state 'errors')
+        $envelope.result.status = if ($state.restorable) { 'failed' } else { 'rolledBack' }
+        $envelope.result.summary = 'The game session controller ended. Recovery used its saved backup.'
     }
 
     Write-RooIndustriesJsonOutput $envelope $OutputPath

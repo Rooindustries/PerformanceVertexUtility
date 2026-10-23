@@ -2,7 +2,8 @@ param(
     [string]$SessionId = '',
     [string]$SessionPath = '',
     [string]$StateRoot = '',
-    [string]$OutputPath = ''
+    [string]$OutputPath = '',
+    [switch]$RecoverInterrupted
 )
 
 $ErrorActionPreference = 'Stop'
@@ -42,6 +43,7 @@ try {
     }
 
     $session = Read-RooIndustriesJsonFile $resolvedSessionPath
+    if ($RecoverInterrupted) { $session = Repair-RooIndustriesInterruptedGameTuneSession $session $resolvedSessionPath }
     $sessionDirectory = Split-Path $resolvedSessionPath -Parent
     $rawStatus = [string](Get-RooIndustriesPropertyValue $session 'sessionStatus' (Get-RooIndustriesPropertyValue $session 'status' 'completed'))
     $isRunning = $rawStatus -eq 'running'

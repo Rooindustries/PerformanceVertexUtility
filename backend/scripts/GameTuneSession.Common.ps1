@@ -298,6 +298,82 @@ function New-RooIndustriesGameTuneResult {
     }
 }
 
+function Test-RooIndustriesGameTuneOwnerEnded {
+    param([int]$OwnerId, [string]$OwnerStart)
+    $savedTime = [datetime]::MinValue
+    if ($OwnerId -le 0 -or -not [datetime]::TryParse($OwnerStart, [ref]$savedTime)) { return $false }
+    $owner = Get-Process -Id $OwnerId -ErrorAction SilentlyContinue
+    if ($null -ne $owner) {
+        try {
+            return -not (Test-RooIndustriesProcessStartTime $OwnerStart ($owner.StartTime.ToUniversalTime().ToString('o')))
+        } catch { return $false }
+    }
+    return $true
+}
+
+function Repair-RooIndustriesInterruptedGameTuneSession {
+    param([object]$Session, [string]$SessionPath)
+    $rawStatus = [string](Get-RooIndustriesPropertyValue $Session 'sessionStatus' '')
+    $ownerId = [int](Get-RooIndustriesPropertyValue $Session 'ownerProcessId' 0)
+    $ownerStart = [string](Get-RooIndustriesPropertyValue $Session 'ownerStartTimeUtc' '')
+    $ownerEnded = Test-RooIndustriesGameTuneOwnerEnded $ownerId $ownerStart
+    $workerEnded = Test-RooIndustriesGameTuneOwnerEnded ([int](Get-RooIndustriesPropertyValue $Session 'workerProcessId' 0)) ([string](Get-RooIndustriesPropertyValue $Session 'workerStartTimeUtc' ''))
+    if ($rawStatus -eq 'running') { if (-not $ownerEnded -and -not $workerEnded) { return $Session } }
+    elseif ($rawStatus -ne 'completed' -or -not $ownerEnded -or -not [bool](Get-RooIndustriesPropertyValue $Session 'recoverWhenOwnerEnds' $false) -or -not [bool](Get-RooIndustriesPropertyValue $Session 'restorable' $false)) { return $Session }
+    $gate = Enter-RooIndustriesGovernorGate
+    if ($null -eq $gate) { return $Session }
+    try {
+        $Session = Read-RooIndustriesJsonFile $SessionPath
+        if ([string](Get-RooIndustriesPropertyValue $Session 'sessionStatus' '') -ne $rawStatus) { return $Session }
+        if ([int](Get-RooIndustriesPropertyValue $Session 'ownerProcessId' 0) -ne $ownerId -or [string](Get-RooIndustriesPropertyValue $Session 'ownerStartTimeUtc' '') -ne $ownerStart) { return $Session }
+        $Session.sessionStatus = 'failed'
+        $Session.status = 'failed'
+        $Session.completedAtUtc = Get-RooIndustriesUtcStamp
+        Write-RooIndustriesGameTuneJsonFile $Session $SessionPath
+        try {
+            $backupPath = [string](Get-RooIndustriesPropertyValue $Session 'backupManifestPath' '')
+            if (-not [string]::IsNullOrWhiteSpace($backupPath)) {
+                if (-not [string]::Equals([IO.Path]::GetFullPath($backupPath), (Join-Path (Split-Path $SessionPath -Parent) 'backup.json'), [StringComparison]::OrdinalIgnoreCase)) { throw 'The interrupted session backup is outside its session folder.' }
+                $backup = Read-RooIndustriesJsonFile $backupPath
+                if ([string](Get-RooIndustriesPropertyValue $backup 'sessionId' '') -cne [string](Get-RooIndustriesPropertyValue $Session 'sessionId' '') -or
+                    [string](Get-RooIndustriesPropertyValue $backup 'profileId' '') -cne [string](Get-RooIndustriesPropertyValue $Session 'profileId' '')) { throw 'The interrupted session and backup do not match.' }
+                foreach ($snapshot in @(Get-RooIndustriesPropertyArray $backup 'snapshots')) {
+                    $identity = Get-RooIndustriesGameTuneLiveProcessIdentity $snapshot
+                    if ($identity.instanceEnded) { continue }
+                    if (-not $identity.exists -or -not $identity.matches) { throw 'A saved app identity could not be checked. Its values were kept.' }
+                    if ($null -eq $snapshot.PSObject.Properties['controlChanges']) { throw 'The interrupted session has no record of the controls it changed.' }
+                    foreach ($change in @(Get-RooIndustriesPropertyArray $snapshot 'controlChanges')) {
+                        if ([string](Get-RooIndustriesPropertyValue $change 'outcome' '') -eq 'failed') { continue }
+                        $control = [string](Get-RooIndustriesPropertyValue $change 'control' '')
+                        $current = Get-RooIndustriesControlStateValue $identity.currentControlState $control
+                        $originalField = switch ($control) { 'priorityClass' { 'originalPriorityClass' }; 'affinityMask' { 'originalAffinityMask' }; 'ioPriority' { 'originalIoPriority' }; 'memoryPriority' { 'originalMemoryPriority' }; 'gpuPriority' { 'originalGpuPriority' }; default { throw 'The saved session contains an unknown control.' } }
+                        if ($null -eq (Get-RooIndustriesPropertyValue $snapshot $originalField $null) -or $null -eq (Get-RooIndustriesPropertyValue $change 'proposedValue' $null)) { throw 'The saved session has an incomplete control backup.' }
+                        if ((Test-RooIndustriesGovernorOwnsControl $identity.process $control) -or
+                            (-not (Test-RooIndustriesControlValueEqual $control $current (Get-RooIndustriesPropertyValue $snapshot $originalField $null)) -and
+                             -not (Test-RooIndustriesControlValueEqual $control $current (Get-RooIndustriesPropertyValue $change 'proposedValue' $null)))) {
+                            throw 'Another program changed a saved app setting. Its value was kept; review the session before restoring.'
+                        }
+                    }
+                }
+                $restore = & (Join-Path $PSScriptRoot 'Stop-GameTuneSession.ps1') -SessionPath $SessionPath -ConfirmApply | ConvertFrom-Json
+                $Session = Read-RooIndustriesJsonFile $SessionPath
+                if ([bool](Get-RooIndustriesPropertyValue $restore 'restorable' $true)) { throw 'The interrupted session could not be fully restored. Its backup was kept.' }
+            } else {
+                if (Test-Path -LiteralPath (Join-Path (Split-Path $SessionPath -Parent) 'backup.json')) { throw 'The interrupted session lost its backup reference. Its backup was kept.' }
+                $Session.sessionStatus = 'completed'
+                $Session.status = 'completed'
+            }
+            $Session.logs = @(Get-RooIndustriesPropertyArray $Session 'logs') + @((New-RooIndustriesLog 'Restored the interrupted game session from its saved backup.'))
+        } catch {
+            $Session.sessionStatus = 'failed'
+            $Session.status = 'failed'
+            $Session.errors = @(Get-RooIndustriesPropertyArray $Session 'errors') + @((New-RooIndustriesIssue 'GAME_TUNE_RECOVERY_NEEDS_ATTENTION' $_.Exception.Message 'error' 'performance.gameTune' $SessionPath $false 'Review the saved session before restoring.' $null))
+        }
+        Write-RooIndustriesGameTuneJsonFile $Session $SessionPath
+        return $Session
+    } finally { Exit-RooIndustriesGovernorGate $gate }
+}
+
 function Test-RooIndustriesGameTuneSameInstance {
     param(
         [object]$Reviewed,
