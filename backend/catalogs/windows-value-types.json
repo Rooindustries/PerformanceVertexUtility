@@ -1,0 +1,84 @@
+{
+  "values": [
+    {
+      "hive": "CurrentUser",
+      "keyPath": "Control Panel\\Keyboard",
+      "valueName": "KeyboardDelay",
+      "type": "REG_SZ",
+      "windowsValue": "1",
+      "reference": "https://learn.microsoft.com/en-us/previous-versions/windows/it-pro/windows-2000-server/cc978658(v=technet.10)",
+      "quote": "HKCU\\Control Panel\\Keyboard | REG_SZ | 0–3 | 1",
+      "evidence": "REG_SZ \"1\" for the user and the sign-in screen on Windows 11 Pro 25H2 (build 26200); read-only check on the test PC, 2026-10-23."
+    },
+    {
+      "hive": "CurrentUser",
+      "keyPath": "Control Panel\\Mouse",
+      "valueName": "MouseSpeed",
+      "type": "REG_SZ",
+      "windowsValue": "1",
+      "reference": "https://learn.microsoft.com/en-us/previous-versions/windows/it-pro/windows-2000-server/cc978664(v=technet.10)",
+      "quote": "MouseSpeed | HKCU\\Control Panel\\Mouse | REG_SZ",
+      "evidence": "REG_SZ \"1\" for the user and the sign-in screen on Windows 11 Pro 25H2 (build 26200); read-only check on the test PC, 2026-10-23."
+    },
+    {
+      "hive": "CurrentUser",
+      "keyPath": "Control Panel\\Mouse",
+      "valueName": "MouseThreshold1",
+      "type": "REG_SZ",
+      "windowsValue": "6",
+      "reference": "https://learn.microsoft.com/en-us/previous-versions/windows/it-pro/windows-2000-server/cc978665(v=technet.10)",
+      "quote": "HKCU\\Control Panel\\Mouse | REG_SZ | Pixels in decimal | 6",
+      "evidence": "REG_SZ \"6\" for the user and the sign-in screen on Windows 11 Pro 25H2 (build 26200); read-only check on the test PC, 2026-10-23."
+    },
+    {
+      "hive": "CurrentUser",
+      "keyPath": "Control Panel\\Mouse",
+      "valueName": "MouseThreshold2",
+      "type": "REG_SZ",
+      "windowsValue": "10",
+      "reference": "https://learn.microsoft.com/en-us/previous-versions/windows/it-pro/windows-2000-server/cc978667(v=technet.10)",
+      "quote": "HKCU\\Control Panel\\Mouse | REG_SZ | Pixels in decimal | 10",
+      "evidence": "REG_SZ \"10\" for the user and the sign-in screen on Windows 11 Pro 25H2 (build 26200); read-only check on the test PC, 2026-10-23."
+    },
+    {
+      "hive": "CurrentUser",
+      "keyPath": "Control Panel\\Accessibility\\StickyKeys",
+      "valueName": "Flags",
+      "type": "REG_SZ",
+      "windowsValue": "510",
+      "reference": "https://learn.microsoft.com/en-us/windows/win32/api/winuser/ns-winuser-stickykeys",
+      "quote": "dwFlags: A set of bit flags that specify properties for the StickyKeys feature.",
+      "evidence": "Windows stores these flags as REG_SZ \"510\" for the user and the sign-in screen on Windows 11 Pro 25H2 (build 26200); read-only check on the test PC, 2026-10-23. The Keyboard Response and ToggleKeys flags next to it are REG_SZ too."
+    },
+    {
+      "hive": "LocalMachine",
+      "keyPath": "SYSTEM\\CurrentControlSet\\Enum\\USB",
+      "valueName": "SelectiveSuspendEnabled",
+      "type": "REG_BINARY",
+      "windowsValue": "00",
+      "reference": "https://learn.microsoft.com/en-us/windows-hardware/drivers/install/inf-addreg-directive",
+      "quote": "0x00000001 (FLG_ADDREG_BINVALUETYPE) The given value is \"raw\" data.",
+      "evidence": "Windows' own input.inf writes HKR,,\"SelectiveSuspendEnabled\",0x00000001,0x1 in HID_SelSus_Inst.AddReg.NT.HW. On Windows 11 Pro 25H2 (build 26200) 20 USB devices keep REG_BINARY 00 and none keep a DWORD; read-only check on the test PC, 2026-10-23."
+    },
+    {
+      "hive": "LocalMachine",
+      "keyPath": "SYSTEM\\CurrentControlSet\\Enum\\HID",
+      "valueName": "SelectiveSuspendEnabled",
+      "type": "REG_BINARY",
+      "windowsValue": "00",
+      "reference": "https://learn.microsoft.com/en-us/windows-hardware/drivers/install/inf-addreg-directive",
+      "quote": "0x00000001 (FLG_ADDREG_BINVALUETYPE) The given value is \"raw\" data.",
+      "evidence": "Same value and reader as the USB device parameters (input.inf HID_SelSus_Inst writes it as binary). No HID device on the test PC keeps it."
+    },
+    {
+      "hive": "LocalMachine",
+      "keyPath": "SYSTEM\\CurrentControlSet\\Enum\\USBSTOR",
+      "valueName": "SelectiveSuspendEnabled",
+      "type": "REG_BINARY",
+      "windowsValue": "00",
+      "reference": "https://learn.microsoft.com/en-us/windows-hardware/drivers/install/inf-addreg-directive",
+      "quote": "0x00000001 (FLG_ADDREG_BINVALUETYPE) The given value is \"raw\" data.",
+      "evidence": "Same value as the USB device parameters, which Windows writes as binary. No USB storage device on the test PC keeps it."
+    }
+  ]
+}
