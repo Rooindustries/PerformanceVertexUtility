@@ -119,16 +119,16 @@ static class MitigationCommandChecks
                 var engine = new TweakEngine(catalog with { Settings = [row], Presets = [], Incompatible = null }, store);
                 PowerShellControls.Launcher = launcher;
                 var before = Snapshot();
+                JsonElement applied = default, observed = default;
                 try
                 {
                     var detected = engine.Detect().Settings.Single();
                     check(detected.Error is null && detected.Controls is [{ } read] && ControlValues.Equal(read.Value, before) && Matches(Independent(), before),
                         row.Name + " reads the independent Windows policy with its module " + modules + ": " + detected.Error);
                     Apply(engine, Review(engine, folder.FullName, [new(row.Id, choice.Id)]));
-                    var applied = Snapshot(); var observed = Independent();
+                    applied = Snapshot(); observed = Independent();
                     check(Matches(observed, applied) && choice.Controls!.All(control => Matches(observed, control.Value)),
                         row.Name + " applies " + choice.Name + " with its module " + modules + ": independent Get-ProcessMitigation agrees");
-                    results.Add(new { modules, row = row.Id, choice = choice.Id, before, applied, observed });
                 }
                 finally
                 {
@@ -137,6 +137,7 @@ static class MitigationCommandChecks
                     check(ControlValues.Equal(Snapshot(), before) && Matches(Independent(), before) && (store.ReadState()?.Profiles.Length is null or 0) && store.Recovery().Pending is null,
                         row.Name + " Undo restores original policy bytes, types, absence and independent Windows readings");
                 }
+                results.Add(new { modules, row = row.Id, choice = choice.Id, before, applied, observed, restored = Snapshot() });
             }
             restored = ControlValues.Equal(Snapshot(), baseline);
             check(restored, "Every mitigation row and choice restores the original Windows policy with its module missing and broken");
