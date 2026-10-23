@@ -29,9 +29,9 @@ internal sealed class LaunchGpuHandles : IDisposable
         Directory.CreateDirectory(_root);
     }
 
-    internal void Start()
+    internal void Start(ProcessJob job)
     {
-        _capture = new Thread(Capture) { IsBackground = true, Name = "GPU launch handles" };
+        _capture = new Thread(() => Capture(job)) { IsBackground = true, Name = "GPU launch handles" };
         _capture.Start();
         if (!_ready.Wait(TimeSpan.FromSeconds(15))) throw new TimeoutException("GPU launch capture did not initialize.");
         Check();
@@ -94,7 +94,7 @@ internal sealed class LaunchGpuHandles : IDisposable
         => !read.Known && read.Error is { Api: "D3DKMTGetProcessSchedulingPriorityClass", CodeKind: "ntstatus", Code: 0xC000000D }
             && DateTime.UtcNow - DateTime.FromFileTimeUtc(long.Parse(identity.CreationTimeFileTimeUtc, System.Globalization.CultureInfo.InvariantCulture)) < TimeSpan.FromSeconds(90);
 
-    private void Capture()
+    private void Capture(ProcessJob job)
     {
         try
         {
@@ -105,7 +105,8 @@ internal sealed class LaunchGpuHandles : IDisposable
                 using var copy = ProcessTarget.ReceiveGpu(warm.CopyTo(self));
                 _ = copy.Read("gpuPriority");
             }
-            using var snapshot = new LaunchProcessSnapshot();
+            using var snapshot = new LaunchProcessSnapshot(job);
+            using var wake = _stop.Token.Register(snapshot.Wake);
             var image = Path.GetFileName(_state.Preview.GamePath);
             if (snapshot.Find(image).Length != 0) throw new InvalidOperationException("The game started before GPU capture was armed.");
             var seen = new HashSet<ulong>();
@@ -132,8 +133,7 @@ internal sealed class LaunchGpuHandles : IDisposable
                     catch (RooIndustries.Optimization.CpuSets.NativeFailure error) when (error.Api == "OpenProcess" && error.NativeErrorCode == 87) { }
                     finally { target?.Dispose(); }
                 }
-                if (_targets.Values.Any(target => !target.HasExited)) _stop.Token.WaitHandle.WaitOne(50);
-                else snapshot.WaitNext();
+                snapshot.WaitNext();
             }
         }
         catch (Exception error) { _failure = error; }
@@ -169,15 +169,18 @@ internal sealed class LaunchProcessSnapshot : IDisposable
     }
     private IntPtr _buffer = Marshal.AllocHGlobal(1024 * 1024);
     private uint _capacity = 1024 * 1024;
-    private readonly SafeWaitHandle _timer;
+    private readonly ProcessJob _job;
+    private readonly SafeWaitHandle _port;
 
-    internal LaunchProcessSnapshot()
+    internal LaunchProcessSnapshot(ProcessJob job)
     {
-        _timer = CreateWaitableTimerEx(IntPtr.Zero, null, 2, 0x100002);
+        _job = job;
+        _port = CreateIoCompletionPort(new IntPtr(-1), IntPtr.Zero, UIntPtr.Zero, 1);
         try
         {
-            if (_timer.IsInvalid) throw new Win32Exception(Marshal.GetLastWin32Error());
+            if (_port.IsInvalid) throw new Win32Exception(Marshal.GetLastWin32Error());
             if (!Find(Path.GetFileName(Environment.ProcessPath!)).Any(process => process.Pid == Environment.ProcessId)) throw new InvalidDataException("Process enumeration did not identify the current host.");
+            if (!job.Notify(_port)) throw new Win32Exception(Marshal.GetLastWin32Error());
         }
         catch { Dispose(); throw; }
     }
@@ -211,14 +214,24 @@ internal sealed class LaunchProcessSnapshot : IDisposable
 
     internal void WaitNext()
     {
-        long due = -10000;
-        if (!SetWaitableTimer(_timer, ref due, 0, IntPtr.Zero, IntPtr.Zero, false)) throw new Win32Exception(Marshal.GetLastWin32Error());
-        if (WaitForSingleObject(_timer, 1000) != 0) throw new InvalidOperationException("GPU launch capture timer failed.");
+        var deadline = Environment.TickCount64 + 1000;
+        for (long left; (left = deadline - Environment.TickCount64) > 0;)
+        {
+            if (!GetQueuedCompletionStatus(_port, out var message, out _, out _, (uint)left))
+            {
+                var error = Marshal.GetLastWin32Error();
+                if (error == 258) return;
+                throw new Win32Exception(error);
+            }
+            if (message is 0 or 6) return;
+        }
     }
 
-    public void Dispose() { _timer.Dispose(); if (_buffer != IntPtr.Zero) { Marshal.FreeHGlobal(_buffer); _buffer = IntPtr.Zero; } }
+    internal void Wake() => PostQueuedCompletionStatus(_port, 0, UIntPtr.Zero, IntPtr.Zero);
+
+    public void Dispose() { _job.Notify(null); _port.Dispose(); if (_buffer != IntPtr.Zero) { Marshal.FreeHGlobal(_buffer); _buffer = IntPtr.Zero; } }
     [DllImport("ntdll.dll")] private static extern int NtQuerySystemInformation(int kind, IntPtr data, uint size, out uint needed);
-    [DllImport("kernel32.dll", EntryPoint = "CreateWaitableTimerExW", CharSet = CharSet.Unicode, SetLastError = true)] private static extern SafeWaitHandle CreateWaitableTimerEx(IntPtr attributes, string? name, uint flags, uint access);
-    [DllImport("kernel32.dll", SetLastError = true)] private static extern bool SetWaitableTimer(SafeWaitHandle timer, ref long due, int period, IntPtr callback, IntPtr context, bool resume);
-    [DllImport("kernel32.dll")] private static extern uint WaitForSingleObject(SafeWaitHandle handle, uint milliseconds);
+    [DllImport("kernel32.dll", SetLastError = true)] private static extern SafeWaitHandle CreateIoCompletionPort(IntPtr file, IntPtr port, UIntPtr key, uint threads);
+    [DllImport("kernel32.dll", SetLastError = true)] private static extern bool GetQueuedCompletionStatus(SafeWaitHandle port, out uint message, out UIntPtr key, out IntPtr process, uint milliseconds);
+    [DllImport("kernel32.dll", SetLastError = true)] private static extern bool PostQueuedCompletionStatus(SafeWaitHandle port, uint message, UIntPtr key, IntPtr process);
 }

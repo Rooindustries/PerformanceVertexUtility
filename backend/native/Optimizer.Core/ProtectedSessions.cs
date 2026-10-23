@@ -225,7 +225,7 @@ public sealed class ProtectedSessions
                 {
                     var watcher = OperationFiles.Read<ProtectedWatchReady>(Path.Combine(root, "watch.json"));
                     gpuHandles = new(root, state, watcher.Watcher);
-                    gpuHandles.Start();
+                    gpuHandles.Start(job);
                 }
                 state.JobStatus = "attachIntent"; Save(root, state);
                 job.Attach(plan.Launcher);
