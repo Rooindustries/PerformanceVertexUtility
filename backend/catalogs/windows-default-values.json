@@ -1,0 +1,14 @@
+{
+  "values": [
+    {
+      "hive": "LocalMachine",
+      "keyPath": "SOFTWARE\\Microsoft\\PolicyManager\\default\\Update\\ExcludeWUDriversInQualityUpdate",
+      "valueName": "value",
+      "dword": 0,
+      "reference": "https://learn.microsoft.com/en-us/windows/client-management/mdm/policy-csp-update#excludewudriversinqualityupdate",
+      "quote": "0 (Default) | Allow Windows Update drivers.",
+      "evidence": "Windows 11 Pro 25H2 (build 26200) keeps REG_DWORD 0 here next to the policy's Behavior, highrange, lowrange, mergealgorithm and policytype values; read-only check on the test PC, 2026-10-23.",
+      "reason": "This key is Windows' own default policy store, not a local override. Windows default writes 0 back instead of deleting it, so the PC matches stock Windows."
+    }
+  ]
+}

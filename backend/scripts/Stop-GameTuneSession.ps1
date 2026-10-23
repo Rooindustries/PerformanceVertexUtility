@@ -34,6 +34,7 @@ function New-GameTuneRestorePreview {
     $originalIoPriority = Get-RooIndustriesPropertyValue $Snapshot 'originalIoPriority' $null
     $originalMemoryPriority = Get-RooIndustriesPropertyValue $Snapshot 'originalMemoryPriority' $null
     $originalGpuPriority = Get-RooIndustriesPropertyValue $Snapshot 'originalGpuPriority' $null
+    $savedControls = @(Get-RooIndustriesPropertyArray $Snapshot 'controlChanges')
     $recorded = @(Get-RooIndustriesRestorableProcessControls $Snapshot (Get-RooIndustriesPropertyValue $Candidate 'currentControlState' $null) | ForEach-Object { [string](Get-RooIndustriesPropertyValue $_ 'control' '') })
     $restoresAll = $null -eq $Snapshot.PSObject.Properties['controlChanges']
     $blocked = (-not $Candidate.exists) -or (-not $Candidate.matches)
@@ -69,6 +70,7 @@ function New-GameTuneRestorePreview {
                 $controlChanges.Add((New-RooIndustriesControlChange 'gpuPriority' $Candidate.currentGpuPriority $originalGpuPriority 'restoreGpuPriority' 'GPU scheduling priority is unavailable for this restore target.' $true $gpuReason)) | Out-Null
             }
         }
+        $missingOriginal = @($savedControls | Where-Object { $_.control -notin @($controlChanges | ForEach-Object { $_.control }) }).Count -gt 0
         $split = Split-RooIndustriesLeftAsSetRestoreChanges $Snapshot @($controlChanges.ToArray()) (Get-RooIndustriesPropertyValue $Candidate 'currentControlState' $null)
         $leftAsSet = @($split.leftAsSet)
         $alreadyOriginal = @($split.alreadyOriginal)
@@ -85,6 +87,10 @@ function New-GameTuneRestorePreview {
         }
         if ($controlChanges.Count -eq 0) {
             $reason = if ($leftAsSet.Count -gt 0) { $script:RooIndustriesLeftAsSet } else { 'Process already matches the Game Tune backup.' }
+        }
+        if ($missingOriginal) {
+            $blocked = $true
+            $reason = 'A saved control has no valid original value. Its current value and backup were kept.'
         }
     }
     $applicableControlChanges = @($controlChanges.ToArray() | Where-Object { -not $_.blocked })

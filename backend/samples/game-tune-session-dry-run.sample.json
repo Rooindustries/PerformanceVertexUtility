@@ -102,5 +102,55 @@
       "level": "info",
       "message": "Game Tune session game-tune-overwatch-stream-session-20260630-100000 started."
     }
-  ]
+  ],
+  "preview": [
+    {
+      "processId": 18344,
+      "processName": "Overwatch.exe",
+      "executablePath": "C:\\Games\\Overwatch\\_retail_\\Overwatch.exe",
+      "processStartTimeUtc": "2026-06-30T09:58:12.4810000Z",
+      "classification": "gameTarget",
+      "ruleId": "boost-foreground-game",
+      "blocked": false,
+      "protected": false,
+      "controlChanges": [
+        {
+          "control": "priorityClass",
+          "currentValue": "Normal",
+          "proposedValue": "AboveNormal",
+          "action": "setPriority"
+        }
+      ]
+    }
+  ],
+  "review": {
+    "schemaVersion": 1,
+    "kind": "game-tune-review",
+    "reviewId": "3f0c2a9d6b7e4c1f8a5d2e9b0c7f4a61",
+    "createdAtUtc": "2026-06-30T10:00:01Z",
+    "profileId": "overwatch-stream-session",
+    "profilePath": "backend\\profiles\\game-session.profile.json",
+    "profileSha256": "0f3a6c9e2b5d8f1a4c7e0b3d6f9a2c5e8b1d4f7a0c3e6b9d2f5a8c1e4b7d0f3a",
+    "targetGameProcessName": "Overwatch.exe",
+    "entries": [
+      {
+        "processId": 18344,
+        "processName": "Overwatch.exe",
+        "executablePath": "C:\\Games\\Overwatch\\_retail_\\Overwatch.exe",
+        "processStartTimeUtc": "2026-06-30T09:58:12.4810000Z",
+        "classification": "gameTarget",
+        "ruleId": "boost-foreground-game",
+        "blocked": false,
+        "protected": false,
+        "controlChanges": [
+          {
+            "control": "priorityClass",
+            "currentValue": "Normal",
+            "proposedValue": "AboveNormal",
+            "action": "setPriority"
+          }
+        ]
+      }
+    ]
+  }
 }

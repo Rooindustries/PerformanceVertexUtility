@@ -33,6 +33,7 @@ public sealed class LiveDataService
     private string ProcessBackupPath(string generation) => Path.Combine(_recoveryDirectory, "process-profile-backups", generation, "backup.json");
     private string NvidiaOperationPath => Path.Combine(_recoveryDirectory, "nvidia-profile-operation");
     private string NvidiaGenerationPath => Path.Combine(_recoveryDirectory, "nvidia-profile-operation-generation.json");
+    private string GameTuneReviewPath => Path.Combine(_recoveryDirectory, "game-tune-review.json");
     private int _processApplyRecovered;
     public bool TakeProcessRecoverySetAsideNotice() => Interlocked.Exchange(ref _processRecoverySetAside, 0) != 0;
     public bool TakeProcessApplyRecoveredNotice() => Interlocked.Exchange(ref _processApplyRecovered, 0) != 0;
@@ -315,17 +316,37 @@ public sealed class LiveDataService
         return result with { RecoveryPath = recovery.Path, RecoveryGeneration = recovery.Generation };
     }
 
-    public Task<LiveDataResult<string>> RunGameTuneSessionResultAsync(bool confirmApply, int maxDurationSeconds, int pollIntervalSeconds, CancellationToken ct = default)
+    public async Task<(LiveDataResult<string> Result, GameTuneReview? Review)> ReviewGameTuneSessionResultAsync(int maxDurationSeconds, int pollIntervalSeconds, CancellationToken ct = default)
     {
-        var args = "-MaxDurationSeconds " + maxDurationSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture) +
-                   " -PollIntervalSeconds " + pollIntervalSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        if (confirmApply)
+        var result = await RunBackendScriptResultAsync("Start-GameTuneSession.ps1", ct, GameTuneTiming(maxDurationSeconds, pollIntervalSeconds)).ConfigureAwait(false);
+        if (result.Value is null || result.Error is not null) return (result, null);
+        try
         {
-            args += " -ConfirmApply";
+            using var document = JsonDocument.Parse(result.Value);
+            if (!document.RootElement.TryGetProperty("review", out var review) || review.ValueKind != JsonValueKind.Object) return (result, null);
+            RooIndustries.Optimizer.OperationFiles.Write(GameTuneReviewPath, review);
+            return (result, new GameTuneReview(GameTuneReviewPath, RooIndustries.Optimizer.OperationFiles.HashFile(GameTuneReviewPath)));
         }
-
-        return RunBackendScriptResultAsync("Start-GameTuneSession.ps1", ct, args);
+        catch (Exception error) when (error is JsonException or IOException or UnauthorizedAccessException)
+        {
+            return (result with { Error = "The review could not be saved: " + error.Message }, null);
+        }
     }
+
+    public Task<LiveDataResult<string>> StartGameTuneSessionResultAsync(GameTuneReview review, int maxDurationSeconds, int pollIntervalSeconds, CancellationToken ct = default)
+        => RunBackendScriptResultAsync(
+            "Start-GameTuneSession.ps1",
+            ct,
+            GameTuneTiming(maxDurationSeconds, pollIntervalSeconds)
+                + " -ReviewPath " + QuotePowerShell(review.Path)
+                + " -ReviewSha256 " + QuotePowerShell(review.Sha256)
+                + " -ControllerProcessId " + Environment.ProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                + " -ControllerStartTimeUtc " + QuotePowerShell(Process.GetCurrentProcess().StartTime.ToUniversalTime().ToString("o", System.Globalization.CultureInfo.InvariantCulture))
+                + " -ConfirmApply");
+
+    private static string GameTuneTiming(int maxDurationSeconds, int pollIntervalSeconds)
+        => "-MaxDurationSeconds " + maxDurationSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture) +
+           " -PollIntervalSeconds " + pollIntervalSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
     public Task<LiveDataResult<string>> RestoreGameTuneSessionResultAsync(
         string sessionId,
@@ -340,11 +361,18 @@ public sealed class LiveDataService
                 + " -BackupPath " + QuotePowerShell(backupManifestPath)
                 + " -ConfirmApply");
 
-    public Task<LiveDataResult<string>> GetGameTuneSessionStatusResultAsync(CancellationToken ct = default)
-        => RunBackendScriptResultAsync("Get-GameTuneSessionStatus.ps1", ct);
+    public async Task<LiveDataResult<string>> GetGameTuneSessionStatusResultAsync(CancellationToken ct = default)
+    {
+        var result = await RunBackendScriptResultAsync("Get-GameTuneSessionStatus.ps1", ct, "-RecoverInterrupted").ConfigureAwait(false);
+        if (DeserializeResult<GameTuneSessionStatus>(result).Value?.RecoveryPerformed == true)
+        {
+            using var change = DataGeneration.BeginChange();
+        }
+        return result;
+    }
 
-    public Task<GameTuneSessionStatus?> GetGameTuneSessionStatusAsync(CancellationToken ct = default)
-        => RunAsync<GameTuneSessionStatus>("Get-GameTuneSessionStatus.ps1", ct);
+    public async Task<GameTuneSessionStatus?> GetGameTuneSessionStatusAsync(CancellationToken ct = default)
+        => DeserializeResult<GameTuneSessionStatus>(await GetGameTuneSessionStatusResultAsync(ct).ConfigureAwait(false)).Value;
 
     public Task<LiveDataResult<string>> RunProcessGovernorSessionResultAsync(bool confirmApply, int maxDurationSeconds, int pollIntervalSeconds, int sampleIntervalMilliseconds, CancellationToken ct = default)
     {

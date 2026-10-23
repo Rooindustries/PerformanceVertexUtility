@@ -59,6 +59,16 @@ Their Microsoft references describe MDM CSP editions without establishing an
 edition limit for the registry policy. The same file records these two explicit
 exceptions to the catalog's overlapping-edition-gate check.
 
+`backend/catalogs/windows-default-values.json` lists values that stock Windows
+keeps itself, with Microsoft's documented default and a read from the test PC.
+Deleting one of these would leave the PC unlike stock Windows, so the compiler
+turns a source choice that deletes it into **Windows default**, which writes
+Windows' own value back. The choice keeps its ID, so saved choices and profiles
+that picked Use Windows default still resolve, and Undo restores whatever the
+value was before. Today this covers **Automatic Driver Updates: value** in
+Windows' default policy store, which Windows keeps at 0 (driver updates
+allowed). `check_windows_tweaks.py` fails while any choice deletes a listed value.
+
 ## One setting, shared ownership
 
 The planner resolves registry handles to their native key identity, with the
@@ -245,12 +255,14 @@ device selection, missing inputs, dependencies and pending servicing. Run:
 ```
 
 The separately approved native fixture switches are `--registry-fixture`,
-`--controls-fixture` and `--power-fixture` on
+`--controls-fixture`, `--power-fixture` and `--windows-default-fixture` on
 `tools/validation/Tweaks/Tweaks.csproj`. They refuse unexpected baseline state
 and clean only their owned test resources. They are not part of the ordinary
 file-fixture run. `--feature-restart-fixture` is: it drives the real recovery
 store in a disposable current-user key with simulated Windows feature states,
-so no feature changes and no restart happens.
+so no feature changes and no restart happens. `--windows-default-fixture` copies
+each value in `backend/catalogs/windows-default-values.json` into a disposable
+current-user key and runs its real catalog row through apply, readback and Undo.
 
 Catalog contracts and negative controls run with:
 
@@ -277,7 +289,8 @@ a two-value row without one; it does not restore a backup. Rows without a Window
 default choice, such as service startup, read on only for their starting choice or
 a selected choice Windows already has, because one of their values always matches.
 Use Windows default explicitly removes the local override, and another policy may
-still control the setting. Choices for missing components
+still control the setting. Where Windows keeps the value
+itself, Windows default writes Windows' value instead. Choices for missing components
 are saved separately from applied Windows profiles and do not create a recovery
 backup. They require a new review before Windows applies them. Backups & history reads
 the actual recovery state. An empty list does not become a sample backup.
