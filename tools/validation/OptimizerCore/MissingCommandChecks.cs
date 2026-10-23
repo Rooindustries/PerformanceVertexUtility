@@ -14,6 +14,7 @@ function Set-MpPreference {param([int]$SubmitSamplesConsent) [IO.File]::WriteAll
 
 """;
     const string LoadFailure = "The Defender provider dependency could not be loaded.";
+    const string MitigationLoadFailure = "The ProcessMitigations provider dependency could not be loaded.";
     const string Parent = @"Software\RooIndustriesTweakTests";
 
     static Func<object, Process> Launcher(string providers, string consent, string modules)
@@ -64,6 +65,19 @@ function Set-MpPreference {param([int]$SubmitSamplesConsent) [IO.File]::WriteAll
             var hidden = Launcher("", consent, none); var present = Launcher(Defender, consent, none); var broken = Launcher("", consent, modules);
             var defender = new ControlAddress("defender", "system", "SubmitSamplesConsent");
             var mitigations = new ControlAddress("mitigations", "system", "policy");
+            var unloadedModules = Path.Combine(folder.FullName, "mitigation-modules");
+            Directory.CreateDirectory(Path.Combine(unloadedModules, "BrokenMitigations"));
+            File.WriteAllText(Path.Combine(unloadedModules, "BrokenMitigations", "BrokenMitigations.psd1"), "@{RootModule='BrokenMitigations.psm1';ModuleVersion='1.0';FunctionsToExport=@('Get-ProcessMitigation')}");
+            File.WriteAllText(Path.Combine(unloadedModules, "BrokenMitigations", "BrokenMitigations.psm1"), "throw '" + MitigationLoadFailure + "'\n");
+            PowerShellControls.Launcher = Launcher("", consent, unloadedModules);
+            var unloadedStore = new RegistryTweakStore(new("CurrentUser", "Registry64", root + @"\Recovery", "value", "State"));
+            var unloadedEngine = new TweakEngine(new TweakCatalog(1, "unloaded-mitigations", [Setting("mitigations", mitigations, JsonDocument.Parse("""{"Aslr.BottomUp":"ON","Aslr.OverrideBottomUp":false}""").RootElement, true)], []), unloadedStore);
+            string Unloaded() => unloadedEngine.Detect().Settings.Single(setting => setting.Id == "mitigations").Error ?? "read";
+            var (firstRead, retryRead) = (Unloaded(), Unloaded());
+            var unloadedReview = Error(() => unloadedEngine.Preview("exploit-unloaded", [new("mitigations", "set")]));
+            check(firstRead.Contains(MitigationLoadFailure, StringComparison.Ordinal) && retryRead == firstRead && unloadedReview.Contains(MitigationLoadFailure, StringComparison.Ordinal)
+                && unloadedStore.ReadState() is null && unloadedStore.Recovery().Pending is null,
+                "Exploit protection whose module is installed but fails to load reads the load error on every retry and refuses a review before anything is saved or written: " + firstRead + " | " + retryRead + " | " + unloadedReview);
             PowerShellControls.Launcher = hidden;
             (string Feature, ControlAddress Address)[] rows =
             [
