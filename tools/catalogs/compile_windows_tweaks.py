@@ -128,7 +128,7 @@ def apply_policy_editions(catalog):
                         continue
                     matched = True
                     if 'equivalentChoice' in policy:
-                        equivalents.append((setting, change, policy['equivalentChoice']))
+                        equivalents.append((setting, option, change, policy['equivalentChoice']))
                     for gate in gates:
                         gate['editions'] = policy['editions'] if '*' in gate['editions'] else sorted(edition for edition in gate['editions'] if any(edition.casefold().startswith(allowed[:-1].casefold()) if allowed.endswith('*') else edition.casefold() == allowed.casefold() for allowed in policy['editions']))
                     gates = [gate for gate in gates if gate['editions']]
@@ -137,11 +137,11 @@ def apply_policy_editions(catalog):
                     raise ValueError('A registry policy edition constraint excludes every source gate: ' + setting['id'] + '/' + option['id'])
                 option['availability'] = gates
                 constrained.add((setting['id'], option['id']))
-    for setting, change, equivalent in equivalents:
+    for setting, limited, change, equivalent in equivalents:
         replacement = {'address': change['address'], 'dword': equivalent['dword']}
         if any(option['changes'] == [replacement] for option in setting['options']):
             continue
-        setting['options'].append({'id': 'choice-' + digest(desired(replacement)), 'name': equivalent['name'], 'changes': [replacement],
+        setting['options'].insert(setting['options'].index(limited) + 1, {'id': 'choice-' + digest(desired(replacement)), 'name': equivalent['name'], 'changes': [replacement], 'replaces': limited['id'],
                                    'availability': [{'minimumBuild': setting['minimumBuild'], 'maximumBuild': setting['maximumBuild'], 'editions': ['*']}]})
     for preset in catalog['presets']:
         optional = [item for item in preset['selections'] if (item['settingId'], item['optionId']) in constrained]

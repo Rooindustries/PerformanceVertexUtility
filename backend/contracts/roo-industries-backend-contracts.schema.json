@@ -6831,6 +6831,10 @@
             "type": "string",
             "minLength": 1
           }
+        },
+        "replaces": {
+          "type": "string",
+          "minLength": 1
         }
       },
       "anyOf": [
