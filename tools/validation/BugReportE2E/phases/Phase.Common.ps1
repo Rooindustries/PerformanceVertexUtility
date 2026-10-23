@@ -83,6 +83,7 @@ function Invoke-RooIndustriesOwnedCommand([string]$Image,[string[]]$Arguments,[s
  $start=[Diagnostics.ProcessStartInfo]::new($Image);$start.UseShellExecute=$false;$start.CreateNoWindow=$true;$start.RedirectStandardOutput=$true;$start.RedirectStandardError=$true;$start.WorkingDirectory=$Working;$start.Arguments=Join-RooIndustriesWindowsArguments $Arguments
  Set-RooIndustriesReaderEnvironment $start $Purpose
  $owned=$null;$stdout=$null;$stderr=$null
+ $commandBodyError=$null
  try{
   $owned=Start-OwnedProcess -StartInfo $start -Purpose $Purpose
   $stdout=$owned.process.StandardOutput.ReadToEndAsync();$stderr=$owned.process.StandardError.ReadToEndAsync()
@@ -96,7 +97,10 @@ function Invoke-RooIndustriesOwnedCommand([string]$Image,[string[]]$Arguments,[s
   Write-HarnessResult $Output ($Purpose+'-exit.json') @{nativeExit=$exit;identity=$owned.Identity;stdoutSha256=(Get-RooIndustriesStringHash $text);stderrSha256=(Get-RooIndustriesStringHash $errorText)}|Out-Null
   Assert-RooIndustries ($exit -eq 0) ($Purpose+' native exit was '+$exit)
   return @{stdout=$text;stderr=$errorText;exit=$exit;identity=$owned.Identity;readerAdverse=$read.readerAdverse}
- }finally{
+ }
+ catch{$commandBodyError=$_;throw}
+ finally{
+ try{
   if($owned){
    Stop-OwnedProcess $owned
    Assert-RooIndustries ($owned.process.WaitForExit(5000)) 'Original process handle did not end.'
@@ -106,6 +110,11 @@ function Invoke-RooIndustriesOwnedCommand([string]$Image,[string[]]$Arguments,[s
     if($stream[0] -and $stream[0].Wait(3000) -and -not(Test-HarnessPath $path)){$null=New-HarnessText $path ($stream[0].GetAwaiter().GetResult()) 'roo70-retained-command-output' 'frame'}
    }
   }
+ }
+ catch{
+  if($null -ne $commandBodyError){throw [AggregateException]::new('Report command failed; original failure is first, followed by cleanup failure',[Exception[]]@($commandBodyError.Exception,$_.Exception))}
+  throw
+ }
  }
 }
 function Register-RooIndustriesTree([string]$Root,[string]$Purpose){

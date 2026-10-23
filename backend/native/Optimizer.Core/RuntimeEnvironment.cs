@@ -65,7 +65,12 @@ public static class RuntimeEnvironment
     private static string ModulePath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "WindowsPowerShell", "Modules") + ";" +
         Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "Modules");
 
-    public static string PowerShellPrelude => "$env:PSModulePath='" + ModulePath.Replace("'", "''") + "'; ";
+    public static string PowerShellPrelude => "$env:PSModulePath='" + ModulePath.Replace("'", "''") + "'; "
+#if ROO_INDUSTRIES_TEST_HOOKS
+        + (Environment.GetEnvironmentVariable("ROO_INDUSTRIES_TEST_MODULES") is { Length: > 0 } modules
+            ? "Import-Module " + string.Join(",", modules.Split(';').Select(module => "'" + module.Replace("'", "''") + "'")) + "; $global:PSModuleAutoLoadingPreference='None'; " : "")
+#endif
+        ;
 
     private static readonly Lazy<string> TokenProfile = new(() =>
     {

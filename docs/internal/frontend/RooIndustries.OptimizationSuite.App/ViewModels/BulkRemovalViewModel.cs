@@ -266,11 +266,13 @@ public partial class BulkRemovalViewModel : ObservableObject
         _journalObserved = false; _removalRunning = true; _cancelRequested = false; Busy = true; Status = "Starting removal.";
         try
         {
+            using var running = RunningChanges.Begin();
             var progress = new Progress<BulkRemovalJournal>(state => { if (_removalRunning) UpdateProgress(state); });
             var result = await App.Operations.ApplyRemovalAsync(_review, DependenciesReviewed, progress);
             _removalRunning = false;
             if (result.Data is not null) UpdateProgress(result.Data);
         }
+        catch (InvalidOperationException error) when (error.Message == RunningChanges.Installing) { Status = "Removal didn't start."; Detail = error.Message; }
         catch (Exception error) { _phase = "needs-reconciliation"; Status = "Removal needs checking."; Detail = error.Message; }
         finally { _removalRunning = false; Busy = false; }
     }
@@ -516,6 +518,7 @@ public partial class BulkRemovalViewModel : ObservableObject
         Busy = true;
         try
         {
+            using var running = RunningChanges.Begin();
             var result = await App.Operations.RestoreRemovedFilesAsync(_restoreReview);
             FileStatus = result.Status == "success" ? "Earlier file backup restored." : "Some earlier files could not be restored.";
             FileSummary = "File recovery does not reinstall the application.";

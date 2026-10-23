@@ -18,6 +18,75 @@
         "https://learn.microsoft.com/en-us/windows-server/get-started/azure-edition"
       ],
       "reason": "CloudContent.admx help limits the registry policy. Match documented edition families so their evaluation, LTSC, multi-session and Azure variants remain supported. Microsoft also documents this registry setting for Server. Removing an override remains available everywhere."
+    },
+    {
+      "hive": "LocalMachine",
+      "keyPath": "SOFTWARE\\Policies\\Microsoft\\Windows\\DataCollection",
+      "valueName": "AllowTelemetry",
+      "dword": 0,
+      "editions": [
+        "Enterprise*", "Education*", "IoTEnterprise*", "Server*"
+      ],
+      "reference": "https://learn.microsoft.com/en-us/azure/governance/policy/samples/guest-configuration-baseline-windows",
+      "quote": "Setting a value of 0 applies to enterprise, EDU, IoT and server devices only. Setting a value of 0 for other devices is equivalent to choosing a value of 1.",
+      "additionalReferences": [
+        "https://learn.microsoft.com/en-us/windows/client-management/mdm/policy-csp-system#allowtelemetry",
+        "https://learn.microsoft.com/en-us/windows/privacy/configure-windows-diagnostic-data-in-your-organization#diagnostic-data-off"
+      ],
+      "equivalentChoice": {
+        "dword": 1,
+        "name": "Required diagnostic data"
+      },
+      "reason": "Diagnostic data off works only on these editions; Windows sends required diagnostic data instead on the rest, so every edition gets that choice too. Removing the override and other levels stay available everywhere."
+    },
+    {
+      "hive": "LocalMachine",
+      "keyPath": "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\DataCollection",
+      "valueName": "AllowTelemetry",
+      "dword": 0,
+      "editions": [
+        "Enterprise*", "Education*", "IoTEnterprise*", "Server*"
+      ],
+      "reference": "https://learn.microsoft.com/en-us/windows/privacy/configure-windows-diagnostic-data-in-your-organization#diagnostic-data-off",
+      "quote": "This is only available on Windows Server, Windows Enterprise, and Windows Education editions.",
+      "additionalReferences": [
+        "https://learn.microsoft.com/en-us/azure/governance/policy/samples/guest-configuration-baseline-windows",
+        "https://learn.microsoft.com/en-us/windows/client-management/mdm/policy-csp-system#allowtelemetry"
+      ],
+      "equivalentChoice": {
+        "dword": 1,
+        "name": "Required diagnostic data"
+      },
+      "reason": "This value stores the same diagnostic data level. Microsoft limits the off level by edition, not by where it is stored, and the security baseline adds IoT. Removing the override and other levels stay available everywhere."
+    },
+    {
+      "hive": "LocalMachine",
+      "keyPath": "SOFTWARE\\Policies\\Microsoft\\Windows\\CloudContent",
+      "valueName": "DisableSoftLanding",
+      "editions": [
+        "Enterprise*", "Education*", "IoTEnterprise*", "Server*"
+      ],
+      "reference": "https://learn.microsoft.com/en-us/windows/configuration/windows-spotlight/#windows-edition-and-licensing-requirements",
+      "quote": "Windows spotlight is available on Windows Enterprise and Education editions only.",
+      "additionalReferences": [
+        "https://learn.microsoft.com/en-us/windows/client-management/mdm/policy-csp-experience#allowwindowstips"
+      ],
+      "reason": "Windows tips are part of Windows spotlight. The Experience CSP maps \"Do not show Windows tips\" to this value and lists Enterprise, Education and IoT Enterprise, not Pro. The client docs don't cover Windows Server, so it keeps its existing availability. Removing the override remains available everywhere."
+    },
+    {
+      "hive": "LocalMachine",
+      "keyPath": "SOFTWARE\\Policies\\Microsoft\\Windows\\CloudContent",
+      "valueName": "DisableWindowsSpotlightFeatures",
+      "editions": [
+        "Enterprise*", "Education*", "IoTEnterprise*", "Server*"
+      ],
+      "reference": "https://learn.microsoft.com/en-us/windows/configuration/windows-spotlight/#windows-edition-and-licensing-requirements",
+      "quote": "Windows spotlight is available on Windows Enterprise and Education editions only.",
+      "additionalReferences": [
+        "https://learn.microsoft.com/en-us/windows/client-management/mdm/policy-csp-experience#allowwindowsspotlight",
+        "https://learn.microsoft.com/en-us/windows/privacy/manage-connections-from-windows-operating-system-components-to-microsoft-services#25-personalized-experiences"
+      ],
+      "reason": "\"Turn off all Windows spotlight features\" is limited to these editions; the Experience CSP lists Enterprise, Education and IoT Enterprise, not Pro. Microsoft documents it as a user policy, so this machine-wide value can't do more on Home or Pro. The client docs don't cover Windows Server, so it keeps its existing availability. Removing the override remains available everywhere."
     }
   ],
   "allowedOverlaps": [

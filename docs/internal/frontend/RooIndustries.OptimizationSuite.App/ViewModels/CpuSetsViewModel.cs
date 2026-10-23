@@ -159,6 +159,7 @@ public partial class CpuSetsViewModel : ObservableObject
         Busy = true;
         try
         {
+            using var running = Services.RunningChanges.Begin();
             _journal = _review.JournalPath;
             var result = await App.Operations.ApplyCpuSetsAsync(_review);
             RestoreAvailable = result.RestoreAvailable;
@@ -178,6 +179,7 @@ public partial class CpuSetsViewModel : ObservableObject
         Busy = true;
         try
         {
+            using var running = Services.RunningChanges.Begin();
             if (await App.Operations.ReleaseEndedCpuSessionAsync(_journal)) { ShowEndedSession(); return; }
             var result = await App.Operations.RestoreCpuSetsAsync(_journal);
             RestoreAvailable = result.RestoreAvailable;

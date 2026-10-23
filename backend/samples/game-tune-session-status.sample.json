@@ -49,5 +49,18 @@
     }
   ],
   "warnings": [],
-  "errors": []
+  "errors": [],
+  "leftAsSetItems": [
+    {
+      "processId": 18344,
+      "processName": "Overwatch.exe",
+      "control": "priorityClass",
+      "currentValue": "BelowNormal",
+      "appliedValue": "AboveNormal",
+      "originalValue": "Normal",
+      "outcome": "leftAsSet",
+      "reason": "Left as another program set it."
+    }
+  ],
+  "restoreAttempted": true
 }
