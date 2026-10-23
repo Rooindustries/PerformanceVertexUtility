@@ -1,6 +1,8 @@
+import contextlib
 import json
 import os
 from pathlib import Path
+import signal
 import subprocess
 import tempfile
 import time
@@ -9,14 +11,31 @@ import time
 def check(root):
     project = root / 'tools/validation/TweakReads/TweakReads.csproj'
     command = [os.environ.get('DOTNET', 'dotnet'), 'run', '--project', str(project), '--configuration', 'Release', '-p:EnableWindowsTargeting=true', '--', str(root)]
+    timeout = int(os.environ.get('TWEAK_READS_TIMEOUT', '600'))
     try:
-        result = subprocess.run(command, cwd=root, capture_output=True, text=True)
+        process = subprocess.Popen(command, cwd=root, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, start_new_session=True)
     except FileNotFoundError:
         return ['The Windows Tweaks read walk needs the .NET 8 SDK (dotnet).']
-    if result.returncode == 0:
+    try:
+        stdout, stderr = process.communicate(timeout=timeout)
+    except BaseException as error:
+        stop(process)
+        if not isinstance(error, subprocess.TimeoutExpired):
+            raise
+        return [f'The Windows Tweaks read walk did not finish within {timeout} seconds, so it was stopped. Run it alone to see where it hangs: dotnet run --project tools/validation/TweakReads/TweakReads.csproj --configuration Release -p:EnableWindowsTargeting=true -- .']
+    if process.returncode == 0:
         return []
-    failures = [line for line in result.stdout.splitlines() if line.startswith('FAIL ')]
-    return failures or ['The Windows Tweaks read walk did not finish: ' + (result.stdout + result.stderr)[-2000:]]
+    failures = [line for line in stdout.splitlines() if line.startswith('FAIL ')]
+    return failures or ['The Windows Tweaks read walk did not finish: ' + (stdout + stderr)[-2000:]]
+
+
+def stop(process):
+    if os.name == 'nt':
+        subprocess.run(['taskkill', '/F', '/T', '/PID', str(process.pid)], capture_output=True)
+    else:
+        with contextlib.suppress(ProcessLookupError):
+            os.killpg(process.pid, signal.SIGKILL)
+    process.communicate()
 
 
 def negative_controls(root):

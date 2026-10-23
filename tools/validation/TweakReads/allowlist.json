@@ -1,10 +1,4 @@
 {
   "schemaVersion": 1,
-  "rows": [
-    {
-      "settingId": "windows.c7158276464d2b3b",
-      "state": "choice-88665aca77848447",
-      "cause": "The recorded PC has SysMain disabled, and the app refuses memory compression without SysMain, so this choice has no written state to read here."
-    }
-  ]
+  "rows": []
 }

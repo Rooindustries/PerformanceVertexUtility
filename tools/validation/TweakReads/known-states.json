@@ -5958,5 +5958,1127 @@
       }
     }
   ],
-  "missingKeys": []
+  "missingKeys": [
+    {
+      "key": {
+        "hive": "CurrentUser",
+        "view": "Registry64",
+        "keyPath": "Software\\Classes\\*\\shell",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "CurrentUser",
+        "view": "Registry64",
+        "keyPath": "Software\\Classes\\CLSID\\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "CurrentUser",
+        "view": "Registry64",
+        "keyPath": "Software\\Classes\\CLSID\\{e88865ea-0e1c-4e20-9aa6-edcd0212c87c}",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "CurrentUser",
+        "view": "Registry64",
+        "keyPath": "Software\\Classes\\CLSID\\{f874310e-b6b7-47dc-bc84-b9e6b38f5903}",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "CurrentUser",
+        "view": "Registry64",
+        "keyPath": "Software\\Classes\\DesktopBackground",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "CurrentUser",
+        "view": "Registry64",
+        "keyPath": "Software\\Classes\\Directory\\shell",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "CurrentUser",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Classes\\Local Settings\\Software\\Microsoft\\Windows\\CurrentVersion\\AppContainer\\Storage\\microsoft.microsoftedge_8wekyb3d8bbwe",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "CurrentUser",
+        "view": "Registry64",
+        "keyPath": "Software\\Classes\\Local Settings\\Software\\Microsoft\\Windows\\Shell\\Bags\\1\\Desktop",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "CurrentUser",
+        "view": "Registry64",
+        "keyPath": "Software\\Classes\\SOFTWARE",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "CurrentUser",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Microsoft\\Messaging",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "CurrentUser",
+        "view": "Registry64",
+        "keyPath": "Software\\Microsoft\\Office\\16.0\\Outlook\\Options",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "CurrentUser",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Microsoft\\Office\\16.0\\Outlook\\Preferences",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "CurrentUser",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Microsoft\\Siuf",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "CurrentUser",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Microsoft\\Speech_OneCore\\Settings\\VoiceActivation",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "CurrentUser",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Sensor",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "CurrentUser",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\CapabilityAccessManager\\ConsentStore\\downloadsFolder",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "CurrentUser",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\CapabilityAccessManager\\ConsentStore\\generativeAI",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "CurrentUser",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\CapabilityAccessManager\\ConsentStore\\graphicsCaptureProgrammatic\\NonPackaged",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "CurrentUser",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\CapabilityAccessManager\\ConsentStore\\graphicsCaptureWithoutBorder\\NonPackaged",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "CurrentUser",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\CapabilityAccessManager\\ConsentStore\\humanPresence",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "CurrentUser",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\CapabilityAccessManager\\ConsentStore\\passkeys",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "CurrentUser",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\CapabilityAccessManager\\ConsentStore\\passkeysEnumeration",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "CurrentUser",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\CPSS\\Store\\UserLocationOverridePrivacySetting",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "CurrentUser",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\DeliveryOptimization",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "CurrentUser",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\DeviceAccess",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "CurrentUser",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced\\People",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "CurrentUser",
+        "view": "Registry64",
+        "keyPath": "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced\\TaskbarDeveloperSettings",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "CurrentUser",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\Explorer",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "CurrentUser",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\SettingSync",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "CurrentUser",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Windows Search",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "CurrentUser",
+        "view": "Registry64",
+        "keyPath": "Software\\Microsoft\\Windows\\Security",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "CurrentUser",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Microsoft\\Windows\\TabletPC\\Snipping Tool",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "CurrentUser",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Policies\\Microsoft\\Edge",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "CurrentUser",
+        "view": "Registry64",
+        "keyPath": "software\\policies\\microsoft\\office",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "CurrentUser",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Policies\\Microsoft\\Power",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "CurrentUser",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Policies\\Microsoft\\Windows\\CurrentVersion\\PushNotifications",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "CurrentUser",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsAI",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "CurrentUser",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsUpdate",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Microsoft\\OneDrive",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Microsoft\\PCHC",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Microsoft\\PolicyManager\\current\\device\\Bluetooth",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Microsoft\\PolicyManager\\current\\device\\Browser",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Microsoft\\PolicyManager\\current\\device\\Education",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Microsoft\\PolicyManager\\current\\device\\Start",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Microsoft\\PolicyManager\\current\\device\\System",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Microsoft\\PolicyManager\\current\\device\\Update",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Image File Execution Options\\smartscreen.exe",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\CapabilityAccessManager\\ConsentStore\\downloadsFolder",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\CapabilityAccessManager\\ConsentStore\\generativeAI",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\CapabilityAccessManager\\ConsentStore\\graphicsCaptureProgrammatic",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\CapabilityAccessManager\\ConsentStore\\graphicsCaptureWithoutBorder",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\CapabilityAccessManager\\ConsentStore\\humanPresence",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\CapabilityAccessManager\\ConsentStore\\musicLibrary",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\CapabilityAccessManager\\ConsentStore\\passkeys",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\CapabilityAccessManager\\ConsentStore\\passkeysEnumeration",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\CapabilityAccessManager\\ConsentStore\\systemAIModels",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\DeliveryOptimization",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Energy",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\EnergyRecommendations",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\FlyoutMenuSettings",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\Microsoft",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\Paint",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\TextInput",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\WindowsStore",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\WindowsUpdate\\Services\\7971f918-a847-4430-9279-4a52d1efe18d",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Policies\\BraveSoftware",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Policies\\Microsoft\\Biometrics",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Policies\\Microsoft\\Edge\\ExtensionInstallBlocklist",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Policies\\Microsoft\\EdgeUpdate",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Policies\\Microsoft\\FindMyDevice",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Policies\\Microsoft\\InputPersonalization",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "keyPath": "Software\\Policies\\Microsoft\\Internet Explorer",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Policies\\Microsoft\\Messenger",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Policies\\Microsoft\\MicrosoftEdge",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Policies\\Microsoft\\MRT",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Policies\\Microsoft\\SearchCompanion",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Policies\\Microsoft\\Speech",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Policies\\Microsoft\\SQMClient",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Policies\\Microsoft\\Windows Defender\\Spynet",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Policies\\Microsoft\\Windows NT\\CurrentVersion",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "keyPath": "Software\\Policies\\Microsoft\\Windows\\AdvertisingInfo",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Policies\\Microsoft\\Windows\\AppCompat",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Policies\\Microsoft\\Windows\\Bluetooth",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Policies\\Microsoft\\Windows\\CloudContent",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Policies\\Microsoft\\Windows\\Connect",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Policies\\Microsoft\\Windows\\CredUI",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Policies\\Microsoft\\Windows\\Device Metadata",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Policies\\Microsoft\\Windows\\DeviceGuard",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Policies\\Microsoft\\Windows\\DriverSearching",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Policies\\Microsoft\\Windows\\HandwritingErrorReports",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Policies\\Microsoft\\Windows\\LocationAndSensors",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Policies\\Microsoft\\Windows\\Maps",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Policies\\Microsoft\\Windows\\Messaging",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Policies\\Microsoft\\Windows\\Personalization",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Policies\\Microsoft\\Windows\\ScriptedDiagnosticsProvider",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "keyPath": "Software\\Policies\\Microsoft\\Windows\\SettingSync",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Policies\\Microsoft\\Windows\\StorageSense",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Policies\\Microsoft\\Windows\\TabletPC",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Policies\\Microsoft\\Windows\\WDI",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Policies\\Microsoft\\Windows\\Windows Error Reporting",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Policies\\Microsoft\\Windows\\Windows Feeds",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Policies\\Microsoft\\Windows\\Windows Search",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsCopilot",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "keyPath": "Software\\Policies\\Microsoft\\Windows\\WindowsUpdate",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Policies\\Microsoft\\Windows\\WwanSvc",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Policies\\Microsoft\\WMDRM",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "keyPath": "SOFTWARE\\Policies\\WindowsNotepad",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "keyPath": "SYSTEM\\CurrentControlSet\\Control\\DeviceGuard\\Scenarios\\CredentialGuard",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "keyPath": "SYSTEM\\CurrentControlSet\\Control\\DeviceGuard\\Scenarios\\SystemGuard",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "keyPath": "SYSTEM\\CurrentControlSet\\Control\\WMI\\AutoLogger\\AutoLogger-Diagtrack-Listener",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    },
+    {
+      "key": {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "keyPath": "SYSTEM\\CurrentControlSet\\Services\\Dnscache\\InterfaceSpecificParameters\\{11111111-2222-3333-4444-555555555555}",
+        "kind": "key",
+        "valueName": null
+      },
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23"
+    }
+  ],
+  "dependencies": [
+    {
+      "settingId": "windows.c7158276464d2b3b",
+      "optionId": "choice-88665aca77848447",
+      "after": {
+        "settingId": "windows.b903b39ef2236b86",
+        "optionId": "choice-abe3c9cd2753a893"
+      },
+      "source": "Windows compresses memory only while SysMain is enabled, so the app refuses memory compression while SysMain is disabled, as it is on the test PC"
+    }
+  ]
 }
