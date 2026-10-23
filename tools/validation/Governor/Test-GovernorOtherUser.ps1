@@ -114,7 +114,14 @@ $sync=(@(& (Join-Path $app 'backend\scripts\Invoke-ProcessPolicyWorker.ps1') -Ac
         }
         $current=try{[Security.Principal.NTAccount]::new($env:COMPUTERNAME+'\'+$account).Translate([Security.Principal.SecurityIdentifier]).Value}catch{$null}
         if($current -and $current -cne $sid){Check $false 'The test account was replaced after setup, so cleanup kept it';break}
-        foreach($name in $tasks){try{if(Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue){Stop-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue;Unregister-ScheduledTask -TaskName $name -Confirm:$false}}catch{}}
+        $keptTasks=@()
+        foreach($name in $tasks){
+            $task=Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue
+            if(-not $task){continue}
+            $runsAs=try{[Security.Principal.NTAccount]::new([string]$task.Principal.UserId).Translate([Security.Principal.SecurityIdentifier]).Value}catch{[string]$task.Principal.UserId}
+            if($runsAs -cne $sid){$keptTasks+=$name;continue}
+            try{Stop-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue;Unregister-ScheduledTask -TaskName $name -Confirm:$false}catch{}
+        }
         if($sid){foreach($task in Governor-Task $sid){try{Unregister-ScheduledTask -TaskName $task.TaskName -TaskPath $task.TaskPath -Confirm:$false}catch{}}}
         Get-CimInstance Win32_Process|Where-Object {$_.ExecutablePath -eq $probeExe -or ($sid -and (Invoke-CimMethod -InputObject $_ -MethodName GetOwnerSid).Sid -eq $sid)}|ForEach-Object {Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue}
         Start-Sleep -Seconds 3
@@ -124,9 +131,10 @@ $sync=(@(& (Join-Path $app 'backend\scripts\Invoke-ProcessPolicyWorker.ps1') -Ac
             for($attempt=0;$attempt -lt 24 -and @(Get-CimInstance Win32_UserProfile -Filter ("SID='"+$sid+"'")).Count -gt 0;$attempt++){try{Get-CimInstance Win32_UserProfile -Filter ("SID='"+$sid+"'")|Remove-CimInstance -ErrorAction Stop}catch{Start-Sleep -Seconds 3}}
         }
         & net.exe user $account /delete 2>&1|Out-Null
-        if(-not(Get-LocalUser -Name $account -ErrorAction SilentlyContinue)){Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue}
-        $out.left=[ordered]@{account=[bool](Get-LocalUser -Name $account -ErrorAction SilentlyContinue);work=(Test-Path -LiteralPath $work);profile=if($sid){@(Get-CimInstance Win32_UserProfile -Filter ("SID='"+$sid+"'")).Count}else{0};profileFolder=(Test-Path -LiteralPath ('C:\Users\'+$account))}
+        if(-not(Get-LocalUser -Name $account -ErrorAction SilentlyContinue) -and @(Get-CimInstance Win32_UserProfile -Filter ("SID='"+$sid+"'")).Count -eq 0){Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue}
+        $out.left=[ordered]@{account=[bool](Get-LocalUser -Name $account -ErrorAction SilentlyContinue);work=(Test-Path -LiteralPath $work);profile=if($sid){@(Get-CimInstance Win32_UserProfile -Filter ("SID='"+$sid+"'")).Count}else{0};profileFolder=(Test-Path -LiteralPath ('C:\Users\'+$account));tasksKept=$keptTasks}
         Check (-not $out.left.account -and -not $out.left.work -and $out.left.profile -eq 0) 'The second administrator account, its profile and the test folder are removed'
+        Check ($keptTasks.Count -eq 0) ('Cleanup removed only the test tasks that run as the test account'+$(if($keptTasks.Count){'; kept tasks it did not create: '+($keptTasks -join ', ')}else{''}))
     }
 }
 $out|ConvertTo-Json -Depth 8
