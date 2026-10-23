@@ -1,6 +1,6 @@
 param(
     [string]$HarnessPath = (Join-Path $PSScriptRoot '..\..\LeanClientOptimizer.ps1'),
-    [ValidateSet('All','Selection','Drift','Registry','Recovery','SnapshotSafety','ApplyComparison')][string]$Scenario = 'All',
+    [ValidateSet('All','Selection','Drift','PreviewBinding','Registry','Recovery','SnapshotSafety','ApplyComparison')][string]$Scenario = 'All',
     [ValidateSet('All','Signed','LegacyEvidence','Preflight','RegistryFailure','ServiceFailure','ServiceRuntime','OriginalEvidence','ServiceExistence','SourceEvidence','JsonNumbers','LegacyNames')][string]$RecoveryCase = 'All',
     [string]$BaseHarnessPath = $env:ROO_INDUSTRIES_LEGACY_BASE_HARNESS,
     [string]$BaseHarnessSha256 = $env:ROO_INDUSTRIES_LEGACY_BASE_HARNESS_SHA256
@@ -10,6 +10,12 @@ $tempRoot = Join-Path ([IO.Path]::GetTempPath()) ('roo-industries-legacy-rollbac
 function Assert([bool]$Condition, [string]$Message) {
     if (-not $Condition) { throw $Message }
     Write-Host "PASS $Message"
+}
+function Invoke-ReviewedApply {
+    $ConfirmApply=$false
+    $PreviewPath=(Invoke-ApplyModule).previewPath
+    $ConfirmApply=$true
+    Invoke-ApplyModule
 }
 $legacyQwordCases=@(
     @{label='signed number';data=[long]-1;raw=[long]-1;encoded='18446744073709551615'},
@@ -206,7 +212,7 @@ try {
             $previewSafe=$preview.dryRun -and -not $preview.backupPath -and $script:safetyRegistryWrites -eq 0 -and $script:safetyServiceWrites -eq 0
             $ConfirmApply=$true
             $refused=$false;$message='';$applied=$null;$restored=$null
-            try { $applied=Invoke-ApplyModule } catch {$refused=$true;$message=$_.Exception.Message}
+            $PreviewPath=$preview.previewPath;try { $applied=Invoke-ApplyModule } catch {$refused=$true;$message=$_.Exception.Message}
             if ($applied) { $BackupPath=$applied.backupPath;$restored=Invoke-RollbackModule }
             $rows.Add([pscustomobject]@{label=$case.label;managedType=$case.raw.GetType().FullName;beforeKind=$(if($case.ContainsKey('nativeKind')){$case.nativeKind}else{[int][Microsoft.Win32.RegistryValueKind]$case.kind});afterKind=$script:safetyValues.Second.nativeKind;beforeBytes=$before;afterBytes=[Convert]::ToBase64String($script:safetyValues.Second.bytes);previewSafe=$previewSafe;refused=$refused;error=$message;registryWrites=$script:safetyRegistryWrites;serviceWrites=$script:safetyServiceWrites;first=$script:safetyValues.First.raw;rollbackSuccess=$restored.success})
         }
@@ -268,7 +274,7 @@ try {
             Reset-SafetyFixture $case
             $before=[Convert]::ToBase64String($case.bytes)
             $ConfirmApply=$true
-            $applied=Invoke-ApplyModule
+            $applied=Invoke-ReviewedApply
             $BackupPath=$applied.backupPath
             $hash=(Get-FileHash $BackupPath).Hash
             $result=Invoke-RollbackModule
@@ -467,7 +473,7 @@ try {
             function Get-BenchmarkSnapshot { param($Label) @{label=$Label} }
             function Invoke-SmokeTest { @() }
             $ConfirmApply=$true
-            $applied=Invoke-ApplyModule
+            $applied=Invoke-ReviewedApply
             $backup=Get-Content $applied.backupPath -Raw | ConvertFrom-Json
             $run=@(Get-ChildItem (Join-Path $DataRoot 'runs') -File | Where-Object { (Get-Content $_.FullName -Raw|ConvertFrom-Json).backupPath -ceq $applied.backupPath })
             Assert (@($backup.services).Count -eq 3 -and $backup.services[0].exists -is [bool] -and $backup.services[0].exists -and $backup.services[0].appliedStartup -ceq 'Disabled' -and $backup.services[0].startType -ceq 'Automatic' -and $backup.services[0].dependsOn[0] -ceq 'FixtureDependency' -and $null -eq $backup.services[1].pathName -and $backup.services[1].processId -eq 0 -and $backup.services[2].exists -is [bool] -and -not $backup.services[2].exists) 'Real backup producer saves populated and absent service fields from OS boundary fixtures'
@@ -668,7 +674,7 @@ try {
                 if (-not $SingleService) { $services+=@{name='SecondSvc';startup='Disabled';targetState='Stopped'} }
                 Write-JsonFile @{protected=@{services=@();registryPathPatterns=@()};modules=@(@{id='fixture';name='Fixture';registryValues=@($registry);services=$services})} $fixtureManifest
                 $ConfirmApply=$true;$script:runtimeApplying=$true
-                $applied=Invoke-ApplyModule
+                $applied=Invoke-ReviewedApply
                 $script:runtimeApplying=$false
                 $bytes=[Convert]::ToBase64String([IO.File]::ReadAllBytes($applied.backupPath))
                 $saved=Get-Content -LiteralPath $applied.backupPath -Raw | ConvertFrom-Json
@@ -830,7 +836,7 @@ try {
         Assert ($null -eq $preview.backupPath) 'Preview creates no rollback snapshot'
         Assert ($script:value -eq 1) 'Preview leaves original state intact'
         $ConfirmApply = $true
-        $applied = Invoke-ApplyModule
+        $PreviewPath = $preview.previewPath; $applied = Invoke-ApplyModule
         Assert ($script:value -eq 2 -and (Test-Path $applied.backupPath)) 'Confirmed apply persists the original state before changing it'
         $ConfirmApply = $false
         Invoke-ApplyModule | Out-Null
@@ -843,7 +849,7 @@ try {
         $script:value = 2
         Invoke-RollbackModule | Out-Null
         Assert ($script:value -eq 1) 'Unproven legacy preview snapshots cannot displace an applied operation'
-        $second = Invoke-ApplyModule
+        $second = Invoke-ReviewedApply
         Assert ($second.backupPath -ne $applied.backupPath) 'Repeated operations have distinct backup paths'
         $BackupPath = $applied.backupPath
         $ConfirmApply = $false
@@ -876,7 +882,7 @@ try {
             $script:serviceExists=$true
             $script:startup='Automatic'
             $script:serviceRestores=0
-            $applied = Invoke-ApplyModule
+            $applied = Invoke-ReviewedApply
             $BackupPath=$applied.backupPath
             $manifest.modules[0].services[0].startup='Manual'
             $manifest | ConvertTo-Json -Depth 8 | Set-Content $fixtureManifest
@@ -944,7 +950,7 @@ try {
                     $preview=Invoke-ApplyModule
                     Assert ($preview.actions[0].blocked -and $script:value -eq 1) ('Apply preview protects the normalized full target ' + $target.name)
                     $ConfirmApply=$true
-                    $applied=Invoke-ApplyModule
+                    $PreviewPath=$preview.previewPath;$applied=Invoke-ApplyModule
                     $saved=Get-Content $applied.backupPath -Raw | ConvertFrom-Json
                     Assert (@($saved.registry).Count -eq 0 -and $script:registryWrites -eq 0 -and $script:value -eq 1) ('Confirmed apply excludes the normalized protected target ' + $target.name)
                     $legacy=[pscustomobject]@{moduleId='fixture';timestamp=(Get-Date).ToString('o');registry=@(@{path=$target.path;name=$target.name;type='REG_DWORD';desiredData=2;oldValue=1;valueExists=$true});services=@()}
@@ -961,6 +967,262 @@ try {
                 Assert ($script:registryReads -eq 0) 'Protected targets never reach the registry OS calls'
             }
         }
+    } }
+    if ($Scenario -in 'All','PreviewBinding') { & {
+        . $HarnessPath -Action ListModules -ManifestPath $fixtureManifest -DataRoot $tempRoot -ModuleId 'fixture' | Out-Null
+        $ManifestPath=Join-Path $tempRoot 'binding-manifest.json'
+        $bindingFailures=New-Object System.Collections.Generic.List[string]
+        function Test-BindingCase([bool]$Condition,[string]$Message) {
+            if ($Condition) { Write-Host "PASS $Message" } else { Write-Host "FAIL $Message"; $bindingFailures.Add($Message) }
+        }
+        function Open-RegistryKey {
+            param($Path,[switch]$Writable,[switch]$Create)
+            $key=[pscustomobject]@{}
+            $key|Add-Member ScriptMethod DeleteValue {param($Name,$Throw) $script:bindingWrites.Add('delete '+$Name);$script:bindingValues.Remove([string]$Name)}
+            $key|Add-Member ScriptMethod Dispose {} -PassThru
+        }
+        function Get-RegistryValueSnapshot {
+            param($Item,[switch]$AllowChangedLayout)
+            $current=$script:bindingValues[[string]$Item.name]
+            [pscustomobject]@{path=$Item.path;name=[string]$Item.name;type=$Item.type;desiredData=$Item.data;pathExists=$true;valueExists=($null -ne $current);kind=$(if($current){$current.kind});oldValue=$(if($current){$current.value})}
+        }
+        function Set-RegistrySnapshotData {
+            param($Key,$Name,$Snapshot)
+            $script:bindingWrites.Add([string]$Name+'='+$Snapshot.kind+':'+(@($Snapshot.oldValue) -join ','))
+            $script:bindingValues[[string]$Name]=@{kind=$Snapshot.kind;value=$Snapshot.oldValue}
+        }
+        function Get-ServiceSnapshot { param($Name) [pscustomobject]@{name=$Name;exists=$true;startType=$script:bindingStartup;status='Stopped'} }
+        function Set-ServiceFromManifest { param($Item) $script:bindingWrites.Add('service='+$Item.startup);$script:bindingStartup=$Item.startup }
+        function Restore-ServiceSnapshot { param($Snapshot) $script:bindingWrites.Add('service='+$Snapshot.startType);$script:bindingStartup=$Snapshot.startType }
+        function Get-BenchmarkSnapshot { param($Label) @{label=$Label} }
+        function Invoke-SmokeTest { @() }
+        function Reset-BindingFixture {
+            param([string]$Label)
+            $script:bindingValues=@{First=@{kind='DWord';value=1};Second=@{kind='String';value='One'};'Split\Name'=@{kind='DWord';value=1};Third=@{kind='DWord';value=1};Fourth=@{kind='DWord';value=1}}
+            $script:bindingWrites=New-Object System.Collections.Generic.List[string]
+            $script:bindingStartup='Automatic'
+            $registry=@(
+                @{path='HKCU\Fixture';name='First';type='REG_DWORD';data=2},
+                @{path='HKCU\Fixture';name='Second';type='REG_SZ';data='Two'},
+                @{path='HKCU\Fixture';name='Split\Name';type='REG_DWORD';data=2},
+                @{path='HKCU\Fixture\Protected';name='Third';type='REG_DWORD';data=2}
+            )
+            $services=@(@{name='FixtureSvc';startup='Disabled';targetState='Stopped'})
+            Write-JsonFile @{protected=@{services=@();registryPathPatterns=@('Fixture\\Protected')};modules=@(
+                @{id='fixture';name='Fixture';registryValues=$registry;services=$services},
+                @{id='other';name='Other';registryValues=$registry;services=$services}
+            )} $ManifestPath
+            return (Join-Path $tempRoot ('binding-'+$Label+'-'+[guid]::NewGuid().ToString('N')))
+        }
+        function Edit-BindingManifest {
+            param([scriptblock]$Edit)
+            $manifest=Get-Content -LiteralPath $ManifestPath -Raw|ConvertFrom-Json
+            & $Edit $manifest
+            Write-JsonFile $manifest $ManifestPath
+        }
+        function Get-BindingState {
+            $runs=@(if (Test-Path -LiteralPath (Join-Path $DataRoot 'runs')) { Get-ChildItem -LiteralPath (Join-Path $DataRoot 'runs') -Filter 'apply-*.json' -File | ForEach-Object { Get-Content -LiteralPath $_.FullName -Raw | ConvertFrom-Json } })
+            [pscustomobject]@{
+                writes=$script:bindingWrites.Count
+                backups=@(if (Test-Path -LiteralPath (Join-Path $DataRoot 'backups')) { Get-ChildItem -LiteralPath (Join-Path $DataRoot 'backups') -Recurse -Force }).Count
+                applied=@($runs|Where-Object {$_.dryRun -eq $false}).Count
+                previews=@($runs|Where-Object {$_.dryRun -eq $true}).Count
+            }
+        }
+        function Test-BindingRefusal {
+            param([string]$Label,[string]$Expect)
+            $ConfirmApply=$true
+            $message=$null
+            try { Invoke-ApplyModule|Out-Null } catch { $message=$_.Exception.Message }
+            $state=Get-BindingState
+            Test-BindingCase ($null -ne $message -and $message.Contains($Expect) -and $message.Contains('Nothing was changed') -and $state.writes -eq 0 -and $state.backups -eq 0 -and $state.applied -eq 0) ('Confirmed apply refuses '+$Label+' before any backup or write')
+            if ($null -ne $message -and -not $message.Contains($Expect)) { Write-Host "  message: $message" }
+        }
+
+        $DataRoot=Reset-BindingFixture 'gates'
+        $ConfirmApply=$false
+        $reviewed=Invoke-ApplyModule
+        $record=@(Get-ChildItem -LiteralPath (Join-Path $DataRoot 'runs') -Filter 'apply-*.json' -File)[0].FullName
+        Test-BindingCase ($reviewed.dryRun -and $reviewed.previewHash -cmatch '^[0-9a-f]{64}$' -and [string]$reviewed.previewPath -ceq $record -and (Get-BindingState).writes -eq 0) 'A preview saves its plan hash in the preview file it names'
+        $ModuleId='other'
+        $otherPreview=(Invoke-ApplyModule).previewPath
+        $ModuleId='fixture'
+        $saved=Get-Content -LiteralPath $record -Raw|ConvertFrom-Json
+        $applied=Join-Path $tempRoot 'binding-applied-record.json'
+        $saved.dryRun=$false
+        Write-JsonFile $saved $applied
+        $earlier=Join-Path $tempRoot 'binding-earlier-preview.json'
+        $saved=Get-Content -LiteralPath $record -Raw|ConvertFrom-Json
+        foreach ($name in 'previewHash','previewPath','plan') { $saved.PSObject.Properties.Remove($name) }
+        Write-JsonFile $saved $earlier
+        $edited=Join-Path $tempRoot 'binding-edited-hash.json'
+        $saved=Get-Content -LiteralPath $record -Raw|ConvertFrom-Json
+        $saved | Add-Member -NotePropertyName previewHash -NotePropertyValue ('A'*64) -Force
+        Write-JsonFile $saved $edited
+        $malformed=Join-Path $tempRoot 'binding-malformed-preview.json'
+        Set-Content -LiteralPath $malformed -Value 'not json' -Encoding UTF8
+        foreach ($gate in @(
+            @{label='without a preview';path='';expect='-PreviewPath'},
+            @{label='a missing preview file';path=(Join-Path $tempRoot 'binding-missing.json');expect='Cannot read the preview'},
+            @{label='an unreadable preview file';path=$malformed;expect='Cannot read the preview'},
+            @{label='a confirmed run record as its preview';path=$applied;expect='is not a preview'},
+            @{label="another module's preview";path=$otherPreview;expect="is for module 'other'"},
+            @{label='a preview from an earlier version';path=$earlier;expect='no plan hash'},
+            @{label='a preview with an edited hash';path=$edited;expect='no plan hash'}
+        )) {
+            $PreviewPath=$gate.path
+            Test-BindingRefusal $gate.label $gate.expect
+        }
+        $PreviewPath=$reviewed.previewPath
+        $ConfirmApply=$true
+        $result=$null
+        try { $result=Invoke-ApplyModule } catch { Write-Host "  error: $($_.Exception.Message)" }
+        Test-BindingCase ($null -ne $result -and $null -ne $reviewed.previewHash -and $result.previewHash -ceq $reviewed.previewHash -and $result.previewPath -ceq $reviewed.previewPath -and $script:bindingValues.First.value -eq 2 -and $script:bindingValues.Second.value -ceq 'Two' -and $script:bindingValues.Third.value -eq 1 -and $script:bindingStartup -ceq 'Disabled') 'The reviewed preview applies its exact plan and records which preview it used'
+        $BackupPath=$result.backupPath
+        $restored=Invoke-RollbackModule
+        $again=$null
+        try { $again=Invoke-ApplyModule } catch { Write-Host "  error: $($_.Exception.Message)" }
+        Test-BindingCase ($restored.success -and $null -ne $again -and $script:bindingValues.First.value -eq 2) 'The same reviewed preview applies again after an undo'
+
+        foreach ($edit in @(
+            @{label='changed DWORD data';expect='HKCU\Fixture\First: REG_DWORD 2 -> REG_DWORD 3';edit={param($m) $m.modules[0].registryValues[0].data=3}},
+            @{label='changed registry type';expect='HKCU\Fixture\First: REG_DWORD 2 -> REG_QWORD 2';edit={param($m) $m.modules[0].registryValues[0].type='REG_QWORD'}},
+            @{label='changed text case';expect='HKCU\Fixture\Second: REG_SZ Two -> REG_SZ two';edit={param($m) $m.modules[0].registryValues[1].data='two'}},
+            @{label='added setting';expect='added HKCU\Fixture\Fourth (REG_DWORD 4)';edit={param($m) $m.modules[0].registryValues+=[pscustomobject]@{path='HKCU\Fixture';name='Fourth';type='REG_DWORD';data=4}}},
+            @{label='removed setting';expect='removed HKCU\Fixture\Second (REG_SZ Two)';edit={param($m) $m.modules[0].registryValues=@($m.modules[0].registryValues|Where-Object {$_.name -cne 'Second'})}},
+            @{label='moved key and value boundary';expect='added HKCU\Fixture\Split\Name (REG_DWORD 2)';edit={param($m) $m.modules[0].registryValues[2].path='HKCU\Fixture\Split';$m.modules[0].registryValues[2].name='Name'}},
+            @{label='lifted protection';expect='HKCU\Fixture\Protected\Third: protected, skipped -> REG_DWORD 2';edit={param($m) $m.protected.registryPathPatterns=@()}},
+            @{label='changed service startup';expect='service FixtureSvc: startup=Disabled, state=Stopped -> startup=Manual, state=Stopped';edit={param($m) $m.modules[0].services[0].startup='Manual'}},
+            @{label='added service';expect='added service OtherSvc (startup=Disabled, state=Stopped)';edit={param($m) $m.modules[0].services+=[pscustomobject]@{name='OtherSvc';startup='Disabled';targetState='Stopped'}}},
+            @{label='reordered settings';expect='different order';edit={param($m) $r=@($m.modules[0].registryValues);$m.modules[0].registryValues=@($r[1],$r[0],$r[2],$r[3])}},
+            @{label='unsupported type';expect="Unsupported registry type 'REG_EXPAND_SZ' for HKCU\Fixture\Second";edit={param($m) $m.modules[0].registryValues[1].type='REG_EXPAND_SZ'}},
+            @{label='unwritable DWORD data';expect='Cannot write HKCU\Fixture\Second as REG_DWORD';edit={param($m) $m.modules[0].registryValues[1].type='REG_DWORD';$m.modules[0].registryValues[1].data=-1}}
+        )) {
+            $DataRoot=Reset-BindingFixture 'edit'
+            $ConfirmApply=$false
+            $PreviewPath=(Invoke-ApplyModule).previewPath
+            Edit-BindingManifest $edit.edit
+            Test-BindingRefusal ('a stale preview ('+$edit.label+')') $edit.expect
+        }
+
+        foreach ($same in @(
+            @{label='DWORD data written as text';edit={param($m) $m.modules[0].registryValues[0].data='2'}},
+            @{label='another module edited';edit={param($m) $m.modules[1].registryValues[0].data=9}},
+            @{label='module description added';edit={param($m) $m.modules[0]|Add-Member -NotePropertyName description -NotePropertyValue 'Same plan' -Force}}
+        )) {
+            $DataRoot=Reset-BindingFixture 'same'
+            $ConfirmApply=$false
+            $PreviewPath=(Invoke-ApplyModule).previewPath
+            Edit-BindingManifest $same.edit
+            $ConfirmApply=$true
+            $result=$null
+            try { $result=Invoke-ApplyModule } catch { Write-Host "  error: $($_.Exception.Message)" }
+            Test-BindingCase ($null -ne $result -and $script:bindingValues.First.kind -ceq 'DWord' -and $script:bindingValues.First.value -eq 2) ('A manifest edit that keeps the plan ('+$same.label+') still applies')
+        }
+        $DataRoot=Reset-BindingFixture 'drift'
+        $ConfirmApply=$false
+        $PreviewPath=(Invoke-ApplyModule).previewPath
+        $script:bindingValues.First.value=5
+        $copy=Join-Path $tempRoot 'binding-copied-manifest.json'
+        Copy-Item -LiteralPath $ManifestPath -Destination $copy
+        $ManifestPath=$copy
+        $ConfirmApply=$true
+        $result=$null
+        try { $result=Invoke-ApplyModule } catch { Write-Host "  error: $($_.Exception.Message)" }
+        $ManifestPath=Join-Path $tempRoot 'binding-manifest.json'
+        $saved=if ($result) { Get-Content -LiteralPath $result.backupPath -Raw|ConvertFrom-Json }
+        Test-BindingCase ($null -ne $result -and @($saved.registry|Where-Object {$_.name -ceq 'First' -and $_.oldValue -eq 5}).Count -eq 1 -and $script:bindingValues.First.value -eq 2) 'A value changed by another program after the preview is backed up as it is at apply time'
+
+        foreach ($case in @(
+            @{type='REG_EXPAND_SZ';data='%TEMP%\fixture';shown="'REG_EXPAND_SZ'"},
+            @{type='REG_MULTI_SZ';data=@('One','Two');shown="'REG_MULTI_SZ'"},
+            @{type='REG_BINARY';data='AQI=';shown="'REG_BINARY'"},
+            @{type='REG_NONE';data='';shown="'REG_NONE'"},
+            @{type='REG_DWORD_BIG_ENDIAN';data=2;shown="'REG_DWORD_BIG_ENDIAN'"},
+            @{type='REG_LINK';data='HKCU\Fixture';shown="'REG_LINK'"},
+            @{type=' REG_DWORD';data=2;shown="' REG_DWORD'"},
+            @{type='';data='x';shown="''"},
+            @{type=$null;data='x';shown='none'},
+            @{missing=$true;data='x';shown='none'},
+            @{type=4;data='x';shown='4'},
+            @{type=@('REG_SZ');data='x';shown='["REG_SZ"]'}
+        )) {
+            $label=if ($case.missing) { 'a missing type' } else { 'type '+(ConvertTo-Json -InputObject $case.type -Compress) }
+            $expect='Unsupported registry type '+$case.shown
+            $change={
+                param($m)
+                $m.modules[0].registryValues[1].data=$case.data
+                if ($case.missing) { $m.modules[0].registryValues[1].PSObject.Properties.Remove('type') } else { $m.modules[0].registryValues[1].type=$case.type }
+            }
+            $DataRoot=Reset-BindingFixture 'type'
+            Edit-BindingManifest $change
+            $ConfirmApply=$false
+            $message=$null
+            try { Invoke-ApplyModule|Out-Null } catch { $message=$_.Exception.Message }
+            $state=Get-BindingState
+            Test-BindingCase ($null -ne $message -and $message.Contains($expect) -and $message.Contains('HKCU\Fixture\Second') -and $state.previews -eq 0 -and $state.writes -eq 0) ('Preview refuses a mixed manifest with '+$label+' and names the setting')
+            $DataRoot=Reset-BindingFixture 'type'
+            $PreviewPath=(Invoke-ApplyModule).previewPath
+            Edit-BindingManifest $change
+            Test-BindingRefusal ('a mixed manifest with '+$label) $expect
+        }
+        $DataRoot=Reset-BindingFixture 'protected-type'
+        Edit-BindingManifest {param($m) $m.modules[0].registryValues[3].type='REG_BINARY'}
+        $ConfirmApply=$false
+        $message=$null
+        try { Invoke-ApplyModule|Out-Null } catch { $message=$_.Exception.Message }
+        Test-BindingCase ($null -ne $message -and $message.Contains("Unsupported registry type 'REG_BINARY' for HKCU\Fixture\Protected\Third") -and (Get-BindingState).previews -eq 0) 'Preview refuses an unsupported type even on a protected setting'
+        foreach ($case in @(
+            @{label='negative DWORD';type='REG_DWORD';data=-1},
+            @{label='DWORD above 32 bits';type='REG_DWORD';data=4294967296},
+            @{label='DWORD text';type='REG_DWORD';data='many'},
+            @{label='negative QWORD';type='REG_QWORD';data=-1}
+        )) {
+            $change={param($m) $m.modules[0].registryValues[1].type=$case.type;$m.modules[0].registryValues[1].data=$case.data}
+            $expect='Cannot write HKCU\Fixture\Second as '+$case.type
+            $DataRoot=Reset-BindingFixture 'data'
+            Edit-BindingManifest $change
+            $ConfirmApply=$false
+            $message=$null
+            try { Invoke-ApplyModule|Out-Null } catch { $message=$_.Exception.Message }
+            Test-BindingCase ($null -ne $message -and $message.Contains($expect) -and (Get-BindingState).previews -eq 0) ('Preview refuses '+$case.label+' data and names the setting')
+            $DataRoot=Reset-BindingFixture 'data'
+            $PreviewPath=(Invoke-ApplyModule).previewPath
+            Edit-BindingManifest $change
+            Test-BindingRefusal ('a mixed manifest with '+$case.label+' data') $expect
+        }
+        $DataRoot=Reset-BindingFixture 'case'
+        Edit-BindingManifest {param($m) $m.modules[0].registryValues[0].type='reg_dword';$m.modules[0].registryValues[1].type='Reg_Sz';$m.modules[0].registryValues[2].type='reg_QWORD'}
+        $ConfirmApply=$false
+        $PreviewPath=(Invoke-ApplyModule).previewPath
+        $ConfirmApply=$true
+        $result=$null
+        try { $result=Invoke-ApplyModule } catch { Write-Host "  error: $($_.Exception.Message)" }
+        Test-BindingCase ($null -ne $result -and $script:bindingValues.First.kind -ceq 'DWord' -and $script:bindingValues.Second.kind -ceq 'String' -and $script:bindingValues['Split\Name'].kind -ceq 'QWord' -and [string]$script:bindingValues['Split\Name'].value -ceq '2') 'Supported types in any letter case still apply with their declared kinds'
+        $DataRoot=Reset-BindingFixture 'original-kind'
+        $script:bindingValues.Second=@{kind='None';value=$null}
+        $ConfirmApply=$false
+        $PreviewPath=(Invoke-ApplyModule).previewPath
+        $ConfirmApply=$true
+        $message=$null
+        try { Invoke-ApplyModule|Out-Null } catch { $message=$_.Exception.Message }
+        $state=Get-BindingState
+        Test-BindingCase ($null -ne $message -and $message.Contains('Unsupported registry value kind') -and $state.backups -eq 0 -and $state.writes -eq 0) 'An unsupported original kind refuses apply without leaving a partial backup'
+        $DataRoot=Reset-BindingFixture 'legacy'
+        $legacyDir=Join-Path $DataRoot 'backups\fixture\20260101-000000000-legacy'
+        New-Item -ItemType Directory -Path $legacyDir -Force | Out-Null
+        Write-JsonFile @{moduleId='fixture';timestamp='2026-01-01T00:00:00Z';applyRequested=$true;registry=@(
+            @{path='HKCU\Fixture';name='Second';type='REG_EXPAND_SZ';desiredData='%TEMP%\fixture';pathExists=$true;valueExists=$true;kind='String';oldValue='One'},
+            @{path='HKCU\Fixture';name='First';type='REG_MULTI_SZ';desiredData=@('One','Two');pathExists=$true;valueExists=$true;kind='DWord';oldValue=1}
+        );services=@()} (Join-Path $legacyDir 'backup.json')
+        $script:bindingValues.Second=@{kind='String';value='%TEMP%\fixture'}
+        $script:bindingValues.First=@{kind='String';value='One Two'}
+        $BackupPath=''
+        $PreviewPath=''
+        $ConfirmApply=$true
+        $restored=Invoke-RollbackModule
+        Test-BindingCase ($restored.success -and $restored.restoredRegistry -eq 2 -and $script:bindingValues.Second.kind -ceq 'String' -and $script:bindingValues.Second.value -ceq 'One' -and $script:bindingValues.First.kind -ceq 'DWord' -and $script:bindingValues.First.value -eq 1) 'Rollback still undoes an apply made before unsupported types were refused'
+        Assert ($bindingFailures.Count -eq 0) ('Every preview-binding case holds ('+$bindingFailures.Count+' failed)')
     } }
     if ($Scenario -in 'All','Registry') { & {
         if ($env:OS -ne 'Windows_NT') { throw 'The real-registry regression requires Windows.' }
@@ -1030,7 +1292,7 @@ public static class RooIndustriesLegacyFixtureRaw {
                     $preview=Invoke-ApplyModule
                     $ConfirmApply=$true
                     $refused=$false;$message=''
-                    try {Invoke-ApplyModule|Out-Null} catch {$refused=$true;$message=$_.Exception.Message}
+                    $PreviewPath=$preview.previewPath;try {Invoke-ApplyModule|Out-Null} catch {$refused=$true;$message=$_.Exception.Message}
                     $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($subkey)
                     try {
                         $after=[RooIndustriesLegacyFixtureRaw]::Read($key,'Value')
@@ -1048,7 +1310,7 @@ public static class RooIndustriesLegacyFixtureRaw {
                         [RooIndustriesLegacyFixtureRaw]::Write($key,'Value',[uint32][Microsoft.Win32.RegistryValueKind]$case.kind,$case.bytes)
                     } finally {$key.Dispose()}
                     $ConfirmApply=$true
-                    $applied=Invoke-ApplyModule
+                    $applied=Invoke-ReviewedApply
                     $BackupPath=$applied.backupPath
                     $hash=(Get-FileHash $BackupPath).Hash
                     $result=Invoke-RollbackModule
@@ -1180,7 +1442,7 @@ public static class RooIndustriesLegacyFixtureRaw {
                 $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($subkey,$true)
                 try { $key.SetValue('Value',$case.data,[Microsoft.Win32.RegistryValueKind]$case.kind) } finally { $key.Dispose() }
                 $ConfirmApply=$true
-                $applied=Invoke-ApplyModule
+                $applied=Invoke-ReviewedApply
                 $BackupPath=$applied.backupPath
                 $saved=Get-Content $BackupPath -Raw | ConvertFrom-Json
                 if ($case.label -eq 'String numeric') { Write-Output ('BACKUP_FIXTURE_JSON ' + (ConvertTo-Json -InputObject ([IO.File]::ReadAllText($BackupPath)) -Compress)) }
@@ -1204,7 +1466,7 @@ public static class RooIndustriesLegacyFixtureRaw {
                 } finally { $key.Dispose() }
                 if ($drift -eq 'new-key') { [Microsoft.Win32.Registry]::CurrentUser.DeleteSubKeyTree($subkey) }
                 $ConfirmApply=$true
-                $applied=Invoke-ApplyModule
+                $applied=Invoke-ReviewedApply
                 $BackupPath=$applied.backupPath
                 $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($subkey,$true)
                 try {
@@ -1237,7 +1499,7 @@ public static class RooIndustriesLegacyFixtureRaw {
             }
             $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($subkey,$true)
             try { $key.SetValue('Value',1,[Microsoft.Win32.RegistryValueKind]::DWord) } finally { $key.Dispose() }
-            $applied=Invoke-ApplyModule
+            $applied=Invoke-ReviewedApply
             $BackupPath=$applied.backupPath
             $legacy=Get-Content $BackupPath -Raw | ConvertFrom-Json
             $legacy.registry[0].PSObject.Properties.Remove('kind')
@@ -1328,6 +1590,56 @@ public static class RooIndustriesLegacyFixtureRaw {
             $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($subkey)
             try { Assert ($key.GetValue('Value') -eq 1) 'The RollbackModule CLI restores the explicit backup only when confirmed' } finally { $key.Dispose() }
             & {
+                $cliRoot=Join-Path $tempRoot 'cli-binding'
+                $cliManifest=Join-Path $tempRoot 'cli-binding-manifest.json'
+                $cliArgs=@{Action='ApplyModule';ModuleId='fixture';ManifestPath=$cliManifest;DataRoot=$cliRoot}
+                Write-JsonFile @{protected=@{services=@();registryPathPatterns=@()};modules=@(@{id='fixture';name='Fixture';registryValues=@(
+                    @{path=$regPath;name='First';type='REG_DWORD';data=2},
+                    @{path=$regPath;name='Value';type='REG_SZ';data='Two'}
+                );services=@()})} $cliManifest
+                function Get-CliState {
+                    $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($subkey)
+                    try { [pscustomobject]@{first=$key.GetValue('First');firstKind=[string]$key.GetValueKind('First');value=$key.GetValue('Value');valueKind=[string]$key.GetValueKind('Value');backups=@(Get-ChildItem -LiteralPath (Join-Path $cliRoot 'backups\fixture') -Directory -ErrorAction SilentlyContinue).Count} } finally { $key.Dispose() }
+                }
+                $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($subkey,$true)
+                try { $key.SetValue('First',1,[Microsoft.Win32.RegistryValueKind]::DWord);$key.SetValue('Value','Original',[Microsoft.Win32.RegistryValueKind]::String) } finally { $key.Dispose() }
+                $refused=$null
+                try { & $HarnessPath @cliArgs -ConfirmApply | Out-Null } catch { $refused=$_.Exception.Message }
+                $state=Get-CliState
+                Assert ($refused -like '*-PreviewPath*' -and $state.first -eq 1 -and $state.value -ceq 'Original' -and $state.backups -eq 0) 'The ApplyModule CLI refuses a confirmed apply without a reviewed preview'
+                $preview=& $HarnessPath @cliArgs
+                Assert ($preview.dryRun -and (Test-Path -LiteralPath $preview.previewPath) -and (Get-CliState).first -eq 1) 'The ApplyModule CLI preview saves the plan it shows'
+                $manifest=Get-Content -LiteralPath $cliManifest -Raw | ConvertFrom-Json
+                $manifest.modules[0].registryValues[1].data='Three'
+                Write-JsonFile $manifest $cliManifest
+                $refused=$null
+                try { & $HarnessPath @cliArgs -ConfirmApply -PreviewPath $preview.previewPath | Out-Null } catch { $refused=$_.Exception.Message }
+                Write-Output ('CLI_STALE_PREVIEW_REFUSAL '+(ConvertTo-Json -InputObject $refused -Compress))
+                $state=Get-CliState
+                Assert ($refused -like ('*'+$regPath+'\Value: REG_SZ Two -> REG_SZ Three*') -and $state.first -eq 1 -and $state.value -ceq 'Original' -and $state.backups -eq 0) 'The ApplyModule CLI refuses and names a manifest edit made after the preview'
+                $manifest.modules[0].registryValues[1].data='Two'
+                Write-JsonFile $manifest $cliManifest
+                $applied=& $HarnessPath @cliArgs -ConfirmApply -PreviewPath $preview.previewPath
+                $state=Get-CliState
+                Assert ($state.first -eq 2 -and $state.firstKind -ceq 'DWord' -and $state.value -ceq 'Two' -and $state.valueKind -ceq 'String' -and $applied.previewHash -ceq $preview.previewHash -and $state.backups -eq 1) 'The ApplyModule CLI applies the exact reviewed plan'
+                & $HarnessPath -Action RollbackModule -ModuleId fixture -ManifestPath $cliManifest -DataRoot $cliRoot -BackupPath $applied.backupPath -ConfirmApply | Out-Null
+                $state=Get-CliState
+                Assert ($state.first -eq 1 -and $state.value -ceq 'Original' -and $state.valueKind -ceq 'String') 'The ApplyModule CLI apply undoes to the exact originals'
+                $manifest.modules[0].registryValues[1].type='REG_EXPAND_SZ'
+                $manifest.modules[0].registryValues[1].data='%TEMP%\fixture'
+                Write-JsonFile $manifest $cliManifest
+                $previewRefused=$null
+                try { & $HarnessPath @cliArgs | Out-Null } catch { $previewRefused=$_.Exception.Message }
+                $refused=$null
+                try { & $HarnessPath @cliArgs -ConfirmApply -PreviewPath $preview.previewPath | Out-Null } catch { $refused=$_.Exception.Message }
+                Write-Output ('CLI_UNSUPPORTED_TYPE_REFUSAL '+(ConvertTo-Json -InputObject $refused -Compress))
+                $state=Get-CliState
+                $expected="*Unsupported registry type 'REG_EXPAND_SZ' for $regPath\Value*"
+                Assert ($previewRefused -like $expected -and $refused -like $expected -and $state.first -eq 1 -and $state.value -ceq 'Original' -and $state.valueKind -ceq 'String' -and $state.backups -eq 1) 'The ApplyModule CLI refuses a mixed manifest with an unsupported type before any write'
+                $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($subkey,$true)
+                try { $key.DeleteValue('First',$false);$key.SetValue('Value',1,[Microsoft.Win32.RegistryValueKind]::DWord) } finally { $key.Dispose() }
+            }
+            & {
                 function Set-RegistrySnapshotData { param($Key,$Name,$Snapshot) }
                 $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($subkey,$true)
                 try { $key.SetValue('Value',2,[Microsoft.Win32.RegistryValueKind]::DWord) } finally { $key.Dispose() }
@@ -1349,7 +1661,7 @@ public static class RooIndustriesLegacyFixtureRaw {
                     if ($nameMode -eq 'literal-default') { $key.SetValue('','Default sibling',[Microsoft.Win32.RegistryValueKind]::String) }
                     $key.SetValue($name,'Original',[Microsoft.Win32.RegistryValueKind]::String)
                 } finally { $key.Dispose() }
-                $applied=Invoke-ApplyModule
+                $applied=Invoke-ReviewedApply
                 $BackupPath=$applied.backupPath
                 $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($subkey,$true)
                 try { $key.SetValue($name,'two',[Microsoft.Win32.RegistryValueKind]::String) } finally { $key.Dispose() }
@@ -1388,7 +1700,7 @@ public static class RooIndustriesLegacyFixtureRaw {
             $manifest.modules[0].registryValues[0].path=$regPath.Replace('\','/')
             $manifest.protected.registryPathPatterns=@([regex]::Escape($regPath+'\Value'))
             Write-JsonFile $manifest $fixtureManifest
-            $applied=Invoke-ApplyModule
+            $applied=Invoke-ReviewedApply
             $saved=Get-Content $applied.backupPath -Raw | ConvertFrom-Json
             Assert (@($saved.registry).Count -eq 0) 'Protected settings are excluded from the rollback backup'
             & {
@@ -1417,11 +1729,11 @@ public static class RooIndustriesLegacyFixtureRaw {
             $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($subkey,$true)
             try { $key.SetValue('Value',[byte[]]@(1,2),[Microsoft.Win32.RegistryValueKind]::None) } finally { $key.Dispose() }
             $refused=$false
-            try { Invoke-ApplyModule | Out-Null } catch { $refused=$_.Exception.Message -like '*Unsupported registry value kind*' }
+            try { Invoke-ReviewedApply | Out-Null } catch { $refused=$_.Exception.Message -like '*Unsupported registry value kind*' }
             Assert $refused 'An unsupported original registry kind refuses apply before changing it'
             $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($subkey,$true)
             try { $key.SetValue('Value','Original',[Microsoft.Win32.RegistryValueKind]::String) } finally { $key.Dispose() }
-            $applied=Invoke-ApplyModule
+            $applied=Invoke-ReviewedApply
             $BackupPath=$applied.backupPath
             $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($subkey,$true)
             try { $key.SetValue('Value',[byte[]]@(1,2),[Microsoft.Win32.RegistryValueKind]::None) } finally { $key.Dispose() }
@@ -1436,7 +1748,7 @@ public static class RooIndustriesLegacyFixtureRaw {
                 try { $key.SetValue('Value','Original',[Microsoft.Win32.RegistryValueKind]::String) } finally { $key.Dispose() }
                 function Set-RegistryValueFromManifest { param($Item) throw 'Fixture apply failure before write' }
                 $failed=$false
-                try { Invoke-ApplyModule | Out-Null } catch { $failed=$_.Exception.Message -eq 'Fixture apply failure before write' }
+                try { Invoke-ReviewedApply | Out-Null } catch { $failed=$_.Exception.Message -eq 'Fixture apply failure before write' }
                 Assert $failed 'An apply failure leaves its prior backup available'
                 $BackupPath=''
                 $restored=Invoke-RollbackModule
@@ -1472,7 +1784,7 @@ public static class RooIndustriesLegacyFixtureRaw {
                     function Invoke-SmokeTest { @() }
                     $ConfirmApply=$true
                     $failure=$null
-                    try { Invoke-ApplyModule | Out-Null } catch { $failure=$_.Exception.Message }
+                    try { Invoke-ReviewedApply | Out-Null } catch { $failure=$_.Exception.Message }
                     $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($comparisonSubkey)
                     try {
                         $exists='Value' -in $key.GetValueNames()

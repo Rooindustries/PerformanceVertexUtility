@@ -7,7 +7,7 @@ The repository contains a WinUI desktop app, a PowerShell backend, native Window
 ## Safety Model
 
 - Default module runs are dry-run only.
-- Real changes require `-ConfirmApply`.
+- Real changes require `-ConfirmApply` and the saved preview you reviewed (`-PreviewPath`).
 - Confirmed module application creates a backup before changing settings; previews do not create rollback snapshots.
 - Rollback restores saved registry values and service startup states.
 - Protected services and protected registry patterns are blocked by the manifest.
@@ -30,11 +30,17 @@ Dry-run a module:
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\LeanClientOptimizer.ps1 -Action ApplyModule -ModuleId M3-safe-services
 ```
 
-Actually apply a module:
+The result lists every planned change and a `previewPath`, the saved copy of that plan.
+
+Actually apply the module you previewed:
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\LeanClientOptimizer.ps1 -Action ApplyModule -ModuleId M3-safe-services -ConfirmApply
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\LeanClientOptimizer.ps1 -Action ApplyModule -ModuleId M3-safe-services -ConfirmApply -PreviewPath <previewPath>
 ```
+
+Apply checks that the module still plans exactly what the preview showed: each registry path, value name, type and data, each service's startup and state, and which settings are protected. If the manifest changed since the preview, apply stops before it backs up or changes anything and lists what changed. Apply also refuses without `-PreviewPath`, with a preview of another module, or with a preview from an earlier harness version, which has no plan hash. Preview again in those cases. The same preview can be applied again after a rollback. Values on the PC may change after the preview; apply backs up whatever is there when it runs.
+
+Manifest registry entries must declare `REG_DWORD`, `REG_QWORD` or `REG_SZ`, in any letter case. Any other type, a missing type, or data the type can't hold (such as a negative DWORD) stops the preview and the apply before any change and names the setting. Earlier versions wrote other types as `REG_SZ`; rollback still undoes those applies.
 
 Rollback the latest confirmed-apply backup for a module:
 
@@ -90,7 +96,7 @@ Subfolders:
 |---|---|
 | `baselines` | Clean snapshots |
 | `backups` | Per-module rollback data |
-| `runs` | Apply/dry-run results |
+| `runs` | Apply results and saved previews |
 | `smoke` | Smoke-test results |
 | `reports` | HTML reports |
 
@@ -99,7 +105,7 @@ Subfolders:
 1. Run `Baseline` three times on clean boots.
 2. Run `SmokeTest`.
 3. Dry-run `M2-safe-registry`.
-4. Apply `M2-safe-registry`, reboot, run `Baseline` and `SmokeTest`.
+4. Apply that `M2-safe-registry` preview with `-PreviewPath`, reboot, run `Baseline` and `SmokeTest`.
 5. Repeat for `M3-safe-services`.
 6. Test optional modules one at a time.
 7. Only combine modules that pass alone.

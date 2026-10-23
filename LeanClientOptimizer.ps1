@@ -4,6 +4,7 @@ param(
     [string]$ModuleId = '',
     [string]$ManifestPath = '',
     [string]$BackupPath = '',
+    [string]$PreviewPath = '',
     [string]$DataRoot = 'C:\ProgramData\LeanClientOptimizer',
     [int]$WaitSeconds = 0,
     [switch]$ConfirmApply
@@ -535,10 +536,96 @@ function Get-ModuleById {
     return $module
 }
 
+function Get-ModulePlan {
+    param([object]$Manifest, [object]$Module)
+    $plan = New-Object System.Collections.Generic.List[object]
+    foreach ($rv in @($Module.registryValues)) {
+        $target = "$($rv.path)\$($rv.name)"
+        $type = $null
+        if ($rv.type -is [string]) {
+            foreach ($supported in 'REG_DWORD','REG_QWORD','REG_SZ') {
+                if ([string]::Equals($supported, $rv.type, [StringComparison]::OrdinalIgnoreCase)) { $type = $supported }
+            }
+        }
+        if (-not $type) {
+            $shown = if ($rv.type -is [string]) { "'" + $rv.type + "'" } elseif ($null -eq $rv.type) { 'none' } else { ConvertTo-Json -InputObject $rv.type -Compress }
+            throw "Unsupported registry type $shown for $target. This harness writes only REG_DWORD, REG_QWORD and REG_SZ. Nothing was changed."
+        }
+        try { $data = [string](Get-ManifestRegistrySnapshot $rv).oldValue } catch { throw "Cannot write $target as ${type}: $($_.Exception.Message) Nothing was changed." }
+        $plan.Add([pscustomobject]@{ kind='registry'; path=[string]$rv.path; name=[string]$rv.name; type=$type; data=$data; blocked=[bool](Test-ProtectedRegistryPath $rv.path $Manifest $rv.name) }) | Out-Null
+    }
+    foreach ($svc in @($Module.services)) {
+        $plan.Add([pscustomobject]@{ kind='service'; name=[string]$svc.name; startup=[string]$svc.startup; targetState=[string]$svc.targetState; blocked=[bool](Test-ProtectedService $svc.name $Manifest) }) | Out-Null
+    }
+    return ,$plan.ToArray()
+}
+
+function Get-ModulePlanHash {
+    param([object[]]$Plan)
+    $text = New-Object System.Text.StringBuilder
+    [void]$text.Append('module-plan-v1;')
+    foreach ($entry in $Plan) {
+        foreach ($property in $entry.PSObject.Properties) {
+            $value = [string]$property.Value
+            [void]$text.Append($property.Name).Append('=').Append($value.Length.ToString([Globalization.CultureInfo]::InvariantCulture)).Append(':').Append($value).Append(';')
+        }
+        [void]$text.Append('|')
+    }
+    $chars = $text.ToString().ToCharArray()
+    $bytes = New-Object byte[] ($chars.Length * 2)
+    [Buffer]::BlockCopy($chars, 0, $bytes, 0, $bytes.Length)
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try { $hash = $sha.ComputeHash($bytes) } finally { $sha.Dispose() }
+    return (($hash | ForEach-Object { $_.ToString('x2') }) -join '')
+}
+
+function Get-ModulePlanChanges {
+    param([object[]]$Previewed, [object[]]$Current)
+    $keys = New-Object System.Collections.Generic.List[string]
+    $targets = New-Object 'System.Collections.Generic.Dictionary[string,string]' ([StringComparer]::Ordinal)
+    $before = New-Object 'System.Collections.Generic.Dictionary[string,string]' ([StringComparer]::Ordinal)
+    $after = New-Object 'System.Collections.Generic.Dictionary[string,string]' ([StringComparer]::Ordinal)
+    foreach ($side in @(@{ entries=$Previewed; details=$before }, @{ entries=$Current; details=$after })) {
+        foreach ($entry in @($side.entries)) {
+            if ($null -eq $entry) { continue }
+            $service = [string]$entry.kind -ceq 'service'
+            $key = [string]$entry.kind + [char]0 + [string]$entry.path + [char]0 + [string]$entry.name
+            $detail = if ($entry.blocked -eq $true) { 'protected, skipped' } elseif ($service) { 'startup=' + [string]$entry.startup + ', state=' + [string]$entry.targetState } else { [string]$entry.type + ' ' + [string]$entry.data }
+            if (-not $targets.ContainsKey($key)) {
+                $keys.Add($key)
+                $targets[$key] = if ($service) { 'service ' + [string]$entry.name } else { [string]$entry.path + '\' + [string]$entry.name }
+            }
+            $side.details[$key] = if ($side.details.ContainsKey($key)) { $side.details[$key] + ' then ' + $detail } else { $detail }
+        }
+    }
+    $changes = New-Object System.Collections.Generic.List[string]
+    foreach ($key in $keys) {
+        if (-not $after.ContainsKey($key)) { $changes.Add('removed ' + $targets[$key] + ' (' + $before[$key] + ')') }
+        elseif (-not $before.ContainsKey($key)) { $changes.Add('added ' + $targets[$key] + ' (' + $after[$key] + ')') }
+        elseif (-not [string]::Equals($before[$key], $after[$key], [StringComparison]::Ordinal)) { $changes.Add($targets[$key] + ': ' + $before[$key] + ' -> ' + $after[$key]) }
+    }
+    if ($changes.Count -eq 0) { $changes.Add('the settings are in a different order') }
+    if ($changes.Count -gt 10) { return @($changes.GetRange(0, 10)) + ('and ' + ($changes.Count - 10) + ' more') }
+    return @($changes.ToArray())
+}
+
+function Assert-ModulePreview {
+    param([object]$Module, [object[]]$Plan, [string]$PlanHash)
+    $next = "Nothing was changed. Preview $($Module.id) without -ConfirmApply, review it, then pass its previewPath with -PreviewPath."
+    if ([string]::IsNullOrWhiteSpace($PreviewPath)) { throw "A confirmed apply needs the preview you reviewed. $next" }
+    try { $preview = Get-Content -LiteralPath $PreviewPath -Raw -ErrorAction Stop | ConvertFrom-Json } catch { throw "Cannot read the preview $PreviewPath. $next" }
+    if ($null -eq $preview -or $preview.dryRun -isnot [bool] -or -not $preview.dryRun) { throw "$PreviewPath is not a preview. $next" }
+    if (-not [string]::Equals([string]$preview.moduleId, [string]$Module.id, [StringComparison]::Ordinal)) { throw "The preview $PreviewPath is for module '$($preview.moduleId)', not '$($Module.id)'. $next" }
+    if ($preview.previewHash -isnot [string] -or $preview.previewHash -cnotmatch '^[0-9a-f]{64}$') { throw "The preview $PreviewPath has no plan hash, so it was made by an earlier version or edited. $next" }
+    if (-not [string]::Equals($preview.previewHash, $PlanHash, [StringComparison]::Ordinal)) {
+        $changes = Get-ModulePlanChanges @($preview.plan) $Plan
+        throw "The manifest changed after the preview $PreviewPath`: $($changes -join '; '). $next"
+    }
+}
+
 function New-ModuleBackup {
     param([object]$Manifest, [object]$Module)
     $moduleDir = Join-Path $DataRoot ("backups\" + $Module.id + "\" + (Get-NowStamp))
-    Ensure-Dir $moduleDir
     $regSnapshots = New-Object System.Collections.Generic.List[object]
     foreach ($rv in @($Module.registryValues)) {
         if (Test-ProtectedRegistryPath $rv.path $Manifest $rv.name) { continue }
@@ -566,6 +653,7 @@ function New-ModuleBackup {
         services = @($svcSnapshots.ToArray())
         baseline = Get-BenchmarkSnapshot ("pre-" + $Module.id)
     }
+    Ensure-Dir $moduleDir
     $path = Join-Path $moduleDir 'backup.json'
     Write-JsonFile $backup $path
     return $path
@@ -574,6 +662,9 @@ function New-ModuleBackup {
 function Invoke-ApplyModule {
     $manifest = Read-Manifest
     $module = Get-ModuleById $manifest $ModuleId
+    $plan = Get-ModulePlan $manifest $module
+    $planHash = Get-ModulePlanHash $plan
+    if ($ConfirmApply) { Assert-ModulePreview $module $plan $planHash }
     Ensure-Dir $DataRoot
     $backupPath = if ($ConfirmApply) { New-ModuleBackup $manifest $module } else { $null }
     $actions = New-Object System.Collections.Generic.List[object]
@@ -591,15 +682,18 @@ function Invoke-ApplyModule {
     }
     $after = if ($ConfirmApply) { Get-BenchmarkSnapshot ("post-" + $module.id) } else { $null }
     $smoke = if ($ConfirmApply) { Invoke-SmokeTest } else { $null }
+    $runPath = Join-Path $DataRoot ("runs\apply-" + $module.id + "-" + (Get-NowStamp) + ".json")
     $result = [pscustomobject]@{
         moduleId = $module.id
         dryRun = -not $ConfirmApply
+        previewPath = if ($ConfirmApply) { $PreviewPath } else { $runPath }
+        previewHash = $planHash
         backupPath = $backupPath
+        plan = $plan
         actions = @($actions.ToArray())
         after = $after
         smoke = $smoke
     }
-    $runPath = Join-Path $DataRoot ("runs\apply-" + $module.id + "-" + (Get-NowStamp) + ".json")
     Ensure-Dir (Split-Path $runPath -Parent)
     Write-JsonFile $result $runPath
     return $result
