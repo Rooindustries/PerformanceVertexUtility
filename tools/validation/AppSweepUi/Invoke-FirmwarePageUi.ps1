@@ -160,7 +160,7 @@ function Add-Checkpoint([string]$Name) {
     Start-Sleep -Milliseconds $PauseMs
     $checkpoints.Add([ordered]@{
         name = $Name; step = Get-Text 'FirmwareStep'; message = Get-Text 'FirmwareMessage'; result = Get-Text 'FirmwareResultMessage'
-        loadShown = Test-Shown 'LoadFirmwareSettings'; startOverShown = Test-Shown 'FirmwareStartOver'; restartShown = Test-Shown 'RestartAfterFirmware'
+        loadShown = Test-Shown 'LoadFirmwareSettings'; startOverShown = Test-Shown 'FirmwareStartOver'; startOverEnabled = [bool]((Test-Shown 'FirmwareStartOver') -and (Find-Id 'FirmwareStartOver').Current.IsEnabled); restartShown = Test-Shown 'RestartAfterFirmware'
         option = Get-Choice 'Fixture option'; delay = Get-Number 'Fixture delay'
     }) | Out-Null
     Save-Shot $Name
@@ -241,7 +241,7 @@ try {
     Start-Sleep -Milliseconds $PauseMs
     Open-Firmware
     $during = Add-Checkpoint '04-back-during-write'
-    Add-Check 'Coming back during a write shows it still running' ($during.step -eq '3  Review changes' -and $during.message -eq $writing -and -not $during.loadShown -and -not $during.startOverShown)
+    Add-Check 'Coming back during a write shows it still running' ($during.step -eq '3  Review changes' -and $during.message -eq $writing -and -not $during.loadShown -and -not $during.startOverEnabled)
     if ($during.loadShown) {
         Wait-Load
         [void](Wait-For { (Get-Text 'FirmwareMessage') -ne '' -and (Find-Id 'LoadFirmwareSettings').Current.IsEnabled } 'the Load attempt to end')
