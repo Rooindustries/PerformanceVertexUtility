@@ -70,6 +70,8 @@ static class CoreChoiceChecks
             check(page.AffinityMask == "" && !page.CanPreview, "With no CPU ticked there is no restriction to review" + " | " + page.AffinityMask);
             page.AffinityMask = "0xF0";
             check(Ticked(page).SequenceEqual([4, 5, 6, 7]) && page.CanPreview, "Typing a mask ticks the CPUs it names" + " | ticked " + string.Join(",", Ticked(page)));
+            page.AffinityMask = "0x100000000";
+            check(!page.CanPreview && Ticked(page).SequenceEqual([4, 5, 6, 7]), "A mask naming a CPU outside the app's processor group can't be reviewed" + " | " + page.AffinityMask);
 
             page = await Open();
             page.SelectedCpuMode = page.CpuModes.Single(mode => mode.Kind == "logical");
@@ -90,6 +92,11 @@ static class CoreChoiceChecks
             await page.EditRuleCommand.ExecuteAsync(null);
             check(page.SetHardAffinity && ProcessTarget.ParseMask(page.AffinityMask) == 0xFF00 && Ticked(page).SequenceEqual([0, 1]),
                 "Edit rule keeps the rule's saved affinity and its saved preferred CPUs as they were" + " | mask " + page.AffinityMask + " ticked " + string.Join(",", Ticked(page)) + " | " + page.Status + " " + page.Detail);
+            page.Cpus.Single(cpu => cpu.Cpu.Index == 2).Selected = true;
+            check(ProcessTarget.ParseMask(page.AffinityMask) == 0xFF00 && Ticked(page).SequenceEqual([0, 1, 2]),
+                "Ticking another preferred CPU on that rule leaves its separate affinity as saved" + " | mask " + page.AffinityMask + " ticked " + string.Join(",", Ticked(page)));
+            page.AffinityMask = "0xF000";
+            check(Ticked(page).SequenceEqual([0, 1, 2]) && page.CanPreview, "Typing a new affinity for that rule leaves its preferred CPUs as ticked" + " | ticked " + string.Join(",", Ticked(page)));
         }
         finally { (App.Operations.ProcessSnapshot, App.Live.Inventory, App.Operations.Governor) = (savedSnapshot, savedInventory, savedGovernor); App.Operations.Review = null; }
     }
