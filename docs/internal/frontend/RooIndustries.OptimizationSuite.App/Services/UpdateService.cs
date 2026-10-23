@@ -18,14 +18,11 @@ using RooIndustries.Optimizer;
 
 namespace RooIndustries.OptimizationSuite.Services;
 
-public sealed record UpdateState(string Status, string Notes = "", bool Busy = false, bool Ready = false, bool CanDownload = false,
-    string Banner = "", string BannerKind = "", bool Installing = false);
 public sealed record PendingUpdate([property: JsonRequired] string FromVersion, [property: JsonRequired] string ToVersion,
     [property: JsonRequired] DateTime StartedAtUtc, [property: JsonRequired] string LogPath);
 
 public sealed class UpdateService
 {
-    private const string Blocked = "Stop your game session and turn off the timer setting first. The update can't install while they run.";
     private string DownloadRetry => AutomaticDownloads ? "The app will try again later." : "Press Download to try again.";
     private string Mismatch => "The download didn't match the signed release, so it was deleted. " + DownloadRetry;
     private readonly Uri? _feed;
@@ -33,6 +30,7 @@ public sealed class UpdateService
     private readonly SettingsStore _settings = new();
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly CancellationTokenSource _stop = new();
+    private readonly InstallGate _install = new(() => App.Operations.ReadGameSessionsAsync(), () => App.Live.GetGameTuneSessionStatusResultAsync(), InstallGate.TimerOn, InstallDrive);
     private DispatcherQueue? _dispatcher;
     private PolicyRootLease? _storageLease;
     private string? _root;
@@ -77,8 +75,9 @@ public sealed class UpdateService
     public void Stop() => _stop.Cancel();
 
     private void Notify() => _dispatcher?.TryEnqueue(() => Changed?.Invoke());
-    private void Set(UpdateState state) { State = state; Notify(); }
+    private void Set(UpdateState state) { State = state.Status == State.Status ? state : state with { Refused = false }; Notify(); }
     private void Status(string text) { Set(State with { Status = text }); AppLog.Write("update", text); }
+    private void Refuse(string text) { State = State with { Status = text, Refused = true }; Notify(); AppLog.Write("update", text); }
     private static string Describe(UpdateFeedResult r) => r.Kind + (r.KeyId is { } key ? ", key " + key : "") + (r.Release is { } release ? ", release " + release.Version : "") + ". " + r.Reason;
     private void LogFeed(string outcome, string source = "Feed") => AppLog.Write("update", source + " " + _feed!.IdnHost + ": " + outcome.TrimEnd('.') + "; installed " + CurrentVersion + ".");
 
@@ -87,6 +86,7 @@ public sealed class UpdateService
         if (_started) return;
         _started = true;
         _dispatcher = dispatcher;
+        RunningChanges.Finished += () => dispatcher.TryEnqueue(ChangeFinished);
 #if ROO_INDUSTRIES_TEST_HOOKS
         if (BrandCompatibility.EnvironmentValue("ROO_INDUSTRIES_TEST_UPDATE_READY") is { Length: > 0 } fixture) { Fixture(fixture); return; }
 #endif
@@ -102,6 +102,11 @@ public sealed class UpdateService
         Set(State with { Ready = true, Notes = _release.Notes, Status = "Version " + version + " is ready to install", Banner = "Version " + version + " is ready to install", BannerKind = "ready" });
     }
 #endif
+
+    private void ChangeFinished()
+    {
+        if (State.Waiting && !RunningChanges.Any) Set(State with { Status = State.Banner, Refused = false });
+    }
 
     private async Task ScheduleAsync()
     {
@@ -382,45 +387,23 @@ public sealed class UpdateService
         }
     }
 
-    private static async Task<bool> ActiveSettingsAsync()
+    private static (string Drive, long Free) InstallDrive()
     {
-        var sessions = await App.Operations.ReadGameSessionsAsync();
-        if (sessions.Any(entry => entry.Worker.HostRunning == true)) return true;
-        if (sessions.Any(entry => entry.Worker.HostRunning is null || entry.Worker.Error is not null))
-            throw new InvalidDataException("Couldn't confirm that all game sessions have stopped. Check Games and Undo changes first.");
-        var game = await App.Live.GetGameTuneSessionStatusResultAsync();
-        if (game.Error is not null || game.Value is null) throw new InvalidDataException("Couldn't read the game priority session. Check Games first.");
-        using var data = JsonDocument.Parse(game.Value);
-        if (data.RootElement.GetProperty("active").GetBoolean()) return true;
-        try
-        {
-            var timer = await Task.Run(() => TimerControl.Read(new ControlAddress("timer", "system", "half-millisecond")));
-            return timer.Value.GetBoolean();
-        }
-        catch (Exception error)
-        {
-            AppLog.Write("update", "Couldn't read the timer setting; treating it as stopped: " + error.Message);
-            return false;
-        }
-    }
-
-    private static long FreeBytes(DriveInfo drive)
-    {
+        var drive = new DriveInfo(Path.GetPathRoot(AppContext.BaseDirectory)!);
 #if ROO_INDUSTRIES_TEST_HOOKS
-        if (long.TryParse(BrandCompatibility.EnvironmentValue("ROO_INDUSTRIES_TEST_INSTALL_FREE_BYTES"), out var free)) return free;
+        if (long.TryParse(BrandCompatibility.EnvironmentValue("ROO_INDUSTRIES_TEST_INSTALL_FREE_BYTES"), out var free)) return (drive.Name, free);
 #endif
-        return drive.AvailableFreeSpace;
+        return (drive.Name, drive.AvailableFreeSpace);
     }
 
     public async Task InstallAsync(XamlRoot xamlRoot)
     {
-        if (!State.Ready || _release is not { } release || !await _gate.WaitAsync(0)) return;
+        if (!State.CanInstall || _release is not { } release || !await _gate.WaitAsync(0)) return;
+        IDisposable? hold = null;
         try
         {
-            Set(State with { Busy = true, Installing = true });
-            if (await ActiveSettingsAsync()) { Status(Blocked); return; }
-            var installDrive = new DriveInfo(Path.GetPathRoot(AppContext.BaseDirectory)!);
-            if (UpdateFeed.InstallDriveSpaceReason(installDrive.Name, FreeBytes(installDrive)) is { } spaceReason) { Status(spaceReason); return; }
+            Set(State with { Busy = true, Installing = true, Refused = false });
+            if (await _install.ReasonAsync() is { } reason) { Refuse(reason); return; }
             var dialog = new ContentDialog { XamlRoot = xamlRoot, Title = "Install version " + release.Version + " now?",
                 Content = "The app closes, installs the update and opens again. It takes about a minute. Your settings, saved rules and undo information are kept.",
                 PrimaryButtonText = "Install", CloseButtonText = "Not now", DefaultButton = ContentDialogButton.Close };
@@ -434,10 +417,10 @@ public sealed class UpdateService
             if (!verification.Verified) throw new InvalidDataException(verification.Reason);
             if (FileVersionInfo.GetVersionInfo(installer).ProductVersion?.TrimEnd(' ') != release.Version)
                 throw new InvalidDataException("The installer's product version does not match the signed release.");
-            if (await ActiveSettingsAsync()) { Status(Blocked); return; }
-            if (UpdateFeed.InstallDriveSpaceReason(installDrive.Name, FreeBytes(installDrive)) is { } finalSpaceReason) { Status(finalSpaceReason); return; }
             var root = Storage();
             var log = InstallLog(release.Version);
+            if (await _install.ReasonAsync() is { } finalReason) { Refuse(finalReason); return; }
+            if ((hold = RunningChanges.TryHold()) is null) { Refuse(InstallGate.ChangeRunning); return; }
             OperationFiles.Write(Path.Combine(root, "pending-install.json"), new PendingUpdate(CurrentVersion, release.Version, DateTime.UtcNow, log));
             var start = new ProcessStartInfo(installer) { UseShellExecute = false, WorkingDirectory = Folder(release),
                 Arguments = "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS /LOG=\"" + log + "\" /ROORELAUNCH=1 /ROOWAITPID=" + Environment.ProcessId };
@@ -451,7 +434,7 @@ public sealed class UpdateService
         }
         catch (Exception error)
         {
-            Status("Couldn't install the update. " + error.Message);
+            Refuse("Couldn't install the update. " + error.Message);
             if (!_handoff && _root is not null)
             {
                 try { File.Delete(Path.Combine(_root, "pending-install.json")); }
@@ -460,7 +443,7 @@ public sealed class UpdateService
         }
         finally
         {
-            if (!_handoff) { _installerHandle?.Dispose(); _installerHandle = null; Set(State with { Busy = false, Installing = false }); }
+            if (!_handoff) { hold?.Dispose(); _installerHandle?.Dispose(); _installerHandle = null; Set(State with { Busy = false, Installing = false }); }
             _gate.Release();
         }
     }

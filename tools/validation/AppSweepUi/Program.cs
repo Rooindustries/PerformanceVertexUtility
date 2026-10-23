@@ -29,6 +29,13 @@ if (args is ["governor-left-as-set"])
     return;
 }
 
+if (args is ["update-install"])
+{
+    await UpdateInstallChecks.RunAsync(Check);
+    Console.WriteLine($"Completed {count} update install checks.");
+    return;
+}
+
 if (args is ["revisit"])
 {
     await RevisitChecks.RunAsync(Check);
@@ -1122,5 +1129,6 @@ Check(RooIndustries.OptimizationSuite.Services.BackendScriptPolicy.Timeout(@"C:\
 await BulkRemovalChecks.RunAsync(Check);
 await RevisitChecks.RunAsync(Check);
 await BugReportChecks.RunAsync(Check);
+await UpdateInstallChecks.RunAsync(Check);
 
 Console.WriteLine($"Completed {count} app sweep UI checks.");

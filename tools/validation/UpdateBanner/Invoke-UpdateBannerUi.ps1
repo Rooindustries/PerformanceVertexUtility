@@ -4,14 +4,14 @@ Add-Type -AssemblyName UIAutomationClient,UIAutomationTypes,System.Drawing
 Add-Type -TypeDefinition @'
 using System;
 using System.Runtime.InteropServices;
-public static class RooUpdateBannerUi
+public static class RooIndustriesUpdateBannerUi
 {
     [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
     [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr window, IntPtr after, int x, int y, int width, int height, uint flags);
     [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr window, int command);
 }
 '@
-[RooUpdateBannerUi]::SetProcessDPIAware()|Out-Null
+[RooIndustriesUpdateBannerUi]::SetProcessDPIAware()|Out-Null
 $A=[Windows.Automation.AutomationElement];$TS=[Windows.Automation.TreeScope];$CT=[Windows.Automation.ControlType]
 $version='9.9.9-beta'
 $ready="Version $version is ready to install"
@@ -55,8 +55,8 @@ function OpenSettings{Nav 'Settings';if(-not(Poll {Find 'id' 'UpdateStatusText'}
 function OpenTools{Nav 'Tools';Start-Sleep -Milliseconds 500}
 function Raise([bool]$on){
  $handle=[IntPtr]::new($script:window.Current.NativeWindowHandle)
- [RooUpdateBannerUi]::ShowWindow($handle,9)|Out-Null
- [RooUpdateBannerUi]::SetWindowPos($handle,[IntPtr]::new($(if($on){-1}else{-2})),0,0,0,0,0x53)|Out-Null
+ [RooIndustriesUpdateBannerUi]::ShowWindow($handle,9)|Out-Null
+ [RooIndustriesUpdateBannerUi]::SetWindowPos($handle,[IntPtr]::new($(if($on){-1}else{-2})),0,0,0,0,0x53)|Out-Null
 }
 function Area{
  $r=$script:window.Current.BoundingRectangle

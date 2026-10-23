@@ -10,6 +10,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using RooIndustries.Optimizer;
+using RooIndustries.OptimizationSuite.Services;
 
 namespace RooIndustries.OptimizationSuite.ViewModels;
 
@@ -270,7 +271,7 @@ public partial class FirmwareViewModel : ObservableObject
     {
         if (!IsReview || _sessionDirectory is null || _reviewHash is null) return;
         Message = "Applying the reviewed changes. Keep the app open until verification finishes.";
-        var journal = await Task.Run(() => Workflow().Apply(_sessionDirectory, _reviewHash));
+        var journal = await Task.Run(() => { using var running = RunningChanges.Begin(); return Workflow().Apply(_sessionDirectory, _reviewHash); });
         ShowResult(journal); await LoadHistoryAsync();
     });
     public async Task VerifyAsync() => await RunAsync(async () =>

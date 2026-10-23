@@ -26,6 +26,7 @@
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/AppLog.cs" Link="AppLog.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/BugRedactor.cs" Link="BugRedactor.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/DataGeneration.cs" Link="DataGeneration.cs" />
+    <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/InstallGate.cs" Link="InstallGate.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/BugReportService.cs" Link="BugReportService.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/BackendScriptPolicy.cs" Link="BackendScriptPolicy.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Helpers/Format.cs" Link="Format.cs" />

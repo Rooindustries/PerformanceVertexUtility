@@ -25,14 +25,15 @@ public static class DataGeneration
     public static bool OwnAccepted(long before, OwnChanges own) => before >= 0 && !Changing && Current == before + own.Bumps;
     public static IDisposable BeginChange()
     {
+        var running = RunningChanges.Begin();
         Interlocked.Increment(ref _changing);
         Interlocked.Increment(ref _value);
-        return new Change(Owner.Value);
+        return new Change(Owner.Value, running);
     }
     public static bool IsCurrent(long generation) => !Changing && generation == Current;
     public static long Snapshot() => Changing ? -1 : Current;
     public static event Action? Settled;
-    private sealed class Change(OwnChanges? own) : IDisposable
+    private sealed class Change(OwnChanges? own, IDisposable running) : IDisposable
     {
         private int _done;
         public void Dispose()
@@ -49,6 +50,64 @@ public static class DataGeneration
                     catch (Exception error) { AppLog.Write("refresh", error.ToString()); }
                 }
             }
+            running.Dispose();
+        }
+    }
+}
+
+public static class RunningChanges
+{
+    public const string Installing = "The app is closing to install an update. Make this change after it opens again.";
+    private static readonly object Gate = new();
+    private static int _count;
+    private static bool _held;
+    public static bool Any { get { lock (Gate) return _count > 0; } }
+    public static event Action? Finished;
+
+    public static IDisposable Begin()
+    {
+        lock (Gate)
+        {
+            if (_held) throw new InvalidOperationException(Installing);
+            _count++;
+        }
+        return new Running();
+    }
+
+    public static IDisposable? TryHold()
+    {
+        lock (Gate)
+        {
+            if (_count > 0 || _held) return null;
+            _held = true;
+        }
+        return new Hold();
+    }
+
+    private sealed class Running : IDisposable
+    {
+        private int _done;
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref _done, 1) != 0) return;
+            bool idle;
+            lock (Gate) idle = --_count == 0;
+            if (!idle) return;
+            foreach (var handler in Finished?.GetInvocationList() ?? [])
+            {
+                try { ((Action)handler)(); }
+                catch (Exception error) { AppLog.Write("change", error.ToString()); }
+            }
+        }
+    }
+
+    private sealed class Hold : IDisposable
+    {
+        private int _done;
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref _done, 1) != 0) return;
+            lock (Gate) _held = false;
         }
     }
 }
