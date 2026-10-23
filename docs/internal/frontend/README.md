@@ -36,6 +36,12 @@ shared flat surfaces and spacing. The navigation collapses on smaller windows;
 Game setup reveals its settings after a launcher is selected. Custom CPU masks
 and saved process rules are expandable. Each action keeps its existing backend
 command and review requirements. Changing a selection invalidates its review.
+The Games tab offers Competitive, Balanced and Streaming launch presets. Picking
+one fills the priority settings, leaves omitted settings on Keep current, and
+keeps the chosen CPU cores. Any priority or core edit shows Custom and requires
+a new review. Review names the selected preset. Saved launch settings keep the
+reviewed values and show a preset name when those priorities match the catalog;
+their saved format and restore behavior stay the same.
 The Games and Processes tabs refresh live status every 2 seconds only while the
 app window is in front. Behind another window or minimized they start no reads,
 and a read already running when the window goes behind starts no follow-on
