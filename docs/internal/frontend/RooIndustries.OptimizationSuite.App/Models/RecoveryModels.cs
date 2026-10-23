@@ -7,6 +7,7 @@ namespace RooIndustries.OptimizationSuite.Models;
 
 public sealed record RecoveryOperationGeneration(string Id);
 
+public sealed record GameTuneReview(string Path, string Sha256);
 public sealed record ProcessProfileApplyJournal(string Path, string Generation);
 
 public sealed record ProcessProfileRecovery(string Path, string Id, string? Generation = null)

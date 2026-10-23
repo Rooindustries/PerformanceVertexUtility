@@ -2680,7 +2680,8 @@
           ],
           "refreshInstructions": null
         }
-      ]
+      ],
+      "compatibility": "Windows default writes the value Windows keeps instead of deleting it."
     },
     {
       "product": "FSOS-X Dash",

@@ -8,12 +8,20 @@ public static class MitigationControl
     public const string SnapshotField = "$registry";
     private const string Kernel = @"SYSTEM\CurrentControlSet\Control\Session Manager\kernel";
     private static readonly string[] Names = ["MitigationOptions", "MitigationAuditOptions", "EAFModules"];
-    private static readonly Lazy<string?> ReadbackMissing = new(() =>
+    private static readonly object ReadbackGate = new();
+    private static (string? Missing, bool Known) _readback;
+    private static string? ReadbackMissing()
     {
-        try { PowerShellControls.Read(new("mitigations", "system", "policy")); return null; }
-        catch (InvalidOperationException error) when (error.Message.EndsWith(" is not available with this Windows version.", StringComparison.Ordinal)) { return error.Message; }
-        catch (Exception) { return null; }
-    });
+        lock (ReadbackGate)
+        {
+            if (_readback.Known) return _readback.Missing;
+            try { PowerShellControls.Read(new("mitigations", "system", "policy")); _readback = (null, true); }
+            catch (InvalidOperationException error) when (error.Message.EndsWith(" is not available with this Windows version.", StringComparison.Ordinal)) { _readback = (error.Message, true); }
+            catch (InvalidOperationException error) when (error.Message.Contains(" couldn't load its PowerShell commands: ", StringComparison.Ordinal)) { throw new InvalidDataException(error.Message); }
+            catch (Exception) { _readback = (null, true); }
+            return _readback.Missing;
+        }
+    }
     private sealed record Field(string Name, int Bit, string Override, bool Audit = false, string? Parent = null, bool HasOption = false);
     private static readonly Field[] Fields =
     [
@@ -62,7 +70,7 @@ public static class MitigationControl
     public static TweakControlRead Read(ControlAddress address)
     {
         if (address.Target != "system" || address.Property != "policy") throw new InvalidDataException("Unknown mitigation policy target.");
-        if (ReadbackMissing.Value is { } missing) throw new InvalidDataException(missing);
+        if (ReadbackMissing() is { } missing) throw new InvalidDataException(missing);
         using var transaction = RegistryTransaction.Begin();
         var reads = Names.Select(name => RegistryNative.ReadTweak(Address(name), transaction)).ToArray();
         if (reads.Any(read => !read.KeyExists)) throw new InvalidDataException("The system mitigation registry key is missing.");

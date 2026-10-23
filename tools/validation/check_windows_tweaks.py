@@ -56,6 +56,29 @@ def policy_gate_failures(catalog, policies):
     return failures
 
 
+REMOVE_OVERRIDE_ID = 'choice-c4697634bc8964cb'
+
+
+def windows_default_failures(catalog, values):
+    failures = []
+    for value in values:
+        def kept(change):
+            return all(change['address'].get(field, '').casefold() == value[field].casefold() for field in ('hive', 'keyPath', 'valueName'))
+        settings = [setting for setting in catalog['settings'] if any(kept(change) for option in setting['options'] for change in option['changes'])]
+        if not settings:
+            failures.append('A value Windows keeps names no catalog setting: ' + value['keyPath'] + '\\' + value['valueName'])
+        for setting in settings:
+            for option in setting['options']:
+                if any(kept(change) and not any(change.get(field) is not None for field in ('dword', 'value', 'token', 'bits', 'formula')) for change in option['changes']):
+                    failures.append('A choice deletes a value Windows keeps: ' + setting['id'] + '/' + option['id'])
+            defaults = [option for option in setting['options'] if option['name'] == 'Windows default']
+            if [[change.get('dword') if kept(change) else None for change in option['changes']] for option in defaults] != [[value['dword']]]:
+                failures.append('Windows default must write the value Windows keeps: ' + setting['id'])
+            elif defaults[0]['id'] != REMOVE_OVERRIDE_ID:
+                failures.append('Windows default must keep the choice ID that saved choices and profiles use: ' + setting['id'])
+    return failures
+
+
 def check(root):
     failures = []
     catalog = json.loads((root / 'backend/catalogs/windows-tweaks.json').read_text())
@@ -94,6 +117,21 @@ def check(root):
         failures.append('Policy edition check must require the documented equivalent choice on other editions.')
     if policy_gate_failures(gated(['Enterprise'], [required, {'id': 'full', 'name': 'Full', 'changes': [{'address': address, 'dword': 3}], 'availability': [{'editions': ['*']}]}, {'id': 'remove', 'name': 'Remove', 'changes': [{'address': address, 'dword': None}]}]), [policy]):
         failures.append('Policy edition check must leave other values and override removal on every edition.')
+    windows_defaults = json.loads((root / 'backend/catalogs/windows-default-values.json').read_text())['values']
+    failures.extend(windows_default_failures(catalog, windows_defaults))
+    kept = {'hive': 'LocalMachine', 'keyPath': 'Fixture', 'valueName': 'value', 'dword': 0}
+    def stock(*options):
+        return {'settings': [{'id': 'fixture', 'options': [{'id': identifier, 'name': name, 'changes': [{'address': {'hive': 'LocalMachine', 'keyPath': 'fixture', 'valueName': 'VALUE'}, 'dword': dword}]} for identifier, name, dword in options]}]}
+    if not windows_default_failures(stock((REMOVE_OVERRIDE_ID, 'Remove this override', None), ('on', 'On (1)', 1)), [kept]):
+        failures.append('Windows default check must reject a choice that deletes a value Windows keeps.')
+    if not windows_default_failures(stock(('choice-95a6ed84299d0109', 'Windows default', 0), ('on', 'On (1)', 1)), [kept]):
+        failures.append('Windows default check must reject a Windows default with a new choice ID.')
+    if not windows_default_failures(stock((REMOVE_OVERRIDE_ID, 'Windows default', 1), ('on', 'Off (0)', 0)), [kept]):
+        failures.append('Windows default check must reject a Windows default that writes another value.')
+    if windows_default_failures(stock((REMOVE_OVERRIDE_ID, 'Windows default', 0), ('on', 'On (1)', 1)), [kept]):
+        failures.append('Windows default check must allow a Windows default that writes the value Windows keeps.')
+    if not windows_default_failures(stock((REMOVE_OVERRIDE_ID, 'Windows default', 0)), [dict(kept, valueName='other')]):
+        failures.append('Windows default check must reject a value Windows keeps that names no setting.')
     powers = [setting for setting in settings if any(control['address']['kind'] == 'hibernation' for option in setting['options'] for control in option.get('controls', []))]
     modes = [setting for setting in powers if any('mode' in control['value'] for option in setting['options'] for control in option.get('controls', []))]
     startup = [setting for setting in powers if any('fastStartup' in control['value'] for option in setting['options'] for control in option.get('controls', []))]

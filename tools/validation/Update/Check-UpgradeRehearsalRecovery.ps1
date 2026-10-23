@@ -15,10 +15,7 @@ $tokens=$null;$errors=$null
 $ast=[Management.Automation.Language.Parser]::ParseFile((Join-Path $ToolRoot 'Harness.Common.ps1'),[ref]$tokens,[ref]$errors)
 foreach($name in 'Invoke-HarnessCheckpoint','Read-HarnessLedger','Get-HarnessLedgerGeneration','Invoke-HarnessLedger','Add-HarnessEntry','Get-HarnessEntries','Get-HarnessEntryById','Set-HarnessEntryState'){
  $definition=$ast.Find({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $name},$true)
- if($definition){$text=$definition.Extent.Text
-  if($name -eq 'Invoke-HarnessLedger' -and $text.Contains('$stream.SetLength(0);')){$text=$text.Replace('$stream.SetLength(0);',"`$stream.SetLength(0);Invoke-HarnessCheckpoint 'journal:truncated';")}
-  Invoke-Expression $text
- }
+ if($definition){Invoke-Expression $definition.Extent.Text}
 }
 if(-not(Get-Command Invoke-HarnessCheckpoint -ErrorAction SilentlyContinue)){function Invoke-HarnessCheckpoint([string]$Name){if($script:HarnessCheckpoint){& $script:HarnessCheckpoint $Name}}}
 . (Join-Path $ToolRoot 'UpgradeRehearsal.State.ps1')

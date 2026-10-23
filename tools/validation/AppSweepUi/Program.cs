@@ -111,7 +111,9 @@ if (args.Length == 0 || (args.Length <= 2 && args[0] is "restore-summary" or "re
         new { control = "priorityClass", currentValue = "AboveNormal", proposedValue = "Normal", outcome = "applied" } },
         controlChanges = new[] { new { control = "gpuPriority", currentValue = "Normal", proposedValue = "Realtime", outcome = "failed" } } } };
     var kept = new[] { new { processName = "Target", control = "priorityClass", currentValue = "Idle" } };
-    const string reason = "priorityClass: Undo could not confirm another program still holds it. Run Undo again.";
+    const string reason = "priorityClass: Undo couldn't confirm another program still holds it, so it was left alone. Run Undo again.";
+    const string profileShown = "priorityClass: Restore couldn't confirm another program still holds it, so it was left alone. Restore again once that app closes; Apply unlocks when Restore finishes.";
+    const string sessionShown = "priorityClass: Restore couldn't confirm another program still holds it, so it was left alone. Restore again once that app closes.";
     var skipped = new[] { new { processName = "Target", reason } };
     try
     {
@@ -151,7 +153,7 @@ if (args.Length == 0 || (args.Length <= 2 && args[0] is "restore-summary" or "re
         Capture("profile-partial", App.Live.ProcessRestoreText, profile);
         Verify(profile.RestoreAvailable && profile.CanRestoreProfile && App.Live.ProcessProfileRecovery?.Path == backup && App.Live.LastProcessRestorePath == backup,
             "Partial profile restore retains and requests its exact recovery artifact");
-        Verify(profile.ActionDetail.StartsWith("Partial restore.", StringComparison.Ordinal) && profile.ActionDetail.Contains(reason, StringComparison.Ordinal)
+        Verify(profile.ActionDetail.StartsWith("Partial restore.", StringComparison.Ordinal) && profile.ActionDetail.Contains(profileShown, StringComparison.Ordinal)
             && !profile.ActionDetail.Contains("BelowNormal", StringComparison.Ordinal), "Partial profile details report the failed confirmation without a stale kept value");
         Verify(profile.ActionDetail.Contains("Peer: CPU AboveNormal → Normal", StringComparison.Ordinal), "Partial profile details retain unrelated restored controls");
         var backendReason = "Restore finished for 1 app(s). 1 app(s) still need attention: Target (PID 123): " + reason + ".";
@@ -169,10 +171,20 @@ if (args.Length == 0 || (args.Length <= 2 && args[0] is "restore-summary" or "re
                 result = new { status = "partial", summary = backendReason, changedItems = restored, leftAsSetItems = Array.Empty<object>(), skippedItems = actualSkipped, restorePendingCount = 1 } });
             await profile.RestoreProfileCommand.ExecuteAsync(null);
             Capture("profile-summary-skipped-" + identity, App.Live.ProcessRestoreText, profile);
-            Verify(profile.ActionDetail.Split(reason, StringSplitOptions.None).Length - 1 == (identity == "matched" ? 1 : 2)
-                && (identity != "shared" || profile.ActionDetail.Contains("Other: " + reason, StringComparison.Ordinal)),
+            Verify(profile.ActionDetail.Split(profileShown, StringSplitOptions.None).Length - 1 == (identity == "matched" ? 1 : 2)
+                && (identity != "shared" || profile.ActionDetail.Contains("Other: " + profileShown, StringComparison.Ordinal)),
                 "Skipped summary deduplication requires the exact numeric process identity: " + identity);
+            Verify(!profile.ActionDetail.Contains("Undo", StringComparison.Ordinal) && !profile.ActionDetail.Contains("..", StringComparison.Ordinal),
+                "A profile Restore that leaves a control names this page's Restore button, with one period, where the backend says Run Undo again: " + identity);
         }
+        App.Live.ProcessRestoreText = JsonSerializer.Serialize(new { actionId = "performance.rollbackProfile", dryRun = false, status = "partial", preview,
+            backup = new { backupId = "summary-backup", location = backup },
+            result = new { status = "partial", summary = "Partial restore.", changedItems = restored, leftAsSetItems = Array.Empty<object>(), restorePendingCount = 1,
+                skippedItems = new[] { new { processName = "Target", reason = "affinityMask: Another saved change still uses this control. Undo that change first, then try again." } } } });
+        await profile.RestoreProfileCommand.ExecuteAsync(null);
+        Capture("profile-partial-managed", App.Live.ProcessRestoreText, profile);
+        Verify(profile.ActionDetail.Contains("Target: affinityMask: Another saved change still uses this control. Restore that change first, then try again.", StringComparison.Ordinal),
+            "A profile Restore blocked by another saved change says Restore that change first");
         foreach (var completeList in new[] { true, false })
         {
             object[] actualKept = completeList ? kept : [kept[0], new { processName = "Other", control = "priorityClass", currentValue = "Idle" }];
@@ -208,6 +220,7 @@ if (args.Length == 0 || (args.Length <= 2 && args[0] is "restore-summary" or "re
         var game = new PerformanceProfilesViewModel { HasGameRunning = true };
         App.Live.GameTuneText = JsonSerializer.Serialize(new { actionId = "performance.gameTune.startSession", dryRun = true, status = "preview", preview,
             result = new { summary = "Game restore preview." } });
+        App.Live.GameTuneReviewModel = new GameTuneReview(Path.Combine(fixtures, "game-review.json"), new string('A', 64));
         await game.CheckMatchTuneCommand.ExecuteAsync(null);
         Capture("game-preview", App.Live.GameTuneText, game);
         Verify(game.MatchTuneDetail.Contains("CPU BelowNormal (left as another program set it)", StringComparison.Ordinal), "Game preview names the proposed kept value");
@@ -215,6 +228,7 @@ if (args.Length == 0 || (args.Length <= 2 && args[0] is "restore-summary" or "re
             sessionId = "summary-session", profileId = "summary-game", sessionPath, backupManifestPath = sessionBackup, restorable = true,
             summary = new { changedItemCount = 1 }, changedItems = applied });
         await game.StartMatchTuneCommand.ExecuteAsync(null);
+        App.Live.GameTuneReviewModel = null;
         Verify(game.MatchTuneRestoreAvailable, "Summary game start binds the exact session recovery artifact");
         App.Live.GameTuneRestoreText = JsonSerializer.Serialize(new { actionId = "performance.gameTune.stopSession", dryRun = false, status = "completed",
             sessionId = "summary-session", profileId = "summary-game", sessionPath, backupManifestPath = sessionBackup, restorable = true, preview,
@@ -223,7 +237,7 @@ if (args.Length == 0 || (args.Length <= 2 && args[0] is "restore-summary" or "re
         Capture("game-partial", App.Live.GameTuneRestoreText, game);
         Verify(game.MatchTuneRestoreAvailable && game.CanRestoreMatchTune && App.Live.LastGameRestoreRequest == ("summary-session", sessionPath, sessionBackup),
             "Partial game restore retains and requests its exact session artifact");
-        Verify(game.MatchTuneDetail.StartsWith("Partial game restore.", StringComparison.Ordinal) && game.MatchTuneDetail.Contains(reason, StringComparison.Ordinal)
+        Verify(game.MatchTuneDetail.StartsWith("Partial game restore.", StringComparison.Ordinal) && game.MatchTuneDetail.Contains(sessionShown, StringComparison.Ordinal)
             && !game.MatchTuneDetail.Contains("BelowNormal", StringComparison.Ordinal), "Partial game details report the failed confirmation without a stale kept value");
         Verify(game.MatchTuneDetail.Contains("Peer: CPU AboveNormal → Normal", StringComparison.Ordinal), "Confirmed game details use restored-item evidence when changed items are absent");
         var mixed = new object?[] { null, new { processName = "Peer", controlChanges = new object?[] { null,
@@ -259,7 +273,7 @@ if (args.Length == 0 || (args.Length <= 2 && args[0] is "restore-summary" or "re
                 && reopened.MatchTuneDetail.Contains("Peer: CPU AboveNormal → Normal", StringComparison.Ordinal)
                 && !reopened.MatchTuneDetail.Contains("StaleApply", StringComparison.Ordinal) && !reopened.MatchTuneDetail.Contains("BelowNormal", StringComparison.Ordinal),
                 "Reopened game status renders persisted kept and restored controls only: " + retained);
-            Verify(reopened.MatchTuneRestoreAvailable == retained && (!retained || reopened.MatchTuneDetail.Contains(reason, StringComparison.Ordinal)),
+            Verify(reopened.MatchTuneRestoreAvailable == retained && (!retained || reopened.MatchTuneDetail.Contains(sessionShown, StringComparison.Ordinal)),
                 "Reopened game status retains exact recovery and per-control failure: " + retained);
             await reopened.ReloadAsync();
             Verify(reopened.MatchTuneDetail.Contains("CPU Idle (left as another program set it)", StringComparison.Ordinal),
@@ -298,7 +312,7 @@ if (args.Length == 0 || (args.Length <= 2 && args[0] is "restore-summary" or "re
             Verify(reloaded.MatchTuneDetail.Contains("Peer: CPU AboveNormal → Normal", StringComparison.Ordinal) == showApplied
                 && !reloaded.MatchTuneDetail.Contains("Realtime", StringComparison.Ordinal)
                 && (!showKept || reloaded.MatchTuneDetail.Contains("Target: CPU Idle (left as another program set it)", StringComparison.Ordinal))
-                && (phase != "after" || !retained || reloaded.MatchTuneDetail.Contains(reason, StringComparison.Ordinal))
+                && (phase != "after" || !retained || reloaded.MatchTuneDetail.Contains(sessionShown, StringComparison.Ordinal))
                 && reloaded.MatchTuneRestoreAvailable == retained,
                 "Public Reload distinguishes applied controls from completed Undo evidence: " + phase + "/" + status + "/" + variant);
         }
@@ -342,7 +356,7 @@ if (args.Length == 0 || (args.Length <= 2 && args[0] is "restore-summary" or "re
             Capture("game-status-final-phase-" + status + "-" + flag, App.Live.GameTuneStatusText, reloaded);
             var showApplied = status is "active" or "restorable" && flag is "false" or "missing";
             Verify(reloaded.MatchTuneDetail.Contains("Peer: CPU AboveNormal → Normal", StringComparison.Ordinal) == showApplied
-                && reloaded.MatchTuneDetail.Contains(reason, StringComparison.Ordinal) && reloaded.MatchTuneRestoreAvailable == retained,
+                && reloaded.MatchTuneDetail.Contains(sessionShown, StringComparison.Ordinal) && reloaded.MatchTuneRestoreAvailable == retained,
                 "Public Reload limits historical apply details to active/restorable without known Undo: " + status + "/" + flag);
         }
         foreach (var governorState in new[] { "active", "restorable", "failed", "completed" })
@@ -530,6 +544,9 @@ if (args is ["governor-task", var taskRoot, var taskName, var registered, var en
     return;
 }
 
+if (args is [] or ["game-tune-restore-skips"]) await GameTuneRestoreChecks.SkipReasonsAsync(Check);
+if (args is ["game-tune-restore-skips"]) { Console.WriteLine($"Completed {count} game restore explanation checks."); return; }
+
 if (args is [] or ["governor"]) await GovernorChecks.RunAsync(Check);
 if (args is ["governor"]) { Console.WriteLine($"Completed {count} governor status checks."); return; }
 
@@ -608,6 +625,19 @@ if (args is [] or ["startup"])
 
 if (args is [] or ["sessions"])
 {
+    var reviewed = new GameTuneReview(Path.Combine(Path.GetTempPath(), "app-sweep-game-tune-review.json"), new string('A', 64));
+    async Task StartReviewed(PerformanceProfilesViewModel model)
+    {
+        var (startText, startError, lastError) = (App.Live.GameTuneText, App.Live.GameTuneResultError, App.Live.LastError);
+        App.Live.GameTuneText = JsonSerializer.Serialize(new { actionId = "performance.gameTune.startSession", dryRun = true, status = "preview" });
+        App.Live.GameTuneResultError = null;
+        App.Live.LastError = null;
+        App.Live.GameTuneReviewModel = reviewed;
+        await model.CheckMatchTuneCommand.ExecuteAsync(null);
+        (App.Live.GameTuneText, App.Live.GameTuneResultError, App.Live.LastError) = (startText, startError, lastError);
+        await model.StartMatchTuneCommand.ExecuteAsync(null);
+    }
+
     async Task RefreshSessions(PerformanceProfilesViewModel model)
     {
         var method = typeof(PerformanceProfilesViewModel).GetMethod("RefreshSessionStatusesAsync", BindingFlags.Instance | BindingFlags.NonPublic)
@@ -693,8 +723,48 @@ if (args is [] or ["sessions"])
     Check(sessions.MatchTuneStatus == "Game priority check not confirmed" && sessions.MatchTuneDetail.Contains("Preview script exited with an error", StringComparison.Ordinal),
         "A game preview value paired with an operation error cannot claim completion");
     App.Live.GameTuneResultError = null;
+    App.Live.GameTuneReviewModel = null;
     await sessions.CheckMatchTuneCommand.ExecuteAsync(null);
-    Check(sessions.MatchTuneStatus == "Game priorities checked", "An identity-bound dry-run game preview is reported as checked");
+    Check(sessions.MatchTuneStatus == "Game priority check not confirmed" && !sessions.CanStartMatchTune,
+        "A game preview without a saved review cannot enable Start");
+    App.Live.GameTuneReviewModel = reviewed;
+    await sessions.CheckMatchTuneCommand.ExecuteAsync(null);
+    Check(sessions.MatchTuneStatus == "Game priorities checked" && sessions.CanStartMatchTune, "An identity-bound dry-run game preview is reported as checked and enables Start");
+
+    var unreviewed = new PerformanceProfilesViewModel { HasGameRunning = true };
+    App.Live.GameTuneText = JsonSerializer.Serialize(new { actionId = "performance.gameTune.startSession", dryRun = false, status = "completed" });
+    await unreviewed.StartMatchTuneCommand.ExecuteAsync(null);
+    Check(!unreviewed.CanStartMatchTune && unreviewed.MatchTuneStatus == "Review first" && App.Live.LastGameTuneStartReview is null,
+        "Start without a review runs nothing and asks for a review");
+
+    App.Live.GameTuneText = JsonSerializer.Serialize(new
+    {
+        actionId = "performance.gameTune.startSession",
+        dryRun = false,
+        status = "refused",
+        sessionStatus = "refused",
+        restorable = false,
+        result = (object?)null,
+        changedItems = Array.Empty<object>(),
+        errors = new[] { new { code = "GAME_TUNE_REVIEWED_GAME_GONE", message = "Overwatch.exe closed or restarted after you reviewed it, so nothing changed. Review again, then start." } },
+    });
+    await sessions.StartMatchTuneCommand.ExecuteAsync(null);
+    Check(App.Live.LastGameTuneStartReview == reviewed && !sessions.CanStartMatchTune,
+        "Start sends the exact saved review and uses it only once");
+    Check(sessions.MatchTuneStatus == "Not started"
+            && sessions.MatchTuneDetail == "Overwatch.exe closed or restarted after you reviewed it, so nothing changed. Review again, then start.",
+        "A refused Start says it did not start and why");
+    await RefreshSessions(sessions);
+    var refusalAfterReload = sessions.MatchTuneStatus == "Not started" && sessions.MatchTuneDetail.StartsWith("Overwatch.exe closed or restarted", StringComparison.Ordinal);
+    await RefreshSessions(sessions);
+    Check(refusalAfterReload && sessions.MatchTuneStatus != "Not started",
+        "A refused Start stays on screen through the reload its run triggers, then gives way to the current status");
+
+    App.Live.GameTuneText = JsonSerializer.Serialize(new { actionId = "performance.gameTune.startSession", dryRun = true, status = "preview" });
+    await sessions.CheckMatchTuneCommand.ExecuteAsync(null);
+    var reviewedBeforeReload = sessions.CanStartMatchTune;
+    await RefreshSessions(sessions);
+    Check(reviewedBeforeReload && !sessions.CanStartMatchTune, "Reloading the page drops a review whose plan is no longer on screen");
 
     App.Live.GovernorText = JsonSerializer.Serialize(new
     {
@@ -719,7 +789,7 @@ if (args is [] or ["sessions"])
         summary = new { changedItemCount = 1 },
         changedItems = new[] { new { processId = 10 } },
     });
-    await sessions.StartMatchTuneCommand.ExecuteAsync(null);
+    await StartReviewed(sessions);
     Check(!sessions.MatchTuneRestoreAvailable,
         "An active game session with changed items but no restore evidence stays unavailable");
 
@@ -729,32 +799,46 @@ if (args is [] or ["sessions"])
     try
     {
         App.Live.GameTuneText = SessionResponse("gameTune", "startSession", "game-session", "game-profile", game.SessionPath, game.BackupPath, true, true, "completed");
-        await sessions.StartMatchTuneCommand.ExecuteAsync(null);
+        await StartReviewed(sessions);
         Check(!sessions.MatchTuneRestoreAvailable, "A dry-run game session cannot expose restore even with favorable files");
 
         App.Live.GameTuneText = SessionResponse("gameTune", "startSession", "game-session", "game-profile", game.SessionPath, game.BackupPath, false, false, "active");
-        await sessions.StartMatchTuneCommand.ExecuteAsync(null);
+        await StartReviewed(sessions);
         Check(!sessions.MatchTuneRestoreAvailable, "Changed items and active status cannot override restorable false");
 
         App.Live.GameTuneText = SessionResponse("gameTune", "startSession", "game-session", "game-profile", game.SessionPath, null, false, true, "failed");
-        await sessions.StartMatchTuneCommand.ExecuteAsync(null);
+        await StartReviewed(sessions);
         Check(!sessions.MatchTuneRestoreAvailable, "Restorable true without an explicit backup path remains unavailable");
 
         App.Live.GameTuneText = SessionResponse("gameTune", "startSession", "wrong-response-session", "game-profile", wrongBackup.SessionPath, wrongBackup.BackupPath, false, true, "failed");
-        await sessions.StartMatchTuneCommand.ExecuteAsync(null);
+        await StartReviewed(sessions);
         Check(!sessions.MatchTuneRestoreAvailable, "A backup for a different session cannot enable game restore");
 
         App.Live.GameTuneText = SessionResponse("gameTune", "startSession", "game-session", "game-profile", game.SessionPath, game.BackupPath, false, true, "failed");
         App.Live.GameTuneResultError = "Session script reported a partial failure";
-        await sessions.StartMatchTuneCommand.ExecuteAsync(null);
+        await StartReviewed(sessions);
         Check(sessions.MatchTuneRestoreAvailable, "A failed game session retains restore when explicit current backup evidence is valid");
 
         App.Live.GameTuneText = null;
         App.Live.GameTuneResultError = null;
         App.Live.LastError = "Controlled replacement session failure";
-        await sessions.StartMatchTuneCommand.ExecuteAsync(null);
+        await StartReviewed(sessions);
         Check(sessions.MatchTuneRestoreAvailable,
             "A lost replacement-session response preserves the previously verified recovery artifact");
+
+        App.Live.GameTuneText = JsonSerializer.Serialize(new
+        {
+            actionId = "performance.gameTune.startSession",
+            dryRun = false,
+            status = "refused",
+            sessionStatus = "refused",
+            restorable = false,
+            errors = new[] { new { code = "GAME_TUNE_REVIEW_PLAN_CHANGED", message = "Overwatch.exe's settings are different from when you reviewed them, so nothing changed. Review again, then start." } },
+        });
+        App.Live.LastError = null;
+        await StartReviewed(sessions);
+        Check(sessions.MatchTuneRestoreAvailable && sessions.MatchTuneStatus == "Not started",
+            "A refused Start keeps the earlier session's verified restore");
 
         App.Live.GameTuneRestoreText = null;
         App.Live.LastError = "Controlled game restore failure";

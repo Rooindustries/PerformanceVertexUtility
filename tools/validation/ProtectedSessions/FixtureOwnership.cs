@@ -180,6 +180,18 @@ sealed class FixtureProcess : IDisposable
         Check(DuplicateHandle(GetCurrentProcess(), process.Handle, GetCurrentProcess(), out var held, 0, false, 2));
         try { var receipt=new FixtureProcess(held, process.Id, evidence);receipt.Token();if(persist)receipt.Record(evidence);return receipt; } catch { held.Dispose(); throw; }
     }
+    internal static FixtureProcess Create(string executable, string[] args, string? sddl, string evidence)
+    {
+        var descriptor=IntPtr.Zero;if(sddl is not null)Check(ConvertStringSecurityDescriptorToSecurityDescriptor(sddl,1,out descriptor,IntPtr.Zero));
+        try
+        {
+            var attributes=new SecurityAttributes{length=Marshal.SizeOf<SecurityAttributes>(),descriptor=descriptor};var startup=new StartupInfo{size=Marshal.SizeOf<StartupInfo>()};
+            Check(CreateProcess(executable,new StringBuilder(string.Join(" ",args.Prepend(executable).Select(arg=>"\""+arg+"\""))),ref attributes,IntPtr.Zero,false,0x08000000,IntPtr.Zero,null,ref startup,out var created));
+            CloseHandle(created.thread);var held=new SafeProcessHandle(created.process,true);
+            try { var receipt=new FixtureProcess(held,created.id,evidence);receipt.Token();receipt.Record(evidence);return receipt; } catch { held.Dispose(); throw; }
+        }
+        finally { if(descriptor!=IntPtr.Zero)LocalFree(descriptor); }
+    }
     internal static FixtureProcess Ready(string ready, string executable, string[] args, bool elevated, string evidence)
     {
         using var doc = JsonDocument.Parse(File.ReadAllText(ready)); var data = doc.RootElement;
@@ -222,6 +234,12 @@ sealed class FixtureProcess : IDisposable
     static string[] Arguments(string command) { var pointer = CommandLineToArgvW(command, out var count); if (pointer == IntPtr.Zero) throw new Win32Exception(); try { return Enumerable.Range(0, count).Select(i => Marshal.PtrToStringUni(Marshal.ReadIntPtr(pointer, i * IntPtr.Size))!).ToArray(); } finally { LocalFree(pointer); } }
     static void Check(bool ok) { if (!ok) throw new Win32Exception(Marshal.GetLastWin32Error()); }
     public void Dispose() => handle.Dispose();
+    [StructLayout(LayoutKind.Sequential)] struct SecurityAttributes { public int length; public IntPtr descriptor; public bool inherit; }
+    [StructLayout(LayoutKind.Sequential)] struct StartupInfo { public int size; public IntPtr reserved, desktop, title; public int x, y, width, height, columns, rows, fill, flags; public short show, extraSize; public IntPtr extra, input, output, error; }
+    [StructLayout(LayoutKind.Sequential)] struct ProcessInformation { public IntPtr process, thread; public int id, threadId; }
+    [DllImport("advapi32.dll", EntryPoint = "ConvertStringSecurityDescriptorToSecurityDescriptorW", CharSet = CharSet.Unicode, SetLastError = true)] static extern bool ConvertStringSecurityDescriptorToSecurityDescriptor(string sddl, uint revision, out IntPtr descriptor, IntPtr size);
+    [DllImport("kernel32.dll", EntryPoint = "CreateProcessW", CharSet = CharSet.Unicode, SetLastError = true)] static extern bool CreateProcess(string application, StringBuilder command, ref SecurityAttributes process, IntPtr thread, bool inherit, uint flags, IntPtr environment, string? directory, ref StartupInfo startup, out ProcessInformation created);
+    [DllImport("kernel32.dll", SetLastError = true)] static extern bool CloseHandle(IntPtr handle);
     [DllImport("kernel32.dll", SetLastError = true)] static extern SafeProcessHandle OpenProcess(uint access, bool inherit, int pid);
     [DllImport("kernel32.dll", SetLastError = true)] static extern bool GetProcessTimes(SafeProcessHandle process, out long created, out long exit, out long kernel, out long user);
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)] static extern bool QueryFullProcessImageName(SafeProcessHandle process, int flags, StringBuilder image, ref int size);

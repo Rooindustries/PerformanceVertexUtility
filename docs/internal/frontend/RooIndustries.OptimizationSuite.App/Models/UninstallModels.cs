@@ -48,7 +48,8 @@ public sealed class InstalledApp
     public string? QuietUninstallString { get; set; }
     [JsonIgnore] public bool Removed { get; init; }
     [JsonIgnore] public bool RemovalUnconfirmed { get; init; }
-    [JsonIgnore] public bool ResultWaiting { get; init; }
+    [JsonIgnore] public bool ResultWaiting { get; private set; }
+    public InstalledApp Waiting() { var copy = (InstalledApp)MemberwiseClone(); copy.ResultWaiting = true; return copy; }
 
     private static readonly Dictionary<string, string> KnownPackages = new(StringComparer.OrdinalIgnoreCase)
     {

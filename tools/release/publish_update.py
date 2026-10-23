@@ -25,6 +25,10 @@ KEYS = json.loads((ROOT / "tools/release/update-keys.json").read_text())
 VERSION = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?\Z")
 
 
+class UnusableResponse(ValueError):
+    pass
+
+
 def check_version(value):
     match = VERSION.fullmatch(value) if isinstance(value, str) else None
     if not match or (match[4] and any(p.isascii() and p.isdecimal() and len(p) > 1 and p[0] == "0" for p in match[4].split("."))):
@@ -235,11 +239,13 @@ def manifest(args):
 
 def fetch(url, limit):
     with urlopen(Request(url, headers={"Cache-Control": "no-cache"}), timeout=20) as response:
-        if response.status != 200 or urlparse(response.url).scheme != "https":
+        if urlparse(response.url).scheme != "https":
             raise ValueError("Published URL did not return HTTPS HTTP 200")
+        if response.status != 200:
+            raise UnusableResponse("Published URL did not return HTTPS HTTP 200")
         data = response.read(limit + 1)
         if len(data) > limit:
-            raise ValueError("Published response exceeds its bound")
+            raise UnusableResponse("Published response exceeds its bound")
         if response.length:
             raise ValueError("Published response ended early")
         return data
@@ -351,7 +357,7 @@ def set_feed(args):
     try:
         current = feed_bytes(feed)
     except (ValueError, OSError, HTTPException) as error:
-        if not isinstance(error, HTTPError) or error.code != 404:
+        if not isinstance(error, UnusableResponse) and (not isinstance(error, HTTPError) or error.code != 404):
             raise ValueError("Couldn't read the live feed (" + str(error) + "); try again")
         current, live, state = None, None, "a live feed that does not verify (" + str(error) + ")"
     else:

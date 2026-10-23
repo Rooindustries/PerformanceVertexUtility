@@ -2,7 +2,8 @@ param(
     [string]$SessionId = '',
     [string]$SessionPath = '',
     [string]$StateRoot = '',
-    [string]$OutputPath = ''
+    [string]$OutputPath = '',
+    [switch]$RecoverInterrupted
 )
 
 $ErrorActionPreference = 'Stop'
@@ -43,11 +44,38 @@ try {
         exit 0
     }
 
-    $session = Read-RooIndustriesJsonFile $resolvedSessionPath
+    $recoveryPerformed = $false
+    $scanErrors = New-Object System.Collections.Generic.List[object]
+    $sessions = New-Object System.Collections.Generic.List[object]
+    $sessionFiles = @($resolvedSessionPath)
+    if ($RecoverInterrupted -and [string]::IsNullOrWhiteSpace($SessionId) -and [string]::IsNullOrWhiteSpace($SessionPath)) {
+        $sessionFiles = @(Get-ChildItem -LiteralPath $resolvedStateRoot -Filter 'session.json' -Recurse -File | ForEach-Object { $_.FullName })
+    }
+    foreach ($path in $sessionFiles) {
+        try {
+            $data = Read-RooIndustriesJsonFile $path
+            $sessions.Add([pscustomobject]@{ path = $path; data = $data; started = [datetime](Get-RooIndustriesPropertyValue $data 'startedAtUtc' ([datetime]::MinValue)) }) | Out-Null
+        } catch { $scanErrors.Add((New-RooIndustriesIssue 'GAME_TUNE_STATUS_FAILED' $_.Exception.Message 'error' 'performance.gameTune' $path $false 'Check the saved session before restoring.' $null)) | Out-Null }
+    }
+    foreach ($record in @($sessions | Sort-Object started -Descending)) {
+        $before = [string](Get-RooIndustriesPropertyValue $record.data 'sessionStatus' '')
+        $restorable = [bool](Get-RooIndustriesPropertyValue $record.data 'restorable' $false)
+        if ($RecoverInterrupted) { $record.data = Repair-RooIndustriesInterruptedGameTuneSession $record.data $record.path }
+        if ($before -ne [string]$record.data.sessionStatus -or $restorable -ne [bool]$record.data.restorable) { $recoveryPerformed = $true }
+    }
+    $selected = $sessions | Sort-Object @{ Expression = {
+        if ($_.data.sessionStatus -eq 'running' -and (Test-RooIndustriesGameTuneOwnerRunning ([int](Get-RooIndustriesPropertyValue $_.data 'ownerProcessId' 0)) ([string](Get-RooIndustriesPropertyValue $_.data 'ownerStartTimeUtc' '')))) { 3 }
+        elseif ($_.data.restorable) { 2 }
+        elseif ($_.data.sessionStatus -eq 'failed') { 1 }
+        else { 0 }
+    }; Descending = $true }, @{ Expression = { $_.started }; Descending = $true } | Select-Object -First 1
+    if ($null -eq $selected) { throw 'No saved Game Tune session could be read. The saved files were kept.' }
+    $session = $selected.data
+    $resolvedSessionPath = $selected.path
     $sessionDirectory = Split-Path $resolvedSessionPath -Parent
     $rawStatus = [string](Get-RooIndustriesPropertyValue $session 'sessionStatus' (Get-RooIndustriesPropertyValue $session 'status' 'completed'))
     $isRunning = $rawStatus -eq 'running'
-    $isFailed = $rawStatus -eq 'failed'
+    $isFailed = $rawStatus -eq 'failed' -or $scanErrors.Count -gt 0
     $isRestorable = [bool](Get-RooIndustriesPropertyValue $session 'restorable' $false)
     $status = if ($isRunning) { 'active' } elseif ($isFailed) { 'failed' } elseif ($isRestorable) { 'restorable' } else { 'completed' }
 
@@ -70,6 +98,7 @@ try {
         status = $status
         sessionStatus = $status
         rawSessionStatus = $rawStatus
+        recoveryPerformed = $recoveryPerformed
         sessionId = [string](Get-RooIndustriesPropertyValue $session 'sessionId' '')
         profileId = [string](Get-RooIndustriesPropertyValue $session 'profileId' '')
         profilePath = Get-RooIndustriesPropertyValue $session 'profilePath' $null
@@ -97,7 +126,7 @@ try {
         leftAsSetItems = @(Get-RooIndustriesPropertyArray $session 'leftAsSetItems')
         latestLogs = @($latestLogs.ToArray())
         warnings = @(Get-RooIndustriesPropertyArray $session 'warnings')
-        errors = @(Get-RooIndustriesPropertyArray $session 'errors')
+        errors = @(Get-RooIndustriesPropertyArray $session 'errors') + @($scanErrors.ToArray())
     }
 
     Write-RooIndustriesJsonOutput $result $OutputPath

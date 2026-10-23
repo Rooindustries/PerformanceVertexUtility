@@ -119,7 +119,8 @@ public partial class WindowsTweakRow : ObservableObject
     public TweakChoice? AppliedChoice { get; private set; }
     public bool IsApplied => AppliedChoice is not null;
     private static readonly string[] LackedHere = ["Win32 1060", "0x80070002", "Windows driver", "Office installation", "devices expose", "No active adapter", "is not installed", "is not available with", "Hard-linked file permissions", "doesn't let administrators change the"];
-    private static bool PcLacks(string error) => error.StartsWith("No choice applies", StringComparison.Ordinal) || LackedHere.Any(text => error.Contains(text, StringComparison.Ordinal));
+    private static bool PcLacks(string error) => !error.Contains("couldn't load its PowerShell commands", StringComparison.Ordinal)
+        && (error.StartsWith("No choice applies", StringComparison.Ordinal) || LackedHere.Any(text => error.Contains(text, StringComparison.Ordinal)));
     private static bool NoRawPolicy(System.Text.Json.JsonElement value) => value.TryGetProperty(MitigationControl.SnapshotField, out var raw) && raw.ValueKind == System.Text.Json.JsonValueKind.Object
         && raw.TryGetProperty("MitigationOptions", out var options) && options.ValueKind == System.Text.Json.JsonValueKind.Null && raw.TryGetProperty("MitigationAuditOptions", out var audit) && audit.ValueKind == System.Text.Json.JsonValueKind.Null;
     private static string[] MitigationFields(TweakDefinition definition) => definition.Options.SelectMany(option => option.Controls ?? []).Where(control => control.Address.Kind == "mitigations" && control.Value.ValueKind == System.Text.Json.JsonValueKind.Object)
@@ -205,7 +206,7 @@ public partial class WindowsTweakRow : ObservableObject
     {
         if (status is not { Supported: true, Error: null }) return null;
         var configured = ActionChoices.Where(choice => !_resetIds.Contains(choice.Id) && status.ConfiguredChoices.Contains(choice.Id)).ToArray();
-        return configured.FirstOrDefault(choice => choice == _selected) ?? configured.FirstOrDefault(choice => choice == _recommended);
+        return configured.FirstOrDefault(choice => choice == _selected) ?? configured.FirstOrDefault(choice => choice == _recommended) ?? (_resetIds.Count > 0 ? configured.FirstOrDefault() : null);
     }
     public WindowsTweakRow(TweakDefinition definition, IReadOnlyDictionary<string, TweakDefinition> definitions, Action<string> showSetting, Action? retry = null)
     {
@@ -261,7 +262,7 @@ public partial class WindowsTweakRow : ObservableObject
         else if (Detail.Contains("Win32 1060", StringComparison.Ordinal)) Detail = "This Windows service is not installed.";
         else if (Detail.Contains("Hard-linked file permissions", StringComparison.Ordinal)) Detail = "Windows links this file to other copies, so its permissions can't be changed safely here.";
         else if (Detail.Contains("0x80070002", StringComparison.Ordinal) && Definition.Options.SelectMany(option => option.Controls ?? []).Any(control => control.Address.Kind == "scheduled-task")) Detail = "This Windows task is not installed.";
-        else if (IsNetwork && status?.Error is { } error && !error.Contains("is not available with this Windows version", StringComparison.Ordinal)) Detail = error.Contains("adapter", StringComparison.OrdinalIgnoreCase) || error.Contains("devices expose", StringComparison.OrdinalIgnoreCase)
+        else if (IsNetwork && status?.Error is { } error && !error.Contains("is not available with this Windows version", StringComparison.Ordinal)) Detail = !error.Contains("couldn't load its PowerShell commands", StringComparison.Ordinal) && (error.Contains("adapter", StringComparison.OrdinalIgnoreCase) || error.Contains("devices expose", StringComparison.OrdinalIgnoreCase))
             ? "The current adapter does not expose this option. You can save a choice for a compatible adapter." : "Windows could not read this preference. Refresh to try again.";
         OnPropertyChanged(nameof(CouldNotCheck)); OnPropertyChanged(nameof(CanRetry)); OnPropertyChanged(nameof(UnavailableHere));
         SyncToggle(); NotifyPending(); OnPropertyChanged(nameof(CanApplySelected));

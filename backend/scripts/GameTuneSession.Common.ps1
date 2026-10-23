@@ -297,3 +297,219 @@ function New-RooIndustriesGameTuneResult {
         artifacts = @(Get-RooIndustriesArray $Artifacts)
     }
 }
+
+function Test-RooIndustriesGameTuneOwnerRunning {
+    param([int]$OwnerId, [string]$OwnerStart)
+    $savedTime = [datetime]::MinValue
+    if ($OwnerId -le 0 -or -not [datetime]::TryParse($OwnerStart, [ref]$savedTime)) { return $false }
+    $owner = Get-Process -Id $OwnerId -ErrorAction SilentlyContinue
+    if ($null -eq $owner) { return $false }
+    try { return Test-RooIndustriesProcessStartTime $OwnerStart ($owner.StartTime.ToUniversalTime().ToString('o')) }
+    catch { return $false }
+}
+
+function Test-RooIndustriesGameTuneOwnerEnded {
+    param([int]$OwnerId, [string]$OwnerStart)
+    $savedTime = [datetime]::MinValue
+    if ($OwnerId -le 0 -or -not [datetime]::TryParse($OwnerStart, [ref]$savedTime)) { return $false }
+    $owner = Get-Process -Id $OwnerId -ErrorAction SilentlyContinue
+    if ($null -ne $owner) {
+        try {
+            return -not (Test-RooIndustriesProcessStartTime $OwnerStart ($owner.StartTime.ToUniversalTime().ToString('o')))
+        } catch { return $false }
+    }
+    return $true
+}
+
+function Repair-RooIndustriesInterruptedGameTuneSession {
+    param([object]$Session, [string]$SessionPath)
+    $rawStatus = [string](Get-RooIndustriesPropertyValue $Session 'sessionStatus' '')
+    $ownerId = [int](Get-RooIndustriesPropertyValue $Session 'ownerProcessId' 0)
+    $ownerStart = [string](Get-RooIndustriesPropertyValue $Session 'ownerStartTimeUtc' '')
+    $recoverWhenOwnerEnds = [bool](Get-RooIndustriesPropertyValue $Session 'recoverWhenOwnerEnds' $false)
+    $parsedOwnerStart = [datetime]::MinValue
+    $ownerIdentityUnreadable = $recoverWhenOwnerEnds -and ($ownerId -le 0 -or -not [datetime]::TryParse($ownerStart, [ref]$parsedOwnerStart))
+    $ownerEnded = Test-RooIndustriesGameTuneOwnerEnded $ownerId $ownerStart
+    $workerEnded = Test-RooIndustriesGameTuneOwnerEnded ([int](Get-RooIndustriesPropertyValue $Session 'workerProcessId' 0)) ([string](Get-RooIndustriesPropertyValue $Session 'workerStartTimeUtc' ''))
+    if ($rawStatus -eq 'running') { if (-not $ownerIdentityUnreadable -and -not $ownerEnded -and -not $workerEnded) { return $Session } }
+    elseif ($rawStatus -ne 'completed' -or (-not $ownerEnded -and -not $ownerIdentityUnreadable) -or -not $recoverWhenOwnerEnds -or -not [bool](Get-RooIndustriesPropertyValue $Session 'restorable' $false)) { return $Session }
+    $gate = Enter-RooIndustriesGovernorGate
+    if ($null -eq $gate) { return $Session }
+    try {
+        $Session = Read-RooIndustriesJsonFile $SessionPath
+        if ([string](Get-RooIndustriesPropertyValue $Session 'sessionStatus' '') -ne $rawStatus) { return $Session }
+        if ([int](Get-RooIndustriesPropertyValue $Session 'ownerProcessId' 0) -ne $ownerId -or [string](Get-RooIndustriesPropertyValue $Session 'ownerStartTimeUtc' '') -ne $ownerStart) { return $Session }
+        $Session.sessionStatus = 'failed'
+        $Session.status = 'failed'
+        $Session.completedAtUtc = Get-RooIndustriesUtcStamp
+        Write-RooIndustriesGameTuneJsonFile $Session $SessionPath
+        try {
+            if ($ownerIdentityUnreadable) { throw 'The saved controller identity could not be checked. Its backup was kept.' }
+            $backupPath = [string](Get-RooIndustriesPropertyValue $Session 'backupManifestPath' '')
+            if (-not [string]::IsNullOrWhiteSpace($backupPath)) {
+                if (-not [string]::Equals([IO.Path]::GetFullPath($backupPath), (Join-Path (Split-Path $SessionPath -Parent) 'backup.json'), [StringComparison]::OrdinalIgnoreCase)) { throw 'The interrupted session backup is outside its session folder.' }
+                $backup = Read-RooIndustriesJsonFile $backupPath
+                if ([string](Get-RooIndustriesPropertyValue $backup 'sessionId' '') -cne [string](Get-RooIndustriesPropertyValue $Session 'sessionId' '') -or
+                    [string](Get-RooIndustriesPropertyValue $backup 'profileId' '') -cne [string](Get-RooIndustriesPropertyValue $Session 'profileId' '')) { throw 'The interrupted session and backup do not match.' }
+                foreach ($snapshot in @(Get-RooIndustriesPropertyArray $backup 'snapshots')) {
+                    $identity = Get-RooIndustriesGameTuneLiveProcessIdentity $snapshot
+                    if ($identity.instanceEnded) { continue }
+                    if (-not $identity.exists -or -not $identity.matches) { throw 'A saved app identity could not be checked. Its values were kept.' }
+                    if ($null -eq $snapshot.PSObject.Properties['controlChanges']) { throw 'The interrupted session has no record of the controls it changed.' }
+                    foreach ($change in @(Get-RooIndustriesPropertyArray $snapshot 'controlChanges')) {
+                        if ([string](Get-RooIndustriesPropertyValue $change 'outcome' '') -eq 'failed') { continue }
+                        $control = [string](Get-RooIndustriesPropertyValue $change 'control' '')
+                        $current = Get-RooIndustriesControlStateValue $identity.currentControlState $control
+                        $originalField = switch ($control) { 'priorityClass' { 'originalPriorityClass' }; 'affinityMask' { 'originalAffinityMask' }; 'ioPriority' { 'originalIoPriority' }; 'memoryPriority' { 'originalMemoryPriority' }; 'gpuPriority' { 'originalGpuPriority' }; default { throw 'The saved session contains an unknown control.' } }
+                        if ($null -eq (Get-RooIndustriesPropertyValue $snapshot $originalField $null) -or $null -eq (Get-RooIndustriesPropertyValue $change 'proposedValue' $null)) { throw 'The saved session has an incomplete control backup.' }
+                        if ((Test-RooIndustriesGovernorOwnsControl $identity.process $control) -or
+                            (-not (Test-RooIndustriesControlValueEqual $control $current (Get-RooIndustriesPropertyValue $snapshot $originalField $null)) -and
+                             -not (Test-RooIndustriesControlValueEqual $control $current (Get-RooIndustriesPropertyValue $change 'proposedValue' $null)))) {
+                            throw 'Another program changed a saved app setting. Its value was kept; review the session before restoring.'
+                        }
+                    }
+                }
+                $restore = & (Join-Path $PSScriptRoot 'Stop-GameTuneSession.ps1') -SessionPath $SessionPath -ConfirmApply | ConvertFrom-Json
+                $Session = Read-RooIndustriesJsonFile $SessionPath
+                if ([bool](Get-RooIndustriesPropertyValue $restore 'restorable' $true)) { throw 'The interrupted session could not be fully restored. Its backup was kept.' }
+            } else {
+                if (Test-Path -LiteralPath (Join-Path (Split-Path $SessionPath -Parent) 'backup.json')) { throw 'The interrupted session lost its backup reference. Its backup was kept.' }
+                $Session.sessionStatus = 'completed'
+                $Session.status = 'completed'
+            }
+            $Session.logs = @(Get-RooIndustriesPropertyArray $Session 'logs') + @((New-RooIndustriesLog 'Restored the interrupted game session from its saved backup.'))
+        } catch {
+            $Session.sessionStatus = 'failed'
+            $Session.status = 'failed'
+            $Session.errors = @(Get-RooIndustriesPropertyArray $Session 'errors') + @((New-RooIndustriesIssue 'GAME_TUNE_RECOVERY_NEEDS_ATTENTION' $_.Exception.Message 'error' 'performance.gameTune' $SessionPath $false 'Review the saved session before restoring.' $null))
+        }
+        Write-RooIndustriesGameTuneJsonFile $Session $SessionPath
+        return $Session
+    } finally { Exit-RooIndustriesGovernorGate $gate }
+}
+
+function Test-RooIndustriesGameTuneSameInstance {
+    param(
+        [object]$Reviewed,
+        [object]$Current
+    )
+    return [int](Get-RooIndustriesPropertyValue $Reviewed 'processId' 0) -eq [int](Get-RooIndustriesPropertyValue $Current 'processId' -1) -and
+        (Test-RooIndustriesProcessNameEquals ([string](Get-RooIndustriesPropertyValue $Reviewed 'processName' '')) ([string](Get-RooIndustriesPropertyValue $Current 'processName' ''))) -and
+        [string](Get-RooIndustriesPropertyValue $Reviewed 'executablePath' '') -eq [string](Get-RooIndustriesPropertyValue $Current 'executablePath' '') -and
+        (Test-RooIndustriesProcessStartTime (Get-RooIndustriesPropertyValue $Reviewed 'processStartTimeUtc' $null) (Get-RooIndustriesPropertyValue $Current 'processStartTimeUtc' $null))
+}
+
+function Get-RooIndustriesGameTunePlanKey {
+    param([object]$Entry)
+    $controls = @(Get-RooIndustriesPreviewControlChanges $Entry | ForEach-Object {
+        "$([string](Get-RooIndustriesPropertyValue $_ 'control' ''))=$([string](Get-RooIndustriesPropertyValue $_ 'currentValue' $null))>$([string](Get-RooIndustriesPropertyValue $_ 'proposedValue' $null))|$([bool](Get-RooIndustriesPropertyValue $_ 'blocked' $false))"
+    } | Sort-Object)
+    return "$([string](Get-RooIndustriesPropertyValue $Entry 'classification' ''))|$([bool](Get-RooIndustriesPropertyValue $Entry 'blocked' $false))|$([bool](Get-RooIndustriesPropertyValue $Entry 'protected' $false))|$($controls -join ';')"
+}
+
+function New-RooIndustriesGameTuneReview {
+    param(
+        [object[]]$Preview,
+        [string]$ProfileId,
+        [string]$ProfilePath,
+        [string]$TargetGameProcessName
+    )
+    $entries = New-Object System.Collections.Generic.List[object]
+    foreach ($entry in @(Get-RooIndustriesArray $Preview)) {
+        $isGame = [string](Get-RooIndustriesPropertyValue $entry 'classification' '') -eq 'gameTarget'
+        if (-not $isGame -and -not (Test-RooIndustriesGameTuneEntryAllowed $entry).allowed) { continue }
+        $entries.Add([pscustomobject]@{
+            processId = [int](Get-RooIndustriesPropertyValue $entry 'processId' 0)
+            processName = [string](Get-RooIndustriesPropertyValue $entry 'processName' '')
+            executablePath = Get-RooIndustriesPropertyValue $entry 'executablePath' $null
+            processStartTimeUtc = Get-RooIndustriesPropertyValue $entry 'processStartTimeUtc' $null
+            classification = [string](Get-RooIndustriesPropertyValue $entry 'classification' '')
+            ruleId = Get-RooIndustriesPropertyValue $entry 'ruleId' $null
+            blocked = [bool](Get-RooIndustriesPropertyValue $entry 'blocked' $false)
+            protected = [bool](Get-RooIndustriesPropertyValue $entry 'protected' $false)
+            controlChanges = @(Get-RooIndustriesPreviewControlChanges $entry)
+        }) | Out-Null
+    }
+    return [pscustomobject]@{
+        schemaVersion = 1
+        kind = 'game-tune-review'
+        reviewId = [guid]::NewGuid().ToString('N')
+        createdAtUtc = Get-RooIndustriesUtcStamp
+        profileId = $ProfileId
+        profilePath = $ProfilePath
+        profileSha256 = (Get-FileHash -LiteralPath $ProfilePath -Algorithm SHA256).Hash.ToLowerInvariant()
+        targetGameProcessName = if ([string]::IsNullOrWhiteSpace($TargetGameProcessName)) { $null } else { $TargetGameProcessName }
+        entries = @($entries.ToArray())
+    }
+}
+
+function Read-RooIndustriesGameTuneReview {
+    param(
+        [string]$ReviewPath,
+        [string]$ReviewSha256,
+        [string]$ProfilePath,
+        [string]$TargetGameProcessName
+    )
+    $outOfDate = New-RooIndustriesIssue 'GAME_TUNE_REVIEW_OUT_OF_DATE' 'Your review is missing or out of date, so nothing changed. Review again, then start.' 'error' 'performance.gameTune' $ReviewPath $true 'Review again, then start.' $null
+    if ([string]::IsNullOrWhiteSpace($ReviewPath) -or $ReviewSha256 -notmatch '^[a-fA-F0-9]{64}$') { return [pscustomobject]@{ review = $null; problem = $outOfDate } }
+    try { $review = (Read-RooIndustriesOperationJson $ReviewPath $ReviewSha256).data }
+    catch { return [pscustomobject]@{ review = $null; problem = $outOfDate } }
+    if ([int](Get-RooIndustriesPropertyValue $review 'schemaVersion' 0) -ne 1 -or [string](Get-RooIndustriesPropertyValue $review 'kind' '') -ne 'game-tune-review') {
+        return [pscustomobject]@{ review = $null; problem = $outOfDate }
+    }
+    $reviewedProfile = [string](Get-RooIndustriesPropertyValue $review 'profilePath' '')
+    $profileMatches = -not [string]::IsNullOrWhiteSpace($reviewedProfile) -and
+        [string]::Equals([IO.Path]::GetFullPath($reviewedProfile), [IO.Path]::GetFullPath($ProfilePath), [StringComparison]::OrdinalIgnoreCase) -and
+        [string](Get-RooIndustriesPropertyValue $review 'profileSha256' '') -eq (Get-FileHash -LiteralPath $ProfilePath -Algorithm SHA256).Hash -and
+        [string](Get-RooIndustriesPropertyValue $review 'targetGameProcessName' '') -eq [string]$TargetGameProcessName
+    if (-not $profileMatches) {
+        return [pscustomobject]@{ review = $null; problem = (New-RooIndustriesIssue 'GAME_TUNE_REVIEW_PLAN_CHANGED' 'The game profile changed after you reviewed it, so nothing changed. Review again, then start.' 'error' 'performance.gameTune' $ProfilePath $true 'Review again, then start.' $null) }
+    }
+    return [pscustomobject]@{ review = $review; problem = $null }
+}
+
+function Get-RooIndustriesGameTuneReviewProblem {
+    param(
+        [object]$Review,
+        [object[]]$Preview
+    )
+    $reviewedEntries = @(Get-RooIndustriesPropertyArray $Review 'entries')
+    if (@($reviewedEntries | Where-Object { [string](Get-RooIndustriesPropertyValue $_ 'classification' '') -eq 'gameTarget' }).Count -eq 0) {
+        return New-RooIndustriesIssue 'GAME_TUNE_REVIEW_NO_GAME' 'No game was running when you reviewed, so nothing changed. Start your game, then review and start again.' 'error' 'performance.gameTune' $null $true 'Start your game, then review again.' $null
+    }
+    foreach ($reviewed in $reviewedEntries) {
+        $name = [string](Get-RooIndustriesPropertyValue $reviewed 'processName' 'An app')
+        $isGame = [string](Get-RooIndustriesPropertyValue $reviewed 'classification' '') -eq 'gameTarget'
+        $current = @(Get-RooIndustriesArray $Preview | Where-Object { Test-RooIndustriesGameTuneSameInstance $reviewed $_ })
+        if ($current.Count -gt 0) {
+            $changed = (Get-RooIndustriesGameTunePlanKey $current[0]) -ne (Get-RooIndustriesGameTunePlanKey $reviewed)
+        } else {
+            $live = Get-RooIndustriesGameTuneLiveProcessIdentity $reviewed
+            $changed = $live.exists -and $live.matches
+            if (-not $changed -and $isGame) {
+                return New-RooIndustriesIssue 'GAME_TUNE_REVIEWED_GAME_GONE' "$name closed or restarted after you reviewed it, so nothing changed. Review again, then start." 'error' 'performance.gameTune' $name $true 'Review again, then start.' $null
+            }
+        }
+        if ($changed) {
+            return New-RooIndustriesIssue 'GAME_TUNE_REVIEW_PLAN_CHANGED' "$name's settings are different from when you reviewed them, so nothing changed. Review again, then start." 'error' 'performance.gameTune' $name $true 'Review again, then start.' $null
+        }
+    }
+    return $null
+}
+
+function Select-RooIndustriesGameTuneReviewedChanges {
+    param(
+        [object]$Review,
+        [object]$PreviewEntry,
+        [object[]]$Changes
+    )
+    $reviewed = @(Get-RooIndustriesPropertyArray $Review 'entries' | Where-Object { Test-RooIndustriesGameTuneSameInstance $_ $PreviewEntry })
+    if ($reviewed.Count -eq 0) { return @() }
+    foreach ($change in @(Get-RooIndustriesArray $Changes)) {
+        $approved = @(Get-RooIndustriesPreviewControlChanges $reviewed[0] | Where-Object { $_.control -eq $change.control -and (Test-RooIndustriesControlValueEqual $change.control $_.proposedValue $change.proposedValue) })
+        if ($approved.Count -eq 0) { continue }
+        $boundChange = $change.PSObject.Copy()
+        $boundChange.currentValue = $approved[0].currentValue
+        $boundChange
+    }
+}

@@ -24,10 +24,22 @@ $script:Commands=@{
     'network-adapter'=@('Network adapter configuration','Get-NetAdapter','Get-NetRoute','Get-NetAdapterBinding','Enable-NetAdapterBinding','Disable-NetAdapterBinding','Get-NetAdapterLso','Set-NetAdapterLso','Get-NetAdapterRsc','Set-NetAdapterRsc','Get-NetAdapterAdvancedProperty','Set-NetAdapterAdvancedProperty')
 }
 $script:Missing=@{}
+$script:Providers=$null
 function Assert-Commands([string]$kind){
     if(-not $script:Missing.ContainsKey($kind)){
         $feature,$names=$script:Commands[$kind]
-        $script:Missing[$kind]=if($feature -and @($names|Where-Object {-not (Get-Command $_ -ErrorAction SilentlyContinue)}).Count){$feature+' is not available with this Windows version.'}else{''}
+        $absent=@(if($feature){$names|Where-Object {-not (Get-Command $_ -ErrorAction SilentlyContinue)}})
+        if($absent.Count){
+            if($null -eq $script:Providers){
+                $script:Providers=@{}
+                foreach($module in @(Get-Module -ListAvailable -ErrorAction SilentlyContinue)){foreach($name in $module.ExportedCommands.Keys){if(-not $script:Providers.ContainsKey($name)){$script:Providers[$name]=$module.Path}}}
+            }
+            foreach($path in @($absent|Where-Object {$script:Providers.ContainsKey($_)}|ForEach-Object {$script:Providers[$_]}|Select-Object -Unique)){
+                try{Import-Module $path -ErrorAction Stop}catch{throw ($feature+' couldn''t load its PowerShell commands: '+$_.Exception.Message)}
+            }
+            $absent=@($absent|Where-Object {-not (Get-Command $_ -ErrorAction SilentlyContinue)})
+        }
+        $script:Missing[$kind]=if($absent.Count){$feature+' is not available with this Windows version.'}else{''}
     }
     if($script:Missing[$kind]){throw $script:Missing[$kind]}
 }

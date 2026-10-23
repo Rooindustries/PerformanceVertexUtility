@@ -9,6 +9,7 @@ public sealed class GameTuneSessionStatus
     [JsonPropertyName("status")] public string? Status { get; set; }
     [JsonPropertyName("sessionStatus")] public string? SessionStatus { get; set; }
     [JsonPropertyName("rawSessionStatus")] public string? RawSessionStatus { get; set; }
+    [JsonPropertyName("recoveryPerformed")] public bool RecoveryPerformed { get; set; }
     [JsonPropertyName("sessionId")] public string? SessionId { get; set; }
     [JsonPropertyName("profileId")] public string? ProfileId { get; set; }
     [JsonPropertyName("targetGameProcessName")] public string? TargetGameProcessName { get; set; }
