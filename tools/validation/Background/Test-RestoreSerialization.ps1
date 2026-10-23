@@ -81,6 +81,7 @@ function Invoke-Body([string]$backend,[string]$scriptName,[hashtable]$arguments,
    if($statement -is [Management.Automation.Language.FunctionDefinitionAst]){. (New-BackendBlock $scriptPath $statement.Extent)}
    elseif($statement -is [Management.Automation.Language.AssignmentStatementAst]){. (New-BackendBlock $scriptPath $statement.Extent)}
   }
+  foreach($parameter in @($ast.ParamBlock.Parameters)){$name=$parameter.Name.VariablePath.UserPath;if(-not $arguments.ContainsKey($name)){Set-Variable -Name $name -Value $(if($parameter.DefaultValue){& (New-BackendBlock $scriptPath $parameter.DefaultValue.Extent)}elseif($parameter.StaticType -eq [switch]){$false}) -Scope Local}}
   foreach($key in $arguments.Keys){Set-Variable -Name $key -Value $arguments[$key] -Scope Local}
   $body=@($ast.EndBlock.Statements|Where-Object {$_ -is [Management.Automation.Language.TryStatementAst]})
   Require ($body.Count -eq 1) 'Expected one actual top-level backend body.'

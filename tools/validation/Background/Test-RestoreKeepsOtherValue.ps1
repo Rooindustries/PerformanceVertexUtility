@@ -12,6 +12,7 @@ function Invoke-E2EBackend {
  foreach($statement in $ast.EndBlock.Statements){
   if($statement -is [Management.Automation.Language.FunctionDefinitionAst] -or $statement -is [Management.Automation.Language.AssignmentStatementAst]){. (New-BackendBlock $path $statement.Extent)}
  }
+ foreach($parameter in @($ast.ParamBlock.Parameters)){$name=$parameter.Name.VariablePath.UserPath;if(-not(Get-Variable -Name $name -Scope 0 -ErrorAction SilentlyContinue)){Set-Variable -Name $name -Value $(if($parameter.DefaultValue){& (New-BackendBlock $path $parameter.DefaultValue.Extent)}elseif($parameter.StaticType -eq [switch]){$false}) -Scope 0}}
  $OutputPath='';$SessionId=''
  $body=@($ast.EndBlock.Statements|Where-Object {$_ -is [Management.Automation.Language.TryStatementAst]})
  if($body.Count -ne 1){throw 'Expected one real backend body'}
