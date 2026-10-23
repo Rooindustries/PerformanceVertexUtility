@@ -166,6 +166,7 @@ static class Fixtures{
  public static void Game(string root,bool hardware){using var self=Process.GetCurrentProcess();using var gpu=hardware?new GpuWorkload(0x1002,0x7550,16384,256):null;File.WriteAllText(Path.Combine(root,"ready.json"),JsonSerializer.Serialize(new{pid=self.Id,creationTimeFileTimeUtc=FixtureProcess.Created(self).ToString(),administrator=true,adapter=gpu?.Adapter}));var until=DateTime.UtcNow.AddMinutes(8);while(!File.Exists(Path.Combine(root,"stop"))&&DateTime.UtcNow<until){gpu?.Run(1);Thread.Sleep(10);}if(gpu is not null)File.WriteAllText(Path.Combine(root,"gpu-result.json"),JsonSerializer.Serialize(new{gpu.Adapter,gpu.Dispatches,verified=gpu.VerifyOutput()}));}
 }
 static class Oracle{
+ public static bool BasicProcessesAvailable(){int status=NtQuerySystemInformation(252,IntPtr.Zero,0,out _);if(status==0||status==unchecked((int)0xC0000004))return true;if(status==unchecked((int)0xC0000002)||status==unchecked((int)0xC0000003))return false;throw new Exception("Basic process capability query "+status.ToString("X8"));}
  public static ulong Affinity(Process p){if(!GetProcessAffinityMask(p.Handle,out var value,out _))throw new System.ComponentModel.Win32Exception();return value.ToUInt64();}
  public static int Gpu(Process p){int status=D3DKMTGetProcessSchedulingPriorityClass(p.Handle,out int value);if(status<0)throw new Exception("GPU query "+status.ToString("X8"));return value;}
  public static void SetGpu(Process p,int value){int status=D3DKMTSetProcessSchedulingPriorityClass(p.Handle,value);if(status<0)throw new Exception("GPU set "+status.ToString("X8"));}
@@ -177,6 +178,7 @@ static class Oracle{
  [DllImport("kernel32.dll",SetLastError=true)]static extern bool GetProcessInformation(IntPtr p,int c,out uint v,uint n);
  [DllImport("kernel32.dll",SetLastError=true)]static extern bool SetProcessInformation(IntPtr p,int c,ref uint v,uint n);
  [DllImport("ntdll.dll")]static extern int NtQueryInformationProcess(IntPtr p,int c,ref int v,int n,IntPtr ret);
+ [DllImport("ntdll.dll")]static extern int NtQuerySystemInformation(int kind,IntPtr data,uint size,out uint needed);
  [DllImport("ntdll.dll")]static extern int NtSetInformationProcess(IntPtr p,int c,ref int v,int n);
  [DllImport("gdi32.dll")]static extern int D3DKMTGetProcessSchedulingPriorityClass(IntPtr p,out int value);
  [DllImport("gdi32.dll")]static extern int D3DKMTSetProcessSchedulingPriorityClass(IntPtr p,int value);

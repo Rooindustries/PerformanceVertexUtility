@@ -25,6 +25,8 @@ static class HighIoChecks
     internal static void Run(string repo, string dotnet, int inspectSeconds)
     {
         Environment.SetEnvironmentVariable("DOTNET_ROOT_X64", Path.GetDirectoryName(dotnet));
+        var captureAvailable = Oracle.BasicProcessesAvailable();
+        Console.WriteLine("MEASURE native launch capture available: " + captureAvailable);
         var root = Path.Combine(Path.GetTempPath(), "roo-industries-high-io-check-" + Guid.NewGuid().ToString("N"));
         var evidence = Path.Combine(repo, "artifacts", "validation", "high-io-cleanup-" + Guid.NewGuid().ToString("N"));
         var fixture = new FixtureScope(root, evidence); var launcherCopy = new FixtureCopy(GamePath, LauncherPath); var stubCopy = new FixtureCopy(GamePath, StubPath);
@@ -149,7 +151,7 @@ static class HighIoChecks
             Check(true, "Independent readback shows High I/O priority and the CPU limit held for the whole hold");
             void Lock(Process process)
             {
-                if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 26100, 4770)) return;
+                if (!captureAvailable) return;
                 File.WriteAllText(Path.Combine(gameRoots[process], "lock"), "");
                 Until(() => File.Exists(Path.Combine(gameRoots[process], "locked")), "The fixture did not deny later control handles.");
                 var denied = false;
