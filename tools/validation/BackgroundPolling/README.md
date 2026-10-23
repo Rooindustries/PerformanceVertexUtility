@@ -22,7 +22,7 @@ Cases and the counts they require:
 
 `games-minimized`, `games-restored` and the panel text in `games-session-ended-while-inactive` also pass on builds that poll in the background; they guard the minimized path and the catch-up read.
 
-The game session uses a renamed copy of `PING.EXE` as its launcher and another as the game, with every priority on "Keep current". The session is started through the app, ended by stopping the owned launcher, then stopped and recovered through `Invoke-ProtectedGameSession.ps1`, which removes its scheduled task. The run deletes only the `game-session-*` operation folders whose preview names its own game copy. The Processes case only selects an owned probe process; it never previews or applies.
+The game session uses a renamed copy of `PING.EXE` as its launcher and another as the game, with every priority on "Keep current". The session is started through the app, ended by stopping the owned launcher, then stopped and recovered through `Invoke-ProtectedGameSession.ps1`, which removes its scheduled task. The run deletes only the `game-session-*` operation folders whose preview names its own game copy. The Processes case only selects an owned probe process; it never previews or applies. Dropdown choices go through `tools/validation/UiAutomation/ComboChoice.Common.ps1`, which finds the item even when the long process list hasn't drawn it yet and checks the dropdown really took the choice.
 
 The run refuses to start while another app process is open or `C:\RooBuild\host-lease.json` names a live frame. It needs an elevated, signed-in, unlocked desktop. Stage a fresh frame for each commit and run it through the interactive task:
 

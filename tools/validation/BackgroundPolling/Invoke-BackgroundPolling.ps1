@@ -7,6 +7,7 @@ param(
 $ErrorActionPreference = 'Stop'
 . (Join-Path $Source 'tools\validation\LoadTimes\CleanupOwnership.Common.ps1')
 . (Join-Path $Source 'backend\scripts\BrandCompatibility.Common.ps1')
+. (Join-Path $Source 'tools\validation\UiAutomation\ComboChoice.Common.ps1')
 Add-Type -AssemblyName UIAutomationClient,UIAutomationTypes,System.Drawing
 Add-Type -Path (Join-Path $Source 'tools\validation\BackgroundPolling\BackgroundPollingWatch.cs') -ReferencedAssemblies System.Management
 [BackgroundPollingUi]::SetProcessDPIAware() | Out-Null
@@ -34,24 +35,7 @@ function InvokeId([string]$id) { Activate (WaitFor { $e = ById $id; if ($e -and 
 function SetValue([string]$id, [string]$value) { (WaitFor { $e = ById $id; if ($e -and $e.Current.IsEnabled) { $e } } 90 $id).GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern).SetValue($value) }
 function Toggle([string]$id) { $e = WaitFor { ById $id } 45 $id; $p = $e.GetCurrentPattern([Windows.Automation.TogglePattern]::Pattern); if ([string]$p.Current.ToggleState -ne 'On') { $p.Toggle() } }
 function Nav([string]$name) { Activate (WaitFor { @(All | Where-Object { $_.Current.Name -eq $name -and $_.Current.ControlType -eq $CT::ListItem }) | Select-Object -First 1 } 45 $name) }
-function FreshCombo([string]$id) { @(All | Where-Object { $_.Current.ControlType -eq $CT::ComboBox -and $_.Current.AutomationId -eq $id }) | Select-Object -First 1 }
-function ListItems($combo) { @($combo.FindAll($TS::Descendants, [Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty, $CT::ListItem))) }
-function ChooseId([string]$id, [string]$pattern) {
-    $items = @(WaitFor { $fresh = FreshCombo $id; $fresh.GetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern).Expand(); $found = ListItems $fresh; if ($found.Count) { $found } } 90 ('choices ' + $id))
-    $item = @($items | Where-Object { $_.Current.Name -like $pattern }) | Select-Object -First 1
-    for ($page = 0; -not $item -and $page -lt 30; $page++) {
-        $fresh = FreshCombo $id
-        $scroll = @($fresh.FindAll($TS::Descendants, [Windows.Automation.Condition]::TrueCondition) | Where-Object { try { $_.GetCurrentPattern([Windows.Automation.ScrollPattern]::Pattern).Current.VerticallyScrollable } catch { $false } }) | Select-Object -First 1
-        if ($scroll) { $scroll.GetCurrentPattern([Windows.Automation.ScrollPattern]::Pattern).Scroll([Windows.Automation.ScrollAmount]::NoAmount, [Windows.Automation.ScrollAmount]::LargeIncrement) } else { try { ($items | Select-Object -Last 1).GetCurrentPattern([Windows.Automation.ScrollItemPattern]::Pattern).ScrollIntoView() } catch { break } }
-        Start-Sleep -Milliseconds 100
-        $items = ListItems $fresh
-        $item = @($items | Where-Object { $_.Current.Name -like $pattern }) | Select-Object -First 1
-    }
-    if (-not $item) { throw ('Choice missing: ' + $pattern) }
-    $item.GetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern).Select()
-    Start-Sleep -Milliseconds 500
-    try { (FreshCombo $id).GetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern).Collapse() } catch {}
-}
+function ChooseId([string]$id, [string]$pattern) { Select-ComboChoice $window $id $pattern 90 | Out-Null }
 function Shot([string]$name) { $r = $window.Current.BoundingRectangle; $b = [Drawing.Bitmap]::new([int]$r.Width, [int]$r.Height); $g = [Drawing.Graphics]::FromImage($b); try { $g.CopyFromScreen([int]$r.X, [int]$r.Y, 0, 0, $b.Size); $b.Save((Join-Path $directory ($name + '.png')), [Drawing.Imaging.ImageFormat]::Png) } finally { $g.Dispose(); $b.Dispose() } }
 function Fixture([string]$name) { $path = Join-Path $directory ($name + '.exe'); Copy-Item "$env:SystemRoot\System32\PING.EXE" $path; $p = Start-Process $path -ArgumentList '-t 127.0.0.1' -WindowStyle Hidden -PassThru; $r = New-OwnedProcess $p; $owned.Add($r); Save 'owned-fixtures.json' @($owned | ForEach-Object { $_.Identity }); return $r }
 function Now { [DateTime]::UtcNow.ToFileTimeUtc() }
