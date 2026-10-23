@@ -1371,6 +1371,11 @@ if ($failure) { exit 2 }
 if (-not $restored.success) { exit 1 }
 '@
         Set-Content -LiteralPath $processScript -Value $processBody -Encoding UTF8
+        function Start-DependentProcess([string]$Arguments) {
+            $start=[Diagnostics.ProcessStartInfo]::new([Diagnostics.Process]::GetCurrentProcess().MainModule.FileName,$Arguments)
+            $start.UseShellExecute=$false
+            [Diagnostics.Process]::Start($start)
+        }
         function Invoke-DependentProcess([switch]$Interrupt,[switch]$CompletionInterrupt) {
             $state=Join-Path $DataRoot 'service-state.xml'
             $result=Join-Path $DataRoot 'process-result.json'
@@ -1396,9 +1401,8 @@ if (-not $restored.success) { exit 1 }
             $firstResult=Join-Path $DataRoot 'first-result.json'
             $secondResult=Join-Path $DataRoot 'second-result.json'
             $script:fakeServices|Export-Clixml -LiteralPath $state
-            $exe=[Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
             $arguments='-NoProfile -File "'+$processScript+'" -Harness "'+$HarnessPath+'" -FixtureManifest "'+$ManifestPath+'" -Root "'+$DataRoot+'" -Backup "'+$BackupPath+'" -State "'+$state+'"'
-            $first=Start-Process -FilePath $exe -ArgumentList ($arguments+' -Result "'+$firstResult+'" -Barrier BeforeRead') -PassThru -NoNewWindow
+            $first=Start-DependentProcess ($arguments+' -Result "'+$firstResult+'" -Barrier BeforeRead')
             $second=$null
             try {
                 $clock=[Diagnostics.Stopwatch]::StartNew()
@@ -1431,7 +1435,7 @@ if (-not $restored.success) { exit 1 }
                 }
                 $latestArgument=if ($Latest) {' -Latest'} else {''}
                 $clock.Restart()
-                $second=Start-Process -FilePath $exe -ArgumentList ($arguments+' -Result "'+$secondResult+'" -Barrier AfterRead'+$latestArgument) -PassThru -NoNewWindow
+                $second=Start-DependentProcess ($arguments+' -Result "'+$secondResult+'" -Barrier AfterRead'+$latestArgument)
                 while (-not $second.HasExited -and -not (Test-Path -LiteralPath ($secondResult+'.ready'))) {
                     if ($clock.Elapsed.TotalSeconds -gt 10) { throw 'Competing Undo neither refused nor reached the read barrier' }
                     Start-Sleep -Milliseconds 20
@@ -1478,7 +1482,7 @@ if (-not $restored.success) { exit 1 }
             $script:fakeServices|Export-Clixml -LiteralPath $state
             $exe=[Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
             $arguments='-NoProfile -File "'+$processScript+'" -Harness "'+$HarnessPath+'" -FixtureManifest "'+$ManifestPath+'" -Root "'+$DataRoot+'" -Backup "'+$BackupPath+'" -State "'+$state+'"'
-            $process=Start-Process -FilePath $exe -ArgumentList ($arguments+' -Result "'+$result+'" -Barrier AfterCompletion') -PassThru -NoNewWindow
+            $process=Start-DependentProcess ($arguments+' -Result "'+$result+'" -Barrier AfterCompletion')
             try {
                 $clock=[Diagnostics.Stopwatch]::StartNew()
                 while (-not (Test-Path -LiteralPath ($result+'.ready'))) {
