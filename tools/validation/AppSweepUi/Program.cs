@@ -13,6 +13,19 @@ void Check(bool condition, string message)
     Console.WriteLine("PASS " + message);
 }
 
+if (args is ["bug-report"]) { await BugReportChecks.RunAsync(Check); Console.WriteLine($"Completed {count} bug report checks."); return; }
+
+if (args is ["bug-report-account-forms"])
+{
+    var root = Path.Combine(Path.GetTempPath(), "roo-industries-account-forms-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(root);
+    try { await BugReportChecks.AccountFormsAsync(Check, root); }
+    finally { Directory.Delete(root, true); }
+    Check(!Directory.Exists(root), "The account form suite's own root is removed");
+    Console.WriteLine($"Completed {count} account form checks.");
+    return;
+}
+
 if (args is ["bug-report-folder"]) { await BugReportChecks.OpenFolderAsync(Check); Console.WriteLine($"Completed {count} bug report folder checks."); return; }
 
 if (args is ["governor-actions"])
@@ -26,6 +39,13 @@ if (args is ["governor-left-as-set"])
 {
     await GovernorChecks.LeftAsSetAsync(Check);
     Console.WriteLine($"Completed {count} governor ownership restore checks.");
+    return;
+}
+
+if (args is ["poll-guard"])
+{
+    await PollGuardChecks.RunAsync(Check);
+    Console.WriteLine($"Completed {count} poll guard checks.");
     return;
 }
 
@@ -1554,5 +1574,6 @@ await CleanupRunChecks.RunAsync(Check);
 await RevisitChecks.RunAsync(Check);
 await BugReportChecks.RunAsync(Check);
 await UpdateInstallChecks.RunAsync(Check);
+await PollGuardChecks.RunAsync(Check);
 
 Console.WriteLine($"Completed {count} app sweep UI checks.");

@@ -66,17 +66,21 @@ These must hold on every commit of `main`. Each one names the code that enforces
    - Enforced by: the attached files (specs, tweak summary, log tails), description and editable specs go through `BugRedactor` before they're zipped or sent. It replaces:
      - the user's profile path with `%USERPROFILE%`
      - the user name with `<user>` and the PC name with `<pc-name>`
-     - S-1-5-21 account SIDs with `<sid>`
-     - other accounts' profile folders with `<user>`
+     - local (`S-1-5-21-...`) and Microsoft Entra (`S-1-12-1-...`) account SIDs with `<sid>`
+     - other accounts' profile folders with `<user>`: any folder directly under a `Users` or `Documents and Settings` folder, whether the path starts with a drive, an NT device or volume, a UNC share or `%SystemDrive%`, and with mixed, doubled or JSON-escaped separators and `.` components. Relocated, roaming and network profiles come from Windows' profile list (`BugRedactor.RegisteredProfiles`), and the folders next to them are private too, also through `.` and `..` components, the drive's volume, NT device or administrative share (`D$`) spelling, the `\Device\Mup` spelling of a share and the server's short or full name. JSON `\u` escapes in profile roots, separators, account SIDs and `%USERPROFILE%` are recognized without rewriting the surrounding text. Inside a link's query a profile path ends at the next `&`, `#` or `;` parameter, so the rest of the link stays as written.
+     - a name suffix that older logs left after `%USERPROFILE%`, like `%USERPROFILE%.name\...`, with `<user>`
+     - a one-letter user or PC name in the forms `PC\A`, `AzureAD\A` and `\\X\share` with `<user>` or `<pc-name>`. As a bare word one letter is far more often ordinary text, so it stays.
 
      The app log is redacted when it's written (`AppLog`).
-   - Checked by: `tools/validation/AppSweepUi/BugReportChecks.cs`.
+   - Checked by: `tools/validation/AppSweepUi/BugReportChecks.cs` (run alone with `AppSweepUi bug-report`).
    - Known gaps:
-     - Other accounts' profiles outside a drive's `Users` directory, including relocated and network profiles, aren't redacted.
-     - Old log entries with `%USERPROFILE%` followed by a name suffix can expose that suffix.
-     - Paths with mixed separator runs, a dot component, or three backslashes before `n`, `r`, `t`, `b` or `f` can leave an account name visible.
-     - Account names and PC names of one character aren't redacted.
-     - Microsoft Entra account SIDs (`S-1-12-1-...`) aren't redacted.
+     - Other accounts' folders outside a `Users` folder that Windows doesn't list as profiles, such as redirected folders or deleted accounts' leftovers, aren't redacted.
+     - Text that reads as both a path and JSON escapes stays as written: three backslashes before a folder starting with `n`, `r`, `t`, `b` or `f` whose own separator is also followed by one of those letters, `%USERPROFILE%` followed directly by `\u` with no deeper separator after it, and a one-letter account named `b`, `f`, `n`, `r`, `t` or `u` after a single backslash.
+     - An old-log suffix after `%USERPROFILE%` that starts with a space or comma and isn't followed by a separator reads as prose and stays.
+     - One-letter user and PC names stay readable as bare words.
+     - A one-letter account name after a domain other than the PC name or `AzureAD`, such as `CONTOSO\A`, stays readable.
+     - A quoted single-rooted path with doubled backslashes is also valid text for a UNC profile path. This ambiguous spelling is redacted as a UNC profile, even when its producer meant a JSON-escaped local path.
+     - A relocated profile's parent folder written in its 8.3 short form, like `D:\USERPR~1\Bob`, isn't recognized.
 
 ### Changing code an invariant depends on
 

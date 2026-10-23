@@ -36,6 +36,8 @@
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/InstallGate.cs" Link="InstallGate.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/BugReportService.cs" Link="BugReportService.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/BackendScriptPolicy.cs" Link="BackendScriptPolicy.cs" />
+    <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/MemoryRelief.cs" Link="MemoryRelief.cs" />
+    <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Views/ForegroundPoll.cs" Link="ForegroundPoll.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Helpers/Format.cs" Link="Format.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Helpers/LocalDisplayFilter.cs" Link="LocalDisplayFilter.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Helpers/Naming.cs" Link="Naming.cs" />
