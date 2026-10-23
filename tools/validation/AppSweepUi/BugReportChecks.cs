@@ -1021,6 +1021,12 @@ static class BugReportChecks
             ("Separator form", own, @"Scanning C:\\Users\\\" + @"nFound 3 profiles\nDone and Source : C:\\Users\\\r\nDest : D:\\Backup\\", @"Scanning C:\\Users\\\" + @"nFound 3 profiles\nDone and Source : C:\\Users\\\r\nDest : D:\\Backup\\", []),
             ("JSON spelling", own, @"C:/Users/<user>\u003C\u0075ser\u003EZqxbob/x and C:/Users/<user>\u003C\u0070c-\u006Eame\u003EZqxcarol/y", "C:/Users/<user>/x and C:/Users/<user>/y", ["Zqxbob", "Zqxcarol"]),
             ("JSON spelling", own, @"{""p"":""C:\/Users\/Bob\/x"",""q"":""C:\/Users\/Alice\/y""}", @"{""p"":""C:\/Users\/<user>\/x"",""q"":""%USERPROFILE%\/y""}", ["Bob"]),
+            ("JSON spelling", own, @"{""p"":""C:\\\u0055sers\\Zqxother\\x"",""q"":""C:\\Us\u0065rs\\Alice\\y""}", @"{""p"":""C:\\\u0055sers\\<user>\\x"",""q"":""%USERPROFILE%\\y""}", ["Zqxother"]),
+            ("JSON spelling", moved, @"{""p"":""D:\\Pro\u0066iles\\Zqxmoved\\x"",""q"":""\\\\fs01\\pro\u0066iles$\\Zqxroam\\y""}", @"{""p"":""D:\\Pro\u0066iles\\<user>\\x"",""q"":""\\\\fs01\\pro\u0066iles$\\<user>\\y""}", ["Zqxmoved", "Zqxroam"]),
+            ("JSON spelling", own, @"C:/\u0055sers/Zqxother/x and C:/\u0055sersBackup/Games/y", @"C:/\u0055sers/<user>/x and C:/\u0055sersBackup/Games/y", ["Zqxother"]),
+            ("JSON spelling", own, @"{""p"":""\u0043:\u005cUsers\u005cZqxother\u005cx"",""q"":""\u0043:\u005cUsers\u005cAlice\u005cy""}", @"{""p"":""\u0043:\u005cUsers\u005c<user>\u005cx"",""q"":""%USERPROFILE%\u005cy""}", ["Zqxother"]),
+            ("JSON spelling", own, @"C:/\u0055sers/\u003Cuser\u003EZqxother/x and C:/\u0055sers/Public/y", @"C:/\u0055sers/<user>/x and C:/\u0055sers/Public/y", ["Zqxother"]),
+            ("Entra SID", own, @"\u0053-1-12-1-111-222-333-444 and \u0053-1-5-21-111-222-333-1001; system \u0053-1-5-18", @"<sid> and <sid>; system \u0053-1-5-18", ["111-222-333"]),
             ("Device path", own, @"\Device\HarddiskVolume3\Users\Bob\x and \\?\GLOBALROOT\Device\HarddiskVolume3\Users\Carol\y", @"\Device\HarddiskVolume3\Users\<user>\x and \\?\GLOBALROOT\Device\HarddiskVolume3\Users\<user>\y", ["Bob", "Carol"]),
             ("Device path", own, @"\\.\HarddiskVolume3\Users\Bob\x, \\?\Volume{0a1b2c3d-0000-0000-0000-000000000000}\Users\Carol\y and \\GAMER-PC\C$\Users\Client\z", @"\\.\HarddiskVolume3\Users\<user>\x, \\?\Volume{0a1b2c3d-0000-0000-0000-000000000000}\Users\<user>\y and \\<pc-name>\C$\Users\<user>\z", ["Bob", "Carol", "Client"]),
             ("Device path", own, @"\??\C:\Users\Bob\x, \\?\C:\Users\Carol\y and \\.\C:\Users\Alice\z", @"\??\C:\Users\<user>\x, \\?\C:\Users\<user>\y and \\.\%USERPROFILE%\z", ["Bob", "Carol"]),
@@ -1164,10 +1170,13 @@ static class BugReportChecks
         while (mixed.Length < 7 * 1024 * 1024) mixed.Append(@"\Device\HarddiskVolume3\Users\Zqxbob\x %USERPROFILE%.Zqxsmith\y D:\Profiles\Zqxmoved\z S-1-12-1-111-222-333-444 %USERPROFILE% a ");
         var spaced = new StringBuilder();
         while (spaced.Length < 7 * 1024 * 1024) spaced.Append("%USERPROFILE% a");
+        var encoded = new StringBuilder();
+        while (encoded.Length < 7 * 1024 * 1024) encoded.Append(@"C:/\u0055sers/Zqxother/x D:/Pro\u0066iles/Zqxmoved/y \u0053-1-12-1-111-222-333-444 ");
         var inputs = new (string Name, string Input, Func<string, bool> Expected)[]
         {
             ("repeated new account forms", mixed.ToString(), output => !output.Contains("Zqx", StringComparison.Ordinal) && !output.Contains("111-222", StringComparison.Ordinal)),
             ("macros followed by prose", spaced.ToString(), output => output == spaced.ToString()),
+            ("encoded profile roots and account SIDs", encoded.ToString(), output => !output.Contains("Zqx", StringComparison.Ordinal) && !output.Contains("111-222", StringComparison.Ordinal)),
             ("a mixed separator run", @"C:\Users" + string.Concat(Enumerable.Repeat(@"\/", 3 * 1024 * 1024)) + "Fixture", output => output.EndsWith(@"\/<user>", StringComparison.Ordinal) && !output.Contains("Fixture", StringComparison.Ordinal)),
             ("a backslash run before a Users word", "x" + new string('\\', 7 * 1024 * 1024) + "Usersy", output => output.EndsWith("Usersy", StringComparison.Ordinal)),
             ("a three-backslash control before a long run", @"C:\\Users\\\r" + "Zqxname" + new string('\\', 7 * 1024 * 1024) + "x", output => !output.Contains("Zqxname", StringComparison.Ordinal)),

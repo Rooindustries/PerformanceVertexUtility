@@ -49,7 +49,7 @@ public sealed class BugRedactor
             var separator = "bfnrtu".Contains(char.ToLowerInvariant(user[0])) ? @"(?:\\\\)+" : @"\\+";
             rules.Add((new Regex(@"(?<=(?<![\p{L}\p{N}_.-])(?:" + PcName + "|AzureAD)" + separator + ")" + Regex.Escape(user) + @"(?![\p{L}\p{N}_])", Options), User));
         }
-        rules.Add((new Regex(@"S-1-(?:5-21(?:-\d+){3,4}|12-1(?:-\d+){1,4})", Options), Sid));
+        rules.Add((AccountSid, Sid));
         _rules = rules.ToArray();
     }
 
@@ -107,6 +107,7 @@ public sealed class BugRedactor
     {
         text = text.Replace(User, @"\u0001").Replace(PcName, @"\u0002").Replace(Sid, @"\u0003");
         text = text.Replace("<user>", User, StringComparison.OrdinalIgnoreCase).Replace("<pc-name>", PcName, StringComparison.OrdinalIgnoreCase).Replace("<sid>", Sid, StringComparison.OrdinalIgnoreCase);
+        text = EncodedPaths(text);
         var changes = new List<(int Start, int End, string Value)>();
         string? previousSeparator = null;
         var previousBoundary = -1;
@@ -134,6 +135,69 @@ public sealed class BugRedactor
             var suffix = macro.Index + macro.Length;
             if (MacroSuffix(text, suffix) is { } end) changes.Add((macro.Index, end, User));
         }
+        text = Replace(text, changes);
+        foreach (var (pattern, replacement) in _rules) text = pattern.Replace(text, replacement);
+        return text.Replace(User, "<user>").Replace(PcName, "<pc-name>").Replace(Sid, "<sid>");
+    }
+
+    private string EncodedPaths(string text)
+    {
+        if (text.IndexOf(@"\u", StringComparison.OrdinalIgnoreCase) < 0) return text;
+        var decoded = new StringBuilder(text.Length);
+        var ends = new List<int>(text.Length);
+        void Add(char value, int end)
+        {
+            decoded.Append(value);
+            ends.Add(end);
+        }
+        for (var index = 0; index < text.Length;)
+        {
+            var slashes = Backslashes(text, index);
+            var hex = index + slashes;
+            if (slashes > 0 && Escaped(text, hex))
+            {
+                var unit = slashes & -slashes;
+                for (var prefix = 0; prefix < slashes - unit; prefix++, index++) Add('\\', index + 1);
+                var end = hex + 5;
+                var value = (char)Convert.ToInt32(text.Substring(hex + 1, 4), 16);
+                if (value == '<' && EncodedMarker(text, index, end, out var kind) is var markerEnd and >= 0)
+                {
+                    value = kind;
+                    end = markerEnd;
+                }
+                if (value >= ' ' || value is '\u0001' or '\u0002' or '\u0003' && end > hex + 5)
+                    Add(value, end);
+                else
+                    for (var cursor = index; cursor < end; cursor++) Add(text[cursor], cursor + 1);
+                index = end;
+            }
+            else
+            {
+                var end = index + Math.Max(1, slashes);
+                for (; index < end; index++) Add(text[index], index + 1);
+            }
+        }
+        var view = decoded.ToString();
+        var changes = new List<(int Start, int End, string Value)>();
+        foreach (Match match in _segment.Matches(view))
+        {
+            var root = match.Groups["root"];
+            var start = root.Index == 0 ? 0 : ends[root.Index - 1];
+            if (ends[root.Index + root.Length - 1] - start == root.Length) continue;
+            if (Profile(match, view, out _, out _, out _) is { } change && change.End > change.Start)
+                changes.Add((change.Start == 0 ? 0 : ends[change.Start - 1], ends[change.End - 1], change.Value));
+        }
+        foreach (Match match in AccountSid.Matches(view))
+        {
+            var start = match.Index == 0 ? 0 : ends[match.Index - 1];
+            var end = ends[match.Index + match.Length - 1];
+            if (end - start > match.Length) changes.Add((start, end, Sid));
+        }
+        return Replace(text, changes);
+    }
+
+    private static string Replace(string text, List<(int Start, int End, string Value)> changes)
+    {
         changes.Sort((left, right) => left.Start != right.Start ? left.Start.CompareTo(right.Start) : left.End.CompareTo(right.End));
         var merged = new List<(int Start, int End, string Value)>();
         foreach (var change in changes)
@@ -155,8 +219,7 @@ public sealed class BugRedactor
             output.Append(text, offset, text.Length - offset);
             text = output.ToString();
         }
-        foreach (var (pattern, replacement) in _rules) text = pattern.Replace(text, replacement);
-        return text.Replace(User, "<user>").Replace(PcName, "<pc-name>").Replace(Sid, "<sid>");
+        return text;
     }
 
     private (int Start, int End, string Value)? Profile(Match match, string input, out int boundaryEnd, out string root, out bool placeholderOnly)
@@ -379,6 +442,7 @@ public sealed class BugRedactor
     private static readonly HashSet<string> SharedProfiles = new(["Public", "Default", "Default User", "All Users"], StringComparer.OrdinalIgnoreCase);
     private static readonly Regex ProfileFolders = new(@"\A(?:Users|Documents and Settings)\z", Options);
     private static readonly Regex AccountProfile = new(@"\AS-1-(?:5-21|12-1)(?:-\d+)+(?:\.bak)?\z", Options);
+    private static readonly Regex AccountSid = new(@"S-1-(?:5-21(?:-\d+){3,4}|12-1(?:-\d+){1,4})", Options);
     private static readonly Regex Macro = new("(?:%USERPROFILE%)+", Options);
     private static readonly Regex ProfileSegment = new("(?=(?<root>(?:" + StandardRoots + ")" + SegmentSeparator + ")" + SegmentRun + ")", Options);
 
