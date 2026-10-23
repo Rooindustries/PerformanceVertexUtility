@@ -61,7 +61,26 @@ static class LaunchProfileChecks
     static bool TaskExists(string sessionRoot) => Schtasks("/Query", "/TN", TaskName(sessionRoot)).Exit == 0;
     static string TaskXml(string sessionRoot) => Schtasks("/Query", "/TN", TaskName(sessionRoot), "/XML").Output;
 
-    public static async Task Run(string repo, bool recovery)
+    public static async Task CleanupFailure(string repo)
+    {
+        var start = new ProcessStartInfo(Environment.ProcessPath!) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
+        if (string.Equals(Path.GetFileNameWithoutExtension(Environment.ProcessPath), "dotnet", StringComparison.OrdinalIgnoreCase)) start.ArgumentList.Add(typeof(LaunchProfileChecks).Assembly.Location);
+        start.ArgumentList.Add(repo); start.ArgumentList.Add("--launch-profile-cleanup-fault");
+        using var child = Process.Start(start)!;
+        var output = child.StandardOutput.ReadToEndAsync(); var error = child.StandardError.ReadToEndAsync();
+        await child.WaitForExitAsync();
+        var stdout = await output; var stderr = await error;
+        Console.WriteLine(stdout);
+        Check(child.ExitCode != 0 && stderr.Contains("Deliberate profile assertion failure", StringComparison.Ordinal), "A cleanup error preserves the original failing assertion");
+        var receipt = stdout.Split('\n').Single(line => line.StartsWith("Cleanup receipt: ", StringComparison.Ordinal))["Cleanup receipt: ".Length..];
+        using var document = JsonDocument.Parse(receipt);
+        var root = document.RootElement.GetProperty("root").GetString()!;
+        using var markers = Registry.LocalMachine.OpenSubKey(PolicyRootSecurity.MarkerKey);
+        Check(!Directory.Exists(root) && markers?.GetValue(PolicyRootSecurity.MarkerName(Path.Combine(root, "operations"))) is null && NoLaunchPolicy(), "A failing scenario still removes its fixture folder, marker and launch policy");
+        Check(document.RootElement.GetProperty("tasks").EnumerateArray().All(task => Schtasks("/Query", "/TN", task.GetString()!).Exit != 0), "A failing scenario leaves no scheduled task behind");
+    }
+
+    public static async Task Run(string repo, bool recovery, bool cleanupFault = false)
     {
         var root = Path.Combine(Path.GetTempPath(), "roo-industries-launch-profile-" + Guid.NewGuid().ToString("N"));
         var operations = Path.Combine(root, "operations");
@@ -150,6 +169,7 @@ static class LaunchProfileChecks
             return (uninstall.ExitCode, await output + await error);
         }
 
+        Exception? scenarioError = null;
         try
         {
             var first = await OpenLauncher();
@@ -168,6 +188,13 @@ static class LaunchProfileChecks
                 app.RequireNoLaunchProfile(review.Plan);
                 await app.StartGameSessionAsync(review);
                 var saved = await app.SaveLaunchProfileAsync(review);
+                if (cleanupFault)
+                {
+                    var broken = Path.Combine(operations, "game-session-" + Guid.NewGuid().ToString("N"), "session");
+                    Directory.CreateDirectory(broken);
+                    File.WriteAllText(Path.Combine(broken, "session.json"), "{}");
+                    throw new InvalidOperationException("Deliberate profile assertion failure");
+                }
                 var reviewedBytes = File.ReadAllBytes(review.PreviewPath);
                 Check(saved.Profile.Enabled && File.ReadAllBytes(Path.Combine(saved.Root, "reviewed-preview.json")).SequenceEqual(reviewedBytes), "Saving keeps the exact reviewed preview as the approval");
                 Check(Equals(Launch("CpuPriorityClass"), 6) && Equals(Launch("IoPriority"), 2) && Affinity(first) == core && Io(first) == 2, "Saved settings are armed on the running launcher");
@@ -318,54 +345,111 @@ static class LaunchProfileChecks
                 Check(uninstall.Exit == 0 && sessions.Length == 6 && sessions.All(entry => GameSessionDisplay.Restored(entry.Worker) && !TaskExists(entry.SessionRoot)) && NoLaunchPolicy() && Affinity(live) == original && Io(live) == 1,
                     "Uninstall cleanup stops the running session, restores everything and removes every session task");
                 Check(TaskExists(unrelatedSession), "Uninstall cleanup leaves tasks from another recovery folder alone");
+
+                var legacyLauncher = await OpenLauncher();
+                var legacy = await Arm(legacyLauncher, controls);
+                PowerLoss(legacy.SessionRoot); await CloseLauncher(legacyLauncher);
+                using var markers = Registry.LocalMachine.OpenSubKey(PolicyRootSecurity.MarkerKey, true)!;
+                var marker = PolicyRootSecurity.MarkerName(operations) + PolicyRootSecurity.ProtectedAtSuffix;
+                var protectedAt = markers.GetValue(marker)!;
+                try
+                {
+                    markers.SetValue(marker, DateTime.UtcNow.AddMinutes(1).ToFileTimeUtc(), RegistryValueKind.QWord);
+                    Check(PolicyRootSecurity.SavedBeforeProtection(Path.Combine(legacy.SessionRoot, "session.json")), "The fixture journals now predate protection, like an upgraded data folder");
+                    var older = await RemoveAll();
+                    using var result = JsonDocument.Parse(older.Output);
+                    var failures = result.RootElement.GetProperty("data").GetProperty("sessions").EnumerateArray().Where(session => session.GetProperty("status").GetString() == "failed").ToArray();
+                    Check(older.Exit != 0 && failures.Length == 1 && failures[0].GetProperty("sessionRoot").GetString() == legacy.SessionRoot && TaskExists(legacy.SessionRoot) && Equals(Launch("CpuPriorityClass"), 6),
+                        "Earlier restored journals do not block cleanup, while an earlier unrestored journal still requires approval");
+                }
+                finally { markers.SetValue(marker, protectedAt, RegistryValueKind.QWord); }
+                Check((await RemoveAll()).Exit == 0 && await Restored(legacy.SessionRoot) && NoLaunchPolicy(), "After the fixture protection time is restored, cleanup recovers the last session");
             }
         }
-        catch
+        catch (Exception error)
         {
-            var evidence = Path.Combine(repo, "artifacts", "validation", "launch-profile-failure");
-            Directory.CreateDirectory(evidence);
-            if (Directory.Exists(operations))
-                foreach (var file in Directory.EnumerateFiles(operations, "*.json", SearchOption.AllDirectories))
-                    File.Copy(file, Path.Combine(evidence, Path.GetRelativePath(operations, file).Replace(Path.DirectorySeparatorChar, '_')), true);
+            scenarioError = error;
+            try
+            {
+                var evidence = Path.Combine(repo, "artifacts", "validation", "launch-profile-failure");
+                Directory.CreateDirectory(evidence);
+                if (Directory.Exists(operations))
+                    foreach (var file in Directory.EnumerateFiles(operations, "*.json", SearchOption.AllDirectories))
+                        File.Copy(file, Path.Combine(evidence, Path.GetRelativePath(operations, file).Replace(Path.DirectorySeparatorChar, '_')), true);
+            }
+            catch (Exception captureError) { Console.WriteLine("Evidence: " + captureError.Message); }
             throw;
         }
         finally
         {
-            try
+            var errors = new List<Exception>();
+            void Clean(Action action)
+            {
+                try { action(); }
+                catch (Exception error) { errors.Add(error); }
+            }
+            async Task CleanAsync(Func<Task> action)
+            {
+                try { await action(); }
+                catch (Exception error) { errors.Add(error); }
+            }
+            var tasks = new List<string>();
+            Clean(() =>
+            {
+                if (Directory.Exists(operations)) tasks.AddRange(Directory.EnumerateDirectories(operations, "game-session-*").Select(directory => TaskName(Path.Combine(directory, "session"))));
+                if (unrelatedSession is not null) tasks.Add(TaskName(unrelatedSession));
+            });
+            await CleanAsync(async () =>
             {
                 var cleanup = App();
-                foreach (var profile in await cleanup.ReadLaunchProfilesAsync()) await cleanup.DisableLaunchProfileAsync(profile.Root);
-                foreach (var entry in await cleanup.ReadGameSessionsAsync())
+                foreach (var profile in await cleanup.ReadLaunchProfilesAsync()) await CleanAsync(async () =>
                 {
-                    try
+                    if (await cleanup.DisableLaunchProfileAsync(profile.Root) is { } problem) throw new InvalidOperationException(problem);
+                });
+                foreach (var entry in await cleanup.ReadGameSessionsAsync())
+                    await CleanAsync(async () =>
                     {
                         if (entry.Worker.HostRunning == true) await cleanup.StopGameSessionAsync(entry.SessionRoot);
                         else if (entry.Worker.State is not null) await cleanup.RecoverGameSessionAsync(entry.SessionRoot);
-                    }
-                    catch (Exception error) { Console.WriteLine("Cleanup: " + error.Message); }
-                }
-            }
-            finally
+                    });
+            });
+            foreach (var (game, folder) in games) Clean(() =>
             {
-                foreach (var (game, folder) in games) { if (!game.HasExited) { File.WriteAllText(Path.Combine(folder, "stop"), ""); if (!game.WaitForExit(10000)) game.Kill(); } game.Dispose(); }
-                foreach (var (launcher, folder) in launchers) { if (!launcher.HasExited) { File.WriteAllText(Path.Combine(folder, "stop-launcher"), ""); if (!launcher.WaitForExit(15000)) { launcher.Kill(); launcher.WaitForExit(10000); } } launcher.Dispose(); }
-                if (Registry.LocalMachine.OpenSubKey(Ifeo) is { } leftover) { leftover.Dispose(); Registry.LocalMachine.DeleteSubKeyTree(Ifeo); }
-                Environment.SetEnvironmentVariable("ROO_INDUSTRIES_BACKEND_ROOT", previous);
-                File.Delete(gamePath); File.Delete(launcherPath);
-            }
+                try { if (!game.HasExited) { File.WriteAllText(Path.Combine(folder, "stop"), ""); if (!game.WaitForExit(10000)) { game.Kill(); game.WaitForExit(10000); } } }
+                finally { game.Dispose(); }
+            });
+            foreach (var (launcher, folder) in launchers) Clean(() =>
+            {
+                try { if (!launcher.HasExited) { File.WriteAllText(Path.Combine(folder, "stop-launcher"), ""); if (!launcher.WaitForExit(15000)) { launcher.Kill(); launcher.WaitForExit(10000); } } }
+                finally { launcher.Dispose(); }
+            });
             await Task.Delay(1000);
-            foreach (var entry in await App().ReadGameSessionsAsync())
+            await CleanAsync(async () =>
             {
-                var restored = await App().RecoverGameSessionAsync(entry.SessionRoot);
-                if (!GameSessionDisplay.Restored(restored) || TaskExists(entry.SessionRoot)) throw new InvalidOperationException("A test session still needs recovery.");
-            }
+                foreach (var entry in await App().ReadGameSessionsAsync()) await CleanAsync(async () =>
+                {
+                    var app = App();
+                    var restored = entry.Worker.HostRunning == true ? await app.StopGameSessionAsync(entry.SessionRoot) : await app.RecoverGameSessionAsync(entry.SessionRoot);
+                    if (!GameSessionDisplay.Restored(restored) || TaskExists(entry.SessionRoot)) throw new InvalidOperationException("A test session still needs recovery.");
+                });
+            });
+            Clean(() => { if (Registry.LocalMachine.OpenSubKey(Ifeo) is { } leftover) { leftover.Dispose(); Registry.LocalMachine.DeleteSubKeyTree(Ifeo); } });
+            Clean(() => Environment.SetEnvironmentVariable("ROO_INDUSTRIES_BACKEND_ROOT", previous));
             foreach (var client in clients)
-                (typeof(OptimizerService).GetField("_storageLease", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(client) as IDisposable)?.Dispose();
-            if (unrelatedSession is not null && TaskExists(unrelatedSession)) Schtasks("/Delete", "/TN", TaskName(unrelatedSession), "/F");
-            Directory.Delete(root, true);
-            using var markers = Registry.LocalMachine.OpenSubKey(PolicyRootSecurity.MarkerKey, true);
-            markers?.DeleteValue(PolicyRootSecurity.MarkerName(operations), false);
-            markers?.DeleteValue(PolicyRootSecurity.MarkerName(operations) + PolicyRootSecurity.ProtectedAtSuffix, false);
+                Clean(() => (typeof(OptimizerService).GetField("_storageLease", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(client) as IDisposable)?.Dispose());
+            foreach (var task in tasks) Clean(() => { if (Schtasks("/Query", "/TN", task).Exit == 0 && Schtasks("/Delete", "/TN", task, "/F").Exit != 0) throw new IOException("A fixture task could not be removed."); });
+            Clean(() => File.Delete(gamePath)); Clean(() => File.Delete(launcherPath));
+            Clean(() => Directory.Delete(root, true));
+            Clean(() =>
+            {
+                if (Directory.Exists(root)) return;
+                using var markers = Registry.LocalMachine.OpenSubKey(PolicyRootSecurity.MarkerKey, true);
+                markers?.DeleteValue(PolicyRootSecurity.MarkerName(operations), false);
+                markers?.DeleteValue(PolicyRootSecurity.MarkerName(operations) + PolicyRootSecurity.ProtectedAtSuffix, false);
+            });
+            if (cleanupFault) Console.WriteLine("Cleanup receipt: " + JsonSerializer.Serialize(new { root, tasks }));
+            foreach (var error in errors) Console.WriteLine("Cleanup: " + error.Message);
+            if (scenarioError is null && errors.Count != 0) throw new AggregateException(errors);
         }
     }
 
