@@ -245,12 +245,14 @@ device selection, missing inputs, dependencies and pending servicing. Run:
 ```
 
 The separately approved native fixture switches are `--registry-fixture`,
-`--controls-fixture` and `--power-fixture` on
+`--controls-fixture`, `--power-fixture` and `--windows-default-fixture` on
 `tools/validation/Tweaks/Tweaks.csproj`. They refuse unexpected baseline state
 and clean only their owned test resources. They are not part of the ordinary
 file-fixture run. `--feature-restart-fixture` is: it drives the real recovery
 store in a disposable current-user key with simulated Windows feature states,
-so no feature changes and no restart happens.
+so no feature changes and no restart happens. `--windows-default-fixture` copies
+each value in `backend/catalogs/windows-default-values.json` into a disposable
+current-user key and runs its real catalog row through apply, readback and Undo.
 
 Catalog contracts and negative controls run with:
 

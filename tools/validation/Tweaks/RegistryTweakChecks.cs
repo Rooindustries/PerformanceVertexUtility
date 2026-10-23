@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.Win32;
 using RooIndustries.Optimizer;
 
@@ -76,20 +77,106 @@ static class RegistryTweakChecks
             check(store.Recover(store.Recovery().PendingHash!) && store.Recovery().Pending is null, "A restart check after a new boot closes the pending feature record");
             Apply("restart", []);
         }
-        finally
+        finally { Remove(hive, parentExisted, check); }
+    }
+    public static void WindowsDefaults(string files, string repo, TweakCatalog catalog, Action<bool, string> check, Action<Action, string> reject)
+    {
+        using var hive = RegistryKey.OpenBaseKey(RegistryHive.CurrentUser, RegistryView.Registry64);
+        using (var existing = hive.OpenSubKey(Root)) if (existing is not null) throw new InvalidDataException("The native fixture already exists; it will not be reused.");
+        var parentExisted = false;
+        using (var parent = hive.OpenSubKey(@"Software\RooIndustriesTweakTests")) parentExisted = parent is not null;
+        var recovery = new RegistryAddress("CurrentUser", "Registry64", Root + @"\Recovery", "value", "State");
+        using var document = JsonDocument.Parse(File.ReadAllText(Path.Combine(repo, "backend", "catalogs", "windows-default-values.json")));
+        byte[]? State() { using var key = hive.OpenSubKey(recovery.KeyPath); return key?.GetValue("State") as byte[]; }
+        try
         {
-            using (var key = hive.OpenSubKey(Root))
+            foreach (var stock in document.RootElement.GetProperty("values").EnumerateArray())
             {
-                if (key is not null && key.Name != @"HKEY_CURRENT_USER\" + Root) throw new InvalidDataException("Unexpected registry fixture identity.");
+                var (hiveName, path, name, kept) = (stock.GetProperty("hive").GetString(), stock.GetProperty("keyPath").GetString()!, stock.GetProperty("valueName").GetString()!, stock.GetProperty("dword").GetUInt32());
+                bool Kept(RegistryAddress address) => address.Hive == hiveName && address.KeyPath.Equals(path, StringComparison.OrdinalIgnoreCase) && string.Equals(address.ValueName, name, StringComparison.OrdinalIgnoreCase);
+                var fixture = Root + @"\Stock\" + path;
+                var definition = catalog.Settings.Single(setting => setting.Options.Any(option => option.Changes.Any(change => Kept(change.Address))));
+                var row = definition with { Options = definition.Options.Select(option => option with { Changes = option.Changes.Select(change => Kept(change.Address) ? change with { Address = change.Address with { Hive = "CurrentUser", KeyPath = fixture } } : change).ToArray() }).ToArray() };
+                if (row.Options.Any(option => option.Controls is { Length: > 0 } || option.Changes.Any(change => change.Address.Hive != "CurrentUser" || !change.Address.KeyPath.StartsWith(Root + @"\", StringComparison.Ordinal))))
+                    throw new InvalidDataException(definition.Name + " also changes a target outside the fixture; it will not be applied.");
+                var reset = row.Options.Single(option => option.Name is "Windows default" or "Remove this override");
+                var other = row.Options.First(option => option.Id != reset.Id);
+                var on = other.Changes.Single().Dword!.Value;
+                var legacy = row with { Options = row.Options.Select(option => option.Id == reset.Id ? option with { Name = "Remove this override", Changes = option.Changes.Select(change => change with { Dword = null }).ToArray() } : option).ToArray() };
+                TweakEngine Engine(TweakDefinition setting) => new(catalog with { Settings = [setting], Presets = [], Incompatible = null }, new RegistryTweakStore(recovery));
+                var engine = Engine(row);
+                (string Path, string Hash, TweakPlan Plan) Preview(TweakEngine with, string id, TweakSelection[] selected)
+                {
+                    var plan = with.Preview(id, selected); var file = Path.Combine(files, plan.OperationId + ".json");
+                    OperationFiles.Write(file, plan); return (file, OperationFiles.HashFile(file), plan);
+                }
+                void Apply(TweakEngine with, string id, TweakSelection[] selected) { var plan = Preview(with, id, selected); with.Apply(plan.Path, plan.Hash); }
+                TweakSelection[] Pick(TweakOption option) => [new(row.Id, option.Id)];
+                uint? Dword() { using var key = hive.OpenSubKey(fixture); return key?.GetValue(name) is int data && key.GetValueKind(name) == RegistryValueKind.DWord ? unchecked((uint)data) : null; }
+                bool Present() { using var key = hive.OpenSubKey(fixture); return key?.GetValue(name) is not null; }
+                bool Siblings() { using var key = hive.OpenSubKey(fixture); return Equals(key?.GetValue("Behavior"), 73760) && Equals(key?.GetValue("policytype"), 4); }
+                void Set(uint? value) { using var key = hive.CreateSubKey(fixture); if (value is { } data) key.SetValue(name, unchecked((int)data), RegistryValueKind.DWord); else key.DeleteValue(name, false); }
+                using (var key = hive.CreateSubKey(fixture)) { key.SetValue("Behavior", 73760, RegistryValueKind.DWord); key.SetValue("policytype", 4, RegistryValueKind.DWord); }
+                Set(kept);
+
+                var untouched = Preview(engine, "stock", Pick(reset));
+                check(untouched.Plan.Changes.Length == 0, definition.Name + ": Use Windows default on stock Windows changes nothing");
+                engine.Apply(untouched.Path, untouched.Hash);
+                check(Dword() == kept && Siblings(), definition.Name + ": Use Windows default keeps Windows' REG_DWORD " + kept + " and the policy's other values");
+                Apply(engine, "stock", []);
+                check(Dword() == kept && Siblings(), definition.Name + ": Undo after Use Windows default on stock Windows leaves Windows' value");
+
+                Apply(engine, "on", Pick(other));
+                check(Dword() == on && Siblings(), definition.Name + ": " + other.Name + " writes REG_DWORD " + on);
+                Apply(engine, "on", []);
+                check(Dword() == kept && Siblings(), definition.Name + ": Undo after " + other.Name + " puts Windows' REG_DWORD " + kept + " back");
+
+                Set(on);
+                Apply(engine, "reset", Pick(reset));
+                check(Dword() == kept && Siblings(), definition.Name + ": Use Windows default turns an earlier " + on + " back into Windows' " + kept);
+                Apply(engine, "reset", []);
+                check(Dword() == on && Siblings(), definition.Name + ": Undo after Use Windows default restores the exact earlier REG_DWORD " + on);
+
+                Set(null);
+                Apply(engine, "absent", Pick(reset));
+                check(Dword() == kept && Siblings(), definition.Name + ": Use Windows default puts Windows' value back after something deleted it");
+                Apply(engine, "absent", []);
+                check(!Present() && Siblings(), definition.Name + ": Undo after that removes only the value it wrote and keeps the policy key and its other values");
+
+                Set(kept);
+                Apply(Engine(legacy), "legacy", Pick(reset));
+                check(!Present() && Siblings(), definition.Name + ": the older catalog's Remove this override deleted Windows' value");
+                Apply(Engine(row), "legacy", []);
+                check(Dword() == kept && Siblings(), definition.Name + ": after an update and restart, Undo of a profile the older app applied puts Windows' REG_DWORD " + kept + " back");
+                Apply(Engine(legacy), "saved", Pick(reset));
+                Apply(Engine(row), "saved", Pick(reset));
+                check(Dword() == kept && Siblings(), definition.Name + ": reviewing the older app's saved choice again after an update writes Windows' value back");
+                Apply(Engine(row), "saved", []);
+                check(Dword() == kept && Siblings() && engine.Detect().State?.Profiles.Length is null or 0, definition.Name + ": Undo of that profile leaves Windows' value and no profile behind");
+
+                Set(on);
+                var fault = Preview(engine, "fault", Pick(reset));
+                var before = State();
+                reject(() => new RegistryTweakStore(recovery).Commit(fault.Plan with { Changes = [.. fault.Plan.Changes, fault.Plan.Changes.Single() with { After = new(name, 4, [1]) }] }, fault.Hash),
+                    definition.Name + ": a Use Windows default write followed by a failing write in the same transaction is rejected");
+                check(Dword() == on && Siblings() && (State() ?? []).SequenceEqual(before ?? []), definition.Name + ": the rolled-back write leaves the earlier value and the recovery record unchanged");
             }
-            hive.DeleteSubKeyTree(Root, false);
-            if (!parentExisted)
-            {
-                using var parent = hive.OpenSubKey(@"Software\RooIndustriesTweakTests");
-                if (parent is { SubKeyCount: 0, ValueCount: 0 }) { parent.Dispose(); hive.DeleteSubKey(@"Software\RooIndustriesTweakTests", false); }
-            }
-            using var remaining = hive.OpenSubKey(Root);
-            check(remaining is null, "Native registry fixture and recovery receipt are removed");
         }
+        finally { Remove(hive, parentExisted, check); }
+    }
+    private static void Remove(RegistryKey hive, bool parentExisted, Action<bool, string> check)
+    {
+        using (var key = hive.OpenSubKey(Root))
+        {
+            if (key is not null && key.Name != @"HKEY_CURRENT_USER\" + Root) throw new InvalidDataException("Unexpected registry fixture identity.");
+        }
+        hive.DeleteSubKeyTree(Root, false);
+        if (!parentExisted)
+        {
+            using var parent = hive.OpenSubKey(@"Software\RooIndustriesTweakTests");
+            if (parent is { SubKeyCount: 0, ValueCount: 0 }) { parent.Dispose(); hive.DeleteSubKey(@"Software\RooIndustriesTweakTests", false); }
+        }
+        using var remaining = hive.OpenSubKey(Root);
+        check(remaining is null, "Native registry fixture and recovery receipt are removed");
     }
 }
