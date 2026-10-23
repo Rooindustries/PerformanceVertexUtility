@@ -54174,10 +54174,13 @@
           ],
           "availability": [
             {
-              "minimumBuild": 10240,
+              "minimumBuild": 14393,
               "maximumBuild": 26200,
               "editions": [
-                "*"
+                "Professional*",
+                "Enterprise*",
+                "Education*",
+                "IoTEnterprise*"
               ]
             }
           ]
