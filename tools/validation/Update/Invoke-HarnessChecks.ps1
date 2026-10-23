@@ -103,6 +103,25 @@ if($JournalOnly){
   $manifest=(Get-HarnessFileSha256 (Join-Path $frame.root 'source\source-verification.json')).ToLowerInvariant()
   Open-HarnessRun $frame.root $frame.root.Substring($frame.root.Length-32) $manifest $nonce
   Invoke-HarnessLedger {param($ledger) $null}|Out-Null
+  [IO.File]::Delete((Get-HarnessLongPath $script:Harness.LedgerPath))
+  $script:Harness=$main;CloseLongFrame $frame|Out-Null
+  Passed 'teardown starts from the committed backup when the primary journal is missing' $true
+  $frame=LongFrame $false
+  $manifest=(Get-HarnessFileSha256 (Join-Path $frame.root 'source\source-verification.json')).ToLowerInvariant()
+  Open-HarnessRun $frame.root $frame.root.Substring($frame.root.Length-32) $manifest $nonce
+  Invoke-HarnessLedger {param($ledger) $null}|Out-Null
+  $committed=Get-HarnessFileSha256 $script:Harness.LedgerPath;$message=$null
+  $held=[IO.FileStream]::new((Get-HarnessLongPath ($script:Harness.LedgerPath+'.previous')),[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::Read)
+  try{Invoke-HarnessLedger {param($ledger) $ledger|Add-Member replaceProbe $true}|Out-Null}catch{$message=$_.Exception.Message}finally{$held.Dispose()}
+  $temps=@(Get-HarnessTree $frame.root|Where-Object {$_.FullName -like ($script:Harness.LedgerPath+'.*.tmp')})
+  if(-not$message -or $temps.Count -or (Get-HarnessFileSha256 (Get-HarnessLedgerGeneration)) -cne $committed){throw ('A failed native journal replacement kept its temporary file or changed the committed generation: '+$message)}
+  Invoke-HarnessLedger {param($ledger) $null}|Out-Null
+  $script:Harness=$main;CloseLongFrame $frame|Out-Null
+  Passed 'a native journal replacement failure removes its temporary file and keeps the committed generation' $message
+  $frame=LongFrame $false
+  $manifest=(Get-HarnessFileSha256 (Join-Path $frame.root 'source\source-verification.json')).ToLowerInvariant()
+  Open-HarnessRun $frame.root $frame.root.Substring($frame.root.Length-32) $manifest $nonce
+  Invoke-HarnessLedger {param($ledger) $null}|Out-Null
   $backup=$script:Harness.LedgerPath+'.previous';$saved=[IO.File]::ReadAllBytes((Get-HarnessLongPath $backup))
   $foreign=[Text.Encoding]::UTF8.GetString($saved)|ConvertFrom-Json;$foreign.machine='foreign-fixture-machine'
   [IO.File]::WriteAllText((Get-HarnessLongPath $backup),($foreign|ConvertTo-Json -Depth 60))

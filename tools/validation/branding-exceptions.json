@@ -479,6 +479,7 @@
         "tools/validation/Release/Test-HistoricalBlackwell.ps1",
         "tools/validation/Release/Test-RecoveryLongPaths.ps1",
         "tools/validation/SetupMigration/Test-SetupMigration.ps1",
+        "tools/validation/Update/Check-UpgradeRehearsalRecovery.ps1",
         "tools/validation/Update/Collect-RestartEvidence.ps1",
         "tools/validation/Update/Harness.Common.ps1",
         "tools/validation/Update/Invoke-ShippedScenario.ps1",

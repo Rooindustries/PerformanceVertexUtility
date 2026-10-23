@@ -42,6 +42,7 @@ function Get-RehearsalCurrentSid{[Security.Principal.WindowsIdentity]::GetCurren
 function Get-RehearsalTasks{
  $service=Get-RehearsalTaskService
  @(Get-ScheduledTask|Where-Object {$_.TaskName -match '^(RooIndustriesOptimizationSuite|RooOptimizationSuite)\.|^Roo Protected Session |^Roo Industries Protected Session |^RooIndustries\.Timer\.'}|ForEach-Object {
+  if($_.TaskPath -cne '\'){throw 'A product task outside the Task Scheduler root folder cannot be preserved; retained.'}
   $task=$service.GetFolder($_.TaskPath).GetTask($_.TaskName)
   if($task.State -notin 1,3){throw 'A product task is running, queued or has an unknown state; retained.'}
   $principal=$task.Definition.Principal

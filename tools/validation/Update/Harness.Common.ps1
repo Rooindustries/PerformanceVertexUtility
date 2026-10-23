@@ -114,6 +114,11 @@ function Read-HarnessLedger([string]$Path){
  if($ledger.frameId -cne $script:Harness.FrameId -or $ledger.manifestSha256 -cne $script:Harness.Manifest -or $ledger.machine -cne $env:COMPUTERNAME){throw 'Harness ledger scope changed; retained.'}
  return $ledger
 }
+function Get-HarnessLedgerGeneration{
+ $path=$script:Harness.LedgerPath
+ if(-not(Test-HarnessPath $path -PathType Leaf)){$path+='.previous'}
+ return $path
+}
 function Invoke-HarnessLedger([scriptblock]$Action,[switch]$NoWrite){
  if(-not$script:Harness){throw 'Harness invocation has no verified frame scope.'}
  $stream=$script:Harness.LedgerLock;$ownsLock=$null -eq $stream
@@ -130,9 +135,7 @@ function Invoke-HarnessLedger([scriptblock]$Action,[switch]$NoWrite){
   catch [IO.IOException]{if($attempt -eq 9){throw};Start-Sleep -Milliseconds 200}
  }
  try{
-  $path=$script:Harness.LedgerPath
-  if(-not(Test-HarnessPath $path -PathType Leaf)){$path+='.previous'}
-  $ledger=Read-HarnessLedger $path
+  $ledger=Read-HarnessLedger (Get-HarnessLedgerGeneration)
   $result=& $Action $ledger
   if(-not$script:Harness.ReadOnly -and -not$NoWrite){
    $bytes=[Text.UTF8Encoding]::new($false).GetBytes(($ledger|ConvertTo-Json -Depth 60))
@@ -140,15 +143,17 @@ function Invoke-HarnessLedger([scriptblock]$Action,[switch]$NoWrite){
    Invoke-HarnessCheckpoint 'journal:before-temp'
    $replacement=[IO.FileStream]::new($temp,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None)
    try{
-    Invoke-HarnessCheckpoint 'journal:temp-created'
-    $half=[int][Math]::Floor($bytes.Length/2);$replacement.Write($bytes,0,$half)
-    Invoke-HarnessCheckpoint 'journal:partial-write'
-    $replacement.Write($bytes,$half,$bytes.Length-$half);$replacement.Flush($true)
-    Invoke-HarnessCheckpoint 'journal:flushed'
-   }finally{$replacement.Dispose()}
-   Invoke-HarnessCheckpoint 'journal:before-replace'
-   if(Test-HarnessPath $script:Harness.LedgerPath -PathType Leaf){[IO.File]::Replace($temp,(Get-HarnessLongPath $script:Harness.LedgerPath),(Get-HarnessLongPath ($script:Harness.LedgerPath+'.previous')))}
-   else{[IO.File]::Move($temp,(Get-HarnessLongPath $script:Harness.LedgerPath))}
+    try{
+     Invoke-HarnessCheckpoint 'journal:temp-created'
+     $half=[int][Math]::Floor($bytes.Length/2);$replacement.Write($bytes,0,$half)
+     Invoke-HarnessCheckpoint 'journal:partial-write'
+     $replacement.Write($bytes,$half,$bytes.Length-$half);$replacement.Flush($true)
+     Invoke-HarnessCheckpoint 'journal:flushed'
+    }finally{$replacement.Dispose()}
+    Invoke-HarnessCheckpoint 'journal:before-replace'
+    if(Test-HarnessPath $script:Harness.LedgerPath -PathType Leaf){[IO.File]::Replace($temp,(Get-HarnessLongPath $script:Harness.LedgerPath),(Get-HarnessLongPath ($script:Harness.LedgerPath+'.previous')))}
+    else{[IO.File]::Move($temp,(Get-HarnessLongPath $script:Harness.LedgerPath))}
+   }catch{if([IO.File]::Exists($temp)){[IO.File]::Delete($temp)};throw}
    Invoke-HarnessCheckpoint 'journal:replaced'
   }
   return $result

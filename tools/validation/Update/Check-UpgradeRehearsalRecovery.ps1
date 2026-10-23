@@ -1,5 +1,5 @@
 param([Parameter(Mandatory)][string]$OutRoot,[string]$ToolRoot=$PSScriptRoot,
- [ValidateSet('All','Journey','JourneyEmpty','Recover','Compare','Untouched','TasksReady','TasksRunning','ForeignAccount','ForeignRoot','Atomic','Verify','Conflict','Reordered','ChangedField','BeforeOutput','Unsupported','Runner','ReplacedRoot','SelectedRoot','PreviousJournal','ForeignJournal','CorruptPrimary')][string]$Case='All',
+ [ValidateSet('All','Journey','JourneyEmpty','Recover','Compare','Untouched','TasksReady','TasksRunning','ForeignAccount','ForeignRoot','Atomic','Verify','Conflict','Reordered','ChangedField','BeforeOutput','Unsupported','Runner','ReplacedRoot','SelectedRoot','PreviousJournal','ReplaceError','ForeignJournal','CorruptPrimary')][string]$Case='All',
  [int]$KillAt=0,[switch]$SkipCrashMatrix,[switch]$MatrixOnly,[int]$MatrixParts=1,[int]$MatrixPart=0,[ValidateSet('Both','Journey','JourneyEmpty')][string]$MatrixVariant='Both')
 $ErrorActionPreference='Stop'
 if($env:OS -eq 'Windows_NT'){throw 'Run the recovery fault-injection scenario on Linux PowerShell.'}
@@ -13,7 +13,7 @@ function Get-HarnessTree([string]$Path){Get-ChildItem -LiteralPath $Path -Recurs
 function Get-HarnessFileSha256([string]$Path){(Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash}
 $tokens=$null;$errors=$null
 $ast=[Management.Automation.Language.Parser]::ParseFile((Join-Path $ToolRoot 'Harness.Common.ps1'),[ref]$tokens,[ref]$errors)
-foreach($name in 'Invoke-HarnessCheckpoint','Read-HarnessLedger','Invoke-HarnessLedger','Add-HarnessEntry','Get-HarnessEntries','Get-HarnessEntryById','Set-HarnessEntryState'){
+foreach($name in 'Invoke-HarnessCheckpoint','Read-HarnessLedger','Get-HarnessLedgerGeneration','Invoke-HarnessLedger','Add-HarnessEntry','Get-HarnessEntries','Get-HarnessEntryById','Set-HarnessEntryState'){
  $definition=$ast.Find({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $name},$true)
  if($definition){$text=$definition.Extent.Text
   if($name -eq 'Invoke-HarnessLedger' -and $text.Contains('$stream.SetLength(0);')){$text=$text.Replace('$stream.SetLength(0);',"`$stream.SetLength(0);Invoke-HarnessCheckpoint 'journal:truncated';")}
@@ -102,7 +102,7 @@ function Child([string]$Mode,[string]$Root,[int]$FailAt=0){
 $script:Harness=@{Root=$OutRoot;Nonce='fixture';LedgerPath=(Join-Path $OutRoot 'ledger.json');FrameId='fixture';Manifest='fixture-hash';ReadOnly=$false}
 if($Case -eq 'All'){
  [IO.Directory]::CreateDirectory($OutRoot)|Out-Null;$results=[Collections.Generic.List[object]]::new()
- foreach($mode in @($(if(-not$MatrixOnly){'Compare','Untouched','TasksReady','TasksRunning','ForeignAccount','ForeignRoot','Atomic','Conflict','Reordered','ChangedField','BeforeOutput','Unsupported','Runner','ReplacedRoot','SelectedRoot','PreviousJournal','ForeignJournal','CorruptPrimary'}))){
+ foreach($mode in @($(if(-not$MatrixOnly){'Compare','Untouched','TasksReady','TasksRunning','ForeignAccount','ForeignRoot','Atomic','Conflict','Reordered','ChangedField','BeforeOutput','Unsupported','Runner','ReplacedRoot','SelectedRoot','PreviousJournal','ReplaceError','ForeignJournal','CorruptPrimary'}))){
   try{Child $mode (Join-Path $OutRoot $mode);$results.Add(@{check=$mode;status='pass'})}catch{$results.Add(@{check=$mode;status='fail';error=$_.Exception.Message})}
  }
  if(-not$SkipCrashMatrix){
@@ -165,6 +165,20 @@ switch($Case){
   Child 'Recover' $OutRoot;Child 'Recover' $OutRoot
   Assert-FixtureRestored
  }
+ 'ReplaceError'{
+  $entry=Save-RehearsalState $paths $roots;Suspend-RehearsalState $entry;Initialize-RehearsalRoots $entry
+  $ledger=Join-Path $OutRoot 'ledger.json';$committed=Get-HarnessFileSha256 $ledger
+  $script:HarnessCheckpoint={param($Name)
+   if($Name -cne 'journal:before-replace'){return}
+   $script:HarnessCheckpoint=$null
+   $path=$script:Harness.LedgerPath;[IO.File]::Delete($path+'.previous');[IO.File]::Move($path,$path+'.previous')
+   throw [IO.IOException]::new('Unable to move the replacement file to the file to be replaced.',-2147023719)
+  }
+  $failed=$false;try{Start-RehearsalApp $entry}catch{$failed=$true}
+  if(-not$failed -or (Test-HarnessPath $ledger) -or [IO.Directory]::GetFiles($OutRoot,'ledger.json.*.tmp').Count -or (Get-HarnessFileSha256 ($ledger+'.previous')) -cne $committed){throw 'A failed journal replacement kept its uncommitted generation or lost the committed one.'}
+  Child 'Recover' $OutRoot;Child 'Recover' $OutRoot
+  Assert-FixtureRestored
+ }
  'ForeignJournal'{
   $entry=Save-RehearsalState $paths $roots;Suspend-RehearsalState $entry
   $saved=[IO.File]::ReadAllText((Join-Path $OutRoot 'ledger.json'))
@@ -207,9 +221,9 @@ switch($Case){
  }
  'Unsupported'{
   foreach($name in @((Read-Fixture 'scheduler.json').tasks.name)){
-   foreach($variant in 'queued','unknown','credentials'){
+   foreach($variant in 'queued','unknown','credentials','subfolder'){
     $scheduler=Read-Fixture 'scheduler.json'
-    foreach($task in $scheduler.tasks){$task.state=3;$task.logonType=3;if($task.name -ceq $name){if($variant -eq 'queued'){$task.state=2}elseif($variant -eq 'unknown'){$task.state=0}else{$task.logonType=1}}}
+    foreach($task in $scheduler.tasks){$task.state=3;$task.logonType=3;$task.folder='\';if($task.name -ceq $name){if($variant -eq 'queued'){$task.state=2}elseif($variant -eq 'unknown'){$task.state=0}elseif($variant -eq 'subfolder'){$task.folder='\PerformanceVertexFixture\'}else{$task.logonType=1}}}
     Write-Fixture 'scheduler.json' $scheduler
     $refused=$false;try{Save-RehearsalState $paths $roots|Out-Null}catch{$refused=$true}
     if(-not$refused -or @((Read-Fixture 'ledger.json').entries).Count){throw ('Unsupported task was accepted: '+$name+' '+$variant)}

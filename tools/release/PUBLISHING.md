@@ -1,6 +1,6 @@
 # Publishing a beta update
 
-Testers' apps read the signed feed in `update-feed.txt`. They only offer a version that is newer than the one installed, by SemVer order. They trust only a feed signed with the private half of a key in `update-keys.json`. Keep that private key on the machine that signs releases and never copy it to Windows.
+Testers' apps read the signed feed in `update-feed.txt`. They only offer a version that is newer than the one installed, by SemVer order. `update-keys.json` holds only public keys. The apps trust a feed only when it is signed by the private key that matches one of them. Keep that private key on the machine that signs releases, outside the repository, and never copy it to Windows.
 
 1. Raise `<Version>` in the app project and build on Windows with `tools\scripts\Build-Release.ps1`. It embeds the committed feed URL and refuses a version that is not newer than every line in `released-versions.txt`.
 2. Copy the installer to the signing machine and sign its manifest. Use a fresh random path segment so the installer URL is never reused:

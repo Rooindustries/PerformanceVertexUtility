@@ -48,7 +48,7 @@ foreach($entry in $entries){
 foreach($entry in $lease){Remove-HarnessEntry $entry}
 $actual=Get-HarnessFolderIdentity $root
 if($actual.creationTimeFileTimeUtc -cne $rootEntry[0].identity.creationTimeFileTimeUtc){throw 'Frame identity changed; retained.'}
-$saved=[IO.File]::ReadAllBytes((Get-HarnessLongPath $script:Harness.LedgerPath))
+$saved=[IO.File]::ReadAllBytes((Get-HarnessLongPath (Get-HarnessLedgerGeneration)))
 $final=[Text.Encoding]::UTF8.GetString($saved)|ConvertFrom-Json
 $remaining=@(Get-HarnessTree $root)
 if(@($remaining|Where-Object {$_.FullName -ine $script:Harness.LedgerPath -and $_.FullName -ine ($script:Harness.LedgerPath+'.previous') -and $_.FullName -ine ($script:Harness.LedgerPath+'.lock')}).Count){throw 'Frame is not empty after cleanup; ledger kept.'}

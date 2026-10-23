@@ -64,8 +64,14 @@ try{
  [IO.File]::WriteAllText((Get-HarnessLongPath (Join-Path $row.saved 'settings.json')),'tampered')
  Refuses 'changed archived original refused before restore' {Restore-RehearsalPaths $entry}
  [IO.File]::WriteAllText((Get-HarnessLongPath (Join-Path $row.saved 'settings.json')),'original settings')
+ function Reset-WriteTimes{foreach($item in $before.items){$long=Get-HarnessLongPath ($row.saved+$item.relative);$time=[DateTime]::new([long]$item.written,[DateTimeKind]::Utc);if($item.directory){[IO.Directory]::SetLastWriteTimeUtc($long,$time)}else{[IO.File]::SetLastWriteTimeUtc($long,$time)}}}
+ $archived=@{metadata=@{paths=@(@{before=$before;saved=$row.saved;movePlanned=$true});outputsReady=$false}}
  [IO.File]::WriteAllText((Get-HarnessLongPath (Join-Path $row.saved 'extra')),'extra')
- Refuses 'extra archived original file refused' {Restore-RehearsalPaths $entry}
+ Reset-WriteTimes
+ Refuses 'extra archived original file refused' {Restore-RehearsalPaths $archived}
+ [IO.File]::Delete((Get-HarnessLongPath (Join-Path $row.saved 'extra')));Reset-WriteTimes
+ Restore-RehearsalPaths $archived;Assert-RehearsalPathState $before $path;Move-RehearsalPath $path $row.saved
+ $rows.Add(@{check='archive restores once the extra file is removed';status='pass'})
  $missing=Join-Path $fixture 'missing'
  Refuses 'missing both original and archive' {Restore-RehearsalPaths @{metadata=@{paths=@(@{before=$before;saved=$missing;movePlanned=$true});outputsReady=$false}}}
  Refuses 'existing archive destination' {Move-RehearsalPath $link $row.saved}
