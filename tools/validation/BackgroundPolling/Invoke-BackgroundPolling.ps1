@@ -110,7 +110,7 @@ try {
     & (Join-Path $Source 'backend\scripts\Build-OptimizerHost.ps1') -DotNetPath $dotnet *> (Join-Path $directory 'build-host.log')
     if ($LASTEXITCODE) { throw 'The optimizer helper build failed; see build-host.log.' }
     $appDirectory = Join-Path $Source 'artifacts\background-polling-app'
-    & $dotnet publish (Join-Path $Source 'docs\internal\frontend\RooIndustries.OptimizationSuite.App\RooIndustries.OptimizationSuite.App.csproj') -c Release -r win-x64 --self-contained false -p:Platform=x64 -p:WindowsAppSDKSelfContained=true -p:WindowsPackageType=None -p:UseSharedCompilation=false -o $appDirectory *> (Join-Path $directory 'build-app.log')
+    & $dotnet publish (Join-Path $Source 'docs\internal\frontend\RooIndustries.OptimizationSuite.App\RooIndustries.OptimizationSuite.App.csproj') -c Release -r win-x64 --self-contained false -p:Platform=x64 -p:WindowsAppSDKSelfContained=true -p:WindowsPackageType=None ("-p:SelfContainedIntermediateOutputPath=" + (Join-Path $directory 'wasdk') + '\') -p:UseSharedCompilation=false -o $appDirectory *> (Join-Path $directory 'build-app.log')
     if ($LASTEXITCODE) { throw 'The app build failed; see build-app.log.' }
     if (Test-Path -LiteralPath (Join-Path $appDirectory 'hostpolicy.dll')) { throw 'The validation app must not run as an installed copy.' }
 
