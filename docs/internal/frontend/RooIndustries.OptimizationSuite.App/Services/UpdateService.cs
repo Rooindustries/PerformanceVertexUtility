@@ -87,8 +87,21 @@ public sealed class UpdateService
         if (_started) return;
         _started = true;
         _dispatcher = dispatcher;
+#if ROO_INDUSTRIES_TEST_HOOKS
+        if (BrandCompatibility.EnvironmentValue("ROO_INDUSTRIES_TEST_UPDATE_READY") is { Length: > 0 } fixture) { Fixture(fixture); return; }
+#endif
         _ = ScheduleAsync();
     }
+
+#if ROO_INDUSTRIES_TEST_HOOKS
+    private bool _fixture;
+    private void Fixture(string version)
+    {
+        _fixture = true;
+        _release = new UpdateRelease(version, DateTimeOffset.UtcNow, new Uri("https://fixture.invalid/setup.exe"), 1, new string('0', 64), "Fixture release notes.");
+        Set(State with { Ready = true, Notes = _release.Notes, Status = "Version " + version + " is ready to install", Banner = "Version " + version + " is ready to install", BannerKind = "ready" });
+    }
+#endif
 
     private async Task ScheduleAsync()
     {
@@ -391,6 +404,14 @@ public sealed class UpdateService
         }
     }
 
+    private static long FreeBytes(DriveInfo drive)
+    {
+#if ROO_INDUSTRIES_TEST_HOOKS
+        if (long.TryParse(BrandCompatibility.EnvironmentValue("ROO_INDUSTRIES_TEST_INSTALL_FREE_BYTES"), out var free)) return free;
+#endif
+        return drive.AvailableFreeSpace;
+    }
+
     public async Task InstallAsync(XamlRoot xamlRoot)
     {
         if (!State.Ready || _release is not { } release || !await _gate.WaitAsync(0)) return;
@@ -399,11 +420,14 @@ public sealed class UpdateService
             Set(State with { Busy = true, Installing = true });
             if (await ActiveSettingsAsync()) { Status(Blocked); return; }
             var installDrive = new DriveInfo(Path.GetPathRoot(AppContext.BaseDirectory)!);
-            if (UpdateFeed.InstallDriveSpaceReason(installDrive.Name, installDrive.AvailableFreeSpace) is { } spaceReason) { Status(spaceReason); return; }
+            if (UpdateFeed.InstallDriveSpaceReason(installDrive.Name, FreeBytes(installDrive)) is { } spaceReason) { Status(spaceReason); return; }
             var dialog = new ContentDialog { XamlRoot = xamlRoot, Title = "Install version " + release.Version + " now?",
                 Content = "The app closes, installs the update and opens again. It takes about a minute. Your settings, saved rules and undo information are kept.",
                 PrimaryButtonText = "Install", CloseButtonText = "Not now", DefaultButton = ContentDialogButton.Close };
             if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
+#if ROO_INDUSTRIES_TEST_HOOKS
+            if (_fixture) { Status("Fixture release: setup isn't started."); return; }
+#endif
             var installer = Installer(release);
             _installerHandle = new FileStream(installer, FileMode.Open, FileAccess.Read, FileShare.Read, 128 * 1024, FileOptions.Asynchronous);
             var verification = await Task.Run(() => UpdateFeed.VerifyInstallerAsync(_installerHandle, release, _stop.Token));
@@ -411,7 +435,7 @@ public sealed class UpdateService
             if (FileVersionInfo.GetVersionInfo(installer).ProductVersion?.TrimEnd(' ') != release.Version)
                 throw new InvalidDataException("The installer's product version does not match the signed release.");
             if (await ActiveSettingsAsync()) { Status(Blocked); return; }
-            if (UpdateFeed.InstallDriveSpaceReason(installDrive.Name, installDrive.AvailableFreeSpace) is { } finalSpaceReason) { Status(finalSpaceReason); return; }
+            if (UpdateFeed.InstallDriveSpaceReason(installDrive.Name, FreeBytes(installDrive)) is { } finalSpaceReason) { Status(finalSpaceReason); return; }
             var root = Storage();
             var log = InstallLog(release.Version);
             OperationFiles.Write(Path.Combine(root, "pending-install.json"), new PendingUpdate(CurrentVersion, release.Version, DateTime.UtcNow, log));
