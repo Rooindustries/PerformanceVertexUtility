@@ -11,13 +11,14 @@ static class PathSpellingChecks
 {
     const string App = "Roo Industries Spelling";
     const string Peer = "Independent spelling tool";
+    const string Refusal = "This leftover is protected, shared or has incomplete ownership evidence: ";
 
     public static void Run(Action<bool, string> check)
     {
         var root = TestFixtures.InheritingRoot("path-spelling");
         var registryRoot = "Software\\RooIndustriesPathSpellingTests-" + Guid.NewGuid().ToString("N");
         using var hive = RegistryKey.OpenBaseKey(RegistryHive.CurrentUser, RegistryView.Registry64);
-        ApplicationCleanupPreview? appeared = null;
+        var reviews = new List<ApplicationCleanupPreview>();
         try
         {
             var apps = Directory.CreateDirectory(Path.Combine(root, "Long Spelling Apps")).FullName;
@@ -108,7 +109,7 @@ static class PathSpellingChecks
                 var appearEngine = new ApplicationCleanup(() => appearContext, [], [new("CurrentUser", "Registry64", appearScope, "key", null)]);
                 var selection = appearEngine.Scan(CancellationToken.None).Candidates.Where(item => item.Kind == "registryKey" || item.Target == install).Select(item => item.ItemId).ToArray();
                 var reviewPath = Path.Combine(root, "review-appear", "review.json");
-                appeared = appearEngine.Preview(reviewPath, selection, true, true);
+                reviews.Add(appearEngine.Preview(reviewPath, selection, true, true));
                 appearContext = appearContext with { Peers = [PeerAt(Path.Combine(installShort, "Shared Plugin"))] };
                 var applied = appearEngine.Apply(reviewPath, OperationFiles.HashFile(reviewPath), Path.Combine(root, "review-appear", "journal.json"));
                 check(selection.Length == 2 && applied.Status == "needsReconciliation" && Snapshot(hive, appearKey) == appearBefore && File.ReadAllText(settings) == "fixture",
@@ -135,11 +136,13 @@ static class PathSpellingChecks
             else Console.WriteLine("SKIP Shared-owner spelling fixtures have no available 8.3 aliases");
             ProtectedRoots(check, root);
             RealRoots(check);
-            ChangingAncestors(check, root);
+            ChangingAncestors(check, root, hive, registryRoot, reviews);
+            RetargetedPeer(check, root, hive, registryRoot, reviews);
         }
         finally
         {
-            if (appeared?.Registry is { } part) hive.DeleteSubKeyTree(OperationFiles.Read<RegistryCleanupPreview>(part.PreviewPath).Receipt.KeyPath, false);
+            foreach (var review in reviews)
+                if (review.Registry is { } part) hive.DeleteSubKeyTree(OperationFiles.Read<RegistryCleanupPreview>(part.PreviewPath).Receipt.KeyPath, false);
             hive.DeleteSubKeyTree(registryRoot, false);
             Directory.Delete(root, true);
         }
@@ -147,16 +150,15 @@ static class PathSpellingChecks
             check(!Directory.Exists(root) && left is null, "Path spelling checks remove their folders, aliases and registry keys");
     }
 
-    static void ChangingAncestors(Action<bool, string> check, string root)
+    static void ChangingAncestors(Action<bool, string> check, string root, RegistryKey hive, string registryRoot, List<ApplicationCleanupPreview> reviews)
     {
         var modes = new[] { "network", "cycle" };
-        static string Claim(string mode) => mode + ": an unsafe ancestor observed after an absent peer keeps ownership incomplete and refuses cleanup preview";
         var probe = Path.Combine(root, "Changing Link Capability");
         try { Directory.CreateSymbolicLink(probe, root); }
         catch (Exception error) when (error is UnauthorizedAccessException ||
             error is IOException && (error.HResult & 0xFFFF) is 1 or 50 or 1314)
         {
-            foreach (var mode in modes) Console.WriteLine("SKIP " + Claim(mode) + " (cannot create symbolic links, error " + (error.HResult & 0xFFFF) + ")");
+            foreach (var mode in modes) Console.WriteLine("SKIP " + mode + ": an unsafe ancestor observed after an absent peer keeps the app's folder, key and value from cleanup at review, Apply and the final check (cannot create symbolic links, error " + (error.HResult & 0xFFFF) + ")");
             return;
         }
         Directory.Delete(probe);
@@ -164,21 +166,34 @@ static class PathSpellingChecks
         {
             var target = Directory.CreateDirectory(Path.Combine(root, "Changing App " + mode)).FullName;
             var data = Path.Combine(target, "settings.txt");
-            File.WriteAllText(data, "fixture");
             var parent = Directory.CreateDirectory(Path.Combine(root, "Changing Parent " + mode)).FullName;
             var peerPath = Path.Combine(parent, "Missing Peer");
-            var linked = false; var absences = 0;
+            var scope = registryRoot + "\\changing-" + mode;
+            var keyPath = scope + "\\Changing App " + mode;
+            var launchers = scope + "\\Launchers";
+            void Seed()
+            {
+                File.WriteAllText(data, "fixture");
+                using (var key = hive.CreateSubKey(keyPath)) key.SetValue("Setting", "fixture");
+                using (var key = hive.CreateSubKey(launchers)) key.SetValue("Changing App", "\"" + Path.Combine(target, "app.exe") + "\"");
+            }
+            Seed();
+            string State() => (File.Exists(data) ? File.ReadAllText(data) : "missing") + "|" + Snapshot(hive, keyPath) + "|" + Snapshot(hive, launchers);
+            var before = State();
+            var link = mode == "network" ? @"\\192.0.2.139\ChangingAncestorFixture" : parent;
+            var linked = false; var absences = 0; var calls = 0; var raceFrom = int.MaxValue;
+            Action<int>? onCall = null;
             var observed = new List<NativeFiles.PathWalk>();
             var expected = mode == "network" ? NativeFiles.PathWalk.OffComputer : NativeFiles.PathWalk.Unknown;
             try
             {
                 CleanupPath.AfterResolveForTest = (path, walk) =>
                 {
-                    if (string.Equals(path, peerPath, StringComparison.OrdinalIgnoreCase) && walk == NativeFiles.PathWalk.Absent)
+                    if (string.Equals(path, peerPath, StringComparison.OrdinalIgnoreCase) && walk == NativeFiles.PathWalk.Absent && calls >= raceFrom)
                     {
                         absences++;
                         Directory.Delete(parent);
-                        Directory.CreateSymbolicLink(parent, mode == "network" ? @"\\192.0.2.139\ChangingAncestorFixture" : parent);
+                        Directory.CreateSymbolicLink(parent, link);
                         linked = true;
                     }
                     else if (string.Equals(path, parent, StringComparison.OrdinalIgnoreCase) && linked)
@@ -189,21 +204,129 @@ static class PathSpellingChecks
                 };
                 var application = new CleanupApplication { AppId = "fixture:changing-" + mode, DisplayName = "Changing App " + mode, Publisher = "Fixture", InstallLocation = target, PackageFamilyName = null };
                 var peer = application with { AppId = "fixture:changing-peer", DisplayName = "Independent changing tool", InstallLocation = peerPath };
-                var scan = new LeftoverDiscovery(application, [peer]).Scan(CancellationToken.None, [], []);
-                var candidate = scan.Candidates.Single(item => item.Target == target);
                 var authority = new CleanupAuthority
                 {
                     AppId = application.AppId, ProviderIdentityHash = new string('E', 64), Owner = OperationOwner.Current(),
                     ProviderQueryComplete = true, RegistrationPresent = false, RebootPending = false, RemoverRunning = false, RemovalResolved = true,
                 };
                 var context = new CleanupContext(Path.Combine(root, "changing-queue.json"), authority, application, [peer], true);
-                var engine = new ApplicationCleanup(() => context, [], []);
-                var refused = false;
-                try { engine.Preview(Path.Combine(root, "review-changing-" + mode, "review.json"), [candidate.ItemId], true, true); }
-                catch (InvalidDataException) { refused = true; }
-                var intact = File.ReadAllText(data) == "fixture";
-                Console.WriteLine("MEASURE changingAncestor " + JsonSerializer.Serialize(new { Scenario = mode, Absences = absences, AncestorResults = observed.Select(value => value.ToString()).ToArray(), candidate.OwnershipComplete, PreviewRefused = refused, Intact = intact }));
-                check(absences > 0 && observed.Count == absences && observed.All(value => value == expected) && !candidate.OwnershipComplete && refused && intact, Claim(mode));
+                var engine = new ApplicationCleanup(() => { calls++; onCall?.Invoke(calls); return context; }, [], [new("CurrentUser", "Registry64", scope, "key", null)]);
+
+                (T Result, int Races) Race<T>(int from, Func<T> action, Action<int>? at = null)
+                {
+                    calls = 0; raceFrom = from; onCall = at; absences = 0; observed.Clear();
+                    try { var result = action(); return (result, observed.Count == absences && observed.All(value => value == expected) ? absences : -1); }
+                    finally { raceFrom = int.MaxValue; onCall = null; }
+                }
+                T Unsafe<T>(Func<T> action)
+                {
+                    Directory.Delete(parent); Directory.CreateSymbolicLink(parent, link);
+                    try { return action(); }
+                    finally { Directory.Delete(parent); Directory.CreateDirectory(parent); }
+                }
+                (string Review, string Hash, ApplicationCleanupPreview Plan) Review(string name, params LeftoverCandidate[] items)
+                {
+                    var review = Path.Combine(root, "changing-" + mode + "-" + name, "review.json");
+                    Seed();
+                    var plan = engine.Preview(review, items.Select(item => item.ItemId).ToArray(), true, true);
+                    reviews.Add(plan);
+                    return (review, OperationFiles.HashFile(review), plan);
+                }
+                ApplicationCleanupJournal Apply((string Review, string Hash, ApplicationCleanupPreview Plan) review) =>
+                    engine.Apply(review.Review, review.Hash, Path.Combine(Path.GetDirectoryName(review.Review)!, "journal.json"));
+                string? Refused(LeftoverCandidate item)
+                {
+                    try { engine.Preview(Path.Combine(root, "changing-" + mode + "-refused", "review.json"), [item.ItemId], true, true); return null; }
+                    catch (InvalidDataException error) { return error.Message; }
+                }
+                bool ReceiptAbsent(ApplicationCleanupPreview plan)
+                {
+                    using var receipt = hive.OpenSubKey(OperationFiles.Read<RegistryCleanupPreview>(plan.Registry!.PreviewPath).Receipt.KeyPath);
+                    return receipt is null;
+                }
+                void Measure(string scenario, object result) => Console.WriteLine("MEASURE changingAncestor " + JsonSerializer.Serialize(new { Mode = mode, Scenario = scenario, Result = result }));
+
+                var clean = engine.Scan(CancellationToken.None).Candidates;
+                var folder = clean.Single(item => item.Target == target);
+                var key = clean.Single(item => item.Kind == "registryKey");
+                var value = clean.Single(item => item.Kind == "registryValue");
+                check(clean.Length == 3 && clean.All(item => item.OwnershipComplete && item.SharedOwners.Count == 0),
+                    mode + ": with the peer's parent unchanged, the app's folder, key and launcher value are offered as its own");
+
+                var scanned = Race(1, () => engine.Scan(CancellationToken.None).Candidates);
+                var named = "Ownership could not be checked for installed app: " + peer.DisplayName;
+                var refusals = new[] { folder, key, value }.Select(item => Race(1, () => Refused(item))).ToArray();
+                Measure("review", new { scanned.Races, Incomplete = scanned.Result.Select(item => item.Kind + "=" + !item.OwnershipComplete).ToArray(), Refusals = refusals.Select(item => item.Result).ToArray() });
+                check(scanned.Races > 0 && scanned.Result.Length == 3 && scanned.Result.All(item => !item.OwnershipComplete && item.Evidence.Contains(named)),
+                    mode + ": an unsafe ancestor observed after an absent peer leaves the app's folder, key and value with incomplete ownership that names the peer");
+                check(refusals.All(item => item.Races > 0) && refusals.Select(item => item.Result).SequenceEqual(new[] { folder, key, value }.Select(item => Refusal + item.Target)),
+                    mode + ": that race refuses the folder, key and value previews for incomplete ownership");
+
+                var registry = Review("registry", key, value);
+                var files = Review("files", folder);
+                var registryApply = Race(1, () => Apply(registry));
+                var fileApply = Race(1, () => Apply(files));
+                Measure("apply", new { Registry = new { registryApply.Races, registryApply.Result.Status, registryApply.Result.Errors }, Files = new { fileApply.Races, fileApply.Result.Status, fileApply.Result.Errors } });
+                check(registryApply.Races > 0 && registryApply.Result.Status == "needsReconciliation" && registryApply.Result.Errors.SequenceEqual([Refusal + key.Target]) &&
+                    !File.Exists(registry.Plan.Registry!.JournalPath) && State() == before,
+                    mode + ": the race after review stops the registry cleanup at Apply before any backup or deletion");
+                check(fileApply.Races > 0 && fileApply.Result.Status == "needsReconciliation" && fileApply.Result.Errors.SequenceEqual([Refusal + folder.Target]) &&
+                    !File.Exists(files.Plan.Files!.JournalPath) && State() == before,
+                    mode + ": the race after review stops the file cleanup at Apply before any backup or deletion");
+
+                var finalRegistry = Review("final-registry", key, value);
+                var finalFiles = Review("final-files", folder);
+                var registryFinal = Race(3, () => Apply(finalRegistry));
+                var registryJournal = OperationFiles.Read<RegistryCleanupJournal>(finalRegistry.Plan.Registry!.JournalPath);
+                var fileFinal = Race(3, () => Apply(finalFiles));
+                var fileJournal = OperationFiles.Read<FileCleanupJournal>(finalFiles.Plan.Files!.JournalPath);
+                Measure("finalCheck", new { Registry = new { registryFinal.Races, registryFinal.Result.Status, Part = registryJournal.Status, registryJournal.Error, Backup = File.Exists(registryJournal.BackupPath) },
+                    Files = new { fileFinal.Races, fileFinal.Result.Status, Part = fileJournal.Status, Entries = fileJournal.Entries.Select(entry => entry.Status + ":" + entry.Error).ToArray() } });
+                check(registryFinal.Races == 1 && registryFinal.Result.Status == "needsReconciliation" && registryJournal.Status == "needsReconciliation" &&
+                    registryJournal.Error == Refusal + key.Target && File.Exists(registryJournal.BackupPath) && ReceiptAbsent(finalRegistry.Plan) && State() == before,
+                    mode + ": the race at the final check after the registry backup keeps the key and value and commits nothing");
+                check(fileFinal.Races == 1 && fileFinal.Result.Status == "needsReconciliation" && fileJournal.Status == "needsReconciliation" &&
+                    fileJournal.Entries.All(entry => entry.Status == "pending") && fileJournal.Entries.Any(entry => entry.Error == Refusal + folder.Target) && State() == before,
+                    mode + ": the race at the final check after the file backup keeps the folder");
+
+                var restoreReview = Review("restore", key, value, folder);
+                var restoreJournal = Path.Combine(Path.GetDirectoryName(restoreReview.Review)!, "journal.json");
+                var applied = Apply(restoreReview);
+                var removed = State();
+                var restore = Unsafe(() => (Journal: engine.Restore(restoreJournal), Candidates: engine.Scan(CancellationToken.None).Candidates));
+                Measure("restore", new { Applied = applied.Status, applied.Errors, Restored = restore.Journal.Status, RestoreErrors = restore.Journal.Errors, Incomplete = restore.Candidates.Count(item => !item.OwnershipComplete) });
+                check(applied.Status == "applied" && removed == "missing|missing|",
+                    mode + ": with the peer's parent unchanged, one cleanup of the key, value and folder still applies");
+                check(restore.Journal.Status == "restored" && State() == before && restore.Candidates.Length == 3 && restore.Candidates.All(item => !item.OwnershipComplete),
+                    mode + ": Restore brings back the key, value and folder while the peer's folder can't be checked");
+
+                var crashReview = Review("crash", key, value);
+                var crashJournal = Path.Combine(Path.GetDirectoryName(crashReview.Review)!, "journal.json");
+                byte[]? appSaved = null, partSaved = null;
+                Race(int.MaxValue, () => Apply(crashReview), call =>
+                {
+                    if (call != 3) return;
+                    appSaved = File.ReadAllBytes(crashJournal); partSaved = File.ReadAllBytes(crashReview.Plan.Registry!.JournalPath);
+                    throw new IOException("Simulated crash before the registry commit.");
+                });
+                File.WriteAllBytes(crashJournal, appSaved!); File.WriteAllBytes(crashReview.Plan.Registry!.JournalPath, partSaved!);
+                var crash = Unsafe(() => (Again: Apply(crashReview), Restored: engine.Restore(crashJournal)));
+                Measure("crashBeforeCommit", new { Again = crash.Again.Status, crash.Again.Errors, Restored = crash.Restored.Status, crash.Restored.RegistryStatus });
+                check(crash.Again.Status == "needsReconciliation" && crash.Again.Errors.SequenceEqual([Refusal + key.Target]) && ReceiptAbsent(crashReview.Plan) &&
+                    crash.Restored.Status == "restored" && crash.Restored.RegistryStatus == "notCommitted" && State() == before,
+                    mode + ": after a crash before the registry commit, Apply again refuses while the peer's folder can't be checked and Restore finds nothing removed");
+
+                var committedReview = Review("committed", key, value);
+                var committedJournal = Path.Combine(Path.GetDirectoryName(committedReview.Review)!, "journal.json");
+                byte[]? beforeCommit = null;
+                var first = Race(int.MaxValue, () => Apply(committedReview), call => { if (call == 3) beforeCommit = File.ReadAllBytes(committedJournal); });
+                var gone = State();
+                File.WriteAllBytes(committedJournal, beforeCommit!);
+                var committed = Unsafe(() => (Again: Apply(committedReview), After: State(), Restored: engine.Restore(committedJournal)));
+                Measure("crashAfterCommit", new { First = first.Result.Status, Again = committed.Again.Status, AgainErrors = committed.Again.Errors, Restored = committed.Restored.Status, RestoreErrors = committed.Restored.Errors });
+                check(first.Result.Status == "applied" && gone == "fixture|missing|" && committed.Again.Status == "applied" && committed.Again.Errors.Count == 0 && committed.After == gone,
+                    mode + ": after a crash right after the registry commit, Apply again finishes without removing anything new while the peer's folder can't be checked");
+                check(committed.Restored.Status == "restored" && State() == before, mode + ": Restore then brings the key and value back");
             }
             finally
             {
@@ -211,6 +334,43 @@ static class PathSpellingChecks
                 if (linked) { Directory.Delete(parent); Directory.CreateDirectory(parent); }
             }
         }
+    }
+
+    static void RetargetedPeer(Action<bool, string> check, string root, RegistryKey hive, string registryRoot, List<ApplicationCleanupPreview> reviews)
+    {
+        var target = Directory.CreateDirectory(Path.Combine(root, "Retarget App")).FullName;
+        var elsewhere = Directory.CreateDirectory(Path.Combine(root, "Retarget Elsewhere")).FullName;
+        var shared = Directory.CreateDirectory(Path.Combine(root, "Retarget Shared")).FullName;
+        var link = Path.Combine(root, "Retarget Peer");
+        var scope = registryRoot + "\\retarget";
+        var keyPath = scope + "\\Retarget App";
+        using (var created = hive.CreateSubKey(keyPath)) created.SetValue("Plugin", "\"" + Path.Combine(shared, "plugin.dll") + "\"");
+        var before = Snapshot(hive, keyPath);
+        AliasOwnershipChecks.Junction(link, elsewhere);
+        try
+        {
+            var application = new CleanupApplication { AppId = "fixture:retarget-registry", DisplayName = "Retarget App", Publisher = "Fixture", InstallLocation = target, PackageFamilyName = null };
+            var peer = application with { AppId = "fixture:retarget-registry-peer", DisplayName = "Independent retarget tool", InstallLocation = link };
+            var authority = new CleanupAuthority
+            {
+                AppId = application.AppId, ProviderIdentityHash = new string('F', 64), Owner = OperationOwner.Current(),
+                ProviderQueryComplete = true, RegistrationPresent = false, RebootPending = false, RemoverRunning = false, RemovalResolved = true,
+            };
+            var context = new CleanupContext(Path.Combine(root, "retarget-queue.json"), authority, application, [peer], true);
+            var engine = new ApplicationCleanup(() => context, [], [new("CurrentUser", "Registry64", scope, "key", null)]);
+            var key = engine.Scan(CancellationToken.None).Candidates.Single(item => item.Kind == "registryKey");
+            var reviewPath = Path.Combine(root, "retarget-registry", "review.json");
+            var review = engine.Preview(reviewPath, [key.ItemId], true, true);
+            reviews.Add(review);
+            Directory.Delete(link); AliasOwnershipChecks.Junction(link, shared);
+            var result = engine.Apply(reviewPath, OperationFiles.HashFile(reviewPath), Path.Combine(root, "retarget-registry", "journal.json"));
+            var rescanned = engine.Scan(CancellationToken.None).Candidates.Single(item => item.Kind == "registryKey");
+            Console.WriteLine("MEASURE retargetedPeer " + JsonSerializer.Serialize(new { Reviewed = key.SharedOwners, Rescanned = rescanned.SharedOwners, result.Status, result.Errors }));
+            check(key.SharedOwners.Count == 0 && rescanned.SharedOwners.Contains(peer.DisplayName) && result.Status == "needsReconciliation" && result.Errors.SequenceEqual([Refusal + key.Target]) &&
+                !File.Exists(review.Registry!.JournalPath) && Snapshot(hive, keyPath) == before,
+                "A peer junction retargeted after review to a folder the key's values name stops the registry cleanup before any backup or deletion");
+        }
+        finally { if (Directory.Exists(link)) Directory.Delete(link); }
     }
 
     static void ProtectedRoots(Action<bool, string> check, string root)
