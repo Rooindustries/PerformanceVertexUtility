@@ -80,13 +80,13 @@ try{
  $app=Start-OwnedProcess -FilePath $exe[0].FullName -WindowStyle Normal -Purpose 'suite-test-build' -Lifetime invocation
  $window=WaitFor {$w=$A::RootElement.FindFirst($TS::Children,[Windows.Automation.PropertyCondition]::new($A::ProcessIdProperty,[int]$app.Identity.pid));if($w -and (ById $w 'WindowsTweaksSearch')){$w}} 180 'the Windows tweaks page'
  $hwnd=[IntPtr]::new([long]$window.Current.NativeWindowHandle)
- $search=ById $window 'WindowsTweaksSearch'
+ $searchBox=ById $window 'WindowsTweaksSearch'
  WaitFor {ById $window 'WindowsTweaksList'} 120 'the Windows tweaks list'|Out-Null
  $advanced=WaitFor {$window.FindFirst($TS::Descendants,[Windows.Automation.AndCondition]::new([Windows.Automation.PropertyCondition]::new($A::NameProperty,'Show advanced options'),[Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty,[Windows.Automation.ControlType]::CheckBox)))} 60 'the advanced options box'
  $toggle=$advanced.GetCurrentPattern([Windows.Automation.TogglePattern]::Pattern)
  $evidence.advancedBefore=[string]$toggle.Current.ToggleState
  if($toggle.Current.ToggleState -ne [Windows.Automation.ToggleState]::On){$toggle.Toggle()}
- $value=$search.GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern)
+ $value=$searchBox.GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern)
  $value.SetValue($Search)
  $evidence.loaded=WaitFor {$state=RowState $window;if($state -and $state.current -ceq $expectedCurrent -and $state.retry -eq $expectedRetry){$state}} 240 'the row to finish loading'
  $value.SetValue('')
