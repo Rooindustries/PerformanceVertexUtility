@@ -139,6 +139,14 @@ public partial class WindowsTweakRow : ObservableObject
     private bool PerDevice => Definition.Options.Any(option => option.Changes.Any(change => change.Selector is not null) || (option.Controls ?? []).Any(control => control.Address.Kind is "device-power" or "network-adapter"));
     private static bool DevicesDiffer(TweakSettingStatus status) => status.Observations is [var first, _, ..] observed && observed.Any(read => !TweakRead.SameValue(read.Value, first.Value))
         || status.Controls is [{ Value.ValueKind: System.Text.Json.JsonValueKind.Object } control] && control.Value.EnumerateObject().Select(device => device.Value.GetRawText()).Distinct(StringComparer.Ordinal).Count() > 1;
+    private static string? AdapterFields(TweakControlRead control)
+    {
+        var devices = control.Value.EnumerateObject().Select(device => device.Value).ToArray();
+        if (devices.Length == 0 || devices.Any(device => device.ValueKind != System.Text.Json.JsonValueKind.Object || device.GetRawText() != devices[0].GetRawText())
+            || devices[0].EnumerateObject().Any(field => field.Value.ValueKind is not (System.Text.Json.JsonValueKind.True or System.Text.Json.JsonValueKind.False))) return null;
+        var on = devices[0].EnumerateObject().Where(field => field.Value.ValueKind == System.Text.Json.JsonValueKind.True).Select(field => field.Name switch { "ipv4v1" => "IPv4 version 1", "ipv4" => "IPv4", "ipv6" => "IPv6", _ => field.Name }).ToArray();
+        return on.Length == 0 ? null : "On for " + (on.Length == 1 ? on[0] : string.Join(", ", on[..^1]) + " and " + on[^1]);
+    }
     private static string? ServiceState(TweakControlRead control) => (control.Address.Property, control.Value.ValueKind) switch
     {
         ("startup", System.Text.Json.JsonValueKind.Number) => control.Value.GetInt32() switch { 0 => "Boot", 1 => "System", 2 => "Automatic", 3 => "Manual", 4 => "Disabled", _ => null },
@@ -244,6 +252,7 @@ public partial class WindowsTweakRow : ObservableObject
             && fields.All(field => policy.Value.TryGetProperty(field, out var value) && (value.ValueKind == System.Text.Json.JsonValueKind.String && value.GetString() == "NOTSET" || value.ValueKind == System.Text.Json.JsonValueKind.False)) && NoRawPolicy(policy.Value)) Current = "Windows default";
         if (Current == "Custom value" && status is { Error: null } && Presentation.Defaults is { } defaults && WindowsDefault(status, defaults)) Current = "Windows default";
         if (Current == "Custom value" && status is { Error: null } && PerDevice && DevicesDiffer(status)) Current = "Varies by device";
+        if (Current == "Custom value" && status is { Error: null, Controls: [{ Address.Kind: "network-adapter", Value.ValueKind: System.Text.Json.JsonValueKind.Object } adapter] } && AdapterFields(adapter) is { } protocols) Current = protocols;
         if (Current == "Custom value" && status is { Error: null, Controls: null or [] } && status.Observations is [var first, ..] found
             && found.All(read => read.Value is not null && TweakRead.SameValue(read.Value, first.Value)) && RegistryText(first.Value!) is { } value) Current = "Custom value: " + value;
         if (_onlyDefaultHere) Detail = "This Windows edition or version doesn't use this setting. You can keep a saved choice for a matching installation.";

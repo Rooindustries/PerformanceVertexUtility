@@ -2,11 +2,6 @@
   "schemaVersion": 1,
   "rows": [
     {
-      "settingId": "windows.7f3f80851197aecc",
-      "state": "device-defaults",
-      "cause": "The adapter keeps large send offload version 1 off and IPv4 and IPv6 on by default; the choices set all three alike."
-    },
-    {
       "settingId": "windows.b048256362718da0",
       "state": "windows-default",
       "cause": "Windows keeps KeyboardDelay as text, default 1; the choices write numbers (a write-type fix, outside read-only work)."

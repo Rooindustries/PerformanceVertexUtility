@@ -266,7 +266,9 @@ presets, before/after review, apply, restore and interruption recovery. Every
 setting remains visible and selectable. Each row separates the current reading
 from the proposed change. A value Windows itself sets, such as automatic DNS or
 the built-in encrypted DNS entries, reads as Windows default. A per-device setting
-whose devices hold different values reads as Varies by device. Choose a value, then turn on the row's switch to select
+whose devices hold different values reads as Varies by device, and an adapter
+setting that is on for only some protocols names them, such as On for IPv4 and IPv6.
+Choose a value, then turn on the row's switch to select
 that action for review. Turning it off keeps the current setting; it does not undo
 an applied change. Use Windows default explicitly removes the local override,
 and another policy may still control the setting. Choices for missing components
