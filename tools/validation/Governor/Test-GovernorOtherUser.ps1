@@ -1,4 +1,4 @@
-param([Parameter(Mandatory=$true)][ValidateSet('setup','after-upgrade','restart','after-uninstall','cleanup')][string]$Phase)
+param([Parameter(Mandatory=$true)][ValidateSet('setup','after-upgrade','restart','after-uninstall','cleanup')][string]$Phase,[ValidateSet('','account-created')][string]$InterruptAfter='')
 $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
 $app='C:\Program Files\Roo Industries\Optimization Suite'
@@ -44,11 +44,14 @@ switch($Phase){
         Set-Content -LiteralPath $ownerPath -Value 'pending' -Encoding ASCII
         Add-Type -TypeDefinition 'public static class RooIndustriesGovernorProbe { public static void Main(string[] args) { System.Threading.Thread.Sleep(System.TimeSpan.FromSeconds(args.Length > 0 ? int.Parse(args[0]) : 600)); } }' -OutputAssembly $probeExe -OutputType ConsoleApplication
         $password='Rg'+[Guid]::NewGuid().ToString('N').Substring(0,20)+'!7'
+        Set-Content -LiteralPath $ownerPath -Value 'creating' -Encoding ASCII
         & net.exe user $account $password /add /y|Out-Null
         if($LASTEXITCODE -ne 0){throw 'The test account could not be created.'}
-        & net.exe localgroup Administrators $account /add|Out-Null
+        if($InterruptAfter -eq 'account-created'){throw 'Setup interrupted after creating the test account.'}
         $sid=[Security.Principal.NTAccount]::new($env:COMPUTERNAME+'\'+$account).Translate([Security.Principal.SecurityIdentifier]).Value
         Set-Content -LiteralPath $ownerPath -Value $sid -Encoding ASCII
+        & net.exe localgroup Administrators $account /add|Out-Null
+        if($LASTEXITCODE -ne 0){throw 'The test account could not be made an administrator.'}
         $setupScript=Join-Path $work 'other-setup.ps1'
         [IO.File]::WriteAllText($setupScript,@'
 $ErrorActionPreference='Stop'
@@ -105,7 +108,10 @@ $sync=(@(& (Join-Path $app 'backend\scripts\Invoke-ProcessPolicyWorker.ps1') -Ac
         $ErrorActionPreference='Continue'
         if(-not(Test-Path -LiteralPath $ownerPath)){Check $false 'Cleanup removes only what setup recorded, and found no setup record';break}
         $sid=(Get-Content -Raw -LiteralPath $ownerPath).Trim()
-        if($sid -notlike 'S-1-5-21-*'){Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue;Check (-not(Test-Path -LiteralPath $work)) 'Setup stopped before creating the account, so cleanup removed only the test folder';break}
+        if($sid -notlike 'S-1-5-21-*'){
+            if(Get-LocalUser -Name $account -ErrorAction SilentlyContinue){$out.left=[ordered]@{account=$true;work=$true};Check $false 'Setup stopped before recording the test account it created, so cleanup kept the account and the setup record';break}
+            Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue;Check (-not(Test-Path -LiteralPath $work)) 'Setup stopped before creating the account, so cleanup removed only the test folder';break
+        }
         $current=try{[Security.Principal.NTAccount]::new($env:COMPUTERNAME+'\'+$account).Translate([Security.Principal.SecurityIdentifier]).Value}catch{$null}
         if($current -and $current -cne $sid){Check $false 'The test account was replaced after setup, so cleanup kept it';break}
         foreach($name in $tasks){try{if(Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue){Stop-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue;Unregister-ScheduledTask -TaskName $name -Confirm:$false}}catch{}}
@@ -118,7 +124,7 @@ $sync=(@(& (Join-Path $app 'backend\scripts\Invoke-ProcessPolicyWorker.ps1') -Ac
             for($attempt=0;$attempt -lt 24 -and @(Get-CimInstance Win32_UserProfile -Filter ("SID='"+$sid+"'")).Count -gt 0;$attempt++){try{Get-CimInstance Win32_UserProfile -Filter ("SID='"+$sid+"'")|Remove-CimInstance -ErrorAction Stop}catch{Start-Sleep -Seconds 3}}
         }
         & net.exe user $account /delete 2>&1|Out-Null
-        Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
+        if(-not(Get-LocalUser -Name $account -ErrorAction SilentlyContinue)){Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue}
         $out.left=[ordered]@{account=[bool](Get-LocalUser -Name $account -ErrorAction SilentlyContinue);work=(Test-Path -LiteralPath $work);profile=if($sid){@(Get-CimInstance Win32_UserProfile -Filter ("SID='"+$sid+"'")).Count}else{0};profileFolder=(Test-Path -LiteralPath ('C:\Users\'+$account))}
         Check (-not $out.left.account -and -not $out.left.work -and $out.left.profile -eq 0) 'The second administrator account, its profile and the test folder are removed'
     }
