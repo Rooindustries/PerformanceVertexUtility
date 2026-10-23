@@ -1,4 +1,4 @@
-param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutRoot,[string]$BackendSource='',[int]$Probes=60,[string[]]$Cases=@('startup-race','boundaries','timeout','killed','closed','rebooted','other-program','stale-journal','race','full'))
+param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutRoot,[string]$BackendSource='',[int]$Probes=60,[string[]]$Cases=@('startup-race','journal-path','boundaries','timeout','killed','closed','rebooted','other-program','stale-journal','race','full'))
 $ErrorActionPreference='Stop'
 . (Join-Path $Source 'tools\validation\LoadTimes\CleanupOwnership.Common.ps1')
 Add-Type -Path (Join-Path $Source 'tools\validation\Background\Oracle.cs')
@@ -103,6 +103,29 @@ try {
    [IO.File]::WriteAllText($applyPath,$applyText,$utf8)
    $null=Offered $settings 'startup-final-relaunch';$results['startup-race']=RestoreAll $fixtures $before $settings 'startup-restore'
   }finally{foreach($app in $apps){Stop-OwnedProcess $app};foreach($script in $scripts){Stop-OwnedProcess $script};[IO.File]::WriteAllText($applyPath,$applyText,$utf8);StopFixtures $fixtures}
+ }
+ if($Cases -contains 'journal-path'){
+  $fixtures=Fixtures 'journal-path' 1;Profile $fixtures;$before=Before $fixtures;$settings=Settings 'journal-path'
+  $applyPath=Join-Path $root 'backend\scripts\Apply-ProcessProfile.ps1';$applyText=[IO.File]::ReadAllText($applyPath);$app=$null;$script=$null
+  try {
+   $marker=Join-Path $settings 'started.txt';$release=$marker+'.release'
+   $pause="[IO.File]::WriteAllText('$($marker.Replace("'","''"))','started'); while(-not [IO.File]::Exists('$($release.Replace("'","''"))')){Start-Sleep -Milliseconds 20}"
+   [IO.File]::WriteAllText($applyPath,$applyText.Replace(". (Join-Path `$PSScriptRoot 'ProcessProfile.Common.ps1')",". (Join-Path `$PSScriptRoot 'ProcessProfile.Common.ps1')`r`n"+$pause),$utf8)
+   $app=StartApply $settings 'journal-path-apply';$script=ScriptOf $app;$deadline=[DateTime]::UtcNow.AddSeconds(90)
+   while(-not(Test-Path -LiteralPath $marker)){if($script.process.HasExited -or [DateTime]::UtcNow -gt $deadline){throw 'The apply never reached startup'};Start-Sleep -Milliseconds 20}
+   $journal=Join-Path $settings 'process-profile-apply.json'
+   if(-not(Test-Path -LiteralPath $journal)){throw 'The app did not save a journal before dispatch'}
+   $saved=Get-Content -Raw -LiteralPath $journal|ConvertFrom-Json;$outside=Join-Path $directory 'redirected-backup.json';$saved.path=$outside
+   [IO.File]::WriteAllText($journal,($saved|ConvertTo-Json -Depth 10),$utf8);$hash=(Get-FileHash -LiteralPath $journal).Hash;Save 'journal-path-header' $saved
+   [IO.File]::WriteAllText($release,'continue',$utf8)
+   if(-not$app.process.WaitForExit(120000)){throw 'The redirected apply did not finish'}
+   $changed=(Changed $fixtures).Count;$outsideExists=Test-Path -LiteralPath $outside;Save 'journal-path-resumed' @{changed=$changed;outsideBackupExists=$outsideExists}
+   if($changed -or $outsideExists){throw 'The apply trusted a redirected backup path and changed a process'}
+   $inspect=Service 'inspect' $settings 'journal-path-relaunch';$state=State $settings
+   if($inspect.pending -or $inspect.recovery -or $state.journal -or $state.archived.Count -ne 1 -or (Get-FileHash (Join-Path $settings $state.archived[0])).Hash -cne $hash){throw 'The redirected journal was not kept intact'}
+   if(-not(Same (Read $fixtures[0]) $before[$fixtures[0].Id])){throw 'Refusing the redirected journal changed an original value'}
+   $results['journal-path']='passed'
+  }finally{if($app){Stop-OwnedProcess $app};if($script){Stop-OwnedProcess $script};[IO.File]::WriteAllText($applyPath,$applyText,$utf8);StopFixtures $fixtures}
  }
  if($Cases -contains 'boundaries'){
   $applyPath=Join-Path $root 'backend\scripts\Apply-ProcessProfile.ps1';$commonPath=Join-Path $root 'backend\scripts\ProcessProfile.Common.ps1';$statePath=Join-Path $root 'backend\scripts\OperationState.Common.ps1'

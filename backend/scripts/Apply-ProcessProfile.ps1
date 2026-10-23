@@ -129,11 +129,13 @@ try {
         $journalLock = Lock-RooIndustriesOperation $RecoveryJournal
         if (-not [IO.File]::Exists($RecoveryJournal)) { throw 'The app already closed this apply. Nothing was changed.' }
         $journal = (Read-RooIndustriesOperationJson $RecoveryJournal).data
-        if ([string]::IsNullOrWhiteSpace($RecoveryGeneration) -or [string](Get-RooIndustriesPropertyValue $journal 'generation' '') -cne $RecoveryGeneration) {
+        $generationId = [Guid]::Empty
+        if (-not [Guid]::TryParseExact($RecoveryGeneration, 'N', [ref]$generationId) -or [string](Get-RooIndustriesPropertyValue $journal 'generation' '') -cne $RecoveryGeneration) {
             throw 'This process apply is no longer current. Nothing was changed.'
         }
         $journalBackupPath = [string](Get-RooIndustriesPropertyValue $journal 'path' '')
-        if ([string]::IsNullOrWhiteSpace($journalBackupPath) -or -not [IO.Path]::IsPathRooted($journalBackupPath) -or [IO.File]::Exists($journalBackupPath)) {
+        $expectedBackupPath = Join-Path ([IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($RecoveryJournal))) (Join-Path 'process-profile-backups' (Join-Path $RecoveryGeneration 'backup.json'))
+        if ([string]::IsNullOrWhiteSpace($journalBackupPath) -or -not [IO.Path]::IsPathRooted($journalBackupPath) -or -not [string]::Equals([IO.Path]::GetFullPath($journalBackupPath), $expectedBackupPath, [StringComparison]::OrdinalIgnoreCase) -or [IO.File]::Exists($journalBackupPath)) {
             throw 'The apply journal does not name a new backup. Nothing was changed.'
         }
     }
