@@ -107,13 +107,13 @@ function Invoke-CimMethod {
  param([string]$Namespace,[string]$ClassName,[string]$MethodName,[hashtable]$Arguments)
  $fixture=[IO.File]::ReadAllText($env:ROO_INDUSTRIES_FIXTURE_DEFENDER)|ConvertFrom-Json
  $fixture.calls=[string]$fixture.calls+$Namespace+' '+$ClassName+'.'+$MethodName+' '+(@($Arguments.Keys|Sort-Object|ForEach-Object {$_+'='+$Arguments[$_]+':'+$Arguments[$_].GetType().Name}) -join ',')+';'
- if([int]$fixture.result -eq 0){$fixture.consent=[int]$Arguments['SubmitSamplesConsent']}
+ if([int]$fixture.result -le 0 -and -not $fixture.stuck){$fixture.consent=[int]$Arguments['SubmitSamplesConsent']}
  [IO.File]::WriteAllText($env:ROO_INDUSTRIES_FIXTURE_DEFENDER,($fixture|ConvertTo-Json -Compress))
- [pscustomobject]@{ReturnValue=[uint32]$fixture.result}
+ if([int]$fixture.result -lt 0){[pscustomobject]@{PSComputerName=$null}}else{[pscustomobject]@{ReturnValue=[uint32]$fixture.result}}
 }
 '@
  $env:ROO_INDUSTRIES_FIXTURE_DEFENDER=$state
- function Defender($provider,$service,[int]$consent=1,[int]$result=0){[IO.File]::WriteAllText($state,([ordered]@{consent=$consent;provider=$provider;service=$service;result=$result;calls=''}|ConvertTo-Json -Compress))}
+ function Defender($provider,$service,[int]$consent=1,[int]$result=-1,[bool]$stuck=$false){[IO.File]::WriteAllText($state,([ordered]@{consent=$consent;provider=$provider;service=$service;result=$result;stuck=$stuck;calls=''}|ConvertTo-Json -Compress))}
  function Saved{[IO.File]::ReadAllText($state)|ConvertFrom-Json}
  function Change([int]$before,[int]$after){$script:request=@{action='write';address=$defender;before=@{address=$defender;identity='defender:system:SubmitSamplesConsent';binding='defender:system';value=$before};after=$after};(Run-Helper $source)|ConvertFrom-Json}
  $set='root/Microsoft/Windows/Defender MSFT_MpPreference.Set SubmitSamplesConsent='
@@ -128,6 +128,10 @@ function Invoke-CimMethod {
  $refused=Change 1 2;$afterRefusal=Saved
  if([string]$refused.error -notlike '*Microsoft Defender Antivirus refused the change*' -or $afterRefusal.consent -ne 1 -or $afterRefusal.calls -cne ($set+'2:Byte;')){throw ('A Defender change the provider refuses must fail with its result: '+($refused|ConvertTo-Json -Compress)+' '+($afterRefusal|ConvertTo-Json -Compress))}
  Write-Host 'PASS a Defender change the provider refuses fails with its result'
+ Defender $null 'Running' 1 -1 $true
+ $kept=Change 1 2;$afterKept=Saved
+ if([string]$kept.error -notlike '*Microsoft Defender Antivirus kept its previous sample-submission choice*' -or $afterKept.consent -ne 1){throw ('A Defender change Windows does not take must fail instead of reporting success: '+($kept|ConvertTo-Json -Compress)+' '+($afterKept|ConvertTo-Json -Compress))}
+ Write-Host 'PASS a Defender change Windows does not take fails instead of reporting success'
  $providers=$hidden+[Environment]::NewLine+$cim
  $lacking=@(
   @{name='Defender removed';provider='Invalid namespace';service=$null;expected=$notInstalled},

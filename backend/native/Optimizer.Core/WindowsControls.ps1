@@ -279,7 +279,8 @@ function Write-Control($address,$value){
         'defender' {
             if($value -notin @(0,1,2,3)){throw 'Invalid sample-submission choice.'}
             $result=Invoke-CimMethod -Namespace root/Microsoft/Windows/Defender -ClassName MSFT_MpPreference -MethodName Set -Arguments @{SubmitSamplesConsent=[byte]$value}
-            if($result.ReturnValue -ne 0){throw ('Microsoft Defender Antivirus refused the change: '+$result.ReturnValue)}
+            if($null -ne $result -and $result.PSObject.Properties.Name -contains 'ReturnValue' -and $result.ReturnValue -ne 0){throw ('Microsoft Defender Antivirus refused the change: '+$result.ReturnValue)}
+            if([int](Get-DefenderPreference).SubmitSamplesConsent -ne $value){throw 'Microsoft Defender Antivirus kept its previous sample-submission choice.'}
         }
         'device-power' {
             foreach($device in @(Get-PowerDevices)){
