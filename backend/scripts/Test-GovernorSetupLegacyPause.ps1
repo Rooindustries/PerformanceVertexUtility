@@ -4,6 +4,8 @@ function Check([bool]$Passed,[string]$Message){if($Passed){Write-Output ('PASS '
 if(-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)){Write-Output 'SKIP Governor setup needs administrator rights to suspend its own scratch task';return}
 $others=@(Get-ScheduledTask -TaskName '*OptimizationSuite.ProcessRules.*' -ErrorAction SilentlyContinue)
 if($others.Count -gt 0){Write-Output ('SKIP This PC has '+$others.Count+' real governor tasks, which setup would suspend');return}
+$watchdog='RooIndustriesOptimizationSuite.GovernorSetupWatchdog'
+if(Get-ScheduledTask -TaskName $watchdog -ErrorAction SilentlyContinue){Write-Output 'SKIP This PC has a pending setup recovery task, which setup would replace';return}
 $compiler=Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
 if(-not(Test-Path -LiteralPath $compiler)){throw 'The fake helper needs the Windows .NET Framework C# compiler'}
 $id=[Guid]::NewGuid().ToString('N').Substring(0,19).ToUpperInvariant()
@@ -69,7 +71,7 @@ public static class FakeHost {
         Check (-not(Test-Path -LiteralPath (Join-Path $case.written 'governor.json'))) ('Setup writes nothing into the earlier, still user-writable '+$case.label+' rules folder and a stopped state it holds does not pause the rules')
     }
 } finally {
-    Unregister-ScheduledTask -TaskName 'RooIndustriesOptimizationSuite.GovernorSetupWatchdog' -Confirm:$false -ErrorAction SilentlyContinue
+    Unregister-ScheduledTask -TaskName $watchdog -Confirm:$false -ErrorAction SilentlyContinue
     foreach($case in $cases){
         Unregister-ScheduledTask -TaskName $case.task -Confirm:$false -ErrorAction SilentlyContinue
         $policy=Join-Path $case.root 'process-rules'
@@ -78,5 +80,5 @@ public static class FakeHost {
     }
     if(Test-Path -LiteralPath $app){Remove-Item -LiteralPath $app -Recurse -Force}
 }
-Check (-not(Test-Path -LiteralPath $app) -and @(Get-ScheduledTask -TaskName ('*'+$id+'*') -ErrorAction SilentlyContinue).Count -eq 0 -and $null -eq (Get-ScheduledTask -TaskName 'RooIndustriesOptimizationSuite.GovernorSetupWatchdog' -ErrorAction SilentlyContinue)) 'The scenario removes its tasks, setup recovery task, helper and folders'
+Check (-not(Test-Path -LiteralPath $app) -and @(Get-ScheduledTask -TaskName ('*'+$id+'*') -ErrorAction SilentlyContinue).Count -eq 0 -and $null -eq (Get-ScheduledTask -TaskName $watchdog -ErrorAction SilentlyContinue)) 'The scenario removes its tasks, setup recovery task, helper and folders'
 if($script:Failed -gt 0){throw ($script:Failed.ToString()+' governor setup checks failed')}

@@ -8,6 +8,8 @@ $account='rigovtest'
 $work=Join-Path $env:ProgramData 'RooIndustriesGovernorTest'
 $probeExe=Join-Path $work 'RooIndustriesGovernorProbe.exe'
 $statePath=Join-Path $work 'state.json'
+$ownerPath=Join-Path $work 'fixture-owner.txt'
+$tasks=@('RooIndustriesGovernorOtherSetup','RooIndustriesGovernorOtherProbe','RooIndustriesGovernorOtherWorker')
 $out=[ordered]@{phase=$Phase;atUtc=[DateTime]::UtcNow.ToString('o');checks=@()}
 function Check([bool]$Condition,[string]$Message){$script:out.checks+=[ordered]@{passed=$Condition;check=$Message};if($Condition){"PASS $Message"}else{"FAIL $Message"}}
 Add-Type -TypeDefinition @'
@@ -36,12 +38,17 @@ switch($Phase){
         $acl.SetAccessRuleProtection($true,$false)
         foreach($sid in 'S-1-5-18','S-1-5-32-544'){$acl.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new([Security.Principal.SecurityIdentifier]::new($sid),'FullControl','ContainerInherit,ObjectInherit','None','Allow'))}
         if(Test-Path -LiteralPath $work){throw 'The test folder already exists; run cleanup first.'}
+        if(Get-LocalUser -Name $account -ErrorAction SilentlyContinue){throw 'The test account already exists and was not created by this test.'}
+        foreach($name in $tasks){if(Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue){throw ('The test task already exists and was not created by this test: '+$name)}}
         [IO.Directory]::CreateDirectory($work,$acl)|Out-Null
+        Set-Content -LiteralPath $ownerPath -Value $account -Encoding ASCII
         Add-Type -TypeDefinition 'public static class RooIndustriesGovernorProbe { public static void Main(string[] args) { System.Threading.Thread.Sleep(System.TimeSpan.FromSeconds(args.Length > 0 ? int.Parse(args[0]) : 600)); } }' -OutputAssembly $probeExe -OutputType ConsoleApplication
         $password='Rg'+[Guid]::NewGuid().ToString('N').Substring(0,20)+'!7'
         & net.exe user $account $password /add /y|Out-Null
+        if($LASTEXITCODE -ne 0){throw 'The test account could not be created.'}
         & net.exe localgroup Administrators $account /add|Out-Null
         $sid=[Security.Principal.NTAccount]::new($env:COMPUTERNAME+'\'+$account).Translate([Security.Principal.SecurityIdentifier]).Value
+        Set-Content -LiteralPath $ownerPath -Value $sid -Encoding ASCII
         $setupScript=Join-Path $work 'other-setup.ps1'
         [IO.File]::WriteAllText($setupScript,@'
 $ErrorActionPreference='Stop'
@@ -96,8 +103,12 @@ $sync=(@(& (Join-Path $app 'backend\scripts\Invoke-ProcessPolicyWorker.ps1') -Ac
     }
     'cleanup' {
         $ErrorActionPreference='Continue'
-        $sid=if($state){$state.sid}else{try{[Security.Principal.NTAccount]::new($env:COMPUTERNAME+'\'+$account).Translate([Security.Principal.SecurityIdentifier]).Value}catch{$null}}
-        foreach($name in 'RooIndustriesGovernorOtherSetup','RooIndustriesGovernorOtherProbe','RooIndustriesGovernorOtherWorker'){try{if(Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue){Stop-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue;Unregister-ScheduledTask -TaskName $name -Confirm:$false}}catch{}}
+        if(-not(Test-Path -LiteralPath $ownerPath)){Check $false 'Cleanup removes only what setup recorded, and found no setup record';break}
+        $owned=(Get-Content -Raw -LiteralPath $ownerPath).Trim()
+        $current=try{[Security.Principal.NTAccount]::new($env:COMPUTERNAME+'\'+$account).Translate([Security.Principal.SecurityIdentifier]).Value}catch{$null}
+        if($owned -cne $account -and $current -and $current -cne $owned){Check $false 'The test account was replaced after setup, so cleanup kept it';break}
+        $sid=if($owned -cne $account){$owned}else{$current}
+        foreach($name in $tasks){try{if(Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue){Stop-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue;Unregister-ScheduledTask -TaskName $name -Confirm:$false}}catch{}}
         if($sid){foreach($task in Governor-Task $sid){try{Unregister-ScheduledTask -TaskName $task.TaskName -TaskPath $task.TaskPath -Confirm:$false}catch{}}}
         Get-CimInstance Win32_Process|Where-Object {$_.ExecutablePath -eq $probeExe -or ($sid -and (Invoke-CimMethod -InputObject $_ -MethodName GetOwnerSid).Sid -eq $sid)}|ForEach-Object {Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue}
         Start-Sleep -Seconds 3

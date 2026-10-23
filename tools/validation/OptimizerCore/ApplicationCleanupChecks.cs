@@ -12,6 +12,7 @@ static class ApplicationCleanupChecks
         Directory.CreateDirectory(source);
         File.WriteAllText(Path.Combine(source, "settings.txt"), "original settings");
         using var hive = RegistryKey.OpenBaseKey(RegistryHive.CurrentUser, RegistryView.Registry64);
+        var owned = OwnedRegistryKey.Create(hive, registryRoot);
         using (var key = hive.CreateSubKey(registryPath)) { key.SetValue("Setting", "original registry"); }
         ApplicationCleanupPreview? preview = null;
         try
@@ -61,9 +62,7 @@ static class ApplicationCleanupChecks
                 var registry = OperationFiles.Read<RegistryCleanupPreview>(part.PreviewPath);
                 hive.DeleteSubKeyTree(registry.Receipt.KeyPath, false);
             }
-            hive.DeleteSubKeyTree(registryRoot, false);
-            using (var parent = hive.OpenSubKey("Software\\RooIndustriesApplicationCleanupTests"))
-                if (parent is not null && parent.SubKeyCount == 0 && parent.ValueCount == 0) hive.DeleteSubKey("Software\\RooIndustriesApplicationCleanupTests", false);
+            owned.Dispose();
             Directory.Delete(root, true);
         }
         check(!Directory.Exists(root), "Combined cleanup validation removes all owned files, registry data and commit receipts");
