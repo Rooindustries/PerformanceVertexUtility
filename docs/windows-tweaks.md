@@ -59,6 +59,16 @@ Their Microsoft references describe MDM CSP editions without establishing an
 edition limit for the registry policy. The same file records these two explicit
 exceptions to the catalog's overlapping-edition-gate check.
 
+`backend/catalogs/windows-default-values.json` lists values that stock Windows
+keeps itself, with Microsoft's documented default and a read from the test PC.
+Deleting one of these would leave the PC unlike stock Windows, so the compiler
+turns a source choice that deletes it into **Windows default**, which writes
+Windows' own value back. The choice keeps its ID, so saved choices and profiles
+that picked Use Windows default still resolve, and Undo restores whatever the
+value was before. Today this covers **Automatic Driver Updates: value** in
+Windows' default policy store, which Windows keeps at 0 (driver updates
+allowed). `check_windows_tweaks.py` fails while any choice deletes a listed value.
+
 ## One setting, shared ownership
 
 The planner resolves registry handles to their native key identity, with the
@@ -273,7 +283,8 @@ setting that is on for only some protocols names them, such as On for IPv4 and I
 Choose a value, then turn on the row's switch to select
 that action for review. Turning it off keeps the current setting; it does not undo
 an applied change. Use Windows default explicitly removes the local override,
-and another policy may still control the setting. Choices for missing components
+and another policy may still control the setting. Where Windows keeps the value
+itself, Windows default writes Windows' value instead. Choices for missing components
 are saved separately from applied Windows profiles and do not create a recovery
 backup. They require a new review before Windows applies them. Backups & history reads
 the actual recovery state. An empty list does not become a sample backup.
