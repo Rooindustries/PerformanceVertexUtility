@@ -275,6 +275,41 @@ def product_name_negative_controls():
     return results
 
 
+def fixture_cleanup_negative_controls():
+    check = runpy.run_path(str(Path(__file__).with_name('check_fixture_cleanup.py')))['check']
+    location = 'tools/validation/fixture-cleanup-allowlist.json'
+    cs = 'tools/validation/Example/Checks.cs'
+    ps = 'backend/scripts/Test-Example.ps1'
+    parent = 'hive.DeleteSubKey("Software\\\\RooIndustriesExampleTests", false);'
+    entry = {'file': cs, 'target': '"Software\\\\RooIndustriesExampleTests"', 'reason': 'fixture'}
+    cases = {
+        'fixed registry parent': ([], {cs: parent}, [f'{cs}:1:']),
+        'unique registry key': ([], {cs: 'var name = "Software\\\\X\\\\" + Guid.NewGuid().ToString("N");\nhive.DeleteSubKeyTree(name, false);'}, []),
+        'helper-owned registry key': ([], {cs: 'owned?.Dispose();\nhive.DeleteSubKey(created[index], false);'}, []),
+        'class constant': ([], {cs: 'static class Other { public const string Root = @"Software\\X"; }\nstatic class Uses { void Run() { hive.DeleteSubKeyTree(Other.Root, false); game.Root.Delete(); Directory.Delete(game.Root, true); } }'}, [f'{cs}:2:']),
+        'fixed task through a variable': ([], {ps: "$task='RooIndustriesExample'\nUnregister-ScheduledTask -TaskName $task -Confirm:$false"}, [f'{ps}:2:']),
+        'fixed folder from environment': ([], {ps: "$work=Join-Path $env:ProgramData 'RooIndustriesExample'\nRemove-Item -LiteralPath $work -Recurse -Force"}, [f'{ps}:2:']),
+        'unique folder': ([], {ps: "$work=Join-Path $env:TEMP ('roo-industries-'+[Guid]::NewGuid().ToString('N'))\nRemove-Item -LiteralPath $work -Recurse -Force"}, []),
+        'fixed task through a wrapper': ([], {ps: "function Remove-Task([string]$Name){Unregister-ScheduledTask -TaskName $Name -Confirm:$false}\n$stray='RooIndustriesExample'\nRemove-Task $stray"}, [f'{ps}:3:']),
+        'fixed task from a case table': ([], {ps: "$cases=@(\n@{name='RooIndustriesExample';exe='x.exe'}\n)\nforeach($case in $cases){Unregister-ScheduledTask -TaskName $case.name -Confirm:$false}"}, [f'{ps}:4:']),
+        'fixed account': ([], {ps: "$account='rooexample'\n& net.exe user $account /delete"}, [f'{ps}:2:']),
+        'process environment variable': ([], {ps: "Remove-Item -LiteralPath 'Env:\\ROO_INDUSTRIES_EXAMPLE'"}, []),
+        'listed proof': ([entry], {cs: parent}, []),
+        'listed proof without a reason': ([dict(entry, reason=' ')], {cs: parent}, [f'{location}:']),
+        'stale listed proof': ([entry], {cs: 'owned?.Dispose();'}, [f'{location}: stale']),
+    }
+    results = {}
+    for label, (entries, files, expected) in cases.items():
+        with tempfile.TemporaryDirectory() as folder:
+            temporary = Path(folder)
+            for relative, source in {location: json.dumps(entries), **files}.items():
+                (temporary / relative).parent.mkdir(parents=True, exist_ok=True)
+                (temporary / relative).write_text(source, encoding='utf-8')
+            failures = check(temporary)
+            results[label] = len(failures) == len(expected) and all(any(f.startswith(e) for f in failures) for e in expected)
+    return results
+
+
 def validate(root: Path, contracts_only: bool = False):
     failures = []
     failures.extend(code_loading_failures(root))
@@ -299,6 +334,10 @@ def validate(root: Path, contracts_only: bool = False):
         for label, passed in product_name_negative_controls().items():
             if not passed:
                 failures.append(f'Negative control failed: {label} did not match the product name check result')
+        failures.extend(runpy.run_path(str(Path(__file__).with_name('check_fixture_cleanup.py')))['check'](root))
+        for label, passed in fixture_cleanup_negative_controls().items():
+            if not passed:
+                failures.append(f'Negative control failed: {label} did not match the fixture cleanup check result')
     documents = {}
     for folder in ('backend/contracts', 'backend/samples', 'backend/profiles', 'backend/uninstall', 'backend/catalogs', 'backend/capabilities', 'modules'):
         for path in sorted((root / folder).rglob('*.json')):

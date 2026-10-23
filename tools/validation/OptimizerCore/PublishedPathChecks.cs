@@ -63,8 +63,10 @@ static class PublishedPathChecks
         var root = TestFixtures.InheritingRoot("published-registry");
         var keyPath = "Software\\RooIndustriesPublishedPathTests\\" + Guid.NewGuid().ToString("N");
         using var hive = RegistryKey.OpenBaseKey(RegistryHive.CurrentUser, RegistryView.Registry64);
+        OwnedRegistryKey? owned = null;
         try
         {
+            owned = OwnedRegistryKey.Create(hive, keyPath);
             var peerRoot = Path.Combine(root, "Installed Peer"); Directory.CreateDirectory(peerRoot);
             var address = new RegistryAddress("CurrentUser", "Registry64", keyPath, "key", null);
             var application = Application(Path.Combine(root, "removed"));
@@ -87,9 +89,7 @@ static class PublishedPathChecks
         }
         finally
         {
-            hive.DeleteSubKeyTree(keyPath, false);
-            using (var parent = hive.OpenSubKey("Software\\RooIndustriesPublishedPathTests"))
-                if (parent is not null && parent.SubKeyCount == 0 && parent.ValueCount == 0) hive.DeleteSubKey("Software\\RooIndustriesPublishedPathTests", false);
+            owned?.Dispose();
             Directory.Delete(root, true);
         }
         check(!Directory.Exists(root) && hive.OpenSubKey(keyPath) is null, "Registry separator checks remove their keys and fixtures");
