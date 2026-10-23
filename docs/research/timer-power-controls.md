@@ -119,7 +119,9 @@ Fingerprint/recheck guards are also not atomic compare-and-delete operations aga
 The worker originally survived its start call but was terminated with the SSH
 parent job. Read-only job inspection reported flags `0x2800` (kill on close and
 permitted breakaway). The integrated launcher now uses `CreateProcessW` with
-`CREATE_BREAKAWAY_FROM_JOB | CREATE_NO_WINDOW` and no inherited handles.
+`CREATE_BREAKAWAY_FROM_JOB | DETACHED_PROCESS` and no inherited handles.
+`DETACHED_PROCESS` replaced `CREATE_NO_WINDOW`, which left a hidden console host
+running beside the worker for the whole session.
 A new SSH session verified the worker remained active after its parent process
 and originating session exited, then verified release and fixture removal. The
 six native acquire/release/lost-worker checks also passed after this change.

@@ -5,6 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <AssemblyName Condition="'$(TimerStartupFixture)' == 'true'">Optimizer.Host</AssemblyName>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../../../backend/native/Optimizer.Core/Optimizer.Core.csproj" />

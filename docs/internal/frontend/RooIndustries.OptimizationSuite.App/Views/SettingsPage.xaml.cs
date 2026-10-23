@@ -42,7 +42,7 @@ public sealed partial class SettingsPage : Page
             UpdateDownloadButton.IsEnabled = !state.Busy;
             UpdateInstallButton.Visibility = state.Ready ? Visibility.Visible : Visibility.Collapsed;
             UpdateInstallButton.Content = state.BannerKind == "failed" ? "Try again" : "Install update";
-            UpdateInstallButton.IsEnabled = !state.Busy;
+            UpdateInstallButton.IsEnabled = state.CanInstall;
         }
         finally { _refreshingUpdates = false; }
     }

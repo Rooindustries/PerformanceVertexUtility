@@ -3,5 +3,5 @@
   <ItemGroup>
     <ProjectReference Include="../../../backend/native/Optimizer.Core/Optimizer.Core.csproj" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.2" />
-    <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/ViewModels/FirmwareViewModel.cs" Link="FirmwareViewModel.cs" /><Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/ToolLauncherService.cs" Link="ToolLauncherService.cs" /></ItemGroup>
+    <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/ViewModels/FirmwareViewModel.cs" Link="FirmwareViewModel.cs" /><Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/ToolLauncherService.cs" Link="ToolLauncherService.cs" /><Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/DataGeneration.cs" Link="DataGeneration.cs" /><Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/AppLog.cs" Link="AppLog.cs" /><Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/BugRedactor.cs" Link="BugRedactor.cs" /></ItemGroup>
 </Project>

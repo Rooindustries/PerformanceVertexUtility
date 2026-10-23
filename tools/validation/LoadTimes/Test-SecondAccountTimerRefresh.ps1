@@ -378,7 +378,7 @@ public static class SecondAccountNative {
         if ($owned.Identity.creationTimeFileTimeUtc -cne [string]$session.creationTime -or
             $owned.Identity.imagePath -ine [RooIndustriesValidationOwnership.Native]::Canonical($hostExe) -or
             [SecondAccountNative]::ProcessSid($owned.handle) -cne $script:AccountSid -or $process.StartTime.ToUniversalTime() -lt $StartedAfter -or
-            $args.Count -ne 3 -or $args[0] -ine $hostExe -or $args[1] -cne ('--timer-' + $LaunchKind) -or $row.ExecutablePath -ine $hostExe -or
+            $args.Count -ne 3 -or $args[0] -ine $hostExe -or $args[1] -cne '--timer-worker' -or $row.ExecutablePath -ine $hostExe -or
             ($LaunchKind -ceq 'worker' -and $args[2] -ine (Join-Path $script:ControlRoot 'launch.json'))) {
             $process.Dispose()
             throw 'B timer helper native identity, SID or command contradicts its session receipt; retained.'
@@ -388,7 +388,7 @@ public static class SecondAccountNative {
         if ($LaunchKind -ceq 'autostart') {
             $launchPath = Join-Path (Split-Path $sessionPath -Parent) 'launch.json'
             $launch = Get-Content -LiteralPath $launchPath -Raw | ConvertFrom-Json
-            if ($args[2] -ine $script:ControlRoot -or $session.executable -ine $hostExe -or
+            if ($args[2] -ine $launchPath -or $session.executable -ine $hostExe -or
                 $launch.owner.userSid -cne $script:AccountSid -or $launch.owner.machine -ine $env:COMPUTERNAME -or
                 $launch.root -ine $script:ControlRoot -or $launch.assemblyPath -ine (Join-Path (Split-Path $hostExe -Parent) 'Optimizer.Host.dll') -or
                 $launch.assemblyHash -ine (Get-FileHash -LiteralPath $launch.assemblyPath).Hash -or
@@ -713,11 +713,12 @@ public static class SecondAccountNative {
     $startup = Start-Secondary 'B-startup-script' $powershell @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $script:ControlRoot 'startup.ps1')) -Logon
     $startupElevated = [SecondAccountNative]::IsElevated($startup.handle)
     Require ($startupElevated -eq $script:ExpectedStartupElevated) 'B startup script elevation matches the recorded EnableLUA' ('EnableLUA=' + $script:EnableLUA + ' expected=' + $script:ExpectedStartupElevated + ' actual=' + $startupElevated)
-    $worker = WaitFor { Capture-TimerWorker 'fixed-autostart' $autostartTime 'autostart' } 60 'the installed B --timer-autostart helper to acquire the timer'
+    $worker = WaitFor { Capture-TimerWorker 'fixed-autostart' $autostartTime 'autostart' } 60 'the installed B detached timer helper to acquire the timer'
     $workerRow = Get-CimInstance Win32_Process -Filter ('ProcessId=' + $worker.Identity.pid)
     $helperElevated = [SecondAccountNative]::IsElevated($worker.handle)
-    Require ($workerRow.ParentProcessId -eq $startup.Identity.pid -and $helperElevated -eq $script:ExpectedStartupElevated) 'B helper is the exact startup-script child with elevation matching the recorded EnableLUA' ('EnableLUA=' + $script:EnableLUA + ' expected=' + $script:ExpectedStartupElevated + ' actual=' + $helperElevated + ' parent=' + $workerRow.ParentProcessId + ' startup=' + $startup.Identity.pid)
-    Check $true 'B startup hash checks pass and start the exact installed --timer-autostart helper' ($worker.Identity | ConvertTo-Json -Compress)
+    Require ($helperElevated -eq $script:ExpectedStartupElevated) 'B detached helper elevation matches the recorded EnableLUA' ('EnableLUA=' + $script:EnableLUA + ' expected=' + $script:ExpectedStartupElevated + ' actual=' + $helperElevated + ' parent=' + $workerRow.ParentProcessId)
+    Require ($startup.process.WaitForExit(20000) -and [SecondAccountNative]::Exit($startup.handle) -eq 0 -and -not $worker.process.HasExited) 'B startup script exits successfully while the exact installed timer helper stays acquired'
+    Check $true 'B startup hash checks pass and start the exact installed detached timer helper' ($worker.Identity | ConvertTo-Json -Compress)
     Stop-Receipt $worker
     Require ($worker.process.WaitForExit(5000)) 'only the exact owned B autostart helper was stopped'
     if (-not $startup.process.WaitForExit(10000)) { Stop-Receipt $startup }
