@@ -55,9 +55,9 @@ try{
  $exe=@(Get-ChildItem -LiteralPath (Join-Path $Source 'docs\internal\frontend\RooIndustries.OptimizationSuite.App\bin\x64\Debug') -Recurse -Filter 'RooIndustries.OptimizationSuite.App.exe'|Sort-Object LastWriteTimeUtc -Descending)
  if(-not$exe.Count){throw 'The app test build produced no executable.'}
  & $dotnet run --project (Join-Path $Source 'tools\validation\Tweaks\Tweaks.csproj') --configuration Release --disable-build-servers -p:UseSharedCompilation=false -- $Source --seed-feature-restart $recovery $states *>> $build
- $evidence.seed=@(Get-Content -LiteralPath $build|Where-Object {$_ -like 'ROO_INDUSTRIES_FEATURE_SEED *'})
+ $evidence.seed=@(Get-Content -LiteralPath $build|Where-Object {$_ -like 'ROO_INDUSTRIES_FEATURE_SEED *'}|ForEach-Object {[string]$_})
  if($LASTEXITCODE -ne 0 -or -not$evidence.seed.Count){throw 'Seeding the pending feature record failed; see build.log.'}
- $env:ROO_INDUSTRIES_TEST_TWEAK_RECOVERY=$recovery;$env:ROO_INDUSTRIES_TEST_FEATURE_STATES=$states;$env:ROO_INDUSTRIES_INITIAL_NAV='windows';$env:ROO_INDUSTRIES_DOTNET_EXE=$dotnet
+ $env:ROO_INDUSTRIES_TEST_TWEAK_RECOVERY=$recovery;$env:ROO_INDUSTRIES_TEST_FEATURE_STATES=$states;$env:ROO_INDUSTRIES_INITIAL_NAV='windows';$env:ROO_INDUSTRIES_DOTNET_EXE=$dotnet;$env:DOTNET_ROOT=Split-Path $dotnet -Parent
  $app=Start-OwnedProcess -FilePath $exe[0].FullName -WindowStyle Normal -Purpose 'suite-test-build' -Lifetime invocation
  $window=WaitFor {$A::RootElement.FindFirst($TS::Children,[Windows.Automation.PropertyCondition]::new($A::ProcessIdProperty,[int]$app.Identity.pid))} 120 'the Suite window'
  $hwnd=[IntPtr]::new([long]$window.Current.NativeWindowHandle)
