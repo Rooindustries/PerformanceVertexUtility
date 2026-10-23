@@ -417,16 +417,23 @@ public sealed class ProtectedSessions
         var errors = new List<string>();
         foreach (var game in state.Games)
         {
-            foreach (var field in game.Fields.Where(field => field.JournalPath is not null && File.Exists(field.JournalPath)))
-                try { var saved = OperationFiles.Read<ProcessControlJournal>(field.JournalPath!); game.Identity.Verify(saved.Preview.Identity);
+            var exited = false;
+            try { game.Exited = exited = !Alive(game.Identity); }
+            catch (Exception error) { errors.Add(error.Message); }
+            foreach (var field in game.Fields.Where(field => field.JournalPath is not null))
+                try {
+                    if (!File.Exists(field.JournalPath))
+                    {
+                        if (exited) { field.Status = "expired"; field.Error = null; }
+                        continue;
+                    }
+                    var saved = OperationFiles.Read<ProcessControlJournal>(field.JournalPath!); game.Identity.Verify(saved.Preview.Identity);
                     if (saved.Preview.Desired.Count != 1 || !saved.Preview.Desired.TryGetValue(field.Name, out var savedDesired) || !ProcessTarget.Equivalent(field.Name, savedDesired, state.Preview.Controls[field.Name])) throw new InvalidDataException("Native recovery belongs to another control.");
                     var retained = field.Name == "gpuPriority" ? gpuHandles?.Find(game.Identity) : null;
                     var result = (retained is null ? _controls : _controls.WithTarget(retained)).Restore(field.JournalPath!); field.Status = result.Status;
                     var last = result.Changes.Single(change => change.Name == field.Name);
                     field.Observed = last.Observed is { } observed ? ControlRead.From(observed) : null; field.Error = last.Error; if (result.Status is not ("restored" or "expired")) errors.Add("Native restoration needs reconciliation: " + field.Name); }
                 catch (Exception error) { errors.Add(error.Message); }
-            try { game.Exited = !Alive(game.Identity); }
-            catch (Exception error) { errors.Add(error.Message); }
             foreach (var field in game.Fields.Where(field => field.Route == "launch")) field.Status = game.Exited ? "expired" : "restartRequired";
         }
         try

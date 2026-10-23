@@ -380,6 +380,30 @@ static class LaunchProfileChecks
                 Check(retryRestored,
                     "Returning the backup restores the original native value and removes the recovery task");
                 EndGame(game);
+
+                var expiredLauncher = await OpenLauncher();
+                var expired = await Arm(expiredLauncher, new() { ["priorityBoost"] = V(false) });
+                var expiredGame = await Game(expiredLauncher);
+                await Until(async () => (await App().ReadGameSessionAsync(expired.SessionRoot)).State?.Status == "active", "The expiring native probe did not apply.");
+                PowerLoss(expired.SessionRoot); await CloseLauncher(expiredLauncher);
+                var expiredState = OperationFiles.Read<ProtectedSessionState>(Path.Combine(expired.SessionRoot, "session.json"));
+                var missing = expiredState.Games.Single().Fields.Single().JournalPath!;
+                File.Move(missing, missing + ".retained");
+                try
+                {
+                    Check(!GameSessionDisplay.Restored(await App().RecoverGameSessionAsync(expired.SessionRoot)) && TaskExists(expired.SessionRoot),
+                        "The missing native backup stays outstanding while its original game lives");
+                    EndGame(expiredGame);
+                    var recovered = await App().RecoverGameSessionAsync(expired.SessionRoot);
+                    Check(GameSessionDisplay.Restored(recovered) && recovered.State!.Games.Single().Exited && recovered.State.Games.Single().Fields.Single().Status == "expired" && !TaskExists(expired.SessionRoot) && !File.Exists(missing),
+                        "After the original game exits, recovery expires its missing native backup and removes the task");
+                    Check(!await App().GameSessionsBlockUpdateAsync() && NoLaunchPolicy(), "An expired native control no longer blocks an update");
+                }
+                finally
+                {
+                    File.Move(missing + ".retained", missing);
+                    await App().RecoverGameSessionAsync(expired.SessionRoot);
+                }
             }
 
             async Task Recovery()
