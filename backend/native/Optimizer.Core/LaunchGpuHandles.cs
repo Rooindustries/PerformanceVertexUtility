@@ -8,7 +8,7 @@ using Microsoft.Win32.SafeHandles;
 namespace RooIndustries.Optimizer;
 
 internal sealed record GpuHandleTransfer(OperationOwner Owner, string OperationId, RunningProcess Host, RunningProcess Watcher, RunningProcess Target, long Handle);
-internal sealed record GpuHandleReady(GpuHandleTransfer Transfer, ControlRead Original);
+internal sealed record GpuHandleReady(GpuHandleTransfer Transfer, ControlRead Original, ControlRead? IoOriginal = null);
 
 internal sealed class LaunchGpuHandles : IDisposable
 {
@@ -45,7 +45,7 @@ internal sealed class LaunchGpuHandles : IDisposable
     internal ProcessTarget? Find(RunningProcess identity)
         => _targets.TryGetValue(identity, out var target) ? target : null;
 
-    internal bool RecoveryMatches(RunningProcess identity, ControlRead original)
+    internal bool RecoveryMatches(RunningProcess identity, ControlRead original, string field)
     {
         var path = ReadyPath(identity);
         if (!File.Exists(path)) return false;
@@ -54,8 +54,9 @@ internal sealed class LaunchGpuHandles : IDisposable
         identity.Verify(ready.Transfer.Target);
         using var watcher = new ProcessTarget(_watcher.ProcessId);
         _watcher.Verify(watcher.Identity());
-        if (!ProcessTarget.Equivalent("gpuPriority", original.Require(), ready.Original.Require()))
-            throw new InvalidOperationException("The recovery handle observed a different original GPU class.");
+        var saved = field == "ioPriority" && _state.Preview.Controls.ContainsKey("gpuPriority") ? ready.IoOriginal : ready.Original;
+        if (saved is null || !ProcessTarget.Equivalent(field, original.Require(), saved.Require()))
+            throw new InvalidOperationException("The recovery handle observed a different original " + ProcessControlBlockedException.Label(field) + ".");
         return true;
     }
 
@@ -81,12 +82,19 @@ internal sealed class LaunchGpuHandles : IDisposable
             var path = ReadyPath(pair.Key);
             if (File.Exists(path) || pair.Value.HasExited) continue;
             ControlRead original;
-            try { original = pair.Value.Read("gpuPriority"); }
+            ControlRead? io = null;
+            var gpu = _state.Preview.Controls.ContainsKey("gpuPriority");
+            try
+            {
+                original = pair.Value.Read(gpu ? "gpuPriority" : "ioPriority");
+                if (gpu && _state.Preview.Controls.TryGetValue("ioPriority", out var desired) && desired.GetInt32() > LaunchPriorities.MaxIoPriority)
+                    io = pair.Value.Read("ioPriority");
+            }
             catch (ProcessEndedException) { continue; }
             if (Initializing(original, pair.Key)) continue;
             var transfer = OperationFiles.Read<GpuHandleTransfer>(TransferPath(pair.Key));
             Validate(transfer);
-            OperationFiles.Write(path, new GpuHandleReady(transfer, original));
+            OperationFiles.Write(path, new GpuHandleReady(transfer, original, io));
         }
     }
 
@@ -103,7 +111,7 @@ internal sealed class LaunchGpuHandles : IDisposable
             {
                 using var self = ProcessTarget.OpenReceiver(warm.Identity());
                 using var copy = ProcessTarget.ReceiveGpu(warm.CopyTo(self));
-                _ = copy.Read("gpuPriority");
+                _ = copy.Read(_state.Preview.Controls.ContainsKey("gpuPriority") ? "gpuPriority" : "ioPriority");
             }
             using var snapshot = new LaunchProcessSnapshot(job);
             using var wake = _stop.Token.Register(snapshot.Wake);

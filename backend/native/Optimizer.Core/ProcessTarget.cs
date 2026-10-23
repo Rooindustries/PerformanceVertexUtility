@@ -27,7 +27,7 @@ public sealed class ProcessTarget : IDisposable
     }
 
     internal static ProcessTarget CaptureGpu(int processId)
-        => new(CpuApi.OpenWithoutPrivileges(0x101200, processId), processId, 0x101200, ["gpuPriority"]);
+        => new(CpuApi.OpenWithoutPrivileges(0x101200, processId), processId, 0x101200, ["gpuPriority", "ioPriority"]);
 
     internal static ProcessTarget ReceiveGpu(long value)
     {
@@ -35,7 +35,7 @@ public sealed class ProcessTarget : IDisposable
         var handle = new ProcessHandle(new IntPtr(value));
         var pid = GetProcessId(handle);
         if (pid == 0) { var error = Marshal.GetLastWin32Error(); handle.Dispose(); throw new CpuFailure("GetProcessId", error, 0x101200); }
-        return new(handle, checked((int)pid), 0x101200, ["gpuPriority"]);
+        return new(handle, checked((int)pid), 0x101200, ["gpuPriority", "ioPriority"]);
     }
 
     internal long CopyTo(ProcessHandle destination)

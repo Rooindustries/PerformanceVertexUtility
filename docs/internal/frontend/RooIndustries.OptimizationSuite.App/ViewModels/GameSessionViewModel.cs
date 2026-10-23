@@ -31,7 +31,6 @@ public partial class GameSessionSetting : ObservableObject
     internal static bool LaunchSupported(string name, JsonElement? value) => value is not { } chosen || name switch
     {
         "cpuPriority" => LaunchPriorities.CpuPriorities.Contains(chosen.GetString()),
-        "ioPriority" => chosen.GetInt32() <= LaunchPriorities.MaxIoPriority,
         "gpuPriority" => chosen.GetInt32() != 5,
         _ => true,
     };
@@ -228,18 +227,37 @@ public partial class GameSessionViewModel : ObservableObject
     {
         if (snapshot.Topology.Select(cpu => cpu.Group).Distinct().Count() != 1) throw new InvalidOperationException("Game sessions currently support one processor group.");
         CoreChoices.Clear(); CoreChoices.Add(new("All allowed cores", original));
+        var allowed = ProcessTarget.ParseMask(original.Mask);
         if (snapshot.Topology.Select(cpu => cpu.Efficiency).Distinct().Count() > 1)
         {
             foreach (var kind in new[] { "performance", "efficiency" })
             {
                 var efficiency = kind == "performance" ? snapshot.Topology.Max(cpu => cpu.Efficiency) : snapshot.Topology.Min(cpu => cpu.Efficiency);
-                var allowed = ProcessTarget.ParseMask(original.Mask);
                 var mask = snapshot.Topology.Where(cpu => cpu.Group == original.Group && cpu.Efficiency == efficiency && cpu.Available)
                     .Aggregate(0UL, (value, cpu) => value | (1UL << cpu.Index)) & allowed;
                 if (mask != 0) CoreChoices.Add(new(kind == "performance" ? "Performance cores" : "Efficiency cores", new(original.Group, "0x" + mask.ToString("X"))));
             }
         }
+        var caches = snapshot.Topology.Where(cpu => cpu.Group == original.Group && cpu.Available).GroupBy(cpu => cpu.Cache)
+            .Select(cache => cache.Aggregate(0UL, (value, cpu) => value | (1UL << cpu.Index)) & allowed).Where(mask => mask != 0).OrderBy(mask => mask & (~mask + 1)).ToArray();
+        if (caches.Length > 1)
+            for (var number = 0; number < caches.Length; number++)
+                CoreChoices.Add(new("Cache group " + (number + 1) + " (" + CpuList(caches[number]) + ")", new(original.Group, "0x" + caches[number].ToString("X"))));
         SelectedCores = CoreChoices[0];
+    }
+
+    private static string CpuList(ulong mask)
+    {
+        var cpus = Enumerable.Range(0, 64).Where(index => (mask & (1UL << index)) != 0).ToArray();
+        var ranges = new System.Collections.Generic.List<string>();
+        for (var start = 0; start < cpus.Length;)
+        {
+            var end = start;
+            while (end + 1 < cpus.Length && cpus[end + 1] == cpus[end] + 1) end++;
+            ranges.Add(start == end ? cpus[start].ToString() : cpus[start] + "-" + cpus[end]);
+            start = end + 1;
+        }
+        return (cpus.Length == 1 ? "CPU " : "CPUs ") + string.Join(", ", ranges);
     }
 
     [RelayCommand]
@@ -258,6 +276,7 @@ public partial class GameSessionViewModel : ObservableObject
             ReviewSummary = Path.GetFileName(_review.Plan.GamePath) + " via " + Path.GetFileName(_review.Plan.Launcher.ExecutablePath) + "\n" +
                 string.Join("\n", Settings.Where(setting => setting.Selected.Value is not null).Select(setting => setting.Label + ": " + setting.Selected.Label)) +
                 "\nCores: " + AffinityMask.Trim() + "\nLauncher core limits and I/O/memory defaults also affect its other new child processes. Launch priorities apply to this game filename." +
+                (controls.TryGetValue("ioPriority", out var io) && io.GetInt32() > LaunchPriorities.MaxIoPriority ? "\nHigh I/O priority is set on the game once it starts and stays until you select Stop and restore." : "") +
                 (KeepArmed ? "\nSaved for next time: these exact settings turn back on whenever " + Path.GetFileName(_review.Plan.Launcher.ExecutablePath) + " opens while the app is open. After a PC restart, open the app once and they're back. To stop them, select Turn off and restore under Saved launch settings." : "");
             Status = "Review these settings, then select Start."; Detail = "Launch the game normally after the session reports Ready.";
         }
@@ -411,7 +430,7 @@ public partial class GameSessionViewModel : ObservableObject
     private void SettingChanged(object? sender, PropertyChangedEventArgs args) { if (args.PropertyName == nameof(GameSessionSetting.Selected)) Invalidate(); }
     private static string FieldResult(string status) => status switch
     {
-        "applied" => "Applied", "pending" => "Waiting", "initializing" => "Graphics starting", "awaitingRecovery" => "Preparing restore",
+        "applied" => "Applied", "pending" => "Waiting", "capturing" => "Preparing game settings", "initializing" => "Graphics starting", "awaitingRecovery" => "Preparing restore",
         "unavailable" => "Unavailable", "conflict" => "Changed elsewhere", "notApplied" => "Not applied", "restartRequired" => "Restart required",
         "restored" => "Restored", "expired" => "Game exited", "released" => "Core restriction released", "reapplyIntent" => "Reapplying", _ => "Needs attention",
     };

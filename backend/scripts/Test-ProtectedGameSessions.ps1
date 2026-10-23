@@ -8,6 +8,6 @@ $bin=Join-Path $root 'tools\validation\ProtectedSessions\bin\publish'
 & $DotNetPath publish (Join-Path $root 'tools\validation\ProtectedSessions\ProtectedSessions.csproj') -c Release -o $bin -p:UseSharedCompilation=false
 if($LASTEXITCODE -ne 0){throw 'Protected-session validation build failed'}
 $arguments=@((Join-Path $bin 'RooIndustriesLaunchPolicyProbe.dll'),$root,$DotNetPath)
-if($HighIo){$arguments+=@('--high-io',[string]$InspectSeconds)}elseif($RetainedGpu){$arguments+='--retained-gpu'}elseif($HardwareGpu){$arguments+='--hardware-gpu'}
+if($HighIo -and $RetainedGpu){$arguments+='--retained-gpu-high-io'}elseif($HighIo){$arguments+=@('--high-io',[string]$InspectSeconds)}elseif($RetainedGpu){$arguments+='--retained-gpu'}elseif($HardwareGpu){$arguments+='--hardware-gpu'}
 & $DotNetPath @arguments
 if($LASTEXITCODE -ne 0){throw 'Protected-session validation failed'}

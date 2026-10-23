@@ -30,7 +30,7 @@ static class CoreChoiceChecks
 
     internal static async Task ProcessesAsync(Action<bool, string> check)
     {
-        var identity = new RunningProcess(123, "1", @"C:\Games\game.exe");
+        var identity = new RunningProcess(123, "1", Path.Combine(Path.GetTempPath(), "game.exe"));
         var controls = Controls("0xFFFFFFFF");
         var (savedSnapshot, savedInventory, savedGovernor) = (App.Operations.ProcessSnapshot, App.Live.Inventory, App.Operations.Governor);
         Dictionary<string, JsonElement>? requested = null;
