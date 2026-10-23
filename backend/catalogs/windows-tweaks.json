@@ -73572,31 +73572,6 @@
           ]
         },
         {
-          "id": "choice-dc6b5cc8eae3dd25",
-          "name": "Allow Telemetry: 3",
-          "changes": [
-            {
-              "address": {
-                "hive": "LocalMachine",
-                "view": "Registry64",
-                "keyPath": "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\DataCollection",
-                "kind": "value",
-                "valueName": "AllowTelemetry"
-              },
-              "dword": 3
-            }
-          ],
-          "availability": [
-            {
-              "minimumBuild": 10240,
-              "maximumBuild": 26200,
-              "editions": [
-                "*"
-              ]
-            }
-          ]
-        },
-        {
           "id": "choice-6b253977ea5987f3",
           "name": "Required diagnostic data",
           "changes": [
@@ -73609,6 +73584,32 @@
                 "valueName": "AllowTelemetry"
               },
               "dword": 1
+            }
+          ],
+          "replaces": "choice-95a6ed84299d0109",
+          "availability": [
+            {
+              "minimumBuild": 10240,
+              "maximumBuild": 26200,
+              "editions": [
+                "*"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "choice-dc6b5cc8eae3dd25",
+          "name": "Allow Telemetry: 3",
+          "changes": [
+            {
+              "address": {
+                "hive": "LocalMachine",
+                "view": "Registry64",
+                "keyPath": "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\DataCollection",
+                "kind": "value",
+                "valueName": "AllowTelemetry"
+              },
+              "dword": 3
             }
           ],
           "availability": [
@@ -74315,6 +74316,7 @@
               "dword": 1
             }
           ],
+          "replaces": "choice-95a6ed84299d0109",
           "availability": [
             {
               "minimumBuild": 10240,
