@@ -317,7 +317,6 @@ public partial class ProcessControlsViewModel : ObservableObject
     private bool _resultShown;
     private bool _signInAtRisk;
     private bool _syncingCpus;
-    private bool _separateCpus;
 
     public ProcessControlsViewModel() => _selectedCpuMode = CpuModes[0];
     public bool CanEdit => !Busy && !RestoreAvailable;
@@ -352,7 +351,7 @@ public partial class ProcessControlsViewModel : ObservableObject
     partial void OnAffinityAvailableChanged(bool value) => NotifyState();
     partial void OnRuleNameChanged(string value) => OnPropertyChanged(nameof(CanSaveRule));
     partial void OnOneThreadPerCoreChanged(bool value) => Invalidate();
-    private bool SyncCpus => !_syncingCpus && !(_separateCpus && SelectedCpuMode.Kind == "logical");
+    private bool SyncCpus => !_syncingCpus && SelectedCpuMode.Kind != "logical";
     partial void OnSetHardAffinityChanged(bool value)
     {
         if (value && SyncCpus)
@@ -374,6 +373,7 @@ public partial class ProcessControlsViewModel : ObservableObject
         if (_snapshot is not null && ShowTopology)
             foreach (var item in _snapshot.Topology.Select(cpu => new TopologyChoice(cpu.Group, value.Kind == "core" ? cpu.Core : value.Kind == "cache" ? cpu.Cache : cpu.Numa)).Distinct()) TopologyChoices.Add(item);
         SelectedTopology = TopologyChoices.FirstOrDefault();
+        if (SetHardAffinity && SyncCpus) CpusFromAffinity();
         Invalidate();
     }
     partial void OnSelectedProcessChanged(CpuProcessChoice? value) { Invalidate(); _readTask = ReadProcessAsync(value, ++_selectionVersion); }
@@ -426,7 +426,7 @@ public partial class ProcessControlsViewModel : ObservableObject
     private async Task ReadProcessAsync(CpuProcessChoice? process, int version)
     {
         _resultShown = false;
-        _snapshot = null; Controls.Clear(); Cpus.Clear(); _editingRuleId = null; _separateCpus = false; SelectedCpuMode = CpuModes[0]; SetHardAffinity = false; OneThreadPerCore = false;
+        _snapshot = null; Controls.Clear(); Cpus.Clear(); _editingRuleId = null; SelectedCpuMode = CpuModes[0]; SetHardAffinity = false; OneThreadPerCore = false;
         CpuSetsAvailable = false; AffinityAvailable = false; _affinityGroup = 0; AffinityMask = ""; AffinityLabel = "Hard-affinity CPU mask";
         if (process is null) { NotifyState(); return; }
         Busy = true;
@@ -809,8 +809,6 @@ public partial class ProcessControlsViewModel : ObservableObject
                 }
             }
             finally { _syncingCpus = false; }
-            _separateCpus = SetHardAffinity && SelectedCpuMode.Kind == "logical" && ValidAffinity() &&
-                Cpus.Where(cpu => cpu.Selected && cpu.Cpu.Group == _affinityGroup).Aggregate(0UL, (bits, cpu) => bits | (1UL << cpu.Cpu.Index)) != ProcessTarget.ParseMask(AffinityMask.Trim());
             if (SetHardAffinity && SelectedCpuMode.Kind != "logical") CpusFromAffinity();
             Status = "Editing " + rule.Name;
             Detail = "Change the controls, then preview and save to replace this rule.";
