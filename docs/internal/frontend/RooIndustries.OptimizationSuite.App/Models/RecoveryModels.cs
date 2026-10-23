@@ -7,6 +7,8 @@ namespace RooIndustries.OptimizationSuite.Models;
 
 public sealed record RecoveryOperationGeneration(string Id);
 
+public sealed record ProcessProfileApplyJournal(string Path, string Generation);
+
 public sealed record ProcessProfileRecovery(string Path, string Id, string? Generation = null)
 {
     public bool Valid()
@@ -68,6 +70,12 @@ public sealed record ProcessProfileRecovery(string Path, string Id, string? Gene
             return recovery.Valid() ? recovery : null;
         }
         catch { return null; }
+    }
+
+    public static ProcessProfileRecovery FromBackup(string path, string generation)
+    {
+        using var document = JsonDocument.Parse(File.ReadAllText(path));
+        return new(path, Text(document.RootElement, "backupId") ?? "", generation);
     }
 
     private static string? Text(JsonElement root, params string[] path)

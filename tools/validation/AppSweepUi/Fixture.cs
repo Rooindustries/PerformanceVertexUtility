@@ -117,6 +117,8 @@ namespace RooIndustries.OptimizationSuite.Services
         public Task<ProcessGovernorSessionStatus?> GetProcessGovernorSessionStatusAsync(CancellationToken cancellationToken = default) => Task.FromResult(GovernorStatusModel);
         public string? FindLatestProcessProfileBackup() => LatestProcessBackup;
         public bool ProcessProfileRestorePending => ProcessProfileRecovery is not null;
+        public bool ProcessProfileApplyFinishing => false;
+        public bool TakeProcessApplyRecoveredNotice() => false;
         public bool ProcessRecoverySetAside { get; set; }
         public bool TakeProcessRecoverySetAsideNotice()
         {
