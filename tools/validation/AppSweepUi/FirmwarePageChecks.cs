@@ -75,7 +75,7 @@ static class FirmwarePageChecks
                 page.Search = "Fixture"; page.ChangedOnly = true;
                 var exports = Calls("/o").Length;
                 var back = await Revisit();
-                return page.IsEditing && back.IsEditing && back.ChangedCount == 2 && back.SessionDirectory == editing
+                return page.IsEditing && back.IsEditing && back.ChangedCount == 2 && back.SessionDirectory == editing && back.HasUnsavedPicks
                     && back.Settings.Single(row => row.Name == "Fixture option").Selection == "01" && back.Settings.Single(row => row.Name == "Fixture delay").Selection == "9"
                     && back.Search == "Fixture" && back.ChangedOnly && Calls("/o").Length == exports;
             });
@@ -95,7 +95,7 @@ static class FirmwarePageChecks
                 if (!await Until(() => Calls("/i").Length == 1)) return false;
                 var back = await Revisit();
                 return back.Busy && back.IsReview && back.SessionDirectory == writing && back.Message == Writing
-                    && !back.CanApply && !back.CanLoad && !back.CanVerify && !write.IsCompleted;
+                    && !back.CanApply && !back.CanLoad && !back.CanStartOver && !back.CanVerify && !write.IsCompleted;
             });
 
             await Scenario("Pressing Load during a BIOS write starts nothing and shows no file-lock error", async () =>
@@ -121,12 +121,29 @@ static class FirmwarePageChecks
                 if (write is null) return false;
                 await write.WaitAsync(TimeSpan.FromSeconds(30));
                 var back = await Revisit();
-                var shown = back.IsResult && !back.Busy && back.ResultStatus == "restartRequired" && back.CanRestart
+                var shown = back.IsResult && !back.Busy && back.ResultStatus == "restartRequired" && back.CanRestart && back.CanStartOver
                     && back.ResultHeadline == "Changes saved. Restart when ready." && back.SessionDirectory == writing
                     && back.History.Count(row => row.Directory == writing && row.Label.EndsWith("Restart pending", StringComparison.Ordinal)) == 1;
                 var again = await Revisit();
                 return shown && again.IsResult && again.ResultStatus == "restartRequired"
                     && Calls("/i").Length == 1 && File.ReadAllText(state) == "01|9";
+            });
+
+            await Scenario("Start over discards the picks on purpose and loads fresh settings", async () =>
+            {
+                var page = await Revisit();
+                await page.StartOverAsync();
+                var cleared = page.IsSetup && page.SessionDirectory is null && !page.CanOpenFiles && !page.CanStartOver && page.CanLoad;
+                await page.LoadAsync();
+                var fresh = page.SessionDirectory;
+                page.Settings.Single(row => row.Name == "Fixture delay").Selection = "7";
+                var picked = page.IsEditing && page.ChangedCount == 1 && page.HasUnsavedPicks && page.CanStartOver;
+                await page.StartOverAsync();
+                var discarded = page.IsSetup && page.ChangedCount == 0 && page.Settings.Count == 0 && page.Changes.Count == 0 && page.Search == "" && !page.ChangedOnly;
+                var back = await Revisit();
+                await back.LoadAsync();
+                return cleared && picked && discarded && back.IsEditing && back.ChangedCount == 0 && back.SessionDirectory != fresh
+                    && back.Settings.Single(row => row.Name == "Fixture delay").Selection == "9" && File.ReadAllText(state) == "01|9";
             });
 
             await Scenario("A BIOS write that fails while the user is away shows the failure on return and unlocks the page", async () =>
@@ -147,7 +164,7 @@ static class FirmwarePageChecks
                 File.Delete(hold);
                 await failing.WaitAsync(TimeSpan.FromSeconds(30));
                 var back = await Revisit();
-                return running && back.IsResult && !back.Busy && back.ResultStatus == "needsAttention" && back.CanVerify && !back.CanRestart
+                return running && back.IsResult && !back.Busy && back.ResultStatus == "needsAttention" && back.CanVerify && back.CanStartOver && !back.CanRestart
                     && back.Message.StartsWith("SCEWIN returned 1.", StringComparison.Ordinal) && File.ReadAllText(state) == "01|9";
             });
             File.Delete(refusal);

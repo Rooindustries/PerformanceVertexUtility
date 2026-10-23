@@ -33,7 +33,7 @@
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
-            <Button Content="← Tools" Click="Back" VerticalAlignment="Top" IsEnabled="{x:Bind ViewModel.Busy, Mode=OneWay, Converter={StaticResource InverseBool}}" />
+            <Button Content="← Tools" Click="Back" VerticalAlignment="Top" AutomationProperties.AutomationId="FirmwareBack" />
             <Image Grid.Column="1" Source="ms-appx:///Assets/Icons/cpu.svg" Style="{StaticResource PageHeaderIconStyle}" />
             <StackPanel Grid.Column="2" Spacing="3">
                 <TextBlock Text="BIOS settings" FontSize="24" FontWeight="SemiBold" />
@@ -46,9 +46,11 @@
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <TextBlock Text="{x:Bind ViewModel.StepText, Mode=OneWay}" Foreground="{StaticResource RooIndustriesAccentBrush}" FontWeight="SemiBold" VerticalAlignment="Center" AutomationProperties.AutomationId="FirmwareStep" />
             <ProgressRing Grid.Column="1" IsActive="{x:Bind ViewModel.Busy, Mode=OneWay}" Width="22" Height="22" AutomationProperties.AutomationId="FirmwareBusy" />
+            <Button Grid.Column="2" Content="Start over" Click="StartOver" IsEnabled="{x:Bind ViewModel.CanStartOver, Mode=OneWay}" Visibility="{x:Bind ViewModel.IsSetup, Mode=OneWay, Converter={StaticResource InverseBoolToVisibility}}" AutomationProperties.AutomationId="FirmwareStartOver" />
         </Grid>
         <Grid Grid.Row="2">
             <ScrollViewer Visibility="{x:Bind ViewModel.IsSetup, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">

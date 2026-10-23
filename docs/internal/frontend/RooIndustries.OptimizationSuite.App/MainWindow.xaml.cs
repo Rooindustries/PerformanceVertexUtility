@@ -275,6 +275,13 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    private void Nav_ItemInvoked(NavigationView sender, NavigationViewItemInvokedEventArgs args)
+    {
+        if (!args.IsSettingsInvoked && !_onSettings && args.InvokedItemContainer is NavigationViewItem { Tag: string tag } && tag == _currentTag
+            && PageMap.TryGetValue(tag, out var pageType) && ContentFrame.Content?.GetType() != pageType)
+            ContentFrame.Navigate(pageType);
+    }
+
     private void OnThemeChanged()
     {
         App.ApplyAccentResourceOverrides();
