@@ -2,6 +2,7 @@ param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutRo
 $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
 . (Join-Path $Source 'tools\validation\Update\Harness.Common.ps1')
+. (Join-Path $Source 'tools\validation\Tweaks\BootMarkerFixture.Common.ps1')
 $nonce=Initialize-HarnessInvocation ('restart-check-'+$Label) $OutRoot
 Assert-HarnessHostLease
 Ensure-HarnessOutputDirectory $OutRoot
@@ -37,6 +38,8 @@ $parent='Software\RooIndustriesTweakTests';$fixture=$parent+'\'+[Guid]::NewGuid(
 $parentExisted=Test-Path -LiteralPath ('HKCU:\'+$parent)
 $states=Join-Path $directory 'feature-states.json'
 $app=$null;$status='fail'
+$evidence.bootMarkerRestored=$false
+$bootMarkerBefore=Get-TweakBootMarkerSnapshot
 try{
  if(@(Get-Process -Name 'RooIndustries.OptimizationSuite.App' -ErrorAction SilentlyContinue).Count){throw 'The Suite is already open; this capture does not take over another window.'}
  [IO.File]::WriteAllText($states,'{"HypervisorPlatform":2,"VirtualMachinePlatform":2}',[Text.UTF8Encoding]::new($false))
@@ -88,12 +91,21 @@ try{
  if(-not$app.process.WaitForExit(20000)){Stop-HarnessProcess $app};$app=$null
  $status='pass'
 }finally{
+ try{
  if($app){Stop-HarnessProcess $app}
  if(Test-Path -LiteralPath ('HKCU:\'+$fixture)){Remove-Item -LiteralPath ('HKCU:\'+$fixture) -Recurse -Force}
  if(-not$parentExisted -and (Test-Path -LiteralPath ('HKCU:\'+$parent))){$left=Get-Item -LiteralPath ('HKCU:\'+$parent);if($left.SubKeyCount -eq 0 -and $left.ValueCount -eq 0){Remove-Item -LiteralPath ('HKCU:\'+$parent) -Force}}
  $evidence.fixtureRemoved=-not(Test-Path -LiteralPath ('HKCU:\'+$fixture))
+ }catch{$status='fail';throw}finally{
+ try{
+ Restore-TweakBootMarkerSnapshot $bootMarkerBefore
+ $evidence.bootMarkerRestored=$true
+ }finally{
+ if(-not$evidence.bootMarkerRestored){$status='fail'}
  $evidence.status=$status
  Write-HarnessResult $directory 'capture.json' $evidence|Out-Null
  Write-Output ('ROO_INDUSTRIES_RESTART_CAPTURE '+$status+' '+$directory)
+ }
+ }
 }
-if($status -ne 'pass' -or -not$evidence.fixtureRemoved){exit 1}
+if($status -ne 'pass' -or -not$evidence.fixtureRemoved -or -not$evidence.bootMarkerRestored){exit 1}
