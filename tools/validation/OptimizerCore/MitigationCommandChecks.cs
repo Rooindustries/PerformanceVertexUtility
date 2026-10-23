@@ -65,7 +65,7 @@ static class MitigationCommandChecks
                 check(read.Error is null && read.Controls is [{ } control] && ControlValues.Equal(control.Value, before),
                     "Exploit protection reads the native store with its module " + modules + " and policy " + (seeded ? "present" : "absent") + ": " + read.Error);
                 var review = Review(engine, folder, [new("mitigations", "set")]);
-                check((store.ReadState()?.Profiles.Length is null or 0) && store.Recovery().Pending is null, "Mitigation review writes no recovery state");
+                check(ControlValues.Equal(Snapshot(), before) && (store.ReadState()?.Profiles.Length is null or 0) && store.Recovery().Pending is null, "Mitigation review writes no policy or recovery state");
                 Apply(engine, review);
                 var expected = seeded ? bytes.ToArray() : new byte[24]; expected[2] = (byte)((expected[2] & ~7) | 1);
                 check(((byte[])kernel.GetValue(Names[0])!).SequenceEqual(expected) && store.Recovery().Pending is null,
@@ -145,12 +145,19 @@ static class MitigationCommandChecks
         finally
         {
             PowerShellControls.Launcher = originalLauncher;
-            var final = Snapshot();
-            var recovery = activeStore?.Recovery();
-            restored = ControlValues.Equal(final, baseline) && recovery?.Pending is null && (recovery?.State?.Profiles.Length is null or 0);
-            OperationFiles.Write(evidence, new { baseline, final, restored, results });
-            if (restored) { owned.Dispose(); folder.Delete(true); }
-            else Console.Error.WriteLine("Retained mitigation recovery at " + root + " and " + folder.FullName);
+            restored = false;
+            try
+            {
+                var final = Snapshot();
+                var recovery = activeStore?.Recovery();
+                restored = ControlValues.Equal(final, baseline) && recovery?.Pending is null && (recovery?.State?.Profiles.Length is null or 0);
+                OperationFiles.Write(evidence, new { baseline, final, restored, results });
+            }
+            finally
+            {
+                if (restored) { owned.Dispose(); folder.Delete(true); }
+                else Console.Error.WriteLine("Retained mitigation recovery at " + root + " and " + folder.FullName);
+            }
         }
     }
 }
