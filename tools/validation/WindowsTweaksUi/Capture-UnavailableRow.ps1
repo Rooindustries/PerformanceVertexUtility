@@ -42,7 +42,7 @@ function Shot($Window,[string]$Path,[string]$Format='png'){
 $dotnet=@((Join-Path $env:LOCALAPPDATA 'Microsoft\dotnet\dotnet.exe'),(Join-Path $env:USERPROFILE '.dotnet\dotnet.exe'),(Join-Path $env:ProgramFiles 'dotnet\dotnet.exe')|Where-Object {Test-Path -LiteralPath $_ -PathType Leaf}|Where-Object {@(& $_ --list-sdks 2>$null).Count}|Select-Object -First 1)
 if(-not$dotnet){throw 'No .NET SDK was found for the test build.'}
 $dotnet=$dotnet[0]
-$app=$null;$copy=Join-Path $directory 'modules';$status='fail'
+$app=$null;$status='fail'
 try{
  if(@(Get-Process -Name 'RooIndustries.OptimizationSuite.App' -ErrorAction SilentlyContinue).Count){throw 'The Suite is already open; this capture does not take over another window.'}
  $env:MSBUILDDISABLENODEREUSE='1';$env:DOTNET_CLI_USE_MSBUILD_SERVER='0';$env:DOTNET_CLI_TELEMETRY_OPTOUT='1'
@@ -55,22 +55,19 @@ try{
  $exe=@(Get-ChildItem -LiteralPath (Join-Path $Source 'docs\internal\frontend\RooIndustries.OptimizationSuite.App\bin\x64\Debug') -Recurse -Filter 'RooIndustries.OptimizationSuite.App.exe'|Sort-Object LastWriteTimeUtc -Descending)
  if(-not$exe.Count){throw 'The app test build produced no executable.'}
  $evidence.provider=[string](Get-Command $HiddenCommand -ErrorAction Stop).Module.Path
- $roots=@((Join-Path ([Environment]::GetFolderPath('ProgramFiles')) 'WindowsPowerShell\Modules'),(Join-Path ([Environment]::SystemDirectory) 'WindowsPowerShell\v1.0\Modules'))
- $paths=@()
- for($index=0;$index -lt $roots.Count;$index++){
-  $target=Join-Path $copy ([string]$index);[IO.Directory]::CreateDirectory($target)|Out-Null
-  foreach($module in @(Get-ChildItem -LiteralPath $roots[$index] -Directory)){
-   if($module.Name -in $hidden){continue}
-   & (Join-Path ([Environment]::SystemDirectory) 'robocopy.exe') $module.FullName (Join-Path $target $module.Name) /E /XJ /R:0 /W:0 /NFL /NDL /NJH /NJS /NP|Out-Null
-   if($LASTEXITCODE -ge 8){throw ('Copying module '+$module.Name+' failed.')}
-  }
-  $paths+=$target
- }
- $modulePath=$paths -join ';'
- $probe=@(& (Join-Path ([Environment]::SystemDirectory) 'WindowsPowerShell\v1.0\powershell.exe') -NoProfile -NonInteractive -Command ("`$env:PSModulePath='"+$modulePath.Replace("'","''")+"';[bool](Get-Command "+$HiddenCommand+" -ErrorAction SilentlyContinue);[bool](Get-Command Get-NetFirewallProfile -ErrorAction SilentlyContinue)"))
+ $tokens=$null;$errors=$null
+ $tree=[Management.Automation.Language.Parser]::ParseFile((Join-Path $Source 'backend\native\Optimizer.Core\WindowsControls.ps1'),[ref]$tokens,[ref]$errors)
+ if($errors.Count){throw 'The Windows control helper could not be parsed.'}
+ $names=@($tree.FindAll({param($node) $node -is [Management.Automation.Language.CommandAst]},$true)|ForEach-Object {$_.GetCommandName()}|Where-Object {$_}|Sort-Object -Unique)
+ $modules=@(Get-Command -Name $names -ErrorAction SilentlyContinue|Where-Object {$_.Module.Path -and $_.ModuleName -notin $hidden}|ForEach-Object {$_.ModuleName}|Sort-Object -Unique)
+ if(-not$modules.Count){throw 'No helper command providers were found.'}
+ $evidence.importedModules=$modules
+ $prelude="`$ErrorActionPreference='Stop';`$ProgressPreference='SilentlyContinue';Import-Module "+(($modules|ForEach-Object {"'"+$_.Replace("'","''")+"'"}) -join ',')+";`$global:PSModuleAutoLoadingPreference='None';"
+ $probeScript=$prelude+"[bool](Get-Command '"+$HiddenCommand.Replace("'","''")+"' -ErrorAction SilentlyContinue);[bool](Get-Command Get-NetFirewallProfile -ErrorAction SilentlyContinue)"
+ $probe=@(& (Join-Path ([Environment]::SystemDirectory) 'WindowsPowerShell\v1.0\powershell.exe') -NoProfile -NonInteractive -EncodedCommand ([Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($probeScript))))
  $evidence.hiddenCommandFound=$probe[0];$evidence.firewallCommandFound=$probe[1]
- if($probe.Count -ne 2 -or $probe[0] -ne 'False' -or $probe[1] -ne 'True'){throw ('The module copy must hide '+$HiddenCommand+' and keep the other modules: '+($probe -join ','))}
- $env:ROO_INDUSTRIES_TEST_MODULE_PATH=$modulePath;$env:ROO_INDUSTRIES_INITIAL_NAV='windows';$env:ROO_INDUSTRIES_DOTNET_EXE=$dotnet
+ if($LASTEXITCODE -ne 0 -or $probe.Count -ne 2 -or $probe[0] -ne 'False' -or $probe[1] -ne 'True'){throw ('The helper providers must hide '+$HiddenCommand+' and keep the other modules: '+($probe -join ','))}
+ $env:ROO_INDUSTRIES_TEST_MODULES=$modules -join ';';$env:ROO_INDUSTRIES_INITIAL_NAV='windows';$env:ROO_INDUSTRIES_DOTNET_EXE=$dotnet
  $app=Start-OwnedProcess -FilePath $exe[0].FullName -WindowStyle Normal -Purpose 'suite-test-build' -Lifetime invocation
  $window=WaitFor {$A::RootElement.FindFirst($TS::Children,[Windows.Automation.PropertyCondition]::new($A::ProcessIdProperty,[int]$app.Identity.pid))} 120 'the Suite window'
  $hwnd=[IntPtr]::new([long]$window.Current.NativeWindowHandle)
@@ -113,11 +110,19 @@ try{
  $window.GetCurrentPattern([Windows.Automation.WindowPattern]::Pattern).Close()
  if(-not$app.process.WaitForExit(20000)){Stop-HarnessProcess $app};$app=$null
  $status='pass'
+}catch{
+ $evidence.error=$_.Exception.Message
+ throw
 }finally{
- if($app){Stop-HarnessProcess $app}
- if(Test-Path -LiteralPath $copy){Remove-Item -LiteralPath $copy -Recurse -Force}
- $evidence.status=$status
- Write-HarnessResult $directory 'capture.json' $evidence|Out-Null
- Write-Output ('ROO_INDUSTRIES_ROW_CAPTURE '+$status+' '+$directory)
+ try{
+  if($app){Stop-HarnessProcess $app}
+ }catch{
+  $status='fail';$evidence.cleanupError=$_.Exception.Message
+  throw
+ }finally{
+  $evidence.status=$status
+  Write-HarnessResult $directory 'capture.json' $evidence|Out-Null
+  Write-Output ('ROO_INDUSTRIES_ROW_CAPTURE '+$status+' '+$directory)
+ }
 }
 if($status -ne 'pass'){exit 1}
