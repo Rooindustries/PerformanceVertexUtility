@@ -5,6 +5,7 @@ using RooIndustries.OptimizationSuite.Models;
 using RooIndustries.OptimizationSuite.Services;
 
 if (args is ["--recovery-slot", var recoveryAction, var recoveryOutput, var recoveryRepo, var slotDirectory]) { await RecoverySlotChecks.Run(recoveryAction, recoveryOutput, recoveryRepo, slotDirectory); return; }
+if (args is ["--recovery-cut", var cutOutput, var cutRepo, var cutDirectory, var cutPids]) { await RecoverySlotChecks.Cut(cutOutput, cutRepo, cutDirectory, cutPids); return; }
 if (args is ["--settings-corruption", var settingsOutput]) { RecoverySlotChecks.Settings(settingsOutput); return; }
 if (args is ["--review2-services", var reviewOutput, var recoveryDirectory]) { await Review2Checks.Run(reviewOutput, recoveryDirectory); return; }
 if (args is ["--review2-restore-pending", var pendingOutput, var pendingDirectory]) { await Review2Checks.Run(pendingOutput, pendingDirectory, settings: false); return; }
