@@ -106,3 +106,23 @@ Update drivers use `upload_frame` / `interactive_frame` and hold a ledger-owned 
 For an unpublished release candidate, `run_shipped.py --scenario p2 --candidate --source-commit <release-head> --published-installer <candidate.exe> --baseline-installer <real-0.10.exe> --baseline-sha256 <baseline-sha> --host <test-pc> --expected-machine <computer-name> --innoextract <binary> --out-dir <fresh-folder>` stages local candidate bytes with MOTW and verifies the live signed feed independently. It never requests an unpublished URL. SmartScreen is recorded and never clicked; the owned launch is canceled before a labeled retry without MOTW. `--scenario p2b --candidate` uses the published prior installer as its baseline and emulates only the pending record, deliberate child environment, silent setup arguments and clean app close. Its trace-bound relaunch, payload, preservation, governor and cache checks do not claim feed-driven OTA before publication.
 
 `Build-ReleaseCandidate.ps1 -Source <staged-source> -OutRoot <frame-child>` builds unsigned with the exact committed feed, runs the release smoke test, reads the embedded resource and records the installer identity plus every payload hash. `-ProbeOnly` builds the same invocation-bound installer-launch probe for P2b.
+
+## Release upgrade rehearsal
+
+`Invoke-UpgradeRehearsal.ps1` runs through `windows_ssh.py interactive-frame` on an exclusively leased Windows PC. `-PreflightOnly` requires only `Source` and `OutRoot`: it records both data roots, shortcuts, product tasks and protected-folder registration, then checks their file hashes and state again without installing. Existing state still refuses a normal run.
+
+For the exclusive run, supply `OldUrl`, `OldSha256`, `OldVersion`, `NewInstaller`, `NewVersion`, `PayloadHashes`, `HandoffProbe` (the built UpdateProbe executable) and `SignedManifest`. The signed manifest is an input; signing happens separately on the signing machine. No signing key or publication credential goes to Windows. Signature, installer and payload checks run before moving state. `-MoveAsideExistingState` opts into preserving existing data and shortcuts through same-directory renames and disabled Task Scheduler copies. An existing installation, running product task or foreign app still refuses the run.
+
+Every original file has a relative path, SHA-256, attributes, creation/write times and permissions in a retained `upgrade-state` ledger entry. The journal records each rename intent first. Generated data is moved to a separate sibling archive before the originals return. Original task XML, security, enabled state and protected-folder registry values are restored and read back. Nothing in those data archives is deleted. If a restore conflicts or a hash changes, the run fails and keeps both sides. `state-journal.json` names the retained ledger entry; `-RestoreStateId <entry>` can finish an interrupted restore in that same frame after the owned installation has been removed. It refuses occupied destinations without a saved output snapshot.
+
+The rehearsal installs the old release, creates a disabled saved rule and genuine undo history using only an owned probe process, primes the signed candidate cache, then clicks the old app's actual Install button. It checks relaunch, the new name and shortcuts, installed payload hashes, saved file hashes and rule readback. `finally` uninstalls only the test-owned installation and verifies restoration. A cached rehearsal does not prove HTTPS download; after publication, `-LiveFeed` repeats the journey with an actual download by the old app instead of cache priming.
+
+Evidence is under `<OutRoot>/upgrade-rehearsal-<nonce>`: `checks`, `as-found`, `state-journal`, `seed-preservation`, `pending-install-observed`, `restore-verification`, `end-state`, screenshots and an app-only MJPEG recording. Setup pauses recording while no app window exists. Convert the MJPEG to MP4 on the render PC and inspect it before using it as visual evidence. Keep the frame ledger and generated sibling archives after the run; do not run frame cleanup over this retained recovery evidence.
+
+Linux regression command:
+
+```sh
+pwsh -NoProfile -File tools/validation/Update/Check-UpgradeRehearsal.ps1 -OutRoot <new-output-folder>
+```
+
+This drives real file renames and hash checks with a fixture ledger. It covers populated/fresh roots, hidden files, empty folders, shortcut files, interrupted/repeated restoration, conflicting destinations and modified/missing archives. It does not exercise Task Scheduler, Windows permissions, registry restoration or the desktop upgrade. Those checks remain part of the exclusive Windows run.

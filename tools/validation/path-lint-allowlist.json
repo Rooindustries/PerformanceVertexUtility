@@ -82,5 +82,23 @@
     "line": 165,
     "text": "if($size -eq 'short'){$streamInfo=Get-Item -LiteralPath (Get-HarnessToolPath $file) -Stream Zone.Identifier;if($streamInfo.Stream -cne 'Zone.Identifier' -or $streamInfo.Length -ne [Text.Encoding]::UTF8.GetByteCount($text)){throw 'The independent PowerShell ADS readback differs.'}}",
     "reason": "Independent ADS provider readback on a bounded short plain file path, with the stream supplied separately through -Stream."
+  },
+  {
+    "file": "tools/validation/Update/Check-UpgradeRehearsal.ps1",
+    "line": 10,
+    "text": "function Get-HarnessItem([string]$Path,[switch]$Force){$i=Get-Item -LiteralPath $Path -Force;[pscustomobject]@{FullName=$i.FullName;IsDirectory=$i.PSIsContainer;Attributes=$i.Attributes}}",
+    "reason": "Linux-only disposable filesystem fixture adapter; real Windows uses the existing extended-path harness helpers."
+  },
+  {
+    "file": "tools/validation/Update/Check-UpgradeRehearsal.ps1",
+    "line": 11,
+    "text": "function Get-HarnessTree([string]$Path){Get-ChildItem -LiteralPath $Path -Recurse -Force|ForEach-Object {Get-HarnessItem $_.FullName}}",
+    "reason": "Linux-only disposable filesystem fixture adapter; real Windows uses the existing extended-path harness helpers."
+  },
+  {
+    "file": "tools/validation/Update/UpgradeRehearsal.State.ps1",
+    "line": 21,
+    "text": "if((Get-HarnessItem $From -Force).IsDirectory){[IO.Directory]::Move((Get-HarnessLongPath $From),(Get-HarnessLongPath $To))}else{[IO.File]::Move((Get-HarnessLongPath $From),(Get-HarnessLongPath $To))}",
+    "reason": "Native same-directory NTFS rename preserves original files and ACLs; extended paths are consumed only by .NET, never cmdlets."
   }
 ]

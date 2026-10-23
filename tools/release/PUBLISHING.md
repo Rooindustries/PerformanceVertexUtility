@@ -32,3 +32,5 @@ python3 tools/release/publish_update.py set-feed --manifest <version>-feed.previ
 This stops new downloads within about a minute. An app that already downloaded the bad version can still install it from its cache, and an app that installed it keeps it, because apps never move to a lower version. To replace a version testers already have, publish a fixed build with a higher version.
 
 If a publish stops after the installer upload, the immutable installer path can't be uploaded again. Run `set-feed` with the new manifest to finish it.
+
+Before publication, run the [release upgrade rehearsal](../validation/Update/README.md#release-upgrade-rehearsal) with the signed manifest and matching installer as inputs. Run its read-only preflight first. Use an exclusive test window for `-MoveAsideExistingState`, and require `restore-verification` with `restored: true`, an empty `cleanupErrors` list and a passing invocation. Retain its ownership ledger and data archives. After publication, repeat with `-LiveFeed` to prove the real old app downloads and installs the live release.
