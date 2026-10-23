@@ -6,17 +6,18 @@ function Invoke-E2EBackend {
  . (Join-Path $Source 'backend\scripts\GameTuneSession.Common.ps1')
  $script:RestoreE2ELegacyData=Join-Path $OutRoot 'owned-data'
  function Get-RooIndustriesLocalDataRoot{return $script:RestoreE2ELegacyData}
- $tokens=$null;$errors=$null
- $ast=[Management.Automation.Language.Parser]::ParseFile((Join-Path $Source ('backend\scripts\'+$Script)),[ref]$tokens,[ref]$errors)
+ $tokens=$null;$errors=$null;$path=Join-Path $Source ('backend\scripts\'+$Script)
+ $ast=[Management.Automation.Language.Parser]::ParseFile($path,[ref]$tokens,[ref]$errors)
  if($errors.Count){throw ($errors -join '; ')}
  foreach($statement in $ast.EndBlock.Statements){
-  if($statement -is [Management.Automation.Language.FunctionDefinitionAst] -or $statement -is [Management.Automation.Language.AssignmentStatementAst]){. ([scriptblock]::Create($statement.Extent.Text))}
+  if($statement -is [Management.Automation.Language.FunctionDefinitionAst] -or $statement -is [Management.Automation.Language.AssignmentStatementAst]){. (New-BackendBlock $path $statement.Extent)}
  }
  $OutputPath='';$SessionId=''
  $body=@($ast.EndBlock.Statements|Where-Object {$_ -is [Management.Automation.Language.TryStatementAst]})
  if($body.Count -ne 1){throw 'Expected one real backend body'}
- & ([scriptblock]::Create($body[0].Extent.Text))
+ & (New-BackendBlock $path $body[0].Extent)
 }
+function New-BackendBlock([string]$Path,$Extent){$tokens=$null;$errors=$null;$ast=[Management.Automation.Language.Parser]::ParseInput(("`n"*($Extent.StartLineNumber-1))+$Extent.Text,$Path,[ref]$tokens,[ref]$errors);if($errors.Count){throw ($errors -join '; ')};return $ast.GetScriptBlock()}
 $utf8=[Text.UTF8Encoding]::new($false)
 function Save([string]$directory,[string]$name,$value){[IO.File]::WriteAllText((Join-Path $directory ($name+'.json')),($value|ConvertTo-Json -Depth 40),$utf8)}
 function Start-Fixture([string]$directory,[string]$name){

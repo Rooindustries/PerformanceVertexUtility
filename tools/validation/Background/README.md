@@ -132,6 +132,10 @@ The caller must first supply the existing verified `windows_ssh.py`
 `Assert-FrameSourceSnapshot` and protected path helpers; it fails if they are
 missing. It checks current source bytes before importing any source and again
 after the groups, including protocol, commit, frame, SID, machine and file count.
+It dot-sources the Harness-dependent groups inside a script block so they share
+its Harness scope; a plain `&` call starts a new script scope that can't see it.
+The drivers parse each backend body with its real script path, so `$PSScriptRoot`
+resolves the same way as in a normal backend run.
 
 The original `frame-receipt.json` and active canonical Harness lease remain
 required. Create `OutRoot` and both `compiled\actor` and `compiled\ui` directories
@@ -347,10 +351,11 @@ are separate from these 12 and from the b0 TOCTOU case. For a later granted
 window, the current driver can target the separately bound product export:
 
 ```powershell
-& (Join-Path $Source 'tools\validation\Background\Test-RestoreSerialization.ps1') -Source $reviewedSource -SourceCommit 'c50c8c8c9a0c8bd2d9103dc0059d088f79a85964' -ActorExe $actor -OutRoot $ownedRedCase -Kind $body -Control priorityClass -Scenario $legacyMode
+& {. (Join-Path $Source 'tools\validation\Background\Test-RestoreSerialization.ps1') -Source $reviewedSource -SourceCommit 'c50c8c8c9a0c8bd2d9103dc0059d088f79a85964' -ActorExe $actor -OutRoot $ownedRedCase -Kind $body -Control priorityClass -Scenario $legacyMode}
 ```
 
-Those variables must come from the approved frame and complete input bindings.
+Those variables must come from the approved frame and complete input bindings,
+in a session that already opened the frame's Harness.
 This call is an expected-failing old-source control, not a second controller,
 automatic retry or permission for host contact. Its failure must be judged from
 the specific saved observations and original cleanup.
@@ -414,6 +419,18 @@ pwsh -NoProfile -File tools/validation/Background/Test-RestoreActorReceipt.ps1 -
 ```
 
 This checks the shared receipt consumer. It does not run the native actor or prove Windows process ownership or restore behavior. The real Windows group remains required.
+
+`Invoke-RestoreKeptUi.ps1` drives the real desktop app's Game priority Restore
+after another program changed the priority. Build the app in a short copy of the
+source with `tools\scripts\Build-Frontend.ps1`, then run the script through
+`windows_ssh.py interactive-frame` with `Source`, `AppRoot`, `OutRoot` and
+`Label` (`before` for a build of main, `after` for the change). It starts an
+owned PING fixture, applies a one-process Game priority profile from the app
+root's own backend, sets the fixture to Below normal, clicks Restore game
+priority and saves the card text, screenshots and window frames for a video. It
+passes only when the fixture keeps Below normal, its affinity comes back and the
+card names the priority it left. A build of main fails that check after saving
+its evidence. It covers one rendered state, not UI8.
 
 The retired Linux-only [Profile confirmation](https://github.com/Rooindustries/PerformanceVertexUtility/blob/8159820c33531fa476a3aefa987a3b8094ecfae6/tools/validation/Background/Test-ProfileRestoreConfirmation.ps1) and [identity recovery](https://github.com/Rooindustries/PerformanceVertexUtility/blob/8159820c33531fa476a3aefa987a3b8094ecfae6/tools/validation/Background/Test-ProfileRestoreIdentityRecovery.ps1) simulations remain in Git history. Their old receipts apply only to their recorded source inputs. `Test-RestoreGovernorOwnership.ps1`, `Test-RestoreProcessOperationOwnership.ps1` and `Test-RestoreOwnershipScale.ps1` are historical simulations, not current native proof. These Background checks are not automatically discovered by `Test-Baseline.ps1`. The Baseline workflow runs its declared Linux checks and optional Windows matrix. The manual real restore group is a separate required gate. C6 still requires 40 real processes, two controls, 125 histories and each whole Undo under 45 seconds. UI8, screenshots, interaction video and both actual vision reviews remain separate required Windows gates.
 

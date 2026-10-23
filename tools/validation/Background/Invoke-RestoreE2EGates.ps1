@@ -114,10 +114,10 @@ try{
  if(-not [IO.File]::Exists((Join-Path $legacy 'summary.json'))){throw 'Legacy group lacks its asserted completion artifact.'}
  $parameters=@{Source=$Source;OutRoot=$native;ActorExe=$actor;SourceCommit=$receipt.sourceCommit;OriginalSource=$originalSource;ReviewedSource=$reviewedSource}
  if($Scenario.Count){$parameters.Scenario=$Scenario}
- & (Join-Path $Source 'tools\validation\Background\Test-RestoreSerialization.ps1') @parameters
+ & {. (Join-Path $Source 'tools\validation\Background\Test-RestoreSerialization.ps1') @parameters}
  $summary=Get-Content -LiteralPath (Join-Path $native 'serialization-summary.json') -Raw|ConvertFrom-Json
  if(-not$summary.passed -or @($summary.cases).Count -eq 0 -or $summary.actualCaseCount -ne $summary.expectedCaseCount -or @($summary.selectedTriples).Count -ne @($summary.cases).Count){throw 'Native group lacks asserted cleanup/completion.'}
- & (Join-Path $Source 'tools\validation\Background\Test-RestoreSummaryOutput.ps1') -Source $Source -OutRoot $output -AppSweepExe $app
+ & {. (Join-Path $Source 'tools\validation\Background\Test-RestoreSummaryOutput.ps1') -Source $Source -OutRoot $output -AppSweepExe $app}
  Assert-HarnessHostLease
  $finalSource=Assert-E2ECurrentSource
  $finalInputEntries=@(Get-HarnessEntries|Where-Object {$_.kind -ceq 'file' -and $_.state -ceq 'active' -and (Get-HarnessPlainPath ([string]$_.identity.path)) -ieq $inputPath})

@@ -33,6 +33,7 @@ if($BeforeNoEffectSource -and -not [IO.Directory]::Exists($BeforeNoEffectSource)
 function Save([string]$path,$value){[IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($path))|Out-Null;[IO.File]::WriteAllText($path,($value|ConvertTo-Json -Depth 60),$utf8)}
 function Require([bool]$ok,[string]$message){if(-not $ok){throw $message}}
 function Read-Ast([string]$path){$e=$null;$t=$null;$a=[Management.Automation.Language.Parser]::ParseFile($path,[ref]$t,[ref]$e);if($e.Count){throw ($e -join '; ')};return $a}
+function New-BackendBlock([string]$Path,$Extent){$t=$null;$e=$null;$a=[Management.Automation.Language.Parser]::ParseInput(("`n"*($Extent.StartLineNumber-1))+$Extent.Text,$Path,[ref]$t,[ref]$e);if($e.Count){throw ($e -join '; ')};return $a.GetScriptBlock()}
 function Read-Actual($process,[string]$field){
  $process.Refresh()
  switch($field){
@@ -74,10 +75,11 @@ function Invoke-Body([string]$backend,[string]$scriptName,[hashtable]$arguments,
   . (Join-Path $backend 'backend\scripts\GameTuneSession.Common.ps1')
   $script:RestoreE2EData=$data
   function Get-RooIndustriesLocalDataRoot{return $script:RestoreE2EData}
-  $ast=Read-Ast (Join-Path $backend ('backend\scripts\'+$scriptName))
+  $scriptPath=Join-Path $backend ('backend\scripts\'+$scriptName)
+  $ast=Read-Ast $scriptPath
   foreach($statement in $ast.EndBlock.Statements){
-   if($statement -is [Management.Automation.Language.FunctionDefinitionAst]){. ([scriptblock]::Create($statement.Extent.Text))}
-   elseif($statement -is [Management.Automation.Language.AssignmentStatementAst]){. ([scriptblock]::Create($statement.Extent.Text))}
+   if($statement -is [Management.Automation.Language.FunctionDefinitionAst]){. (New-BackendBlock $scriptPath $statement.Extent)}
+   elseif($statement -is [Management.Automation.Language.AssignmentStatementAst]){. (New-BackendBlock $scriptPath $statement.Extent)}
   }
   foreach($key in $arguments.Keys){Set-Variable -Name $key -Value $arguments[$key] -Scope Local}
   $body=@($ast.EndBlock.Statements|Where-Object {$_ -is [Management.Automation.Language.TryStatementAst]})
@@ -124,7 +126,7 @@ function Invoke-Body([string]$backend,[string]$scriptName,[hashtable]$arguments,
      finally {$guardEvent.outcome=[string]$Change.outcome}
     }
    }
-   & ([scriptblock]::Create($body[0].Extent.Text))
+   & (New-BackendBlock $scriptPath $body[0].Extent)
   } finally {
    if($lateGuardInstalled){
     if($lateGuardPriorExists){$script:RestoreE2ELateMutationGuard=$lateGuardPriorValue}
