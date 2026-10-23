@@ -74,6 +74,11 @@ public sealed class ProcessJob : IDisposable
         Check(SetInformationJobObject(_handle, 2, ref info, (uint)Marshal.SizeOf<Limits>()), "SetInformationJobObject(clear)");
         if (ReadAffinity() != 0) throw new InvalidOperationException("The job affinity limit was not cleared.");
     }
+    internal bool Notify(SafeHandle? port)
+    {
+        var info = new CompletionPort { Port = port?.DangerousGetHandle() ?? IntPtr.Zero };
+        return SetInformationJobObject(_handle, 7, ref info, (uint)Marshal.SizeOf<CompletionPort>());
+    }
     public void Dispose() => _handle.Dispose();
     private static void Check(bool ok, string api) { if (!ok) throw Failure(Marshal.GetLastWin32Error(), api); }
     private static Win32Exception Failure(int error, string api) => new(error, api + " failed with Win32 " + error + ": " + new Win32Exception(error).Message);
@@ -86,6 +91,7 @@ public sealed class ProcessJob : IDisposable
         public UIntPtr Affinity;
         public uint PriorityClass, SchedulingClass;
     }
+    [StructLayout(LayoutKind.Sequential)] private struct CompletionPort { public IntPtr Key, Port; }
     private sealed class JobHandle() : SafeHandleZeroOrMinusOneIsInvalid(true)
     {
         protected override bool ReleaseHandle() => CloseHandle(handle);
@@ -95,6 +101,7 @@ public sealed class ProcessJob : IDisposable
     [DllImport("kernel32.dll", SetLastError = true)] private static extern bool AssignProcessToJobObject(JobHandle job, ProcessHandle process);
     [DllImport("kernel32.dll", SetLastError = true)] private static extern bool IsProcessInJob(ProcessHandle process, JobHandle job, out bool result);
     [DllImport("kernel32.dll", SetLastError = true)] private static extern bool SetInformationJobObject(JobHandle job, int kind, ref Limits value, uint size);
+    [DllImport("kernel32.dll", SetLastError = true)] private static extern bool SetInformationJobObject(JobHandle job, int kind, ref CompletionPort value, uint size);
     [DllImport("kernel32.dll", SetLastError = true)] private static extern bool QueryInformationJobObject(JobHandle job, int kind, out Limits value, uint size, IntPtr returned);
     [DllImport("kernel32.dll")] private static extern bool CloseHandle(IntPtr handle);
 }
