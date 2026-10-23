@@ -49,7 +49,7 @@ def lease(args, receipt):
 
 
 def encode(args, evidence):
-    script = '$directory=' + windows.ps_literal(evidence) + r"""
+    script = '$directory=' + windows.ps_literal(evidence) + ';$ffmpeg=' + windows.ps_literal(args.ffmpeg) + r"""
 $capture=@(Get-ChildItem -LiteralPath $directory -Filter 'capture-*.json')
 if($capture.Count -ne 1){throw 'A single capture receipt is required.'}
 $rows=(Get-Content -Raw -LiteralPath $capture[0].FullName|ConvertFrom-Json).data.frames
@@ -58,7 +58,7 @@ $lines=@(foreach($row in $rows){"file '"+$row.file+"'";'duration '+[Math]::Max([
 $lines+="file '"+$rows[-1].file+"'"
 $listing=Join-Path $directory 'frames\frames.txt'
 [IO.File]::WriteAllLines($listing,$lines,[Text.UTF8Encoding]::new($false))
-$ffmpeg=(Get-Command ffmpeg.exe -CommandType Application -ErrorAction Stop).Source
+$ffmpeg=(Get-Command $ffmpeg -CommandType Application -ErrorAction Stop).Source
 & $ffmpeg -v error -y -f concat -safe 0 -i $listing -vf 'scale=trunc(min(iw\,1920)/2)*2:-2' -r 30 -c:v libx264 -pix_fmt yuv420p -crf 20 -movflags +faststart (Join-Path $directory 'interaction.mp4')
 if($LASTEXITCODE -ne 0){throw 'Windows video encoding failed.'}
 """
@@ -77,6 +77,7 @@ def main():
                         help='Comma-separated Tweaks suite modes; empty skips them')
     parser.add_argument('--skip-capture', action='store_true')
     parser.add_argument('--expected-outcome', choices=['undone', 'refused'], default='undone')
+    parser.add_argument('--ffmpeg', default='ffmpeg.exe', help='Windows video encoder executable or full path')
     args = parser.parse_args()
     args.out_dir.mkdir(parents=True, exist_ok=False)
     receipt = windows.upload_frame(args.host, args.expected_machine, 'roo-industries-restart-check', True, args.parent)
