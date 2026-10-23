@@ -1,6 +1,6 @@
 # Game priority review check
 
-`Invoke-GameTuneReviewUi.ps1` drives the real desktop app through UI Automation. It starts a disposable `Overwatch.exe` probe (a copy of Windows PowerShell), clicks **Review** on the Game priority card, closes that probe, starts a second `Overwatch.exe` probe from another folder and clicks **Start**. It passes only when the second probe keeps Normal priority and the card says "Not started" with the closed-or-restarted reason. On a build without review binding it fails, because Start tunes the second probe; the script then clicks **Restore** to put it back.
+`Invoke-GameTuneReviewUi.ps1` drives the real desktop app through UI Automation. It starts a disposable `Overwatch.exe` probe (a copy of Windows PowerShell), clicks **Review** on the Game priority card, closes that probe, starts a second `Overwatch.exe` probe from another folder and clicks **Start**. It passes only when Start leaves the second probe's priority as it was just before Start and the card says "Not started" with the closed-or-restarted reason. On a build without review binding it fails, because Start tunes the second probe; the script then clicks **Restore** to put it back.
 
 While it runs, the staged `backend\profiles\game-session.profile.json` boosts only `Overwatch.exe` and has no background rules, so no real app changes priority. The original bytes are written back in `finally`. The script refuses to run when the app or a process named Overwatch is already running, and removes the review file it created under the app's settings folder.
 

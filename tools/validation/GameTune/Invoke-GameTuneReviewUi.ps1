@@ -88,12 +88,12 @@ try {
  Start-Sleep -Seconds 2
  [IO.File]::WriteAllText($stopFile,'stop');[void]$recorder.EndInvoke($recording)
  $restored=$null
- if($bAfter.priorityClass -ne 'Normal'){
+ if($bAfter.priorityClass -ne $bBeforeStart.priorityClass){
   Activate (WaitFor {$e=Button 'Restore game priority';if($e -and $e.Current.IsEnabled){$e}} 30 'Restore enabled')
   WaitFor {$c=Card;$c -and $c.status -in 'Game priorities restored','Game restore needs attention','Game restore not confirmed'} 90 'restore result'|Out-Null
   Start-Sleep -Seconds 2;Shot '04-restored';$restored=Read $gameB
  }
- $bound=$bAfter.priorityClass -eq 'Normal' -and $after.status -eq 'Not started' -and $after.detail -like 'Overwatch.exe closed or restarted after you reviewed it*'
+ $bound=$bAfter.priorityClass -eq $bBeforeStart.priorityClass -and $after.status -eq 'Not started' -and $after.detail -like 'Overwatch.exe closed or restarted after you reviewed it*'
  Save 'result.json' @{machine=$env:COMPUTERNAME;startEnabledBeforeReview=$beforeReview.start;reviewed=$reviewed;gameAAtReview=$aAtReview;foregroundAtStart=$foregroundId;startResult=$started;afterReload=$after;gameBBeforeStart=$bBeforeStart;gameBAfterStart=$bAfter;gameBAfterRestore=$restored;bound=$bound;frames=@(Get-ChildItem $frames -Filter '*.jpg').Count}
  if(-not$bound){throw ('Start did not stay bound to the reviewed game: B '+$bAfter.priorityClass+', status '+$after.status)}
 } catch {
