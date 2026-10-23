@@ -81,3 +81,38 @@ python3 tools/validation/windows_ssh.py --host windows-test --expected-machine T
 The helper disables SSH proxying, checks the Windows computer name before writes, and preserves argument boundaries through encoded PowerShell. Upload includes tracked working-tree source and a SHA-256 manifest under the current Windows user's Temp directory; it excludes frontend sources. Add new source files to Git before uploading them. The returned staging path can be used by a trusted validation script that runs `Test-Baseline.ps1` and verifies the manifest before and after testing. Retrieve results before removing the owned staging directory.
 
 A green build or fixture suite does not establish real-provider operation, real uninstall success, a performance gain, or visual quality. Record those separately on the relevant Windows machine.
+
+Profile and Game Tune restore changes also require the manual real Windows
+entry point `tools/validation/Background/Invoke-RestoreE2EGates.ps1 -Source
+$Source -OutRoot $OwnedArtifacts`. Use its original frame receipt, active Harness
+lease and hashed E2E inputs as described in the [Background checks](../tools/validation/Background/README.md#required-restore-e2e-gates).
+This group is separate from automatic Baseline discovery. Historical Linux
+restore diagnostics simulate process I/O; schema validation of their full JSON
+envelopes proves only the contract. Real restore, contention, C6 and rendered
+UI8/media gates must finish on the authorized Windows source before merge.
+Saved-format replay and owned junction launch checks are part of that manual
+gate. Keep c50 and b0 evidence separate; an un-reproduced alias case stays
+recorded as missing red.
+
+These manual checks cover a saved request that already matched its original
+value. The producer saves no change record for that control. When Undo reads
+an absent or valid saved change list with no matching record, it excludes the
+request only if the original and requested values are valid and equal, and
+any legacy applied value is also valid and equal. Undo leaves that control
+alone if another program changes it later, while restoring recorded changes
+on other controls. Conflicting or invalid legacy metadata keeps recovery
+available until a fresh check confirms the original value or the process has
+ended. Changed requests with missing apply evidence stay recoverable. An
+already-original or kept value seen in a preview still needs a fresh check
+before recovery closes.
+
+Restore checks the saved process instance at explicit points before publishing
+its result. If a clean check proves that the original ended or restarted,
+that entry is reported as already closed. A failed query, write, readback or
+resource cleanup keeps the entry pending with its actual error, even if the
+process later exits. Other saved entries continue. Verified writes made
+before an exit remain in the artifacts; a closed entry is counted once and
+has no current restored or kept value. A process can exit between a clean
+check and a later operation. If that operation fails, the attempt stays
+pending. These timing cases require the manual Windows gate; authored
+scenarios and Linux static checks do not prove native behavior.

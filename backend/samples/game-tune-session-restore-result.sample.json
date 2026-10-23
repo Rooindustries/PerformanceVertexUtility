@@ -90,7 +90,8 @@
         "type": "gameTuneSessionBackup",
         "path": "backend\\state\\game-tune-sessions\\game-tune-overwatch-stream-session-20260630-101000\\backup.json"
       }
-    ]
+    ],
+    "leftAsSetItems": []
   },
   "warnings": [],
   "errors": [],
@@ -100,5 +101,6 @@
       "level": "info",
       "message": "Game Tune restore completed with 1 restored item(s) and 0 skipped item(s)."
     }
-  ]
+  ],
+  "leftAsSetItems": []
 }
