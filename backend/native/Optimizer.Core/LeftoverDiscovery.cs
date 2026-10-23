@@ -50,6 +50,7 @@ public sealed class LeftoverDiscovery
     private readonly Dictionary<string, string> _nativeNames = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<RegistryAddress> _incomplete = [];
     private int _visited;
+    private bool _valueOnly;
 
     public LeftoverDiscovery(CleanupApplication application, IEnumerable<CleanupApplication> otherApplications)
     {
@@ -112,7 +113,7 @@ public sealed class LeftoverDiscovery
         {
             foreach (var child in _registryOwners.Where(pair => Within(pair.Key, _nativeNames[parent.ItemId])))
                 foreach (var owner in child.Value) if (!parent.SharedOwners.Contains(owner)) parent.SharedOwners.Add(owner);
-            parent.OwnershipComplete = !_incomplete.Any(address => address.Hive == parent.Registry!.Hive &&
+            parent.OwnershipComplete &= !_incomplete.Any(address => address.Hive == parent.Registry!.Hive &&
                 (address.View == parent.Registry.View || address.Hive == "CurrentUser") &&
                 (Within(address.KeyPath, parent.Registry.KeyPath) || Within(parent.Registry.KeyPath, address.KeyPath)));
         }
@@ -166,8 +167,7 @@ public sealed class LeftoverDiscovery
             _found.Add(id, new()
             {
                 ItemId = id, Kind = (attributes & FileAttributes.Directory) != 0 ? "folder" : "file", Target = path, Exists = true,
-                Evidence = [evidence, .. _unprovedOwners.Distinct().Select(name => "Ownership could not be checked for installed app: " + name)],
-                SharedOwners = owners, Protected = protectedPath, UserData = userData, OwnershipComplete = _unprovedOwners.Count == 0,
+                Evidence = EvidenceFor(evidence), SharedOwners = owners, Protected = protectedPath, UserData = userData, OwnershipComplete = _unprovedOwners.Count == 0,
             });
         }
         catch (DirectoryNotFoundException) { }
@@ -183,6 +183,22 @@ public sealed class LeftoverDiscovery
             if (resolved.Walk == NativeFiles.PathWalk.Absent) continue;
             if (resolved.Path is null || _unprovedOwners.Count != 0 || FileOwners(path).Count != 0)
                 throw new InvalidDataException("This leftover is protected, shared or has incomplete ownership evidence: " + path);
+        }
+    }
+
+    internal void RequireRegistryOwnership(IEnumerable<LeftoverCandidate> items)
+    {
+        foreach (var item in items)
+        {
+            var address = item.Registry!;
+            _valueOnly = address.Kind == "value";
+            try
+            {
+                var current = Scan(CancellationToken.None, [], [address with { Kind = "key", ValueName = null }]).Candidates.SingleOrDefault(found => found.ItemId == item.ItemId);
+                if (current is null ? RegistryNative.Capture(address).Exists : current.Protected || current.SharedOwners.Count != 0 || !current.OwnershipComplete)
+                    throw new InvalidDataException("This leftover is protected, shared or has incomplete ownership evidence: " + item.Target);
+            }
+            finally { _valueOnly = false; }
         }
     }
 
@@ -246,6 +262,7 @@ public sealed class LeftoverDiscovery
                 if (_registryOwners.TryGetValue(nativeName, out var existingOwners)) existingOwners.UnionWith(referencedOwners);
                 else _registryOwners.Add(nativeName, referencedOwners);
             }
+            if (_valueOnly) return;
             var children = key.GetSubKeyNames();
             if (depth >= 64 && children.Length != 0)
             {
@@ -293,9 +310,11 @@ public sealed class LeftoverDiscovery
         {
             ItemId = id, Kind = address.Kind == "key" ? "registryKey" : "registryValue", Registry = address,
             Target = address.Hive + "\\" + address.KeyPath + (address.Kind == "value" ? " :: " + (address.ValueName == "" ? "(Default)" : address.ValueName) : ""),
-            Exists = true, Evidence = [evidence], SharedOwners = owners, Protected = protectedKey, UserData = true,
+            Exists = true, Evidence = EvidenceFor(evidence), SharedOwners = owners, Protected = protectedKey, UserData = true, OwnershipComplete = _unprovedOwners.Count == 0,
         });
     }
+
+    private List<string> EvidenceFor(string evidence) => [evidence, .. _unprovedOwners.Distinct().Select(name => "Ownership could not be checked for installed app: " + name)];
 
     private string Id(string kind, string path) => kind + ":" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(_app.AppId + "|" + path.ToUpperInvariant())));
     private static bool Within(string path, string root) => !string.IsNullOrWhiteSpace(root) && (string.Equals(path.TrimEnd('\\'), root.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase) || path.StartsWith(root.TrimEnd('\\') + "\\", StringComparison.OrdinalIgnoreCase));
