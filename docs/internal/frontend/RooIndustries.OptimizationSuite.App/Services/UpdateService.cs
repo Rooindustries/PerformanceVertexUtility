@@ -371,10 +371,7 @@ public sealed class UpdateService
 
     private static async Task<bool> ActiveSettingsAsync()
     {
-        var sessions = await App.Operations.ReadGameSessionsAsync();
-        if (sessions.Any(entry => entry.Worker.HostRunning == true)) return true;
-        if (sessions.Any(entry => entry.Worker.HostRunning is null || entry.Worker.Error is not null))
-            throw new InvalidDataException("Couldn't confirm that all game sessions have stopped. Check Games and Undo changes first.");
+        if (await App.Operations.GameSessionsBlockUpdateAsync()) return true;
         var game = await App.Live.GetGameTuneSessionStatusResultAsync();
         if (game.Error is not null || game.Value is null) throw new InvalidDataException("Couldn't read the game priority session. Check Games first.");
         using var data = JsonDocument.Parse(game.Value);

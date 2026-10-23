@@ -121,6 +121,29 @@ public sealed class ProtectedSessions
     {
         var plan = OperationFiles.Read<ProtectedSessionPreview>(path, hash); VerifyLaunch(plan); return plan;
     }
+
+    public static string? ProfileMismatch(ProtectedSessionPreview saved, ProtectedSessionPreview fresh)
+    {
+        static bool Same(Dictionary<string, JsonElement> left, Dictionary<string, JsonElement> right)
+            => left.Count == right.Count && left.All(pair => right.TryGetValue(pair.Key, out var other) && ProcessTarget.Equivalent(pair.Key, pair.Value, other));
+        if (fresh.SchemaVersion != saved.SchemaVersion || fresh.Owner != saved.Owner) return "It was set up by another Windows account.";
+        if (!string.Equals(fresh.Launcher.ExecutablePath, saved.Launcher.ExecutablePath, StringComparison.OrdinalIgnoreCase) || fresh.LauncherHash != saved.LauncherHash)
+            return "The launcher was updated or changed since you saved these settings.";
+        if (!string.Equals(fresh.GamePath, saved.GamePath, StringComparison.OrdinalIgnoreCase) || fresh.GameHash != saved.GameHash || fresh.GameLength != saved.GameLength || fresh.GameModifiedAtUtc != saved.GameModifiedAtUtc)
+            return "The game changed since you saved these settings.";
+        if (fresh.TopologyHash != saved.TopologyHash || !ProcessTarget.Equivalent("affinity", Value(fresh.OriginalAffinity), Value(saved.OriginalAffinity)))
+            return "The CPU or the launcher's cores changed since you saved these settings.";
+        if (!fresh.AcceptLauncherScope || !saved.AcceptLauncherScope || !Same(fresh.Controls, saved.Controls)) return "The requested settings differ from the saved ones.";
+        var launch = fresh.OriginalLaunchSettings; var original = saved.OriginalLaunchSettings;
+        if (launch.ImageKeyExisted != original.ImageKeyExisted || launch.OptionsKeyExisted != original.OptionsKeyExisted || launch.Values.Count != original.Values.Count ||
+            launch.Values.Any(pair => !original.Values.TryGetValue(pair.Key, out var value) || value != pair.Value))
+            return "Another program changed this game's launch priorities since you saved these settings.";
+        if ((fresh.LauncherChanges is null) != (saved.LauncherChanges is null)) return "The launcher's I/O or memory defaults changed since you saved these settings.";
+        if (fresh.LauncherChanges is { } now && saved.LauncherChanges is { } then && (!Same(now.Desired, then.Desired) || now.Original.Count != then.Original.Count ||
+            now.Original.Any(pair => !then.Original.TryGetValue(pair.Key, out var before) || !pair.Value.Known || !before.Known || !ProcessTarget.Equivalent(pair.Key, pair.Value.Require(), before.Require()))))
+            return "The launcher's I/O or memory defaults changed since you saved these settings.";
+        return null;
+    }
     public ProtectedSessionStatus Status(string root)
     {
         if (!File.Exists(StatePath(root))) return new(null, false, null);
@@ -412,7 +435,7 @@ public sealed class ProtectedSessions
         try
         {
             if (job is not null) job.Clear(ProcessTarget.ParseMask(state.Preview.OriginalAffinity.Mask));
-            else if ((state.JobStatus is "attachIntent" or "applied") && (Alive(state.Preview.Launcher) || Processes(state.Preview.GamePath).Length != 0)) throw new InvalidOperationException("The session job is unavailable; recovery cannot confirm its limits were cleared.");
+            else if ((state.JobStatus is "attachIntent" or "applied") && (Alive(state.Preview.Launcher) || LimitedGame(state))) throw new InvalidOperationException("The session job is unavailable; recovery cannot confirm its limits were cleared.");
             state.JobStatus = "cleared";
             foreach (var field in state.Games.SelectMany(game => game.Fields).Where(field => field.Route == "job")) field.Status = "released";
         }
@@ -544,6 +567,22 @@ public sealed class ProtectedSessions
             Thread.Sleep(50);
         }
         throw new TimeoutException("The recovery watcher did not acknowledge the session job.");
+    }
+    private static bool LimitedGame(ProtectedSessionState state)
+    {
+        var desired = ProcessTarget.ParseMask(state.DesiredAffinity.Mask);
+        if (desired == ProcessTarget.ParseMask(state.Preview.OriginalAffinity.Mask)) return false;
+        foreach (var processId in Processes(state.Preview.GamePath))
+        {
+            try
+            {
+                using var game = new ProcessTarget(processId);
+                if ((ProcessTarget.ParseMask(game.Read("affinity").Require().Deserialize<AffinityState>(OperationFiles.Json)!.Mask) & ~desired) == 0) return true;
+            }
+            catch (ProcessEndedException) { }
+            catch (RooIndustries.Optimization.CpuSets.NativeFailure error) when (error.Api == "OpenProcess" && error.NativeErrorCode == 87) { }
+        }
+        return false;
     }
     private static int[] Processes(string path)
     {

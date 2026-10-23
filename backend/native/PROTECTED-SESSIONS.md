@@ -20,7 +20,9 @@ The job and launcher defaults affect other new descendants of that launcher too.
 
 In the desktop app, open Process Control → Game sessions. Close the game, select its running launcher and installed executable, choose launch priorities and a core mask, accept the launcher scope, and review the settings. **Arm session** starts the worker; launch the game normally after it reports Ready. The panel shows requested and observed values separately, permits live core switching, and offers Stop and restore or recovery after a worker exit. Saved sessions are rediscovered when the app opens, and Restore & Logs includes their actual recovery state. GPU access denial remains unavailable; it does not prevent other accepted controls from being shown individually.
 
-Desktop session state lives under `%LOCALAPPDATA%\RooIndustriesOptimizationSuite\operations\game-session-*\session`, outside the repository. Closing the app does not stop a session. This flow does not enable automatic startup at Windows sign-in.
+Desktop session state lives under `%LOCALAPPDATA%\RooIndustriesOptimizationSuite\operations\game-session-*\session`, outside the repository. Closing the app does not stop a session. A session's task also runs at the user's sign-in, but only to recover a session whose worker died; it never arms a game.
+
+**Save for next time** (step 3, part of the review) keeps the reviewed preview bytes as saved launch settings in `operations\launch-profile-*`. While the app is open, a check every 3 seconds looks for a new run of that launcher (same path, same Windows user). For each new run it recovers any interrupted session of those settings, builds a fresh preview and arms it only when it equals the saved review apart from the launcher process: launcher and game files, CPU topology, the launcher's original cores and I/O or memory defaults, the game's original launch priorities and the requested controls (`ProtectedSessions.ProfileMismatch`). Anything else is reported on the saved row and waits for the next launcher run. A launcher run is armed once: Stop and restore is not undone while it keeps running. **Turn off and restore** stops or recovers its sessions and then deletes the saved settings. Only the three newest restored sessions of saved settings are kept. After a restart, saved settings arm again once the app is open.
 
 Build the native package with `backend/scripts/Build-OptimizerHost.ps1`. It includes the command host and a self-contained x64 Windows background worker in `backend/bin/optimizer/session`; the worker and recovery watcher create no console windows. Put the requested controls in a JSON file, for example:
 
@@ -64,18 +66,20 @@ An independent watcher acknowledges the job handle before the launcher is attach
 
 For a captured GPU session, the watcher also retains its own game handle. If both worker and watcher exit, those handles are lost; manual recovery can still be denied while a protected game remains alive. A saved original is not proof that a new handle can restore it.
 
-After a system restart, or if both worker and watcher were terminated, inspect the retained state and run:
+After a system restart, or if both worker and watcher were terminated, the session's task recovers it at the next sign-in, and the app recovers it when it opens and before installing an update. A missing job blocks recovery only while the old launcher or a copy of the game that still has the session's core limit is running, because only those can still be inside it. To recover by hand:
 
 ```powershell
 .\backend\scripts\Invoke-ProtectedGameSession.ps1 -Action Recover `
   -SessionRoot $sessionRoot -ConfirmApply
 ```
 
-Recovery cannot take over a live worker. Create a new preview and session directory to start again after stop/recovery. The existing session's saved controls remain available for that review. Automatic logon startup is not enabled by this command.
+Recovery cannot take over a live worker. Create a new preview and session directory to start again after stop/recovery. The existing session's saved controls remain available for that review. The uninstaller runs `-Action RemoveAll`, which stops or recovers each of the user's sessions and removes their tasks.
 
 ## Validation
 
 `tools/scripts/Test-GameSessionClient.ps1` exercises the desktop service against the actual session worker with disposable RX9070XT workloads. It covers review-hash binding, saved-session discovery, sustained native GPU-class readback, live affinity changes, stop/restoration, and rejection of stale, missing or conflicting UI success signals. Its requested GPU and affinity controls do not write registry launch policies.
+
+`tools/scripts/Test-GameSessionClient.ps1 -Mode launch-profiles` drives saved launch settings through the desktop service and the real worker with a probe launcher and game: saving, launcher restarts, app restarts between steps, a simulated power loss, Stop and restore, changed launch priorities and game files, pruning, idle cost and turning them off. `-Mode session-recovery` covers sign-in recovery with the app closed, recovery at app start and before an update, Recover while a new copy of the game runs and the uninstall cleanup.
 
 `backend/scripts/Test-ProtectedGameSessions.ps1` is discovered by the normal backend regression runner. It uses disposable launcher/game processes and the `RooIndustriesLaunchPolicyProbe.exe` IFEO key, restoring and removing fixture state afterward. It requires permission to perform that reversible registry fixture on the selected machine.
 

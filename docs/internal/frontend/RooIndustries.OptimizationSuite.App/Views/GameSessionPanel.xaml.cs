@@ -17,16 +17,22 @@ public sealed partial class GameSessionPanel : UserControl
     {
         InitializeComponent();
         _watch = new(work => DispatcherQueue.TryEnqueue(async () => await work()), CatchUpAsync);
-        _timer.Tick += async (_, _) => { if (!MemoryRelief.Minimized) await ViewModel.ObserveAsync(); };
+        _timer.Tick += async (_, _) =>
+        {
+            if (MemoryRelief.Minimized) return;
+            await ViewModel.ObserveAsync();
+            if (ViewModel.Profiles.Count > 0) await ViewModel.RefreshProfilesAsync();
+        };
         ViewModel.PropertyChanged += (_, args) =>
         {
             if (args.PropertyName == nameof(ViewModel.Busy)) { if (ViewModel.Busy) _watch.OperationStarted(); else _watch.OperationEnded(); }
             if (args.PropertyName is nameof(ViewModel.SelectedLauncher) or nameof(ViewModel.SelectedSession) && ViewModel.SelectedLauncher is null && ViewModel.SelectedSession is null && _watch.Changed && IsLoaded) _watch.Run(revisit: false);
         };
-        Unloaded += (_, _) => { _timer.Stop(); _watch.Stop(); };
+        Unloaded += (_, _) => { _timer.Stop(); _watch.Stop(); App.Operations.GameSessionsChanged -= SessionsChanged; };
         Loaded += async (_, _) =>
         {
             _watch.Start();
+            App.Operations.GameSessionsChanged += SessionsChanged;
             if (!_initialized) { _initialized = true; _watch.MarkSeen(); await ViewModel.InitializeAsync(); }
             else _watch.Run(revisit: true);
             if (IsLoaded) _timer.Start();
@@ -39,6 +45,13 @@ public sealed partial class GameSessionPanel : UserControl
         if ((!revisit && !changed) || ViewModel.Busy) return;
         if (ViewModel.SelectedSession is null && ViewModel.SelectedLauncher is null) await _watch.RefreshAsync(ViewModel.TryRefreshAsync);
         else if (changed && ViewModel.SelectedSession is null) { _watch.MarkSeen(); ViewModel.NoteChanged(); }
+    }
+
+    private void SessionsChanged() => DispatcherQueue.TryEnqueue(async () => { if (IsLoaded) await ViewModel.SessionsChangedAsync(); });
+
+    private async void TurnOff_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is LaunchProfileRow row) await ViewModel.TurnOffProfileAsync(row);
     }
 
     private async void Browse_Click(object sender, RoutedEventArgs e)

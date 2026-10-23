@@ -42,6 +42,7 @@ public sealed record GameCoreChoice(string Label, AffinityState Affinity)
     public override string ToString() => Label;
 }
 public sealed record GameSessionField(string Label, string Requested, string Observed, string Result);
+public sealed record LaunchProfileRow(string Root, string Title, string Status);
 
 public partial class GameSessionViewModel : ObservableObject
 {
@@ -49,6 +50,7 @@ public partial class GameSessionViewModel : ObservableObject
     public ObservableCollection<GameSessionEntry> Sessions { get; } = new();
     public ObservableCollection<GameCoreChoice> CoreChoices { get; } = new();
     public ObservableCollection<GameSessionField> Fields { get; } = new();
+    public ObservableCollection<LaunchProfileRow> Profiles { get; } = new();
     public GameSessionSetting[] Settings { get; } = [new("cpuPriority"), new("ioPriority"), new("memoryPriority"), new("gpuPriority"), new("executionQoS"), new("priorityBoost")];
     [ObservableProperty] private CpuProcessChoice? _selectedLauncher;
     [ObservableProperty] private GameSessionEntry? _selectedSession;
@@ -56,6 +58,7 @@ public partial class GameSessionViewModel : ObservableObject
     [ObservableProperty] private string _gamePath = "";
     [ObservableProperty] private string _affinityMask = "";
     [ObservableProperty] private bool _acceptLauncherScope;
+    [ObservableProperty] private bool _keepArmed;
     [ObservableProperty] private bool _busy;
     [ObservableProperty] private string _status = "Close the game, then choose its launcher and executable.";
     [ObservableProperty] private string _detail = "";
@@ -90,6 +93,7 @@ public partial class GameSessionViewModel : ObservableObject
     partial void OnBusyChanged(bool value) => NotifyState();
     partial void OnGamePathChanged(string value) => Invalidate();
     partial void OnAcceptLauncherScopeChanged(bool value) => Invalidate();
+    partial void OnKeepArmedChanged(bool value) => Invalidate();
     partial void OnAffinityMaskChanged(string value) => Invalidate();
     partial void OnSelectedCoresChanged(GameCoreChoice? value) { if (value is not null) AffinityMask = value.Affinity.Mask; }
     public void NoteChanged()
@@ -107,7 +111,7 @@ public partial class GameSessionViewModel : ObservableObject
     {
         ++_version; _review = null; ReviewSummary = ""; _launcher = null; CoreChoices.Clear();
         _pendingAffinity = null;
-        _sessionRoot = value?.SessionRoot; _current = value?.Worker;
+        _sessionRoot = value?.SessionRoot; _current = value?.Worker; KeepArmed = value?.ProfileId is not null;
         if (value is not null)
         {
             if (value.Worker.State is { } state)
@@ -132,6 +136,7 @@ public partial class GameSessionViewModel : ObservableObject
     public async Task InitializeAsync()
     {
         await RefreshAsync();
+        await RefreshProfilesAsync();
         if (SelectedSession is null && Sessions.Count > 0)
             SelectedSession = Sessions.FirstOrDefault(entry => !GameSessionDisplay.Restored(entry.Worker)) ?? Sessions[0];
     }
@@ -175,7 +180,7 @@ public partial class GameSessionViewModel : ObservableObject
             Detail = "Stop or recover the existing session before starting another.";
             return;
         }
-        SelectedSession = null; _sessionRoot = null; _current = null; AcceptLauncherScope = false; Fields.Clear();
+        SelectedSession = null; _sessionRoot = null; _current = null; AcceptLauncherScope = false; KeepArmed = false; Fields.Clear();
         Status = "Close the game, then choose its launcher and executable."; Detail = "";
         await RefreshAsync(); NotifyState();
     }
@@ -252,7 +257,8 @@ public partial class GameSessionViewModel : ObservableObject
             _review = await App.Operations.PreviewGameSessionAsync(SelectedLauncher!.Id, GamePath.Trim(), controls, AcceptLauncherScope);
             ReviewSummary = Path.GetFileName(_review.Plan.GamePath) + " via " + Path.GetFileName(_review.Plan.Launcher.ExecutablePath) + "\n" +
                 string.Join("\n", Settings.Where(setting => setting.Selected.Value is not null).Select(setting => setting.Label + ": " + setting.Selected.Label)) +
-                "\nCores: " + AffinityMask.Trim() + "\nLauncher core limits and I/O/memory defaults also affect its other new child processes. Launch priorities apply to this game filename.";
+                "\nCores: " + AffinityMask.Trim() + "\nLauncher core limits and I/O/memory defaults also affect its other new child processes. Launch priorities apply to this game filename." +
+                (KeepArmed ? "\nSaved for next time: these exact settings turn back on whenever " + Path.GetFileName(_review.Plan.Launcher.ExecutablePath) + " opens while the app is open. After a PC restart, open the app once and they're back. To stop them, select Turn off and restore under Saved launch settings." : "");
             Status = "Review these settings, then select Start."; Detail = "Launch the game normally after the session reports Ready.";
         }
         catch (Exception error) { _review = null; ReviewSummary = ""; Status = "Couldn't prepare this session."; Detail = Closed(error) ? ProtectedSessions.LauncherClosed : error.Message; }
@@ -264,8 +270,23 @@ public partial class GameSessionViewModel : ObservableObject
     {
         if (!CanStart) return;
         var review = _review!;
+        var keep = KeepArmed;
+        if (keep)
+        {
+            try { App.Operations.RequireNoLaunchProfile(review.Plan); }
+            catch (Exception error) { Status = "Couldn't save these settings for next time."; Detail = error.Message; return; }
+        }
         Busy = true; _sessionRoot = review.SessionRoot;
-        try { ShowStatus(await App.Operations.StartGameSessionAsync(review)); }
+        string? saved = null;
+        try
+        {
+            ShowStatus(await App.Operations.StartGameSessionAsync(review));
+            if (keep)
+            {
+                try { await App.Operations.SaveLaunchProfileAsync(review); saved = "Saved for next time. These settings turn back on whenever " + Path.GetFileName(review.Plan.Launcher.ExecutablePath) + " opens while the app is open."; }
+                catch (Exception error) { saved = "The session started, but its settings weren't saved for next time: " + error.Message; }
+            }
+        }
         catch (Exception error)
         {
             Status = "Session startup needs attention."; Detail = error.Message;
@@ -274,6 +295,46 @@ public partial class GameSessionViewModel : ObservableObject
         }
         finally { _review = null; ReviewSummary = ""; Busy = false; }
         await RefreshAsync();
+        await RefreshProfilesAsync();
+        if (saved is not null) Detail = saved;
+    }
+
+    public async Task RefreshProfilesAsync()
+    {
+        try
+        {
+            var rows = (await App.Operations.ReadLaunchProfilesAsync()).Select(entry => new LaunchProfileRow(entry.Root, entry.Title, OptimizerService.DescribeLaunchProfile(entry))).ToArray();
+            if (rows.SequenceEqual(Profiles)) return;
+            Profiles.Clear(); foreach (var row in rows) Profiles.Add(row);
+        }
+        catch (Exception error) { AppLog.Write("profiles", "Saved launch settings couldn't be listed: " + error.Message); }
+    }
+
+    public async Task TurnOffProfileAsync(LaunchProfileRow row)
+    {
+        if (Busy) return;
+        Busy = true;
+        string status, detail;
+        try
+        {
+            var problem = await App.Operations.DisableLaunchProfileAsync(row.Root);
+            status = problem is null ? "Saved settings turned off" : "Saved settings turned off, but a session needs attention";
+            detail = problem ?? row.Title + " is back to its original settings. They won't turn on again by themselves.";
+        }
+        catch (Exception error) { status = "Couldn't turn off the saved settings."; detail = error.Message; }
+        finally { Busy = false; }
+        await RefreshAsync();
+        await RefreshProfilesAsync();
+        Status = status; Detail = detail;
+    }
+
+    public async Task SessionsChangedAsync()
+    {
+        await RefreshProfilesAsync();
+        if (Busy || _review is not null || _sessionRoot is null && (SelectedLauncher is not null || !string.IsNullOrWhiteSpace(GamePath))) return;
+        if (SelectedSession is { } current && !GameSessionDisplay.Restored(current.Worker)) return;
+        if (!await TryRefreshAsync()) return;
+        if (Sessions.FirstOrDefault(entry => !GameSessionDisplay.Restored(entry.Worker)) is { } armed) SelectedSession = armed;
     }
 
     [RelayCommand] private Task StopAsync() => ManageAsync(false);
