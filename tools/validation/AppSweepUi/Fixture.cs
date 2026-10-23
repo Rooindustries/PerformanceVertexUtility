@@ -283,8 +283,30 @@ namespace RooIndustries.OptimizationSuite.Services
         public int RetryCalls { get; private set; }
         public Task<PolicyHostState> RetryGovernorRestoreAsync() { RetryCalls++; return RetryRestore(); }
         public Task<GameSessionEntry[]> ReadGameSessionsAsync() => Task.FromResult(GameSessions);
-        public Task<TweakRecovery> ReadWindowsRecoveryAsync() => Task.FromResult(WindowsRecovery ?? throw new IOException("Controlled Windows recovery failure"));
+        public Task<TweakRecovery> ReadWindowsRecoveryAsync(bool fresh = false) => Task.FromResult(WindowsRecovery ?? throw new IOException("Controlled Windows recovery failure"));
+        public Func<string, Task> WindowsStep { get; set; } = step => throw new InvalidOperationException("Unexpected Windows settings " + step + " call.");
+        public static readonly TweakContext WindowsContext = new(new("fixture-pc", "fixture-user"), "fixture-store", 26200, "Professional");
+        public Task<TweakCatalogResult> ReadWindowsTweakCatalogAsync(bool fresh = false) => Task.FromException<TweakCatalogResult>(new IOException("Controlled Windows catalog read failure"));
+        public Task<TweakChoiceFile> ReadWindowsChoicesAsync() => Task.FromException<TweakChoiceFile>(new IOException("Controlled saved choices read failure"));
+        public Task<TweakInspection> ReadWindowsTweaksAsync(bool fresh = false, bool streamed = true) => Task.FromException<TweakInspection>(new IOException("Controlled Windows settings read failure"));
+        public event Action<TweakInspection, long>? WindowsTweaksPartial { add { } remove { } }
+        public (TweakInspection Inspection, long Generation)? PendingWindowsTweaks => null;
+        public Task<WindowsTweakReview> PreviewWindowsTweaksAsync(string profileId, TweakSelection[] selections) => throw new InvalidOperationException("Unexpected Windows settings preview.");
+        public Task<WindowsTweakReview> PreviewOwnershipAsync(string path) => throw new InvalidOperationException("Unexpected ownership preview.");
+        public Task<JsonElement> RecoverWindowsTweaksAsync(string hash) => throw new InvalidOperationException("Unexpected Windows settings recovery.");
+        public async Task<TweakChoiceFile> SaveWindowsChoicesAsync(TweakCatalog catalog, string profileId, TweakSelection[] selections, string? revision)
+        {
+            using (DataGeneration.BeginChange()) await WindowsStep(selections.Length == 0 ? "remove saved choices" : "save choices");
+            return new(1, WindowsContext.Owner, "fixture-revision", []);
+        }
+        public async Task<TweakApplyResult> ApplyWindowsTweaksAsync(WindowsTweakReview review, bool accepted)
+        {
+            using (DataGeneration.BeginChange()) await WindowsStep("Windows helper");
+            return new(new TweakState { SchemaVersion = 1, Context = WindowsContext, Revision = "fixture-revision", Profiles = [], Held = [], CreatedKeys = [], History = [], Notices = [] }, true, false);
+        }
     }
+
+    public sealed record WindowsTweakReview(TweakPlan Plan, string Path, string Hash);
 }
 
 namespace RooIndustries.OptimizationSuite.ViewModels

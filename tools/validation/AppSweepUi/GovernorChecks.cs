@@ -381,10 +381,12 @@ static class GovernorChecks
         var panel = new ProcessControlsViewModel();
         await panel.RefreshRulesCommand.ExecuteAsync(null);
         var before = panel.Rules.Single().Rule.Enabled;
-        App.Operations.RuleSaved = saved => App.Operations.Governor = Snapshot(false, [saved], new(Host("running", []), true, null));
+        var savedWhileRunning = false;
+        App.Operations.RuleSaved = saved => { savedWhileRunning = RunningChanges.Any; App.Operations.Governor = Snapshot(false, [saved], new(Host("running", []), true, null)); };
         App.Operations.PolicyWorkerError = new InvalidOperationException("Task Scheduler is unavailable.");
         try { await panel.ToggleRuleCommand.ExecuteAsync(null); }
         finally { App.Operations.PolicyWorkerError = null; App.Operations.RuleSaved = null; }
+        check(savedWhileRunning && !RunningChanges.Any, "Turning a rule off and syncing the governor count as one running change, which ends when the sync fails");
         check(before && !panel.Rules.Single().Rule.Enabled && panel.Status == "Couldn't update the rule." && panel.Detail == "Task Scheduler is unavailable.",
             "A rule that was saved before the governor sync failed shows its real state in the rules list" + (panel.Rules.Count == 1 ? " | list says enabled=" + panel.Rules.Single().Rule.Enabled : ""));
     }

@@ -586,11 +586,15 @@ public partial class ProcessControlsViewModel : ObservableObject
                 ExecutableHash = PinExecutable ? await Task.Run(() => OperationFiles.HashFile(path)) : null, Controls = desired.Controls, CpuSelection = desired.Selection,
                 AffinityTopologyHash = desired.Controls.ContainsKey("affinity") ? _review.Plan.TopologyHash : null,
             };
-            if ((await App.Operations.ReadGovernorAsync()).Summary.SecurityProblem is not (null or "missing")) await App.Operations.PolicyWorkerAsync("Sync");
-            var saved = await App.Operations.SaveRuleAsync(rule);
-            _editingRuleId = saved.RuleId;
-            Status = "Rule saved. Starting the Governor…";
-            var registration = await App.Operations.PolicyWorkerAsync("Sync");
+            PolicyWorkerRegistration registration;
+            using (RunningChanges.Begin())
+            {
+                if ((await App.Operations.ReadGovernorAsync()).Summary.SecurityProblem is not (null or "missing")) await App.Operations.PolicyWorkerAsync("Sync");
+                var saved = await App.Operations.SaveRuleAsync(rule);
+                _editingRuleId = saved.RuleId;
+                Status = "Rule saved. Starting the Governor…";
+                registration = await App.Operations.PolicyWorkerAsync("Sync");
+            }
             await RefreshRulesAsync();
             Status = registration.Paused ? "Rule saved. The governor is paused, so press Start governor to use it." : "Rule saved and on.";
             Detail = "The Governor keeps this rule on after you close the app. If another app changes the same setting, the Governor puts it back up to three times and then steps back for that app.";
@@ -757,15 +761,18 @@ public partial class ProcessControlsViewModel : ObservableObject
         Busy = true;
         try
         {
-            if ((await App.Operations.ReadGovernorAsync()).Summary.SecurityProblem is not (null or "missing")) await App.Operations.PolicyWorkerAsync("Sync");
-            if (delete) await App.Operations.DeleteRuleAsync(SelectedRule!.Rule.RuleId);
-            else
+            using (RunningChanges.Begin())
             {
-                var fresh = (await App.Operations.ReadGovernorAsync()).Rules.FirstOrDefault(rule => rule.RuleId == SelectedRule!.Rule.RuleId)
-                    ?? throw new InvalidOperationException("This rule was deleted. Refresh the rules list.");
-                await App.Operations.SaveRuleAsync(fresh with { Enabled = !fresh.Enabled });
+                if ((await App.Operations.ReadGovernorAsync()).Summary.SecurityProblem is not (null or "missing")) await App.Operations.PolicyWorkerAsync("Sync");
+                if (delete) await App.Operations.DeleteRuleAsync(SelectedRule!.Rule.RuleId);
+                else
+                {
+                    var fresh = (await App.Operations.ReadGovernorAsync()).Rules.FirstOrDefault(rule => rule.RuleId == SelectedRule!.Rule.RuleId)
+                        ?? throw new InvalidOperationException("This rule was deleted. Refresh the rules list.");
+                    await App.Operations.SaveRuleAsync(fresh with { Enabled = !fresh.Enabled });
+                }
+                await App.Operations.PolicyWorkerAsync("Sync");
             }
-            await App.Operations.PolicyWorkerAsync("Sync");
             await RefreshRulesAsync();
             Status = delete ? "Rule deleted." : "Rule updated.";
             Detail = "Turning off or deleting a rule gives the app its old settings back.";

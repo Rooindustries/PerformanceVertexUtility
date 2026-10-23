@@ -602,6 +602,7 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
         CleanupExecutionDetail = "Reading the rollback file and putting cleanup targets back.";
         try
         {
+            using var running = RunningChanges.Begin();
             var result = await App.Live.RestoreUninstallCleanupResultAsync(rollbackPath);
             var restored = result.Error is null && IsSuccessfulRestore(result.Value, rollbackPath);
             var markFailed = false;

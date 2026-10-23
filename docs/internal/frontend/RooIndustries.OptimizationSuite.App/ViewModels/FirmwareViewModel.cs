@@ -270,9 +270,12 @@ public partial class FirmwareViewModel : ObservableObject
     public async Task ApplyAsync() => await RunAsync(async () =>
     {
         if (!IsReview || _sessionDirectory is null || _reviewHash is null) return;
-        Message = "Applying the reviewed changes. Keep the app open until verification finishes.";
-        var journal = await Task.Run(() => { using var running = RunningChanges.Begin(); return Workflow().Apply(_sessionDirectory, _reviewHash); });
-        ShowResult(journal); await LoadHistoryAsync();
+        using (RunningChanges.Begin())
+        {
+            Message = "Applying the reviewed changes. Keep the app open until verification finishes.";
+            ShowResult(await Task.Run(() => Workflow().Apply(_sessionDirectory, _reviewHash)));
+        }
+        await LoadHistoryAsync();
     });
     public async Task VerifyAsync() => await RunAsync(async () =>
     {

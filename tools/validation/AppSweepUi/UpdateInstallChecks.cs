@@ -1,4 +1,7 @@
+using System.Reflection;
+using RooIndustries.OptimizationSuite;
 using RooIndustries.OptimizationSuite.Services;
+using RooIndustries.OptimizationSuite.ViewModels;
 using RooIndustries.Optimizer;
 
 static class UpdateInstallChecks
@@ -95,5 +98,103 @@ static class UpdateInstallChecks
 
         check(!(ready with { Busy = true }).CanInstall && !(ready with { Ready = false }).CanInstall, "Install stays unavailable while an update check or download runs, or before an update is ready");
         check((ready with { Status = "Checking for updates...", Refused = false }).BannerMessage == "Fixture release notes.", "A later status without a refusal puts the release notes back on the banner");
+        await OperationsAsync(check);
+    }
+
+    static void Set(object target, string name, object? value) => target.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(target, value);
+
+    static async Task OperationsAsync(Action<bool, string> check)
+    {
+        var steps = new List<string>();
+        var entered = new Dictionary<string, TaskCompletionSource>();
+        var release = new Dictionary<string, TaskCompletionSource>();
+        var closed = new List<string>();
+        void CloseWhenDone() { if (!RunningChanges.Any) closed.Add(string.Join(" then ", steps)); }
+        void Pause(params string[] names)
+        {
+            steps.Clear(); closed.Clear(); entered.Clear(); release.Clear();
+            foreach (var name in names) { entered[name] = new(TaskCreationOptions.RunContinuationsAsynchronously); release[name] = new(TaskCreationOptions.RunContinuationsAsynchronously); }
+        }
+        WindowsTweaksViewModel Reviewed(bool restoring)
+        {
+            var model = new WindowsTweaksViewModel { ProfileId = "fixture-profile" };
+            Set(model, "_review", new WindowsTweakReview(new TweakPlan
+            {
+                SchemaVersion = 1, OperationId = "fixture-operation", CreatedAtUtc = DateTime.UtcNow, Context = FakeOptimizerService.WindowsContext, CatalogHash = "fixture-catalog",
+                BeforeRevision = null, AfterRevision = "fixture-revision", ProfileId = "fixture-profile", Selections = [], Expected = [], Changes = [], Profiles = [], Held = [],
+            }, "fixture-plan.json", "fixture-hash"));
+            Set(model, "_reviewedChoices", restoring ? Array.Empty<TweakSelection>() : new[] { new TweakSelection("setting", "on") });
+            Set(model, "_restoringChoices", restoring);
+            model.Approved = true;
+            if (!model.CanApply) throw new InvalidOperationException("The reviewed Windows settings fixture is not ready to apply.");
+            return model;
+        }
+
+        var unexpected = App.Operations.WindowsStep;
+        App.Operations.WindowsStep = async step => { steps.Add(step); entered[step].SetResult(); await release[step].Task; };
+        RunningChanges.Finished += CloseWhenDone;
+        try
+        {
+            Pause("Windows helper", "remove saved choices");
+            var restore = Reviewed(restoring: true);
+            var run = restore.ApplyCommand.ExecuteAsync(null);
+            await entered["Windows helper"].Task;
+            check(RunningChanges.Any, "Restoring a saved Windows settings profile counts as a running change while its helper works");
+            release["Windows helper"].SetResult();
+            await entered["remove saved choices"].Task;
+            check(RunningChanges.Any && closed.Count == 0, "After the restore helper returns, Close when done keeps waiting until the profile's saved choices are removed");
+            release["remove saved choices"].SetResult();
+            await run;
+            check(!RunningChanges.Any && closed.SequenceEqual(["Windows helper then remove saved choices"]) && restore.Status == "Settings saved; current values could not be reloaded.",
+                "Close when done closes once, only after the restore and the saved-choice removal both finished");
+
+            Pause("save choices", "Windows helper");
+            var apply = Reviewed(restoring: false);
+            run = apply.ApplyCommand.ExecuteAsync(null);
+            await entered["save choices"].Task;
+            release["save choices"].SetResult();
+            await entered["Windows helper"].Task;
+            check(RunningChanges.Any && closed.Count == 0, "Saving choices and applying them to Windows is one running change, with no gap between the two steps");
+            release["Windows helper"].SetResult();
+            await run;
+            check(!RunningChanges.Any && closed.SequenceEqual(["save choices then Windows helper"]), "Close when done closes once, after the Windows apply finishes");
+
+            Pause();
+            var refused = Reviewed(restoring: false);
+            var hold = RunningChanges.TryHold();
+            try { await refused.ApplyCommand.ExecuteAsync(null); }
+            finally { hold?.Dispose(); }
+            check(hold is not null && steps.Count == 0 && closed.Count == 0 && refused.Status == "Settings were not confirmed" && refused.Detail == RunningChanges.Installing && !RunningChanges.Any,
+                "A Windows settings apply that starts while setup launches is refused before any step and says why");
+
+            Pause();
+            var firmware = new FirmwareViewModel { Stage = "review" };
+            Set(firmware, "_sessionDirectory", Path.Combine(Path.GetTempPath(), "roo-industries-firmware-fixture-not-created"));
+            Set(firmware, "_reviewHash", "fixture-review-hash");
+            var gate = typeof(RunningChanges).GetField("Gate", BindingFlags.NonPublic | BindingFlags.Static)!.GetValue(null)!;
+            Task write;
+            bool counted;
+            lock (gate)
+            {
+                write = firmware.ApplyAsync();
+                counted = RunningChanges.Any;
+            }
+            check(counted, "A confirmed BIOS write counts as running before its worker starts, so the window X and Install both wait for it");
+            await write;
+            check(!RunningChanges.Any && closed.Count == 1 && firmware.Message == "Load settings to set up SCEWIN first." && !firmware.Busy,
+                "The fixture BIOS write has no SCEWIN package, so nothing is written, and Close when done fires once when it ends");
+
+            Pause();
+            hold = RunningChanges.TryHold();
+            try { await firmware.ApplyAsync(); }
+            finally { hold?.Dispose(); }
+            check(hold is not null && closed.Count == 0 && firmware.Message == RunningChanges.Installing && firmware.CanApply && !RunningChanges.Any,
+                "A BIOS write that starts while setup launches is refused with its reason, and the review stays ready to retry");
+        }
+        finally
+        {
+            RunningChanges.Finished -= CloseWhenDone;
+            App.Operations.WindowsStep = unexpected;
+        }
     }
 }

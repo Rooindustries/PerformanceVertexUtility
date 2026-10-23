@@ -1040,7 +1040,12 @@ if (args is [] or ["responses"] or ["cleanup"] or ["race"])
                 restoredItems = new[] { new { itemId = "saved", restored = true } },
                 summary = new { restoredCount = 1, blockingGateCount = 0 },
             }));
-            await reopened.RestoreCleanupCommand.ExecuteAsync(null);
+            var markedWhenDone = false;
+            void Marked() { if (!RooIndustries.OptimizationSuite.Services.RunningChanges.Any) markedWhenDone = File.Exists(Path.Combine(runsRoot, "run-a", "restored.json")); }
+            RooIndustries.OptimizationSuite.Services.RunningChanges.Finished += Marked;
+            try { await reopened.RestoreCleanupCommand.ExecuteAsync(null); }
+            finally { RooIndustries.OptimizationSuite.Services.RunningChanges.Finished -= Marked; }
+            Check(markedWhenDone, "Close when done waits until a cleanup restore is saved as finished");
             var again = new UninstallCleanupViewModel { SelectedApp = appA };
             await Task.Delay(200);
             Check(File.Exists(Path.Combine(runsRoot, "run-a", "restored.json")) && !again.CleanupRestoreAvailable,
