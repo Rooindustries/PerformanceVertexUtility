@@ -161,6 +161,15 @@ static class FeatureRestartChecks
                 var row = f.Engine.Detect().Settings.Single(setting => setting.Id == "platform");
                 check(!row.Supported && row.Error is { } error && error.StartsWith("No choice applies", StringComparison.Ordinal), "The row shows the removed feature as not available here");
             });
+            Scenario("Windows deleted the feature from the image during the restart", f =>
+            {
+                f.Boot(("HypervisorPlatform", 2), ("VirtualMachinePlatform", 2)); f.Dism.ChangeResult = 3010;
+                f.Apply("mine", ("platform", "on"));
+                f.Restart(); f.Boot(("VirtualMachinePlatform", 2));
+                check(f.Recover() && f.Store.Recovery().Pending is null, "A feature DISM no longer knows closes the pending record");
+                var state = f.Store.ReadState()!;
+                check(state.Profiles.Length == 0 && state.Controls is { Length: 0 } && state.Notices.SequenceEqual([RegistryTweakStore.FeaturesRemoved + "HypervisorPlatform."]), "The deleted feature is released with the removed notice: " + string.Join(" | ", state.Notices));
+            });
             Scenario("Windows removed one feature while another stays owned", f =>
             {
                 f.Boot(("HypervisorPlatform", 2), ("VirtualMachinePlatform", 2)); f.Dism.ChangeResult = 3010;

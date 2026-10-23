@@ -7,6 +7,7 @@ namespace RooIndustries.Optimizer;
 public static class WindowsFeatures
 {
     private const int RestartRequired = 3010;
+    private const int UnknownFeature = unchecked((int)0x800F080C);
     public static bool IsHypervisor(string name) => name.StartsWith("Microsoft-Hyper-V", StringComparison.Ordinal) || name is "HypervisorPlatform" or "VirtualMachinePlatform" or "Containers-DisposableClientVM" or "Windows-Defender-ApplicationGuard";
     public static TweakControlRead Read(ControlAddress address) => Read(address, DismServicing.Current);
     public static TweakControlRead Read(ControlAddress address, DismServicing dism)
@@ -57,8 +58,9 @@ public static class WindowsFeatures
             Check(dism.OpenSession(out session), "DismOpenSession"); opened = true;
             foreach (var name in names.Distinct(StringComparer.Ordinal))
             {
-                Check(dism.GetFeatureState(session, name, out var state), "DismGetFeatureInfo(" + name + ")");
-                states.Add(name, state);
+                var result = dism.GetFeatureState(session, name, out var state);
+                if (result != UnknownFeature) Check(result, "DismGetFeatureInfo(" + name + ")");
+                states.Add(name, result == UnknownFeature ? 0 : state);
             }
         }
         finally
