@@ -11,6 +11,8 @@ import subprocess
 import struct
 import sys
 from datetime import datetime, timezone
+from http.client import HTTPException
+from urllib.error import HTTPError
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
@@ -241,8 +243,12 @@ def fetch(url, limit):
         return data
 
 
+def feed_bytes(feed):
+    return fetch(feed + "?t=" + str(int(datetime.now(timezone.utc).timestamp())), 65536)
+
+
 def live_feed(feed):
-    data = fetch(feed + "?t=" + str(int(datetime.now(timezone.utc).timestamp())), 65536)
+    data = feed_bytes(feed)
     return data, verify_manifest(data, feed_url=feed)
 
 
@@ -328,7 +334,11 @@ def publish(args):
         raise ValueError("Published feed has not propagated to the signed bytes yet")
     check_online_installer(published["installer"])
     print("Published manifest and installer verified over HTTPS.")
-    record_release(payload["version"])
+    try:
+        record_release(payload["version"])
+    except (OSError, ValueError) as error:
+        print("Published, but couldn't add " + payload["version"] + " to released-versions.txt (" + str(error) + "); add it by hand.", file=sys.stderr)
+        return 1
 
 
 def set_feed(args):
@@ -337,10 +347,17 @@ def set_feed(args):
     payload = verify_manifest(data, feed_url=feed)
     check_feed_path(feed, args.feed_path)
     try:
-        current, live = live_feed(feed)
-        state = "the live " + live["version"] + " manifest"
-    except (ValueError, KeyError, TypeError, AttributeError, OSError, InvalidSignature) as error:
-        current, live, state = None, None, "a live feed that does not verify (" + ("Invalid signature" if isinstance(error, InvalidSignature) else str(error)) + ")"
+        current = feed_bytes(feed)
+    except (ValueError, OSError, HTTPException) as error:
+        if not isinstance(error, HTTPError) or error.code != 404:
+            raise ValueError("Couldn't read the live feed (" + str(error) + "); try again")
+        current, live, state = None, None, "a live feed that does not verify (" + str(error) + ")"
+    else:
+        try:
+            live = verify_manifest(current, feed_url=feed)
+            state = "the live " + live["version"] + " manifest"
+        except (ValueError, KeyError, TypeError, AttributeError, InvalidSignature) as error:
+            current, live, state = None, None, "a live feed that does not verify (" + ("Invalid signature" if isinstance(error, InvalidSignature) else str(error)) + ")"
     if current == data:
         raise ValueError("The live feed already serves this manifest")
     floor, listed = release_floor(live and live["version"])
@@ -388,7 +405,7 @@ def main():
         elif args.command == "set-feed":
             set_feed(args)
         else:
-            publish(args)
+            return publish(args) or 0
     except (ValueError, KeyError, TypeError, AttributeError, OSError, struct.error, InvalidSignature) as error:
         print("Update release refused: " + ("Invalid signature" if isinstance(error, InvalidSignature) else str(error)), file=sys.stderr)
         return 1

@@ -73,11 +73,11 @@ try:
     def fixture_url(version, origin='https://' + host):
         return origin + '/b/' + secrets.token_urlsafe(24) + '/RooIndustries-OptimizationSuite-' + version + '-setup.exe'
 
-    def run(name, tool, arguments, code, text, after=lambda: None, run_env=env):
+    def run(name, tool, arguments, code, text, after=lambda: None, run_env=env, uploads=False):
         result = subprocess.run([sys.executable, '-I', str(tool)] + arguments, capture_output=True, text=True, env=run_env, cwd=work, timeout=600)
         output = result.stdout + result.stderr
         problem = None if result.returncode == code and text in output else 'unexpected exit code or output'
-        problem = problem or ('a refused command printed an upload command' if code and 'vercel blob put' in output else None)
+        problem = problem or ('a refused command printed an upload command' if code and not uploads and 'vercel blob put' in output else None)
         problem = problem or after()
         rows.append({'case': name, 'passed': problem is None, 'problem': problem, 'exitCode': result.returncode, 'expectedExitCode': code, 'expectedText': text, 'output': output})
         print(('PASS ' if problem is None else 'FAIL ') + name + ('' if problem is None else ': ' + problem))
@@ -129,9 +129,15 @@ try:
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     context.load_cert_chain(work / 'fixture-cert.pem', work / 'fixture-key.pem')
     served = {}
+    failures = {}
     class Fixture(http.server.BaseHTTPRequestHandler):
         def do_GET(self):
             path = urlparse(self.path).path
+            if failures.get(path):
+                status = failures[path].pop(0)
+                if status:
+                    self.send_error(status)
+                return
             blob = work / 'blob' / path[1:]
             body = served.get(path, blob.read_bytes() if blob.is_file() else None)
             if body is None:
@@ -198,6 +204,9 @@ try:
             def still_live():
                 if (work / 'blob' / flow_path).read_bytes() != bad.read_bytes():
                     return 'the refused rollback changed the feed'
+            for failure, status in [('503', 503), ('dropped', 0)]:
+                failures['/' + flow_path] = [status]
+                run(flow + '-feed-' + failure + '-rollback-refused', tool, rollback, 1, "Couldn't read the live feed (", lambda: 'the feed failure was not served' if failures['/' + flow_path] else still_live(), upload_env)
             run(flow + '-unlisted-rollback-refused', tool, rollback, 1, 'The live beta 0.11.1-beta is not in released-versions.txt. Add it there before rolling back', still_live, armed_env)
             for version in ['0.11.1-beta', '0.11.1-alpha']:
                 publish_case(flow + '-live-' + version + '-refused', tool, version, 1, 'is not newer than the live beta 0.11.1-beta', bad.read_bytes(), flow_path, origin, armed_env, ['--yes-publish'])
@@ -206,6 +215,26 @@ try:
         for version in ['0.11.1-beta', '0.11.1-alpha']:
             publish_case(flow + '-republish-' + version + '-refused', tool, version, 1, 'is not newer than the released version 0.11.1-beta, so testers who already have 0.11.1-beta would not be offered it', previous.read_bytes(), flow_path, origin, armed_env, ['--yes-publish'])
         publish_case(flow + '-newer-accepted', tool, '0.11.2-beta', 0, 'Dry run: nothing uploaded.', previous.read_bytes(), flow_path, origin, local_env)
+    repair_path = 'u/repair/beta.json'
+    tool = tool_tree('repair-tree', origin + '/' + repair_path + '\n', b'0.11.0-beta\n')
+    released_list = tool.parent / 'released-versions.txt'
+    repair_url = fixture_url('0.11.0-beta', origin)
+    served[urlparse(repair_url).path] = dummy.read_bytes()
+    repair = signed('repair', '0.11.0-beta', {'url': repair_url, **dummy_identity})
+    def serves(manifest):
+        return lambda: None if (work / 'blob' / repair_path).read_bytes() == manifest.read_bytes() else 'the feed does not serve the uploaded manifest'
+    set_repair = ['set-feed', '--manifest', str(repair), '--feed-path', repair_path, '--yes-publish']
+    run('set-feed-missing-feed-repaired', tool, set_repair, 0, 'does not verify (HTTP Error 404', serves(repair), upload_env)
+    envelope = json.loads(repair.read_bytes())
+    envelope['signature'] = json.loads(signed('repair-other', '0.11.1-beta', {'url': repair_url, **dummy_identity}).read_bytes())['signature']
+    (work / 'blob' / repair_path).write_text(json.dumps(envelope))
+    run('set-feed-bad-signature-feed-repaired', tool, set_repair, 0, 'does not verify (Invalid signature)', serves(repair), upload_env)
+    late_url = fixture_url('0.11.1-beta', origin)
+    late = signed('late', '0.11.1-beta', {'url': late_url, **dummy_identity})
+    released_list.chmod(0o444)
+    def unlisted():
+        return serves(late)() or (None if released_list.read_bytes() == b'0.11.0-beta\n' else 'the read-only list changed')
+    run('publish-list-write-failure-reported', tool, ['publish', '--installer', str(dummy), '--manifest', str(late), '--installer-path', urlparse(late_url).path[1:], '--feed-path', repair_path, '--yes-publish'], 1, "Published, but couldn't add 0.11.1-beta to released-versions.txt", unlisted, upload_env, True)
     uploads = (work / 'vercel-calls.txt').read_text().splitlines() if (work / 'vercel-calls.txt').exists() else []
     rows.append({'case': 'no-upload-attempted', 'passed': not uploads, 'calls': uploads})
     print(('PASS ' if not uploads else 'FAIL ') + 'no-upload-attempted')

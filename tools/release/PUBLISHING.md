@@ -22,7 +22,7 @@ Testers' apps read the signed feed in `update-feed.txt`. They only offer a versi
 
 ## Rolling back
 
-Point the feed back at the saved manifest. If the live version isn't in `released-versions.txt` yet, add it first. `set-feed` refuses to roll back a live version newer than everything in that list, so a rebuilt copy of the bad version can't be published again. The tool also checks that the saved installer still downloads with the signed bytes:
+Point the feed back at the saved manifest. If the live version isn't in `released-versions.txt` yet, add it first. `set-feed` refuses to roll back a live version newer than everything in that list, so a rebuilt copy of the bad version can't be published again. If it can't read the live feed (a server error, timeout or dropped connection), it refuses before uploading; run it again. A missing feed or one that doesn't verify can still be replaced. The tool also checks that the saved installer still downloads with the signed bytes:
 
 ```sh
 python3 tools/release/publish_update.py set-feed --manifest <version>-feed.previous-live.json --feed-path <feed path>
@@ -32,5 +32,7 @@ python3 tools/release/publish_update.py set-feed --manifest <version>-feed.previ
 This stops new downloads within about a minute. An app that already downloaded the bad version can still install it from its cache, and an app that installed it keeps it, because apps never move to a lower version. To replace a version testers already have, publish a fixed build with a higher version.
 
 If a publish stops after the installer upload, the immutable installer path can't be uploaded again. Run `set-feed` with the new manifest to finish it, then add its version to `released-versions.txt`.
+
+If publish stops after the feed upload, run `verify` against the live feed, then add the version to `released-versions.txt`.
 
 Before publication, run the [release upgrade rehearsal](../validation/Update/README.md#release-upgrade-rehearsal) with the signed manifest and matching installer as inputs. Run its read-only preflight first. Use an exclusive test window for `-MoveAsideExistingState`, and require `restore-verification` with `restored: true`, an empty `cleanupErrors` list and a passing invocation. Retain its ownership ledger and data archives. After publication, repeat with `-LiveFeed` to prove the real old app downloads and installs the live release.
