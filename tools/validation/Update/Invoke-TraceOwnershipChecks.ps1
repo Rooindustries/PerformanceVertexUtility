@@ -11,7 +11,7 @@ function Trigger($Root,[string]$Gate){
  $locked=$null
  try{
   $until=[DateTime]::UtcNow.AddSeconds(5)
-  while(-not$locked){try{$locked=[IO.FileStream]::new((Get-HarnessLongPath $script:Harness.LedgerPath),[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::None)}catch [IO.IOException]{if(($_.Exception.HResult -band 0xffff) -notin 32,33 -or [DateTime]::UtcNow -ge $until){throw};Start-Sleep -Milliseconds 50}}
+  while(-not$locked){try{$locked=[IO.FileStream]::new((Get-HarnessLongPath ($script:Harness.LedgerPath+'.lock')),[IO.FileMode]::OpenOrCreate,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None)}catch [IO.IOException]{if(($_.Exception.HResult -band 0xffff) -notin 32,33 -or [DateTime]::UtcNow -ge $until){throw};Start-Sleep -Milliseconds 50}}
   $ready.Set()|Out-Null;Start-Sleep -Milliseconds 800
  }
  finally{if($locked){$locked.Dispose()};$ready.Dispose()}

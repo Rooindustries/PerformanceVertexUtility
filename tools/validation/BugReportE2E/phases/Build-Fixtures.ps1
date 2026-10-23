@@ -7,6 +7,7 @@ if($script:RooIndustriesScenario -in @('All','Rendered')){
  $mainWindowSha256=Get-RooIndustriesFileSha256 (Join-Path $Source 'docs\internal\frontend\RooIndustries.OptimizationSuite.App\MainWindow.xaml')
  Assert-RooIndustries ($mainWindowSha256 -cmatch '^[a-f0-9]{64}$') 'Original MainWindow compile binding invalid.'
 }
+$buildBodyError=$null
 try{
  Assert-RooIndustries (@(Get-HarnessTree $BuildOut).Count -eq 0) 'BuildOut must be fresh; never rebuild in place.'
  Assert-RooIndustries ($script:RooIndustriesCommit -cmatch '^[a-f0-9]{40}$' -and $binding.appLogSha256 -cmatch '^[a-f0-9]{64}$' -and $binding.redactorSha256 -cmatch '^[a-f0-9]{64}$') 'Compile binding values invalid.'
@@ -51,4 +52,12 @@ public static class BuildBinding {
   $null=New-HarnessText (Join-Path $OutRoot ('build-'+$kind+'-binding.json')) ($build|ConvertTo-Json -Depth 15) 'report-e2e-build-binding' 'frame'
   Write-HarnessResult $OutRoot ('build-'+$kind+'-result.json') $build|Out-Null
  }
-}finally{$null=Register-RooIndustriesTree $BuildOut 'report-e2e-retained-build';$null=Assert-RooIndustriesSource $Source;Assert-HarnessHostLease}
+}
+catch{$buildBodyError=$_;throw}
+finally{
+try{$null=Register-RooIndustriesTree $BuildOut 'report-e2e-retained-build';$null=Assert-RooIndustriesSource $Source;Assert-HarnessHostLease}
+catch{
+ if($null -ne $buildBodyError){throw [AggregateException]::new('Report build failed; original failure is first, followed by cleanup failure',[Exception[]]@($buildBodyError.Exception,$_.Exception))}
+ throw
+}
+}

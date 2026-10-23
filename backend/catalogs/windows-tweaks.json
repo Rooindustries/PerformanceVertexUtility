@@ -55711,7 +55711,10 @@
               "minimumBuild": 10240,
               "maximumBuild": 26200,
               "editions": [
-                "*"
+                "Enterprise*",
+                "Education*",
+                "IoTEnterprise*",
+                "Server*"
               ]
             }
           ]
@@ -55855,7 +55858,10 @@
               "minimumBuild": 10240,
               "maximumBuild": 26200,
               "editions": [
-                "*"
+                "Enterprise*",
+                "Education*",
+                "IoTEnterprise*",
+                "Server*"
               ]
             }
           ]
@@ -73557,7 +73563,10 @@
               "minimumBuild": 10240,
               "maximumBuild": 26200,
               "editions": [
-                "*"
+                "Enterprise*",
+                "Education*",
+                "IoTEnterprise*",
+                "Server*"
               ]
             }
           ]
@@ -73575,6 +73584,31 @@
                 "valueName": "AllowTelemetry"
               },
               "dword": 3
+            }
+          ],
+          "availability": [
+            {
+              "minimumBuild": 10240,
+              "maximumBuild": 26200,
+              "editions": [
+                "*"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "choice-6b253977ea5987f3",
+          "name": "Required diagnostic data",
+          "changes": [
+            {
+              "address": {
+                "hive": "LocalMachine",
+                "view": "Registry64",
+                "keyPath": "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\DataCollection",
+                "kind": "value",
+                "valueName": "AllowTelemetry"
+              },
+              "dword": 1
             }
           ],
           "availability": [
@@ -74251,6 +74285,34 @@
                 "valueName": "AllowTelemetry"
               },
               "dword": 0
+            }
+          ],
+          "availability": [
+            {
+              "minimumBuild": 10240,
+              "maximumBuild": 26200,
+              "editions": [
+                "Enterprise*",
+                "Education*",
+                "IoTEnterprise*",
+                "Server*"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "choice-6b253977ea5987f3",
+          "name": "Required diagnostic data",
+          "changes": [
+            {
+              "address": {
+                "hive": "LocalMachine",
+                "view": "Registry64",
+                "keyPath": "SOFTWARE\\Policies\\Microsoft\\Windows\\DataCollection",
+                "kind": "value",
+                "valueName": "AllowTelemetry"
+              },
+              "dword": 1
             }
           ],
           "availability": [
@@ -78921,6 +78983,14 @@
         {
           "settingId": "windows.a8268996c3eb9072",
           "optionId": "choice-6b253977ea5987f3"
+        },
+        {
+          "settingId": "windows.d09ccd0fee309f49",
+          "optionId": "choice-6b253977ea5987f3"
+        },
+        {
+          "settingId": "windows.9ba2fc5ad6c98df6",
+          "optionId": "choice-6b253977ea5987f3"
         }
       ]
     },
@@ -81200,6 +81270,16 @@
         },
         {
           "settingId": "windows.4f7aa92582f348b6",
+          "optionId": "choice-95a6ed84299d0109"
+        }
+      ],
+      "optionalSelections": [
+        {
+          "settingId": "windows.94caf9dc9f3af63e",
+          "optionId": "choice-95a6ed84299d0109"
+        },
+        {
+          "settingId": "windows.677967b3c07b235d",
           "optionId": "choice-95a6ed84299d0109"
         }
       ]
@@ -88618,6 +88698,16 @@
           "settingId": "windows.620784a60cb8b67d",
           "optionId": "choice-95a6ed84299d0109"
         }
+      ],
+      "optionalSelections": [
+        {
+          "settingId": "windows.677967b3c07b235d",
+          "optionId": "choice-95a6ed84299d0109"
+        },
+        {
+          "settingId": "windows.94caf9dc9f3af63e",
+          "optionId": "choice-95a6ed84299d0109"
+        }
       ]
     },
     {
@@ -91996,6 +92086,12 @@
       "id": "wpd.allowtelemetry.8.apply",
       "name": "WPD · Telemetry · apply",
       "selections": [
+        {
+          "settingId": "windows.677967b3c07b235d",
+          "optionId": "choice-95a6ed84299d0109"
+        }
+      ],
+      "optionalSelections": [
         {
           "settingId": "windows.677967b3c07b235d",
           "optionId": "choice-95a6ed84299d0109"
