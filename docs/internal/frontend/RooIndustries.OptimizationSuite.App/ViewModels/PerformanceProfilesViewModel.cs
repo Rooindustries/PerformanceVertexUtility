@@ -217,6 +217,7 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
         ActionDetail = "Applying reversible process controls to this session.";
         try
         {
+            using var running = RunningChanges.Begin();
             var response = await App.Live.ApplyProcessProfileResultAsync(preset: ProcessPreset);
             var recovery = response.RecoveryPath is null ? null : App.Live.ProcessProfileRecovery;
             if (recovery is not null && PathsEqual(response.RecoveryPath, recovery.Path))
@@ -264,6 +265,11 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
             ActionTitle = "Process priorities need attention";
             ActionDetail = SummarizeProcessAction(response.Value, "The process apply was not fully confirmed.");
         }
+        catch (InvalidOperationException error) when (error.Message == RunningChanges.Installing)
+        {
+            ActionTitle = "Process priorities not confirmed";
+            ActionDetail = error.Message;
+        }
         finally
         {
             ActionBusy = false;
@@ -292,6 +298,7 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
         ActionDetail = "Putting changed process controls back to their previous state.";
         try
         {
+            using var running = RunningChanges.Begin();
             var response = await App.Live.RestoreProcessProfileResultAsync(recovery);
             if (PathsEqual(response.RecoveryPath, recovery.Path) && !string.IsNullOrWhiteSpace(response.RecoveryGeneration))
             {
@@ -326,6 +333,11 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
                 RestoreAvailable = true;
                 RestoreHint = "The reviewed backup remains available";
             }
+        }
+        catch (InvalidOperationException error) when (error.Message == RunningChanges.Installing)
+        {
+            ActionTitle = "Restore not confirmed";
+            ActionDetail = error.Message;
         }
         finally
         {
@@ -710,30 +722,116 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
 
     private static string SummarizeControls(JsonElement root)
     {
-        if ((!root.TryGetProperty("preview", out var preview) || preview.ValueKind != JsonValueKind.Array) &&
-            (!root.TryGetProperty("skippedItems", out preview) || preview.ValueKind != JsonValueKind.Array)) return string.Empty;
-        var lines = new List<string>();
-        foreach (var item in preview.EnumerateArray())
+        if (root.ValueKind != JsonValueKind.Object) return string.Empty;
+        var isPreview = root.TryGetProperty("dryRun", out var dryRun) && dryRun.ValueKind == JsonValueKind.True;
+        var actionId = ExtractString(root, "actionId");
+        var isGameStatus = !isPreview && actionId == "performance.gameTune.sessionStatus";
+        if (!isPreview && !isGameStatus && actionId?.EndsWith(".sessionStatus", StringComparison.Ordinal) == true) return string.Empty;
+        var result = isGameStatus ? root : root.TryGetProperty("result", out var value) && value.ValueKind == JsonValueKind.Object ? value : default;
+        JsonElement items;
+        if (isPreview)
         {
+            if (!root.TryGetProperty("preview", out items) || items.ValueKind != JsonValueKind.Array)
+                root.TryGetProperty("skippedItems", out items);
+        }
+        else if (result.ValueKind == JsonValueKind.Object)
+        {
+            if (isGameStatus)
+            {
+                if (!result.TryGetProperty("restoredItems", out items) || items.ValueKind != JsonValueKind.Array || items.GetArrayLength() == 0)
+                {
+                    items = default;
+                    var hasKept = result.TryGetProperty("leftAsSetItems", out var keptStatus) && keptStatus.ValueKind == JsonValueKind.Array && keptStatus.GetArrayLength() > 0;
+                    var canShowApplied = ExtractString(root, "status") is "active" or "restorable" && !hasKept
+                        && (!result.TryGetProperty("restoreAttempted", out var attempted) || attempted.ValueKind == JsonValueKind.False);
+                    if (canShowApplied) result.TryGetProperty("changedItems", out items);
+                }
+            }
+            else if (!result.TryGetProperty("changedItems", out items)) result.TryGetProperty("restoredItems", out items);
+        }
+        else root.TryGetProperty("changedItems", out items);
+        var lines = new List<string>();
+        if (items.ValueKind == JsonValueKind.Array)
+        foreach (var item in items.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.Object) continue;
             var fields = new List<string>();
-            if (item.TryGetProperty("controlChanges", out var changes) && changes.ValueKind == JsonValueKind.Array)
+            JsonElement changes;
+            if (isPreview) item.TryGetProperty("controlChanges", out changes);
+            else if (!item.TryGetProperty("restoredControls", out changes) || changes.ValueKind != JsonValueKind.Array)
+            {
+                if (!item.TryGetProperty("appliedControls", out changes) || changes.ValueKind != JsonValueKind.Array)
+                    item.TryGetProperty("controlChanges", out changes);
+            }
+            if (changes.ValueKind == JsonValueKind.Array)
             foreach (var change in changes.EnumerateArray())
             {
+                if (change.ValueKind != JsonValueKind.Object) continue;
+                var blocked = change.TryGetProperty("blocked", out var block) && block.ValueKind == JsonValueKind.True;
+                var outcome = ExtractString(change, "outcome");
+                if (!isPreview && (blocked || outcome is { Length: > 0 } && outcome != "applied")) continue;
                 var control = ExtractString(change, "control");
-                var label = control switch { "priorityClass" => "CPU", "memoryPriority" => "Memory", "ioPriority" => "I/O", "affinityMask" => "CPUs", "gpuPriority" => "GPU", _ => control ?? "Control" };
+                var label = ControlLabel(control);
                 var current = change.TryGetProperty("currentValue", out var from) ? ControlValue(control, from) : "unavailable";
                 var proposed = change.TryGetProperty("proposedValue", out var to) ? ControlValue(control, to) : "unavailable";
-                var blocked = change.TryGetProperty("blocked", out var block) && block.ValueKind == JsonValueKind.True;
                 fields.Add(label + " " + current + " → " + proposed + (blocked ? " (skipped: " + ExtractString(change, "blockedReason") + ")" : string.Empty));
             }
+            if (isPreview && item.TryGetProperty("leftAsSet", out var kept) && kept.ValueKind == JsonValueKind.Array)
+            foreach (var left in kept.EnumerateArray())
+            {
+                if (left.ValueKind != JsonValueKind.Object) continue;
+                var control = ExtractString(left, "control");
+                fields.Add(ControlLabel(control) + " " + (left.TryGetProperty("currentValue", out var keptValue) ? ControlValue(control, keptValue) : "unavailable") + " (left as another program set it)");
+            }
             if (fields.Count > 0) lines.Add((ExtractString(item, "processName") ?? "App") + ": " + string.Join("; ", fields));
-            else if ((ExtractString(item, "classification") == "protectedCompanion" ||
+            else if (isPreview && (ExtractString(item, "classification") == "protectedCompanion" ||
                 item.TryGetProperty("reasonCodes", out var codes) && codes.ValueKind == JsonValueKind.Array && codes.EnumerateArray().Any(code => code.ValueKind == JsonValueKind.String && code.GetString() == "GAME_LAUNCHER_PROTECTED")) &&
                 ExtractString(item, "reason") is { Length: > 0 } reason)
                 lines.Add((ExtractString(item, "processName") ?? "App") + ": " + reason);
         }
+        if (!isPreview && result.ValueKind == JsonValueKind.Object)
+        {
+            var summaryText = result.TryGetProperty("summary", out var summaryValue) && summaryValue.ValueKind == JsonValueKind.String
+                ? summaryValue.GetString() ?? string.Empty : string.Empty;
+            if (result.TryGetProperty("leftAsSetItems", out var kept) && kept.ValueKind == JsonValueKind.Array)
+            {
+                var entries = new List<string>();
+                var complete = kept.GetArrayLength() > 0;
+                foreach (var left in kept.EnumerateArray())
+                {
+                    if (left.ValueKind != JsonValueKind.Object || !left.TryGetProperty("processName", out var name) || name.ValueKind != JsonValueKind.String
+                        || !left.TryGetProperty("control", out var controlValue) || controlValue.ValueKind != JsonValueKind.String
+                        || !left.TryGetProperty("currentValue", out var current) || current.ValueKind is not (JsonValueKind.String or JsonValueKind.Number))
+                    { complete = false; break; }
+                    var control = controlValue.GetString();
+                    var label = control switch { "priorityClass" => "CPU priority", "affinityMask" => "CPU affinity", "ioPriority" => "I/O priority",
+                        "memoryPriority" => "memory priority", "gpuPriority" => "GPU priority", _ => control };
+                    entries.Add(name.GetString() + " " + label + " (" + current.ToString() + ")");
+                }
+                if (!complete || !summaryText.Contains(" Left as another program set it: " + string.Join(", ", entries) + ".", StringComparison.Ordinal))
+                foreach (var left in kept.EnumerateArray())
+                {
+                    if (left.ValueKind != JsonValueKind.Object) continue;
+                    var control = ExtractString(left, "control");
+                    lines.Add((ExtractString(left, "processName") ?? "App") + ": " + ControlLabel(control) + " " +
+                        (left.TryGetProperty("currentValue", out var keptValue) ? ControlValue(control, keptValue) : "unavailable") + " (left as another program set it)");
+                }
+            }
+            if (result.TryGetProperty("skippedItems", out var skipped) && skipped.ValueKind == JsonValueKind.Array)
+            foreach (var item in skipped.EnumerateArray())
+                if (item.ValueKind == JsonValueKind.Object && ExtractString(item, "reason") is { Length: > 0 } reason)
+                {
+                    var name = ExtractString(item, "processName");
+                    if (name is { Length: > 0 } && item.TryGetProperty("processId", out var processId) && processId.ValueKind == JsonValueKind.Number
+                        && processId.TryGetInt64(out var id) && summaryText.Contains(name + " (PID " + id.ToString(CultureInfo.InvariantCulture) + "): " + reason, StringComparison.Ordinal)) continue;
+                    lines.Add((name ?? "App") + ": " + reason);
+                }
+        }
         return lines.Count == 0 ? string.Empty : "\n" + string.Join("\n", lines.Take(20)) + (lines.Count > 20 ? "\n" + (lines.Count - 20) + " more apps; see the list below." : string.Empty);
     }
+
+    private static string ControlLabel(string? control)
+        => control switch { "priorityClass" => "CPU", "memoryPriority" => "Memory", "ioPriority" => "I/O", "affinityMask" => "CPUs", "gpuPriority" => "GPU", _ => control ?? "Control" };
 
     private static string ControlValue(string? control, JsonElement value)
         => control == "memoryPriority" && value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var memory) ? FriendlyMemoryPriority(memory) : value.ToString();
@@ -785,7 +883,8 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
             var restored = ExtractInt(root, "summary", "restoredItemCount") ?? CountArray(root, "restoredItems") ?? CountArray(root, "result", "restoredItems") ?? 0;
             var skipped = ExtractInt(root, "summary", "skippedItemCount") ?? CountArray(root, "skippedItems") ?? CountArray(root, "result", "skippedItems") ?? 0;
             var polls = ExtractInt(root, "summary", "pollCount") ?? CountArray(root, "polls") ?? 0;
-            if (changed > 0 || restored > 0 || skipped > 0 || polls > 0)
+            var kept = CountArray(root, "leftAsSetItems") ?? CountArray(root, "result", "leftAsSetItems") ?? 0;
+            if (changed > 0 || restored > 0 || skipped > 0 || polls > 0 || kept > 0)
             {
                 var label = status switch
                 {
@@ -800,7 +899,7 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
                     changed.ToString(CultureInfo.InvariantCulture) + " changed, " +
                     restored.ToString(CultureInfo.InvariantCulture) + " restored, " +
                     skipped.ToString(CultureInfo.InvariantCulture) + " skipped across " +
-                    polls.ToString(CultureInfo.InvariantCulture) + " checks.";
+                    polls.ToString(CultureInfo.InvariantCulture) + " checks." + SummarizeControls(root);
             }
 
             if (!string.IsNullOrWhiteSpace(issue)) return issue!;

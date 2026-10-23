@@ -17,7 +17,8 @@
             PaneDisplayMode="Auto"
             ExpandedModeThresholdWidth="1100" CompactModeThresholdWidth="720"
             OpenPaneLength="224"
-            SelectionChanged="Nav_SelectionChanged">
+            SelectionChanged="Nav_SelectionChanged"
+            ItemInvoked="Nav_ItemInvoked">
 
             <NavigationView.Resources>
                 <StaticResource x:Key="FocusVisualPrimaryBrush" ResourceKey="RooIndustriesFocusVisualBrush" />

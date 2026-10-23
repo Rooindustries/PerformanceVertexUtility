@@ -91,6 +91,7 @@
         "tools/validation/Update/run_manual_install.py",
         "tools/validation/Update/run_shipped.py",
         "tools/validation/Update/run_trace_checks.py",
+        "tools/validation/UpdateBanner/README.md",
         "tools/validation/BugReportE2E/applog/Program.cs"
       ],
       "reason": "Windows harness staging and host-lease root; existing frames, cleanup ownership and path-length guards depend on this exact path spelling, including its source escaping."
@@ -119,7 +120,8 @@
         "tools/validation/Update/Clear-UpdateFrame.ps1",
         "tools/validation/Update/Harness.Common.ps1",
         "tools/validation/BugReportE2E/shared/OwnedBoundary.cs",
-        "tools/validation/BugReportE2E/phases/Contract.Common.ps1"
+        "tools/validation/BugReportE2E/phases/Contract.Common.ps1",
+        "tools/validation/Background/Invoke-RestoreE2EGates.ps1"
       ],
       "reason": "Windows harness staging and host-lease root; existing frames, cleanup ownership and path-length guards depend on this exact path spelling, including its source escaping."
     },
@@ -143,6 +145,14 @@
         "tools/validation/Governor/Test-GovernorSetupFallbacks.ps1"
       ],
       "reason": "On-disk game-root fixture used in ownership and setup-fallback requests; preserve the exact persisted path."
+    },
+    {
+      "text": "Local\\RooProcessControls-",
+      "files": [
+        "backend/scripts/ProcessProfile.Common.ps1",
+        "tools/validation/Background/NativeRestoreContention/Program.cs"
+      ],
+      "reason": "Existing native process-instance mutex prefix; restore and contention controls must share the exact namespace and PID/native creation identity."
     },
     {
       "text": "Local\\RooTrace-",
@@ -174,6 +184,7 @@
         "tools/validation/Update/Build-ShippedAlpha.ps1",
         "tools/validation/Update/Invoke-ShippedScenario.ps1",
         "tools/validation/Update/Invoke-UpdateFixture.ps1",
+        "tools/validation/Update/Invoke-UpgradeRehearsal.ps1",
         "tools/validation/Update/UpdateProbe/Program.cs",
         "tools/validation/windows_ssh.py"
       ],
@@ -255,7 +266,8 @@
       "files": [
         "tools/validation/Governor/Fixtures/BrandCompatibility.0.9.0-beta.ps1",
         "tools/validation/LoadTimes/Test-ElevatedLaunchers.ps1",
-        "tools/validation/Release/Invoke-IntegrationVerification.ps1"
+        "tools/validation/Release/Invoke-IntegrationVerification.ps1",
+        "tools/validation/Update/UpgradeRehearsal.State.ps1"
       ],
       "reason": "Legacy protected-session scheduled-task prefix; discovery and cleanup must find tasks created by earlier versions."
     },
@@ -477,10 +489,13 @@
         "tools/validation/Release/Test-HistoricalBlackwell.ps1",
         "tools/validation/Release/Test-RecoveryLongPaths.ps1",
         "tools/validation/SetupMigration/Test-SetupMigration.ps1",
+        "tools/validation/Update/Check-UpgradeRehearsalRecovery.ps1",
         "tools/validation/Update/Collect-RestartEvidence.ps1",
         "tools/validation/Update/Harness.Common.ps1",
         "tools/validation/Update/Invoke-ShippedScenario.ps1",
         "tools/validation/Update/Invoke-UpdateScenario.ps1",
+        "tools/validation/Update/Invoke-UpgradeRehearsal.ps1",
+        "tools/validation/Update/UpgradeRehearsal.State.ps1",
         "tools/validation/Update/run_shipped.py"
       ],
       "reason": "Legacy data directory, registry root, process image and scheduled-task prefix from BrandCompatibility; migration, ownership and historical recovery must recognize the existing identities."
@@ -749,6 +764,14 @@
         "tools/validation/Memory/run_memory.py"
       ],
       "reason": "Published cleanup-receipt field written to JSON; existing measurement artifacts and consumers retain this key."
+    },
+    {
+      "text": "ROO-673",
+      "files": [
+        "AGENTS.md",
+        "tools/validation/Background/README.md"
+      ],
+      "reason": "Linear issue key for the restore test-harness repair that moves the harness-blocked scenarios back into the default group."
     }
   ]
 }

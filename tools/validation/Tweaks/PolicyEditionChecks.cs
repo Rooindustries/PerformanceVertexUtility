@@ -95,8 +95,10 @@ static class PolicyEditionChecks
             var store = FileTweakStore.Create(Path.Combine(root, "consumer-preset-" + edition + ".json"), 26100, edition);
             var engine = new TweakEngine(catalog with { Settings = definitions, Presets = [mixed], Incompatible = null }, store);
             var plan = engine.PreviewPreset("mixed", mixed.Id);
-            var expected = mixed.Selections.Where(selection => edition == "Enterprise" || selection != selected).OrderBy(selection => selection.SettingId);
-            check(plan.Selections.SequenceEqual(expected) && plan.Skipped.SequenceEqual(edition == "Professional" ? new[] { definition.Name } : []), "The source preset keeps its other choices and reports only unavailable consumer blocking on " + edition);
+            var skipped = edition == "Enterprise" ? [] : mixed.Selections.Where(selection => selection.SettingId is "windows.a8268996c3eb9072" or "windows.d09ccd0fee309f49" or "windows.9ba2fc5ad6c98df6").ToArray();
+            var expected = mixed.Selections.Except(skipped).OrderBy(selection => selection.SettingId);
+            check(plan.Selections.SequenceEqual(expected) && plan.Skipped.SequenceEqual(skipped.Select(selection => catalog.Resolve(selection).Definition.Name)),
+                "The source preset keeps its required choices and reports all edition-limited choices as skipped on " + edition);
             Apply(engine, plan); Apply(engine, engine.Preview("mixed", []));
             check(store.ReadState()!.Profiles.Length == 0 && OperationFiles.Read<TweakFixture>(Path.Combine(root, "consumer-preset-" + edition + ".json")).Keys.Count == 0, "The edition-filtered source preset restores all fixture values and keys on " + edition);
         }

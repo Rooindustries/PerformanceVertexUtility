@@ -23,6 +23,7 @@ try {
             stateRoot = $resolvedStateRoot
             sessionPath = $resolvedSessionPath
             restorable = $false
+            restoreAttempted = $false
             active = $false
             completed = $false
             failed = $false
@@ -33,6 +34,7 @@ try {
                 restoredItemCount = 0
                 pollCount = 0
             }
+            leftAsSetItems = @()
             latestLogs = @()
             warnings = @((New-RooIndustriesIssue 'GAME_TUNE_SESSION_NOT_FOUND' 'No Game Tune session state was found.' 'warning' 'performance.gameTune' $resolvedStateRoot $false 'Start a confirmed session or provide a session path.' $null))
             errors = @()
@@ -77,6 +79,7 @@ try {
         sessionPath = $resolvedSessionPath
         backupManifestPath = Get-RooIndustriesPropertyValue $session 'backupManifestPath' $null
         restorable = $isRestorable
+        restoreAttempted = ($null -ne $session.PSObject.Properties['leftAsSetItems'] -or @(Get-RooIndustriesPropertyArray $session 'restoredItems').Count -gt 0)
         active = ($status -eq 'active')
         completed = ($status -eq 'completed')
         failed = ($status -eq 'failed')
@@ -91,6 +94,7 @@ try {
         changedItems = @(Get-RooIndustriesPropertyArray $session 'changedItems')
         skippedItems = @(Get-RooIndustriesPropertyArray $session 'skippedItems')
         restoredItems = @(Get-RooIndustriesPropertyArray $session 'restoredItems')
+        leftAsSetItems = @(Get-RooIndustriesPropertyArray $session 'leftAsSetItems')
         latestLogs = @($latestLogs.ToArray())
         warnings = @(Get-RooIndustriesPropertyArray $session 'warnings')
         errors = @(Get-RooIndustriesPropertyArray $session 'errors')
@@ -109,6 +113,7 @@ try {
         stateRoot = $StateRoot
         sessionPath = $SessionPath
         restorable = $false
+        restoreAttempted = $false
         active = $false
         completed = $false
         failed = $true
@@ -119,6 +124,7 @@ try {
             restoredItemCount = 0
             pollCount = 0
         }
+        leftAsSetItems = @()
         latestLogs = @()
         warnings = @()
         errors = @((New-RooIndustriesIssue 'GAME_TUNE_STATUS_FAILED' $_.Exception.Message 'error' 'performance.gameTune' $SessionPath $true 'Check the session state path and retry.' $null))
