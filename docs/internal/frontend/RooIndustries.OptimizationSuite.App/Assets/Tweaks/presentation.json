@@ -898,7 +898,10 @@
     "section": "devices"
   },
   "windows.09240c8c2144ffde": {
-    "section": "devices"
+    "section": "devices",
+    "defaults": {
+      "InitialKeyboardIndicators": "2147483648"
+    }
   },
   "windows.791468133ef9ae2a": {
     "section": "devices",
@@ -1075,6 +1078,9 @@
       "choice-9afa59bf9867e9ba": "Mullvad Ads Trackers Malware Social",
       "choice-59283a239f11cba6": "Mullvad Ads Trackers Malware Adult Gambling",
       "choice-e21e769470acbc8f": "Mullvad Ads Trackers Malware Adult Gambling Social"
+    },
+    "defaults": {
+      "NameServer": ""
     },
     "summary": "Choose DNS lookup and content-filtering services."
   },
@@ -2834,7 +2840,10 @@
     "section": "windows"
   },
   "windows.190ec8140565cdbe": {
-    "section": "windows"
+    "section": "windows",
+    "defaults": {
+      "value": 0
+    }
   },
   "windows.75800f3d9de3671e": {
     "section": "windows"
@@ -2999,6 +3008,13 @@
     "choices": {
       "choice-696e67767182f287": "Use this preference"
     },
+    "defaults": {
+      "configuration": {
+        "template": "https://cloudflare-dns.com/dns-query",
+        "allowFallback": false,
+        "autoUpgrade": false
+      }
+    },
     "summary": "Enable encrypted DNS; select the provider separately."
   },
   "windows.8208c998c8a458d9": {
@@ -3029,6 +3045,13 @@
     "choices": {
       "choice-696e67767182f287": "Use this preference"
     },
+    "defaults": {
+      "configuration": {
+        "template": "https://cloudflare-dns.com/dns-query",
+        "allowFallback": false,
+        "autoUpgrade": false
+      }
+    },
     "summary": "Enable encrypted DNS; select the provider separately."
   },
   "windows.5403fd16255c7f6c": {
@@ -3058,6 +3081,13 @@
     "topic": "DNS",
     "choices": {
       "choice-604d415f4705eb0b": "Use this preference"
+    },
+    "defaults": {
+      "configuration": {
+        "template": "https://dns.quad9.net/dns-query",
+        "allowFallback": false,
+        "autoUpgrade": false
+      }
     },
     "summary": "Enable encrypted DNS; select the provider separately."
   },
@@ -3129,6 +3159,13 @@
     "choices": {
       "choice-0524ad4316c363b1": "Use this preference"
     },
+    "defaults": {
+      "configuration": {
+        "template": "https://dns.google/dns-query",
+        "allowFallback": false,
+        "autoUpgrade": false
+      }
+    },
     "summary": "Enable encrypted DNS; select the provider separately."
   },
   "windows.55c7e34207106885": {
@@ -3138,6 +3175,13 @@
     "topic": "DNS",
     "choices": {
       "choice-0524ad4316c363b1": "Use this preference"
+    },
+    "defaults": {
+      "configuration": {
+        "template": "https://dns.google/dns-query",
+        "allowFallback": false,
+        "autoUpgrade": false
+      }
     },
     "summary": "Enable encrypted DNS; select the provider separately."
   },
@@ -3169,6 +3213,13 @@
     "choices": {
       "choice-696e67767182f287": "Use this preference"
     },
+    "defaults": {
+      "configuration": {
+        "template": "https://cloudflare-dns.com/dns-query",
+        "allowFallback": false,
+        "autoUpgrade": false
+      }
+    },
     "summary": "Enable encrypted DNS; select the provider separately."
   },
   "windows.2ce72222b2dad012": {
@@ -3198,6 +3249,13 @@
     "topic": "DNS",
     "choices": {
       "choice-696e67767182f287": "Use this preference"
+    },
+    "defaults": {
+      "configuration": {
+        "template": "https://cloudflare-dns.com/dns-query",
+        "allowFallback": false,
+        "autoUpgrade": false
+      }
     },
     "summary": "Enable encrypted DNS; select the provider separately."
   },
@@ -3249,6 +3307,13 @@
     "choices": {
       "choice-604d415f4705eb0b": "Use this preference"
     },
+    "defaults": {
+      "configuration": {
+        "template": "https://dns.quad9.net/dns-query",
+        "allowFallback": false,
+        "autoUpgrade": false
+      }
+    },
     "summary": "Enable encrypted DNS; select the provider separately."
   },
   "windows.a550397cede16b37": {
@@ -3258,6 +3323,13 @@
     "topic": "DNS",
     "choices": {
       "choice-604d415f4705eb0b": "Use this preference"
+    },
+    "defaults": {
+      "configuration": {
+        "template": "https://dns.quad9.net/dns-query",
+        "allowFallback": false,
+        "autoUpgrade": false
+      }
     },
     "summary": "Enable encrypted DNS; select the provider separately."
   },
@@ -3369,6 +3441,13 @@
     "choices": {
       "choice-0524ad4316c363b1": "Use this preference"
     },
+    "defaults": {
+      "configuration": {
+        "template": "https://dns.google/dns-query",
+        "allowFallback": false,
+        "autoUpgrade": false
+      }
+    },
     "summary": "Enable encrypted DNS; select the provider separately."
   },
   "windows.d0239e1369742570": {
@@ -3379,6 +3458,13 @@
     "choices": {
       "choice-0524ad4316c363b1": "Use this preference"
     },
+    "defaults": {
+      "configuration": {
+        "template": "https://dns.google/dns-query",
+        "allowFallback": false,
+        "autoUpgrade": false
+      }
+    },
     "summary": "Enable encrypted DNS; select the provider separately."
   },
   "windows.ec55a129b83d4bc9": {
@@ -3388,6 +3474,13 @@
     "topic": "DNS",
     "choices": {
       "choice-604d415f4705eb0b": "Use this preference"
+    },
+    "defaults": {
+      "configuration": {
+        "template": "https://dns.quad9.net/dns-query",
+        "allowFallback": false,
+        "autoUpgrade": false
+      }
     },
     "summary": "Enable encrypted DNS; select the provider separately."
   },
@@ -3897,7 +3990,10 @@
     "section": "windows"
   },
   "windows.d564e4921d5ee555": {
-    "section": "windows"
+    "section": "windows",
+    "defaults": {
+      "SvcHostSplitThresholdInKB": 3670016
+    }
   },
   "windows.4799dd60dfc02e8c": {
     "section": "windows"
