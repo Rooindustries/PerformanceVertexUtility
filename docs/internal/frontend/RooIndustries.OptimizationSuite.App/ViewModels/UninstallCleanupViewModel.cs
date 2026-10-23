@@ -565,10 +565,16 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
         CleanupExecutionDetail = ApplyApprovalSummary;
         try
         {
+            using var running = RunningChanges.Begin();
             var result = await App.Live.RequestUninstallCleanupApplyResultAsync(app.AppId!, RemoverPathApproved, CleanupListApproved, true);
             CaptureRecovery(app.AppId!, result);
             if (!IsCurrent(app, generation)) return;
             SummarizeCleanupExecution(result.Value, app.AppId!, result.Error, true);
+        }
+        catch (InvalidOperationException error) when (error.Message == RunningChanges.Installing)
+        {
+            CleanupExecutionState = "Cleanup didn't start.";
+            CleanupExecutionDetail = error.Message;
         }
         catch (Exception error)
         {

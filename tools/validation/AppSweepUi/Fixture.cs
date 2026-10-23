@@ -34,9 +34,11 @@ namespace RooIndustries.OptimizationSuite.Services
     {
         public static Func<string, Task>? Pause { get; set; }
         public static List<string> Written { get; } = new();
-        public static async Task<T> Then<T>(string helper, Func<T> write)
+        public static async Task<T> Then<T>(string helper, Func<T> write, Action? prepare = null)
         {
-            if (Pause is not { } pause) return write();
+            if (Pause is not { } pause) { prepare?.Invoke(); return write(); }
+            await pause(helper + " starts");
+            prepare?.Invoke();
             using (DataGeneration.BeginChange()) await pause(helper);
             await pause(helper + " returned");
             var result = write();
@@ -278,7 +280,10 @@ namespace RooIndustries.OptimizationSuite.Services
         public Task<OptimizerResult<BulkRemovalJournal>> DismissRemovalAsync(string journal) { Dismissed.Add(journal); return DismissRemoval(journal); }
         public Task<OptimizerResult<BulkRemovalJournal>> ReconcileRemovalAsync(string journal) => ReconcileRemoval(journal);
         public Task<BulkRemovalReview> PreviewRemovalAsync(string[] appIds, bool includeAllAppxUsers = false) => throw new InvalidOperationException("Unexpected removal preview call.");
-        public Task<OptimizerResult<BulkRemovalJournal>> ApplyRemovalAsync(BulkRemovalReview review, bool dependenciesReviewed, IProgress<BulkRemovalJournal> progress) => throw new InvalidOperationException("Unexpected removal call.");
+        public string? RemovalPointer { get; set; }
+        public Task<OptimizerResult<BulkRemovalJournal>> ApplyRemovalAsync(BulkRemovalReview review, bool dependenciesReviewed, IProgress<BulkRemovalJournal> progress)
+            => ServiceSteps.Pause is null ? throw new InvalidOperationException("Unexpected removal call.")
+                : ServiceSteps.Then("removal", () => new OptimizerResult<BulkRemovalJournal> { Status = "success" }, () => RemovalPointer = review.JournalPath);
         public Task<OptimizerResult<BulkRemovalJournal>> CancelRemovalAsync(string journal) => throw new InvalidOperationException("Unexpected cancel call.");
         public Task<LeftoverDiscoveryResult> DiscoverLeftoversAsync(string queueJournalPath, string appId, CancellationToken cancellationToken) => throw new InvalidOperationException("Unexpected leftover scan.");
         public Task<CleanupPart> PreviewDeepCleanupAsync(string queueJournalPath, string appId, string[] itemIds, bool acceptKeyRecreation) => throw new InvalidOperationException("Unexpected cleanup preview.");

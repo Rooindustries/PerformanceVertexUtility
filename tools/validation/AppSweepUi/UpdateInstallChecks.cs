@@ -119,7 +119,7 @@ static class UpdateInstallChecks
         void Pause(params string[] helpers)
         {
             steps.Clear(); closed.Clear(); entered.Clear(); release.Clear(); order.Clear(); ServiceSteps.Written.Clear();
-            foreach (var name in helpers.SelectMany(helper => new[] { helper, helper + " returned" }))
+            foreach (var name in helpers.SelectMany(helper => new[] { helper + " starts", helper, helper + " returned" }))
             {
                 order.Add(name);
                 entered[name] = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -169,6 +169,10 @@ static class UpdateInstallChecks
         var governor = new ProcessControlsViewModel();
         var damaged = new ProcessControlsViewModel();
         WindowsTweaksViewModel? windows = null;
+        var removing = new BulkRemovalViewModel();
+        var removalJournal = Path.Combine(root, "removal-journal.json");
+        UninstallCleanupViewModel? cleanup = null;
+        string? cleanupInputs = null;
         bool Refused(string? detail) => detail == RunningChanges.Installing;
 
         Command[] commands =
@@ -201,6 +205,11 @@ static class UpdateInstallChecks
                 () => true, () => windows!.Status == "Settings were not confirmed" && Refused(windows.Detail), () => true),
             new("Windows settings apply", ["save choices", "Windows helper"], "the Windows apply", () => (windows = Reviewed(restoring: false)).ApplyCommand.ExecuteAsync(null),
                 () => true, () => windows!.Status == "Settings were not confirmed" && Refused(windows.Detail), () => true),
+            new("Remove selected apps", ["removal"], "the removal result", () => removing.ApplyCommand.ExecuteAsync(null),
+                () => App.Operations.RemovalPointer == removalJournal, () => removing.Status == "Removal didn't start." && Refused(removing.Detail) && removing.CanApply, () => App.Operations.RemovalPointer is null),
+            new("Reviewed cleanup apply", ["cleanup"], "the cleanup result", () => cleanup!.ApplyCleanupCommand.ExecuteAsync(null),
+                () => cleanupInputs == "registry:Editor" && cleanup!.CleanupExecutionState != "Applying reviewed cleanup...",
+                () => cleanup!.CleanupExecutionState == "Cleanup didn't start." && Refused(cleanup.CleanupExecutionDetail) && cleanup.CanApplyCleanup, () => cleanupInputs is null),
         ];
 
         ServiceSteps.Pause = async step =>
@@ -241,6 +250,23 @@ static class UpdateInstallChecks
                     case "Damaged rule removal":
                         App.Operations.DeletedRules.Clear();
                         damaged.SelectedDamagedRule = new DamagedRuleChoice(rule.RuleId, "The JSON is incomplete.");
+                        break;
+                    case "Remove selected apps":
+                        Set(removing, "_review", new BulkRemovalReview(new BulkRemovalPlan(), Path.Combine(root, "removal-preview.json"), "fixture-hash", removalJournal));
+                        Set(removing, "_phase", "preview");
+                        break;
+                    case "Reviewed cleanup apply":
+                        App.Live.LastError = null; App.Live.BeforeInstalledApps = null; App.Live.AfterInstalledApps = null;
+                        App.Live.InstalledApps = new() { Apps = [new InstalledApp { AppId = "registry:Editor", DisplayName = "Roo Industries Fixture Editor", SourceType = "registry" }], Complete = true };
+                        cleanup = new UninstallCleanupViewModel();
+                        await cleanup.InitializeAsync();
+                        cleanup.SelectedApp = cleanup.Apps.Single();
+                        cleanup.RemovalPathReviewed = true; cleanup.LeftoverScanCompleted = true; cleanup.CleanupPlanReady = true;
+                        cleanup.RemoverPathApproved = true; cleanup.CleanupListApproved = true;
+                        cleanup.FinalCheckPassed = true; cleanup.RealCleanupApproved = true;
+                        App.Live.CleanupApply = (id, _, _, _) => ServiceSteps.Then<string?>("cleanup",
+                            () => JsonSerializer.Serialize(new { actionId = "apps.invokeUninstallCleanupApplyPackage", appId = id, dryRun = false, status = "success", executionMode = "real", summary = new { deletedCount = 1 } }),
+                            () => cleanupInputs = id);
                         break;
                 }
 
