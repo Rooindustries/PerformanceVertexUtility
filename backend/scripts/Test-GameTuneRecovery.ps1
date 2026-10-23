@@ -77,10 +77,10 @@ try {
     $readOnly = Status $run
     Check ($readOnly.active -and (Priority $run.Game) -eq 'AboveNormal') 'A plain status read does not change process controls'
     $recovered = Status $run -Recover
-    Check ($recovered.completed -and -not $recovered.restorable -and (Priority $run.Game) -eq 'Normal') 'Restarting the app after a controller crash restores the original priority'
+    Check ($recovered.completed -and $recovered.recoveryPerformed -and -not $recovered.restorable -and (Priority $run.Game) -eq 'Normal') 'Restarting the app after a controller crash restores the original priority and reports changed readings'
     $bytes = [IO.File]::ReadAllBytes($run.Path)
     $again = Status $run -Recover
-    Check ($again.completed -and [Convert]::ToBase64String($bytes) -eq [Convert]::ToBase64String([IO.File]::ReadAllBytes($run.Path))) 'Repeated app refreshes leave the recovered session unchanged'
+    Check ($again.completed -and -not $again.recoveryPerformed -and [Convert]::ToBase64String($bytes) -eq [Convert]::ToBase64String([IO.File]::ReadAllBytes($run.Path))) 'Repeated app refreshes leave the recovered session and cached readings unchanged'
     Finish $run
 
     $run = Interrupted 'restarted-game'

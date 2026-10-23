@@ -43,6 +43,7 @@ try {
     }
 
     $session = Read-RooIndustriesJsonFile $resolvedSessionPath
+    $statusBeforeRecovery = [string](Get-RooIndustriesPropertyValue $session 'sessionStatus' '')
     if ($RecoverInterrupted) { $session = Repair-RooIndustriesInterruptedGameTuneSession $session $resolvedSessionPath }
     $sessionDirectory = Split-Path $resolvedSessionPath -Parent
     $rawStatus = [string](Get-RooIndustriesPropertyValue $session 'sessionStatus' (Get-RooIndustriesPropertyValue $session 'status' 'completed'))
@@ -70,6 +71,7 @@ try {
         status = $status
         sessionStatus = $status
         rawSessionStatus = $rawStatus
+        recoveryPerformed = ($RecoverInterrupted -and $statusBeforeRecovery -ne $rawStatus)
         sessionId = [string](Get-RooIndustriesPropertyValue $session 'sessionId' '')
         profileId = [string](Get-RooIndustriesPropertyValue $session 'profileId' '')
         profilePath = Get-RooIndustriesPropertyValue $session 'profilePath' $null

@@ -336,11 +336,18 @@ public sealed class LiveDataService
                 + " -BackupPath " + QuotePowerShell(backupManifestPath)
                 + " -ConfirmApply");
 
-    public Task<LiveDataResult<string>> GetGameTuneSessionStatusResultAsync(CancellationToken ct = default)
-        => RunBackendScriptResultAsync("Get-GameTuneSessionStatus.ps1", ct, "-RecoverInterrupted");
+    public async Task<LiveDataResult<string>> GetGameTuneSessionStatusResultAsync(CancellationToken ct = default)
+    {
+        var result = await RunBackendScriptResultAsync("Get-GameTuneSessionStatus.ps1", ct, "-RecoverInterrupted").ConfigureAwait(false);
+        if (DeserializeResult<GameTuneSessionStatus>(result).Value?.RecoveryPerformed == true)
+        {
+            using var change = DataGeneration.BeginChange();
+        }
+        return result;
+    }
 
-    public Task<GameTuneSessionStatus?> GetGameTuneSessionStatusAsync(CancellationToken ct = default)
-        => RunAsync<GameTuneSessionStatus>("Get-GameTuneSessionStatus.ps1", ct, "-RecoverInterrupted");
+    public async Task<GameTuneSessionStatus?> GetGameTuneSessionStatusAsync(CancellationToken ct = default)
+        => DeserializeResult<GameTuneSessionStatus>(await GetGameTuneSessionStatusResultAsync(ct).ConfigureAwait(false)).Value;
 
     public Task<LiveDataResult<string>> RunProcessGovernorSessionResultAsync(bool confirmApply, int maxDurationSeconds, int pollIntervalSeconds, int sampleIntervalMilliseconds, CancellationToken ct = default)
     {
