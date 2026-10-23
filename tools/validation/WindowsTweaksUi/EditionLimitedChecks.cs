@@ -54,17 +54,21 @@ static class EditionLimitedChecks
                 check(model.Rows.Any(row => row.Id == definition.Id) == (!limitedHere && !definition.Advanced),
                     definition.Name + " follows edition availability and catalog visibility in simple mode: " + edition);
         }
+        void Hold(string folder, RegistryAddress target, uint value)
+        {
+            var state = OperationFiles.Read<TweakFixture>(Path.Combine(folder, "windows.json"));
+            var parts = target.KeyPath.Split('\\');
+            for (var count = 1; count <= parts.Length; count++)
+            {
+                var key = @"\REGISTRY\MACHINE\" + string.Join('\\', parts.Take(count));
+                state.Keys.TryAdd(key.ToUpperInvariant(), new(key, "fixture", []));
+            }
+            state.Keys[(@"\REGISTRY\MACHINE\" + target.KeyPath).ToUpperInvariant()].Values[target.ValueName!.ToUpperInvariant()] = new(target.ValueName, 4, BitConverter.GetBytes(value));
+            OperationFiles.Write(Path.Combine(folder, "windows.json"), state);
+        }
         var held = new Fixture(Path.Combine(root, "edition-held"), subset, 26100, "Core") { Missing = false };
         var tipsAddress = tips.Options.Single(option => option.Changes.Single().Dword == 1).Changes.Single().Address;
-        var state = OperationFiles.Read<TweakFixture>(Path.Combine(root, "edition-held", "windows.json"));
-        var parts = tipsAddress.KeyPath.Split('\\');
-        for (var count = 1; count <= parts.Length; count++)
-        {
-            var key = @"\REGISTRY\MACHINE\" + string.Join('\\', parts.Take(count));
-            state.Keys.TryAdd(key.ToUpperInvariant(), new(key, "fixture", []));
-        }
-        state.Keys[(@"\REGISTRY\MACHINE\" + tipsAddress.KeyPath).ToUpperInvariant()].Values[tipsAddress.ValueName!.ToUpperInvariant()] = new(tipsAddress.ValueName, 4, BitConverter.GetBytes(1u));
-        OperationFiles.Write(Path.Combine(root, "edition-held", "windows.json"), state);
+        Hold(Path.Combine(root, "edition-held"), tipsAddress, 1);
         var heldModel = await Load(held); heldModel.ShowAdvanced = true;
         var heldRow = heldModel.Rows.Single(item => item.Id == tips.Id);
         var remove = tips.Options.Single(option => option.Changes.Single().Dword is null).Id;
@@ -84,5 +88,35 @@ static class EditionLimitedChecks
         await proModel.ReviewRestoreCommand.ExecuteAsync(null); proModel.Approved = true; await proModel.ApplyCommand.ExecuteAsync(null);
         check(pro.Windows.Read(address).Value is null && pro.Windows.ReadState()!.Profiles.Length == 0 && proModel.Rows.Single(item => item.Id == diagnostic.Id).Current == "No override",
             "Undo removes Required diagnostic data again on Pro");
+
+        var settingsAddress = settingsDiagnostic.Options.Single(option => option.Changes.Single().Dword == 3).Changes.Single().Address;
+        foreach (var edition in new[] { "Core", "Professional", "Enterprise" })
+        {
+            var folder = Path.Combine(root, "edition-applied-" + edition);
+            var applied = new Fixture(folder, subset, 26100, edition) { Missing = false };
+            Hold(folder, address, 1); Hold(folder, settingsAddress, 3);
+            var appliedModel = await Load(applied); appliedModel.ShowAdvanced = true;
+            foreach (var (definition, value) in new[] { (diagnostic, 1u), (settingsDiagnostic, 3u) })
+            {
+                var row = appliedModel.Rows.Single(item => item.Id == definition.Id);
+                var chosen = definition.Options.Single(option => option.Changes.Single().Dword == value).Id;
+                var reset = definition.Options.Single(option => option.Changes.Single().Dword is null).Id;
+                check(row.ToggleOn && row.AppliedChoice?.Id == chosen && row.Action.Id == chosen && row.Selected.Id.Length == 0 && !row.HasPendingChange && row.StateLabel == "On",
+                    row.Name + " shows the value Windows already has, " + row.Action.Name + ", as on: " + edition);
+                row.ToggleOn = false;
+                check(row.Selected.Id == reset && row.CanApplySelected && row.StateLabel == "Will turn off" && row.Action.Id == chosen,
+                    row.Name + " queues Use Windows default when switched off: " + edition);
+            }
+            await appliedModel.ReviewCommand.ExecuteAsync(null); appliedModel.Approved = true; await appliedModel.ApplyCommand.ExecuteAsync(null);
+            check(applied.Windows.Read(address).Value is null && applied.Windows.Read(settingsAddress).Value is null
+                && new[] { diagnostic, settingsDiagnostic }.All(definition => appliedModel.Rows.Single(item => item.Id == definition.Id) is { ToggleOn: false, IsApplied: false, Current: "No override" }),
+                "Applying the switched-off rows removes both values and the rows read off: " + edition);
+            await appliedModel.ReviewRestoreCommand.ExecuteAsync(null); appliedModel.Approved = true; await appliedModel.ApplyCommand.ExecuteAsync(null);
+            check(applied.Windows.Read(address).Value is { Type: 4 } restored && restored.Bytes.SequenceEqual(BitConverter.GetBytes(1u))
+                && applied.Windows.Read(settingsAddress).Value is { Type: 4 } restoredSettings && restoredSettings.Bytes.SequenceEqual(BitConverter.GetBytes(3u))
+                && appliedModel.Rows.Single(item => item.Id == diagnostic.Id).AppliedChoice?.Name == "Required diagnostic data"
+                && appliedModel.Rows.Single(item => item.Id == settingsDiagnostic.Id).AppliedChoice?.Name == "Allow Telemetry: 3",
+                "Undo puts back the exact earlier values and both rows read on again: " + edition);
+        }
     }
 }

@@ -102,5 +102,27 @@ static class ActionChecks
         observed.Observe(null);
         check(observed.Current == "Not read" && !observed.ToggleOn && observed.Selected.Id.Length == 0,
             "A missing observation remains unknown without selecting a change");
+
+        static bool WindowsDefault(string name) => name is "Remove this override" or "Windows default" or "Use Windows default" or "Not configured" or "source-default" or "Return to previous plan" or "Remove boot override";
+        var misread = new List<string>();
+        var stockMisread = new List<string>();
+        foreach (var definition in catalog.Settings)
+        {
+            var resets = definition.Options.Where(option => WindowsDefault(option.Name) || WindowsDefault(WindowsTweakPresentation.Choice(definition, option))).Select(option => option.Id).ToHashSet();
+            foreach (var option in definition.Options)
+            {
+                var row = Row(definition.Id); var starting = row.Action.Id;
+                row.Observe(new(definition.Id, definition.Name, true, [option.Id], [], null, definition.Options.Select(item => item.Id).ToArray()));
+                var applied = !resets.Contains(option.Id) && (resets.Count > 0 || option.Id == starting);
+                var found = resets.Count > 0 ? misread : stockMisread;
+                if (row.IsApplied != applied || row.ToggleOn != applied || row.HasPendingChange || row.Action.Id != (applied ? option.Id : starting)) { found.Add(definition.Id + " " + option.Id); continue; }
+                if (!applied || resets.Count == 0) continue;
+                row.ToggleOn = false;
+                if (!resets.Contains(row.Selected.Id) || row.StateLabel != "Will turn off" || row.Action.Id != option.Id) misread.Add(definition.Id + " " + option.Id + " off");
+            }
+        }
+        check(stockMisread.Count == 0, "A setting without a Windows default shows only its starting choice as on: " + string.Join(", ", stockMisread.Take(10)));
+        check(misread.Count == 0, "Every setting with a Windows default shows any applied choice on beside its switch, and turning it off queues the Windows default: "
+            + misread.Count + " misread, " + string.Join(", ", misread.Take(10)));
     }
 }

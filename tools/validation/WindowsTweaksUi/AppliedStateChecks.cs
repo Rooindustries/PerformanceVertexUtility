@@ -12,7 +12,8 @@ static class AppliedStateChecks
         var pair = Definition("pair", Option("on", "On", 1), Option("off", "Off", 0));
         var three = Definition("three", Option("a", "Fast", 1), Option("b", "Balanced", 2), Option("c", "Slow", 3));
         var single = Definition("single", Option("only", "Off", 0));
-        var definitions = new[] { withReset, pair, three, single }.ToDictionary(definition => definition.Id);
+        var levels = Definition("levels", Option("fast", "Fast", 1), Option("slow", "Slow", 2), Option("reset", "Remove this override", null));
+        var definitions = new[] { withReset, pair, three, single, levels }.ToDictionary(definition => definition.Id);
         WindowsTweakRow Row(TweakDefinition definition) => new(definition, definitions, _ => { });
         TweakSettingStatus Status(TweakDefinition definition, string[] configured, bool supported = true, string? error = null) =>
             new(definition.Id, definition.Name, supported, configured, [], error, definition.Options.Select(option => option.Id).ToArray());
@@ -62,7 +63,7 @@ static class AppliedStateChecks
         }
 
         var other = Row(three); other.Observe(Status(three, ["b"]));
-        check(!other.ToggleOn && !other.IsApplied && other.Action.Id == "a", "A current value that is not the suggested one is not shown as an applied tweak");
+        check(!other.ToggleOn && !other.IsApplied && other.Action.Id == "a", "A current value that is not the suggested one is not shown as an applied tweak on a setting without a Windows default");
         other.Action = other.ActionChoices.Single(choice => choice.Id == "b"); other.ToggleOn = true;
         check(other.Selected.Id == "b" && other.IsApplied && !other.HasPendingChange && other.ToggleOn, "Choosing the value Windows already has leaves nothing to change");
         other.Action = other.ActionChoices.Single(choice => choice.Id == "c");
@@ -70,6 +71,32 @@ static class AppliedStateChecks
         other.Selected = other.Choices[0]; other.Observe(Status(three, ["a"]));
         other.ToggleOn = false;
         check(other.ToggleOn && other.Selected.Id.Length == 0 && other.ChoiceStatus.StartsWith("Already on", StringComparison.Ordinal), "A setting without a way back stays on and says so");
+
+        var level = Row(levels); level.Observe(Status(levels, ["slow"]));
+        check(level.ToggleOn && level.AppliedChoice?.Id == "slow" && level.Action.Id == "slow" && level.Selected.Id.Length == 0 && !level.HasPendingChange && level.StateLabel == "On",
+            "A setting whose value is another of its choices shows on with that choice beside the switch");
+        level.ShowDetails = false;
+        check(level.SimpleState == "On · Slow", "Simple mode names the applied choice: " + level.SimpleState);
+        level.ShowDetails = true;
+        level.ToggleOn = false;
+        check(level.Selected.Id == "reset" && level.HasPendingChange && !level.ToggleOn && level.StateLabel == "Will turn off" && level.Action.Id == "slow",
+            "Turning it off queues its Windows default while keeping the applied choice visible");
+        level.ToggleOn = true;
+        check(level.Selected.Id.Length == 0 && !level.HasPendingChange && level.ToggleOn && level.StateLabel == "On", "Turning it back on leaves nothing queued");
+        level.Action = level.ActionChoices.Single(choice => choice.Id == "fast");
+        check(level.Selected.Id == "fast" && level.HasPendingChange && level.ToggleOn && level.AppliedChoice?.Id == "slow", "Picking another choice beside the applied one queues it");
+        level.Action = level.ActionChoices.Single(choice => choice.Id == "slow");
+        check(level.Selected.Id.Length == 0 && !level.HasPendingChange && level.ToggleOn, "Picking the applied choice again leaves nothing to change");
+        level.Observe(Status(levels, ["reset"]));
+        check(!level.ToggleOn && !level.IsApplied && !level.HasPendingChange, "Refreshing after its Windows default returns turns the switch off");
+        var both = Row(levels); both.Observe(Status(levels, ["fast", "slow"]));
+        check(both.AppliedChoice?.Id == "fast" && both.Action.Id == "fast" && both.ToggleOn, "When the starting choice also matches, the switch shows the starting choice");
+        var picked = Row(levels); picked.Selected = picked.Choices.Single(choice => choice.Id == "slow"); picked.Observe(Status(levels, ["fast", "slow"]));
+        check(picked.AppliedChoice?.Id == "slow" && !picked.HasPendingChange && picked.ToggleOn, "A loaded choice that matches stays the applied one");
+        var unread = Row(levels); unread.Observe(Status(levels, ["slow"], error: "Windows could not read this value."));
+        check(!unread.ToggleOn && !unread.IsApplied, "An unreadable setting never shows another choice as applied");
+        var stock = Row(pair); stock.Observe(Status(pair, ["off"]));
+        check(!stock.ToggleOn && !stock.IsApplied && stock.Action.Id == "on", "A two value setting without a Windows default still shows its other value as off");
 
         var opposite = Row(pair); opposite.Observe(Status(pair, ["on"]));
         opposite.ToggleOn = false;
