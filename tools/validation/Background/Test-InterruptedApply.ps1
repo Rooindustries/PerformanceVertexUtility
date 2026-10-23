@@ -1,4 +1,4 @@
-param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutRoot,[string]$BackendSource='',[int]$Probes=60,[string[]]$Cases=@('startup-race','journal-path','boundaries','timeout','killed','closed','rebooted','other-program','stale-journal','race','full'))
+param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutRoot,[string]$BackendSource='',[int]$Probes=60,[string[]]$Cases=@('startup-race','journal-path','boundaries','replace-failure','timeout','killed','closed','rebooted','other-program','stale-journal','race','full'))
 $ErrorActionPreference='Stop'
 . (Join-Path $Source 'tools\validation\LoadTimes\CleanupOwnership.Common.ps1')
 Add-Type -Path (Join-Path $Source 'tools\validation\Background\Oracle.cs')
@@ -35,7 +35,7 @@ function Fixtures($case,[int]$count=$Probes,[switch]$Gpu){
   $p.PriorityClass='Normal';[RooIndustriesBackgroundOracle]::SetIo($p,2);[RooIndustriesBackgroundOracle]::SetMemory($p,5);$p
  })
 }
-function Profile($fixtures){$profile=Get-Content -Raw (Join-Path $Source 'backend\profiles\game-session.profile.json')|ConvertFrom-Json;$profile.profileId='roo655-interrupted-apply';$profile.foregroundGame.processNames=@();$profile.targetGames=@();$profile.rules=@([pscustomobject]@{ruleId='fixture';enabled=$true;match=@{processNames=@($fixtures|ForEach-Object {$_.ProcessName+'.exe'})};action=@{actionType='setPriority';priorityClass='BelowNormal'}});$profile|ConvertTo-Json -Depth 30|Set-Content (Join-Path $root 'backend\profiles\game-session.profile.json') -Encoding UTF8}
+function Profile($fixtures){$profile=Get-Content -Raw (Join-Path $Source 'backend\profiles\game-session.profile.json')|ConvertFrom-Json;$profile.profileId='cut';$profile.foregroundGame.processNames=@();$profile.targetGames=@();$profile.rules=@([pscustomobject]@{ruleId='fixture';enabled=$true;match=@{processNames=@($fixtures|ForEach-Object {$_.ProcessName+'.exe'})};action=@{actionType='setPriority';priorityClass='BelowNormal'}});$profile|ConvertTo-Json -Depth 30|Set-Content (Join-Path $root 'backend\profiles\game-session.profile.json') -Encoding UTF8}
 function Read($p){$p.Refresh();[ordered]@{pid=$p.Id;priorityClass=[string]$p.PriorityClass;affinityMask=$p.ProcessorAffinity.ToInt64();ioPriority=[RooIndustriesBackgroundOracle]::Io($p);memoryPriority=[RooIndustriesBackgroundOracle]::Memory($p)}}
 function Before($fixtures){$map=@{};foreach($p in $fixtures){$map[$p.Id]=Read $p};$map}
 function Same($a,$b){foreach($field in 'priorityClass','affinityMask','ioPriority','memoryPriority'){if([string]$a.$field -cne [string]$b.$field){return $false}};$true}
@@ -168,7 +168,8 @@ try {
       $expected=if($Matches[1] -eq 'before'){$gpuBefore}else{1}
       if([RooIndustriesBackgroundOracle]::Gpu($fixtures[0]) -ne $expected){throw ('The cut did not observe the real GPU priority write at '+$point)}
      }
-     if($point -in 'backup-before','backup-flushed'){
+     if($point -in 'backup-before','backup-flushed' -and -not(Same $atCut $before[$fixtures[0].Id])){throw 'An apply killed before its backup left changes'}
+     if($point -eq 'backup-before'){
       $inspect=Service 'inspect' $settings ($name+'-relaunch');if($inspect.pending -or $inspect.recovery -or -not(Same $atCut $before[$fixtures[0].Id])){throw 'An apply killed before its backup left changes or blocked Apply'}
      }else{
       $null=Offered $settings ($name+'-relaunch');$null=RestoreAll $fixtures $before $settings ($name+'-restore')
@@ -181,6 +182,36 @@ try {
    Save 'boundaries' $results
    if($boundaryFailures.Count){throw ($boundaryFailures -join '; ')}
   } finally {[IO.File]::WriteAllText($applyPath,$applyText,$utf8);[IO.File]::WriteAllText($commonPath,$commonText,$utf8);[IO.File]::WriteAllText($statePath,$stateText,$utf8)}
+ }
+ if($Cases -contains 'replace-failure'){
+  $statePath=Join-Path $root 'backend\scripts\OperationState.Common.ps1';$stateText=[IO.File]::ReadAllText($statePath);$replaceFailures=@()
+  try {
+   foreach($mode in '1176','1177','1177-move'){
+    $name='replace-'+$mode;$fixtures=Fixtures $name 1;Profile $fixtures;$before=Before $fixtures;$settings=Settings $name
+    try {
+     $code=[int]$mode.Split('-')[0];$hresult=-2147024896+$code
+     $displace=if($code -eq 1176){'[IO.File]::Delete($full)'}else{'[IO.File]::Move($full,$full+''.failed-old'')'}
+     $replace='[IO.File]::Replace($temporary,$full,[System.Management.Automation.Language.NullString]::Value)'
+     if(-not$stateText.Contains($replace)){throw 'The real replacement call was not found'}
+     $instrumented=$stateText.Replace($replace,($displace+"; throw [IO.IOException]::new('Fixture replacement failure', $hresult)"))
+     if($mode -eq '1177-move'){
+      $move='[IO.File]::Move($temporary,$full)';$position=$instrumented.LastIndexOf($move)
+      if($position -ne $instrumented.IndexOf($move)){$instrumented=$instrumented.Insert($position,"throw [IO.IOException]::new('Fixture fallback rename failure', -2147024891); ")}
+     }
+     [IO.File]::WriteAllText($statePath,$instrumented,$utf8)
+     $apply=Service 'apply' $settings ($name+'-apply')
+     $changed=(Changed $fixtures).Count;Save ($name+'-state') @{changed=$changed;recoveryPath=$apply.result.RecoveryPath}
+     if($changed -ne 1){throw ('The replacement failure did not follow a real process change: '+$mode)}
+     if(-not$apply.result.RecoveryPath){throw ('Replacement failure lost the restore point: '+$mode)}
+     if($mode -eq '1177-move' -and -not$apply.result.Error){throw 'The failed fallback rename was not reported'}
+     [IO.File]::WriteAllText($statePath,$stateText,$utf8)
+     $null=Offered $settings ($name+'-relaunch');$results[$name]=RestoreAll $fixtures $before $settings ($name+'-restore')
+    }catch{$replaceFailures+=($mode+': '+$_.Exception.Message);$results[$name]=$_.Exception.Message}
+    finally{[IO.File]::WriteAllText($statePath,$stateText,$utf8);StopFixtures $fixtures}
+   }
+   Save 'replacements' $results
+   if($replaceFailures.Count){throw ($replaceFailures -join '; ')}
+  }finally{[IO.File]::WriteAllText($statePath,$stateText,$utf8)}
  }
  if($Cases -contains 'timeout'){
   $fixtures=Fixtures 'timeout';Profile $fixtures;$before=Before $fixtures;$settings=Settings 'timeout'
@@ -255,6 +286,18 @@ try {
    $invalid=Service 'inspect' $settings ('stale-journal-shape-'+$i);$state=State $settings;$newArchives=@($state.archived|Where-Object {$_ -notin $archivedBefore})
    if($invalid.pending -or $invalid.recovery -or $state.journal -or $newArchives.Count -ne 1 -or (Get-FileHash (Join-Path $settings $newArchives[0])).Hash -ne $hash){throw ('An invalid journal was not kept intact: '+$invalidJournals[$i])}
   }
+  [IO.Directory]::CreateDirectory($folder)|Out-Null
+  [IO.File]::WriteAllText($journal,(@{path=(Join-Path $folder 'backup.json');generation=$generationId}|ConvertTo-Json),$utf8);$journalHash=(Get-FileHash $journal).Hash
+  $first=Join-Path $folder 'backup.json.first.tmp';$second=Join-Path $folder 'backup.json.second.tmp'
+  foreach($shape in 'partial','ambiguous','unrelated'){
+   if($shape -eq 'partial'){[IO.File]::WriteAllText($first,'{"actionId":',$utf8)}
+   elseif($shape -eq 'ambiguous'){[IO.File]::WriteAllText($second,'{"actionId":',$utf8)}
+   else{[IO.File]::Delete($first);[IO.File]::Delete($second);$first=Join-Path $folder 'unrelated.json';[IO.File]::WriteAllText($first,'keep these bytes',$utf8)}
+   $hashes=@{};foreach($file in @(Get-ChildItem -LiteralPath $folder -File)){$hashes[$file.FullName]=(Get-FileHash $file.FullName).Hash}
+   $pending=Service 'inspect' $settings ('stale-journal-pending-'+$shape)
+   if(-not$pending.pending -or $pending.recovery -or (Get-FileHash $journal).Hash -cne $journalHash){throw ('An unsettled backup lost its journal: '+$shape)}
+   foreach($file in $hashes.Keys){if(-not(Test-Path -LiteralPath $file) -or (Get-FileHash $file).Hash -cne $hashes[$file]){throw ('An unsettled backup lost saved bytes: '+$shape)}}
+  }
   $results['stale-journal']='passed'
  }
  if($Cases -contains 'race'){
@@ -265,7 +308,9 @@ try {
    $outcomes=@('race-a','race-b'|ForEach-Object {Get-Content -Raw (Join-Path $directory ($_+'.json'))|ConvertFrom-Json})
    $winners=@($outcomes|Where-Object {$_.result.RecoveryPath});$losers=@($outcomes|Where-Object {-not$_.result.RecoveryPath})
    if($winners.Count -ne 1 -or $losers[0].result.Error -notin 'Another process profile action is already in progress.','Restore the last change first'){throw 'Two applies at once did not leave exactly one restore point'}
-   if(@(Get-ChildItem (Join-Path $settings 'process-profile-backups') -Directory).Count -ne 1){throw 'Two applies at once wrote more than one backup'}
+   $backupFolder=Join-Path $settings 'process-profile-backups'
+   if(-not(Test-Path -LiteralPath $backupFolder)){throw 'Racing applies did not keep the app-owned backup folder'}
+   if(@(Get-ChildItem -LiteralPath $backupFolder -Directory).Count -ne 1){throw 'Two applies at once wrote more than one backup'}
    $results.race=RestoreAll $fixtures $before $settings 'race-restore'
   } finally {StopFixtures $fixtures}
  }

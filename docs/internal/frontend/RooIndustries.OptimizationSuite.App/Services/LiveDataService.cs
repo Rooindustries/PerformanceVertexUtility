@@ -982,9 +982,21 @@ public sealed class LiveDataService
         if (!File.Exists(journal.Path))
         {
             var folder = Path.GetDirectoryName(journal.Path)!;
-            if (Directory.Exists(folder)) Directory.Delete(folder, recursive: true);
-            File.Delete(ProcessApplyPath);
-            return (null, null);
+            var pending = Directory.Exists(folder) ? Directory.GetFiles(folder, "backup.json.*.tmp") : [];
+            if (pending.Length == 0)
+            {
+                if (Directory.Exists(folder)) Directory.Delete(folder);
+                File.Delete(ProcessApplyPath);
+                return (null, null);
+            }
+            if (pending.Length != 1) return (null, "The process backup does not match its recovery reference.");
+            try
+            {
+                var candidate = ProcessProfileRecovery.FromBackup(pending[0], journal.Generation);
+                if (candidate.ValidationError() is { } invalidPending) return (null, invalidPending);
+            }
+            catch (JsonException) { return (null, "The process backup contains invalid JSON."); }
+            File.Move(pending[0], journal.Path);
         }
         ProcessProfileRecovery recovery;
         try { recovery = ProcessProfileRecovery.FromBackup(journal.Path, journal.Generation); }
