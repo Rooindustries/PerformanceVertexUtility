@@ -149,6 +149,15 @@ static class PathSpellingChecks
 
     static void ChangingAncestors(Action<bool, string> check, string root)
     {
+        var probe = Path.Combine(root, "Changing Link Capability");
+        try { Directory.CreateSymbolicLink(probe, root); }
+        catch (Exception error) when (error is UnauthorizedAccessException ||
+            error is IOException && (error.HResult & 0xFFFF) is 1 or 50 or 1314)
+        {
+            Console.WriteLine("SKIP Changing-ancestor fixtures cannot create symbolic links (error " + (error.HResult & 0xFFFF) + ")");
+            return;
+        }
+        Directory.Delete(probe);
         foreach (var mode in new[] { "network", "cycle" })
         {
             var target = Directory.CreateDirectory(Path.Combine(root, "Changing App " + mode)).FullName;
