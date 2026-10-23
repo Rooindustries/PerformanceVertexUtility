@@ -78,6 +78,16 @@ static class GameSessionPresetChecks
                 "Editing cores after review clears Start and shows Custom");
             model.SelectedPreset = picked;
             check(model.AffinityMask == "0x1", "Repicking a preset preserves the user's core choice");
+            var first = model.SelectedLauncher;
+            App.Operations.ProcessReads = _ => new ProcessControlSnapshot(launcher, ControlRead.From(0u), topology, new Dictionary<string, ControlRead> { ["affinity"] = ControlRead.From(new AffinityState(0, "0x2")) });
+            model.SelectedLauncher = new CpuProcessChoice(4200, "other.exe");
+            check(model.SelectedPreset == picked && model.PresetHint == picked.Description && model.AffinityMask == "0x2",
+                "Switching launchers after picking " + picked.Name + " loads the new launcher's cores and keeps the preset");
+            App.Operations.ProcessReads = null;
+            model.SelectedLauncher = first;
+            check(model.SelectedPreset == picked && model.AffinityMask == "0x3", "Switching back keeps the preset and reloads the first launcher's cores");
+            model.AffinityMask = "0x1";
+            model.SelectedPreset = picked;
             await model.PreviewCommand.ExecuteAsync(null);
             var lines = model.ReviewSummary.Split('\n');
             check(model.CanStart && lines[0] == "game.exe via launcher.exe" && lines[1] == "Preset: " + picked.Name && sent is not null && Written(sent) == Written(picked.Controls())
@@ -144,6 +154,7 @@ static class GameSessionPresetChecks
             (App.Live.Inventory, App.Operations.ProcessSnapshot, App.Operations.GameSessions, App.Operations.LaunchProfiles, GameSessionViewModel.PresetsPath, AppLog.Observer, App.Operations.GameReview) = before;
             App.Operations.StartedSessions.RemoveRange(started, App.Operations.StartedSessions.Count - started);
             App.Operations.SavedLaunchProfiles.RemoveRange(saved, App.Operations.SavedLaunchProfiles.Count - saved);
+            App.Operations.ProcessReads = null;
             Directory.Delete(root, true);
         }
     }
