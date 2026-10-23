@@ -24,12 +24,18 @@ var fixtureRow = new TweakDefinition("fixture.read", "Fixture", "Fixture", "Fixt
     [new("on", "On", [new(address, 1)]), new("off", "Off", [new(address, 0)])], [new("Roo Industries", "fixture", "read walk negative control")]);
 var fixtureService = fixtureRow with { Id = "fixture.service", Options = [new("manual", "Manual", [], Controls: [new(service, ControlValues.From(3))]), new("disabled", "Disabled", [], Controls: [new(service, ControlValues.From(4))])] };
 KnownValue Fixture(uint type, object data) => new(address, type, ControlValues.From(data));
-var negative = new KnownStates(1, [new("fixture.read", "number", "fixture", [Fixture(4, 2)]), new("fixture.read", "text", "fixture", [Fixture(1, "1")]), new("fixture.read", "same", "fixture", [Fixture(4, 1)])],
+var negative = new KnownStates(1, [new("fixture.read", "number", "fixture", [Fixture(4, 2)]), new("fixture.read", "text", "fixture", [Fixture(1, "1")]), new("fixture.read", "same", "fixture", [Fixture(4, 1)]), new("fixture.read", "windows-default", "fixture", [Fixture(4, 1)])],
     [new(service, "stock", "fixture", Error: "The service could not be read.")]);
 var caught = new SortedDictionary<string, string>(StringComparer.Ordinal);
 foreach (var row in new[] { fixtureRow, fixtureService }) Walk(catalog with { Settings = [row] }, row, negative, caught);
-if (!caught.Keys.SequenceEqual(["fixture.read number", "fixture.read text", "fixture.service stock"]) || !caught["fixture.read number"].StartsWith("Custom value: 2", StringComparison.Ordinal))
+if (!caught.Keys.SequenceEqual(["fixture.read number", "fixture.read text", "fixture.read windows-default", "fixture.service stock"]) || !caught["fixture.read number"].StartsWith("Custom value: 2", StringComparison.Ordinal))
     throw new InvalidOperationException("The read walk missed a known state that reads wrong: " + string.Join("; ", caught.Select(pair => pair.Key + " " + pair.Value)));
+var removes = fixtureRow with { Id = "fixture.removes", Options = [new("default", "Remove this override", [new(address, null)]), new("on", "On", [new(address, 1)])] };
+var keeps = removes with { Id = "fixture.keeps", Options = [new("default", "Windows default", [new(address, 0)]), removes.Options[1]] };
+caught.Clear();
+foreach (var row in new[] { removes, keeps }) Walk(catalog with { Settings = [row] }, row, new(1, [new(removes.Id, "windows-default", "fixture", [Fixture(4, 0)]), new(keeps.Id, "windows-default", "fixture", [Fixture(4, 0)])], []), caught);
+if (!caught.ContainsKey(removes.Id + " use-windows-default") || caught.Keys.Any(key => key.StartsWith(keeps.Id, StringComparison.Ordinal)))
+    throw new InvalidOperationException("The read walk must catch Use Windows default changing stock Windows, and only that: " + string.Join("; ", caught.Select(pair => pair.Key + " " + pair.Value)));
 var split = definitions["windows.d564e4921d5ee555"];
 var splitAddress = split.Options[0].Changes[0].Address;
 caught.Clear();
@@ -75,7 +81,7 @@ void Walk(TweakCatalog source, TweakDefinition definition, KnownStates known, So
         foreach (var (name, values, controls) in states)
         {
             var store = new ReadStore(context, values, controls, background);
-            if (Problem(single, definition, store, null) is { } problem) offenders.TryAdd(definition.Id + " " + name, problem + " on " + context.Edition + " " + context.WindowsBuild);
+            if (Problem(single, definition, store, null, name == "windows-default" && values.Length > 0) is { } problem) offenders.TryAdd(definition.Id + " " + name, problem + " on " + context.Edition + " " + context.WindowsBuild);
             walked++;
         }
         var before = Status(single, new ReadStore(context, baseline.Values, baseline.Controls, background));
@@ -90,6 +96,8 @@ void Walk(TweakCatalog source, TweakDefinition definition, KnownStates known, So
                 else offenders.TryAdd(definition.Id + " " + option.Id, "the app refuses this choice from the known state, which reads fine and offers it: " + error.Message + " on " + context.Edition + " " + context.WindowsBuild);
                 continue;
             }
+            if (baseline.Name == "windows-default" && baseline.Values.Length > 0 && plan.Changes.Length > 0 && WindowsTweakRow.DisplayChoice(WindowsTweakPresentation.Choice(definition, option)) is "Use Windows default" or "Windows default")
+                offenders.TryAdd(definition.Id + " use-windows-default", "Use Windows default changes stock Windows (" + string.Join(", ", plan.Changes.Select(change => change.Before.Address.ValueName + (change.After is null ? " deleted" : " rewritten"))) + ") on " + context.Edition + " " + context.WindowsBuild);
             store.Apply(plan);
             if (Problem(single, definition, store, option.Id) is { } problem) offenders.TryAdd(definition.Id + " " + option.Id, problem + " on " + context.Edition + " " + context.WindowsBuild);
             walked++;
@@ -97,7 +105,7 @@ void Walk(TweakCatalog source, TweakDefinition definition, KnownStates known, So
     }
 }
 TweakSettingStatus Status(TweakCatalog single, ReadStore store) => new TweakEngine(single, store).Detect().Settings.Single();
-string? Problem(TweakCatalog single, TweakDefinition definition, ReadStore store, string? optionId)
+string? Problem(TweakCatalog single, TweakDefinition definition, ReadStore store, string? optionId, bool stock = false)
 {
     var inspection = new TweakEngine(single, store).Detect();
     var status = inspection.Settings.Single();
@@ -106,6 +114,7 @@ string? Problem(TweakCatalog single, TweakDefinition definition, ReadStore store
     if (row.CouldNotCheck) return "Couldn't check: " + status.Error;
     if (row.Current is "Not read" or "Unknown value" || row.Current.StartsWith("Custom value", StringComparison.Ordinal)) return row.Current + " for " + store.Describe(status);
     if (optionId is not null && !status.ConfiguredChoices.Contains(optionId)) return "reads as " + row.Current + " after choosing " + optionId;
+    if (stock && row.IsApplied) return "stock Windows reads as switched on (" + row.Current + ") for " + store.Describe(status);
     return null;
 }
 if (allowlist.Rows.Any(item => string.IsNullOrWhiteSpace(item.Cause))) throw new InvalidDataException("Every allowlisted row needs its cause.");
