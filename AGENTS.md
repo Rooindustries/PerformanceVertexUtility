@@ -60,7 +60,7 @@ These must hold on every commit of `main`. Each one names the code that enforces
    - A PR that changes what a PC gets by default says so in its first line.
 5. **Edition detection.** A setting a PC can't use shows as not available on that PC, never as an error or a retry that can't work.
    - Enforced by: the engine reads the PC's build and edition from `CurrentBuildNumber` and `EditionID` (`RegistryTweaks.cs`), and offers only options whose build and edition gates match (`TweakEngine.Supported`). Registry policies Microsoft documents as edition-limited, such as diagnostic data off, are gated from `backend/catalogs/windows-policy-editions.json` (`check_windows_tweaks.py` fails while one is offered elsewhere). A Windows feature the PC doesn't have makes its choices unavailable instead of failing the read (`TweakControlRead.Allows`). A row with no option for this PC reports "No choice applies to this Windows version, edition or installed product.", and missing Windows components report "... is not installed" or "... is not available with ...". A setting whose PowerShell commands are missing reports "... is not available with this Windows version." before any read or write (`Assert-Commands` in `WindowsControls.ps1`); exploit protection settings report it when their readback command is missing (`MitigationControl.Read`). The app shows these, and rows where clearing an override is the only choice left for this PC, as "Not available here" with no Retry (`PcLacks`, `UnavailableHere` and `CanRetry` in `WindowsTweaksViewModel.cs`).
-   - Checked by: `tools/validation/Tweaks` (catalog integration and feature checks), `Test-WindowsControlOutput.ps1`, `tools/validation/OptimizerCore` (`Test-OptimizerCore.ps1 -Area control-reads`), `tools/validation/WindowsTweaksUi`, `tools/validation/check_windows_tweaks.py`.
+   - Checked by: `tools/validation/Tweaks` (catalog integration and feature checks), `Test-WindowsControlOutput.ps1`, `tools/validation/OptimizerCore` (`Test-OptimizerCore.ps1 -Area control-reads`), `tools/validation/WindowsTweaksUi`, `tools/validation/check_windows_tweaks.py`, `tools/validation/TweakReads` (every row's recorded Windows reads and each choice's writes never read as Couldn't check, Custom value or Not read, except rows its allowlist names with their cause).
 6. **Bug report privacy.** A bug report leaves the PC only when the user clicks Send (`BugReportViewModel.SendAsync`). The description, editable specs and diagnostics must redact account profile paths, the current user and PC names, and account SIDs. Contact details the user supplies are kept as typed.
    - Enforced by: the attached files (specs, tweak summary, log tails), description and editable specs go through `BugRedactor` before they're zipped or sent. It replaces:
      - the user's profile path with `%USERPROFILE%`
@@ -104,7 +104,7 @@ Linux is the development host. These four Baseline jobs run for same-repository 
 
 ```sh
 python -m pip install -r tools/validation/requirements.txt
-python tools/validation/check_baseline.py
+python tools/validation/check_baseline.py   # needs the .NET 8 SDK for the Windows Tweaks read walk
 python -m unittest discover -s tools/validation -p 'test_*.py'
 pwsh tools/validation/check_powershell.ps1   # needs PSScriptAnalyzer 1.25.0
 python tools/validation/build_dotnet.py      # needs the .NET 8 SDK

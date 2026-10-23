@@ -318,6 +318,7 @@ def validate(root: Path, contracts_only: bool = False):
             failures.append(f'Negative control failed: a {label} passed the clearing check')
     failures.extend(runpy.run_path(str(Path(__file__).with_name('check_windows_tweaks.py')))['check'](root))
     if not contracts_only:
+        failures.extend(runpy.run_path(str(Path(__file__).with_name('check_tweak_reads.py')))['check'](root))
         failures.extend(runpy.run_path(str(Path(__file__).with_name("check_branding.py")))["check"](root))
         for label, passed in branding_negative_controls().items():
             if not passed:
