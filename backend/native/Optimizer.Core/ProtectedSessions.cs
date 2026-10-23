@@ -29,6 +29,7 @@ public sealed class ProtectedFieldState
     public required string Status { get; set; }
     public ControlRead? Observed { get; set; }
     public string? JournalPath { get; set; }
+    public string? PreviewHash { get; set; }
     public string? Error { get; set; }
     public int Reapplications { get; set; }
 }
@@ -387,8 +388,9 @@ public sealed class ProtectedSessions
                         var path = Path.Combine(folder, "preview.json");
                         var preview = controls.Preview(processId, new() { [field.Name] = desired });
                         identity.Verify(preview.Identity); OperationFiles.Write(path, preview);
+                        var hash = OperationFiles.HashFile(path); field.PreviewHash = hash;
                         field.JournalPath = Path.Combine(folder, "journal.json"); Save(root, state);
-                        var result = controls.Apply(path, OperationFiles.HashFile(path), field.JournalPath);
+                        var result = controls.Apply(path, hash, field.JournalPath);
                         if (result.Status != "applied") throw new InvalidOperationException(string.Join("; ", result.Changes.Select(change => change.Error)));
                     }
                     else if (!ProcessTarget.Equivalent(field.Name, field.Observed.Require(), desired))
@@ -425,6 +427,20 @@ public sealed class ProtectedSessions
                     if (!File.Exists(field.JournalPath))
                     {
                         if (exited) { field.Status = "expired"; field.Error = null; }
+                        else if (field.Status is ("pending" or "conflict") && field.PreviewHash is { } hash)
+                        {
+                            var preview = OperationFiles.Read<ProcessControlPreview>(Path.Combine(Path.GetDirectoryName(field.JournalPath!)!, "preview.json"), hash);
+                            preview.Owner.Verify(); game.Identity.Verify(preview.Identity);
+                            if (preview.SchemaVersion != 1 || preview.Desired.Count != 1 || !preview.Desired.TryGetValue(field.Name, out var desired) ||
+                                !ProcessTarget.Equivalent(field.Name, desired, state.Preview.Controls[field.Name]) || preview.Original.Count != 1 ||
+                                !preview.Original.TryGetValue(field.Name, out var original) || !original.Known)
+                                throw new InvalidDataException("Native recovery belongs to another control.");
+                            using var target = new ProcessTarget(game.Identity.ProcessId, readControls: [field.Name]);
+                            game.Identity.Verify(target.Identity());
+                            var current = target.Read(field.Name);
+                            if (current.Known && ProcessTarget.Equivalent(field.Name, current.Require(), original.Require()))
+                            { field.Status = "restored"; field.Observed = current; field.Error = null; }
+                        }
                         continue;
                     }
                     var saved = OperationFiles.Read<ProcessControlJournal>(field.JournalPath!); game.Identity.Verify(saved.Preview.Identity);

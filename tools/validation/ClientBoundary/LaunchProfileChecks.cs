@@ -328,7 +328,8 @@ static class LaunchProfileChecks
                 var native = await Arm(first, new() { ["priorityBoost"] = V(false) });
                 var game = await Game(first);
                 await Until(async () => (await App().ReadGameSessionAsync(native.SessionRoot)).State?.Status == "active", "The native probe control did not apply.");
-                PowerLoss(native.SessionRoot); await CloseLauncher(first);
+                PowerLoss(native.SessionRoot); first.Kill(); first.WaitForExit(10000);
+                Check(!game.HasExited, "The native game probe survives the lost launcher");
                 var statePath = Path.Combine(native.SessionRoot, "session.json");
                 var checkpoint = File.ReadAllBytes(statePath);
                 var state = OperationFiles.Read<ProtectedSessionState>(statePath);
@@ -385,14 +386,20 @@ static class LaunchProfileChecks
                 var expired = await Arm(expiredLauncher, new() { ["priorityBoost"] = V(false) });
                 var expiredGame = await Game(expiredLauncher);
                 await Until(async () => (await App().ReadGameSessionAsync(expired.SessionRoot)).State?.Status == "active", "The expiring native probe did not apply.");
-                PowerLoss(expired.SessionRoot); await CloseLauncher(expiredLauncher);
+                PowerLoss(expired.SessionRoot); expiredLauncher.Kill(); expiredLauncher.WaitForExit(10000);
+                Check(!expiredGame.HasExited, "The legacy native probe survives the lost launcher");
                 var expiredState = OperationFiles.Read<ProtectedSessionState>(Path.Combine(expired.SessionRoot, "session.json"));
-                var missing = expiredState.Games.Single().Fields.Single().JournalPath!;
+                var expiredField = expiredState.Games.Single().Fields.Single();
+                var missing = expiredField.JournalPath!;
+                var expiredOriginal = OperationFiles.Read<ProcessControlJournal>(missing).Preview.Original["priorityBoost"].Require().GetBoolean();
+                expiredGame.PriorityBoostEnabled = expiredOriginal;
+                expiredField.Status = "conflict"; expiredField.PreviewHash = null; expiredState.Status = "recoveryRequired";
+                OperationFiles.Write(Path.Combine(expired.SessionRoot, "session.json"), expiredState);
                 File.Move(missing, missing + ".retained");
                 try
                 {
                     Check(!GameSessionDisplay.Restored(await App().RecoverGameSessionAsync(expired.SessionRoot)) && TaskExists(expired.SessionRoot),
-                        "The missing native backup stays outstanding while its original game lives");
+                        "An older missing-journal record without retained preview authority stays outstanding while its game lives");
                     EndGame(expiredGame);
                     var recovered = await App().RecoverGameSessionAsync(expired.SessionRoot);
                     Check(GameSessionDisplay.Restored(recovered) && recovered.State!.Games.Single().Exited && recovered.State.Games.Single().Fields.Single().Status == "expired" && !TaskExists(expired.SessionRoot) && !File.Exists(missing),
@@ -404,6 +411,47 @@ static class LaunchProfileChecks
                     File.Move(missing + ".retained", missing);
                     await App().RecoverGameSessionAsync(expired.SessionRoot);
                 }
+
+                var unchangedLauncher = await OpenLauncher();
+                var unchanged = await Arm(unchangedLauncher, new() { ["priorityBoost"] = V(false) });
+                var unchangedGame = await Game(unchangedLauncher);
+                await Until(async () => (await App().ReadGameSessionAsync(unchanged.SessionRoot)).State?.Status == "active", "The unchanged native probe did not apply.");
+                PowerLoss(unchanged.SessionRoot); unchangedLauncher.Kill(); unchangedLauncher.WaitForExit(10000);
+                Check(!unchangedGame.HasExited, "The unchanged-value probe survives the lost launcher");
+                var unchangedPath = Path.Combine(unchanged.SessionRoot, "session.json");
+                var unchangedState = OperationFiles.Read<ProtectedSessionState>(unchangedPath);
+                var unchangedField = unchangedState.Games.Single().Fields.Single();
+                var absent = unchangedField.JournalPath!;
+                var baseline = OperationFiles.Read<ProcessControlJournal>(absent).Preview.Original["priorityBoost"].Require().GetBoolean();
+                unchangedField.Status = "conflict"; unchangedField.Observed = ControlRead.From(V(false)); unchangedState.Status = "recoveryRequired";
+                OperationFiles.Write(unchangedPath, unchangedState);
+                File.Move(absent, absent + ".retained");
+                try
+                {
+                    Check(!GameSessionDisplay.Restored(await App().RecoverGameSessionAsync(unchanged.SessionRoot)) && TaskExists(unchanged.SessionRoot),
+                        "A value matching the latest observation but differing from the retained original cannot retire recovery");
+                    unchangedGame.PriorityBoostEnabled = baseline;
+                    var nativePreview = Path.Combine(Path.GetDirectoryName(absent)!, "preview.json");
+                    var bytes = File.ReadAllBytes(nativePreview);
+                    try
+                    {
+                        File.AppendAllText(nativePreview, " ");
+                        Check(!GameSessionDisplay.Restored(await App().RecoverGameSessionAsync(unchanged.SessionRoot)) && TaskExists(unchanged.SessionRoot),
+                            "Changed native preview bytes cannot certify that a missing-journal control is unchanged");
+                    }
+                    finally { File.WriteAllBytes(nativePreview, bytes); }
+                    var recovered = await App().RecoverGameSessionAsync(unchanged.SessionRoot);
+                    unchangedGame.Refresh();
+                    Check(GameSessionDisplay.Restored(recovered) && recovered.State!.Games.Single().Fields.Single().Status == "restored" &&
+                        !unchangedGame.HasExited && unchangedGame.PriorityBoostEnabled == baseline && !TaskExists(unchanged.SessionRoot) && !File.Exists(absent),
+                        "A verified original native value completes recovery without a journal while its game remains alive");
+                }
+                finally
+                {
+                    File.Move(absent + ".retained", absent);
+                    await App().RecoverGameSessionAsync(unchanged.SessionRoot);
+                }
+                EndGame(unchangedGame);
             }
 
             async Task Recovery()
