@@ -94,6 +94,8 @@ $app=$null;$launcher=$null;$appStarted=$null;$window=$null;$recorder=$null;$reco
 $stopFile=Join-Path $directory 'frames.stop'
 try{
  if(@(Get-Process -Name 'RooIndustries.OptimizationSuite.App' -ErrorAction SilentlyContinue).Count){throw 'The app is already open; this capture does not take over another window.'}
+ $longest=Join-Path $Source 'docs\internal\frontend\RooIndustries.OptimizationSuite.App\obj\x64\Debug\net8.0-windows10.0.19041.0\MsixContent\WindowsAppSdk.AppxDeploymentExtensions.Desktop-EventLog-Instrumentation.dll'
+ if($longest.Length -gt 259){throw ('The app build needs paths up to '+$longest.Length+' characters here; Windows allows 259. Stage the frame with a shorter --directory, such as roo-industries-a.')}
  Initialize-HarnessBuildFolders $Source
  Ensure-HarnessOutputDirectory (Join-Path $Source 'backend\bin')
  $env:MSBUILDDISABLENODEREUSE='1';$env:DOTNET_CLI_USE_MSBUILD_SERVER='0';$env:DOTNET_CLI_TELEMETRY_OPTOUT='1'

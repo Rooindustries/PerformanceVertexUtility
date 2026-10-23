@@ -50,8 +50,9 @@ lease and its owned frame; it does not capture the desktop picker or review.
 
 `tools/validation/ProtectedSessions/Capture-LaunchPresetUi.ps1` covers the
 desktop side. Run it through `windows_ssh.py interactive-frame` on a frame
-staged with `--include-frontend`, passing `Source`, `OutRoot` and a short
-`Label`. It builds the app from that frame, starts a disposable launcher, and
+staged with `--include-frontend` and a short `--directory` such as
+`roo-industries-a` (the app build's longest path must stay under 260
+characters), passing `Source`, `OutRoot` and a short `Label`. It builds the app from that frame, starts a disposable launcher, and
 drives the Games tab: each preset, a priority edit (Custom), a core edit (the
 preset stays), and Review. It saves window screenshots, the text each one
 shows, and JPEG frames for a video. On a build without the picker it fills
