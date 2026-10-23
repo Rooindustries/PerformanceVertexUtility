@@ -425,6 +425,9 @@ after another program changed the priority. Build the app in a short copy of the
 source with `tools\scripts\Build-Frontend.ps1`, then run the script through
 `windows_ssh.py interactive-frame` with `Source`, `AppRoot`, `OutRoot` and
 `Label` (`before` for a build of main, `after` for the change). It starts an
+owned app with the runtime beside `DotNetPath` when that optional argument is
+supplied. It records and acknowledges the known missing-data notice before
+attaching to the navigation window. Other dialogs stay untouched. It starts an
 owned PING fixture, applies a one-process Game priority profile from the app
 root's own backend, sets the fixture to Below normal, clicks Restore game
 priority and saves the card text, screenshots and window frames for a video. It

@@ -1,5 +1,10 @@
-param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$AppRoot,[Parameter(Mandatory)][string]$OutRoot,[Parameter(Mandatory)][ValidateSet('before','after')][string]$Label)
+param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$AppRoot,[Parameter(Mandatory)][string]$OutRoot,[Parameter(Mandatory)][ValidateSet('before','after')][string]$Label,[string]$DotNetPath='')
 $ErrorActionPreference='Stop'
+if($DotNetPath){
+ if(-not[IO.File]::Exists($DotNetPath)){throw 'The requested runtime host does not exist.'}
+ $env:DOTNET_ROOT=[IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($DotNetPath))
+ $env:DOTNET_ROOT_X64=$env:DOTNET_ROOT
+}
 . (Join-Path $Source 'tools\validation\LoadTimes\CleanupOwnership.Common.ps1')
 Add-Type -AssemblyName UIAutomationClient,UIAutomationTypes,System.Drawing,System.Windows.Forms
 Add-Type @'
@@ -55,7 +60,20 @@ try{
  if($applied.priorityClass -ne 'AboveNormal' -or $applied.affinityMask -ne $affinity -or -not$start.restorable){throw ('Game priority did not apply to the fixture: '+$applied.priorityClass+' '+$applied.affinityMask)}
  $process.PriorityClass='BelowNormal';$changed=Read-Fixture $process
  $app=Start-Process $exe[0].FullName -PassThru;$receipt=New-OwnedProcess $app
- $window=WaitFor {$A::RootElement.FindFirst($TS::Children,[Windows.Automation.PropertyCondition]::new($A::ProcessIdProperty,$app.Id))} 120 'app window'
+ $window=WaitFor {
+  $windows=@($A::RootElement.FindAll($TS::Children,[Windows.Automation.PropertyCondition]::new($A::ProcessIdProperty,$app.Id)))
+  foreach($dialog in $windows|Where-Object {$_.Current.ClassName -eq '#32770'}){
+   $message=$dialog.FindFirst($TS::Descendants,[Windows.Automation.PropertyCondition]::new($A::NameProperty,'The earlier data folder was gone, so the app started fresh. Its saved rules and undo history are no longer available.'))
+   if($message){
+    $script:window=$dialog
+    Save 'as-found-missing-data-notice.json' @{message=$message.Current.Name}
+    Shot 'as-found-missing-data-notice'
+    $ok=$dialog.FindFirst($TS::Descendants,[Windows.Automation.AndCondition]::new([Windows.Automation.PropertyCondition]::new($A::NameProperty,'OK'),[Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty,$CT::Button)))
+    Activate $ok
+   }
+  }
+  @($windows|Where-Object {$_.FindFirst($TS::Descendants,[Windows.Automation.PropertyCondition]::new($A::NameProperty,'Settings'))})|Select-Object -First 1
+ } 120 'app window'
  $handle=[IntPtr]::new($window.Current.NativeWindowHandle)
  [RooIndustriesRestoreKeptUi]::SetWindowPos($handle,[IntPtr]::new(-1),40,40,1360,960,0x40)|Out-Null
  [RooIndustriesRestoreKeptUi]::SetForegroundWindow($handle)|Out-Null
