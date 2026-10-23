@@ -40,9 +40,14 @@ public sealed class UpdateService
     private bool _started;
     private bool _later;
     private bool _handoff;
+    private bool _waiting;
     public event Action? Changed;
     public UpdateState State { get; private set; }
+#if ROO_INDUSTRIES_TEST_HOOKS
+    public bool Enabled => _feed is not null || _fixture;
+#else
     public bool Enabled => _feed is not null;
+#endif
     public static string CurrentVersion => typeof(App).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "";
 
     public UpdateService()
@@ -75,9 +80,14 @@ public sealed class UpdateService
     public void Stop() => _stop.Cancel();
 
     private void Notify() => _dispatcher?.TryEnqueue(() => Changed?.Invoke());
-    private void Set(UpdateState state) { State = state.Status == State.Status ? state : state with { Refused = false }; Notify(); }
+    private void Set(UpdateState state)
+    {
+        if (state.Status != State.Status) state = state with { Refused = false };
+        State = _waiting && state.Ready && !state.Busy && RunningChanges.Any ? state with { Status = InstallGate.ChangeRunning, Refused = true } : state;
+        Notify();
+    }
     private void Status(string text) { Set(State with { Status = text }); AppLog.Write("update", text); }
-    private void Refuse(string text) { State = State with { Status = text, Refused = true }; Notify(); AppLog.Write("update", text); }
+    private void Refuse(string text) { _waiting = text == InstallGate.ChangeRunning; State = State with { Status = text, Refused = true }; Notify(); AppLog.Write("update", text); }
     private static string Describe(UpdateFeedResult r) => r.Kind + (r.KeyId is { } key ? ", key " + key : "") + (r.Release is { } release ? ", release " + release.Version : "") + ". " + r.Reason;
     private void LogFeed(string outcome, string source = "Feed") => AppLog.Write("update", source + " " + _feed!.IdnHost + ": " + outcome.TrimEnd('.') + "; installed " + CurrentVersion + ".");
 
@@ -105,7 +115,9 @@ public sealed class UpdateService
 
     private void ChangeFinished()
     {
-        if (State.Waiting && !RunningChanges.Any) Set(State with { Status = State.Banner, Refused = false });
+        if (RunningChanges.Any) return;
+        _waiting = false;
+        if (State.Waiting) Set(State with { Status = State.Banner, Refused = false });
     }
 
     private async Task ScheduleAsync()
@@ -250,13 +262,16 @@ public sealed class UpdateService
 
     public async Task CheckAsync()
     {
-        if (_feed is null || !await _gate.WaitAsync(0)) return;
+        if (!Enabled || !await _gate.WaitAsync(0)) return;
         try
         {
             Set(State with { Busy = true, Status = "Checking for updates..." });
+#if ROO_INDUSTRIES_TEST_HOOKS
+            if (_fixture) { await Task.Delay(1000); Found(_release!, [], ""); return; }
+#endif
             using var deadline = CancellationTokenSource.CreateLinkedTokenSource(_stop.Token);
             deadline.CancelAfter(TimeSpan.FromSeconds(20));
-            var builder = new UriBuilder(_feed);
+            var builder = new UriBuilder(_feed!);
             builder.Query = (builder.Query.Length > 1 ? builder.Query[1..] + "&" : "") + "t=" + DateTimeOffset.UtcNow.ToUnixTimeSeconds();
             using var response = await GetAsync(builder.Uri, deadline.Token);
             if (response.StatusCode != HttpStatusCode.OK)
@@ -276,7 +291,7 @@ public sealed class UpdateService
                 await output.WriteAsync(buffer.AsMemory(0, read), deadline.Token);
             }
             var bytes = output.ToArray();
-            var result = UpdateFeed.Verify(bytes, (int)response.StatusCode, _feed, CurrentVersion);
+            var result = UpdateFeed.Verify(bytes, (int)response.StatusCode, _feed!, CurrentVersion);
             LogFeed(Describe(result));
             if (result.Kind == UpdateFeedKind.Refused) { Status("Couldn't verify the update. " + result.Reason); return; }
             if (result.Kind == UpdateFeedKind.Current)
@@ -285,16 +300,20 @@ public sealed class UpdateService
                 Set(State with { Ready = false, CanDownload = false, Notes = "", Status = result.Reason, Banner = State.BannerKind == "ready" ? "" : State.Banner });
                 return;
             }
-            var release = result.Release!;
-            var same = _release == release && State.Ready;
-            _release = release; _envelope = bytes;
-            Set(State with { Ready = same, CanDownload = !same, Notes = release.Notes, Status = same ? State.BannerKind == "failed" ? State.Banner : "Version " + release.Version + " is ready to install" : result.Reason,
-                Banner = same ? State.Banner : "", BannerKind = same ? State.BannerKind : "" });
-            if (AutomaticDownloads && !same) await DownloadCoreAsync();
+            if (!Found(result.Release!, bytes, result.Reason) && AutomaticDownloads) await DownloadCoreAsync();
         }
         catch (OperationCanceledException) { if (_stop.IsCancellationRequested) LogFeed("canceled: the app is closing"); else { LogFeed("failed: The request timed out."); Status("Couldn't check for updates. The request timed out."); } }
         catch (Exception error) { LogFeed("failed: " + error.Message); Status("Couldn't check for updates. " + error.Message); }
         finally { Set(State with { Busy = false }); _gate.Release(); }
+    }
+
+    private bool Found(UpdateRelease release, byte[] envelope, string reason)
+    {
+        var same = _release == release && State.Ready;
+        _release = release; _envelope = envelope;
+        Set(State with { Ready = same, CanDownload = !same, Notes = release.Notes, Status = same ? State.BannerKind == "failed" ? State.Banner : "Version " + release.Version + " is ready to install" : reason,
+            Banner = same ? State.Banner : "", BannerKind = same ? State.BannerKind : "" });
+        return same;
     }
 
     private async Task<HttpResponseMessage> GetAsync(Uri uri, CancellationToken cancellation)

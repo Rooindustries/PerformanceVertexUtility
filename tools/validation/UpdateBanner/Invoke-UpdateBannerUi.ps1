@@ -187,6 +187,13 @@ try{
  $status=SettingsStatus
  Check 'Running change: Settings shows the same reason and waits too' (($status -ceq $changeRunning) -and -not(Enabled 'UpdateInstallButton')) @{settings=$status;settingsInstallEnabled=(Enabled 'UpdateInstallButton')}
  Shot 'change-running-settings'
+ Press 'id' 'UpdateCheckButton'
+ $checking=Poll {if((SettingsStatus) -ceq 'Checking for updates...'){$true}} 5
+ $rechecked=Poll {if((Enabled 'UpdateCheckButton') -and (SettingsStatus) -cne 'Checking for updates...'){$true}} 20
+ Start-Sleep -Seconds 1
+ $status=SettingsStatus;$banner=@(BannerTexts)
+ Check 'Running change: checking for updates again keeps the reason and both buttons waiting' ([bool]$checking -and [bool]$rechecked -and ($status -ceq $changeRunning) -and ($banner -contains $changeRunning) -and -not(Enabled 'UpdateInstallButton') -and -not(Enabled 'UpdateBannerInstall')) @{checked=[bool]$checking;settings=$status;banner=$banner;settingsInstallEnabled=(Enabled 'UpdateInstallButton');bannerInstallEnabled=(Enabled 'UpdateBannerInstall')}
+ Shot 'recheck-while-waiting'
  Start-Sleep -Seconds 1
  Remove-Item -LiteralPath $flag
  $cleared=Poll {if((Enabled 'UpdateBannerInstall') -and (Enabled 'UpdateInstallButton') -and -not(@(BannerTexts) -contains $changeRunning) -and (SettingsStatus) -ceq $ready){$true}} 15

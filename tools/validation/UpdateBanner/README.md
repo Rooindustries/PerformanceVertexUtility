@@ -14,7 +14,7 @@ The script takes the frame's host lease first and fails if another frame holds i
 
 The script builds the helper and the app with `RooIndustriesTestHooks=true` inside the staged copy. Three hooks exist only in that build:
 
-- `ROO_INDUSTRIES_TEST_UPDATE_READY` makes the app show a ready fixture release instead of checking a feed. Its confirmation never starts setup.
+- `ROO_INDUSTRIES_TEST_UPDATE_READY` makes the app show a ready fixture release instead of checking a feed. Check for updates answers with the same release after a second. Its confirmation never starts setup.
 - `ROO_INDUSTRIES_TEST_HOLD_CHANGE` names a flag file. While it exists, the app holds a running change open, the same marker a removal, Windows settings apply or cleanup sets.
 - `ROO_INDUSTRIES_TEST_INSTALL_FREE_BYTES` replaces the install drive's free bytes.
 
@@ -22,6 +22,7 @@ Cases, each read back through UI Automation:
 
 - Low disk space: Install now leaves the banner naming the space to free, and Settings shows the same text.
 - A change running: Install now never opens the confirmation; the banner and Settings both say a change is still running and both install buttons wait, disabled.
+- Checking for updates while it waits: the banner and Settings keep saying a change is still running and both install buttons stay disabled.
 - The change finishing: both buttons come back and the banner returns to the release notes.
 - Nothing running: Install opens the confirmation (Not now is pressed), or the banner and Settings name another blocker on that PC.
 - Later still hides the banner.
