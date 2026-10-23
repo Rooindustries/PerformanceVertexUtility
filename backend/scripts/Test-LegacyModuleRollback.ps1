@@ -6,7 +6,7 @@ param(
     [string]$BaseHarnessSha256 = $env:ROO_INDUSTRIES_LEGACY_BASE_HARNESS_SHA256
 )
 $ErrorActionPreference = 'Stop'
-$tempRoot = Join-Path ([IO.Path]::GetTempPath()) ('roo-industries-legacy-rollback-' + [guid]::NewGuid().ToString('N'))
+$tempRoot = Join-Path ([IO.Path]::GetFullPath([IO.Path]::GetTempPath())) ('roo-industries-legacy-rollback-' + [guid]::NewGuid().ToString('N'))
 function Assert([bool]$Condition, [string]$Message) {
     if (-not $Condition) { throw $Message }
     Write-Host "PASS $Message"
@@ -1414,8 +1414,20 @@ if (-not $restored.success) { exit 1 }
                 & {
                     $BackupPath=Join-Path $DataRoot 'independent-backup.json'
                     Write-JsonFile @{moduleId='fixture';registry=@();services=@()} $BackupPath
-                    $ConfirmApply=$true;$independent=Invoke-RollbackModule
-                    Test-DependentCase ($independent.success -and $script:serviceCalls.Count -eq $calls) 'A different selected backup is not blocked by the held lock'
+                    $independentHash=(Get-FileHash -LiteralPath $BackupPath).Hash
+                    $ConfirmApply=$true;$refused=$false
+                    try { Invoke-RollbackModule|Out-Null } catch { $refused=$_.Exception.Message -like '*Apply or Undo is running*' }
+                    Test-DependentCase ($refused -and $script:serviceCalls.Count -eq $calls -and (Get-FileHash -LiteralPath $BackupPath).Hash -ceq $independentHash) 'Undo of a different backup also waits for the held change lock and refuses'
+                }
+                & {
+                    $backupRoot=Join-Path $DataRoot 'backups\fixture'
+                    $backups=@(Get-ChildItem -LiteralPath $backupRoot -Directory).Count
+                    $ConfirmApply=$false
+                    $previewed=Invoke-ApplyModule
+                    $PreviewPath=$previewed.previewPath
+                    $ConfirmApply=$true;$refused=$false
+                    try { Invoke-ApplyModule|Out-Null } catch { $refused=$_.Exception.Message -like '*Apply or Undo is running*' }
+                    Test-DependentCase ($previewed.dryRun -and $refused -and $script:serviceCalls.Count -eq $calls -and @(Get-ChildItem -LiteralPath $backupRoot -Directory).Count -eq $backups -and (Get-FileHash -LiteralPath $BackupPath).Hash -ceq $hash) 'Confirmed Apply refuses before its backup or any write while Undo holds the change lock; its preview still runs'
                 }
                 $latestArgument=if ($Latest) {' -Latest'} else {''}
                 $clock.Restart()
@@ -1428,8 +1440,7 @@ if (-not $restored.success) { exit 1 }
                 if (-not $staleRead) {
                     $second.WaitForExit()
                     $busy=Get-Content -LiteralPath $secondResult -Raw|ConvertFrom-Json
-                    $expectedReads=if ($Latest) {1} else {0}
-                    Test-DependentCase ($second.ExitCode -eq 2 -and $busy.error -like '*backup*busy*Undo*' -and @($busy.calls).Count -eq 0 -and $busy.backupReads -eq $expectedReads -and $clock.Elapsed.TotalSeconds -lt 10 -and (Get-FileHash -LiteralPath $BackupPath).Hash -ceq $hash) 'A competing confirmed Undo refuses as busy before its selected-backup read or any service write'
+                    Test-DependentCase ($second.ExitCode -eq 2 -and $busy.error -like '*Apply or Undo is running*' -and @($busy.calls).Count -eq 0 -and $busy.backupReads -eq 0 -and $clock.Elapsed.TotalSeconds -lt 10 -and (Get-FileHash -LiteralPath $BackupPath).Hash -ceq $hash) 'A competing confirmed Undo refuses as busy before selecting or reading a backup or any service write'
                 }
                 [IO.File]::WriteAllText(($firstResult+'.release'),'continue')
                 if (-not $first.WaitForExit(20000)) { throw 'First Undo did not finish' }
@@ -1481,7 +1492,7 @@ if (-not $restored.success) { exit 1 }
                 $contender=Start-Process -FilePath $exe -ArgumentList ($arguments+' -Result "'+$busyResult+'"') -Wait -PassThru -NoNewWindow
                 try {
                     $busy=Get-Content -LiteralPath $busyResult -Raw|ConvertFrom-Json
-                    Test-DependentCase ($contender.ExitCode -eq 2 -and $busy.error -like '*backup*busy*Undo*' -and @($busy.calls).Count -eq 0 -and $busy.backupReads -eq 0 -and (Get-FileHash -LiteralPath $BackupPath).Hash -ceq $hash) 'The same lock stays exclusive after atomic attempt and completion saves'
+                    Test-DependentCase ($contender.ExitCode -eq 2 -and $busy.error -like '*Apply or Undo is running*' -and @($busy.calls).Count -eq 0 -and $busy.backupReads -eq 0 -and (Get-FileHash -LiteralPath $BackupPath).Hash -ceq $hash) 'The same lock stays exclusive after atomic attempt and completion saves'
                 } finally { $contender.Dispose() }
                 Stop-Process -Id $process.Id -Force
                 $process.WaitForExit()
@@ -1516,28 +1527,12 @@ if (-not $restored.success) { exit 1 }
             Test-DependentCase ($replayed.result.restoredServices -eq 3 -and (Get-FakeStatus) -ceq $restoredState) 'A throw releases the lock for a fresh Undo process'
         }
 
-        & {
-            $DataRoot=Reset-DependentFixture
-            $applied=Invoke-ReviewedApply
-            $BackupPath=$applied.backupPath
-            $hash=(Get-FileHash -LiteralPath $BackupPath).Hash
-            $calls=$script:serviceCalls.Count
-            $lockPath=$BackupPath+'.undo.lock'
-            New-Item -ItemType Directory -Path $lockPath|Out-Null
-            $ConfirmApply=$true;$refused=$false
-            try { Invoke-RollbackModule|Out-Null } catch { $refused=$true }
-            Test-DependentCase ($refused -and $script:serviceCalls.Count -eq $calls -and (Get-FileHash -LiteralPath $BackupPath).Hash -ceq $hash) 'An unusable lock path refuses Undo before service or backup changes'
-            Remove-Item -LiteralPath $lockPath
-            $replayed=Invoke-DependentProcess
-            Test-DependentCase ($replayed.result.restoredServices -eq 3 -and (Get-FakeStatus) -ceq $restoredState) 'Undo can resume after the lock path is repaired'
-        }
-
         $DataRoot=Reset-DependentFixture
         $applied=Invoke-ReviewedApply
         Test-DependentCase ((Get-FakeStatus) -ceq 'Probe=Disabled/Stopped ProbeDep=Manual/Stopped ProbeDepChild=Manual/Stopped ProbeIdle=Manual/Stopped') 'Apply stops the service and the dependents running on it'
         $saved=Get-Content -LiteralPath $applied.backupPath -Raw|ConvertFrom-Json
-        $recorded=@($saved.services[0].dependents|ForEach-Object {$_.name+'='+$_.startType+'/'+$_.status}) -join ' '
-        Test-DependentCase ($recorded -ceq 'ProbeDepChild=Manual/Running ProbeDep=Manual/Running ProbeIdle=Manual/Stopped') ('The backup records each dependent''s state before the stop ('+$recorded+')')
+        $recorded=@($saved.services[0].dependents|ForEach-Object {$_.name+'='+$_.startType+'/'+$_.status+'/'+$_.stoppedByApply}) -join ' '
+        Test-DependentCase ($recorded -ceq 'ProbeDepChild=Manual/Running/True ProbeDep=Manual/Running/True ProbeIdle=Manual/Stopped/') ('The backup records each dependent''s state before the stop and which ones the stop was verified to stop ('+$recorded+')')
         $BackupPath=$applied.backupPath
         $ConfirmApply=$false
         $calls=$script:serviceCalls.Count
@@ -1657,7 +1652,7 @@ if (-not $restored.success) { exit 1 }
             Test-DependentCase ($replayed.result.restoredServices -eq 2 -and (@($replayed.calls) -join ',') -ceq 'start ProbeDep,start ProbeDepChild' -and (Get-FakeStatus) -ceq $restoredState) 'A fresh process resumes never-attempted dependents after the attempt-marker save failed'
         }
 
-        foreach ($marker in 'restoreComplete','restoreAttempted') {
+        foreach ($marker in 'restoreComplete','restoreAttempted','stoppedByApply') {
             $DataRoot=Reset-DependentFixture
             $applied=Invoke-ReviewedApply
             $BackupPath=$applied.backupPath
@@ -1750,6 +1745,139 @@ if (-not $restored.success) { exit 1 }
         Write-JsonFile $legacy $BackupPath
         $restored=Invoke-RollbackModule
         Test-DependentCase ($restored.success -and $restored.restoredServices -eq 1 -and (Get-FakeStatus) -ceq 'Probe=Automatic/Running ProbeDep=Manual/Stopped ProbeDepChild=Manual/Stopped ProbeIdle=Manual/Stopped') 'A backup made before dependents were recorded still undoes its own service'
+
+        $DataRoot=Reset-DependentFixture
+        $applied=Invoke-ReviewedApply
+        $BackupPath=$applied.backupPath
+        $older=Get-Content -LiteralPath $BackupPath -Raw|ConvertFrom-Json
+        foreach ($dependent in $older.services[0].dependents) { $dependent.PSObject.Properties.Remove('stoppedByApply') }
+        Write-JsonFile $older $BackupPath
+        $ConfirmApply=$true
+        $restored=Invoke-RollbackModule
+        Test-DependentCase ($restored.success -and $restored.restoredServices -eq 1 -and @($restored.leftAsChanged|Where-Object {$_.type -eq 'dependent' -and $_.reason -like '*did not confirm*'}).Count -eq 2 -and (Get-FakeStatus) -ceq 'Probe=Automatic/Running ProbeDep=Manual/Stopped ProbeDepChild=Manual/Stopped ProbeIdle=Manual/Stopped') 'A backup without verified stop evidence restores its service and leaves the dependents stopped'
+
+        & {
+            $DataRoot=Reset-DependentFixture
+            $applied=Invoke-ReviewedApply
+            $original=$applied.backupPath
+            $hash=(Get-FileHash -LiteralPath $original).Hash
+            $folder=Split-Path $original -Parent
+            $aliases=New-Object System.Collections.Generic.List[string]
+            try { New-Item -ItemType SymbolicLink -Path (Join-Path $folder 'alias.json') -Target $original|Out-Null; $aliases.Add((Join-Path $folder 'alias.json')) } catch { Write-Host ('SKIP A file symbolic link needs link rights here: '+$_.Exception.Message) }
+            New-Item -ItemType HardLink -Path (Join-Path $folder 'hard.json') -Target $original|Out-Null
+            $aliases.Add((Join-Path $folder 'hard.json'))
+            $aliases.Add($original)
+            $ConfirmApply=$true
+            foreach ($alias in $aliases) {
+                $calls=$script:serviceCalls.Count
+                $BackupPath=$alias;$refused=$false
+                try { Invoke-RollbackModule|Out-Null } catch { $refused=$_.Exception.Message -like '*is a link or not a file*' }
+                Test-DependentCase ($refused -and $script:serviceCalls.Count -eq $calls -and (Get-FileHash -LiteralPath $original).Hash -ceq $hash -and (Get-Item -LiteralPath $alias).LinkType) ('Confirmed Undo refuses a linked backup ('+(Split-Path $alias -Leaf)+') before changing services or the backup')
+            }
+            Remove-Item -LiteralPath (Join-Path $folder 'hard.json')
+            $files=@(Get-ChildItem -LiteralPath $folder|ForEach-Object Name|Sort-Object) -join ','
+            $BackupPath=[IO.Path]::Combine($folder,'.','backup.json')
+            if ($env:OS -eq 'Windows_NT') {
+                $short=(New-Object -ComObject Scripting.FileSystemObject).GetFile($original).ShortPath
+                if ([IO.Path]::GetFileName($short) -ine 'backup.json') { $BackupPath=$short } else { Write-Host 'SKIP This volume gives backup.json no short name' }
+            }
+            $restored=Invoke-RollbackModule
+            $saved=Get-Content -LiteralPath $original -Raw|ConvertFrom-Json
+            Test-DependentCase ($restored.success -and $restored.restoredServices -eq 3 -and $restored.backupPath -eq $original -and (Get-FakeStatus) -ceq $restoredState -and @($saved.services[0].dependents|Where-Object restoreComplete -EQ $true).Count -eq 2 -and (@(Get-ChildItem -LiteralPath $folder|ForEach-Object Name|Sort-Object) -join ',') -ceq $files) ('Undo through another spelling of the backup ('+(Split-Path $BackupPath -Leaf)+') saves ownership in the backup itself')
+            Stop-Service -Name ProbeDepChild -Force
+            $BackupPath=[IO.Path]::Combine($folder,'.','backup.json')
+            $calls=$script:serviceCalls.Count
+            $again=Invoke-RollbackModule
+            Test-DependentCase ($again.success -and $script:serviceCalls.Count -eq $calls -and $script:fakeServices.ProbeDepChild.status -ceq 'Stopped') 'A later Undo through any spelling keeps the child another program stopped'
+        }
+
+        foreach ($latest in $true,$false) { & {
+            param($Latest)
+            $DataRoot=Reset-DependentFixture
+            $write=${function:Write-JsonFile}
+            $script:raced=$null
+            function Write-JsonFile {
+                param($Object,$Path)
+                & $write $Object $Path
+                if ($Object.applyRequested -eq $true -and $null -eq $script:raced) {
+                    $state=Join-Path $DataRoot 'apply-race-state.xml'
+                    $result=Join-Path $DataRoot 'apply-race-result.json'
+                    $script:fakeServices|Export-Clixml -LiteralPath $state
+                    $exe=[Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
+                    $arguments='-NoProfile -File "'+$processScript+'" -Harness "'+$HarnessPath+'" -FixtureManifest "'+$ManifestPath+'" -Root "'+$DataRoot+'" -Backup "'+$Path+'" -State "'+$state+'" -Result "'+$result+'"'
+                    if ($Latest) { $arguments+=' -Latest' }
+                    $published=(Get-FileHash -LiteralPath $Path).Hash
+                    $early=Start-Process -FilePath $exe -ArgumentList $arguments -Wait -PassThru -NoNewWindow
+                    try { $script:raced=@{exit=$early.ExitCode;output=(Get-Content -LiteralPath $result -Raw|ConvertFrom-Json);unchanged=(Get-FileHash -LiteralPath $Path).Hash -ceq $published} } finally { $early.Dispose() }
+                    $script:fakeServices=Import-Clixml -LiteralPath $state
+                }
+            }
+            $applied=Invoke-ReviewedApply
+            $BackupPath=$applied.backupPath
+            Test-DependentCase ($script:raced.exit -eq 2 -and $script:raced.output.error -like '*Apply or Undo is running*' -and @($script:raced.output.calls).Count -eq 0 -and $script:raced.output.backupReads -eq 0 -and $script:raced.unchanged -and (Get-FakeStatus) -ceq 'Probe=Disabled/Stopped ProbeDep=Manual/Stopped ProbeDepChild=Manual/Stopped ProbeIdle=Manual/Stopped') ('An Undo after Apply publishes its backup and before it stops services refuses as busy (latest='+$Latest+')')
+            $replayed=Invoke-DependentProcess
+            Test-DependentCase ($replayed.result.restoredServices -eq 3 -and (Get-FakeStatus) -ceq $restoredState) ('Undo after that Apply finishes restores the service and both dependents (latest='+$Latest+')')
+        } $latest }
+
+        & {
+            $DataRoot=Reset-DependentFixture
+            $stop=${function:Stop-Service}
+            function Stop-Service {
+                [CmdletBinding()]param($Name,[switch]$Force)
+                Write-Error 'Fixture service refuses the stop control' -ErrorId CouldNotStopService
+            }
+            $applyError=$null
+            try { Invoke-ReviewedApply|Out-Null } catch { $applyError=$_.Exception.Message }
+            $BackupPath=Join-Path @(Get-ChildItem -LiteralPath (Join-Path $DataRoot 'backups\fixture') -Directory)[0].FullName 'backup.json'
+            $saved=Get-Content -LiteralPath $BackupPath -Raw|ConvertFrom-Json
+            $evidence=@($saved.services[0].dependents|ForEach-Object {$_.name+'='+$_.stoppedByApply}) -join ' '
+            Test-DependentCase ($applyError -like '*refuses the stop control*' -and (Get-FakeStatus) -ceq 'Probe=Disabled/Running ProbeDep=Manual/Running ProbeDepChild=Manual/Running ProbeIdle=Manual/Stopped' -and $evidence -ceq 'ProbeDepChild=False ProbeDep=False ProbeIdle=') ('A refused stop fails Apply and records that it stopped no dependent ('+$evidence+')')
+            & $stop -Name ProbeDepChild -Force
+            $replayed=Invoke-DependentProcess
+            Test-DependentCase ($replayed.result.success -and @($replayed.calls|Where-Object {$_ -like '* ProbeDepChild'}).Count -eq 0 -and @($replayed.result.leftAsChanged|Where-Object {$_.name -ceq 'ProbeDepChild' -and $_.reason -like '*did not confirm*'}).Count -eq 1 -and (Get-FakeStatus) -ceq 'Probe=Automatic/Running ProbeDep=Manual/Running ProbeDepChild=Manual/Stopped ProbeIdle=Manual/Stopped') 'Undo after a refused stop restores startup and keeps the dependent another program stopped'
+        }
+
+        foreach ($externalStop in $false,$true) { & {
+            param($ExternalStop)
+            $DataRoot=Reset-DependentFixture
+            $stop=${function:Stop-Service}
+            function Stop-Service {
+                [CmdletBinding()]param($Name,[switch]$Force)
+                if ($Name -cne 'Probe') { & $stop -Name $Name -Force:$Force; return }
+                & $stop -Name ProbeDepChild -Force
+                Write-Error 'Fixture dependent ProbeDep refuses the stop control' -ErrorId CouldNotStopService
+            }
+            $applyError=$null
+            try { Invoke-ReviewedApply|Out-Null } catch { $applyError=$_.Exception.Message }
+            $BackupPath=Join-Path @(Get-ChildItem -LiteralPath (Join-Path $DataRoot 'backups\fixture') -Directory)[0].FullName 'backup.json'
+            $saved=Get-Content -LiteralPath $BackupPath -Raw|ConvertFrom-Json
+            $evidence=@($saved.services[0].dependents|ForEach-Object {$_.name+'='+$_.stoppedByApply}) -join ' '
+            Test-DependentCase ($applyError -like '*ProbeDep refuses*' -and (Get-FakeStatus) -ceq 'Probe=Disabled/Running ProbeDep=Manual/Running ProbeDepChild=Manual/Stopped ProbeIdle=Manual/Stopped' -and $evidence -ceq 'ProbeDepChild=True ProbeDep=False ProbeIdle=') ('A partial stop records only the dependent it stopped ('+$evidence+')')
+            if ($ExternalStop) { & $stop -Name ProbeDep -Force }
+            $replayed=Invoke-DependentProcess
+            if ($ExternalStop) {
+                Test-DependentCase ($replayed.result.success -and @($replayed.calls|Where-Object {$_ -like 'start ProbeDep*'}).Count -eq 0 -and @($replayed.result.leftAsChanged|Where-Object {$_.name -ceq 'ProbeDep' -and $_.reason -like '*did not confirm*'}).Count -eq 1 -and @($replayed.result.leftAsChanged|Where-Object {$_.name -ceq 'ProbeDepChild' -and $_.reason -like '*depends on is not running*'}).Count -eq 1 -and (Get-FakeStatus) -ceq 'Probe=Automatic/Running ProbeDep=Manual/Stopped ProbeDepChild=Manual/Stopped ProbeIdle=Manual/Stopped') 'After a partial stop, Undo keeps the dependent another program stopped and its child stopped'
+            } else {
+                Test-DependentCase ($replayed.result.success -and (@($replayed.calls|Where-Object {$_ -like 'start ProbeDep*'}) -join ',') -ceq 'start ProbeDepChild' -and @($replayed.result.alreadyAtOriginal|Where-Object {$_.name -ceq 'ProbeDep'}).Count -eq 1 -and (Get-FakeStatus) -ceq $restoredState) 'After a partial stop, Undo restarts only the dependent Apply stopped'
+            }
+        } $externalStop }
+
+        & {
+            $DataRoot=Reset-DependentFixture
+            $write=${function:Write-JsonFile}
+            function Write-JsonFile {
+                param($Object,$Path)
+                if (@($Object.services|ForEach-Object {$_.dependents}|Where-Object {$_ -and $_.PSObject.Properties['stoppedByApply']}).Count) { throw 'Fixture stop evidence write failure' }
+                & $write $Object $Path
+            }
+            $applyError=$null
+            try { Invoke-ReviewedApply|Out-Null } catch { $applyError=$_.Exception.Message }
+            $BackupPath=Join-Path @(Get-ChildItem -LiteralPath (Join-Path $DataRoot 'backups\fixture') -Directory)[0].FullName 'backup.json'
+            $saved=Get-Content -LiteralPath $BackupPath -Raw|ConvertFrom-Json
+            Test-DependentCase ($applyError -like '*stop evidence write failure*' -and (Get-FakeStatus) -ceq 'Probe=Disabled/Stopped ProbeDep=Manual/Stopped ProbeDepChild=Manual/Stopped ProbeIdle=Manual/Stopped' -and @($saved.services[0].dependents|Where-Object {$_.PSObject.Properties['stoppedByApply']}).Count -eq 0) 'An Apply that cannot save its stop evidence fails without claiming the dependents'
+            $replayed=Invoke-DependentProcess
+            Test-DependentCase ($replayed.result.success -and (@($replayed.calls) -join ',') -ceq 'set Probe Automatic,start Probe' -and @($replayed.result.leftAsChanged|Where-Object {$_.type -eq 'dependent' -and $_.reason -like '*did not confirm*'}).Count -eq 2 -and (Get-FakeStatus) -ceq 'Probe=Automatic/Running ProbeDep=Manual/Stopped ProbeDepChild=Manual/Stopped ProbeIdle=Manual/Stopped') 'Undo restores the service and reports the dependents it cannot prove Apply stopped'
+        }
         Assert ($dependentFailures.Count -eq 0) ('Every dependent-service case holds ('+$dependentFailures.Count+' failed)')
     } }
     if ($Scenario -in 'All','BackupWrite') { & {
@@ -1801,9 +1929,10 @@ if (-not $restored.success) { exit 1 }
         $dependent='RooIndustriesProbeDep'+$suffix
         $child='RooIndustriesProbeKid'+$suffix
         $exe=Join-Path $tempRoot 'probe-service.exe'
-        Add-Type -TypeDefinition 'using System.ServiceProcess; public class RooIndustriesProbeService : ServiceBase { public RooIndustriesProbeService() { ServiceName = "RooIndustriesProbe"; } public static void Main() { ServiceBase.Run(new RooIndustriesProbeService()); } }' -ReferencedAssemblies System.ServiceProcess -OutputAssembly $exe -OutputType ConsoleApplication
-        function Get-ProbeState {
-            (@($probe,$dependent,$child) | ForEach-Object { $s=Get-Service -Name $_; $s.Refresh(); [string]$s.StartType+'/'+[string]$s.Status }) -join ' '
+        Add-Type -TypeDefinition 'using System.ServiceProcess; public class RooIndustriesProbeService : ServiceBase { public RooIndustriesProbeService() { ServiceName = "RooIndustriesProbe"; } public static void Main(string[] args) { ServiceBase.Run(new RooIndustriesProbeService { CanStop = args.Length == 0 }); } }' -ReferencedAssemblies System.ServiceProcess -OutputAssembly $exe -OutputType ConsoleApplication
+        $refusing=@(($probe+'R'),($dependent+'R'),($child+'R'))
+        function Get-ProbeState([string[]]$Names=@($probe,$dependent,$child)) {
+            (@($Names) | ForEach-Object { $s=Get-Service -Name $_; $s.Refresh(); [string]$s.StartType+'/'+[string]$s.Status }) -join ' '
         }
         try {
             New-Service -Name $probe -BinaryPathName ('"'+$exe+'"') -StartupType Automatic -DisplayName 'Roo Industries test probe' | Out-Null
@@ -1834,18 +1963,38 @@ if (-not $restored.success) { exit 1 }
             Stop-Service -Name $dependent -Force
             $replayed=& $HarnessPath -Action RollbackModule -ModuleId fixture -ManifestPath $servicesManifest -DataRoot $DataRoot -BackupPath $BackupPath -ConfirmApply
             Assert ($replayed.success -and $replayed.restoredServices -eq 0 -and @($replayed.leftAsChanged|Where-Object {$_.type -eq 'dependent'}).Count -eq 2 -and (Get-ProbeState) -ceq 'Automatic/Running Manual/Stopped Manual/Stopped') 'Repeated Undo preserves both real dependents stopped externally after restoration'
+
+            New-Service -Name $refusing[0] -BinaryPathName ('"'+$exe+'"') -StartupType Automatic -DisplayName 'Roo Industries test probe' | Out-Null
+            New-Service -Name $refusing[1] -BinaryPathName ('"'+$exe+'" refuse-stop') -StartupType Manual -DependsOn $refusing[0] -DisplayName 'Roo Industries test probe dependent that refuses stop' | Out-Null
+            New-Service -Name $refusing[2] -BinaryPathName ('"'+$exe+'"') -StartupType Manual -DependsOn $refusing[1] -DisplayName 'Roo Industries test probe second dependent' | Out-Null
+            Start-Service -Name $refusing[2]
+            Assert ((Get-ProbeState $refusing) -ceq 'Automatic/Running Manual/Running Manual/Running' -and -not (Get-Service -Name $refusing[1]).CanStop) 'A second disposable probe chain runs with a dependent that refuses Stop'
+            @{protected=@{services=@();registryPathPatterns=@()};modules=@(@{id='fixture';name='Fixture';registryValues=@();services=@(@{name=$refusing[0];startup='Disabled';targetState='Stopped'})})} | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $servicesManifest -Encoding UTF8
+            $applyError=$null
+            try { Invoke-ReviewedApply | Out-Null } catch { $applyError=$_.Exception.Message }
+            $BackupPath=Join-Path (@(Get-ChildItem -LiteralPath (Join-Path $DataRoot 'backups\fixture') -Directory | Sort-Object Name)[-1].FullName) 'backup.json'
+            $saved=Get-Content -LiteralPath $BackupPath -Raw | ConvertFrom-Json
+            $evidence=@($saved.services[0].dependents | ForEach-Object { $_.name+'='+$_.stoppedByApply }) -join ' '
+            Write-Output ('REAL_REFUSED_STOP_APPLY_JSON '+(ConvertTo-Json -InputObject @{state=(Get-ProbeState $refusing);error=$applyError;evidence=$evidence} -Compress))
+            Assert ($saved.services[0].name -ceq $refusing[0] -and $applyError -and (Get-ProbeState $refusing) -ceq 'Disabled/Running Manual/Running Manual/Stopped' -and $evidence -ceq ($refusing[2]+'=True '+$refusing[1]+'=False')) ('A real refused Stop fails Apply and records only the dependent it stopped ('+$evidence+')')
+            $BackupPath=''
+            $restored=Invoke-RollbackModule
+            Write-Output ('REAL_REFUSED_STOP_UNDO_JSON '+(ConvertTo-Json -InputObject @{state=(Get-ProbeState $refusing);success=$restored.success;restoredServices=$restored.restoredServices;actions=@($restored.actions)} -Depth 5 -Compress))
+            Assert ($restored.success -and $restored.restoredServices -eq 2 -and (@($restored.actions|Where-Object {$_.type -eq 'dependent'}|ForEach-Object name) -join ',') -ceq $refusing[2] -and (Get-ProbeState $refusing) -ceq 'Automatic/Running Manual/Running Manual/Running') 'Undo after a real refused Stop restores startup and restarts only the dependent Apply stopped'
         } finally {
-            foreach ($name in @($child,$dependent,$probe)) {
+            foreach ($name in @($child,$dependent,$probe,$refusing[2],$refusing[1],$refusing[0])) {
                 if (Get-Service -Name $name -ErrorAction SilentlyContinue) {
                     Stop-Service -Name $name -Force -ErrorAction SilentlyContinue
+                    $owned=Get-CimInstance Win32_Service -Filter ("Name='"+$name+"'")
+                    if ($owned.ProcessId -gt 0 -and $owned.PathName -like ('"'+$exe+'"*')) { Stop-Process -Id $owned.ProcessId -Force; try { (Get-Service -Name $name).WaitForStatus('Stopped',[TimeSpan]::FromSeconds(10)) } catch { Write-Output ('CLEANUP '+$name+' did not report Stopped: '+$_.Exception.Message) } }
                     & sc.exe delete $name | Out-Null
                 }
             }
             [GC]::Collect()
             [GC]::WaitForPendingFinalizers()
-            for ($wait=0; $wait -lt 40 -and @(Get-Service -Name $probe,$dependent,$child -ErrorAction SilentlyContinue).Count; $wait++) { Start-Sleep -Milliseconds 250 }
+            for ($wait=0; $wait -lt 40 -and @(Get-Service -Name (@($probe,$dependent,$child)+$refusing) -ErrorAction SilentlyContinue).Count; $wait++) { Start-Sleep -Milliseconds 250 }
         }
-        Assert (@(Get-Service -Name $probe,$dependent,$child -ErrorAction SilentlyContinue).Count -eq 0) 'The disposable probe services are removed'
+        Assert (@(Get-Service -Name (@($probe,$dependent,$child)+$refusing) -ErrorAction SilentlyContinue).Count -eq 0) 'The disposable probe services are removed'
     } }
     if ($Scenario -in 'All','Registry') { & {
         if ($env:OS -ne 'Windows_NT') { throw 'The real-registry regression requires Windows.' }

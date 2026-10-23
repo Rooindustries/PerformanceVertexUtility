@@ -41,6 +41,30 @@ function Write-JsonFile {
     }
 }
 
+function Enter-ChangeLock {
+    $lock = [Threading.Mutex]::new($false, 'Global\RooIndustries.LeanClientOptimizer.Changes')
+    try { $owned = $lock.WaitOne(2000) } catch [Threading.AbandonedMutexException] { $owned = $true }
+    if ($owned) { return $lock }
+    $lock.Dispose()
+    throw 'Another confirmed Apply or Undo is running on this PC. Wait for it to finish, then try again. Nothing was changed.'
+}
+
+function Exit-ChangeLock {
+    param([Threading.Mutex]$Lock)
+    if ($null -eq $Lock) { return }
+    try { $Lock.ReleaseMutex() } finally { $Lock.Dispose() }
+}
+
+function Resolve-BackupFile {
+    param([string]$Path)
+    $full = [IO.Path]::GetFullPath($ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Path))
+    $item = Get-Item -LiteralPath $full -Force
+    if ($item -isnot [IO.FileInfo] -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -or $item.LinkType -eq 'HardLink') {
+        throw "The selected backup $Path is a link or not a file. Select the backup.json file itself. Nothing was changed."
+    }
+    return $item.FullName
+}
+
 function Read-Manifest {
     if (-not (Test-Path -LiteralPath $ManifestPath)) {
         throw "Manifest not found: $ManifestPath"
@@ -402,8 +426,21 @@ function Get-ServiceSnapshot {
     return @($result.ToArray())
 }
 
+function Save-DependentStopEvidence {
+    param([string]$Name, [object]$Backup, [string]$Path)
+    foreach ($snapshot in @($Backup.services)) {
+        if ($snapshot.name -ine $Name) { continue }
+        foreach ($dependent in @($snapshot.dependents)) {
+            if ($null -eq $dependent -or [string]$dependent.status -cne 'Running') { continue }
+            $current = @(Get-ServiceSnapshot $dependent.name | Where-Object { $_.exists -and $_.name -ieq $dependent.name })
+            $dependent | Add-Member -MemberType NoteProperty -Name stoppedByApply -Value ($current.Count -eq 1 -and $current[0].status -eq 'Stopped') -Force
+        }
+    }
+    Write-JsonFile $Backup $Path
+}
+
 function Set-ServiceFromManifest {
-    param([object]$Item)
+    param([object]$Item, [object]$Backup, [string]$BackupPath)
     $targets = @(Resolve-ServiceTargets $Item.name)
     foreach ($svc in $targets) {
         if ($Item.startup -eq 'Disabled') {
@@ -414,7 +451,7 @@ function Set-ServiceFromManifest {
             Set-Service -Name $svc.Name -StartupType Automatic
         }
         if ($Item.targetState -eq 'Stopped') {
-            Stop-Service -Name $svc.Name -Force -ErrorAction SilentlyContinue
+            try { Stop-Service -Name $svc.Name -Force -ErrorAction Stop } finally { Save-DependentStopEvidence $svc.Name $Backup $BackupPath }
         }
     }
 }
@@ -451,8 +488,9 @@ function Test-DependentRestore {
     if ($Dependent.PSObject.Properties['restoreComplete'] -and $Dependent.restoreComplete -isnot [bool]) { return [pscustomobject]@{ state='leftAsChanged'; reason='dependent restore completion evidence is invalid' } }
     if ($Dependent.PSObject.Properties['restoreAttempted'] -and $Dependent.restoreAttempted -isnot [bool]) { return [pscustomobject]@{ state='leftAsChanged'; reason='dependent restore attempt evidence is invalid' } }
     if ($current[0].status -eq 'Running') { return [pscustomobject]@{ state='alreadyAtOriginal'; reason=$null } }
+    if ($Dependent.stoppedByApply -isnot [bool] -or -not $Dependent.stoppedByApply) { return [pscustomobject]@{ state='leftAsChanged'; reason='apply did not confirm that its stop stopped this service; another program may have stopped it' } }
     if ($Dependent.restoreComplete -eq $true) { return [pscustomobject]@{ state='leftAsChanged'; reason='dependent was already restored; runtime ownership released' } }
-    if ($Dependent.restoreAttempted -eq $true) { return [pscustomobject]@{ state='leftAsChanged'; reason='a previous Undo was interrupted after starting it; another program may have stopped it' } }
+    if ($Dependent.restoreAttempted -eq $true) { return [pscustomobject]@{ state='leftAsChanged'; reason='a previous Undo tried to start it without a confirmed result; another program may have stopped it' } }
     if ($current[0].status -ne 'Stopped') { return [pscustomobject]@{ state='leftAsChanged'; reason='dependent startup or state changed' } }
     foreach ($required in @($current[0].dependsOn)) {
         if (-not $required) { continue }
@@ -734,7 +772,7 @@ function New-ModuleBackup {
     Ensure-Dir $moduleDir
     $path = Join-Path $moduleDir 'backup.json'
     Write-JsonFile $backup $path
-    return $path
+    return [pscustomobject]@{ path=$path; backup=$backup }
 }
 
 function Invoke-ApplyModule {
@@ -744,19 +782,25 @@ function Invoke-ApplyModule {
     $planHash = Get-ModulePlanHash $plan
     if ($ConfirmApply) { Assert-ModulePreview $module $plan $planHash }
     Ensure-Dir $DataRoot
-    $backupPath = if ($ConfirmApply) { New-ModuleBackup $manifest $module } else { $null }
-    $actions = New-Object System.Collections.Generic.List[object]
-    foreach ($rv in @($module.registryValues)) {
-        $blocked = Test-ProtectedRegistryPath $rv.path $manifest $rv.name
-        $actions.Add([pscustomobject]@{ type='registry'; target=($rv.path + '\' + $rv.name); blocked=$blocked; action='set'; value=$rv.data }) | Out-Null
-        if ($blocked) { continue }
-        if ($ConfirmApply) { Set-RegistryValueFromManifest $rv }
-    }
-    foreach ($svc in @($module.services)) {
-        $blocked = Test-ProtectedService $svc.name $manifest
-        $actions.Add([pscustomobject]@{ type='service'; target=$svc.name; blocked=$blocked; action=('startup=' + $svc.startup + ', state=' + $svc.targetState) }) | Out-Null
-        if ($blocked) { continue }
-        if ($ConfirmApply) { Set-ServiceFromManifest $svc }
+    $changeLock = if ($ConfirmApply) { Enter-ChangeLock } else { $null }
+    try {
+        $created = if ($ConfirmApply) { New-ModuleBackup $manifest $module } else { $null }
+        $backupPath = $created.path
+        $actions = New-Object System.Collections.Generic.List[object]
+        foreach ($rv in @($module.registryValues)) {
+            $blocked = Test-ProtectedRegistryPath $rv.path $manifest $rv.name
+            $actions.Add([pscustomobject]@{ type='registry'; target=($rv.path + '\' + $rv.name); blocked=$blocked; action='set'; value=$rv.data }) | Out-Null
+            if ($blocked) { continue }
+            if ($ConfirmApply) { Set-RegistryValueFromManifest $rv }
+        }
+        foreach ($svc in @($module.services)) {
+            $blocked = Test-ProtectedService $svc.name $manifest
+            $actions.Add([pscustomobject]@{ type='service'; target=$svc.name; blocked=$blocked; action=('startup=' + $svc.startup + ', state=' + $svc.targetState) }) | Out-Null
+            if ($blocked) { continue }
+            if ($ConfirmApply) { Set-ServiceFromManifest $svc $created.backup $backupPath }
+        }
+    } finally {
+        Exit-ChangeLock $changeLock
     }
     $after = if ($ConfirmApply) { Get-BenchmarkSnapshot ("post-" + $module.id) } else { $null }
     $smoke = if ($ConfirmApply) { Invoke-SmokeTest } else { $null }
@@ -779,47 +823,35 @@ function Invoke-ApplyModule {
 
 function Invoke-RollbackModule {
     $manifest = Read-Manifest
-    $backupRoot = Join-Path $DataRoot ("backups\" + $ModuleId)
-    $backupPath = $BackupPath
-    if ([string]::IsNullOrWhiteSpace($backupPath)) {
-        if (-not (Test-Path -LiteralPath $backupRoot)) { throw "No backups found for $ModuleId in $backupRoot" }
-        $appliedPaths = @{}
-        $runRoot = Join-Path $DataRoot 'runs'
-        if (Test-Path -LiteralPath $runRoot) {
-            foreach ($runFile in Get-ChildItem -LiteralPath $runRoot -Filter 'apply-*.json' -File) {
-                $run = Get-Content -LiteralPath $runFile.FullName -Raw | ConvertFrom-Json
-                if ($run.moduleId -eq $ModuleId -and $run.dryRun -eq $false -and $run.backupPath) {
-                    $appliedPaths[[System.IO.Path]::GetFullPath($run.backupPath)] = $true
-                }
-            }
-        }
-        $eligible = @(foreach ($directory in Get-ChildItem -LiteralPath $backupRoot -Directory) {
-            $candidatePath = Join-Path $directory.FullName 'backup.json'
-            if (-not (Test-Path -LiteralPath $candidatePath)) { continue }
-            $candidate = Get-Content -LiteralPath $candidatePath -Raw | ConvertFrom-Json
-            if ($candidate.moduleId -eq $ModuleId -and ($candidate.applyRequested -eq $true -or $appliedPaths.ContainsKey([System.IO.Path]::GetFullPath($candidatePath)))) {
-                [pscustomobject]@{ path = $candidatePath; timestamp = [datetime]$candidate.timestamp }
-            }
-        })
-        $latest = $eligible | Sort-Object timestamp -Descending | Select-Object -First 1
-        if ($null -eq $latest) { throw "No confirmed-apply backup found for $ModuleId. Select a reviewed legacy backup explicitly with -BackupPath." }
-        $backupPath = $latest.path
-    }
-    $rollbackLock = $null
+    $changeLock = if ($ConfirmApply) { Enter-ChangeLock } else { $null }
     try {
-        if ($ConfirmApply) {
-            $lockPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($backupPath) + '.undo.lock'
-            $clock = [Diagnostics.Stopwatch]::StartNew()
-            while ($null -eq $rollbackLock) {
-                try {
-                    $rollbackLock = [IO.File]::Open($lockPath, [IO.FileMode]::OpenOrCreate, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None)
-                } catch [IO.IOException] {
-                    if (($_.Exception.GetBaseException().HResult -band 65535) -notin 11,32,33) { throw }
-                    if ($clock.Elapsed.TotalSeconds -ge 2) { throw 'This backup is busy with another confirmed Undo. Wait for it to finish, then try again.' }
-                    Start-Sleep -Milliseconds 50
+        $backupRoot = Join-Path $DataRoot ("backups\" + $ModuleId)
+        $backupPath = $BackupPath
+        if ([string]::IsNullOrWhiteSpace($backupPath)) {
+            if (-not (Test-Path -LiteralPath $backupRoot)) { throw "No backups found for $ModuleId in $backupRoot" }
+            $appliedPaths = @{}
+            $runRoot = Join-Path $DataRoot 'runs'
+            if (Test-Path -LiteralPath $runRoot) {
+                foreach ($runFile in Get-ChildItem -LiteralPath $runRoot -Filter 'apply-*.json' -File) {
+                    $run = Get-Content -LiteralPath $runFile.FullName -Raw | ConvertFrom-Json
+                    if ($run.moduleId -eq $ModuleId -and $run.dryRun -eq $false -and $run.backupPath) {
+                        $appliedPaths[[System.IO.Path]::GetFullPath($run.backupPath)] = $true
+                    }
                 }
             }
+            $eligible = @(foreach ($directory in Get-ChildItem -LiteralPath $backupRoot -Directory) {
+                $candidatePath = Join-Path $directory.FullName 'backup.json'
+                if (-not (Test-Path -LiteralPath $candidatePath)) { continue }
+                $candidate = Get-Content -LiteralPath $candidatePath -Raw | ConvertFrom-Json
+                if ($candidate.moduleId -eq $ModuleId -and ($candidate.applyRequested -eq $true -or $appliedPaths.ContainsKey([System.IO.Path]::GetFullPath($candidatePath)))) {
+                    [pscustomobject]@{ path = $candidatePath; timestamp = [datetime]$candidate.timestamp }
+                }
+            })
+            $latest = $eligible | Sort-Object timestamp -Descending | Select-Object -First 1
+            if ($null -eq $latest) { throw "No confirmed-apply backup found for $ModuleId. Select a reviewed legacy backup explicitly with -BackupPath." }
+            $backupPath = $latest.path
         }
+        $backupPath = Resolve-BackupFile $backupPath
         $backup = Get-Content -LiteralPath $backupPath -Raw | ConvertFrom-Json
         if ($backup.moduleId -ne $ModuleId) { throw 'The selected backup belongs to a different module.' }
         $actions = New-Object System.Collections.Generic.List[object]
@@ -1041,7 +1073,7 @@ function Invoke-RollbackModule {
             pending = @($pending.ToArray())
         }
     } finally {
-        if ($null -ne $rollbackLock) { $rollbackLock.Dispose() }
+        Exit-ChangeLock $changeLock
     }
 }
 
