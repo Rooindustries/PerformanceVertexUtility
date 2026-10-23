@@ -30,6 +30,12 @@ var caught = new SortedDictionary<string, string>(StringComparer.Ordinal);
 foreach (var row in new[] { fixtureRow, fixtureService }) Walk(catalog with { Settings = [row] }, row, negative, caught);
 if (!caught.Keys.SequenceEqual(["fixture.read number", "fixture.read text", "fixture.service stock"]) || !caught["fixture.read number"].StartsWith("Custom value: 2", StringComparison.Ordinal))
     throw new InvalidOperationException("The read walk missed a known state that reads wrong: " + string.Join("; ", caught.Select(pair => pair.Key + " " + pair.Value)));
+var split = definitions["windows.d564e4921d5ee555"];
+var splitAddress = split.Options[0].Changes[0].Address;
+caught.Clear();
+Walk(catalog, split, new(1, [new(split.Id, "next-number", "fixture", [new(splitAddress, 4, ControlValues.From(3670017))]), new(split.Id, "as-text", "fixture", [new(splitAddress, 1, ControlValues.From("3670016"))])], []), caught);
+if (!caught.Keys.SequenceEqual([split.Id + " as-text", split.Id + " next-number"]))
+    throw new InvalidOperationException("A value next to a Windows default read as that default: " + string.Join("; ", caught.Select(pair => pair.Key + " " + pair.Value)));
 walked = 0; unplanned.Clear();
 var offenders = new SortedDictionary<string, string>(StringComparer.Ordinal);
 foreach (var definition in catalog.Settings) Walk(catalog, definition, known, offenders);

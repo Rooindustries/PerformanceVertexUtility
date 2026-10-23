@@ -30,6 +30,13 @@ NATIVE_NETWORK = {
     ('network-adapter', 'ipv6-binding'): ('IPv6 on active connections', 'Use IPv6 on the active network adapters. Turning it off can interrupt apps or networks that depend on it.', 'Connection'),
     ('teredo', 'type'): ('Game network compatibility', 'Support multiplayer and party connections that need this compatibility feature. Turning it off can affect those apps.', 'Connection'),
 }
+WINDOWS_DEFAULTS = {
+    ('SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters\\Interfaces', 'NameServer'): '',
+    ('SOFTWARE\\Microsoft\\PolicyManager\\default\\Update\\ExcludeWUDriversInQualityUpdate', 'value'): 0,
+    ('SYSTEM\\CurrentControlSet\\Control', 'SvcHostSplitThresholdInKB'): 0x380000,
+    ('.Default\\Control Panel\\Keyboard', 'InitialKeyboardIndicators'): '2147483648',
+}
+BUILT_IN_DOH = {'1.1.1.1', '1.0.0.1', '2606:4700:4700::1111', '2606:4700:4700::1001', '8.8.8.8', '8.8.4.4', '2001:4860:4860::8888', '2001:4860:4860::8844', '9.9.9.9', '149.112.112.112', '2620:fe::fe', '2620:fe::9'}
 SECTIONS = {'Privacy': 'privacy', 'Apps and browsers': 'apps', 'Services': 'services', 'Devices': 'devices', 'Network': 'network', 'Desktop and File Explorer': 'windows', 'Windows & Explorer': 'windows', 'Windows Update': 'updates', 'Scheduled tasks': 'services', 'Security': 'security', 'Gaming and display': 'gaming', 'System': 'windows'}
 NETWORK_SUMMARIES = {
     ('value', 'NetworkThrottlingIndex'): 'Balance network traffic with games and media.',
@@ -131,6 +138,10 @@ def compile_presentation():
             entry.update(section='network', name=name, description='Protect this type of connection. Turning the firewall off reduces its protection; organization rules may take precedence.', topic='Firewall')
         if kind == 'firewall-blocklist':
             entry.update(section='network', description='Block a saved list of connections. The list is dated 2022 and may interrupt Microsoft services; it does not cover every current address.', topic='Firewall')
+        if (address.get('keyPath'), value_name) in WINDOWS_DEFAULTS:
+            entry['defaults'] = {value_name: WINDOWS_DEFAULTS[(address['keyPath'], value_name)]}
+        if kind == 'dns-over-https' and address['target'] in BUILT_IN_DOH:
+            entry['defaults'] = {prop: dict(change['value'], autoUpgrade=False)}
         if entry['section'] == 'network' and not entry.get('description'):
             raise ValueError('Missing network description: ' + setting['id'])
         if entry['section'] == 'network':
