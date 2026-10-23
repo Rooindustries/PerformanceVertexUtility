@@ -256,7 +256,8 @@
       "files": [
         "tools/validation/Governor/Fixtures/BrandCompatibility.0.9.0-beta.ps1",
         "tools/validation/LoadTimes/Test-ElevatedLaunchers.ps1",
-        "tools/validation/Release/Invoke-IntegrationVerification.ps1"
+        "tools/validation/Release/Invoke-IntegrationVerification.ps1",
+        "tools/validation/Update/UpgradeRehearsal.State.ps1"
       ],
       "reason": "Legacy protected-session scheduled-task prefix; discovery and cleanup must find tasks created by earlier versions."
     },
