@@ -106,7 +106,7 @@ try{
  }
  $originalCount=Assert-E2EOriginalSource
  $reviewedCount=Assert-E2EOriginalSource $reviewedSource $reviewedManifestPath $inputs.reviewedSourceCommit $inputs.reviewedSourceFileCount
- $directory=Join-Path $OutRoot ('restore-gates-'+[guid]::NewGuid().ToString('N'))
+ $directory=Join-Path $OutRoot ('g-'+[guid]::NewGuid().ToString('N').Substring(0,16))
  $null=New-HarnessDirectory $directory 'restore-e2e-artifacts' 'frame'
  $legacy=Join-Path $directory 'legacy';$native=Join-Path $directory 'native';$output=Join-Path $directory 'output'
  foreach($path in $legacy,$native,$output){$null=New-HarnessDirectory $path 'restore-e2e-group' 'frame'}

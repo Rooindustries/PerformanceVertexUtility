@@ -32,6 +32,11 @@ if($BeforeNoEffectSource -and ($Scenario.Count -ne 1 -or $Scenario[0] -cne 'no-e
 if($BeforeNoEffectSource -and -not [IO.Directory]::Exists($BeforeNoEffectSource)){throw 'The exact preserved before-no-effect 861 source is required.'}
 function Save([string]$path,$value){[IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($path))|Out-Null;[IO.File]::WriteAllText($path,($value|ConvertTo-Json -Depth 60),$utf8)}
 function Require([bool]$ok,[string]$message){if(-not $ok){throw $message}}
+function Get-CaseDirectoryName([string]$Kind,[string]$Control,[string]$Scenario){
+ $hash=[Security.Cryptography.SHA256]::Create()
+ try{return $Kind+'-'+([BitConverter]::ToString($hash.ComputeHash([Text.Encoding]::UTF8.GetBytes($Kind+'|'+$Control+'|'+$Scenario)))).Replace('-','').Substring(0,16).ToLowerInvariant()}
+ finally{$hash.Dispose()}
+}
 function Read-Ast([string]$path){$e=$null;$t=$null;$a=[Management.Automation.Language.Parser]::ParseFile($path,[ref]$t,[ref]$e);if($e.Count){throw ($e -join '; ')};return $a}
 function New-BackendBlock([string]$Path,$Extent){$t=$null;$e=$null;$a=[Management.Automation.Language.Parser]::ParseInput(("`n"*($Extent.StartLineNumber-1))+$Extent.Text,$Path,[ref]$t,[ref]$e);if($e.Count){throw ($e -join '; ')};return $a.GetScriptBlock()}
 function Read-Actual($process,[string]$field){
@@ -856,7 +861,7 @@ function Invoke-LateHistory($parent,[string]$kind,[string]$field,[string]$mode,$
 }
 
 function Run-Scenario([string]$kind,[string]$field,[string]$mode){ & {
- $directory=Join-Path $root ($kind+'-'+$field+'-'+$mode)
+ $directory=Join-Path $root (Get-CaseDirectoryName $kind $field $mode)
  Require (-not [IO.Directory]::Exists($directory)) 'Case output already exists; no automatic repeat.'
  [IO.Directory]::CreateDirectory($directory)|Out-Null
  $nonce=[guid]::NewGuid().ToString('N');Save (Join-Path $directory 'owner.json') @{nonce=$nonce;sourceCommit=$SourceCommit}
@@ -1444,7 +1449,7 @@ function Run-Scenario([string]$kind,[string]$field,[string]$mode){ & {
  }
  if($bodyError){throw $bodyError};Require ($cleanups.Count -eq 0) 'Original-identity cleanup failed.'
  Save (Join-Path $directory 'done.json') @{passed=$true;sourceCommit=$SourceCommit;kind=$kind;control=$field;scenario=$mode;cleanupPassed=$true}
- $results.Add(@{kind=$kind;control=$field;scenario=$mode;passed=$true;aliasRedReproduced=$aliasRedReproduced})|Out-Null
+ $results.Add(@{kind=$kind;control=$field;scenario=$mode;directoryName=(Get-CaseDirectoryName $kind $field $mode);passed=$true;aliasRedReproduced=$aliasRedReproduced})|Out-Null
 }}
 $kinds=if($Kind -eq 'all'){@('profile','game')}else{@($Kind)}
 $controls=if($Control -eq 'all'){@('priorityClass','affinityMask','ioPriority','memoryPriority','gpuPriority')}else{@($Control)}
@@ -1454,14 +1459,15 @@ foreach($body in $kinds){foreach($field in $controls){foreach($case in $Scenario
  if($case -eq 'protected-launcher' -and $field -ne 'memoryPriority'){continue}
  if($priorityScenarios -contains $case -and $field -ne 'priorityClass'){continue}
  if($affinityScenarios -contains $case -and $field -ne 'affinityMask'){continue}
- $selected.Add(@{kind=$body;control=$field;scenario=$case})|Out-Null
+ $selected.Add(@{kind=$body;control=$field;scenario=$case;directoryName=(Get-CaseDirectoryName $body $field $case)})|Out-Null
 }}}
 $uniqueTriples=@{}
-foreach($case in $selected){$key=$case.kind+'|'+$case.control+'|'+$case.scenario;Require (-not $uniqueTriples.ContainsKey($key)) 'Duplicate selected history.';$uniqueTriples[$key]=$true}
+$uniqueDirectories=@{}
+foreach($case in $selected){$key=$case.kind+'|'+$case.control+'|'+$case.scenario;Require (-not $uniqueTriples.ContainsKey($key)) 'Duplicate selected history.';Require (-not $uniqueDirectories.ContainsKey($case.directoryName)) 'Selected history directory collision.';$uniqueTriples[$key]=$true;$uniqueDirectories[$case.directoryName]=$true}
 Save (Join-Path $root 'selection.json') @{sourceCommit=$SourceCommit;driverSha256=(Get-HarnessFileSha256 $driverSourcePath);scope='Authored selected triples; actual success requires each assertion and cleanup';expectedCaseCount=$selected.Count;cases=@($selected.ToArray())}
 foreach($case in $selected){Run-Scenario $case.kind $case.control $case.scenario}
 Require ($results.Count -eq $selected.Count) 'Actual completed triples differ from the selected source grid.'
-foreach($case in $selected){$casePath=Join-Path $root ($case.kind+'-'+$case.control+'-'+$case.scenario);$done=Get-Content -LiteralPath (Join-Path $casePath 'done.json') -Raw|ConvertFrom-Json;$cleanup=Get-Content -LiteralPath (Join-Path $casePath 'cleanup.json') -Raw|ConvertFrom-Json;Require ($done.passed -and $done.cleanupPassed -and $cleanup.targetCleanupSucceeded -and @($cleanup.errors).Count -eq 0) 'Selected history lacks its done/original cleanup proof.'}
+foreach($case in $selected){$casePath=Join-Path $root $case.directoryName;$done=Get-Content -LiteralPath (Join-Path $casePath 'done.json') -Raw|ConvertFrom-Json;$cleanup=Get-Content -LiteralPath (Join-Path $casePath 'cleanup.json') -Raw|ConvertFrom-Json;Require ($done.kind -ceq $case.kind -and $done.control -ceq $case.control -and $done.scenario -ceq $case.scenario -and $done.passed -and $done.cleanupPassed -and $cleanup.targetCleanupSucceeded -and @($cleanup.errors).Count -eq 0) 'Selected history lacks its matching done/original cleanup proof.'}
 
 Save (Join-Path $root 'serialization-summary.json') @{sourceCommit=$SourceCommit;cases=@($results.ToArray());expectedCaseCount=$selected.Count;actualCaseCount=$results.Count;selectedTriples=@($selected.ToArray());engine=$PSVersionTable.PSVersion.ToString();nativeBehaviorSimulated=$false;passed=$true}
 'ROO_INDUSTRIES_RESTORE_SERIALIZATION_E2E_COMPLETE'

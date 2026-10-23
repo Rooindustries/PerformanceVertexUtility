@@ -420,6 +420,12 @@ pwsh -NoProfile -File tools/validation/Background/Test-RestoreActorReceipt.ps1 -
 
 This checks the shared receipt consumer. It does not run the native actor or prove Windows process ownership or restore behavior. The real Windows group remains required.
 
+Group and native case folders use short names to leave room for Windows
+PowerShell 5.1's temporary session files. `selection.json` maps each
+kind/control/scenario to its `directoryName`. Duplicate histories or directory
+names fail before any scenario runs. Final validation checks each completed
+record against the history in that index.
+
 `Invoke-RestoreKeptUi.ps1` drives the real desktop app's Game priority Restore
 after another program changed the priority. Build the app in a short copy of the
 source with `tools\scripts\Build-Frontend.ps1`, then run the script through
