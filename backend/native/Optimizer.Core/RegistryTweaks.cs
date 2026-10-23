@@ -147,6 +147,8 @@ public sealed class RegistryTweakStore : ITweakStore
                     if (observed.Id != change.Before.Id || observed.Value.ValueKind != JsonValueKind.Object) throw new InvalidDataException("Windows feature state does not match the accepted changes after restart.");
                     var claimed = state.Profiles.SelectMany(profile => profile.Controls ?? []).Where(claim => claim.Target.Id == change.Before.Id)
                         .SelectMany(claim => claim.Desired.EnumerateObject()).Select(feature => feature.Name).ToHashSet(StringComparer.Ordinal);
+                    var held = (state.Controls ?? []).SingleOrDefault(item => item.Original.Id == change.Before.Id);
+                    var baseline = held?.RestoreValue ?? held?.Original.Value;
                     var release = new List<string>();
                     foreach (var name in WindowsFeatures.Changed(change))
                     {
@@ -154,15 +156,16 @@ public sealed class RegistryTweakStore : ITweakStore
                         var was = change.Before.Value.TryGetProperty(name, out var prior) ? prior.GetString() : null;
                         if (!observed.Value.TryGetProperty(name, out var now)) { removed.Add(name); if (claimed.Contains(name)) release.Add(name); }
                         else if (now.GetString() == wanted) continue;
-                        else if (now.GetString() == was && claimed.Contains(name)) { undone.Add(name + " " + was); release.Add(name); }
-                        else if (now.GetString() == was) restoreUndone.Add(name + " is " + was + " again, its original is " + wanted);
-                        else unexpected.Add(name + " is " + now.GetString() + ", it was " + was + " and this app set " + wanted);
+                        else if (now.GetString() == was && claimed.Contains(name) && baseline is { ValueKind: JsonValueKind.Object } original &&
+                            original.TryGetProperty(name, out var saved) && ControlValues.Equal(now, saved)) { undone.Add(name + " " + was); release.Add(name); }
+                        else if (now.GetString() == was && !claimed.Contains(name)) restoreUndone.Add(name + " is " + was + " again (originally " + wanted + ")");
+                        else unexpected.Add(name + " is " + now.GetString() + " (it was " + was + ", this app set " + wanted + ")");
                     }
                     if (release.Count > 0) released.Add((change.Before.Id, release.ToArray()));
                 }
                 var problems = new List<string>();
                 if (restoreUndone.Count > 0) problems.Add("Windows undid the restore of these features when it restarted: " + string.Join("; ", restoreUndone) + ". Set them back to their original in Turn Windows features on or off, restart Windows, then check restart completion again.");
-                if (unexpected.Count > 0) problems.Add("Windows left these features in a state this app didn't set: " + string.Join("; ", unexpected) + ". Set each one to one of those in Turn Windows features on or off, restart Windows, then check restart completion again.");
+                if (unexpected.Count > 0) problems.Add("Windows left these features in a state this app didn't set: " + string.Join("; ", unexpected) + ". Set each one to either value in Turn Windows features on or off, restart Windows, then check restart completion again.");
                 if (problems.Count > 0) throw new InvalidDataException(string.Join(" ", problems));
                 foreach (var (id, features) in released) state = WindowsFeatures.Release(state, id, features);
                 if (undone.Count > 0) notices.Add(FeaturesUndone + string.Join(", ", undone) + ".");
@@ -183,7 +186,7 @@ public sealed class RegistryTweakStore : ITweakStore
         finally { guard.ReleaseMutex(); }
     }
     public const string FeaturesUndone = "Windows undid these feature changes when it restarted, so they're back to how they were: ";
-    public const string FeaturesRemoved = "Windows no longer lists these features after the restart, so there's nothing to undo for them: ";
+    public const string FeaturesRemoved = "Windows no longer lists these features after the restart, so there's nothing to undo: ";
     public const string RestartNotice = "Restart Windows (choose Restart, not Shut down) to finish the feature changes, then check restart completion in Windows settings.";
     public const string RestartAgain = "Windows hasn't restarted since the feature changes. Choose Restart, not Shut down, then check them again. With Fast Startup on, Shut down keeps the same session.";
     public static string? CurrentBoot()

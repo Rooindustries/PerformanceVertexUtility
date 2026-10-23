@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import windows_ssh as windows
 
 CHECKS = r"""
-$ErrorActionPreference='Continue'
+$ErrorActionPreference='Stop'
 $source=__SOURCE__
 Set-Location -LiteralPath $source
 $env:MSBUILDDISABLENODEREUSE='1';$env:DOTNET_CLI_USE_MSBUILD_SERVER='0';$env:DOTNET_CLI_TELEMETRY_OPTOUT='1';$env:UseSharedCompilation='false'
@@ -23,6 +23,7 @@ try{
   if($mode -ne 'default'){$arguments+=$mode}
   & $dotnet @arguments 2>&1
   'ROO_INDUSTRIES_CHECK '+$mode+' '+$LASTEXITCODE
+  if($LASTEXITCODE -ne 0){throw ('Tweak checks failed: '+$mode)}
  }
 }finally{Restore-TweakBootMarkerSnapshot $marker;'ROO_INDUSTRIES_CHECK boot-marker restored'}
 """
@@ -74,7 +75,11 @@ def main():
         modes = [mode for mode in args.checks.split(',') if mode]
         if modes:
             script = CHECKS.replace('__SOURCE__', windows.ps_literal(receipt['stagingPath'])).replace('__MODES__', ','.join(windows.ps_literal(mode) for mode in modes))
-            checks = windows.invoke(args.host, args.expected_machine, script, timeout=2400)
+            try:
+                checks = windows.invoke(args.host, args.expected_machine, script, timeout=2400)
+            except subprocess.CalledProcessError as error:
+                (args.out_dir / 'checks.log').write_text((error.stdout or '') + (error.stderr or ''))
+                raise
             (args.out_dir / 'checks.log').write_text(checks.stdout)
             print('\n'.join(line for line in checks.stdout.splitlines() if line.startswith(('PASS', 'FAIL', 'ROO_INDUSTRIES_CHECK', 'Completed', 'Unhandled'))), flush=True)
         if not args.skip_capture:

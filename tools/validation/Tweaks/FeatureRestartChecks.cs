@@ -132,7 +132,7 @@ static class FeatureRestartChecks
                 var before = f.Raw("State");
                 f.Restart(); f.Boot(("HypervisorPlatform", 3));
                 var refusal = f.Refusal(() => f.Recover());
-                check(refusal == "Windows left these features in a state this app didn't set: HypervisorPlatform is DisabledWithPayloadRemoved, it was Disabled and this app set Enabled. Set each one to one of those in Turn Windows features on or off, restart Windows, then check restart completion again.",
+                check(refusal == "Windows left these features in a state this app didn't set: HypervisorPlatform is DisabledWithPayloadRemoved (it was Disabled, this app set Enabled). Set each one to either value in Turn Windows features on or off, restart Windows, then check restart completion again.",
                     "An unexpected feature state names the feature and the states that close the record: " + refusal);
                 check(f.Store.Recovery().Pending is not null && f.Raw("State")!.SequenceEqual(before!) && f.Refusal(() => f.Apply("other", ("flag", "one"))) == unlocked, "The record and saved state stay unchanged");
                 f.Restart(); f.Boot(("HypervisorPlatform", 4));
@@ -147,11 +147,27 @@ static class FeatureRestartChecks
                 check(f.Store.Recovery().Pending is { Phase: "awaiting-restart" } && f.Store.ReadState()!.Profiles.Length == 0, "The restore waits for restart");
                 f.Restart(); f.Boot(("HypervisorPlatform", 4));
                 var refusal = f.Refusal(() => f.Recover());
-                check(refusal == "Windows undid the restore of these features when it restarted: HypervisorPlatform is Enabled again, its original is Disabled. Set them back to their original in Turn Windows features on or off, restart Windows, then check restart completion again.",
+                check(refusal == "Windows undid the restore of these features when it restarted: HypervisorPlatform is Enabled again (originally Disabled). Set them back to their original in Turn Windows features on or off, restart Windows, then check restart completion again.",
                     "An undone restore keeps the record that holds the original and says how to finish: " + refusal);
                 check(f.Store.Recovery().Pending is not null, "The undone restore keeps its record");
                 f.Restart(); f.Boot(("HypervisorPlatform", 2));
                 check(f.Recover() && f.Store.Recovery().Pending is null && f.Store.ReadState()!.Profiles.Length == 0, "Setting the original back and restarting closes the record");
+            });
+            Scenario("Windows undid a replacement while the original is still different", f =>
+            {
+                f.Boot(("HypervisorPlatform", 2));
+                f.Apply("mine", ("platform", "on"));
+                f.Dism.ChangeResult = 3010;
+                f.Apply("mine", ("platform", "off"));
+                var state = f.Raw("State");
+                f.Restart(); var pending = f.Raw("Pending"); f.Boot(("HypervisorPlatform", 4));
+                check(f.Refusal(() => f.Recover()).Length > 0 && f.Raw("Pending")!.SequenceEqual(pending!) && f.Raw("State")!.SequenceEqual(state!),
+                    "An undone replacement retains the journal and original while the feature differs from that original");
+                check(f.Refusal(() => f.Apply("other", ("flag", "one"))) == unlocked, "Other changes wait while the original still needs recovery");
+                f.Restart(); f.Boot(("HypervisorPlatform", 2));
+                check(f.Recover() && f.Store.Recovery().Pending is null, "Returning the replacement to its accepted original closes recovery");
+                f.Apply("mine");
+                check(f.Dism.Calls.Count == 0 && f.Dism.Listed["HypervisorPlatform"] == 2, "Undo preserves the original after the replacement finishes");
             });
             Scenario("A restart check cut off midway", f =>
             {
@@ -163,6 +179,21 @@ static class FeatureRestartChecks
                 check(f.Refusal(() => f.Recover()).Contains("0x80070005") && f.Raw("State")!.SequenceEqual(state!) && f.Raw("Pending")!.SequenceEqual(pending!), "A restart check that fails reading features changes nothing");
                 f.Boot(("HypervisorPlatform", 2));
                 check(f.Recover() && f.Store.Recovery().Pending is null && f.Store.ReadState()!.Profiles.Length == 0, "The next restart check finishes from the same record");
+                state = f.Raw("State");
+                check(!f.Recover() && f.Raw("State")!.SequenceEqual(state!), "Repeating a completed recovery after a lost reply changes nothing");
+            });
+            Scenario("The app stopped before the accepted state was committed", f =>
+            {
+                f.Boot(("HypervisorPlatform", 2));
+                f.Apply("other", ("flag", "one")); var state = f.Raw("State");
+                f.Dism.ChangeResult = 3010; f.Apply("mine", ("platform", "on"));
+                f.InterruptCommit(state!);
+                f.Boot(("HypervisorPlatform", 4));
+                check(f.Recover() && f.Store.Recovery().Pending is null && f.Raw("State")!.SequenceEqual(state!),
+                    "Recovery before an accepted state commit preserves the prior saved state and closes the interrupted journal");
+                check(f.Dism.Calls.SequenceEqual(["disable HypervisorPlatform"]) && f.Dism.Listed["HypervisorPlatform"] == 2 && f.Flag() == 1,
+                    "Recovery restores the interrupted feature and preserves the unrelated committed setting");
+                f.Apply("other"); check(f.Flag() is null, "Undo of the prior committed setting still works after interrupted apply recovery");
             });
             Scenario("Another program changed a non-feature setting from the same apply", f =>
             {
@@ -258,6 +289,11 @@ static class FeatureRestartChecks
         public TweakApplyResult Apply(string profile, params (string Setting, string Option)[] picks) => Commit(Preview(profile, picks));
         public bool Recover() => Store.Recover(Store.Recovery().PendingHash!);
         public void Restart() => NewBoot(_hive, _recovery.KeyPath);
+        public void InterruptCommit(byte[] previous)
+        {
+            using var key = _hive.OpenSubKey(_recovery.KeyPath, true)!;
+            key.SetValue("State", previous, RegistryValueKind.Binary);
+        }
         public byte[]? Raw(string name) { using var key = _hive.OpenSubKey(_recovery.KeyPath); return key?.GetValue(name) as byte[]; }
         public int? Flag() { using var key = _hive.OpenSubKey(_flag.KeyPath); return key?.GetValue("Flag") as int?; }
         public string[] Configured(string setting) => Engine.Detect().Settings.Single(item => item.Id == setting).ConfiguredChoices;
