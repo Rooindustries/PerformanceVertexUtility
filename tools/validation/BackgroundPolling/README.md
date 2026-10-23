@@ -1,0 +1,37 @@
+# Background polling
+
+The Games and Processes panels read live status every 2 seconds. Each read starts a new `Optimizer.Host` process. This suite proves the reads stop while the app window sits behind another window, and that the panel catches up when the user comes back.
+
+It builds the app from the staged source (framework-dependent .NET, self-contained Windows App SDK, so it never runs as an installed copy), starts it next to a maximized probe window it owns, and counts the app's child host processes with `Win32_ProcessStartTrace`. A 10 ms process snapshot loop records each child's action from its command line as a cross-check. Focus changes are confirmed with `GetForegroundWindow` before a window is timed.
+
+Cases and the counts they require:
+
+| Case | Window | Host starts |
+| --- | --- | --- |
+| `games-active-baseline` | app in front, 10 s | 3 to 8 |
+| `games-inactive` | probe in front, 60 s | 0 |
+| `games-reactivated-once` | app in front 1.2 s, then probe 5 s | exactly 1 |
+| `games-read-in-flight-at-deactivation` | probe brought forward while a read is still running, then 10 s | 0 after the switch |
+| `games-quick-toggles` | ten 300 ms app/probe toggles, then probe 6 s | 1 to 4 |
+| `games-minimized` | app minimized, 20 s | 0 |
+| `games-restored` | restore from minimized, 3 s | 1 to 3 |
+| `games-session-ended-while-inactive` | probe in front while the probe launcher exits and the session stops itself | 0, and the panel shows the stopped session within 3 s of coming back |
+| `processes-active-baseline` | Processes tab, probe process selected, app in front 10 s | 3 to 8 |
+| `processes-inactive` | probe in front, 60 s | 0 |
+| `processes-reactivated-once` | app in front 1.2 s, then probe 5 s | exactly 1 |
+
+`games-minimized`, `games-restored` and the panel text in `games-session-ended-while-inactive` also pass on builds that poll in the background; they guard the minimized path and the catch-up read.
+
+The game session uses a renamed copy of `PING.EXE` as its launcher and another as the game, with every priority on "Keep current". The session is started through the app, ended by stopping the owned launcher, then stopped and recovered through `Invoke-ProtectedGameSession.ps1`, which removes its scheduled task. The run deletes only the `game-session-*` operation folders whose preview names its own game copy. The Processes case only selects an owned probe process; it never previews or applies.
+
+The run refuses to start while another app process is open or `C:\RooBuild\host-lease.json` names a live frame. It needs an elevated, signed-in, unlocked desktop. Stage a fresh frame for each commit and run it through the interactive task:
+
+```sh
+python3 -I tools/validation/windows_ssh.py --host <test-pc> --expected-machine <COMPUTERNAME> upload --directory roo-industries-background-polling --parent 'C:\RooBuild' --include-frontend > "$receipt"
+arguments=$(jq -c '{Source:.stagingPath,OutRoot:(.runRoot+"\\evidence")}' "$receipt")
+python3 -I tools/validation/windows_ssh.py --host <test-pc> --expected-machine <COMPUTERNAME> interactive \
+  --receipt "$receipt" --script tools/validation/BackgroundPolling/Invoke-BackgroundPolling.ps1 \
+  --arguments "$arguments" --minutes 30
+```
+
+The run ends with `ROO_INDUSTRIES_BACKGROUND_POLLING_PASS` or lists the failed cases. Evidence in `evidence\background-polling` holds `cases.json`, `focus.json`, `children.json`, `session-cleanup.json`, build logs and app-window screenshots. Copy it with SCP, then remove the frame.
