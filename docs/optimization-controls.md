@@ -4,7 +4,7 @@ The desktop provides reviewed process controls, saved rules, queued vendor remov
 
 ## Desktop workflows
 
-In **Process Control**, select a running application and choose CPU priority, I/O priority, GPU priority, memory priority, execution QoS, dynamic priority boosts, CPU Sets or hard affinity. Preview shows each original and requested value. Apply once records recovery data for that process identity; Restore preserves controls changed by another actor. The identity includes executable path, PID and creation time, so a reused PID is not a replacement target.
+In **Process Control**, select a running application and choose CPU priority, I/O priority, GPU priority, memory priority, execution QoS, dynamic priority boosts, CPU Sets or hard affinity. Preview shows each original and requested value. Apply once records recovery data for that process identity; Restore preserves controls changed by another actor, names each one it left and finishes, so the page unlocks. The identity includes executable path, PID and creation time, so a reused PID is not a replacement target.
 
 CPU selections can use logical processors, performance/efficiency classes, one thread per physical core, cache groups or NUMA nodes. Hard affinity has its own group-relative mask and can differ from the CPU Set preference. Memory priority controls page retention, not a RAM allocation limit.
 
