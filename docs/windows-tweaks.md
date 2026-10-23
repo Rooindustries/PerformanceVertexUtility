@@ -34,7 +34,10 @@ or **Windows spotlight** turned off, or Windows diagnostic data **Off** (value 0
 Enterprise, Education, IoT Enterprise and Server retain them. A limit can name one
 value: Microsoft documents that diagnostic data 0 counts as 1 on other editions,
 so both diagnostic data settings also offer **Required diagnostic data** (value 1)
-on every edition. **Remove this override** remains available, including when the
+on every edition, listed right after the value it replaces and marked with `replaces`. When a row's
+starting choice doesn't apply to this PC, its switch starts on the choice that replaces
+it, so on Home and Pro it turns on Required diagnostic data. Rows without a replacement
+keep their starting choice. **Remove this override** remains available, including when the
 limited value was set before this catalog update. An unsupported choice is
 excluded from the applicable current choices; its raw registry value remains in
 the observations. When removing an override is the only choice left for this PC

@@ -76,12 +76,14 @@ public partial class WindowsTweakRow : ObservableObject
     public TweakChoice[] ActionChoices { get; }
     public TweakAlternative[] Alternatives { get; }
     private TweakChoice _action;
+    private bool _actionPicked;
     public TweakChoice Action
     {
         get => _action;
         set
         {
             if (value is null || !ActionChoices.Contains(value) || !SetProperty(ref _action, value)) return;
+            _actionPicked = true;
             if (ToggleOn) Selected = value == AppliedChoice ? Choices[0] : value;
             OnPropertyChanged(nameof(ActionNote));
         }
@@ -212,6 +214,8 @@ public partial class WindowsTweakRow : ObservableObject
         AppliedChoice = FindApplied(status);
         _cannotRevert = false;
         if (AppliedChoice is not null && Selected.Id.Length == 0 && _action != AppliedChoice) { _action = AppliedChoice; OnPropertyChanged(nameof(Action)); OnPropertyChanged(nameof(ActionNote)); }
+        else if (AppliedChoice is null && Selected.Id.Length == 0 && !_actionPicked && _action == _recommended && status?.AvailableChoices is { } available && !available.Contains(_action.Id)
+            && ActionChoices.FirstOrDefault(choice => available.Contains(choice.Id) && Definition.Options.Any(option => option.Id == choice.Id && option.Replaces == _action.Id)) is { } usable) { _action = usable; OnPropertyChanged(nameof(Action)); OnPropertyChanged(nameof(ActionNote)); }
         OnPropertyChanged(nameof(AppliedChoice)); OnPropertyChanged(nameof(IsApplied));
         Name = Presentation.Name ?? (status?.Controls?.FirstOrDefault() is { Address.Kind: "service", DisplayName: { } serviceName } && ReadableName(serviceName) ? serviceName : Definition.Name);
         Available = Choices.Length > 1 && status is { Supported: true, Error: null } && status.Controls?.Any(control => control.RestartPending) != true;
