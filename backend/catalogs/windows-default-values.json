@@ -5,10 +5,14 @@
       "keyPath": "SOFTWARE\\Microsoft\\PolicyManager\\default\\Update\\ExcludeWUDriversInQualityUpdate",
       "valueName": "value",
       "dword": 0,
+      "minimumBuild": 14393,
+      "editions": [
+        "Professional*", "Enterprise*", "Education*", "IoTEnterprise*"
+      ],
       "reference": "https://learn.microsoft.com/en-us/windows/client-management/mdm/policy-csp-update#excludewudriversinqualityupdate",
-      "quote": "0 (Default) | Allow Windows Update drivers.",
+      "quote": "Pro, Enterprise, Education, IoT Enterprise / IoT Enterprise LTSC | Windows 10, version 1607 [10.0.14393] and later | 0 (Default) | Allow Windows Update drivers.",
       "evidence": "Windows 11 Pro 25H2 (build 26200) keeps REG_DWORD 0 here next to the policy's Behavior, highrange, lowrange, mergealgorithm and policytype values; read-only check on the test PC, 2026-10-23.",
-      "reason": "This key is Windows' own default policy store, not a local override. Windows default writes 0 back instead of deleting it, so the PC matches stock Windows."
+      "reason": "This key is Windows' own default policy store, not a local override. Windows default writes 0 back instead of deleting it, so the PC matches stock Windows. It is offered only on the builds and editions Microsoft documents for this policy."
     }
   ]
 }

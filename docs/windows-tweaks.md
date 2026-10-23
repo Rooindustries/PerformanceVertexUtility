@@ -67,7 +67,10 @@ Windows' own value back. The choice keeps its ID, so saved choices and profiles
 that picked Use Windows default still resolve, and Undo restores whatever the
 value was before. Today this covers **Automatic Driver Updates: value** in
 Windows' default policy store, which Windows keeps at 0 (driver updates
-allowed). `check_windows_tweaks.py` fails while any choice deletes a listed value.
+allowed). Windows default is offered only on the builds and editions Microsoft
+documents for the value; elsewhere the row still reads Windows default for 0.
+`check_windows_tweaks.py` fails while any choice deletes a listed value or offers
+Windows default outside those builds and editions.
 
 ## One setting, shared ownership
 

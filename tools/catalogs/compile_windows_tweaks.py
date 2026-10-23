@@ -90,6 +90,11 @@ def apply_windows_defaults(settings, coverage):
                     raise ValueError('A choice removes a value Windows keeps together with other changes: ' + setting['id'] + '/' + option['id'])
                 removes[0]['dword'] = value['dword']
                 option['name'] = 'Windows default'
+                gates = [dict(gate, minimumBuild=max(gate['minimumBuild'], value['minimumBuild']), editions=value['editions'] if '*' in gate['editions'] else sorted(edition for edition in gate['editions'] if any(edition.casefold().startswith(allowed[:-1].casefold()) if allowed.endswith('*') else edition.casefold() == allowed.casefold() for allowed in value['editions'])))
+                         for gate in option['availability']]
+                option['availability'] = [gate for gate in gates if gate['editions'] and gate['minimumBuild'] <= gate['maximumBuild']]
+                if not option['availability']:
+                    raise ValueError('Windows default has no Windows version left where Windows keeps the value: ' + setting['id'])
                 rewritten.add((setting['id'], option['id']))
                 found += 1
         if not found:
