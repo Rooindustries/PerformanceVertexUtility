@@ -87,6 +87,8 @@ namespace RooIndustries.OptimizationSuite.Services
         public string? GovernorRestoreError { get; set; }
         public string? GovernorStatusError { get; set; }
         public (string SessionId, string SessionPath, string BackupPath)? LastGameRestoreRequest { get; private set; }
+        public GameTuneReview? GameTuneReviewModel { get; set; }
+        public GameTuneReview? LastGameTuneStartReview { get; private set; }
         public (string SessionId, string SessionPath, string BackupPath)? LastGovernorRestoreRequest { get; private set; }
         public InstalledAppInventory? InstalledApps { get; set; }
         public DriverHardwareSummary? DriverHardware { get; set; }
@@ -156,8 +158,13 @@ namespace RooIndustries.OptimizationSuite.Services
                 return new LiveDataResult<string>(ProcessRestoreText, error, completed ? null : recovery.Path, completed ? null : recovery.Generation);
             });
         }
-        public Task<LiveDataResult<string>> RunGameTuneSessionResultAsync(bool confirmApply, int maxDurationSeconds, int pollIntervalSeconds, CancellationToken cancellationToken = default)
-            => Task.FromResult(new LiveDataResult<string>(GameTuneText, GameTuneResultError ?? (GameTuneText is null ? LastError : null)));
+        public Task<(LiveDataResult<string> Result, GameTuneReview? Review)> ReviewGameTuneSessionResultAsync(int maxDurationSeconds, int pollIntervalSeconds, CancellationToken cancellationToken = default)
+            => Task.FromResult((new LiveDataResult<string>(GameTuneText, GameTuneResultError ?? (GameTuneText is null ? LastError : null)), GameTuneReviewModel));
+        public Task<LiveDataResult<string>> StartGameTuneSessionResultAsync(GameTuneReview review, int maxDurationSeconds, int pollIntervalSeconds, CancellationToken cancellationToken = default)
+        {
+            LastGameTuneStartReview = review;
+            return Task.FromResult(new LiveDataResult<string>(GameTuneText, GameTuneResultError ?? (GameTuneText is null ? LastError : null)));
+        }
         public Task<LiveDataResult<string>> RestoreGameTuneSessionResultAsync(string sessionId, string sessionPath, string backupManifestPath, CancellationToken cancellationToken = default)
         {
             LastGameRestoreRequest = (sessionId, sessionPath, backupManifestPath);

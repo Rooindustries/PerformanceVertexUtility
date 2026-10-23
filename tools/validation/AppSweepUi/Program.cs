@@ -208,6 +208,7 @@ if (args.Length == 0 || (args.Length <= 2 && args[0] is "restore-summary" or "re
         var game = new PerformanceProfilesViewModel { HasGameRunning = true };
         App.Live.GameTuneText = JsonSerializer.Serialize(new { actionId = "performance.gameTune.startSession", dryRun = true, status = "preview", preview,
             result = new { summary = "Game restore preview." } });
+        App.Live.GameTuneReviewModel = new GameTuneReview(Path.Combine(fixtures, "game-review.json"), new string('A', 64));
         await game.CheckMatchTuneCommand.ExecuteAsync(null);
         Capture("game-preview", App.Live.GameTuneText, game);
         Verify(game.MatchTuneDetail.Contains("CPU BelowNormal (left as another program set it)", StringComparison.Ordinal), "Game preview names the proposed kept value");
@@ -215,6 +216,7 @@ if (args.Length == 0 || (args.Length <= 2 && args[0] is "restore-summary" or "re
             sessionId = "summary-session", profileId = "summary-game", sessionPath, backupManifestPath = sessionBackup, restorable = true,
             summary = new { changedItemCount = 1 }, changedItems = applied });
         await game.StartMatchTuneCommand.ExecuteAsync(null);
+        App.Live.GameTuneReviewModel = null;
         Verify(game.MatchTuneRestoreAvailable, "Summary game start binds the exact session recovery artifact");
         App.Live.GameTuneRestoreText = JsonSerializer.Serialize(new { actionId = "performance.gameTune.stopSession", dryRun = false, status = "completed",
             sessionId = "summary-session", profileId = "summary-game", sessionPath, backupManifestPath = sessionBackup, restorable = true, preview,
@@ -530,6 +532,9 @@ if (args is ["governor-task", var taskRoot, var taskName, var registered, var en
     return;
 }
 
+if (args is [] or ["game-tune-restore-skips"]) await GameTuneRestoreChecks.SkipReasonsAsync(Check);
+if (args is ["game-tune-restore-skips"]) { Console.WriteLine($"Completed {count} game restore explanation checks."); return; }
+
 if (args is [] or ["governor"]) await GovernorChecks.RunAsync(Check);
 if (args is ["governor"]) { Console.WriteLine($"Completed {count} governor status checks."); return; }
 
@@ -608,6 +613,19 @@ if (args is [] or ["startup"])
 
 if (args is [] or ["sessions"])
 {
+    var reviewed = new GameTuneReview(Path.Combine(Path.GetTempPath(), "app-sweep-game-tune-review.json"), new string('A', 64));
+    async Task StartReviewed(PerformanceProfilesViewModel model)
+    {
+        var (startText, startError, lastError) = (App.Live.GameTuneText, App.Live.GameTuneResultError, App.Live.LastError);
+        App.Live.GameTuneText = JsonSerializer.Serialize(new { actionId = "performance.gameTune.startSession", dryRun = true, status = "preview" });
+        App.Live.GameTuneResultError = null;
+        App.Live.LastError = null;
+        App.Live.GameTuneReviewModel = reviewed;
+        await model.CheckMatchTuneCommand.ExecuteAsync(null);
+        (App.Live.GameTuneText, App.Live.GameTuneResultError, App.Live.LastError) = (startText, startError, lastError);
+        await model.StartMatchTuneCommand.ExecuteAsync(null);
+    }
+
     async Task RefreshSessions(PerformanceProfilesViewModel model)
     {
         var method = typeof(PerformanceProfilesViewModel).GetMethod("RefreshSessionStatusesAsync", BindingFlags.Instance | BindingFlags.NonPublic)
@@ -693,8 +711,48 @@ if (args is [] or ["sessions"])
     Check(sessions.MatchTuneStatus == "Game priority check not confirmed" && sessions.MatchTuneDetail.Contains("Preview script exited with an error", StringComparison.Ordinal),
         "A game preview value paired with an operation error cannot claim completion");
     App.Live.GameTuneResultError = null;
+    App.Live.GameTuneReviewModel = null;
     await sessions.CheckMatchTuneCommand.ExecuteAsync(null);
-    Check(sessions.MatchTuneStatus == "Game priorities checked", "An identity-bound dry-run game preview is reported as checked");
+    Check(sessions.MatchTuneStatus == "Game priority check not confirmed" && !sessions.CanStartMatchTune,
+        "A game preview without a saved review cannot enable Start");
+    App.Live.GameTuneReviewModel = reviewed;
+    await sessions.CheckMatchTuneCommand.ExecuteAsync(null);
+    Check(sessions.MatchTuneStatus == "Game priorities checked" && sessions.CanStartMatchTune, "An identity-bound dry-run game preview is reported as checked and enables Start");
+
+    var unreviewed = new PerformanceProfilesViewModel { HasGameRunning = true };
+    App.Live.GameTuneText = JsonSerializer.Serialize(new { actionId = "performance.gameTune.startSession", dryRun = false, status = "completed" });
+    await unreviewed.StartMatchTuneCommand.ExecuteAsync(null);
+    Check(!unreviewed.CanStartMatchTune && unreviewed.MatchTuneStatus == "Review first" && App.Live.LastGameTuneStartReview is null,
+        "Start without a review runs nothing and asks for a review");
+
+    App.Live.GameTuneText = JsonSerializer.Serialize(new
+    {
+        actionId = "performance.gameTune.startSession",
+        dryRun = false,
+        status = "refused",
+        sessionStatus = "refused",
+        restorable = false,
+        result = (object?)null,
+        changedItems = Array.Empty<object>(),
+        errors = new[] { new { code = "GAME_TUNE_REVIEWED_GAME_GONE", message = "Overwatch.exe closed or restarted after you reviewed it, so nothing changed. Review again, then start." } },
+    });
+    await sessions.StartMatchTuneCommand.ExecuteAsync(null);
+    Check(App.Live.LastGameTuneStartReview == reviewed && !sessions.CanStartMatchTune,
+        "Start sends the exact saved review and uses it only once");
+    Check(sessions.MatchTuneStatus == "Not started"
+            && sessions.MatchTuneDetail == "Overwatch.exe closed or restarted after you reviewed it, so nothing changed. Review again, then start.",
+        "A refused Start says it did not start and why");
+    await RefreshSessions(sessions);
+    var refusalAfterReload = sessions.MatchTuneStatus == "Not started" && sessions.MatchTuneDetail.StartsWith("Overwatch.exe closed or restarted", StringComparison.Ordinal);
+    await RefreshSessions(sessions);
+    Check(refusalAfterReload && sessions.MatchTuneStatus != "Not started",
+        "A refused Start stays on screen through the reload its run triggers, then gives way to the current status");
+
+    App.Live.GameTuneText = JsonSerializer.Serialize(new { actionId = "performance.gameTune.startSession", dryRun = true, status = "preview" });
+    await sessions.CheckMatchTuneCommand.ExecuteAsync(null);
+    var reviewedBeforeReload = sessions.CanStartMatchTune;
+    await RefreshSessions(sessions);
+    Check(reviewedBeforeReload && !sessions.CanStartMatchTune, "Reloading the page drops a review whose plan is no longer on screen");
 
     App.Live.GovernorText = JsonSerializer.Serialize(new
     {
@@ -719,7 +777,7 @@ if (args is [] or ["sessions"])
         summary = new { changedItemCount = 1 },
         changedItems = new[] { new { processId = 10 } },
     });
-    await sessions.StartMatchTuneCommand.ExecuteAsync(null);
+    await StartReviewed(sessions);
     Check(!sessions.MatchTuneRestoreAvailable,
         "An active game session with changed items but no restore evidence stays unavailable");
 
@@ -729,32 +787,46 @@ if (args is [] or ["sessions"])
     try
     {
         App.Live.GameTuneText = SessionResponse("gameTune", "startSession", "game-session", "game-profile", game.SessionPath, game.BackupPath, true, true, "completed");
-        await sessions.StartMatchTuneCommand.ExecuteAsync(null);
+        await StartReviewed(sessions);
         Check(!sessions.MatchTuneRestoreAvailable, "A dry-run game session cannot expose restore even with favorable files");
 
         App.Live.GameTuneText = SessionResponse("gameTune", "startSession", "game-session", "game-profile", game.SessionPath, game.BackupPath, false, false, "active");
-        await sessions.StartMatchTuneCommand.ExecuteAsync(null);
+        await StartReviewed(sessions);
         Check(!sessions.MatchTuneRestoreAvailable, "Changed items and active status cannot override restorable false");
 
         App.Live.GameTuneText = SessionResponse("gameTune", "startSession", "game-session", "game-profile", game.SessionPath, null, false, true, "failed");
-        await sessions.StartMatchTuneCommand.ExecuteAsync(null);
+        await StartReviewed(sessions);
         Check(!sessions.MatchTuneRestoreAvailable, "Restorable true without an explicit backup path remains unavailable");
 
         App.Live.GameTuneText = SessionResponse("gameTune", "startSession", "wrong-response-session", "game-profile", wrongBackup.SessionPath, wrongBackup.BackupPath, false, true, "failed");
-        await sessions.StartMatchTuneCommand.ExecuteAsync(null);
+        await StartReviewed(sessions);
         Check(!sessions.MatchTuneRestoreAvailable, "A backup for a different session cannot enable game restore");
 
         App.Live.GameTuneText = SessionResponse("gameTune", "startSession", "game-session", "game-profile", game.SessionPath, game.BackupPath, false, true, "failed");
         App.Live.GameTuneResultError = "Session script reported a partial failure";
-        await sessions.StartMatchTuneCommand.ExecuteAsync(null);
+        await StartReviewed(sessions);
         Check(sessions.MatchTuneRestoreAvailable, "A failed game session retains restore when explicit current backup evidence is valid");
 
         App.Live.GameTuneText = null;
         App.Live.GameTuneResultError = null;
         App.Live.LastError = "Controlled replacement session failure";
-        await sessions.StartMatchTuneCommand.ExecuteAsync(null);
+        await StartReviewed(sessions);
         Check(sessions.MatchTuneRestoreAvailable,
             "A lost replacement-session response preserves the previously verified recovery artifact");
+
+        App.Live.GameTuneText = JsonSerializer.Serialize(new
+        {
+            actionId = "performance.gameTune.startSession",
+            dryRun = false,
+            status = "refused",
+            sessionStatus = "refused",
+            restorable = false,
+            errors = new[] { new { code = "GAME_TUNE_REVIEW_PLAN_CHANGED", message = "Overwatch.exe's settings are different from when you reviewed them, so nothing changed. Review again, then start." } },
+        });
+        App.Live.LastError = null;
+        await StartReviewed(sessions);
+        Check(sessions.MatchTuneRestoreAvailable && sessions.MatchTuneStatus == "Not started",
+            "A refused Start keeps the earlier session's verified restore");
 
         App.Live.GameTuneRestoreText = null;
         App.Live.LastError = "Controlled game restore failure";

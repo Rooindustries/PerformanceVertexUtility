@@ -45,4 +45,7 @@
     <EmbeddedResource Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Assets/Tweaks/presentation.json" LogicalName="RooIndustries.TweakPresentation.json" />
     <EmbeddedResource Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Assets/Tweaks/icons.json" LogicalName="RooIndustries.TweakIcons.json" />
   </ItemGroup>
+  <ItemGroup>
+    <None Update="Fixtures/game-tune-restore-skips.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>
