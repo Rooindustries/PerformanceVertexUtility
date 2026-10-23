@@ -45,34 +45,50 @@ function New-GameTuneRestorePreview {
     } else {
         'Restore original process controls from Game Tune session backup.'
     }
+    $leftAsSet = @()
+    $alreadyOriginal = @()
     $controlChanges = New-Object System.Collections.Generic.List[object]
     if (-not $blocked) {
-        if (($restoresAll -or $recorded -contains 'priorityClass') -and -not [string]::IsNullOrWhiteSpace($originalPriority) -and (Test-RooIndustriesPriorityAllowed $originalPriority -Restoring) -and [string]$Candidate.currentPriorityClass -ne $originalPriority) {
+        if (($restoresAll -or $recorded -contains 'priorityClass') -and -not [string]::IsNullOrWhiteSpace($originalPriority) -and (Test-RooIndustriesPriorityAllowed $originalPriority -Restoring)) {
             $controlChanges.Add((New-RooIndustriesControlChange 'priorityClass' $Candidate.currentPriorityClass $originalPriority 'restorePriority' 'Restore original process priority.')) | Out-Null
         }
-        if (($restoresAll -or $recorded -contains 'affinityMask') -and $null -ne $originalAffinityMask -and (Test-RooIndustriesAffinityMaskAllowed $originalAffinityMask) -and [int64]$Candidate.currentAffinityMask -ne [int64]$originalAffinityMask) {
+        if (($restoresAll -or $recorded -contains 'affinityMask') -and $null -ne $originalAffinityMask -and (Test-RooIndustriesAffinityMaskAllowed $originalAffinityMask)) {
             $controlChanges.Add((New-RooIndustriesControlChange 'affinityMask' $Candidate.currentAffinityMask ([int64]$originalAffinityMask) 'restoreAffinity' 'Restore original CPU affinity.')) | Out-Null
         }
-        if (($restoresAll -or $recorded -contains 'ioPriority') -and -not [string]::IsNullOrWhiteSpace([string]$originalIoPriority) -and (Test-RooIndustriesIoPriorityAllowed $originalIoPriority -Restoring) -and [string]$Candidate.currentIoPriority -ne [string]$originalIoPriority) {
+        if (($restoresAll -or $recorded -contains 'ioPriority') -and -not [string]::IsNullOrWhiteSpace([string]$originalIoPriority) -and (Test-RooIndustriesIoPriorityAllowed $originalIoPriority -Restoring)) {
             $controlChanges.Add((New-RooIndustriesControlChange 'ioPriority' $Candidate.currentIoPriority $originalIoPriority 'restoreIoPriority' 'Restore original I/O priority.')) | Out-Null
         }
-        if (($restoresAll -or $recorded -contains 'memoryPriority') -and -not [string]::IsNullOrWhiteSpace([string]$originalMemoryPriority) -and (Test-RooIndustriesMemoryPriorityAllowed $originalMemoryPriority) -and [string]$Candidate.currentMemoryPriority -ne [string]$originalMemoryPriority) {
+        if (($restoresAll -or $recorded -contains 'memoryPriority') -and -not [string]::IsNullOrWhiteSpace([string]$originalMemoryPriority) -and (Test-RooIndustriesMemoryPriorityAllowed $originalMemoryPriority)) {
             $controlChanges.Add((New-RooIndustriesControlChange 'memoryPriority' $Candidate.currentMemoryPriority $originalMemoryPriority 'restoreMemoryPriority' 'Restore original memory priority.')) | Out-Null
         }
-        if (($restoresAll -or $recorded -contains 'gpuPriority') -and -not [string]::IsNullOrWhiteSpace([string]$originalGpuPriority) -and (Test-RooIndustriesGpuPriorityAllowed $originalGpuPriority) -and [string]$Candidate.currentGpuPriority -ne [string]$originalGpuPriority) {
+        if (($restoresAll -or $recorded -contains 'gpuPriority') -and -not [string]::IsNullOrWhiteSpace([string]$originalGpuPriority) -and (Test-RooIndustriesGpuPriorityAllowed $originalGpuPriority)) {
             if ([bool](Get-RooIndustriesPropertyValue (Get-RooIndustriesPropertyValue $Candidate 'currentControlState' $null) 'gpuPriorityAvailable' $false)) {
                 $controlChanges.Add((New-RooIndustriesControlChange 'gpuPriority' $Candidate.currentGpuPriority $originalGpuPriority 'restoreGpuPriority' 'Restore original GPU priority.')) | Out-Null
             } else {
-                $blocked = $true
-                $reason = 'GPU scheduling priority is unavailable for this restore target.'
-                $controlChanges.Add((New-RooIndustriesControlChange 'gpuPriority' $Candidate.currentGpuPriority $originalGpuPriority 'restoreGpuPriority' 'GPU scheduling priority is unavailable for this restore target.' $true $reason)) | Out-Null
+                $gpuReason = 'GPU scheduling priority is unavailable for this restore target.'
+                $controlChanges.Add((New-RooIndustriesControlChange 'gpuPriority' $Candidate.currentGpuPriority $originalGpuPriority 'restoreGpuPriority' 'GPU scheduling priority is unavailable for this restore target.' $true $gpuReason)) | Out-Null
+            }
+        }
+        $split = Split-RooIndustriesLeftAsSetRestoreChanges $Snapshot @($controlChanges.ToArray()) (Get-RooIndustriesPropertyValue $Candidate 'currentControlState' $null)
+        $leftAsSet = @($split.leftAsSet)
+        $alreadyOriginal = @($split.alreadyOriginal)
+        $controlChanges = New-Object System.Collections.Generic.List[object]
+        foreach ($change in @($split.changes)) { $controlChanges.Add($change) | Out-Null }
+        foreach ($left in $leftAsSet) {
+            switch ([string]$left.control) {
+                'priorityClass' { $originalPriority = [string]$left.currentValue }
+                'affinityMask' { $originalAffinityMask = $left.currentValue }
+                'ioPriority' { $originalIoPriority = $left.currentValue }
+                'memoryPriority' { $originalMemoryPriority = $left.currentValue }
+                'gpuPriority' { $originalGpuPriority = $left.currentValue }
             }
         }
         if ($controlChanges.Count -eq 0) {
-            $reason = 'Process already matches the Game Tune backup.'
+            $reason = if ($leftAsSet.Count -gt 0) { $script:RooIndustriesLeftAsSet } else { 'Process already matches the Game Tune backup.' }
         }
     }
-    $proposedAction = if ($blocked -or $controlChanges.Count -eq 0) { 'noChange' } elseif ($controlChanges.Count -eq 1 -and [string](Get-RooIndustriesPropertyValue $controlChanges[0] 'control' '') -eq 'priorityClass') { 'restorePriority' } else { 'restoreProcessControls' }
+    $applicableControlChanges = @($controlChanges.ToArray() | Where-Object { -not $_.blocked })
+    $proposedAction = if ($blocked -or $applicableControlChanges.Count -eq 0) { 'noChange' } elseif ($applicableControlChanges.Count -eq 1 -and [string](Get-RooIndustriesPropertyValue $applicableControlChanges[0] 'control' '') -eq 'priorityClass') { 'restorePriority' } else { 'restoreProcessControls' }
 
     return [pscustomobject]@{
         previewId = ("game-tune-restore-$processName-$processId").ToLowerInvariant() -replace '[^a-z0-9\-]+', '-'
@@ -97,17 +113,19 @@ function New-GameTuneRestorePreview {
         gpuPriorityStatus = Get-RooIndustriesPropertyValue (Get-RooIndustriesPropertyValue $Candidate 'currentControlState' $null) 'gpuPriorityStatus' $null
         proposedAction = $proposedAction
         controlChanges = @($controlChanges.ToArray())
+        leftAsSet = @($leftAsSet)
+        alreadyOriginal = @($alreadyOriginal)
         ruleId = [string](Get-RooIndustriesPropertyValue $Snapshot 'ruleId' '')
         reason = $reason
-        reasonCodes = if ($ended) { @('GAME_TUNE_ALREADY_CLOSED') } elseif ($blocked) { @('GAME_TUNE_RESTORE_SKIPPED') } else { @('GAME_TUNE_PROCESS_CONTROLS_RESTORE') }
+        reasonCodes = @(if ($ended) { 'GAME_TUNE_ALREADY_CLOSED' } elseif ($blocked) { 'GAME_TUNE_RESTORE_SKIPPED' } else { 'GAME_TUNE_PROCESS_CONTROLS_RESTORE' })
         classification = 'rollbackCandidate'
         blocked = $blocked
         blockedReason = if ($blocked) { $reason } else { $null }
         risk = 'low'
         confidence = 'medium'
         protected = $false
-        requiresConfirmation = ($controlChanges.Count -gt 0 -and -not $blocked)
-        rollbackSupported = ($controlChanges.Count -gt 0 -and -not $blocked)
+        requiresConfirmation = ($applicableControlChanges.Count -gt 0 -and -not $blocked)
+        rollbackSupported = ($applicableControlChanges.Count -gt 0 -and -not $blocked)
         currentState = [pscustomobject]@{
             priorityClass = $Candidate.currentPriorityClass
             affinityMask = $Candidate.currentAffinityMask
@@ -134,6 +152,7 @@ function New-GameTuneRestorePreview {
 }
 
 try {
+    $script:RooIndustriesProcessOperationPreview = $null
     $session = $null
     $resolvedSessionPath = $null
     if (-not [string]::IsNullOrWhiteSpace($SessionId) -or -not [string]::IsNullOrWhiteSpace($SessionPath)) {
@@ -191,11 +210,13 @@ try {
     }
     $startedAtUtc = Get-RooIndustriesUtcStamp
 
+    $executionPairs = New-Object System.Collections.Generic.List[object]
     $preview = New-Object System.Collections.Generic.List[object]
     $changed = New-Object System.Collections.Generic.List[object]
     $skipped = New-Object System.Collections.Generic.List[object]
     $alreadyClosed = New-Object System.Collections.Generic.List[object]
     $restored = New-Object System.Collections.Generic.List[object]
+    $leftAsSetItems = New-Object System.Collections.Generic.List[object]
     foreach ($snapshot in @(Get-RooIndustriesPropertyArray $backup 'snapshots')) {
         $candidateEntry = [pscustomobject]@{
             processId = Get-RooIndustriesPropertyValue $snapshot 'processId' 0
@@ -207,86 +228,168 @@ try {
         $candidate = Get-RooIndustriesGameTuneLiveProcessIdentity $candidateEntry
         $entry = New-GameTuneRestorePreview $snapshot $candidate
         $preview.Add($entry) | Out-Null
+        $executionPairs.Add([pscustomobject]@{
+            entry = $entry
+            snapshot = $snapshot
+            failed = $false
+            executionMatched = $false
+            closed = $false
+            stopControls = $false
+            failureReasons = (New-Object System.Collections.Generic.List[string])
+            stagedChanged = $null
+            stagedKept = (New-Object System.Collections.Generic.List[object])
+        }) | Out-Null
     }
 
     if ($ConfirmApply) {
-        foreach ($entry in @($preview.ToArray())) {
+        foreach ($pair in @($executionPairs.ToArray())) {
+            $entry = $pair.entry
             if ([bool](Get-RooIndustriesPropertyValue $entry 'blocked' $false)) {
                 if (@(Get-RooIndustriesPropertyArray $entry 'reasonCodes') -contains 'GAME_TUNE_ALREADY_CLOSED') {
-                    $alreadyClosed.Add((New-GameTuneAlreadyClosedItem $entry)) | Out-Null
+                    $pair.closed = $true
+                } else {
+                    $pair.failed = $true
+                    $pair.failureReasons.Add([string](Get-RooIndustriesPropertyValue $entry 'blockedReason' 'Restore entry is blocked.')) | Out-Null
+                }
+                continue
+            }
+
+            try {
+                $processId = [int](Get-RooIndustriesPropertyValue $entry 'processId' 0)
+                $identity = Get-RooIndustriesGameTuneLiveProcessIdentity $entry
+                $live = $identity.process
+                if (-not $identity.exists -or -not $identity.matches) {
+                    if ($identity.instanceEnded) {
+                        $pair.closed = $true
+                    } else {
+                        $pair.failed = $true
+                        $pair.failureReasons.Add([string]$identity.reason) | Out-Null
+                    }
                     continue
                 }
-                $skip = [pscustomobject]@{
+                $pair.executionMatched = $true
+                $appliedControls = New-Object System.Collections.Generic.List[object]
+                $workItems = New-Object System.Collections.Generic.List[object]
+                foreach ($check in (@(Get-RooIndustriesPropertyArray $entry 'alreadyOriginal') + @(Get-RooIndustriesPropertyArray $entry 'leftAsSet'))) {
+                    $workItems.Add([pscustomobject]@{ check = $check; change = $null }) | Out-Null
+                }
+                foreach ($change in @(Get-RooIndustriesPreviewControlChanges $entry)) {
+                    $workItems.Add([pscustomobject]@{ check = $change; change = $change }) | Out-Null
+                }
+                foreach ($work in @($workItems.ToArray())) {
+                    try {
+                        $verification = Confirm-RooIndustriesRestoreControl $live $work.check $pair.snapshot $entry $work.change
+                        if ($null -eq $verification) { throw 'Restore confirmation returned no result.' }
+                        foreach ($flag in @('confirmed', 'restored', 'instanceEnded', 'cleanupFailed')) {
+                            $property = $verification.PSObject.Properties[$flag]
+                            if ($null -eq $property -or $property.Value -isnot [bool]) { throw 'Restore confirmation returned an incomplete result.' }
+                        }
+                        if ($verification.cleanupFailed) { throw [string]$verification.reason }
+                        if ($verification.instanceEnded) {
+                            if ($verification.confirmed -or $verification.restored -or $null -ne $verification.leftAsSet) { throw 'Restore confirmation returned conflicting results.' }
+                            $pair.stopControls = $true
+                            if (-not $pair.failed) { $pair.closed = $true }
+                            break
+                        }
+                        if (-not $verification.confirmed) { throw [string]$verification.reason }
+                        if ($verification.restored) {
+                            if ($null -eq $work.change -or $null -ne $verification.leftAsSet) { throw 'Restore confirmation returned conflicting results.' }
+                            $appliedControls.Add($work.change) | Out-Null
+                        } elseif ($null -ne $verification.leftAsSet) {
+                            $pair.stagedKept.Add((New-RooIndustriesLeftAsSetItem $entry $verification.leftAsSet)) | Out-Null
+                        }
+                    } catch {
+                        $pair.failed = $true
+                        $pair.failureReasons.Add([string](Get-RooIndustriesPropertyValue $work.check 'control' '') + ': ' + $_.Exception.Message) | Out-Null
+                    }
+                }
+
+                if (-not $pair.failed -and -not $pair.closed) {
+                    if (Test-RooIndustriesRestoreInstanceEnded $pair.snapshot $entry) {
+                        $pair.closed = $true
+                        $pair.stopControls = $true
+                    }
+                }
+                if (-not $pair.closed -and -not $pair.stopControls -and $appliedControls.Count -gt 0) {
+                    $afterControls = Get-RooIndustriesProcessControlState $processId $null -ReadGpu:(Test-RooIndustriesEntryHasGpuControl $entry)
+                    $existsProperty = if ($null -ne $afterControls) { $afterControls.PSObject.Properties['exists'] } else { $null }
+                    if ($null -eq $existsProperty -or $existsProperty.Value -isnot [bool] -or -not $existsProperty.Value) {
+                        throw 'Windows could not verify the restored process controls.'
+                    }
+                    foreach ($appliedControl in @($appliedControls.ToArray())) {
+                        $control = [string]$appliedControl.control
+                        $actual = Get-RooIndustriesPropertyValue $afterControls $control $null
+                        $available = Get-RooIndustriesPropertyValue $afterControls ($control + 'Available') $null
+                        $valid = switch ($control) {
+                            'priorityClass' { $actual -is [string] -and (Test-RooIndustriesPriorityAllowed $actual -Restoring) }
+                            'affinityMask' { ($actual -is [int] -or $actual -is [long]) -and (Test-RooIndustriesAffinityMaskAllowed $actual) }
+                            'ioPriority' { $actual -is [string] -and (Test-RooIndustriesIoPriorityAllowed $actual -Restoring) -and $available -is [bool] -and $available }
+                            'memoryPriority' { ($actual -is [int] -or $actual -is [long]) -and (Test-RooIndustriesMemoryPriorityAllowed $actual) -and $available -is [bool] -and $available }
+                            'gpuPriority' { $actual -is [string] -and (Test-RooIndustriesGpuPriorityAllowed $actual) -and $available -is [bool] -and $available }
+                            default { $false }
+                        }
+                        if (-not $valid -or -not (Test-RooIndustriesControlValueEqual $control $actual $appliedControl.proposedValue)) {
+                            throw ('Windows could not verify the restored value for ' + $control + '.')
+                        }
+                    }
+                    if (-not $pair.failed) {
+                        if (Test-RooIndustriesRestoreInstanceEnded $pair.snapshot $entry) {
+                            $pair.closed = $true
+                            $pair.stopControls = $true
+                        }
+                    }
+                    if (-not $pair.closed -and -not $pair.stopControls) {
+                        $pair.stagedChanged = [pscustomobject]@{
+                            processId = $processId
+                            processName = Get-RooIndustriesPropertyValue $entry 'processName' ''
+                            restoredPriorityClass = $afterControls.priorityClass
+                            restoredAffinityMask = $afterControls.affinityMask
+                            restoredIoPriority = $afterControls.ioPriority
+                            restoredMemoryPriority = $afterControls.memoryPriority
+                            restoredGpuPriority = $afterControls.gpuPriority
+                            restoredControls = @($appliedControls.ToArray())
+                            ruleId = Get-RooIndustriesPropertyValue $entry 'ruleId' ''
+                            restoredAtUtc = Get-RooIndustriesUtcStamp
+                        }
+                    }
+                }
+            } catch {
+                $pair.failed = $true
+                $pair.failureReasons.Add($_.Exception.Message) | Out-Null
+            }
+        }
+
+        foreach ($pair in @($executionPairs.ToArray())) {
+            $entry = $pair.entry
+            if ($pair.executionMatched -and -not $pair.failed -and -not $pair.closed) {
+                try {
+                    if (Test-RooIndustriesRestoreInstanceEnded $pair.snapshot $entry) {
+                        $pair.closed = $true
+                        $pair.stopControls = $true
+                    }
+                } catch {
+                    $pair.failed = $true
+                    $pair.failureReasons.Add($_.Exception.Message) | Out-Null
+                }
+            }
+            if ($pair.closed -and -not $pair.failed) {
+                $alreadyClosed.Add((New-GameTuneAlreadyClosedItem $entry)) | Out-Null
+                continue
+            }
+            if (-not $pair.stopControls) {
+                if ($null -ne $pair.stagedChanged) {
+                    $restored.Add($pair.stagedChanged) | Out-Null
+                    $changed.Add($pair.stagedChanged) | Out-Null
+                }
+                foreach ($item in @($pair.stagedKept.ToArray())) { $leftAsSetItems.Add($item) | Out-Null }
+            }
+            if ($pair.failed) {
+                $skipped.Add([pscustomobject]@{
                     processId = Get-RooIndustriesPropertyValue $entry 'processId' 0
                     processName = Get-RooIndustriesPropertyValue $entry 'processName' ''
-                    reason = Get-RooIndustriesPropertyValue $entry 'blockedReason' 'Restore entry is blocked.'
+                    reason = ($pair.failureReasons -join '; ')
                     skippedAtUtc = Get-RooIndustriesUtcStamp
-                }
-                $skipped.Add($skip) | Out-Null
-                continue
-            }
-            $processId = [int](Get-RooIndustriesPropertyValue $entry 'processId' 0)
-            $identity = Get-RooIndustriesGameTuneLiveProcessIdentity $entry
-            $live = $identity.process
-            if (-not $identity.exists -or -not $identity.matches) {
-                if ($identity.instanceEnded) {
-                    $alreadyClosed.Add((New-GameTuneAlreadyClosedItem $entry)) | Out-Null
-                    continue
-                }
-                $skip = [pscustomobject]@{
-                    processId = $processId
-                    processName = Get-RooIndustriesPropertyValue $entry 'processName' ''
-                    reason = $identity.reason
-                    skippedAtUtc = Get-RooIndustriesUtcStamp
-                }
-                $skipped.Add($skip) | Out-Null
-                continue
-            }
-            $entryControlChanges = @(Get-RooIndustriesPreviewControlChanges $entry)
-            if ($entryControlChanges.Count -eq 0) {
-                continue
-            }
-            $appliedControls = New-Object System.Collections.Generic.List[object]
-            $failedControls = New-Object System.Collections.Generic.List[string]
-            foreach ($change in $entryControlChanges) {
-                try {
-                    Invoke-RooIndustriesProcessControlChange $live $change
-                    $appliedControls.Add($change) | Out-Null
-                } catch {
-                    $failedControls.Add("$([string](Get-RooIndustriesPropertyValue $change 'control' 'unknown')): $($_.Exception.Message)") | Out-Null
-                }
-            }
-            if ($appliedControls.Count -gt 0) {
-                $afterControls = Get-RooIndustriesProcessControlState $processId $null -ReadGpu:(Test-RooIndustriesEntryHasGpuControl $entry)
-                $restoreItem = [pscustomobject]@{
-                    processId = $processId
-                    processName = Get-RooIndustriesPropertyValue $entry 'processName' ''
-                    restoredPriorityClass = $afterControls.priorityClass
-                    restoredAffinityMask = $afterControls.affinityMask
-                    restoredIoPriority = $afterControls.ioPriority
-                    restoredMemoryPriority = $afterControls.memoryPriority
-                    restoredGpuPriority = $afterControls.gpuPriority
-                    restoredControls = @($appliedControls.ToArray())
-                    ruleId = Get-RooIndustriesPropertyValue $entry 'ruleId' ''
-                    restoredAtUtc = Get-RooIndustriesUtcStamp
-                }
-                $restored.Add($restoreItem) | Out-Null
-                $changed.Add($restoreItem) | Out-Null
-            }
-            if ($failedControls.Count -gt 0) {
-                $exitedDuringRestore = $false
-                try { $exitedDuringRestore = $live.HasExited } catch { $exitedDuringRestore = $false }
-                if ($exitedDuringRestore) {
-                    $alreadyClosed.Add((New-GameTuneAlreadyClosedItem $entry)) | Out-Null
-                    continue
-                }
-                $skip = [pscustomobject]@{
-                    processId = $processId
-                    processName = Get-RooIndustriesPropertyValue $entry 'processName' ''
-                    reason = $failedControls -join '; '
-                    skippedAtUtc = Get-RooIndustriesUtcStamp
-                }
-                $skipped.Add($skip) | Out-Null
+                }) | Out-Null
             }
         }
     } else {
@@ -324,7 +427,7 @@ try {
     $closedText = if ($alreadyClosed.Count -gt 0) { ' Already closed or restarted, so nothing remained to restore: ' + (($alreadyClosed | ForEach-Object { $_.processName + ' (PID ' + $_.processId + ')' }) -join ', ') + '.' } else { '' }
     $skippedOut = @($skipped.ToArray()) + @($alreadyClosed.ToArray())
     $summary = if ($ConfirmApply) {
-        "Game Tune restore completed with $($restored.Count) restored item(s) and $($skipped.Count) skipped item(s)." + $closedText
+        "Game Tune restore completed with $($restored.Count) restored item(s) and $($skipped.Count) skipped item(s)." + (Format-RooIndustriesLeftAsSetText @($leftAsSetItems.ToArray())) + $closedText
     } else {
         "Game Tune restore preview completed. No process priority changes were applied."
     }
@@ -337,6 +440,7 @@ try {
         -SkippedItems $skippedOut `
         -RestoredItems @($restored.ToArray()) `
         -Artifacts @([pscustomobject]@{ type = 'gameTuneSessionBackup'; path = $resolvedBackupPath })
+    $result | Add-Member -NotePropertyName leftAsSetItems -NotePropertyValue @($leftAsSetItems.ToArray()) -Force
 
     $logs = @((New-RooIndustriesLog $summary))
     $envelope = [pscustomobject]@{
@@ -358,6 +462,7 @@ try {
         changedItems = @($changed.ToArray())
         skippedItems = $skippedOut
         restoredItems = @($restored.ToArray())
+        leftAsSetItems = @($leftAsSetItems.ToArray())
         backup = $backupMetadata
         result = $result
         warnings = @($warnings.ToArray())
@@ -372,6 +477,7 @@ try {
         $session.restorable = ($status -in @('partial', 'failed'))
         $session.restoredItems = @($restored.ToArray())
         $session.skippedItems = $skippedOut
+        $session | Add-Member -NotePropertyName leftAsSetItems -NotePropertyValue @($leftAsSetItems.ToArray()) -Force
         $session.completedAtUtc = Get-RooIndustriesUtcStamp
         Write-RooIndustriesGameTuneJsonFile $session $resolvedSessionPath
         Add-RooIndustriesGameTuneLogFileEntry (Split-Path $resolvedSessionPath -Parent) (New-RooIndustriesLog $summary)
