@@ -62,7 +62,11 @@
                 <StackPanel Spacing="16">
                     <StackPanel Spacing="4">
                         <TextBlock Text="2. Set priorities and CPU cores" Style="{StaticResource SectionHeaderTextBlockStyle}" />
-                        <TextBlock Text="Leave a setting on Keep current to preserve its value." TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                        <TextBlock Text="Pick a preset or set each one yourself. Leave a setting on Keep current to preserve its value." TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                    </StackPanel>
+                    <StackPanel Spacing="4">
+                        <ComboBox Header="Preset" ItemsSource="{x:Bind ViewModel.Presets, Mode=OneWay}" SelectedItem="{x:Bind ViewModel.SelectedPreset, Mode=TwoWay}" PlaceholderText="{x:Bind ViewModel.PresetPlaceholder, Mode=OneWay}" HorizontalAlignment="Stretch" IsEnabled="{x:Bind ViewModel.CanEdit, Mode=OneWay}" AutomationProperties.AutomationId="GameSessionPreset" />
+                        <TextBlock Text="{x:Bind ViewModel.PresetHint, Mode=OneWay}" TextWrapping="Wrap" FontSize="12" Foreground="{StaticResource RooIndustriesTextMutedBrush}" AutomationProperties.AutomationId="GameSessionPresetHint" />
                     </StackPanel>
                     <ItemsControl ItemsSource="{x:Bind ViewModel.Settings}" IsEnabled="{x:Bind ViewModel.CanEdit, Mode=OneWay}">
                         <ItemsControl.ItemsPanel>

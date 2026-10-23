@@ -11,6 +11,13 @@ public sealed record LaunchPreset([property: JsonRequired] string Id, [property:
 {
     public Dictionary<string, JsonElement> Controls() => Settings.ToDictionary(pair => pair.Key, pair => pair.Key == "executionQoS"
         ? JsonSerializer.SerializeToElement(new PowerThrottling(0, 0).WithExecutionMode(pair.Value.GetString()!), OperationFiles.Json) : pair.Value);
+    public bool Matches(IReadOnlyDictionary<string, JsonElement> controls)
+    {
+        var mine = Controls();
+        var named = controls.Where(pair => pair.Key != "affinity").ToArray();
+        return named.Length == mine.Count && named.All(pair => mine.TryGetValue(pair.Key, out var value) && ProcessTarget.Equivalent(pair.Key, pair.Value, value));
+    }
+    public override string ToString() => Name;
 }
 
 public sealed record LaunchPresetCatalog([property: JsonRequired] int SchemaVersion, [property: JsonRequired] LaunchPreset[] Presets)

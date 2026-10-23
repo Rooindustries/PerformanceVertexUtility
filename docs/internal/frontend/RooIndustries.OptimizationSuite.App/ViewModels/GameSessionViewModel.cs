@@ -46,12 +46,15 @@ public sealed record LaunchProfileRow(string Root, string Title, string Status);
 
 public partial class GameSessionViewModel : ObservableObject
 {
+    public static string? PresetsPath { get; set; }
     public ObservableCollection<CpuProcessChoice> Launchers { get; } = new();
     public ObservableCollection<GameSessionEntry> Sessions { get; } = new();
     public ObservableCollection<GameCoreChoice> CoreChoices { get; } = new();
     public ObservableCollection<GameSessionField> Fields { get; } = new();
     public ObservableCollection<LaunchProfileRow> Profiles { get; } = new();
     public GameSessionSetting[] Settings { get; } = [new("cpuPriority"), new("ioPriority"), new("memoryPriority"), new("gpuPriority"), new("executionQoS"), new("priorityBoost")];
+    public LaunchPreset[] Presets { get; private set; } = [];
+    [ObservableProperty] private LaunchPreset? _selectedPreset;
     [ObservableProperty] private CpuProcessChoice? _selectedLauncher;
     [ObservableProperty] private GameSessionEntry? _selectedSession;
     [ObservableProperty] private GameCoreChoice? _selectedCores;
@@ -70,6 +73,9 @@ public partial class GameSessionViewModel : ObservableObject
     private string? _pendingAffinity;
     private int _version;
     private bool _observing;
+    private bool _matching;
+    private bool _customPreset;
+    private string? _presetsError;
 
     public GameSessionViewModel()
     {
@@ -89,12 +95,32 @@ public partial class GameSessionViewModel : ObservableObject
         DateTime.UtcNow - current.State.UpdatedAtUtc <= TimeSpan.FromSeconds(15) && current.State.Preview.Controls.ContainsKey("affinity") && _launcher is not null;
     public bool CanChooseCores => CanEdit || CanSwitch;
     public bool CanChooseSession => !Busy;
+    private bool AnyChosen => Settings.Any(setting => setting.Selected.Value is not null);
+    public string PresetPlaceholder => _customPreset || AnyChosen ? LaunchPresetCatalog.Custom : "Choose a preset";
+    public string PresetHint => _presetsError ?? SelectedPreset?.Description
+        ?? (_customPreset || AnyChosen ? "Your own mix of settings. Picking a preset replaces them." : "A preset fills in the settings below. You can still change any of them.");
+
+    partial void OnSelectedPresetChanged(LaunchPreset? value)
+    {
+        if (!_matching && value is not null)
+        {
+            _customPreset = false;
+            _matching = true;
+            try
+            {
+                foreach (var setting in Settings)
+                    setting.Selected = value.Settings.TryGetValue(setting.Name, out var chosen) ? setting.Options.Single(option => option.Value?.GetRawText() == chosen.GetRawText()) : setting.Options[0];
+            }
+            finally { _matching = false; }
+        }
+        OnPropertyChanged(nameof(PresetPlaceholder)); OnPropertyChanged(nameof(PresetHint));
+    }
 
     partial void OnBusyChanged(bool value) => NotifyState();
     partial void OnGamePathChanged(string value) => Invalidate();
     partial void OnAcceptLauncherScopeChanged(bool value) => Invalidate();
     partial void OnKeepArmedChanged(bool value) => Invalidate();
-    partial void OnAffinityMaskChanged(string value) => Invalidate();
+    partial void OnAffinityMaskChanged(string oldValue, string newValue) { Invalidate(); if (oldValue.Length > 0) UseCustomPreset(); }
     partial void OnSelectedCoresChanged(GameCoreChoice? value) { if (value is not null) AffinityMask = value.Affinity.Mask; }
     public void NoteChanged()
     {
@@ -127,6 +153,7 @@ public partial class GameSessionViewModel : ObservableObject
                     setting.Selected = setting.Options.FirstOrDefault(option => option.Value?.GetRawText() == desired.GetRawText()) ?? setting.Options[0];
                 }
                 CoreChoices.Add(new("Last requested cores", state.DesiredAffinity)); SelectedCores = CoreChoices[0];
+                MatchPreset();
             }
             ShowStatus(value.Worker); _ = ReadSessionLauncherAsync(value, _version);
         }
@@ -135,10 +162,42 @@ public partial class GameSessionViewModel : ObservableObject
 
     public async Task InitializeAsync()
     {
+        LoadPresets();
         await RefreshAsync();
         await RefreshProfilesAsync();
         if (SelectedSession is null && Sessions.Count > 0)
             SelectedSession = Sessions.FirstOrDefault(entry => !GameSessionDisplay.Restored(entry.Worker)) ?? Sessions[0];
+    }
+
+    private void LoadPresets()
+    {
+        try { Presets = LaunchPresetCatalog.Read(PresetsPath ?? throw new FileNotFoundException("The launch preset list isn't installed.")).Presets; _presetsError = null; }
+        catch (Exception error) when (error is IOException or InvalidDataException or JsonException or UnauthorizedAccessException)
+        {
+            Presets = [];
+            _presetsError = "Launch presets couldn't be loaded: " + error.Message; AppLog.Write("games", _presetsError);
+        }
+        OnPropertyChanged(nameof(Presets)); MatchPreset();
+    }
+
+    private void MatchPreset()
+    {
+        var controls = SettingControls();
+        _matching = true;
+        try { SelectedPreset = Presets.FirstOrDefault(preset => preset.Matches(controls)); }
+        finally { _matching = false; }
+        _customPreset = SelectedPreset is null && (AnyChosen || _sessionRoot is not null);
+        OnPropertyChanged(nameof(PresetPlaceholder)); OnPropertyChanged(nameof(PresetHint));
+    }
+
+    private string PresetLabel(Dictionary<string, JsonElement> controls) => Presets.FirstOrDefault(preset => preset.Matches(controls)) is { } preset ? " · " + preset.Name + " preset" : "";
+
+    private Dictionary<string, JsonElement> SettingControls()
+    {
+        var controls = Settings.Where(setting => setting.Selected.Value is not null).ToDictionary(setting => setting.Name, setting => setting.Selected.Value!.Value);
+        if (controls.TryGetValue("executionQoS", out var qos))
+            controls["executionQoS"] = JsonSerializer.SerializeToElement(new PowerThrottling(0, 0).WithExecutionMode(qos.GetString()!), OperationFiles.Json);
+        return controls;
     }
 
     [RelayCommand]
@@ -216,6 +275,7 @@ public partial class GameSessionViewModel : ObservableObject
             var selected = CoreChoices.FirstOrDefault(choice => ProcessTarget.ParseMask(choice.Affinity.Mask) == ProcessTarget.ParseMask(state.DesiredAffinity.Mask));
             if (selected is null) { selected = new("Custom cores", state.DesiredAffinity); CoreChoices.Add(selected); }
             SelectedCores = selected;
+            MatchPreset();
         }
         catch (Exception error) { if (version == _version) Detail = error.Message; }
         finally { if (version == _version) NotifyState(); }
@@ -249,13 +309,12 @@ public partial class GameSessionViewModel : ObservableObject
         Busy = true;
         try
         {
-            var controls = Settings.Where(setting => setting.Selected.Value is not null).ToDictionary(setting => setting.Name, setting => setting.Selected.Value!.Value);
-            if (controls.TryGetValue("executionQoS", out var qos))
-                controls["executionQoS"] = JsonSerializer.SerializeToElement(new PowerThrottling(0, 0).WithExecutionMode(qos.GetString()!), OperationFiles.Json);
+            var controls = SettingControls();
             var group = _launcher!.Controls["affinity"].Require().Deserialize<AffinityState>(OperationFiles.Json)!.Group;
             controls["affinity"] = JsonSerializer.SerializeToElement(new AffinityState(group, AffinityMask.Trim()), OperationFiles.Json);
             _review = await App.Operations.PreviewGameSessionAsync(SelectedLauncher!.Id, GamePath.Trim(), controls, AcceptLauncherScope);
             ReviewSummary = Path.GetFileName(_review.Plan.GamePath) + " via " + Path.GetFileName(_review.Plan.Launcher.ExecutablePath) + "\n" +
+                (SelectedPreset is { } preset ? "Preset: " + preset.Name + "\n" : "") +
                 string.Join("\n", Settings.Where(setting => setting.Selected.Value is not null).Select(setting => setting.Label + ": " + setting.Selected.Label)) +
                 "\nCores: " + AffinityMask.Trim() + "\nLauncher core limits and I/O/memory defaults also affect its other new child processes. Launch priorities apply to this game filename." +
                 (KeepArmed ? "\nSaved for next time: these exact settings turn back on whenever " + Path.GetFileName(_review.Plan.Launcher.ExecutablePath) + " opens while the app is open. After a PC restart, open the app once and they're back. To stop them, select Turn off and restore under Saved launch settings." : "");
@@ -303,7 +362,7 @@ public partial class GameSessionViewModel : ObservableObject
     {
         try
         {
-            var rows = (await App.Operations.ReadLaunchProfilesAsync()).Select(entry => new LaunchProfileRow(entry.Root, entry.Title, OptimizerService.DescribeLaunchProfile(entry))).ToArray();
+            var rows = (await App.Operations.ReadLaunchProfilesAsync()).Select(entry => new LaunchProfileRow(entry.Root, entry.Title + PresetLabel(entry.Saved.Controls), OptimizerService.DescribeLaunchProfile(entry))).ToArray();
             if (rows.SequenceEqual(Profiles)) return;
             Profiles.Clear(); foreach (var row in rows) Profiles.Add(row);
         }
@@ -408,7 +467,18 @@ public partial class GameSessionViewModel : ObservableObject
         NotifyState();
     }
 
-    private void SettingChanged(object? sender, PropertyChangedEventArgs args) { if (args.PropertyName == nameof(GameSessionSetting.Selected)) Invalidate(); }
+    private void SettingChanged(object? sender, PropertyChangedEventArgs args)
+    {
+        if (args.PropertyName != nameof(GameSessionSetting.Selected)) return;
+        Invalidate();
+        UseCustomPreset();
+    }
+    private void UseCustomPreset()
+    {
+        if (_matching) return;
+        _customPreset = true; SelectedPreset = null;
+        OnPropertyChanged(nameof(PresetPlaceholder)); OnPropertyChanged(nameof(PresetHint));
+    }
     private static string FieldResult(string status) => status switch
     {
         "applied" => "Applied", "pending" => "Waiting", "initializing" => "Graphics starting", "awaitingRecovery" => "Preparing restore",
