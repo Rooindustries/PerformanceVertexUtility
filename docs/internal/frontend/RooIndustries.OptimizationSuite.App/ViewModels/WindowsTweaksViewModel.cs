@@ -140,7 +140,7 @@ public partial class WindowsTweakRow : ObservableObject
     public bool CanRetry => CouldNotCheck;
     public RelayCommand RetryCommand { get; }
     public string RetryAutomationId => Id + ".retry";
-    public bool UnavailableHere => !CouldNotCheck && _observed is { } status && (status.Supported == false || status.Error is { } error && PcLacks(error));
+    public bool UnavailableHere => !CouldNotCheck && _observed is { } status && (status.Supported == false || status.Error is { } error && PcLacks(error) || _onlyDefaultHere);
     public bool HasPendingChange => Selected.Id.Length > 0 && Selected != AppliedChoice;
     public TweakChoice? RevertChoice => ActionChoices.FirstOrDefault(choice => _resetIds.Contains(choice.Id))
         ?? (ActionChoices.Length == 2 && AppliedChoice is not null ? ActionChoices.First(choice => choice != AppliedChoice) : null);
@@ -162,6 +162,7 @@ public partial class WindowsTweakRow : ObservableObject
     public bool CanApplyChoice(string id) => id.Length > 0 && Available && _observed?.AvailableChoices?.Contains(id) != false;
     public string ChoiceStatus => _cannotRevert ? "Already on. This one can't be turned off from here." : Selected.Id.Length == 0 || CanApplySelected ? "" : "Selected · save for later";
     private bool _cannotRevert;
+    private bool _onlyDefaultHere;
     partial void OnToggleOnChanged(bool value)
     {
         if (_syncingToggle || !HasToggle) return;
@@ -205,7 +206,7 @@ public partial class WindowsTweakRow : ObservableObject
     public static bool ReadableName(string name) => name.Trim().Length > 0 && char.IsLetterOrDigit(name.Trim()[0]);
     public static string DisplayChoice(string name) => name is "Remove this override" or "Not configured" ? "Use Windows default" : name;
     private static bool IsDefaultAction(string name) => name is "Remove this override" or "Windows default" or "Use Windows default" or "Not configured" or "source-default" or "Return to previous plan" or "Remove boot override";
-    public void Observe(TweakSettingStatus? status)
+    public void Observe(TweakSettingStatus? status, TweakContext? context = null)
     {
         _observed = status;
         AppliedChoice = FindApplied(status);
@@ -216,8 +217,11 @@ public partial class WindowsTweakRow : ObservableObject
         Available = Choices.Length > 1 && status is { Supported: true, Error: null } && status.Controls?.Any(control => control.RestartPending) != true;
         Detail = status is null ? "Refresh to read this setting." : status.Controls?.Any(control => control.RestartPending) == true ? "Restart Windows to finish this feature change." : status.Error ?? (status.Supported == false ? "Not available on this Windows build or edition." : "");
         if (Detail.Length == 0) Detail = string.Join("\n", (status?.Controls ?? []).Where(control => control.Address.Kind is "timer" or "download-blocker" or "firewall-profile").Select(control => control.DisplayName).Where(text => !string.IsNullOrWhiteSpace(text)));
-        Current = status?.Error == TweakEngine.FeaturesPending ? "Checking…" : CouldNotCheck ? "Couldn't check" : status is null ? "Not read" : status.Error is not null ? "Not available here"
-            : status.Observations.All(read => read.Value is null) && (status.Controls ?? []).All(read => read.Value.ValueKind == System.Text.Json.JsonValueKind.Null) ? "No override"
+        var unset = status is not null && status.Observations.All(read => read.Value is null) && (status.Controls ?? []).All(read => read.Value.ValueKind == System.Text.Json.JsonValueKind.Null);
+        _onlyDefaultHere = context is not null && status is { Supported: true, Error: null } && unset && Definition.Options.Where(option => !_resetIds.Contains(option.Id)).ToArray() is { Length: > 0 } actions
+            && actions.All(option => !TweakEngine.SupportsWindows(Definition, option, context));
+        Current = status?.Error == TweakEngine.FeaturesPending ? "Checking…" : CouldNotCheck ? "Couldn't check" : status is null ? "Not read" : status.Error is not null || _onlyDefaultHere ? "Not available here"
+            : unset ? "No override"
             : status.ConfiguredChoices.Length > 0 ? string.Join(" / ", Choices.Where(choice => status.ConfiguredChoices.Contains(choice.Id)).Select(choice => choice.Name)) : "Custom value";
         if (Current.Length == 0) Current = "Unknown value";
         if (status is { Error: null, Controls: [var control] } && control.Address.Kind == "timer") Current = control.Value.GetBoolean() ? "Active" : "Stopped";
@@ -228,7 +232,8 @@ public partial class WindowsTweakRow : ObservableObject
             && fields.All(field => policy.Value.TryGetProperty(field, out var value) && (value.ValueKind == System.Text.Json.JsonValueKind.String && value.GetString() == "NOTSET" || value.ValueKind == System.Text.Json.JsonValueKind.False)) && NoRawPolicy(policy.Value)) Current = "Windows default";
         if (Current == "Custom value" && status is { Error: null, Controls: null or [] } && status.Observations is [var first, ..] found
             && found.All(read => read.Value is not null && TweakRead.SameValue(read.Value, first.Value)) && RegistryText(first.Value!) is { } value) Current = "Custom value: " + value;
-        if (Detail.Contains("Office installation", StringComparison.Ordinal)) Detail = "Office was not detected. You can save this choice before installing it.";
+        if (_onlyDefaultHere) Detail = "This Windows edition or version doesn't use this setting. You can keep a saved choice for a matching installation.";
+        else if (Detail.Contains("Office installation", StringComparison.Ordinal)) Detail = "Office was not detected. You can save this choice before installing it.";
         else if (Detail.StartsWith("No choice applies", StringComparison.Ordinal)) Detail = "This Windows or app version does not use this setting. You can keep a saved choice for a matching installation.";
         else if (Detail.Contains("Win32 1060", StringComparison.Ordinal)) Detail = "This Windows service is not installed.";
         else if (Detail.Contains("Hard-linked file permissions", StringComparison.Ordinal)) Detail = "Windows links this file to other copies, so its permissions can't be changed safely here.";
@@ -418,7 +423,7 @@ public partial class WindowsTweaksViewModel : ObservableObject
         foreach (var item in inspection.Settings) if (!statuses.TryAdd(item.Id, item)) return;
         _loading = true;
         _recovery = recovery; _inspection = inspection;
-        foreach (var row in _all) row.Observe(statuses.GetValueOrDefault(row.Id));
+        foreach (var row in _all) row.Observe(statuses.GetValueOrDefault(row.Id), inspection.Context);
         FillProfiles(inspection);
         LoadProfile(); Filter();
         _loading = false;
@@ -451,7 +456,7 @@ public partial class WindowsTweaksViewModel : ObservableObject
         var statuses = new Dictionary<string, TweakSettingStatus>(StringComparer.Ordinal);
         foreach (var item in partial.Settings) if (!statuses.TryAdd(item.Id, item)) return;
         _loading = true;
-        foreach (var row in _all) row.Observe(statuses.GetValueOrDefault(row.Id));
+        foreach (var row in _all) row.Observe(statuses.GetValueOrDefault(row.Id), partial.Context);
         _loading = false;
         Status = _all.Count + " settings · checking Windows features";
         Detail = "Settings that depend on Windows optional features are still being read. You can review changes once every setting is read.";
@@ -524,7 +529,7 @@ public partial class WindowsTweaksViewModel : ObservableObject
             _inspection = inspection;
             var statuses = new Dictionary<string, TweakSettingStatus>(StringComparer.Ordinal);
             foreach (var item in inspection.Settings) if (!statuses.TryAdd(item.Id, item)) throw new InvalidOperationException("Sequence contains more than one matching element");
-            foreach (var row in _all) row.Observe(statuses.GetValueOrDefault(row.Id));
+            foreach (var row in _all) row.Observe(statuses.GetValueOrDefault(row.Id), inspection.Context);
             UpdateTopics();
             Fill(Sources, "All sources", _all.SelectMany(row => row.Definition.Sources.Select(source => source.Product)));
             if (!Categories.Contains(Category)) Category = "All groups";
