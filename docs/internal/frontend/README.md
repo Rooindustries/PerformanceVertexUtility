@@ -37,8 +37,9 @@ Game setup reveals its settings after a launcher is selected. Custom CPU masks
 and saved process rules are expandable. Each action keeps its existing backend
 command and review requirements. Changing a selection invalidates its review.
 The Games and Processes tabs refresh live status every 2 seconds only while the
-app window is in front. Behind another window or minimized they start no reads;
-when the window comes back they read once, then resume.
+app window is in front. Behind another window or minimized they start no reads,
+and a read already running when the window goes behind starts no follow-on
+helper; when the window comes back they read once, then resume.
 
 Physical RAM use is calculated from total physical capacity and available bytes.
 Missing or inconsistent readings display as unavailable. Committed memory is

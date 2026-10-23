@@ -16,7 +16,7 @@ public sealed partial class GameSessionPanel : UserControl
     {
         InitializeComponent();
         _watch = new(work => DispatcherQueue.TryEnqueue(async () => await work()), CatchUpAsync);
-        _poll = new(ViewModel.ObserveAsync);
+        _poll = new(_ => ViewModel.ObserveAsync());
         ViewModel.PropertyChanged += (_, args) =>
         {
             if (args.PropertyName == nameof(ViewModel.Busy)) { if (ViewModel.Busy) _watch.OperationStarted(); else _watch.OperationEnded(); }
