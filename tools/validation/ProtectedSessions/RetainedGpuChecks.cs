@@ -84,16 +84,17 @@ static class RetainedGpuChecks
                 Check(denied, "A fresh GPU control handle is denied on the disposable fixture");
                 if (trial is >= 4 and < 7)
                 {
-                    Until(() => Directory.GetFiles(Path.Combine(session, "gpu-handles"), "*.ready.json").Length == 1, "Recovery readback missing.");
-                    var readyPath = Directory.GetFiles(Path.Combine(session, "gpu-handles"), "*.ready.json").Single();
+                    Until(() => Directory.GetFiles(Path.Combine(session, "gpu-handles"), "*.gpuPriority.ready.json").Length == 1, "Recovery readback missing.");
+                    var readyPath = Directory.GetFiles(Path.Combine(session, "gpu-handles"), "*.gpuPriority.ready.json").Single();
                     Check(State(session).Games.All(item => item.Fields.All(value => value.JournalPath is null)), "Negative fixture changes recovery evidence before any apply");
                     var changed = JsonNode.Parse(File.ReadAllText(readyPath))!;
                     if (trial == 4) { changed["original"]!["known"] = false; changed["original"]!["value"] = 3; }
                     if (trial == 5) changed["original"]!["value"] = 1;
                     if (trial == 6) changed["transfer"]!["operationId"] = Guid.NewGuid().ToString("N");
                     OperationFiles.Write(readyPath, changed);
-                    Until(() => State(session).Games.Any(item => item.Fields.Any(value => value.Status == "conflict")), "Contradictory recovery evidence was accepted.");
-                    Check(Oracle.Gpu(game) == 2 && State(session).Games.Single().Fields.Single().JournalPath is null, "Unknown, conflicting or stale recovery evidence cannot authorize a GPU change");
+                    var refusal = trial == 4 ? "unavailable" : "conflict";
+                    Until(() => State(session).Games.Any(item => item.Fields.Any(value => value.Status == refusal)), "Contradictory recovery evidence was accepted.");
+                    Check(Oracle.Gpu(game) == 2 && State(session).Games.Single().Fields.Single().JournalPath is null, trial == 4 ? "An original the watcher couldn't read shows Unavailable and changes nothing" : "Conflicting or stale recovery evidence cannot authorize a GPU change");
                     engine.Command(session, "stop");
                     Check(worker.WaitForExit(20000), "Rejected session stops");
                     Until(() => File.Exists(Path.Combine(session, "recovery-result.json")), "Rejected session watcher did not finish.");
@@ -107,11 +108,12 @@ static class RetainedGpuChecks
                 var field = State(session).Games.Single().Fields.Single(value => value.Name == "gpuPriority");
                 var journal = OperationFiles.Read<ProcessControlJournal>(field.JournalPath!);
                 Check(journal.UpdatedAtUtc >= locked && Oracle.Gpu(game) == 3, "The actual GPU class changes after fresh access is denied");
-                var ready = Directory.GetFiles(Path.Combine(session, "gpu-handles"), "*.ready.json").Single();
-                var ack = OperationFiles.Read<JsonElement>(ready);
-                Check(ack.GetProperty("original").GetProperty("known").GetBoolean() && ack.GetProperty("original").GetProperty("value").GetInt32() == 2, "The separate watcher independently captured original class 2");
-                var originalIo = paired ? ack.GetProperty("ioOriginal").GetProperty("value").GetInt32() : 0;
-                if (paired) Check(Oracle.Io(game) == 3 && ack.GetProperty("ioOriginal").GetProperty("known").GetBoolean(), "The same retained handoff independently captures I/O and applies High alongside GPU priority after fresh setters are denied");
+                JsonElement Ack(string control) => OperationFiles.Read<JsonElement>(Directory.GetFiles(Path.Combine(session, "gpu-handles"), "*." + control + ".ready.json").Single());
+                var ack = Ack("gpuPriority");
+                Check(ack.GetProperty("control").GetString() == "gpuPriority" && ack.GetProperty("original").GetProperty("known").GetBoolean() && ack.GetProperty("original").GetProperty("value").GetInt32() == 2, "The separate watcher independently captured original class 2");
+                var ioAck = paired ? Ack("ioPriority") : default;
+                var originalIo = paired ? ioAck.GetProperty("original").GetProperty("value").GetInt32() : 0;
+                if (paired) Check(Oracle.Io(game) == 3 && ioAck.GetProperty("control").GetString() == "ioPriority" && ioAck.GetProperty("original").GetProperty("known").GetBoolean(), "The watcher acknowledges I/O on its own and High is applied alongside GPU priority after fresh setters are denied");
                 if (trial == 7) throw new CleanupSignal();
                 if (trial == 0)
                 {

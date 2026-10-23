@@ -432,7 +432,7 @@ public partial class GameSessionViewModel : ObservableObject
     {
         "applied" => "Applied", "pending" => "Waiting", "capturing" => "Preparing game settings", "initializing" => "Graphics starting", "awaitingRecovery" => "Preparing restore",
         "unavailable" => "Unavailable", "conflict" => "Changed elsewhere", "notApplied" => "Not applied", "restartRequired" => "Restart required",
-        "restored" => "Restored", "expired" => "Game exited", "released" => "Core restriction released", "reapplyIntent" => "Reapplying", _ => "Needs attention",
+        "restored" => "Restored", "leftAsIs" => "Already set when this game started, left as is", "expired" => "Game exited", "released" => "Core restriction released", "reapplyIntent" => "Reapplying", _ => "Needs attention",
     };
     private void Invalidate() { _review = null; ReviewSummary = ""; NotifyState(); }
     private void NotifyState()

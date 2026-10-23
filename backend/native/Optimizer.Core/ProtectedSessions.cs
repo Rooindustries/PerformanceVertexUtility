@@ -68,7 +68,7 @@ public sealed class ProtectedSessions
     public ProtectedSessions(Func<RunningProcess, bool> excluded) { _excluded = excluded; _controls = new(excluded); }
     public static bool IsRestored(ProtectedSessionState state) => state.Status is ("stopped" or "stoppedWithErrors") &&
         state.RegistryStatus == "restored" && state.JobStatus == "cleared" &&
-        state.Games.All(game => game.Fields.All(field => field.JournalPath is null || field.Status is "restored" or "expired"));
+        state.Games.All(game => game.Fields.All(field => field.JournalPath is null || field.Status is "restored" or "expired" or "leftAsIs"));
     private static string StatePath(string root) => Path.Combine(Path.GetFullPath(root), "session.json");
     private static string CommandPath(string root) => Path.Combine(Path.GetFullPath(root), "command.json");
     private static JsonElement Value<T>(T value) => JsonSerializer.SerializeToElement(value, OperationFiles.Json);
@@ -227,13 +227,14 @@ public sealed class ProtectedSessions
             LaunchGpuHandles? gpuHandles = null;
             try
             {
+                var retainHandles = RetainHandles(plan);
                 startWatch(root, plan.OperationId);
                 AwaitWatch(root, state, false);
                 job = ProcessJob.Create(plan.OperationId);
                 state.JobStatus = "created"; Save(root, state);
                 AwaitWatch(root, state, true);
                 VerifyLaunch(plan);
-                if (RetainHandles(plan))
+                if (retainHandles)
                 {
                     var watcher = OperationFiles.Read<ProtectedWatchReady>(Path.Combine(root, "watch.json"));
                     gpuHandles = new(root, state, watcher.Watcher);
@@ -377,6 +378,10 @@ public sealed class ProtectedSessions
                 var desired = field.Name == "affinity" ? Value(state.DesiredAffinity) : state.Preview.Controls[field.Name];
                 if (field.Route == "native" && (field.Status is "unavailable" or "conflict")) continue;
                 var retainedControl = field.Name == "gpuPriority" || field.Name == "ioPriority" && field.Route == "native";
+                if (retainedControl && field.JournalPath is null && gpuHandles?.Refusal(identity) is { } refusal)
+                {
+                    field.Status = "unavailable"; field.Error = refusal; continue;
+                }
                 var retained = retainedControl ? gpuHandles?.Find(identity) : null;
                 if (retainedControl && gpuHandles is not null && retained is null)
                 {
@@ -396,7 +401,9 @@ public sealed class ProtectedSessions
                     if (!field.Observed.Known) { field.Status = "unavailable"; field.Error = field.Observed.Error?.Message ?? "Original value unavailable."; continue; }
                     if (field.JournalPath is null)
                     {
-                        if (retained is not null && !gpuHandles!.RecoveryMatches(identity, field.Observed, field.Name)) { field.Status = "awaitingRecovery"; continue; }
+                        var recovery = retained is null ? "ready" : gpuHandles!.Recovery(identity, field.Observed, field.Name);
+                        if (recovery == "pending") { field.Status = "awaitingRecovery"; continue; }
+                        if (recovery == "unknown") { field.Status = "unavailable"; field.Error = LaunchGpuHandles.OriginalUnreadable; continue; }
                         var folder = Path.Combine(root, "games", identity.ProcessId + "-" + identity.CreationTimeFileTimeUtc, field.Name);
                         var path = Path.Combine(folder, "preview.json");
                         var preview = controls.Preview(processId, new() { [field.Name] = desired });
@@ -404,7 +411,12 @@ public sealed class ProtectedSessions
                         var hash = OperationFiles.HashFile(path); field.PreviewHash = hash;
                         field.JournalPath = Path.Combine(folder, "journal.json"); Save(root, state);
                         var result = controls.Apply(path, hash, field.JournalPath);
-                        if (result.Status != "applied") throw new InvalidOperationException(string.Join("; ", result.Changes.Select(change => change.Error)));
+                        if (result.Status != "applied")
+                        {
+                            var failed = result.Changes.Where(change => change.Error is not null).ToArray();
+                            var message = string.Join("; ", failed.Select(change => change.Error));
+                            throw failed.Length != 0 && failed.All(change => change.ErrorKind == "denied") ? new UnauthorizedAccessException(message) : new InvalidOperationException(message);
+                        }
                     }
                     else if (!ProcessTarget.Equivalent(field.Name, field.Observed.Require(), desired))
                     {
@@ -420,6 +432,10 @@ public sealed class ProtectedSessions
                     field.Observed = reader.Read(field.Name);
                     if (!ProcessTarget.Equivalent(field.Name, field.Observed.Require(), desired)) throw new InvalidOperationException("Native readback differs from requested priority.");
                     field.Status = "applied"; field.Error = null;
+                }
+                catch (Exception error) when (ProcessFailures.Refused(error))
+                {
+                    field.Status = "unavailable"; field.Error = error is ProcessControlBlockedException ? ProcessTarget.WriteBlocked : error.Message;
                 }
                 catch (Exception error) { field.Status = "conflict"; field.Error = error.Message; }
                 Save(root, state);
@@ -440,7 +456,7 @@ public sealed class ProtectedSessions
                     if (!File.Exists(field.JournalPath))
                     {
                         if (exited) { field.Status = "expired"; field.Error = null; }
-                        else if (field.Status is ("pending" or "conflict") && field.PreviewHash is { } hash)
+                        else if (field.Status is ("pending" or "conflict" or "unavailable") && field.PreviewHash is { } hash)
                         {
                             var preview = OperationFiles.Read<ProcessControlPreview>(Path.Combine(Path.GetDirectoryName(field.JournalPath!)!, "preview.json"), hash);
                             preview.Owner.Verify(); game.Identity.Verify(preview.Identity);
@@ -461,6 +477,7 @@ public sealed class ProtectedSessions
                     var retained = field.Name is "gpuPriority" or "ioPriority" ? gpuHandles?.Find(game.Identity) : null;
                     var result = (retained is null ? _controls : _controls.WithTarget(retained)).Restore(field.JournalPath!); field.Status = result.Status;
                     var last = result.Changes.Single(change => change.Name == field.Name);
+                    if (result.Status == "restored" && last.Status == "unchanged") field.Status = "leftAsIs";
                     field.Observed = last.Observed is { } observed ? ControlRead.From(observed) : null; field.Error = last.Error; if (result.Status is not ("restored" or "expired")) errors.Add("Native restoration needs reconciliation: " + field.Name); }
                 catch (Exception error) { errors.Add(error.Message); }
             foreach (var field in game.Fields.Where(field => field.Route == "launch")) field.Status = game.Exited ? "expired" : "restartRequired";
@@ -640,7 +657,7 @@ public sealed class ProtectedSessions
         catch (ProcessEndedException) { return false; }
         catch (RooIndustries.Optimization.CpuSets.NativeFailure error) when (error.Api == "OpenProcess" && error.NativeErrorCode == 87) { return false; }
     }
-    private static RunningProcess ReadIdentity(ProcessTarget process)
+    internal static RunningProcess ReadIdentity(ProcessTarget process)
     {
         try { return process.Identity(); }
         catch (RooIndustries.Optimization.CpuSets.NativeFailure error)

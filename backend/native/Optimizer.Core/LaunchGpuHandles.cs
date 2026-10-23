@@ -8,15 +8,20 @@ using Microsoft.Win32.SafeHandles;
 namespace RooIndustries.Optimizer;
 
 internal sealed record GpuHandleTransfer(OperationOwner Owner, string OperationId, RunningProcess Host, RunningProcess Watcher, RunningProcess Target, long Handle);
-internal sealed record GpuHandleReady(GpuHandleTransfer Transfer, ControlRead Original, ControlRead? IoOriginal = null);
+internal sealed record GpuHandleReady(GpuHandleTransfer Transfer, string Control, ControlRead Original);
+internal sealed record GpuHandleRefused(GpuHandleTransfer Transfer, string GrantedAccess);
 
 internal sealed class LaunchGpuHandles : IDisposable
 {
     internal static bool Supported => LaunchProcessSnapshot.Supported;
+    internal const string GameRefused = "The game didn't let other apps change this when it started, so it was left as is.";
+    internal const string RecoveryRefused = "Windows didn't give the session a way to undo this for the game, so it was left as is.";
+    internal const string OriginalUnreadable = "The game's original value couldn't be read, so this was left as is.";
     private readonly string _root;
     private readonly ProtectedSessionState _state;
     private readonly RunningProcess _watcher;
     private readonly ConcurrentDictionary<RunningProcess, ProcessTarget> _targets = new();
+    private readonly ConcurrentDictionary<RunningProcess, bool> _refused = new();
     private readonly HashSet<string> _received = new(StringComparer.OrdinalIgnoreCase);
     private readonly CancellationTokenSource _stop = new();
     private readonly ManualResetEventSlim _ready = new();
@@ -45,19 +50,31 @@ internal sealed class LaunchGpuHandles : IDisposable
     internal ProcessTarget? Find(RunningProcess identity)
         => _targets.TryGetValue(identity, out var target) ? target : null;
 
-    internal bool RecoveryMatches(RunningProcess identity, ControlRead original, string field)
+    internal string? Refusal(RunningProcess identity)
     {
-        var path = ReadyPath(identity);
-        if (!File.Exists(path)) return false;
+        if (_refused.ContainsKey(identity)) return GameRefused;
+        var path = RefusedPath(identity);
+        if (!File.Exists(path)) return null;
+        var refused = OperationFiles.Read<GpuHandleRefused>(path);
+        Validate(refused.Transfer);
+        identity.Verify(refused.Transfer.Target);
+        return RecoveryRefused;
+    }
+
+    internal string Recovery(RunningProcess identity, ControlRead original, string field)
+    {
+        var path = ReadyPath(identity, field);
+        if (!File.Exists(path)) return "pending";
         var ready = OperationFiles.Read<GpuHandleReady>(path);
         Validate(ready.Transfer);
         identity.Verify(ready.Transfer.Target);
+        if (ready.Control != field || ready.Original is null) throw new InvalidDataException("The recovery handoff belongs to another control.");
         using var watcher = new ProcessTarget(_watcher.ProcessId);
         _watcher.Verify(watcher.Identity());
-        var saved = field == "ioPriority" && _state.Preview.Controls.ContainsKey("gpuPriority") ? ready.IoOriginal : ready.Original;
-        if (saved is null || !ProcessTarget.Equivalent(field, original.Require(), saved.Require()))
+        if (!ready.Original.Known || ready.Original.Error is not null) return "unknown";
+        if (!ProcessTarget.Equivalent(field, original.Require(), ready.Original.Require()))
             throw new InvalidOperationException("The recovery handle observed a different original " + ProcessControlBlockedException.Label(field) + ".");
-        return true;
+        return "ready";
     }
 
     internal void Receive()
@@ -71,32 +88,43 @@ internal sealed class LaunchGpuHandles : IDisposable
             var target = ProcessTarget.ReceiveGpu(transfer.Handle);
             try
             {
-                if (!target.HasExited) transfer.Target.Verify(target.Identity());
-                if (!_targets.TryAdd(transfer.Target, target)) throw new InvalidDataException("Duplicate retained GPU handoff.");
+                if (target.ProcessId != transfer.Target.ProcessId) throw new InvalidDataException("Retained GPU handoff belongs to another process.");
+                var granted = target.Granted();
+                if ((granted & ProcessTarget.CaptureAccess) != ProcessTarget.CaptureAccess)
+                {
+                    OperationFiles.Write(RefusedPath(transfer.Target), new GpuHandleRefused(transfer, "0x" + granted.ToString("X")));
+                    target.Dispose();
+                }
+                else
+                {
+                    if (!target.HasExited) transfer.Target.Verify(ProtectedSessions.ReadIdentity(target));
+                    if (!_targets.TryAdd(transfer.Target, target)) throw new InvalidDataException("Duplicate retained GPU handoff.");
+                }
             }
+            catch (ProcessEndedException) { target.Dispose(); }
             catch { target.Dispose(); throw; }
             _received.Add(path);
         }
         foreach (var pair in _targets)
         {
-            var path = ReadyPath(pair.Key);
-            if (File.Exists(path) || pair.Value.HasExited) continue;
-            ControlRead original;
-            ControlRead? io = null;
-            var gpu = _state.Preview.Controls.ContainsKey("gpuPriority");
-            try
+            if (pair.Value.HasExited) continue;
+            foreach (var control in Retained(_state.Preview))
             {
-                original = pair.Value.Read(gpu ? "gpuPriority" : "ioPriority");
-                if (gpu && _state.Preview.Controls.TryGetValue("ioPriority", out var desired) && desired.GetInt32() > LaunchPriorities.MaxIoPriority)
-                    io = pair.Value.Read("ioPriority");
+                var path = ReadyPath(pair.Key, control);
+                if (File.Exists(path)) continue;
+                ControlRead original;
+                try { original = pair.Value.Read(control); }
+                catch (ProcessEndedException) { break; }
+                if (control == "gpuPriority" && Initializing(original, pair.Key)) continue;
+                var transfer = OperationFiles.Read<GpuHandleTransfer>(TransferPath(pair.Key));
+                Validate(transfer);
+                OperationFiles.Write(path, new GpuHandleReady(transfer, control, original));
             }
-            catch (ProcessEndedException) { continue; }
-            if (Initializing(original, pair.Key)) continue;
-            var transfer = OperationFiles.Read<GpuHandleTransfer>(TransferPath(pair.Key));
-            Validate(transfer);
-            OperationFiles.Write(path, new GpuHandleReady(transfer, original, io));
         }
     }
+
+    internal static IEnumerable<string> Retained(ProtectedSessionPreview plan)
+        => plan.Controls.Where(pair => pair.Key == "gpuPriority" || pair.Key == "ioPriority" && pair.Value.GetInt32() > LaunchPriorities.MaxIoPriority).Select(pair => pair.Key);
 
     internal static bool Initializing(ControlRead read, RunningProcess identity)
         => !read.Known && read.Error is { Api: "D3DKMTGetProcessSchedulingPriorityClass", CodeKind: "ntstatus", Code: 0xC000000D }
@@ -128,13 +156,15 @@ internal sealed class LaunchGpuHandles : IDisposable
                     try
                     {
                         try { target = ProcessTarget.CaptureGpu(process.Pid); }
-                        catch (RooIndustries.Optimization.CpuSets.NativeFailure error) when (error.Api == "OpenProcess" && error.NativeErrorCode == 5)
+                        catch (RooIndustries.Optimization.CpuSets.NativeFailure error) when (error.Api == "OpenProcess" && error.NativeErrorCode == 5) { }
+                        if (target is null || (target.Granted() & ProcessTarget.CaptureAccess) != ProcessTarget.CaptureAccess)
                         {
                             using var query = new ProcessTarget(process.Pid);
-                            if (Reviewed(query.Identity())) throw;
+                            var refused = ProtectedSessions.ReadIdentity(query);
+                            if (Reviewed(refused)) _refused.TryAdd(refused, true);
                             continue;
                         }
-                        var identity = target.Identity();
+                        var identity = ProtectedSessions.ReadIdentity(target);
                         if (!Reviewed(identity)) continue;
                         var copy = target.CopyTo(receiver);
                         var transfer = new GpuHandleTransfer(_state.Preview.Owner, _state.Preview.OperationId, _state.Host, _watcher, identity, copy);
@@ -166,7 +196,8 @@ internal sealed class LaunchGpuHandles : IDisposable
     }
 
     private string TransferPath(RunningProcess identity) => Path.Combine(_root, identity.ProcessId + "-" + identity.CreationTimeFileTimeUtc + ".transfer.json");
-    private string ReadyPath(RunningProcess identity) => Path.Combine(_root, identity.ProcessId + "-" + identity.CreationTimeFileTimeUtc + ".ready.json");
+    private string ReadyPath(RunningProcess identity, string control) => Path.Combine(_root, identity.ProcessId + "-" + identity.CreationTimeFileTimeUtc + "." + control + ".ready.json");
+    private string RefusedPath(RunningProcess identity) => Path.Combine(_root, identity.ProcessId + "-" + identity.CreationTimeFileTimeUtc + ".refused.json");
 
     public void Dispose()
     {
@@ -178,15 +209,18 @@ internal sealed class LaunchGpuHandles : IDisposable
 
 internal sealed class LaunchProcessSnapshot : IDisposable
 {
+    private const int BasicProcessInformation = 252;
+    private const uint Limit = 8 * 1024 * 1024;
+
     internal static bool Supported
     {
         get
         {
             if (!OperatingSystem.IsWindows()) return false;
-            var status = NtQuerySystemInformation(252, IntPtr.Zero, 0, out _);
-            if (status == 0 || status == unchecked((int)0xC0000004)) return true;
-            if (status == unchecked((int)0xC0000002) || status == unchecked((int)0xC0000003)) return false;
-            throw new InvalidOperationException($"SystemBasicProcessInformation capability query failed with NTSTATUS 0x{status:X8}.");
+            var status = NtQuerySystemInformation(BasicProcessInformation, IntPtr.Zero, 0, out var needed);
+            if (status is unchecked((int)0xC0000002) or unchecked((int)0xC0000003)) return false;
+            if (status == 0 || needed > 0) return true;
+            throw new InvalidOperationException($"Windows couldn't say whether it can list new processes (NTSTATUS 0x{status:X8}).");
         }
     }
 
@@ -215,12 +249,13 @@ internal sealed class LaunchProcessSnapshot : IDisposable
     internal (int Pid, ulong Sequence)[] Find(string image)
     {
         int status; uint needed;
-        while ((status = NtQuerySystemInformation(252, _buffer, _capacity, out needed)) == unchecked((int)0xC0000004))
+        while ((status = NtQuerySystemInformation(BasicProcessInformation, _buffer, _capacity, out needed)) != 0 && needed > _capacity)
         {
-            if (needed > 8 * 1024 * 1024 || _capacity >= 8 * 1024 * 1024) throw new InvalidDataException("Process enumeration exceeded its size limit.");
-            _capacity = Math.Max(_capacity * 2, needed); _buffer = Marshal.ReAllocHGlobal(_buffer, (IntPtr)_capacity);
+            if (needed > Limit) throw new InvalidDataException("Process enumeration exceeded its size limit.");
+            _capacity = Math.Min(Limit, Math.Max(_capacity * 2, needed)); _buffer = Marshal.ReAllocHGlobal(_buffer, (IntPtr)_capacity);
         }
-        if (status != 0) throw new InvalidOperationException($"SystemBasicProcessInformation requires Windows 11 build 26100.4770 or later; NTSTATUS 0x{status:X8}.");
+        if (status != 0) throw new InvalidOperationException($"Windows couldn't list new processes (NTSTATUS 0x{status:X8}).");
+        if (needed > _capacity) throw new InvalidDataException("Process enumeration reported more data than it returned.");
         var found = new List<(int, ulong)>(); uint offset = 0; var size = (uint)Marshal.SizeOf<BasicProcess>();
         while (true)
         {

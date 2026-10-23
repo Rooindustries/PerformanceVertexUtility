@@ -26,17 +26,23 @@ public sealed class ProcessTarget : IDisposable
         _handle = handle; _pid = processId; _access = access; _writable = writable; _borrowed = borrowed;
     }
 
+    internal const uint CaptureAccess = 0x101200;
+
     internal static ProcessTarget CaptureGpu(int processId)
-        => new(CpuApi.OpenWithoutPrivileges(0x101200, processId), processId, 0x101200, ["gpuPriority", "ioPriority"]);
+        => new(CpuApi.OpenWithoutPrivileges(CaptureAccess, processId), processId, CaptureAccess, ["gpuPriority", "ioPriority"]);
 
     internal static ProcessTarget ReceiveGpu(long value)
     {
         if (value <= 0) throw new InvalidDataException("Invalid retained process handle.");
         var handle = new ProcessHandle(new IntPtr(value));
         var pid = GetProcessId(handle);
-        if (pid == 0) { var error = Marshal.GetLastWin32Error(); handle.Dispose(); throw new CpuFailure("GetProcessId", error, 0x101200); }
-        return new(handle, checked((int)pid), 0x101200, ["gpuPriority", "ioPriority"]);
+        if (pid == 0) { var error = Marshal.GetLastWin32Error(); handle.Dispose(); throw new CpuFailure("GetProcessId", error, CaptureAccess); }
+        return new(handle, checked((int)pid), CaptureAccess, ["gpuPriority", "ioPriority"]);
     }
+
+    internal int ProcessId => _pid;
+
+    internal uint Granted() => GrantedAccess(_handle, _access);
 
     internal long CopyTo(ProcessHandle destination)
     {

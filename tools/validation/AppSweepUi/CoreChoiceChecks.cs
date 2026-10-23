@@ -56,7 +56,7 @@ static class CoreChoiceChecks
             foreach (var cpu in page.Cpus) cpu.Selected = cpu.Cpu.Index < 16;
             await page.PreviewCommand.ExecuteAsync(null);
             check(Mask(requested) == 0xFFFF,
-                "Restricting a game to the ticked CPUs 0-15 (second CCD off) reviews exactly those CPUs, not the CPUs it runs on now" + " | reviewed mask 0x" + Mask(requested).ToString("X") + " | " + page.Status + " " + page.Detail);
+                "Restricting a game to the ticked CPUs 0-15 (CPUs 16-31 off) reviews exactly those CPUs, not the CPUs it runs on now" + " | reviewed mask 0x" + Mask(requested).ToString("X") + " | " + page.Status + " " + page.Detail);
             check(page.ReviewSummary.Contains("CPU affinity: group 0 · 0xFFFFFFFF → group 0 · 0xFFFF", StringComparison.Ordinal),
                 "The review shows the game moving from all 32 CPUs to CPUs 0-15" + " | " + page.ReviewSummary);
 
@@ -65,7 +65,7 @@ static class CoreChoiceChecks
             check(Ticked(page).SequenceEqual(Enumerable.Range(0, 32)) && ProcessTarget.ParseMask(page.AffinityMask) == 0xFFFFFFFF,
                 "Turning on Restrict ticks the CPUs the app may use now, so the list matches its current affinity" + " | ticked " + string.Join(",", Ticked(page)));
             foreach (var cpu in page.Cpus.Where(cpu => cpu.Cpu.Index >= 16)) cpu.Selected = false;
-            check(ProcessTarget.ParseMask(page.AffinityMask) == 0xFFFF && page.CanPreview, "Unticking the second CCD changes the mask to CPUs 0-15 right away" + " | " + page.AffinityMask);
+            check(ProcessTarget.ParseMask(page.AffinityMask) == 0xFFFF && page.CanPreview, "Unticking CPUs 16-31 changes the mask to CPUs 0-15 right away" + " | " + page.AffinityMask);
             foreach (var cpu in page.Cpus) cpu.Selected = false;
             check(page.AffinityMask == "" && !page.CanPreview, "With no CPU ticked there is no restriction to review" + " | " + page.AffinityMask);
             page.AffinityMask = "0xF0";
@@ -125,14 +125,14 @@ static class CoreChoiceChecks
             var first = games.CoreChoices.FirstOrDefault(choice => ProcessTarget.ParseMask(choice.Affinity.Mask) == 0xFFFF);
             var second = games.CoreChoices.FirstOrDefault(choice => ProcessTarget.ParseMask(choice.Affinity.Mask) == 0xFFFF0000);
             check(first is not null && second is not null && games.SelectedCores == games.CoreChoices[0] && ProcessTarget.ParseMask(games.CoreChoices[0].Affinity.Mask) == 0xFFFFFFFF,
-                "On a CPU with two cache groups like the 9950X3D's two CCDs, CPU cores offers each group, and all cores stay the default" + " | offered: " + Offered(games));
+                "On a CPU with two last-level cache groups, CPU cores offers each group, and all cores stay the default" + " | offered: " + Offered(games));
             check(first!.Label == "Cache group 1 (CPUs 0-15)" && second!.Label == "Cache group 2 (CPUs 16-31)", "Each cache group names its CPUs" + " | offered: " + Offered(games));
             games.SelectedCores = first;
             io.Selected = io.Options.Single(option => option.Value?.GetInt32() == 3);
             games.AcceptLauncherScope = true;
             await games.PreviewCommand.ExecuteAsync(null);
             check(requested is not null && requested["ioPriority"].GetInt32() == 3 && Mask(requested) == 0xFFFF && games.CanStart,
-                "Reviewing High I/O with the first CCD sends exactly those settings and Start can be pressed" + " | " + games.Status + " " + games.Detail);
+                "Reviewing High I/O with the first cache group sends exactly those settings and Start can be pressed" + " | " + games.Status + " " + games.Detail);
             check(games.ReviewSummary.Contains("I/O priority: High", StringComparison.Ordinal) && games.ReviewSummary.Contains("High I/O priority is set on the game once it starts and stays until you select Stop and restore.", StringComparison.Ordinal),
                 "The review says when High I/O priority takes effect and how it comes back" + " | " + games.ReviewSummary);
 
