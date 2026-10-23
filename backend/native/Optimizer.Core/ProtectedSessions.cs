@@ -359,7 +359,7 @@ public sealed class ProtectedSessions
         {
             try { Observe(processId); }
             catch (ProcessEndedException) { }
-            catch (RooIndustries.Optimization.CpuSets.NativeFailure error) when (error.Api == "OpenProcess" && error.NativeErrorCode == 87) { }
+            catch (RooIndustries.Optimization.CpuSets.NativeFailure error) when (error.Api == "OpenProcess" && error.NativeErrorCode is 5 or 87) { }
         }
         void Observe(int processId)
         {
@@ -404,6 +404,7 @@ public sealed class ProtectedSessions
                         var recovery = retained is null ? "ready" : gpuHandles!.Recovery(identity, field.Observed, field.Name);
                         if (recovery == "pending") { field.Status = "awaitingRecovery"; continue; }
                         if (recovery == "unknown") { field.Status = "unavailable"; field.Error = LaunchGpuHandles.OriginalUnreadable; continue; }
+                        if (field.Name == "ioPriority" && field.Route == "native") using (new PrivilegeScope("High I/O priority", "SeIncreaseBasePriorityPrivilege")) { }
                         var folder = Path.Combine(root, "games", identity.ProcessId + "-" + identity.CreationTimeFileTimeUtc, field.Name);
                         var path = Path.Combine(folder, "preview.json");
                         var preview = controls.Preview(processId, new() { [field.Name] = desired });

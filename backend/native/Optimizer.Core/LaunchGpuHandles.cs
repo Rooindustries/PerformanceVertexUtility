@@ -173,7 +173,7 @@ internal sealed class LaunchGpuHandles : IDisposable
                         target = null;
                     }
                     catch (ProcessEndedException) { }
-                    catch (RooIndustries.Optimization.CpuSets.NativeFailure error) when (error.Api == "OpenProcess" && error.NativeErrorCode == 87) { }
+                    catch (RooIndustries.Optimization.CpuSets.NativeFailure error) when (error.Api == "OpenProcess" && error.NativeErrorCode is 5 or 87) { }
                     finally { target?.Dispose(); }
                 }
                 snapshot.WaitNext();
