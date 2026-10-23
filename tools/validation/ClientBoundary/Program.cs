@@ -12,6 +12,12 @@ if (args is [var hostDll, var hostAction, "-"] && Path.GetFileName(hostDll) == "
 if (Path.GetFileName(System.Reflection.Assembly.GetEntryAssembly()?.Location) == "Optimizer.Host.dll") { await HostFixture.Run(args); return; }
 if (args is [_, "--game-session-display"]) { GameSessionChecks.Display(); return; }
 if (args is [var gameRepo, "--game-sessions"]) { await GameSessionChecks.Run(gameRepo); return; }
+if (args is [var profileRepo, "--launch-profiles" or "--session-recovery"]) { await LaunchProfileChecks.Run(profileRepo, args[1] == "--session-recovery"); return; }
+if (args is [var cleanupRepo, "--cleanup-failure"]) { await LaunchProfileChecks.CleanupFailure(cleanupRepo); return; }
+if (args is [var completionRepo, "--recovery-completion"]) { await LaunchProfileChecks.Run(completionRepo, true, completion: true); return; }
+if (args is [var faultRepo, "--launch-profile-cleanup-fault"]) { await LaunchProfileChecks.Run(faultRepo, false, true); return; }
+if (args is [var setupRepo, "--launch-profile-setup-fault"]) { await LaunchProfileChecks.Run(setupRepo, false, harnessFault: "setup"); return; }
+if (args is [var readinessRepo, "--launch-profile-readiness-fault"]) { await LaunchProfileChecks.Run(readinessRepo, false, harnessFault: "readiness"); return; }
 if (args is [_, "--background-priority"]) { PriorityChecks.Run(); return; }
 if (args is [var boundsRepo, "--bounds", .. var boundsFilter]) { await BoundChecks.Run(boundsRepo, boundsFilter.FirstOrDefault()); return; }
 if (args is [_, "--child-environment", var childScenario, var childMode]) { await ChildEnvironmentChecks.Run(childScenario, childMode); return; }

@@ -158,6 +158,20 @@
       "reason": "Protected session task name; scenarios and cleanup find these tasks by this prefix."
     },
     {
+      "text": "'Roo Industries Protected Session *'",
+      "files": [
+        "backend/scripts/Invoke-ProtectedGameSession.ps1"
+      ],
+      "reason": "Protected session task name pattern; uninstall cleanup finds leftover tasks by this prefix."
+    },
+    {
+      "text": "\"Roo Industries Protected Session \"",
+      "files": [
+        "backend/native/Optimizer.SessionHost/Program.cs"
+      ],
+      "reason": "Protected session task name; the worker removes its own task after sign-in recovery."
+    },
+    {
       "text": "'Roo Industries protected game session | '",
       "files": [
         "backend/scripts/Invoke-ProtectedGameSession.ps1"

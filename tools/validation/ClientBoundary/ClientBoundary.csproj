@@ -22,6 +22,7 @@
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/OptimizerService.Controls.cs" Link="OptimizerService.Controls.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/GovernorProbe.cs" Link="GovernorProbe.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/OptimizerService.GameSessions.cs" Link="OptimizerService.GameSessions.cs" />
+    <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/OptimizerService.LaunchProfiles.cs" Link="OptimizerService.LaunchProfiles.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/OptimizerService.Tweaks.cs" Link="OptimizerService.Tweaks.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/JsonTolerance.cs" Link="JsonTolerance.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/AppLog.cs" Link="AppLog.cs" />
