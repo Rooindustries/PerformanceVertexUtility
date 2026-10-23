@@ -79,6 +79,7 @@ These must hold on every commit of `main`. Each one names the code that enforces
      - An old-log suffix after `%USERPROFILE%` that starts with a space or comma and isn't followed by a separator reads as prose and stays.
      - One-letter user and PC names stay readable as bare words.
      - A one-letter account name after a domain other than the PC name or `AzureAD`, such as `CONTOSO\A`, stays readable.
+     - A quoted single-rooted path with doubled backslashes is also valid text for a UNC profile path. This ambiguous spelling is redacted as a UNC profile, even when its producer meant a JSON-escaped local path.
 
 ### Changing code an invariant depends on
 

@@ -25,7 +25,7 @@ public sealed class BugRedactor
         if (!string.IsNullOrWhiteSpace(profile))
         {
             foreach (var form in new[] { profile, profile.Replace("\\", "\\\\"), profile.Replace('\\', '/') }.Distinct())
-                rules.Add((new Regex(Regex.Escape(form) + @"(?![\p{L}\p{N}_])", Options), "%USERPROFILE%"));
+                rules.Add((new Regex(Regex.Escape(form) + ComponentEnd, Options), "%USERPROFILE%"));
         }
         var machine = machineName?.Trim();
         var user = userName?.Trim();
@@ -113,7 +113,7 @@ public sealed class BugRedactor
         var previousBoundary = -1;
         var previousPrivate = false;
         var covered = new List<(int Start, int End)>();
-        foreach (Match match in _segment.Matches(text))
+        foreach (var match in Profiles(text))
         {
             covered.Add((match.Groups["root"].Index, match.Groups["run"].Index + match.Groups["run"].Length));
             var found = Profile(match, text, out var boundary, out var root, out var placeholder);
@@ -142,7 +142,7 @@ public sealed class BugRedactor
 
     private string EncodedPaths(string text)
     {
-        if (text.IndexOf(@"\u", StringComparison.OrdinalIgnoreCase) < 0) return text;
+        if (!EncodedRootCharacter.IsMatch(text)) return text;
         var decoded = new StringBuilder(text.Length);
         var ends = new List<int>(text.Length);
         void Add(char value, int end)
@@ -179,7 +179,7 @@ public sealed class BugRedactor
         }
         var view = decoded.ToString();
         var changes = new List<(int Start, int End, string Value)>();
-        foreach (Match match in _segment.Matches(view))
+        foreach (var match in Profiles(view))
         {
             var root = match.Groups["root"];
             var start = root.Index == 0 ? 0 : ends[root.Index - 1];
@@ -194,6 +194,22 @@ public sealed class BugRedactor
             if (end - start > match.Length) changes.Add((start, end, Sid));
         }
         return Replace(text, changes);
+    }
+
+    private IEnumerable<Match> Profiles(string text)
+    {
+        if (ReferenceEquals(_segment, ProfileSegment))
+        {
+            foreach (Match match in _segment.Matches(text)) yield return match;
+            yield break;
+        }
+        using var urls = HttpUrls.Matches(text).Cast<Match>().GetEnumerator();
+        var hasUrl = urls.MoveNext();
+        foreach (Match match in _segment.Matches(text))
+        {
+            while (hasUrl && urls.Current.Index + urls.Current.Length <= match.Index) hasUrl = urls.MoveNext();
+            if (!match.Groups["network"].Success || !hasUrl || match.Index < urls.Current.Index) yield return match;
+        }
     }
 
     private static string Replace(string text, List<(int Start, int End, string Value)> changes)
@@ -414,16 +430,18 @@ public sealed class BugRedactor
             var parts = trimmed.Split('\\', '/');
             var named = parts.Where(part => part.Length > 0).ToArray();
             string head;
-            int volume;
-            if (parts.Length > 1 && parts[0].Length == 2 && char.IsAsciiLetter(parts[0][0]) && parts[0][1] == ':') { head = Regex.Escape(parts[0]); volume = 1; }
-            else if (trimmed.StartsWith(@"\\", StringComparison.Ordinal) && named.Length > 0 && named[0] is not ("?" or ".")) { head = @"(?<![\\/])"; volume = 0; }
+            if (parts.Length > 1 && parts[0].Length == 2 && char.IsAsciiLetter(parts[0][0]) && parts[0][1] == ':') head = Regex.Escape(parts[0]);
+            else if (trimmed.StartsWith(@"\\", StringComparison.Ordinal) && named.Length > 0 && named[0] is not ("?" or "."))
+            {
+                head = @"(?<network>(?<![\\/:])(?:\\{2,}(?:[?.]\\+UNC[\\/]+)?|\\+\?\?\\+UNC[\\/]+|/{2,}|(?:\\+/){2,}))" + Regex.Escape(named[0]);
+            }
             else continue;
-            if (named.Length < 2 || named.Skip(volume).Any(part => part is "." or "..")) continue;
-            var parent = named[volume..^1];
+            if (named.Length < 2 || named.Skip(1).Any(part => part is "." or "..")) continue;
+            var parent = named[1..^1];
             var pattern = head + string.Concat(parent.Select(part => @"(?>[\\/]+)" + Regex.Escape(part)));
             if (parent.Length > 0 && ProfileFolders.IsMatch(parent[^1])) continue;
-            if (volume == 1 ? parent.Length == 0 : parent.Length < 2)
-                exact.Add("(?<root>" + pattern + SegmentSeparator + ")(?=" + Regex.Escape(named[^1]) + @"(?![\p{L}\p{N}_]))");
+            if (parent.Length == 0)
+                exact.Add("(?<root>" + pattern + SegmentSeparator + ")(?=" + Regex.Escape(named[^1]) + ComponentEnd + ")");
             else roots.Add(pattern);
         }
         if (roots.Count == 0 && exact.Count == 0) return ProfileSegment;
@@ -436,6 +454,7 @@ public sealed class BugRedactor
 
     private const string User = "\u0001", PcName = "\u0002", Sid = "\u0003";
     private const RegexOptions Options = RegexOptions.IgnoreCase | RegexOptions.CultureInvariant;
+    private const string ComponentEnd = @"(?=[\\/""\x00-\x1F:<>|?*]|$)";
     private const string StandardRoots = @"[A-Za-z]:(?>[\\/]+)(?:Users|Documents and Settings)|(?<![\\/]|[A-Za-z]:)(?>\\+)(?:Users|Documents and Settings)";
     private const string SegmentSeparator = @"(?>(?:\\+(?=/)|/+(?=(?>\\+)(?!u[0-9A-Fa-f]{4}))|[\\/]+\.(?=[\\/]))*)(?<sep>(?>\\+|/+))";
     private const string SegmentRun = @"(?<run>(?>(?:(?!\k<sep>)\\+u[0-9A-Fa-f]{4}|(?![A-Za-z]:[\\/])[^\\/""\x00-\x1F:<>|?*])*)(?>[\u0001-\u0003](?:(?!\k<sep>)\\+u[0-9A-Fa-f]{4}|(?![A-Za-z]:[\\/])[^\\/""\x00-\x1F:<>|?*])*)*)";
@@ -443,6 +462,8 @@ public sealed class BugRedactor
     private static readonly Regex ProfileFolders = new(@"\A(?:Users|Documents and Settings)\z", Options);
     private static readonly Regex AccountProfile = new(@"\AS-1-(?:5-21|12-1)(?:-\d+)+(?:\.bak)?\z", Options);
     private static readonly Regex AccountSid = new(@"S-1-(?:5-21(?:-\d+){3,4}|12-1(?:-\d+){1,4})", Options);
+    private static readonly Regex EncodedRootCharacter = new(@"\\u(?!003[ce]|0022)[0-9A-Fa-f]{4}", Options);
+    private static readonly Regex HttpUrls = new(@"https?:(?:\\*/){2}(?:\\+/|[^\s\\""'<>])*", Options);
     private static readonly Regex Macro = new("(?:%USERPROFILE%)+", Options);
     private static readonly Regex ProfileSegment = new("(?=(?<root>(?:" + StandardRoots + ")" + SegmentSeparator + ")" + SegmentRun + ")", Options);
 

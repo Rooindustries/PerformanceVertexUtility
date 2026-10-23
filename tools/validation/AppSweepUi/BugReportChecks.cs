@@ -1001,7 +1001,7 @@ static class BugReportChecks
         var own = new BugRedactor(@"C:\Users\Alice", "Alice", "GAMER-PC");
         var moved = new BugRedactor(@"D:\Profiles\Alice", "Alice", "GAMER-PC", [@"D:\Profiles\Bob", @"\\fs01\profiles$\Carol.V6", @"E:\Client", @"\\nas\Fixture", @"D:\Profiles\Public", @"D:\Profiles\Default"]);
         var single = new BugRedactor(@"C:\Users\A", "A", "X");
-        var direct = new BugRedactor(@"E:\Client", "Client", "GAMER-PC", [@"\\nas\Fixture"]);
+        var direct = new BugRedactor(@"E:\Client", "Alice", "GAMER-PC", [@"\\nas\Fixture"]);
         var escapeLetter = new BugRedactor(@"C:\Users\n", "n", "GAMER-PC");
         var cases = new List<(string Issue, BugRedactor Redactor, string Input, string Expected, string[] Private)>
         {
@@ -1014,6 +1014,7 @@ static class BugReportChecks
             ("Relocated profile", moved, @"E:\Client\x, \\nas\Fixture\y, E:\Games\z and \\nas\share\w", @"E:\<user>\x, \\nas\<user>\y, E:\Games\z and \\nas\share\w", ["Client", "Fixture"]),
             ("Relocated profile", moved, @"E:\ClientGames\x and \\nas\FixtureBackup\y", @"E:\ClientGames\x and \\nas\FixtureBackup\y", []),
             ("Relocated profile", direct, @"E:\ClientGames\x and \\nas\FixtureBackup\y", @"E:\ClientGames\x and \\nas\FixtureBackup\y", []),
+            ("Relocated profile", direct, @"E:\Client\x", @"%USERPROFILE%\x", []),
             ("Old log suffix", own, @"%USERPROFILE%.Zqxsmith\AppData\x and %USERPROFILE% Zqxsmith\AppData\y", @"<user>\AppData\x and <user>\AppData\y", ["Zqxsmith"]),
             ("Old log suffix", own, @"%userprofile%Zqxsmith", "<user>", ["Zqxsmith"]),
             ("Old log suffix", own, @"Moved %USERPROFILE%%USERPROFILE%-Zqxold\x", @"Moved <user>\x", ["Zqxold"]),
@@ -1039,6 +1040,22 @@ static class BugReportChecks
         };
         check(escapeLetter.Redact(@"{""m"":""on GAMER-PC\n""} and GAMER-PC\\n") == @"{""m"":""on <pc-name>\n""} and <pc-name>\\<user>",
             "A one-letter account named like a JSON escape keeps JSON newlines valid and is redacted after an escaped backslash");
+        foreach (var suffix in new[] { "Data", ".Backup", "-cache", " Games" })
+        {
+            var input = @"E:\Client" + suffix + @"\x and \\nas\Fixture" + suffix + @"\y";
+            cases.Add(("Relocated profile", moved, input, input, []));
+            cases.Add(("Relocated profile", direct, input, input, []));
+        }
+        check(moved.Redact(@"\nas\Fixture\x") == @"\nas\Fixture\x", "An unquoted single-rooted local path is not a UNC profile");
+        cases.Add(("Ambiguous UNC JSON", moved, @"""\\nas\\Fixture\\x""", @"""\\nas\\<user>\\x""", ["Fixture"]));
+        foreach (var input in new[] { @"C:\nas\Fixture\x", "C:/nas/Fixture/x", @"nas\Fixture\x",
+            "https://host/nas/Fixture/x", "https://nas/Fixture/x", "https://fs01/profiles$/Bob/x", "https://host/fs01/profiles$/Bob/x",
+            "https://host//nas/Fixture/x", @"https:\/\/fs01\/profiles$\/Bob\/x" })
+            cases.Add(("Relocated profile", moved, input, input, []));
+        cases.Add(("Relocated profile", moved, @"\\.\UNC\fs01\profiles$\Zqxroam\x and //fs01/profiles$/Zqxroam/y and \/\/fs01\/profiles$\/Zqxroam\/z",
+            @"\\.\UNC\fs01\profiles$\<user>\x and //fs01/profiles$/<user>/y and \/\/fs01\/profiles$\/<user>\/z", ["Zqxroam"]));
+        cases.Add(("Windows path in URL", own, "https://host/?file=C:/Users/Bob/x", "https://host/?file=C:/Users/<user>/x", ["Bob"]));
+        cases.Add(("UNC after URL", moved, "https://host/x\n" + @"\\fs01\profiles$\Zqxroam\x", "https://host/x\n" + @"\\fs01\profiles$\<user>\x", ["Zqxroam"]));
         foreach (var letter in new[] { "n", "r", "t", "b", "f" })
         {
             cases.Add(("Separator form", own, @"C:\\Users\\\" + letter + "Zqxname" + @"\\x", @"C:\\Users\\<user>\\x", ["Zqxname"]));
