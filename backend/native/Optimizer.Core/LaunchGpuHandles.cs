@@ -119,11 +119,16 @@ internal sealed class LaunchGpuHandles : IDisposable
                     ProcessTarget? target = null;
                     try
                     {
-                        target = ProcessTarget.CaptureGpu(process.Pid);
-                        var copy = target.CopyTo(receiver);
+                        try { target = ProcessTarget.CaptureGpu(process.Pid); }
+                        catch (RooIndustries.Optimization.CpuSets.NativeFailure error) when (error.Api == "OpenProcess" && error.NativeErrorCode == 5)
+                        {
+                            using var query = new ProcessTarget(process.Pid);
+                            if (Reviewed(query.Identity())) throw;
+                            continue;
+                        }
                         var identity = target.Identity();
-                        if (!string.Equals(identity.ExecutablePath, _state.Preview.GamePath, StringComparison.OrdinalIgnoreCase))
-                            throw new InvalidDataException("A launch matched the name but not the reviewed executable.");
+                        if (!Reviewed(identity)) continue;
+                        var copy = target.CopyTo(receiver);
                         var transfer = new GpuHandleTransfer(_state.Preview.Owner, _state.Preview.OperationId, _state.Host, _watcher, identity, copy);
                         OperationFiles.Write(TransferPath(identity), transfer);
                         if (!_targets.TryAdd(identity, target)) throw new InvalidDataException("Duplicate GPU capture identity.");
@@ -140,13 +145,15 @@ internal sealed class LaunchGpuHandles : IDisposable
         finally { _ready.Set(); }
     }
 
+    private bool Reviewed(RunningProcess identity) => string.Equals(identity.ExecutablePath, _state.Preview.GamePath, StringComparison.OrdinalIgnoreCase);
+
     private void Validate(GpuHandleTransfer transfer)
     {
         if (transfer.Owner is null || transfer.Target is null || transfer.Host is null || transfer.Watcher is null) throw new InvalidDataException("Incomplete GPU handle handoff.");
         transfer.Owner.Verify();
         if (transfer.Owner != _state.Preview.Owner || transfer.OperationId != _state.Preview.OperationId || transfer.Host != _state.Host || transfer.Watcher != _watcher ||
             transfer.Target.ProcessId <= 0 || !long.TryParse(transfer.Target.CreationTimeFileTimeUtc, out var created) || created <= 0 ||
-            !string.Equals(transfer.Target.ExecutablePath, _state.Preview.GamePath, StringComparison.OrdinalIgnoreCase))
+            !Reviewed(transfer.Target))
             throw new InvalidDataException("GPU handle handoff belongs to a different session or process.");
     }
 

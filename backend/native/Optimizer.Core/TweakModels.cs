@@ -10,7 +10,7 @@ public sealed record TweakToken([property: JsonRequired] string Name, [property:
 public sealed record TweakBits([property: JsonRequired] uint Mask, [property: JsonRequired] uint Value, [property: JsonRequired] uint AbsentDefault);
 public sealed record TweakAssignment([property: JsonRequired] RegistryAddress Address, [property: JsonRequired] uint? Dword, RegistryValueData? Value = null, TweakToken? Token = null, TweakBits? Bits = null, RegistrySelection? Selector = null, string? Formula = null);
 public sealed record TweakAvailability([property: JsonRequired] int MinimumBuild, [property: JsonRequired] int MaximumBuild, [property: JsonRequired] string[] Editions, string[]? Requirements = null);
-public sealed record TweakOption([property: JsonRequired] string Id, [property: JsonRequired] string Name, [property: JsonRequired] TweakAssignment[] Changes, TweakAvailability[]? Availability = null, ControlAssignment[]? Controls = null, DateTime? ValidUntilUtc = null, string[]? DataLoss = null, string? Replaces = null);
+public sealed record TweakOption([property: JsonRequired] string Id, [property: JsonRequired] string Name, [property: JsonRequired] TweakAssignment[] Changes, TweakAvailability[]? Availability = null, ControlAssignment[]? Controls = null, DateTime? ValidUntilUtc = null, string[]? DataLoss = null, string? Replaces = null, string? SameAs = null);
 public sealed record TweakSelection([property: JsonRequired] string SettingId, [property: JsonRequired] string OptionId);
 public sealed record TweakPreset([property: JsonRequired] string Id, [property: JsonRequired] string Name, [property: JsonRequired] TweakSelection[] Selections, bool AvailableOnly = false,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] TweakSelection[]? OptionalSelections = null);
@@ -35,6 +35,7 @@ public sealed record TweakCatalog([property: JsonRequired] int SchemaVersion, [p
             {
                 if (string.IsNullOrWhiteSpace(option.Id) || !options.Add(option.Id) || option.Changes is null || option.Changes.Length == 0 && option.Controls is not { Length: > 0 }) throw new InvalidDataException("Invalid or duplicate tweak option.");
                 if (option.Availability is not null && (option.Availability.Length == 0 || option.Availability.Any(gate => gate.MinimumBuild < 10240 || gate.MaximumBuild < gate.MinimumBuild || gate.Editions is not { Length: > 0 }))) throw new InvalidDataException("Invalid Windows applicability.");
+                if (option.SameAs is { } twin && (twin == option.Id || setting.Options.SingleOrDefault(item => item.Id == twin) is not { SameAs: null })) throw new InvalidDataException("A hidden choice must name a visible choice of the same setting.");
                 foreach (var control in option.Controls ?? []) { control.Address.Validate(); if (control.Value.ValueKind == JsonValueKind.Undefined || control.Patch && (control.Value.ValueKind != JsonValueKind.Object || !control.Value.EnumerateObject().Any())) throw new InvalidDataException("A desired control value is required."); }
                 foreach (var change in option.Changes)
                 {

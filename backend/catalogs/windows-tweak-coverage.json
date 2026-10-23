@@ -3930,7 +3930,8 @@
           "remainingEffects": [],
           "refreshInstructions": null
         }
-      ]
+      ],
+      "compatibility": "Writes the registry type Windows keeps for these values instead of a DWORD."
     },
     {
       "product": "FSOS-X Dash",
@@ -19205,7 +19206,8 @@
           "remainingEffects": [],
           "refreshInstructions": null
         }
-      ]
+      ],
+      "compatibility": "Writes the registry type Windows keeps for these values instead of a DWORD."
     },
     {
       "product": "Chris Titus Tech WinUtil",
@@ -20542,15 +20544,15 @@
           "selections": [
             {
               "settingId": "windows.c55fa4621a954e21",
-              "optionId": "choice-6b253977ea5987f3"
+              "optionId": "choice-b7f8b0e92f46b445"
             },
             {
               "settingId": "windows.079018f691b27542",
-              "optionId": "choice-4b2161bf9c2d794a"
+              "optionId": "choice-0c8d927787c234c4"
             },
             {
               "settingId": "windows.ced5e140ccf6e55d",
-              "optionId": "choice-58acca08b103278c"
+              "optionId": "choice-c8412e2c9862ae97"
             }
           ],
           "remainingEffects": [],
@@ -20562,21 +20564,22 @@
           "selections": [
             {
               "settingId": "windows.c55fa4621a954e21",
-              "optionId": "choice-95a6ed84299d0109"
+              "optionId": "choice-48d6a69e87a1e228"
             },
             {
               "settingId": "windows.079018f691b27542",
-              "optionId": "choice-95a6ed84299d0109"
+              "optionId": "choice-a3328a72057554f3"
             },
             {
               "settingId": "windows.ced5e140ccf6e55d",
-              "optionId": "choice-95a6ed84299d0109"
+              "optionId": "choice-f91ca3596f527da8"
             }
           ],
           "remainingEffects": [],
           "refreshInstructions": null
         }
-      ]
+      ],
+      "compatibility": "Writes the registry type Windows keeps for these values instead of a DWORD."
     },
     {
       "product": "Chris Titus Tech WinUtil",
@@ -20912,7 +20915,7 @@
           "selections": [
             {
               "settingId": "windows.8c7a398b0e1a5c1d",
-              "optionId": "choice-c55db10b623ad078"
+              "optionId": "choice-4ab2e532dd520023"
             }
           ],
           "remainingEffects": [],
@@ -20930,7 +20933,8 @@
           "remainingEffects": [],
           "refreshInstructions": null
         }
-      ]
+      ],
+      "compatibility": "Writes the registry type Windows keeps for these values instead of a DWORD."
     },
     {
       "product": "Chris Titus Tech WinUtil",

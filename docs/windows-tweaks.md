@@ -69,6 +69,21 @@ value was before. Today this covers **Automatic Driver Updates: value** in
 Windows' default policy store, which Windows keeps at 0 (driver updates
 allowed). `check_windows_tweaks.py` fails while any choice deletes a listed value.
 
+`backend/catalogs/windows-value-types.json` lists values Windows keeps as text or
+binary, with Microsoft's reference and a read from the test PC: the keyboard
+repeat delay, mouse acceleration speed and thresholds, the Sticky Keys flags as
+REG_SZ, and USB, HID and USB storage selective suspend as REG_BINARY. Some sources
+write these as DWORD numbers. The compiler writes each number in the type Windows
+keeps, such as REG_SZ `"0"` or REG_BINARY `00`, so Windows reads it the same way.
+When that makes a choice write exactly what another choice of the row writes, the
+converted choice keeps its ID with `sameAs` naming its twin: the app lists only
+the twin and shows a saved pick of the hidden choice as the twin, and presets pick
+the twin. Saved choices and profiles from before keep working, and Undo puts back
+the exact earlier type and data, including a number an older version wrote.
+`check_windows_tweaks.py` fails while a choice writes a listed value in another
+type, and the read walk fails while a choice writes a different type than the one
+recorded from Windows in `tools/validation/TweakReads/known-states.json`.
+
 ## One setting, shared ownership
 
 The planner resolves registry handles to their native key identity, with the
@@ -255,7 +270,8 @@ device selection, missing inputs, dependencies and pending servicing. Run:
 ```
 
 The separately approved native fixture switches are `--registry-fixture`,
-`--controls-fixture`, `--power-fixture` and `--windows-default-fixture` on
+`--controls-fixture`, `--power-fixture`, `--windows-default-fixture` and
+`--windows-types-fixture` on
 `tools/validation/Tweaks/Tweaks.csproj`. They refuse unexpected baseline state
 and clean only their owned test resources. They are not part of the ordinary
 file-fixture run. `--feature-restart-fixture` is: it drives the real recovery
@@ -263,6 +279,11 @@ store in a disposable current-user key with simulated Windows feature states,
 so no feature changes and no restart happens. `--windows-default-fixture` copies
 each value in `backend/catalogs/windows-default-values.json` into a disposable
 current-user key and runs its real catalog row through apply, readback and Undo.
+`--windows-types-fixture` does the same for `windows-value-types.json`, with USB
+devices that hold binary, nothing or an older DWORD, and checks each choice writes
+Windows' type and Undo puts back the exact earlier type and data. The desktop
+suite's `--type-twins <repo>` loads an older app's number choice through the app
+and checks it shows and writes as its text twin.
 
 Catalog contracts and negative controls run with:
 

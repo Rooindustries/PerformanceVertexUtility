@@ -175,7 +175,7 @@ static class RegistryTweakChecks
         }
         finally { Remove(hive, parentExisted, check); }
     }
-    private static void Remove(RegistryKey hive, bool parentExisted, Action<bool, string> check)
+    internal static void Remove(RegistryKey hive, bool parentExisted, Action<bool, string> check)
     {
         using (var key = hive.OpenSubKey(Root))
         {

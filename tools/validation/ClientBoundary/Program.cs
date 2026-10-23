@@ -19,6 +19,7 @@ if (args is [var completionRepo, "--recovery-completion"]) { await LaunchProfile
 if (args is [var faultRepo, "--launch-profile-cleanup-fault"]) { await LaunchProfileChecks.Run(faultRepo, false, true); return; }
 if (args is [var setupRepo, "--launch-profile-setup-fault"]) { await LaunchProfileChecks.Run(setupRepo, false, harnessFault: "setup"); return; }
 if (args is [var readinessRepo, "--launch-profile-readiness-fault"]) { await LaunchProfileChecks.Run(readinessRepo, false, harnessFault: "readiness"); return; }
+if (args is [var sameNameRepo, "--launch-profile-same-name"]) { await LaunchProfileChecks.Run(sameNameRepo, false, sameName: true); return; }
 if (args is [_, "--background-priority"]) { PriorityChecks.Run(); return; }
 if (args is [var boundsRepo, "--bounds", .. var boundsFilter]) { await BoundChecks.Run(boundsRepo, boundsFilter.FirstOrDefault()); return; }
 if (args is [_, "--child-environment", var childScenario, var childMode]) { await ChildEnvironmentChecks.Run(childScenario, childMode); return; }

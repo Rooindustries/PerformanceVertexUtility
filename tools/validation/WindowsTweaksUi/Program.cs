@@ -54,6 +54,12 @@ if (args is ["--denied-releases", var deniedRepo])
     finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
     return;
 }
+if (args is ["--type-twins", var twinsRepo])
+{
+    try { await TypeTwinChecks.Run(root, OperationFiles.Read<TweakCatalog>(Path.Combine(twinsRepo, "backend/catalogs/windows-tweaks.json")), Check); Console.WriteLine($"Completed {count} type twin UI checks."); }
+    finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+    return;
+}
 if (args is ["--retained-profiles"])
 {
     try { await RetainedProfileChecks.Run(root, TwoSettingCatalog(), Check); Console.WriteLine($"Completed {count} retained profile UI checks."); }
