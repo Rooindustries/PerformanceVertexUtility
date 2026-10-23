@@ -47,6 +47,12 @@ try{
  Restore-RehearsalPaths @{id='fresh';metadata=@{paths=@($fresh);outputsReady=$true}}
  if((Test-HarnessPath $absent) -or -not(Test-HarnessPath $fresh.generated)){throw 'Fresh root was not retained outside the app path.'}
  $rows.Add(@{check='fresh data root returns to absent without deleting its data';status='pass'})
+ $deep=Join-Path $fixture 'deep';$nested=$deep
+ foreach($number in 1..4){$nested=Join-Path $nested ('nested-'+('x'*60)+$number)}
+ [IO.Directory]::CreateDirectory($nested)|Out-Null;[IO.File]::WriteAllText((Join-Path $nested 'history.json'),'deep undo history')
+ $deepBefore=Get-RehearsalPathState $deep
+ Move-RehearsalPath $deep ($deep+'.saved');Assert-RehearsalPathState $deepBefore ($deep+'.saved');Move-RehearsalPath ($deep+'.saved') $deep;Assert-RehearsalPathState $deepBefore $deep
+ $rows.Add(@{check='data beyond 259 characters survives archive and restore';status='pass';windowsAclTested=$false})
  $link=Join-Path $fixture 'shortcut.lnk';[IO.File]::WriteAllText($link,'shortcut bytes')
  $linkBefore=Get-RehearsalPathState $link;Move-RehearsalPath $link ($link+'.saved');Move-RehearsalPath ($link+'.saved') $link;Assert-RehearsalPathState $linkBefore $link
  $rows.Add(@{check='shortcut bytes restored exactly';status='pass'})

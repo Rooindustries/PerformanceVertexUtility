@@ -5,7 +5,7 @@ function Get-RehearsalPathState([string]$Path){
   if($items[0].IsDirectory){$items+=@(Get-HarnessTree $Path)}
   foreach($item in $items){
    if($item.Attributes -band [IO.FileAttributes]::ReparsePoint){throw ('Linked rehearsal state retained: '+$item.FullName)}
-   $security=if($env:OS -eq 'Windows_NT'){$acl=if($item.IsDirectory){[IO.Directory]::GetAccessControl((Get-HarnessLongPath $item.FullName))}else{[IO.File]::GetAccessControl((Get-HarnessLongPath $item.FullName))};$acl.GetSecurityDescriptorSddlForm([Security.AccessControl.AccessControlSections]7)}else{''}
+   $security=if($env:OS -eq 'Windows_NT'){$acl=if($item.IsDirectory){[IO.Directory]::GetAccessControl((Get-HarnessLongPath $item.FullName))}else{[IO.File]::GetAccessControl((Get-HarnessLongPath $item.FullName))};$acl.GetSecurityDescriptorSddlForm([Security.AccessControl.AccessControlSections]'Access,Owner,Group')}else{''}
    @{relative=$item.FullName.Substring($Path.Length);directory=$item.IsDirectory;attributes=[int]$item.Attributes;created=[IO.File]::GetCreationTimeUtc((Get-HarnessLongPath $item.FullName)).Ticks;written=[IO.File]::GetLastWriteTimeUtc((Get-HarnessLongPath $item.FullName)).Ticks;security=$security;sha256=$(if(-not$item.IsDirectory){Get-HarnessFileSha256 $item.FullName}else{''})}
   }
  })
