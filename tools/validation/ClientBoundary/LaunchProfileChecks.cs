@@ -42,6 +42,11 @@ static class LaunchProfileChecks
         if (NtQueryInformationProcess(process.Handle, 33, ref value, 4, IntPtr.Zero) < 0) throw new InvalidOperationException("Independent I/O priority getter failed.");
         return value;
     }
+    static int Gpu(Process process)
+    {
+        if (D3DKMTGetProcessSchedulingPriorityClass(process.Handle, out var value) < 0) throw new InvalidOperationException("Independent GPU priority getter failed.");
+        return value;
+    }
     static object? Launch(string name)
     {
         using var key = Registry.LocalMachine.OpenSubKey(Ifeo + @"\PerfOptions");
@@ -90,7 +95,7 @@ static class LaunchProfileChecks
         }
     }
 
-    public static async Task Run(string repo, bool recovery, bool cleanupFault = false, bool completion = false, string? harnessFault = null)
+    public static async Task Run(string repo, bool recovery, bool cleanupFault = false, bool completion = false, string? harnessFault = null, bool sameName = false)
     {
         var root = Path.Combine(Path.GetTempPath(), "roo-industries-launch-profile-" + Guid.NewGuid().ToString("N"));
         var operations = Path.Combine(root, "operations");
@@ -211,6 +216,7 @@ static class LaunchProfileChecks
             var controls = new Dictionary<string, JsonElement> { ["cpuPriority"] = V("AboveNormal"), ["ioPriority"] = V(2), ["affinity"] = V(new AffinityState(0, "0x" + core.ToString("X"))) };
 
             if (completion) await Completion();
+            else if (sameName) await SameName();
             else await (recovery ? Recovery() : Profiles());
             Console.WriteLine((recovery ? "Session recovery" : "Launch profile") + " assertions: " + passed);
 
@@ -315,6 +321,40 @@ static class LaunchProfileChecks
                 await Ticks(off, 4);
                 Check((await Sessions()).All(entry => GameSessionDisplay.Restored(entry.Worker)) && NoLaunchPolicy(), "Nothing is set up again after the settings are turned off");
                 await CloseLauncher(sixth);
+            }
+
+            async Task SameName()
+            {
+                var app = App();
+                var review = await app.PreviewGameSessionAsync(first.Id, gamePath, new(controls) { ["gpuPriority"] = V(3) }, true);
+                await app.StartGameSessionAsync(review);
+                var saved = await app.SaveLaunchProfileAsync(review);
+                await CloseLauncher(first);
+                await Until(async () => GameSessionDisplay.Restored((await Sessions()).Single().Worker), "Closing the launcher did not end the first session.");
+                var second = await OpenLauncher();
+                var rearmed = await ArmedFor(App(), second);
+                Check(rearmed.ProfileId == saved.Profile.ProfileId && rearmed.Worker.State!.Preview.Controls.ContainsKey("gpuPriority"), "A restarted launcher is set up again with the saved GPU priority");
+                var other = Directory.CreateDirectory(Path.Combine(root, "same-name")).FullName;
+                foreach (var file in Directory.GetFiles(bin, "*.dll").Concat(Directory.GetFiles(bin, "*.json"))) File.Copy(file, Path.Combine(other, Path.GetFileName(file)));
+                File.Copy(gamePath, Path.Combine(other, Path.GetFileName(gamePath)));
+                var folder = Path.Combine(root, "game-" + (games.Count + 1)); Directory.CreateDirectory(folder);
+                var copy = Start(Path.Combine(other, Path.GetFileName(gamePath)), "--game", folder, "none"); games.Add((copy, folder, copy.StartTime.ToUniversalTime().ToFileTimeUtc()));
+                await Until(() => Task.FromResult(File.Exists(Path.Combine(folder, "ready.json"))), "The same-name program did not start.");
+                string? ended = null; var clock = Stopwatch.StartNew();
+                while (ended is null && clock.Elapsed.TotalSeconds < 6)
+                {
+                    var live = await App().ReadGameSessionAsync(rearmed.SessionRoot);
+                    if (live.HostRunning != true || live.State?.Status != "armed" || live.State.Errors.Count != 0) ended = live.State?.Status + ": " + string.Join("; ", live.State?.Errors ?? []);
+                    await Task.Delay(250);
+                }
+                Check(ended is null, "A program with the game's file name from another folder leaves the re-armed session running" + (ended is null ? "" : " (" + ended + ")"));
+                var game = await Game(second);
+                await Until(async () => (await App().ReadGameSessionAsync(rearmed.SessionRoot)).State?.Status == "active", "The game under the re-armed session was not verified.");
+                Check(Gpu(game) == 3 && Affinity(game) == core && game.PriorityClass == ProcessPriorityClass.AboveNormal, "The game started next still gets the saved GPU priority, cores and priority");
+                EndGame(game); EndGame(copy);
+                Check(await App().DisableLaunchProfileAsync((await Profile()).Root) is null && (await Sessions()).All(entry => GameSessionDisplay.Restored(entry.Worker)) && NoLaunchPolicy() && Affinity(second) == original,
+                    "Turning the saved settings off restores the launcher and game settings");
+                await CloseLauncher(second);
             }
 
             async Task Completion()
@@ -628,4 +668,5 @@ static class LaunchProfileChecks
     [DllImport("ntdll.dll")] static extern int NtSuspendProcess(IntPtr process);
     [DllImport("ntdll.dll")] static extern int NtQueryInformationProcess(IntPtr process, int information, ref int value, int length, IntPtr returned);
     [DllImport("kernel32.dll", SetLastError = true)] static extern bool GetProcessAffinityMask(IntPtr process, out UIntPtr mask, out UIntPtr system);
+    [DllImport("gdi32.dll")] static extern int D3DKMTGetProcessSchedulingPriorityClass(IntPtr process, out int value);
 }
