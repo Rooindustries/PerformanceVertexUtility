@@ -243,11 +243,18 @@ public sealed class ProcessControlEngine
     public ProcessControlJournal Restore(string journalPath, bool overwrite = false) => Restore(journalPath, overwrite, false, false, null);
 
     public ProcessControlJournal RestoreApplyOnce(string journalPath, string dataRoot, string? repoRoot) =>
-        Restore(journalPath, false, false, false, (identity, name, current) => GovernorClaims.OwnChange(identity, name, current, dataRoot, repoRoot, journalPath));
+        Restore(journalPath, false, false, false, new Ownership(dataRoot, repoRoot, journalPath));
 
     internal ProcessControlJournal RestoreGovernor(string journalPath, bool relinquished) => Restore(journalPath, false, true, relinquished, null);
 
-    private ProcessControlJournal Restore(string journalPath, bool overwrite, bool governor, bool relinquished, Func<RunningProcess, string, JsonElement, string[]?>? owned, string? only = null)
+    private sealed record Ownership(string DataRoot, string? RepoRoot, string JournalPath)
+    {
+        public string[]? Holders(RunningProcess identity, string name, JsonElement current) => GovernorClaims.OwnChange(identity, name, current, DataRoot, RepoRoot, JournalPath);
+        public (string[] Journals, ReleasedClaim[] Released) SetBack(RunningProcess identity, string name, JsonElement current, JsonElement desired) =>
+            GovernorClaims.SetBack(identity, name, current, desired, DataRoot, RepoRoot, JournalPath);
+    }
+
+    private ProcessControlJournal Restore(string journalPath, bool overwrite, bool governor, bool relinquished, Ownership? owned, string? only = null)
     {
         using var lease = OperationFiles.Lock(journalPath);
         var journal = OperationFiles.Read<ProcessControlJournal>(journalPath);
@@ -282,25 +289,55 @@ public sealed class ProcessControlEngine
             var conflicts = false;
             JsonElement Release(string name, string[] holders)
             {
-                foreach (var held in holders) Restore(held, false, false, false, null, name);
+                foreach (var held in holders)
+                {
+                    var record = Restore(held, false, false, false, null, name);
+                    if (record.Status != "expired" && record.Changes.FirstOrDefault(change => change.Name == name) is { Status: not ("restored" or "leftAsSet") } stuck)
+                        throw new InvalidOperationException("Another saved change on this app couldn't be undone first" + (stuck.Error is { } reason ? ": " + reason : "."));
+                }
                 return target.Read(name).Require();
             }
-            foreach (var change in journal.Changes.Where(change => IsAttempted(change) && (only is null || change.Name == only)).Reverse())
+            bool Settle(ControlChange change)
             {
-                try
+                var confirmed = change.Status == "applied";
+                var settled = false;
+                var current = target.Read(change.Name).Require();
+                for (var round = 0; ; round++)
                 {
-                    var current = target.Read(change.Name).Require();
-                    if (ProcessTarget.Equivalent(change.Name, current, change.Original)) { change.Status = "restored"; change.Observed = current; change.Error = null; change.ErrorKind = null; Save(journalPath, journal); continue; }
-                    var holders = owned is null || ProcessTarget.Equivalent(change.Name, current, change.Desired) ? null : owned(journal.Preview.Identity, change.Name, current);
-                    if (governor && (relinquished || !ProcessTarget.Equivalent(change.Name, current, change.Desired)) ||
-                        owned is not null && holders is null && change.Status == "applied" && !ProcessTarget.Equivalent(change.Name, current, change.Desired))
+                    if (round > 4) throw new InvalidOperationException("This setting kept changing, so Undo left it for now. Try again in a moment.");
+                    if (ProcessTarget.Equivalent(change.Name, current, change.Original))
+                    {
+                        if (owned is not null && !settled)
+                        {
+                            settled = true;
+                            var (stacked, released) = owned.SetBack(journal.Preview.Identity, change.Name, current, change.Desired);
+                            if (released.Length > 0)
+                            {
+                                change.Released = (change.Released ?? []).Concat(released).DistinctBy(claim => claim.Feature + "\n" + claim.Original.GetRawText()).ToList();
+                                Save(journalPath, journal);
+                            }
+                            if (stacked.Length > 0) { current = Release(change.Name, stacked); continue; }
+                        }
+                        Succeeded(change, "restored", current);
+                        return true;
+                    }
+                    if (ProcessTarget.Equivalent(change.Name, current, change.Desired)) confirmed = true;
+                    if (governor && (relinquished || !ProcessTarget.Equivalent(change.Name, current, change.Desired)))
                     {
                         LeaveAsSet(change, current);
-                        Save(journalPath, journal);
-                        continue;
+                        return true;
                     }
-                    if (holders is not null) current = Release(change.Name, holders);
-                    if (!overwrite && holders is null && !ProcessTarget.Equivalent(change.Name, current, change.Desired)) throw new InvalidOperationException("Another writer changed this field; restoration will not overwrite it.");
+                    if (!overwrite && !ProcessTarget.Equivalent(change.Name, current, change.Desired))
+                    {
+                        var holders = owned?.Holders(journal.Preview.Identity, change.Name, current);
+                        if (holders is null)
+                        {
+                            if (owned is null || !confirmed) throw new InvalidOperationException("Another writer changed this field; restoration will not overwrite it.");
+                            LeaveAsSet(change, current);
+                            return true;
+                        }
+                        if (holders.Length > 0) { current = Release(change.Name, holders); continue; }
+                    }
                     change.Status = "restoreIntent";
                     Save(journalPath, journal);
 #if GOVERNOR_TEST_HOOKS
@@ -311,28 +348,32 @@ public sealed class ProcessControlEngine
                         var beforeWrite = target.Read(change.Name).Require();
                         if (!ProcessTarget.Equivalent(change.Name, beforeWrite, current) && !ProcessTarget.Equivalent(change.Name, beforeWrite, change.Desired))
                         {
-                            var late = owned?.Invoke(journal.Preview.Identity, change.Name, beforeWrite);
-                            if (late is null)
+                            if (owned is null && !governor) throw new InvalidOperationException("The field changed before restoration.");
+                            if (owned is null)
                             {
-                                if (!governor && owned is null) throw new InvalidOperationException("The field changed before restoration.");
                                 LeaveAsSet(change, beforeWrite);
-                                Save(journalPath, journal);
-                                continue;
+                                return true;
                             }
-                            Release(change.Name, late);
+                            current = beforeWrite;
+                            continue;
                         }
                     }
                     target.Write(change.Name, change.Original);
                     var after = target.Read(change.Name).Require();
                     change.Observed = after;
                     if (!ProcessTarget.Equivalent(change.Name, after, change.Original)) throw new InvalidOperationException("Restoration readback did not match the saved original.");
-                    change.Status = "restored";
-                    change.Error = null; change.ErrorKind = null;
+                    Succeeded(change, "restored", after);
+                    return false;
                 }
+            }
+            foreach (var change in journal.Changes.Where(change => IsAttempted(change) && (only is null || change.Name == only)).Reverse())
+            {
+                var early = false;
+                try { early = Settle(change); }
                 catch (Exception error) { change.Error = error.Message; change.ErrorKind = ProcessFailures.Denied(error) ? "denied" : null; conflicts = true; }
                 Save(journalPath, journal);
 #if GOVERNOR_TEST_HOOKS
-                if (int.TryParse(Environment.GetEnvironmentVariable("ROO_INDUSTRIES_TEST_RESTORE_PAUSE_MS"), out var pause) && pause > 0) Thread.Sleep(Math.Min(pause, 10000));
+                if (!early && int.TryParse(Environment.GetEnvironmentVariable("ROO_INDUSTRIES_TEST_RESTORE_PAUSE_MS"), out var pause) && pause > 0) Thread.Sleep(Math.Min(pause, 10000));
 #endif
             }
             journal.Status = conflicts ? "needsReconciliation" : journal.Changes.Any(IsAttempted) ? journal.Status : "restored";

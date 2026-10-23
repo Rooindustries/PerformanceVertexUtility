@@ -706,6 +706,14 @@ function Get-RooIndustriesProcessGovernorPreview {
     }
 }
 
+function Test-RooIndustriesGovernorReleasedControl {
+    param($Snapshot,[string]$Control)
+    $field=switch($Control){'priorityClass'{'originalPriorityClass'}'affinityMask'{'originalAffinityMask'}'ioPriority'{'originalIoPriority'}'memoryPriority'{'originalMemoryPriority'}'gpuPriority'{'originalGpuPriority'}default{$null}}
+    $started=[DateTime]::MinValue
+    if($null -eq $field -or -not [DateTime]::TryParse([string](Get-RooIndustriesPropertyValue $Snapshot 'processStartTimeUtc' ''),[Globalization.CultureInfo]::InvariantCulture,[Globalization.DateTimeStyles]::RoundtripKind,[ref]$started)){return $false}
+    return Test-RooIndustriesReleasedControl ([long](Get-RooIndustriesPropertyValue $Snapshot 'processId' 0)) $started.ToUniversalTime().ToFileTimeUtc() $Control 'Background limits' (Get-RooIndustriesPropertyValue $Snapshot $field $null)
+}
+
 function Select-RooIndustriesGovernorOwnedRestoreChanges {
     param($Snapshot,[object[]]$Changes)
     $recorded=if($null -ne $Snapshot.PSObject.Properties['appliedControls']){@(Get-RooIndustriesPropertyArray $Snapshot 'appliedControls')}else{@(Get-RooIndustriesPropertyArray $Snapshot 'controlChanges' | Where-Object { (Get-RooIndustriesPropertyValue $_ 'outcome' '') -ne 'failed' })}
@@ -716,6 +724,9 @@ function Select-RooIndustriesGovernorOwnedRestoreChanges {
         if(-not(Test-RooIndustriesControlValueEqual $control (Get-RooIndustriesPropertyValue $change 'currentValue' $null) (Get-RooIndustriesPropertyValue $owned[0] 'proposedValue' $null))) {
             $change.blocked=$true
             $change.blockedReason='The control changed externally; its current value was preserved.'
+        } else {
+            try {if(Test-RooIndustriesGovernorReleasedControl $Snapshot $control){continue}}
+            catch {$change.blocked=$true;$change.blockedReason=$_.Exception.Message}
         }
         $change
     }

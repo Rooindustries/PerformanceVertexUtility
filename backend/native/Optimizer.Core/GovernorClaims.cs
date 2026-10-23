@@ -60,13 +60,30 @@ internal static class GovernorClaims
 
     public static string[]? OwnChange(RunningProcess identity, string field, JsonElement current, string dataRoot, string? repoRoot, string journalPath)
     {
+        var claims = Overlapping(identity, field, dataRoot, repoRoot, journalPath, out var doubted);
+        var holders = claims.Where(claim => claim.Journal is { } path && Sets(path, field, current)).Select(claim => claim.Journal!).ToArray();
+        if (holders.Length > 0 || doubted || claims.Any(claim => claim.Journal is null && Sets(claim, field, current))) return holders;
+        return null;
+    }
+
+    public static (string[] Journals, ReleasedClaim[] Released) SetBack(RunningProcess identity, string field, JsonElement current, JsonElement desired, string dataRoot, string? repoRoot, string journalPath)
+    {
+        var claims = Overlapping(identity, field, dataRoot, repoRoot, journalPath, out _);
+        var journals = claims.Where(claim => claim.Journal is { } path && StartsFrom(path, field, current, desired)).Select(claim => claim.Journal!).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        var released = claims.Where(claim => claim.Journal is null && claim.Checks is not null)
+            .SelectMany(claim => claim.Checks!.Where(check => check.Field == field && check.Original is { } original && Same(field, desired, original) == true &&
+                (check.Proposed is not { } proposed || Same(field, current, proposed) == true)).Select(check => new ReleasedClaim(claim.Feature, check.Original!.Value)))
+            .DistinctBy(claim => claim.Feature + "\n" + claim.Original.GetRawText()).ToArray();
+        return (journals, released);
+    }
+
+    private static Claim[] Overlapping(RunningProcess identity, string field, string dataRoot, string? repoRoot, string journalPath, out bool doubted)
+    {
         var self = Path.GetFullPath(journalPath);
         var journals = Journals(dataRoot, "process-*").Concat(SessionJournals(dataRoot)).Where(path => !string.Equals(Path.GetFullPath(path), self, StringComparison.OrdinalIgnoreCase));
         var evidence = Collect(new Evidence(dataRoot, ProcessTarget.ControlNames.ToHashSet(StringComparer.Ordinal)), journals, repoRoot);
-        var claims = evidence.Claims.Where(claim => claim.Fields.Contains(field) && SameInstance(claim, identity)).ToArray();
-        var holders = claims.Where(claim => claim.Journal is { } path && Sets(path, field, current)).Select(claim => claim.Journal!).ToArray();
-        if (holders.Length > 0 || evidence.Doubts.Any(doubt => doubt.Fields.Contains(field)) || claims.Any(claim => claim.Journal is null && Sets(claim, field, current))) return holders;
-        return null;
+        doubted = evidence.Doubts.Any(doubt => doubt.Fields.Contains(field));
+        return evidence.Claims.Where(claim => claim.Fields.Contains(field) && SameInstance(claim, identity)).ToArray();
     }
 
     private static bool Sets(Claim claim, string field, JsonElement current) =>
@@ -74,6 +91,9 @@ internal static class GovernorClaims
 
     private static bool Sets(string journal, string field, JsonElement current) => OperationFiles.Read<ProcessControlJournal>(journal).Changes
         .Any(change => change.Name == field && change.Status is "applyIntent" or "applied" or "restoreIntent" && ProcessTarget.Equivalent(field, current, change.Desired));
+
+    private static bool StartsFrom(string journal, string field, JsonElement current, JsonElement desired) => OperationFiles.Read<ProcessControlJournal>(journal).Changes
+        .Any(change => change.Name == field && change.Status is "applyIntent" or "applied" or "restoreIntent" && ProcessTarget.Equivalent(field, current, change.Desired) && ProcessTarget.Equivalent(field, desired, change.Original));
 
     private static Evidence Collect(Evidence evidence, IEnumerable<string> journals, string? repoRoot)
     {
@@ -202,6 +222,8 @@ internal static class GovernorClaims
                 return Level(live, null) is { } io && Level(recorded, IoNames) is { } wantedIo ? io == wantedIo : null;
             case "gpuPriority":
                 return Level(live, null) is { } gpu && Level(recorded, GpuNames) is { } wantedGpu ? gpu == wantedGpu : null;
+            case "memoryPriority":
+                return Level(live, null) is { } memory && Level(recorded, null) is { } wantedMemory ? memory == wantedMemory : null;
             default:
                 return null;
         }
@@ -346,7 +368,7 @@ internal static class GovernorClaims
     }
 
     private static JsonElement? Original(JsonElement snapshot, string field) =>
-        Originals.FirstOrDefault(pair => pair.Field == field).Key is { } key ? Present(Child(snapshot, key)) : null;
+        (field == "memoryPriority" ? "originalMemoryPriority" : Originals.FirstOrDefault(pair => pair.Field == field).Key) is { } key ? Present(Child(snapshot, key)) : null;
 
     private static JsonElement? Present(JsonElement? value) =>
         value is { ValueKind: not (JsonValueKind.Null or JsonValueKind.Undefined) } present && !(present.ValueKind == JsonValueKind.String && string.IsNullOrWhiteSpace(present.GetString())) ? present.Clone() : null;

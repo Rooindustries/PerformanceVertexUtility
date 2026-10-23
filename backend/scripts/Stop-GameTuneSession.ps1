@@ -284,7 +284,7 @@ try {
                 }
                 foreach ($work in @($workItems.ToArray())) {
                     try {
-                        $verification = Confirm-RooIndustriesRestoreControl $live $work.check $pair.snapshot $entry $work.change
+                        $verification = Confirm-RooIndustriesRestoreControl $live $work.check $pair.snapshot $entry $work.change -Feature 'Game priority'
                         if ($null -eq $verification) { throw 'Restore confirmation returned no result.' }
                         foreach ($flag in @('confirmed', 'restored', 'instanceEnded', 'cleanupFailed')) {
                             $property = $verification.PSObject.Properties[$flag]

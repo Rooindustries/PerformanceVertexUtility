@@ -1130,6 +1130,16 @@ function Get-RooIndustriesRestoreControlOwnershipReason {
     return $null
 }
 
+function Test-RooIndustriesReleasedControl {
+    param([long]$ProcessId, [long]$Created, [string]$Control, [string]$Feature, $Original)
+    $native = switch ($Control) { 'priorityClass' { 'cpuPriority' } 'affinityMask' { 'affinity' } default { $Control } }
+    foreach ($release in @((Read-RooIndustriesProcessOperationOwnership).releases)) {
+        if ($release.processId -eq $ProcessId -and $release.creationTimeFileTimeUtc -eq $Created -and $release.control -ceq $native -and $release.feature -ceq $Feature -and
+            (Test-RooIndustriesControlValueEqual $Control $release.original $Original)) { return $true }
+    }
+    return $false
+}
+
 function Get-RooIndustriesAppliedControlValue {
     param($Snapshot, [string]$Control)
     $recorded = @(Get-RooIndustriesPropertyArray $Snapshot 'controlChanges' | Where-Object { [string](Get-RooIndustriesPropertyValue $_ 'control' '') -eq $Control })
@@ -1306,7 +1316,7 @@ function Test-RooIndustriesRestoreInstanceEnded {
 }
 
 function Confirm-RooIndustriesRestoreControl {
-    param([System.Diagnostics.Process]$Process, $Check, $Snapshot, $Entry, $Change = $null)
+    param([System.Diagnostics.Process]$Process, $Check, $Snapshot, $Entry, $Change = $null, [string]$Feature = '')
     $control = [string](Get-RooIndustriesPropertyValue $Check 'control' '')
     $candidateConfirmed = $false
     $candidateRestored = $false
@@ -1384,6 +1394,9 @@ function Confirm-RooIndustriesRestoreControl {
                 $now = Get-RooIndustriesProcessControlReadback $Process $control
                 if ([string]::IsNullOrWhiteSpace([string]$now)) { throw $script:RooIndustriesLeftAsSetChangedBack }
                 if (Test-RooIndustriesControlValueEqual $control $now $original) {
+                    $candidateConfirmed = $true
+                } elseif ($Feature -and $applied.known -and (Test-RooIndustriesControlValueEqual $control $now $applied.value) -and
+                    (Test-RooIndustriesReleasedControl $savedId $savedBirth $control $Feature $original)) {
                     $candidateConfirmed = $true
                 } elseif (-not $applied.known -or -not $applied.verified) {
                     throw $script:RooIndustriesUnprovenWrite
