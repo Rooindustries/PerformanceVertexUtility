@@ -37,6 +37,17 @@ Missing access remains `unavailable`; graphics initialization can remain pending
 
 Run `Test-ProtectedGameSessions.ps1 -RetainedGpu` on the RX9070XT validation machine to exercise real GPU work after a disposable process denies new control handles. This mode covers sustained class changes, controller and watcher termination, foreign values and rejected recovery evidence. `-HardwareGpu` runs the broader launch-priority, core-switching, relaunch and recovery checks; those checks also exercise the disposable fixture's IFEO registry settings.
 
+Run `tools/scripts/Test-GameSessionClient.ps1 -Mode launch-preset-session` in an
+isolated Windows source copy to exercise every shipped launch preset with the
+existing disposable launcher and game. It checks Preview, Start, Stop, Save for
+next time, launcher restart and Turn off through the app's session service.
+Independent Windows reads compare all process values, including settings the
+preset leaves alone. Stop restores native controls and removes launch policy;
+CPU launch priority clears when the game next starts, which the suite checks
+with a fresh probe. Raw readbacks are saved under
+`artifacts/validation/launch-preset-*.json`. This suite needs the Windows host
+lease and its owned frame; it does not capture the desktop picker or review.
+
 ## Validation
 
 The desktop saves the Game priority Review and its hash. Start checks the reviewed process IDs, creation times, executable paths and controls before changing anything, then limits every poll to that saved plan. A closed or restarted reviewed game, changed profile or edited review refuses the whole Start. Older direct backend calls without a review retain their existing behavior.
