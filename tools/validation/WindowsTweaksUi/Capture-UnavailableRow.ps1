@@ -45,6 +45,8 @@ $dotnet=$dotnet[0]
 $app=$null;$status='fail'
 try{
  if(@(Get-Process -Name 'RooIndustries.OptimizationSuite.App' -ErrorAction SilentlyContinue).Count){throw 'The Suite is already open; this capture does not take over another window.'}
+ Initialize-HarnessBuildFolders $Source
+ Ensure-HarnessOutputDirectory (Join-Path $Source 'backend\bin')
  $env:MSBUILDDISABLENODEREUSE='1';$env:DOTNET_CLI_USE_MSBUILD_SERVER='0';$env:DOTNET_CLI_TELEMETRY_OPTOUT='1'
  $build=Join-Path $directory 'build.log'
  & $dotnet publish (Join-Path $Source 'backend\native\Optimizer.Host\Optimizer.Host.csproj') --configuration Debug --self-contained false -o (Join-Path $Source 'backend\bin\optimizer') --disable-build-servers -p:RooIndustriesTestHooks=true -p:UseSharedCompilation=false *>> $build

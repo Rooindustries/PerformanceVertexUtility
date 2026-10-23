@@ -65,6 +65,11 @@ def main():
     status = 'fail'
     try:
         lease(args, receipt)
+        prepare = '. ' + windows.ps_literal(receipt['stagingPath'] + r'\tools\validation\Update\Harness.Common.ps1')
+        prepare += '; Open-HarnessRun ' + ' '.join(windows.ps_literal(receipt[key]) for key in ('runRoot', 'frameId', 'manifestSha256', 'frameId'))
+        prepare += '; Initialize-HarnessBuildFolders ' + windows.ps_literal(receipt['stagingPath'])
+        prepare += '; Ensure-HarnessOutputDirectory ' + windows.ps_literal(receipt['stagingPath'] + r'\backend\bin')
+        windows.invoke(args.host, args.expected_machine, prepare, timeout=windows.SOURCE_TIMEOUT)
         if not args.skip_checks:
             checks = windows.invoke(args.host, args.expected_machine, CHECKS.replace('__SOURCE__', windows.ps_literal(receipt['stagingPath'])), timeout=1800)
             (args.out_dir / 'checks.log').write_text(checks.stdout)
