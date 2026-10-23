@@ -18,14 +18,11 @@ using RooIndustries.Optimizer;
 
 namespace RooIndustries.OptimizationSuite.Services;
 
-public sealed record UpdateState(string Status, string Notes = "", bool Busy = false, bool Ready = false, bool CanDownload = false,
-    string Banner = "", string BannerKind = "", bool Installing = false);
 public sealed record PendingUpdate([property: JsonRequired] string FromVersion, [property: JsonRequired] string ToVersion,
     [property: JsonRequired] DateTime StartedAtUtc, [property: JsonRequired] string LogPath);
 
 public sealed class UpdateService
 {
-    private const string Blocked = "Stop your game session and turn off the timer setting first. The update can't install while they run.";
     private string DownloadRetry => AutomaticDownloads ? "The app will try again later." : "Press Download to try again.";
     private string Mismatch => "The download didn't match the signed release, so it was deleted. " + DownloadRetry;
     private readonly Uri? _feed;
@@ -33,6 +30,7 @@ public sealed class UpdateService
     private readonly SettingsStore _settings = new();
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly CancellationTokenSource _stop = new();
+    private readonly InstallGate _install = new(() => App.Operations.ReadGameSessionsAsync(), () => App.Live.GetGameTuneSessionStatusResultAsync(), InstallGate.TimerOn, InstallDrive);
     private DispatcherQueue? _dispatcher;
     private PolicyRootLease? _storageLease;
     private string? _root;
@@ -42,9 +40,14 @@ public sealed class UpdateService
     private bool _started;
     private bool _later;
     private bool _handoff;
+    private bool _waiting;
     public event Action? Changed;
     public UpdateState State { get; private set; }
+#if ROO_INDUSTRIES_TEST_HOOKS
+    public bool Enabled => _feed is not null || _fixture;
+#else
     public bool Enabled => _feed is not null;
+#endif
     public static string CurrentVersion => typeof(App).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "";
 
     public UpdateService()
@@ -77,8 +80,14 @@ public sealed class UpdateService
     public void Stop() => _stop.Cancel();
 
     private void Notify() => _dispatcher?.TryEnqueue(() => Changed?.Invoke());
-    private void Set(UpdateState state) { State = state; Notify(); }
+    private void Set(UpdateState state)
+    {
+        if (state.Status != State.Status) state = state with { Refused = false };
+        State = _waiting && state.Ready && !state.Busy && RunningChanges.Any ? state with { Status = InstallGate.ChangeRunning, Refused = true } : state;
+        Notify();
+    }
     private void Status(string text) { Set(State with { Status = text }); AppLog.Write("update", text); }
+    private void Refuse(string text) { _waiting = text == InstallGate.ChangeRunning; State = State with { Status = text, Refused = true }; Notify(); AppLog.Write("update", text); }
     private static string Describe(UpdateFeedResult r) => r.Kind + (r.KeyId is { } key ? ", key " + key : "") + (r.Release is { } release ? ", release " + release.Version : "") + ". " + r.Reason;
     private void LogFeed(string outcome, string source = "Feed") => AppLog.Write("update", source + " " + _feed!.IdnHost + ": " + outcome.TrimEnd('.') + "; installed " + CurrentVersion + ".");
 
@@ -87,7 +96,28 @@ public sealed class UpdateService
         if (_started) return;
         _started = true;
         _dispatcher = dispatcher;
+        RunningChanges.Finished += () => dispatcher.TryEnqueue(ChangeFinished);
+#if ROO_INDUSTRIES_TEST_HOOKS
+        if (BrandCompatibility.EnvironmentValue("ROO_INDUSTRIES_TEST_UPDATE_READY") is { Length: > 0 } fixture) { Fixture(fixture); return; }
+#endif
         _ = ScheduleAsync();
+    }
+
+#if ROO_INDUSTRIES_TEST_HOOKS
+    private bool _fixture;
+    private void Fixture(string version)
+    {
+        _fixture = true;
+        _release = new UpdateRelease(version, DateTimeOffset.UtcNow, new Uri("https://fixture.invalid/setup.exe"), 1, new string('0', 64), "Fixture release notes.");
+        Set(State with { Ready = true, Notes = _release.Notes, Status = "Version " + version + " is ready to install", Banner = "Version " + version + " is ready to install", BannerKind = "ready" });
+    }
+#endif
+
+    private void ChangeFinished()
+    {
+        if (RunningChanges.Any) return;
+        _waiting = false;
+        if (State.Waiting) Set(State with { Status = State.Banner, Refused = false });
     }
 
     private async Task ScheduleAsync()
@@ -232,13 +262,16 @@ public sealed class UpdateService
 
     public async Task CheckAsync()
     {
-        if (_feed is null || !await _gate.WaitAsync(0)) return;
+        if (!Enabled || !await _gate.WaitAsync(0)) return;
         try
         {
             Set(State with { Busy = true, Status = "Checking for updates..." });
+#if ROO_INDUSTRIES_TEST_HOOKS
+            if (_fixture) { await Task.Delay(1000); Found(_release!, [], ""); return; }
+#endif
             using var deadline = CancellationTokenSource.CreateLinkedTokenSource(_stop.Token);
             deadline.CancelAfter(TimeSpan.FromSeconds(20));
-            var builder = new UriBuilder(_feed);
+            var builder = new UriBuilder(_feed!);
             builder.Query = (builder.Query.Length > 1 ? builder.Query[1..] + "&" : "") + "t=" + DateTimeOffset.UtcNow.ToUnixTimeSeconds();
             using var response = await GetAsync(builder.Uri, deadline.Token);
             if (response.StatusCode != HttpStatusCode.OK)
@@ -258,7 +291,7 @@ public sealed class UpdateService
                 await output.WriteAsync(buffer.AsMemory(0, read), deadline.Token);
             }
             var bytes = output.ToArray();
-            var result = UpdateFeed.Verify(bytes, (int)response.StatusCode, _feed, CurrentVersion);
+            var result = UpdateFeed.Verify(bytes, (int)response.StatusCode, _feed!, CurrentVersion);
             LogFeed(Describe(result));
             if (result.Kind == UpdateFeedKind.Refused) { Status("Couldn't verify the update. " + result.Reason); return; }
             if (result.Kind == UpdateFeedKind.Current)
@@ -267,16 +300,20 @@ public sealed class UpdateService
                 Set(State with { Ready = false, CanDownload = false, Notes = "", Status = result.Reason, Banner = State.BannerKind == "ready" ? "" : State.Banner });
                 return;
             }
-            var release = result.Release!;
-            var same = _release == release && State.Ready;
-            _release = release; _envelope = bytes;
-            Set(State with { Ready = same, CanDownload = !same, Notes = release.Notes, Status = same ? State.BannerKind == "failed" ? State.Banner : "Version " + release.Version + " is ready to install" : result.Reason,
-                Banner = same ? State.Banner : "", BannerKind = same ? State.BannerKind : "" });
-            if (AutomaticDownloads && !same) await DownloadCoreAsync();
+            if (!Found(result.Release!, bytes, result.Reason) && AutomaticDownloads) await DownloadCoreAsync();
         }
         catch (OperationCanceledException) { if (_stop.IsCancellationRequested) LogFeed("canceled: the app is closing"); else { LogFeed("failed: The request timed out."); Status("Couldn't check for updates. The request timed out."); } }
         catch (Exception error) { LogFeed("failed: " + error.Message); Status("Couldn't check for updates. " + error.Message); }
         finally { Set(State with { Busy = false }); _gate.Release(); }
+    }
+
+    private bool Found(UpdateRelease release, byte[] envelope, string reason)
+    {
+        var same = _release == release && State.Ready;
+        _release = release; _envelope = envelope;
+        Set(State with { Ready = same, CanDownload = !same, Notes = release.Notes, Status = same ? State.BannerKind == "failed" ? State.Banner : "Version " + release.Version + " is ready to install" : reason,
+            Banner = same ? State.Banner : "", BannerKind = same ? State.BannerKind : "" });
+        return same;
     }
 
     private async Task<HttpResponseMessage> GetAsync(Uri uri, CancellationToken cancellation)
@@ -369,51 +406,40 @@ public sealed class UpdateService
         }
     }
 
-    private static async Task<bool> ActiveSettingsAsync()
+    private static (string Drive, long Free) InstallDrive()
     {
-        var sessions = await App.Operations.ReadGameSessionsAsync();
-        if (sessions.Any(entry => entry.Worker.HostRunning == true)) return true;
-        if (sessions.Any(entry => entry.Worker.HostRunning is null || entry.Worker.Error is not null))
-            throw new InvalidDataException("Couldn't confirm that all game sessions have stopped. Check Games and Undo changes first.");
-        var game = await App.Live.GetGameTuneSessionStatusResultAsync();
-        if (game.Error is not null || game.Value is null) throw new InvalidDataException("Couldn't read the game priority session. Check Games first.");
-        using var data = JsonDocument.Parse(game.Value);
-        if (data.RootElement.GetProperty("active").GetBoolean()) return true;
-        try
-        {
-            var timer = await Task.Run(() => TimerControl.Read(new ControlAddress("timer", "system", "half-millisecond")));
-            return timer.Value.GetBoolean();
-        }
-        catch (Exception error)
-        {
-            AppLog.Write("update", "Couldn't read the timer setting; treating it as stopped: " + error.Message);
-            return false;
-        }
+        var drive = new DriveInfo(Path.GetPathRoot(AppContext.BaseDirectory)!);
+#if ROO_INDUSTRIES_TEST_HOOKS
+        if (long.TryParse(BrandCompatibility.EnvironmentValue("ROO_INDUSTRIES_TEST_INSTALL_FREE_BYTES"), out var free)) return (drive.Name, free);
+#endif
+        return (drive.Name, drive.AvailableFreeSpace);
     }
 
     public async Task InstallAsync(XamlRoot xamlRoot)
     {
-        if (!State.Ready || _release is not { } release || !await _gate.WaitAsync(0)) return;
+        if (!State.CanInstall || _release is not { } release || !await _gate.WaitAsync(0)) return;
+        IDisposable? hold = null;
         try
         {
-            Set(State with { Busy = true, Installing = true });
-            if (await ActiveSettingsAsync()) { Status(Blocked); return; }
-            var installDrive = new DriveInfo(Path.GetPathRoot(AppContext.BaseDirectory)!);
-            if (UpdateFeed.InstallDriveSpaceReason(installDrive.Name, installDrive.AvailableFreeSpace) is { } spaceReason) { Status(spaceReason); return; }
+            Set(State with { Busy = true, Installing = true, Refused = false });
+            if (await _install.ReasonAsync() is { } reason) { Refuse(reason); return; }
             var dialog = new ContentDialog { XamlRoot = xamlRoot, Title = "Install version " + release.Version + " now?",
                 Content = "The app closes, installs the update and opens again. It takes about a minute. Your settings, saved rules and undo information are kept.",
                 PrimaryButtonText = "Install", CloseButtonText = "Not now", DefaultButton = ContentDialogButton.Close };
             if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
+#if ROO_INDUSTRIES_TEST_HOOKS
+            if (_fixture) { Status("Fixture release: setup isn't started."); return; }
+#endif
             var installer = Installer(release);
             _installerHandle = new FileStream(installer, FileMode.Open, FileAccess.Read, FileShare.Read, 128 * 1024, FileOptions.Asynchronous);
             var verification = await Task.Run(() => UpdateFeed.VerifyInstallerAsync(_installerHandle, release, _stop.Token));
             if (!verification.Verified) throw new InvalidDataException(verification.Reason);
             if (FileVersionInfo.GetVersionInfo(installer).ProductVersion?.TrimEnd(' ') != release.Version)
                 throw new InvalidDataException("The installer's product version does not match the signed release.");
-            if (await ActiveSettingsAsync()) { Status(Blocked); return; }
-            if (UpdateFeed.InstallDriveSpaceReason(installDrive.Name, installDrive.AvailableFreeSpace) is { } finalSpaceReason) { Status(finalSpaceReason); return; }
             var root = Storage();
             var log = InstallLog(release.Version);
+            if (await _install.ReasonAsync() is { } finalReason) { Refuse(finalReason); return; }
+            if ((hold = RunningChanges.TryHold()) is null) { Refuse(InstallGate.ChangeRunning); return; }
             OperationFiles.Write(Path.Combine(root, "pending-install.json"), new PendingUpdate(CurrentVersion, release.Version, DateTime.UtcNow, log));
             var start = new ProcessStartInfo(installer) { UseShellExecute = false, WorkingDirectory = Folder(release),
                 Arguments = "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS /LOG=\"" + log + "\" /ROORELAUNCH=1 /ROOWAITPID=" + Environment.ProcessId };
@@ -427,7 +453,7 @@ public sealed class UpdateService
         }
         catch (Exception error)
         {
-            Status("Couldn't install the update. " + error.Message);
+            Refuse("Couldn't install the update. " + error.Message);
             if (!_handoff && _root is not null)
             {
                 try { File.Delete(Path.Combine(_root, "pending-install.json")); }
@@ -436,7 +462,7 @@ public sealed class UpdateService
         }
         finally
         {
-            if (!_handoff) { _installerHandle?.Dispose(); _installerHandle = null; Set(State with { Busy = false, Installing = false }); }
+            if (!_handoff) { hold?.Dispose(); _installerHandle?.Dispose(); _installerHandle = null; Set(State with { Busy = false, Installing = false }); }
             _gate.Release();
         }
     }

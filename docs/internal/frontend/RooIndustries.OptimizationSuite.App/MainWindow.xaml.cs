@@ -33,6 +33,8 @@ public sealed partial class MainWindow : Window
     private string _pendingTag;
     private bool _pendingSettings;
     private string? _ownershipPath;
+    private bool _closeWhenIdle;
+    private bool _askingToClose;
 
     public MainWindow() : this("dashboard", false)
     {
@@ -54,6 +56,8 @@ public sealed partial class MainWindow : Window
         DataGeneration.Settled += OnDataSettled;
         App.Updates.Changed += OnUpdateChanged;
         Closed += OnWindowClosed;
+        AppWindow.Closing += OnClosing;
+        RunningChanges.Finished += OnChangesFinished;
         MemoryRelief.Attach(this);
         ContentFrame.Navigated += (_, _) => MemoryRelief.PageShown();
         MemoryRelief.PageShown();
@@ -68,17 +72,37 @@ public sealed partial class MainWindow : Window
     {
         var state = App.Updates.State;
         UpdateBanner.Title = state.Banner;
-        UpdateBanner.Message = state.Notes;
+        UpdateBanner.Message = state.BannerMessage;
         UpdateBanner.IsOpen = App.Updates.ShowBanner;
-        UpdateBanner.Severity = state.BannerKind == "failed" ? InfoBarSeverity.Warning : state.BannerKind == "updated" ? InfoBarSeverity.Success : InfoBarSeverity.Informational;
+        UpdateBanner.Severity = state.Refused || state.BannerKind == "failed" ? InfoBarSeverity.Warning : state.BannerKind == "updated" ? InfoBarSeverity.Success : InfoBarSeverity.Informational;
         UpdateBannerInstall.Content = state.BannerKind == "failed" ? "Try again" : "Install now";
         UpdateBannerInstall.Visibility = state.Ready ? Visibility.Visible : Visibility.Collapsed;
-        UpdateBannerInstall.IsEnabled = !state.Busy;
+        UpdateBannerInstall.IsEnabled = state.CanInstall;
         ContentFrame.IsEnabled = !state.Installing;
     }
 
     private async void UpdateInstall_Click(object sender, RoutedEventArgs args) => await App.Updates.InstallAsync(Content.XamlRoot);
     private void UpdateLater_Click(object sender, RoutedEventArgs args) => App.Updates.Later();
+
+    private async void OnClosing(Microsoft.UI.Windowing.AppWindow sender, Microsoft.UI.Windowing.AppWindowClosingEventArgs args)
+    {
+        if (!RunningChanges.Any || !ReferenceEquals(App.MainWindow, this)) return;
+        args.Cancel = true;
+        if (_askingToClose) return;
+        _askingToClose = true;
+        try
+        {
+            var dialog = new ContentDialog { XamlRoot = Content.XamlRoot, Title = "A change is still running",
+                Content = "Closing now could cut it off. Keep the app open until it finishes, or have it close by itself once it's done.",
+                PrimaryButtonText = "Close when done", CloseButtonText = "Keep open", DefaultButton = ContentDialogButton.Close };
+            _closeWhenIdle = await dialog.ShowAsync() == ContentDialogResult.Primary;
+            if (_closeWhenIdle && !RunningChanges.Any) Close();
+        }
+        catch (Exception error) { AppLog.Write("close", "The running change question could not be shown: " + error.Message); }
+        finally { _askingToClose = false; }
+    }
+
+    private void OnChangesFinished() => DispatcherQueue.TryEnqueue(() => { if (_closeWhenIdle && !RunningChanges.Any) Close(); });
 
     private Task<bool> AskEarlierVersionAsync(string text)
     {
@@ -104,6 +128,8 @@ public sealed partial class MainWindow : Window
         App.Theme.SimpleModeChanged -= ApplySimpleMode;
         DataGeneration.Settled -= OnDataSettled;
         App.Updates.Changed -= OnUpdateChanged;
+        AppWindow.Closing -= OnClosing;
+        RunningChanges.Finished -= OnChangesFinished;
         if (ReferenceEquals(App.MainWindow, this)) App.Updates.Stop();
     }
 

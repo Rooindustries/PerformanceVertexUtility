@@ -10,6 +10,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using RooIndustries.Optimizer;
+using RooIndustries.OptimizationSuite.Services;
 
 namespace RooIndustries.OptimizationSuite.ViewModels;
 
@@ -293,9 +294,13 @@ public partial class FirmwareViewModel : ObservableObject
     public async Task ApplyAsync() => await RunAsync(async () =>
     {
         if (!IsReview || _sessionDirectory is null || _reviewHash is null) return;
-        Message = "Writing the reviewed changes to the BIOS. Keep the app open until it's done. You can use other pages while it runs.";
-        var journal = await Task.Run(() => Workflow().Apply(_sessionDirectory, _reviewHash));
-        ShowResult(journal); await LoadHistoryAsync();
+        using (RunningChanges.Begin())
+        {
+            Message = "Writing the reviewed changes to the BIOS. Keep the app open until it's done. You can use other pages while it runs.";
+            var journal = await Task.Run(() => Workflow().Apply(_sessionDirectory, _reviewHash));
+            ShowResult(journal);
+        }
+        await LoadHistoryAsync();
     });
     public async Task VerifyAsync() => await RunAsync(async () =>
     {
