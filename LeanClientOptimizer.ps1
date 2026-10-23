@@ -442,8 +442,9 @@ function Restore-ServiceSnapshot {
 }
 
 function Test-DependentRestore {
-    param([object]$Dependent, [hashtable]$States, [switch]$Planning)
+    param([object]$Dependent, [hashtable]$States, [object]$Manifest, [switch]$Planning)
     $name = [string]$Dependent.name
+    if (Test-ProtectedService $name $Manifest) { return [pscustomobject]@{ state='leftAsChanged'; reason='dependent service is protected' } }
     $current = @(Get-ServiceSnapshot $name | Where-Object { $_.exists -and $_.name -ieq $name })
     if ($current.Count -ne 1) { return [pscustomobject]@{ state='leftAsChanged'; reason='dependent service missing' } }
     if ($current[0].status -eq 'Running') { return [pscustomobject]@{ state='alreadyAtOriginal'; reason=$null } }
@@ -688,6 +689,7 @@ function New-ModuleBackup {
         foreach ($snap in @(Get-ServiceSnapshot $svc.name)) {
             $startup = if ($svc.startup -in 'Disabled','Manual','Automatic') { $svc.startup } else { $snap.startType }
             $snap | Add-Member -NotePropertyName appliedStartup -NotePropertyValue $startup
+            $snap | Add-Member -NotePropertyName appliedTargetState -NotePropertyValue ([string]$svc.targetState)
             $svcSnapshots.Add($snap) | Out-Null
         }
     }
@@ -864,13 +866,14 @@ function Invoke-RollbackModule {
         }
     }
     foreach ($svc in @($backup.services)) {
+        if ($svc.appliedTargetState -ne 'Stopped') { continue }
         $dependents = @($svc.dependents)
         for ($index = $dependents.Count - 1; $index -ge 0; $index--) {
             $dependent = $dependents[$index]
             if ($null -eq $dependent -or [string]$dependent.status -cne 'Running' -or $serviceStates.ContainsKey([string]$dependent.name)) { continue }
             $target = @{ type='dependent'; name=[string]$dependent.name; of=[string]$svc.name }
             try {
-                $check = Test-DependentRestore $dependent $serviceStates -Planning
+                $check = Test-DependentRestore $dependent $serviceStates $manifest -Planning
                 if ($check.state -eq 'alreadyAtOriginal') {
                     $alreadyAtOriginal.Add([pscustomobject]$target) | Out-Null
                     $serviceStates[$target.name] = [pscustomobject]@{ status='alreadyAtOriginal' }
@@ -924,7 +927,7 @@ function Invoke-RollbackModule {
                 Restore-RegistryValue $item.snapshot $item.original
                 $registryCount++
             } elseif ($item.target.type -eq 'dependent') {
-                $check = Test-DependentRestore $item.snapshot $serviceStates
+                $check = Test-DependentRestore $item.snapshot $serviceStates $manifest
                 if ($check.state -eq 'alreadyAtOriginal') {
                     $alreadyAtOriginal.Add([pscustomobject]$item.target) | Out-Null
                     $item.action.status = 'alreadyAtOriginal'

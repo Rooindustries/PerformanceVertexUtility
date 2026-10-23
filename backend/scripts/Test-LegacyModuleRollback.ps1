@@ -1326,6 +1326,24 @@ try {
         $left=@($restored.leftAsChanged|ForEach-Object {$_.name}) -join ','
         Test-DependentCase ($restored.success -and $left -ceq 'Probe,ProbeDep,ProbeDepChild' -and $script:serviceCalls.Count -eq $calls) ('Dependents stay stopped when their service is left as another program set it ('+$left+')')
 
+        $DataRoot=Reset-DependentFixture @(@{name='Probe';startup='Manual';targetState='Running'})
+        $applied=Invoke-ReviewedApply
+        $BackupPath=$applied.backupPath
+        $script:fakeServices.ProbeDep.status='Stopped'
+        $script:fakeServices.ProbeDepChild.status='Stopped'
+        $restored=Invoke-RollbackModule
+        Test-DependentCase ($restored.success -and $restored.restoredServices -eq 1 -and @($restored.actions|Where-Object {$_.type -eq 'dependent'}).Count -eq 0 -and (Get-FakeStatus) -ceq 'Probe=Automatic/Running ProbeDep=Manual/Stopped ProbeDepChild=Manual/Stopped ProbeIdle=Manual/Stopped') 'Undo does not start dependents the apply never stopped'
+
+        $DataRoot=Reset-DependentFixture
+        $applied=Invoke-ReviewedApply
+        $BackupPath=$applied.backupPath
+        $manifest=Get-Content -LiteralPath $ManifestPath -Raw|ConvertFrom-Json
+        $manifest.protected.services=@('ProbeDep')
+        Write-JsonFile $manifest $ManifestPath
+        $restored=Invoke-RollbackModule
+        $left=@($restored.leftAsChanged|Where-Object {$_.type -eq 'dependent'}|ForEach-Object {$_.name}) -join ','
+        Test-DependentCase ($restored.success -and $left -ceq 'ProbeDep,ProbeDepChild' -and (Get-FakeStatus) -ceq 'Probe=Automatic/Running ProbeDep=Manual/Stopped ProbeDepChild=Manual/Stopped ProbeIdle=Manual/Stopped') 'Undo leaves a newly protected dependent and its children stopped'
+
         $DataRoot=Reset-DependentFixture @(@{name='Probe';startup='Disabled';targetState='Stopped'},@{name='ProbeDep';startup='Disabled';targetState='Stopped'})
         $applied=Invoke-ReviewedApply
         $BackupPath=$applied.backupPath
@@ -1404,7 +1422,7 @@ try {
             Start-Service -Name $child
             Assert ((Get-ProbeState) -ceq 'Automatic/Running Manual/Running Manual/Running') 'The disposable probe service and its two-level dependents are running'
             $servicesManifest=Join-Path $tempRoot 'services-manifest.json'
-            Write-JsonFile @{protected=@{services=@();registryPathPatterns=@()};modules=@(@{id='fixture';name='Fixture';registryValues=@();services=@(@{name=$probe;startup='Disabled';targetState='Stopped'})})} $servicesManifest
+            @{protected=@{services=@();registryPathPatterns=@()};modules=@(@{id='fixture';name='Fixture';registryValues=@();services=@(@{name=$probe;startup='Disabled';targetState='Stopped'})})} | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $servicesManifest -Encoding UTF8
             . $HarnessPath -Action ListModules -ManifestPath $servicesManifest -DataRoot (Join-Path $tempRoot 'services') -ModuleId 'fixture' | Out-Null
             function Get-BenchmarkSnapshot { param($Label) @{label=$Label} }
             function Invoke-SmokeTest { [pscustomobject]@{pass=$true} }
