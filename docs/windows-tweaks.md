@@ -340,5 +340,21 @@ Windows UI state checks use the real view model with an isolated file transactio
 dotnet run --project tools/validation/WindowsTweaksUi/WindowsTweaksUi.csproj -c Release -- .
 ```
 
+The Windows Tweaks read walk runs every catalog row through the real detection and
+row labels with recorded Windows states, on Linux and in `check_baseline.py`:
+
+```sh
+dotnet run --project tools/validation/TweakReads/TweakReads.csproj -c Release -p:EnableWindowsTargeting=true -- .
+```
+
+Each row is read with its value absent, with every Windows read recorded in
+`tools/validation/TweakReads/known-states.json`, and after each choice's planned
+writes, as Home, Pro and Enterprise, and on any other build or edition a choice is
+gated to. A state that shows Couldn't check, Custom value or Not read, a choice that
+reads as another choice, or a choice the app refuses to plan from a state that reads
+fine and offers it, fails unless
+`tools/validation/TweakReads/allowlist.json` names that row and state with its cause.
+An allowlisted state that now reads correctly fails until its entry is removed.
+
 The native fixture modes change system configuration and require approval of their
 exact test scopes. The catalog matrices and UI state checks do not change Windows settings.
