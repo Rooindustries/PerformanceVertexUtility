@@ -149,16 +149,18 @@ static class PathSpellingChecks
 
     static void ChangingAncestors(Action<bool, string> check, string root)
     {
+        var modes = new[] { "network", "cycle" };
+        static string Claim(string mode) => mode + ": an unsafe ancestor observed after an absent peer keeps ownership incomplete and refuses cleanup preview";
         var probe = Path.Combine(root, "Changing Link Capability");
         try { Directory.CreateSymbolicLink(probe, root); }
         catch (Exception error) when (error is UnauthorizedAccessException ||
             error is IOException && (error.HResult & 0xFFFF) is 1 or 50 or 1314)
         {
-            Console.WriteLine("SKIP Changing-ancestor fixtures cannot create symbolic links (error " + (error.HResult & 0xFFFF) + ")");
+            foreach (var mode in modes) Console.WriteLine("SKIP " + Claim(mode) + " (cannot create symbolic links, error " + (error.HResult & 0xFFFF) + ")");
             return;
         }
         Directory.Delete(probe);
-        foreach (var mode in new[] { "network", "cycle" })
+        foreach (var mode in modes)
         {
             var target = Directory.CreateDirectory(Path.Combine(root, "Changing App " + mode)).FullName;
             var data = Path.Combine(target, "settings.txt");
@@ -201,8 +203,7 @@ static class PathSpellingChecks
                 catch (InvalidDataException) { refused = true; }
                 var intact = File.ReadAllText(data) == "fixture";
                 Console.WriteLine("MEASURE changingAncestor " + JsonSerializer.Serialize(new { Scenario = mode, Absences = absences, AncestorResults = observed.Select(value => value.ToString()).ToArray(), candidate.OwnershipComplete, PreviewRefused = refused, Intact = intact }));
-                check(absences > 0 && observed.Count == absences && observed.All(value => value == expected) && !candidate.OwnershipComplete && refused && intact,
-                    mode + ": an unsafe ancestor observed after an absent peer keeps ownership incomplete and refuses cleanup preview");
+                check(absences > 0 && observed.Count == absences && observed.All(value => value == expected) && !candidate.OwnershipComplete && refused && intact, Claim(mode));
             }
             finally
             {
