@@ -2,7 +2,8 @@ param(
     [Parameter(Mandatory)][string]$Source,
     [Parameter(Mandatory)][string]$OutRoot,
     [ValidateSet('all','games','processes')][string]$Scenario = 'all',
-    [ValidateRange(10, 300)][int]$InactiveSeconds = 60
+    [ValidateRange(10, 300)][int]$InactiveSeconds = 60,
+    [ValidatePattern('^[0-9a-f]{32}$')][string]$LeaseFrame
 )
 $ErrorActionPreference = 'Stop'
 . (Join-Path $Source 'tools\validation\LoadTimes\CleanupOwnership.Common.ps1')
@@ -87,7 +88,9 @@ function ReactivateOnce([string]$name) {
 try {
     if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { throw 'Run from an elevated interactive session.' }
     $lease = 'C:\RooBuild\host-lease.json'
-    if (Test-Path -LiteralPath $lease) { $held = Get-Content -Raw -LiteralPath $lease | ConvertFrom-Json; if ($held.runRoot -and (Test-Path -LiteralPath $held.runRoot)) { throw ('BUSY: the test PC is leased by frame ' + $held.frameId + '; retry later.') } }
+    $leaseHolder = if (Test-Path -LiteralPath $lease) { Get-Content -Raw -LiteralPath $lease | ConvertFrom-Json }
+    if ($LeaseFrame -and $leaseHolder.frameId -cne $LeaseFrame) { throw ('The test PC lease is not held by frame ' + $LeaseFrame + '.') }
+    if ($leaseHolder.runRoot -and $leaseHolder.frameId -cne $LeaseFrame -and (Test-Path -LiteralPath $leaseHolder.runRoot)) { throw ('BUSY: the test PC is leased by frame ' + $leaseHolder.frameId + '; retry later.') }
     Assert-NoUnownedAppProcess
 
     $dotnet = Join-Path $env:USERPROFILE '.dotnet\dotnet.exe'
