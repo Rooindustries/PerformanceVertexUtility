@@ -100,6 +100,8 @@ try
     if (args is [_, "--kill-apply-fixture"]) { KillApplyChecks.Run(root, Check); Console.WriteLine($"Completed {count} kill-apply checks."); return; }
     if (args is [_, "--detect-checks"]) { DetectChecks.Run(root, Check); Console.WriteLine($"Completed {count} detection checks."); return; }
     if (args is [_, "--feature-checks"]) { FeatureChecks.Run(root, catalog, Check); Console.WriteLine($"Completed {count} feature checks."); return; }
+    if (args is [_, "--seed-feature-restart", var seedKey, var seedStates]) { FeatureRestartChecks.Seed(catalog, root, seedKey, seedStates); return; }
+    if (args is [_, "--feature-restart-fixture"]) { FeatureRestartChecks.Run(root, Check); Console.WriteLine($"Completed {count} feature restart checks."); return; }
     if (args is [_, "--registry-fixture"]) { RegistryTweakChecks.Run(root, Check, Reject); Console.WriteLine($"Completed {count} native registry checks."); return; }
     catalog.Validate();
     Check(catalog.Settings.Select(item => item.Id).Distinct().Count() == catalog.Settings.Length, "Catalog setting identities are unique");
