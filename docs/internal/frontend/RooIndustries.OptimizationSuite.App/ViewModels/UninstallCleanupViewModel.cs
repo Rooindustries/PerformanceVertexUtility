@@ -143,9 +143,11 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
 
     private readonly List<InstalledApp> _allApps = new();
     private readonly Dictionary<string, string> _cleanupRecoveryByApp = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, Action> _keptResults = new(StringComparer.Ordinal);
-    private sealed record CleanupRun(string AppId, string Name, int Generation, string? Verb = null, string? State = null, string? Detail = null)
+    private readonly Dictionary<string, KeptResult> _keptResults = new(StringComparer.Ordinal);
+    private sealed record KeptResult(InstalledApp App, Action Show);
+    private sealed record CleanupRun(InstalledApp App, int Generation, string? Verb = null, string? State = null, string? Detail = null)
     {
+        public string AppId => App.AppId!;
         public bool KeepsResult => State is not null;
     }
     private CleanupRun? _run;
@@ -179,11 +181,16 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
         var installed = apps.Select(a => a.AppId).OfType<string>().ToHashSet(StringComparer.Ordinal);
         var removed = saved.Where(recovery => !installed.Contains(recovery.AppId)).ToArray();
         foreach (var recovery in removed) _cleanupRecoveryByApp.TryAdd(recovery.AppId, recovery.ManifestPath);
-        _allApps.AddRange(apps
+        var rows = apps
             .Where(a => a.IsListable && !Naming.IsNonActionable(a.DisplayName)
                         && !LocalDisplayFilter.Default.IsHidden(a.FriendlyName, null, a.PackageId ?? a.DisplayName))
             .Concat(removed.Select(recovery => new InstalledApp { AppId = recovery.AppId, DisplayName = string.IsNullOrWhiteSpace(recovery.DisplayName) ? "Removed app" : recovery.DisplayName, Removed = true, RemovalUnconfirmed = !complete }))
-            .OrderBy(a => a.FriendlyName, StringComparer.OrdinalIgnoreCase));
+            .ToList();
+        var rowIds = rows.Select(a => a.AppId).OfType<string>().ToHashSet(StringComparer.Ordinal);
+        rows.AddRange(_keptResults.Values
+            .Where(kept => !rowIds.Contains(kept.App.AppId!))
+            .Select(kept => new InstalledApp { AppId = kept.App.AppId, DisplayName = kept.App.DisplayName, Removed = true, RemovalUnconfirmed = !complete }));
+        _allApps.AddRange(rows.OrderBy(a => a.FriendlyName, StringComparer.OrdinalIgnoreCase));
         AppCount = _allApps.Count(a => !a.Removed);
         Sources = inventory?.Sources is { Count: > 0 } s ? string.Join(", ", s.Select(FriendlySource)) : null;
 
@@ -862,7 +869,7 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
 
     private CleanupRun BeginRun(InstalledApp app, string? verb = null, string? state = null, string? detail = null)
     {
-        var run = new CleanupRun(app.AppId!, app.FriendlyName, _selectionGeneration, verb, state, detail);
+        var run = new CleanupRun(app, _selectionGeneration, verb, state, detail);
         _run = run;
         ScanBusy = true;
         if (run.KeepsResult) ShowRunFor(run.AppId);
@@ -878,22 +885,22 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
             return true;
         }
         if (appId is null || !_keptResults.Remove(appId, out var kept)) return false;
-        kept();
+        kept.Show();
         return true;
     }
 
     private string? WaitingNotice => _run is not { } run || run.Generation == _selectionGeneration && SelectedApp?.AppId == run.AppId
         ? null
         : !run.KeepsResult
-            ? "Still checking " + run.Name + ". Wait for it to finish."
+            ? "Still checking " + run.App.FriendlyName + ". Wait for it to finish."
             : SelectedApp?.AppId == run.AppId
                 ? "Still " + run.Verb + " this app. The result shows here when it's done."
-                : "Still " + run.Verb + " " + run.Name + ". Pick it again to see the result.";
+                : "Still " + run.Verb + " " + run.App.FriendlyName + ". Pick it again to see the result.";
 
     private void ShowResult(CleanupRun run, Action show)
     {
         if (SelectedApp?.AppId == run.AppId) show();
-        else _keptResults[run.AppId] = show;
+        else _keptResults[run.AppId] = new KeptResult(run.App, show);
     }
 
     private void FinishOperation(CleanupRun run)
