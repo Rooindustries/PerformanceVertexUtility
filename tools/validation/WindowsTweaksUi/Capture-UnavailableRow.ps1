@@ -1,4 +1,4 @@
-param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutRoot,[Parameter(Mandatory)][ValidatePattern('^[a-z][a-z0-9-]{0,30}$')][string]$Label,[string]$SettingId='windows.171a004ed11767da',[string]$Search='Telemetry - Disable: system',[string]$HiddenModules='ConfigDefender,Defender,DefenderPerformance',[string]$HiddenCommand='Get-MpPreference',[switch]$BeforeFix,[switch]$BrokenModule)
+param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutRoot,[Parameter(Mandatory)][ValidatePattern('^[a-z][a-z0-9-]{0,30}$')][string]$Label,[string]$SettingId='windows.171a004ed11767da',[string]$Search='Telemetry - Disable: system',[string]$HiddenModules='ConfigDefender,Defender,DefenderPerformance',[string]$HiddenCommand='Get-MpPreference',[switch]$BeforeFix,[switch]$BrokenModule,[switch]$Reads)
 $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
 . (Join-Path $Source 'tools\validation\Update\Harness.Common.ps1')
@@ -18,9 +18,10 @@ public static class RooIndustriesRowCapture {
 [RooIndustriesRowCapture]::SetProcessDPIAware()|Out-Null
 $A=[Windows.Automation.AutomationElement];$TS=[Windows.Automation.TreeScope]
 $hidden=@($HiddenModules.Split(',')|ForEach-Object {$_.Trim()}|Where-Object {$_})
-$expectedRetry=$BeforeFix.IsPresent -xor $BrokenModule.IsPresent
-$expectedCurrent=if($expectedRetry){"Couldn't check"}else{'Not available here'}
+$expectedRetry=-not $Reads -and ($BeforeFix.IsPresent -xor $BrokenModule.IsPresent)
+$expectedCurrent=if($Reads){'a value Windows read'}elseif($expectedRetry){"Couldn't check"}else{'Not available here'}
 $evidence=[ordered]@{label=$Label;settingId=$SettingId;search=$Search;hiddenModules=$hidden;expectedCurrent=$expectedCurrent;brokenModule=$BrokenModule.IsPresent;expectedRetry=$expectedRetry;frames=@()}
+function Settled($State){$State -and $State.retry -eq $expectedRetry -and $(if($Reads){$State.current -and $State.current -cnotin @("Couldn't check",'Not available here','Not read','Unknown value') -and $State.current -notlike 'Checking*'}else{$State.current -ceq $expectedCurrent})}
 function WaitFor([scriptblock]$Probe,[double]$Limit,[string]$What){$deadline=[DateTime]::UtcNow.AddSeconds($Limit);while([DateTime]::UtcNow -lt $deadline){try{$value=& $Probe}catch{$value=$null};if($value){return $value};Start-Sleep -Milliseconds 200};throw ('Timed out waiting for '+$What)}
 function ById($Root,[string]$Id){$Root.FindFirst($TS::Descendants,[Windows.Automation.PropertyCondition]::new($A::AutomationIdProperty,$Id))}
 function Row($Window){
@@ -88,7 +89,7 @@ try{
  if($toggle.Current.ToggleState -ne [Windows.Automation.ToggleState]::On){$toggle.Toggle()}
  $value=$searchBox.GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern)
  $value.SetValue($Search)
- $evidence.loaded=WaitFor {$state=RowState $window;if($state -and $state.current -ceq $expectedCurrent -and $state.retry -eq $expectedRetry){$state}} 240 'the row to finish loading'
+ $evidence.loaded=WaitFor {$state=RowState $window;if(Settled $state){$state}} 240 'the row to finish loading'
  $value.SetValue('')
  [RooIndustriesRowCapture]::SetWindowPos($hwnd,[IntPtr]::new(-1),0,0,0,0,0x0003)|Out-Null
  [RooIndustriesRowCapture]::SetForegroundWindow($hwnd)|Out-Null
@@ -106,13 +107,13 @@ try{
    if($retry){$retry.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke();$states+=@([ordered]@{at=[Math]::Round($now,3);action='retry clicked'})}else{$states+=@([ordered]@{at=[Math]::Round($now,3);action='no retry button'});$done=$now+1}
    $retried=$now;continue
   }
-  $final=$state -and $state.current -ceq $expectedCurrent -and $state.retry -eq $expectedRetry
+  $final=Settled $state
   if($retried -and -not$final){$checked=$true}
   if($retried -and -not$done -and $final -and ($checked -or $now -ge $retried+8)){$done=$now}
  }
  if(-not$done){throw ('The row did not settle while recording: '+(($states|ConvertTo-Json -Compress -Depth 5)))}
  $final=RowState $window
- if(-not $final -or $final.current -cne $expectedCurrent -or $final.retry -ne $expectedRetry){throw 'The row did not reach the expected state and retry visibility.'}
+ if(-not (Settled $final)){throw 'The row did not reach the expected state and retry visibility.'}
  Shot $window (Join-Path $directory ('row-'+$Label+'.png'))
  $evidence.states=$states;$evidence.final=$final
  [RooIndustriesRowCapture]::SetWindowPos($hwnd,[IntPtr]::new(-2),0,0,0,0,0x0003)|Out-Null
