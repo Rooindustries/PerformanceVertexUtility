@@ -109,16 +109,30 @@ function Get-HarnessFolderIdentity([string]$Path){
  @{path=$plain;creationTimeFileTimeUtc=[IO.Directory]::GetCreationTimeUtc($long).ToFileTimeUtc().ToString()}
 }
 function Invoke-HarnessCheckpoint([string]$Name){if($script:HarnessCheckpoint){& $script:HarnessCheckpoint $Name}}
+function Read-HarnessLedger([string]$Path){
+ $ledger=[IO.File]::ReadAllText((Get-HarnessLongPath $Path))|ConvertFrom-Json
+ if($ledger.frameId -cne $script:Harness.FrameId -or $ledger.manifestSha256 -cne $script:Harness.Manifest -or $ledger.machine -cne $env:COMPUTERNAME){throw 'Harness ledger scope changed; retained.'}
+ return $ledger
+}
 function Invoke-HarnessLedger([scriptblock]$Action,[switch]$NoWrite){
  if(-not$script:Harness){throw 'Harness invocation has no verified frame scope.'}
- $stream=$null
- for($attempt=0;$attempt -lt 10;$attempt++){
-  try{$stream=[IO.FileStream]::new((Get-HarnessLongPath ($script:Harness.LedgerPath+'.lock')),[IO.FileMode]::OpenOrCreate,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None);break}
+ $stream=$script:Harness.LedgerLock;$ownsLock=$null -eq $stream
+ for($attempt=0;$ownsLock -and $attempt -lt 10;$attempt++){
+  try{
+   $path=Get-HarnessLongPath ($script:Harness.LedgerPath+'.lock')
+   if($env:OS -eq 'Windows_NT'){
+    $handle=[RooIndustriesValidationOwnership.Native]::CreateFile($path,[uint32]3221291008,0,[IntPtr]::Zero,4,0,[IntPtr]::Zero)
+    if($handle.IsInvalid){$errorCode=[Runtime.InteropServices.Marshal]::GetLastWin32Error();$handle.Dispose();throw [IO.IOException]::new('The frame journal lock could not be acquired.',[ComponentModel.Win32Exception]::new($errorCode))}
+    try{$stream=[IO.FileStream]::new($handle,[IO.FileAccess]::ReadWrite)}catch{$handle.Dispose();throw}
+   }else{$stream=[IO.FileStream]::new($path,[IO.FileMode]::OpenOrCreate,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None)}
+   $script:Harness.LedgerLock=$stream;break
+  }
   catch [IO.IOException]{if($attempt -eq 9){throw};Start-Sleep -Milliseconds 200}
  }
  try{
-  $ledger=[IO.File]::ReadAllText((Get-HarnessLongPath $script:Harness.LedgerPath))|ConvertFrom-Json
-  if($ledger.frameId -cne $script:Harness.FrameId -or $ledger.manifestSha256 -cne $script:Harness.Manifest -or $ledger.machine -cne $env:COMPUTERNAME){throw 'Harness ledger scope changed; retained.'}
+  $path=$script:Harness.LedgerPath
+  if(-not(Test-HarnessPath $path -PathType Leaf)){$path+='.previous'}
+  $ledger=Read-HarnessLedger $path
   $result=& $Action $ledger
   if(-not$script:Harness.ReadOnly -and -not$NoWrite){
    $bytes=[Text.UTF8Encoding]::new($false).GetBytes(($ledger|ConvertTo-Json -Depth 60))
@@ -133,17 +147,18 @@ function Invoke-HarnessLedger([scriptblock]$Action,[switch]$NoWrite){
     Invoke-HarnessCheckpoint 'journal:flushed'
    }finally{$replacement.Dispose()}
    Invoke-HarnessCheckpoint 'journal:before-replace'
-   [IO.File]::Replace($temp,(Get-HarnessLongPath $script:Harness.LedgerPath),(Get-HarnessLongPath ($script:Harness.LedgerPath+'.previous')))
+   if(Test-HarnessPath $script:Harness.LedgerPath -PathType Leaf){[IO.File]::Replace($temp,(Get-HarnessLongPath $script:Harness.LedgerPath),(Get-HarnessLongPath ($script:Harness.LedgerPath+'.previous')))}
+   else{[IO.File]::Move($temp,(Get-HarnessLongPath $script:Harness.LedgerPath))}
    Invoke-HarnessCheckpoint 'journal:replaced'
   }
   return $result
- }finally{$stream.Dispose()}
+ }finally{if($ownsLock){$script:Harness.LedgerLock=$null;$stream.Dispose()}}
 }
 function Open-HarnessRun([string]$FrameRoot,[string]$FrameId,[string]$ManifestSha256,[string]$Nonce,[switch]$ReadOnly){
  $root=(Get-HarnessPlainPath $FrameRoot).TrimEnd('\')
  if($root -notmatch '^C:\\RooBuild\\roo-industries-[A-Za-z0-9_-]+-[a-f0-9]{32}$' -or $FrameId -cne $root.Substring($root.Length-32)){throw 'Harness frame scope differs.'}
  $script:Harness=@{Root=$root;FrameId=$FrameId;Manifest=$ManifestSha256;Nonce=$Nonce;LedgerPath=(Join-Path $root 'ledger.json');ReadOnly=[bool]$ReadOnly;Handles=@{};Scenario='';Scope=''}
- if(-not(Test-HarnessPath $script:Harness.LedgerPath -PathType Leaf)){throw 'Frame has no creation ledger; stage a fresh frame.'}
+ if(-not(Test-HarnessPath $script:Harness.LedgerPath -PathType Leaf) -and -not(Test-HarnessPath ($script:Harness.LedgerPath+'.previous') -PathType Leaf)){throw 'Frame has no creation ledger; stage a fresh frame.'}
  Invoke-HarnessLedger {param($ledger) $null} -NoWrite|Out-Null
 }
 function Initialize-HarnessInvocation([string]$Scenario,[string]$Scope){

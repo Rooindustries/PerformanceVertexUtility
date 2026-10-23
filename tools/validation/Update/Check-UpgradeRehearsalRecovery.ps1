@@ -1,5 +1,5 @@
 param([Parameter(Mandatory)][string]$OutRoot,[string]$ToolRoot=$PSScriptRoot,
- [ValidateSet('All','Journey','JourneyEmpty','Recover','Compare','Untouched','TasksReady','TasksRunning','ForeignAccount','ForeignRoot','Atomic','Verify','Conflict','Reordered','ChangedField','BeforeOutput','Unsupported','Runner','ReplacedRoot')][string]$Case='All',
+ [ValidateSet('All','Journey','JourneyEmpty','Recover','Compare','Untouched','TasksReady','TasksRunning','ForeignAccount','ForeignRoot','Atomic','Verify','Conflict','Reordered','ChangedField','BeforeOutput','Unsupported','Runner','ReplacedRoot','SelectedRoot','PreviousJournal','ForeignJournal','CorruptPrimary')][string]$Case='All',
  [int]$KillAt=0,[switch]$SkipCrashMatrix,[switch]$MatrixOnly,[int]$MatrixParts=1,[int]$MatrixPart=0,[ValidateSet('Both','Journey','JourneyEmpty')][string]$MatrixVariant='Both')
 $ErrorActionPreference='Stop'
 if($env:OS -eq 'Windows_NT'){throw 'Run the recovery fault-injection scenario on Linux PowerShell.'}
@@ -7,13 +7,13 @@ $env:COMPUTERNAME='fixture-machine'
 function Read-Fixture([string]$Name){[IO.File]::ReadAllText((Join-Path $OutRoot $Name))|ConvertFrom-Json}
 function Write-Fixture([string]$Name,$Value){[IO.File]::WriteAllText((Join-Path $OutRoot $Name),($Value|ConvertTo-Json -Depth 60))}
 function Get-HarnessLongPath([string]$Path){$Path}
-function Test-HarnessPath([string]$Path){[IO.File]::Exists($Path) -or [IO.Directory]::Exists($Path)}
+function Test-HarnessPath([string]$Path,[string]$PathType='Any'){if($PathType -eq 'Leaf'){return [IO.File]::Exists($Path)};[IO.File]::Exists($Path) -or [IO.Directory]::Exists($Path)}
 function Get-HarnessItem([string]$Path,[switch]$Force){$i=Get-Item -LiteralPath $Path -Force;[pscustomobject]@{FullName=$i.FullName;IsDirectory=$i.PSIsContainer;Attributes=$i.Attributes}}
 function Get-HarnessTree([string]$Path){Get-ChildItem -LiteralPath $Path -Recurse -Force|ForEach-Object {Get-HarnessItem $_.FullName}}
 function Get-HarnessFileSha256([string]$Path){(Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash}
 $tokens=$null;$errors=$null
 $ast=[Management.Automation.Language.Parser]::ParseFile((Join-Path $ToolRoot 'Harness.Common.ps1'),[ref]$tokens,[ref]$errors)
-foreach($name in 'Invoke-HarnessCheckpoint','Invoke-HarnessLedger','Add-HarnessEntry','Get-HarnessEntries','Get-HarnessEntryById','Set-HarnessEntryState'){
+foreach($name in 'Invoke-HarnessCheckpoint','Read-HarnessLedger','Invoke-HarnessLedger','Add-HarnessEntry','Get-HarnessEntries','Get-HarnessEntryById','Set-HarnessEntryState'){
  $definition=$ast.Find({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $name},$true)
  if($definition){$text=$definition.Extent.Text
   if($name -eq 'Invoke-HarnessLedger' -and $text.Contains('$stream.SetLength(0);')){$text=$text.Replace('$stream.SetLength(0);',"`$stream.SetLength(0);Invoke-HarnessCheckpoint 'journal:truncated';")}
@@ -102,7 +102,7 @@ function Child([string]$Mode,[string]$Root,[int]$FailAt=0){
 $script:Harness=@{Root=$OutRoot;Nonce='fixture';LedgerPath=(Join-Path $OutRoot 'ledger.json');FrameId='fixture';Manifest='fixture-hash';ReadOnly=$false}
 if($Case -eq 'All'){
  [IO.Directory]::CreateDirectory($OutRoot)|Out-Null;$results=[Collections.Generic.List[object]]::new()
- foreach($mode in @($(if(-not$MatrixOnly){'Compare','Untouched','TasksReady','TasksRunning','ForeignAccount','ForeignRoot','Atomic','Conflict','Reordered','ChangedField','BeforeOutput','Unsupported','Runner','ReplacedRoot'}))){
+ foreach($mode in @($(if(-not$MatrixOnly){'Compare','Untouched','TasksReady','TasksRunning','ForeignAccount','ForeignRoot','Atomic','Conflict','Reordered','ChangedField','BeforeOutput','Unsupported','Runner','ReplacedRoot','SelectedRoot','PreviousJournal','ForeignJournal','CorruptPrimary'}))){
   try{Child $mode (Join-Path $OutRoot $mode);$results.Add(@{check=$mode;status='pass'})}catch{$results.Add(@{check=$mode;status='fail';error=$_.Exception.Message})}
  }
  if(-not$SkipCrashMatrix){
@@ -141,6 +141,49 @@ $script:HarnessCheckpoint={param($Name)
 }
 $paths=@(foreach($name in 'data','fresh','shortcut.lnk'){Join-Path $OutRoot $name});$roots=@($paths[0],$paths[1])
 switch($Case){
+ 'SelectedRoot'{
+  Write-Fixture 'markers.json' @{parents=@(@{path='fixture-parent';exists=$true});values=@()}
+  $local=Join-Path $OutRoot 'local'
+  $productRoots=@((Join-Path $local 'RooOptimizationSuite'),(Join-Path $local 'RooIndustriesOptimizationSuite'))
+  [IO.Directory]::CreateDirectory($productRoots[0])|Out-Null
+  [IO.File]::WriteAllText((Join-Path $productRoots[0] 'original.json'),'original legacy data')
+  $entry=Save-RehearsalState $productRoots $productRoots;Suspend-RehearsalState $entry
+  Initialize-RehearsalRoots $entry $productRoots[1]
+  . (Join-Path $ToolRoot '../../../backend/scripts/BrandCompatibility.Common.ps1')
+  function Test-RooIndustriesDataRootMarked([string]$Root){$false}
+  function Test-RooIndustriesDataRootMigrationInFlight([string]$Parent,[string]$Name){$false}
+  $selected=Get-RooIndustriesLocalDataRoot -LocalData $local
+  if($selected -cne $productRoots[1] -or (Test-HarnessPath $productRoots[0])){throw 'The actual product selector uses another root from the rehearsal cache.'}
+  [IO.File]::WriteAllText((Join-Path $selected 'generated.json'),'app output')
+  Restore-RehearsalState $entry
+  if([IO.File]::ReadAllText((Join-Path $productRoots[0] 'original.json')) -cne 'original legacy data' -or -not(Test-HarnessPath (Join-Path $entry.metadata.paths[1].generated 'generated.json'))){throw 'Selected-root recovery lost original or generated data.'}
+ }
+ 'PreviousJournal'{
+  $entry=Save-RehearsalState $paths $roots;Suspend-RehearsalState $entry;Initialize-RehearsalRoots $entry
+  Invoke-HarnessLedger {param($ledger) $null}|Out-Null
+  [IO.File]::Delete((Join-Path $OutRoot 'ledger.json'))
+  Child 'Recover' $OutRoot;Child 'Recover' $OutRoot
+  Assert-FixtureRestored
+ }
+ 'ForeignJournal'{
+  $entry=Save-RehearsalState $paths $roots;Suspend-RehearsalState $entry
+  $saved=[IO.File]::ReadAllText((Join-Path $OutRoot 'ledger.json'))
+  foreach($field in 'frameId','machine','manifestSha256'){
+   $foreign=$saved|ConvertFrom-Json;$foreign.$field='foreign'
+   Write-Fixture 'ledger.json.previous' $foreign
+   [IO.File]::Delete((Join-Path $OutRoot 'ledger.json'))
+   $before=Get-HarnessFileSha256 (Join-Path $OutRoot 'ledger.json.previous');$refused=$false
+   try{Get-HarnessEntries|Out-Null}catch{$refused=$true}
+   if(-not$refused -or (Test-HarnessPath (Join-Path $OutRoot 'ledger.json')) -or $before -cne (Get-HarnessFileSha256 (Join-Path $OutRoot 'ledger.json.previous'))){throw ('Foreign committed generation was accepted or changed: '+$field)}
+  }
+ }
+ 'CorruptPrimary'{
+  Add-HarnessEntry 'file' @{path='fixture'} 'fixture'|Out-Null
+  $previous=Get-HarnessFileSha256 (Join-Path $OutRoot 'ledger.json.previous')
+  [IO.File]::WriteAllText((Join-Path $OutRoot 'ledger.json'),'{broken')
+  $refused=$false;try{Get-HarnessEntries|Out-Null}catch{$refused=$true}
+  if(-not$refused -or $previous -cne (Get-HarnessFileSha256 (Join-Path $OutRoot 'ledger.json.previous')) -or [IO.File]::ReadAllText((Join-Path $OutRoot 'ledger.json')) -cne '{broken'){throw 'Malformed primary silently selected or changed another generation.'}
+ }
  'Compare'{Child 'Verify' $OutRoot}
  'Verify'{foreach($path in (Read-Fixture 'before.json').paths){Assert-RehearsalPathState $path $path.path}}
  'Untouched'{

@@ -151,11 +151,13 @@ function Get-RehearsalRootIdentity([string]$Path){
  }
  return (& stat -c '%d:%i:%W' -- $Path)
 }
-function Initialize-RehearsalRoots($Entry){
+function Initialize-RehearsalRoots($Entry,[string]$ActiveRoot){
  $state=$Entry.metadata
+ if($ActiveRoot -and $ActiveRoot -notin $state.roots){throw 'The active data root is outside the saved rehearsal scope.'}
  for($i=0;$i -lt $state.paths.Count;$i++){
   $row=$state.paths[$i]
   if($row.before.path -notin $state.roots){continue}
+  if($ActiveRoot -and $row.before.path -ine $ActiveRoot){continue}
   Invoke-RehearsalMutation $Entry ('root-prepare:'+ $i) {
    if(Test-HarnessPath $row.staging){throw 'Generated staging root exists without an identity; retained.'}
    if($env:OS -eq 'Windows_NT'){

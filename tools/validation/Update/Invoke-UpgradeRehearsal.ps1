@@ -103,7 +103,9 @@ Save 'state-journal.json' @{stateId=$stateEntry.id;ledger=$script:Harness.Ledger
 $status='fail';$installAttempted=$false;$pending=$null
 try{
  Suspend-RehearsalState $stateEntry
- Initialize-RehearsalRoots $stateEntry
+ Initialize-RehearsalRoots $stateEntry $data
+ $selected=Get-RooIndustriesLocalDataRoot -LocalData (Get-RooIndustriesLocalAppData)
+ Check 'the product selects the rehearsal data root' @{selected=$selected;expected=$data} ($selected -ieq $data)
  Initialize-HarnessCache $updates @($NewVersion)
  $downloads=Join-Path $directory 'download';New-HarnessDirectory $downloads 'download' 'run'|Out-Null
  $old=Join-Path $downloads ([IO.Path]::GetFileName(([uri]$OldUrl).AbsolutePath))
