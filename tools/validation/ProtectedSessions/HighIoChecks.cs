@@ -63,17 +63,38 @@ static class HighIoChecks
             if (first == original) throw new InvalidOperationException("At least two allowed logical processors are required.");
             if (groups.Length > 1) Check(first == groups[0], "On a CPU with two cache groups, like the 9950X3D's two CCDs, the game is limited to the first one");
 
-            Process Launch(string sessionRoot)
+            Process ReadGame(string gameRoot, string sessionRoot)
             {
-                var gameRoot = Path.Combine(root, "game-" + ++games); Directory.CreateDirectory(gameRoot);
-                OperationFiles.Write(Path.Combine(root, "launch.json"), new { root = gameRoot });
-                Until(() => File.Exists(Path.Combine(gameRoot, "stub-exited")) && File.Exists(Path.Combine(gameRoot, "ready.json")), "The launcher's helper did not start the game and exit.");
+                Until(() => File.Exists(Path.Combine(gameRoot, "ready.json")), "The game did not report its identity.");
                 var child = Process.GetProcessById(OperationFiles.Read<JsonElement>(Path.Combine(gameRoot, "ready.json")).GetProperty("pid").GetInt32()); _ = child.Handle;
                 var identity = FixtureProcess.Ready(Path.Combine(gameRoot, "ready.json"), GamePath, ["--high-io-game", gameRoot], true, evidence); identities.Add(child, identity);
                 if (FixtureProcess.Created(child) != identity.Creation) throw new InvalidDataException("Fixture game handle identity mismatch.");
                 gameRoots.Add(child, gameRoot);
-                if (sessionRoot.Length != 0) Until(() => State(sessionRoot).Status == "active", "The session did not apply High I/O and the cores to the handed-off game.");
+                if (sessionRoot.Length != 0) Until(() => State(sessionRoot).Games.Any(item => item.Identity.ProcessId == child.Id && item.Identity.CreationTimeFileTimeUtc == identity.Creation.ToString(System.Globalization.CultureInfo.InvariantCulture) && !item.Exited && item.Fields.All(field => field.Status == "applied")), "The session did not apply every control to this game instance.");
                 return child;
+            }
+            Process Launch(string sessionRoot)
+            {
+                var gameRoot = Path.Combine(root, "game-" + ++games); Directory.CreateDirectory(gameRoot);
+                OperationFiles.Write(Path.Combine(root, "launch.json"), new { root = gameRoot });
+                Until(() => File.Exists(Path.Combine(gameRoot, "stub-exited")), "The launcher's helper did not start the game and exit.");
+                return ReadGame(gameRoot, sessionRoot);
+            }
+            Process Restart(Process predecessor, string sessionRoot)
+            {
+                var nextRoot = Path.Combine(root, "game-" + ++games); Directory.CreateDirectory(nextRoot);
+                var previousRoot = gameRoots[predecessor];
+                OperationFiles.Write(Path.Combine(previousRoot, "restart.json"), new { root = nextRoot });
+                var successor = ReadGame(nextRoot, sessionRoot);
+                Until(() => File.Exists(Path.Combine(previousRoot, "restart-started.json")), "The original game did not record its replacement.");
+                var receipt = OperationFiles.Read<JsonElement>(Path.Combine(previousRoot, "restart-started.json"));
+                Check(receipt.GetProperty("parent").GetInt32() == predecessor.Id && receipt.GetProperty("child").GetInt32() == successor.Id &&
+                    receipt.GetProperty("creation").GetString() == identities[successor].Creation.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    "The running game itself starts its replacement before exiting");
+                File.WriteAllText(Path.Combine(previousRoot, "restart-ack"), "");
+                Check(predecessor.WaitForExit(15000) && predecessor.ExitCode == 0, "The original game exits after its replacement is tracked");
+                Until(() => State(sessionRoot).Games.Single(item => item.Identity.ProcessId == predecessor.Id).Exited, "The session did not observe the original game's exit.");
+                return successor;
             }
             void Close(Process game)
             {
@@ -158,6 +179,21 @@ static class HighIoChecks
             using (var key = Registry.LocalMachine.OpenSubKey(ImageKey)) Check(key is null, "Stop removes the game's launch settings from the registry");
             Close(again);
 
+            session = Arm("session-self-restart");
+            game = Launch(session);
+            var replacement = Restart(game, session);
+            Check(State(session).Games.Count == 2 && Io(session, game).JournalPath != Io(session, replacement).JournalPath && Oracle.Io(replacement) == 3 && Oracle.Affinity(replacement) == first,
+                "A game that restarts itself gets a distinct journal and the selected High I/O and CPUs on its replacement");
+            var replacementOriginalIo = JournalOriginal(session, replacement);
+            Snapshot("game restarted itself", session, replacement);
+            engine.Command(session, "stop");
+            Check(workers.Last().WaitForExit(20000), "The self-restart session stops");
+            Until(() => File.Exists(Path.Combine(session, "recovery-result.json")), "The self-restart recovery watcher did not finish.");
+            Check(State(session).Status == "stopped" && Oracle.Io(replacement) == replacementOriginalIo && Oracle.Affinity(replacement) == original,
+                "Stop restores the replacement's own captured I/O original, including an inherited High value, and clears the session CPU limit");
+            Snapshot("self-restarted game restored", session, replacement);
+            Close(replacement);
+
             session = Arm("session2");
             game = Launch(session);
             Check(Oracle.Io(game) == 3, "A new session sets High I/O priority");
@@ -238,6 +274,20 @@ static class HighIoChecks
         var until = DateTime.UtcNow.AddMinutes(8);
         while (!File.Exists(Path.Combine(root, "stop")) && DateTime.UtcNow < until)
         {
+            var restart = Path.Combine(root, "restart.json");
+            if (File.Exists(restart))
+            {
+                var nextRoot = OperationFiles.Read<JsonElement>(restart).GetProperty("root").GetString()!;
+                using var replacement = Start(GamePath, "--high-io-game", nextRoot);
+                using var owned = FixtureProcess.Started(replacement, Path.Combine(root, "process-receipts"));
+                try
+                {
+                    OperationFiles.Write(Path.Combine(root, "restart-started.json"), new { parent = self.Id, child = replacement.Id, creation = owned.Creation.ToString(System.Globalization.CultureInfo.InvariantCulture) });
+                    Until(() => File.Exists(Path.Combine(root, "restart-ack")), "The runner did not adopt the restarted game.");
+                }
+                catch { owned.Stop(); throw; }
+                return;
+            }
             if (File.Exists(Path.Combine(root, "lock")) && !File.Exists(Path.Combine(root, "locked")))
             {
                 RetainedGpuChecks.DenyNewGpuHandles(self);
