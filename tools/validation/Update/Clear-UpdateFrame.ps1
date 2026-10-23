@@ -12,8 +12,10 @@ for($ancestor=$root;$ancestor;$ancestor=[IO.Path]::GetDirectoryName($ancestor)){
 $receipt=[IO.File]::ReadAllText((Get-HarnessLongPath (Join-Path $root 'source\source-verification.json')))|ConvertFrom-Json
 $manifestHash=(Get-HarnessFileSha256 (Join-Path $root 'source\source-verification.json')).ToLowerInvariant()
 Open-HarnessRun $root $receipt.frameId $manifestHash ''
+$teardown=Invoke-HarnessLedger {param($ledger)
 Assert-HarnessFrameIdle $root
 $entries=@(Get-HarnessEntries|Where-Object {$_.state -in 'active','error'})
+if(@($entries|Where-Object {$_.lifetime -eq 'retained' -or $_.kind -eq 'rehearsal-state'}).Count){throw 'Frame has retained recovery evidence; kept.'}
 $rootEntry=@($entries|Where-Object {$_.kind -eq 'folder' -and $_.identity.path -ieq $root})
 if($rootEntry.Count -ne 1){throw 'Frame root has no unique creation identity; retained.'}
 $source=Join-Path $root 'source'
@@ -33,7 +35,9 @@ foreach($item in @(Get-HarnessTree $root)){
  $manifestFile=$path.StartsWith($source+'\',[StringComparison]::OrdinalIgnoreCase) -and ($relative -eq 'source-verification.json' -or $receipt.files.PSObject.Properties[$relative])
  $tracked=@($entries|Where-Object {$_.kind -eq 'file' -and $_.identity.path -ieq $path}).Count
  $container=@($entries|Where-Object {$_.kind -eq 'folder' -and $_.purpose -ne 'source-frame' -and $path.StartsWith($_.identity.path+'\',[StringComparison]::OrdinalIgnoreCase)}).Count
- if(-not$manifestFile -and -not$tracked -and -not$container -and $path -ine (Join-Path $root 'ledger.json')){throw ('Unrecorded frame file retained: '+$path)}
+ $journalFile=$path -ieq $script:Harness.LedgerPath -or $path -ieq ($script:Harness.LedgerPath+'.lock')
+ if($path -ieq ($script:Harness.LedgerPath+'.previous')){Read-HarnessLedger $path|Out-Null;$journalFile=$true}
+ if(-not$manifestFile -and -not$tracked -and -not$container -and -not$journalFile){throw ('Unrecorded frame file retained: '+$path)}
 }
 [array]::Reverse($entries)
 $lease=@($entries|Where-Object purpose -EQ 'host-lease')
@@ -44,13 +48,20 @@ foreach($entry in $entries){
 foreach($entry in $lease){Remove-HarnessEntry $entry}
 $actual=Get-HarnessFolderIdentity $root
 if($actual.creationTimeFileTimeUtc -cne $rootEntry[0].identity.creationTimeFileTimeUtc){throw 'Frame identity changed; retained.'}
-$saved=[IO.File]::ReadAllBytes((Get-HarnessLongPath $script:Harness.LedgerPath))
+$saved=[IO.File]::ReadAllBytes((Get-HarnessLongPath (Get-HarnessLedgerGeneration)))
 $final=[Text.Encoding]::UTF8.GetString($saved)|ConvertFrom-Json
-if(@(Get-HarnessTree $root|Where-Object FullName -INE $script:Harness.LedgerPath).Count){throw 'Frame is not empty after cleanup; ledger kept.'}
+$remaining=@(Get-HarnessTree $root)
+if(@($remaining|Where-Object {$_.FullName -ine $script:Harness.LedgerPath -and $_.FullName -ine ($script:Harness.LedgerPath+'.previous') -and $_.FullName -ine ($script:Harness.LedgerPath+'.lock')}).Count){throw 'Frame is not empty after cleanup; ledger kept.'}
 $final.entries|Where-Object id -CEQ $rootEntry[0].id|ForEach-Object {$_.state='removed'}
+if(Test-HarnessPath ($script:Harness.LedgerPath+'.previous')){Read-HarnessLedger ($script:Harness.LedgerPath+'.previous')|Out-Null;[IO.File]::Delete((Get-HarnessLongPath ($script:Harness.LedgerPath+'.previous')))}
+[RooIndustriesValidationOwnership.Native]::FileId($script:Harness.LedgerLock.SafeFileHandle)|Out-Null
+[RooIndustriesValidationOwnership.Native]::Delete($script:Harness.LedgerLock.SafeFileHandle)
 [IO.File]::Delete((Get-HarnessLongPath $script:Harness.LedgerPath))
+return @{saved=$saved;final=$final;rootCreated=$rootEntry[0].identity.creationTimeFileTimeUtc}
+} -NoWrite
+$saved=$teardown.saved;$final=$teardown.final
 try{[IO.Directory]::Delete((Get-HarnessLongPath $root),$false)}catch{
- if([IO.Directory]::Exists((Get-HarnessLongPath $root)) -and (Get-HarnessFolderIdentity $root).creationTimeFileTimeUtc -ceq $rootEntry[0].identity.creationTimeFileTimeUtc -and -not(Test-HarnessPath $script:Harness.LedgerPath)){
+ if([IO.Directory]::Exists((Get-HarnessLongPath $root)) -and (Get-HarnessFolderIdentity $root).creationTimeFileTimeUtc -ceq $teardown.rootCreated -and -not(Test-HarnessPath $script:Harness.LedgerPath)){
   $stream=[IO.FileStream]::new((Get-HarnessLongPath $script:Harness.LedgerPath),[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None)
   try{$stream.Write($saved,0,$saved.Length);$stream.Flush($true)}finally{$stream.Dispose()}
  }
