@@ -7,21 +7,22 @@ using RooIndustries.Optimizer;
 
 static class MissingCommandChecks
 {
-    const string Hidden = "Import-Module Microsoft.PowerShell.Utility; $global:PSModuleAutoLoadingPreference='None'\n";
+    static string Hidden(string modules) => "Import-Module Microsoft.PowerShell.Utility; $global:PSModuleAutoLoadingPreference='None'; $env:PSModulePath='" + modules.Replace("'", "''") + "'\n";
     const string Defender = """
 function Get-MpPreference {[pscustomobject]@{SubmitSamplesConsent=[int][IO.File]::ReadAllText($env:ROO_INDUSTRIES_FIXTURE_DEFENDER)}}
 function Set-MpPreference {param([int]$SubmitSamplesConsent) [IO.File]::WriteAllText($env:ROO_INDUSTRIES_FIXTURE_DEFENDER,[string]$SubmitSamplesConsent)}
 
 """;
+    const string LoadFailure = "The Defender provider dependency could not be loaded.";
     const string Parent = @"Software\RooIndustriesTweakTests";
 
-    static Func<object, Process> Launcher(string providers, string consent)
+    static Func<object, Process> Launcher(string providers, string consent, string modules)
     {
         string helper;
         using (var resource = typeof(PowerShellControls).Assembly.GetManifestResourceStream("Optimizer.Core.WindowsControls.ps1") ?? throw new FileNotFoundException("The Windows control helper is missing."))
         using (var reader = new StreamReader(resource)) helper = reader.ReadToEnd();
         using var packed = new MemoryStream();
-        using (var gzip = new GZipStream(packed, CompressionLevel.Optimal, leaveOpen: true)) gzip.Write(Encoding.UTF8.GetBytes(Hidden + providers + helper));
+        using (var gzip = new GZipStream(packed, CompressionLevel.Optimal, leaveOpen: true)) gzip.Write(Encoding.UTF8.GetBytes(Hidden(modules) + providers + helper));
         var encoded = Convert.ToBase64String(packed.ToArray());
         return request =>
         {
@@ -56,7 +57,11 @@ function Set-MpPreference {param([int]$SubmitSamplesConsent) [IO.File]::WriteAll
         try
         {
             File.WriteAllText(consent, "1");
-            var hidden = Launcher("", consent); var present = Launcher(Defender, consent);
+            var modules = Path.Combine(folder.FullName, "modules"); var none = Path.Combine(folder.FullName, "no-modules");
+            Directory.CreateDirectory(Path.Combine(modules, "BrokenDefender"));
+            File.WriteAllText(Path.Combine(modules, "BrokenDefender", "BrokenDefender.psd1"), "@{RootModule='BrokenDefender.psm1';ModuleVersion='1.0';FunctionsToExport=@('Get-MpPreference','Set-MpPreference')}");
+            File.WriteAllText(Path.Combine(modules, "BrokenDefender", "BrokenDefender.psm1"), "throw '" + LoadFailure + "'\n" + Defender);
+            var hidden = Launcher("", consent, none); var present = Launcher(Defender, consent, none); var broken = Launcher("", consent, modules);
             var defender = new ControlAddress("defender", "system", "SubmitSamplesConsent");
             var mitigations = new ControlAddress("mitigations", "system", "policy");
             PowerShellControls.Launcher = hidden;
@@ -70,6 +75,13 @@ function Set-MpPreference {param([int]$SubmitSamplesConsent) [IO.File]::WriteAll
             var reads = new WindowsControlStore().ReadMany(rows.Select(row => row.Address).ToArray());
             var wrong = rows.Where(row => reads[row.Address].Error?.Message != Unavailable(row.Feature)).Select(row => row.Feature + ": " + (reads[row.Address].Error?.Message ?? "read")).ToArray();
             check(wrong.Length == 0, "Every command-backed Windows setting, exploit protection included, reads as not available when its PowerShell commands are missing: " + string.Join(" | ", wrong));
+            PowerShellControls.Launcher = broken;
+            var maps = new ControlAddress("defender", "system", "MAPSReporting");
+            var loading = new WindowsControlStore().ReadMany([defender, maps]);
+            string Failure(ControlAddress address) => loading[address].Error?.Message ?? "read";
+            check(Failure(defender) != Unavailable("Microsoft Defender Antivirus") && Failure(defender).Contains(LoadFailure, StringComparison.Ordinal) && Failure(maps) == Failure(defender),
+                "Every Defender read reports the load error, not not available, when Defender's module is installed but fails to load: " + Failure(defender) + " | " + Failure(maps));
+            PowerShellControls.Launcher = hidden;
 
             TweakDefinition Setting(string id, ControlAddress address, JsonElement desired, bool patch = false) => new(id, id, "Fixture", "Fixture", 10240, int.MaxValue, ["*"], "none",
                 [new("set", "Set", [], Controls: [new(address, desired, patch)])], [new("Roo Industries", "fixture", "missing PowerShell commands")]);
@@ -92,6 +104,11 @@ function Set-MpPreference {param([int]$SubmitSamplesConsent) [IO.File]::WriteAll
             var refusedApply = Error(() => engine.Apply(apply, OperationFiles.HashFile(apply)));
             check(refusedApply == Unavailable("Microsoft Defender Antivirus") && store.ReadState() is null && Untouched("1"),
                 "Applying a reviewed Defender choice after Defender's commands went missing stops as not available before any journal or write: " + refusedApply);
+            PowerShellControls.Launcher = broken;
+            var unloaded = engine.Detect().Settings.Single(setting => setting.Id == "defender").Error ?? "read";
+            var failedApply = Error(() => engine.Apply(apply, OperationFiles.HashFile(apply)));
+            check(unloaded.Contains(LoadFailure, StringComparison.Ordinal) && failedApply.Contains(LoadFailure, StringComparison.Ordinal) && store.ReadState() is null && Untouched("1"),
+                "With Defender's module failing to load, the page gets the load error and a reviewed Defender apply stops with it before any journal or write: " + unloaded + " | " + failedApply);
 
             PowerShellControls.Launcher = present;
             apply = Review(engine.Preview("defender-fixture", [new("defender", "set")]));

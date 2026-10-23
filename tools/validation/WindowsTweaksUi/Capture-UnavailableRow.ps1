@@ -1,4 +1,4 @@
-param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutRoot,[Parameter(Mandatory)][ValidatePattern('^[a-z][a-z0-9-]{0,30}$')][string]$Label,[string]$SettingId='windows.171a004ed11767da',[string]$Search='Telemetry - Disable: system',[string]$HiddenModules='ConfigDefender,Defender,DefenderPerformance',[string]$HiddenCommand='Get-MpPreference',[switch]$BeforeFix)
+param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutRoot,[Parameter(Mandatory)][ValidatePattern('^[a-z][a-z0-9-]{0,30}$')][string]$Label,[string]$SettingId='windows.171a004ed11767da',[string]$Search='Telemetry - Disable: system',[string]$HiddenModules='ConfigDefender,Defender,DefenderPerformance',[string]$HiddenCommand='Get-MpPreference',[switch]$BeforeFix,[switch]$BrokenModule)
 $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
 . (Join-Path $Source 'tools\validation\Update\Harness.Common.ps1')
@@ -18,8 +18,9 @@ public static class RooIndustriesRowCapture {
 [RooIndustriesRowCapture]::SetProcessDPIAware()|Out-Null
 $A=[Windows.Automation.AutomationElement];$TS=[Windows.Automation.TreeScope]
 $hidden=@($HiddenModules.Split(',')|ForEach-Object {$_.Trim()}|Where-Object {$_})
-$expectedCurrent=if($BeforeFix){"Couldn't check"}else{'Not available here'}
-$evidence=[ordered]@{label=$Label;settingId=$SettingId;search=$Search;hiddenModules=$hidden;expectedCurrent=$expectedCurrent;expectedRetry=$BeforeFix.IsPresent;frames=@()}
+$expectedRetry=$BeforeFix.IsPresent -xor $BrokenModule.IsPresent
+$expectedCurrent=if($expectedRetry){"Couldn't check"}else{'Not available here'}
+$evidence=[ordered]@{label=$Label;settingId=$SettingId;search=$Search;hiddenModules=$hidden;expectedCurrent=$expectedCurrent;brokenModule=$BrokenModule.IsPresent;expectedRetry=$expectedRetry;frames=@()}
 function WaitFor([scriptblock]$Probe,[double]$Limit,[string]$What){$deadline=[DateTime]::UtcNow.AddSeconds($Limit);while([DateTime]::UtcNow -lt $deadline){try{$value=& $Probe}catch{$value=$null};if($value){return $value};Start-Sleep -Milliseconds 200};throw ('Timed out waiting for '+$What)}
 function ById($Root,[string]$Id){$Root.FindFirst($TS::Descendants,[Windows.Automation.PropertyCondition]::new($A::AutomationIdProperty,$Id))}
 function Row($Window){
@@ -52,7 +53,7 @@ try{
  & $dotnet publish (Join-Path $Source 'backend\native\Optimizer.Host\Optimizer.Host.csproj') --configuration Debug --self-contained false -o (Join-Path $Source 'backend\bin\optimizer') --disable-build-servers -p:RooIndustriesTestHooks=true -p:UseSharedCompilation=false *>> $build
  if($LASTEXITCODE -ne 0){throw 'The helper test build failed; see build.log.'}
  $project=Join-Path $Source 'docs\internal\frontend\RooIndustries.OptimizationSuite.App\RooIndustries.OptimizationSuite.App.csproj'
- & $dotnet build $project --configuration Debug -p:Platform=x64 --disable-build-servers -p:RooIndustriesTestHooks=true -p:UseSharedCompilation=false *>> $build
+ & $dotnet build $project --configuration Debug -p:Platform=x64 -p:WindowsAppSDKSelfContained=true --disable-build-servers -p:RooIndustriesTestHooks=true -p:UseSharedCompilation=false *>> $build
  if($LASTEXITCODE -ne 0){throw 'The app test build failed; see build.log.'}
  $exe=@(Get-ChildItem -LiteralPath (Join-Path $Source 'docs\internal\frontend\RooIndustries.OptimizationSuite.App\bin\x64\Debug') -Recurse -Filter 'RooIndustries.OptimizationSuite.App.exe'|Sort-Object LastWriteTimeUtc -Descending)
  if(-not$exe.Count){throw 'The app test build produced no executable.'}
@@ -64,16 +65,22 @@ try{
  $modules=@(Get-Command -Name $names -ErrorAction SilentlyContinue|Where-Object {$_.Module.Path -and $_.ModuleName -notin $hidden}|ForEach-Object {$_.ModuleName}|Sort-Object -Unique)
  if(-not$modules.Count){throw 'No helper command providers were found.'}
  $evidence.importedModules=$modules
- $prelude="`$ErrorActionPreference='Stop';`$ProgressPreference='SilentlyContinue';Import-Module "+(($modules|ForEach-Object {"'"+$_.Replace("'","''")+"'"}) -join ',')+";`$global:PSModuleAutoLoadingPreference='None';"
+ $prelude="`$ErrorActionPreference='Stop';`$ProgressPreference='SilentlyContinue';Import-Module "+(($modules|ForEach-Object {"'"+$_.Replace("'","''")+"'"}) -join ',')+";`$global:PSModuleAutoLoadingPreference='None';`$env:PSModulePath='"+(Join-Path $directory 'no-modules')+"';"
  $probeScript=$prelude+"[bool](Get-Command '"+$HiddenCommand.Replace("'","''")+"' -ErrorAction SilentlyContinue);[bool](Get-Command Get-NetFirewallProfile -ErrorAction SilentlyContinue)"
  $probe=@(& (Join-Path ([Environment]::SystemDirectory) 'WindowsPowerShell\v1.0\powershell.exe') -NoProfile -NonInteractive -EncodedCommand ([Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($probeScript))))
  $evidence.hiddenCommandFound=$probe[0];$evidence.firewallCommandFound=$probe[1]
  if($LASTEXITCODE -ne 0 -or $probe.Count -ne 2 -or $probe[0] -ne 'False' -or $probe[1] -ne 'True'){throw ('The helper providers must hide '+$HiddenCommand+' and keep the other modules: '+($probe -join ','))}
- $env:ROO_INDUSTRIES_TEST_MODULES=$modules -join ';';$env:ROO_INDUSTRIES_INITIAL_NAV='windows';$env:ROO_INDUSTRIES_DOTNET_EXE=$dotnet
+ if($BrokenModule){
+  $broken=[IO.Directory]::CreateDirectory((Join-Path $directory 'modules\BrokenDefender')).FullName
+  [IO.File]::WriteAllText((Join-Path $broken 'BrokenDefender.psd1'),"@{RootModule='BrokenDefender.psm1';ModuleVersion='1.0';FunctionsToExport=@('Get-MpPreference','Set-MpPreference')}")
+  [IO.File]::WriteAllText((Join-Path $broken 'BrokenDefender.psm1'),"throw 'The Defender provider dependency could not be loaded.'")
+  $env:ROO_INDUSTRIES_TEST_MODULE_PATH=Split-Path $broken -Parent
+ }
+ $env:ROO_INDUSTRIES_TEST_MODULES=$modules -join ';';$env:ROO_INDUSTRIES_INITIAL_NAV='windows';$env:ROO_INDUSTRIES_DOTNET_EXE=$dotnet;$env:DOTNET_ROOT=Split-Path $dotnet -Parent
  $app=Start-OwnedProcess -FilePath $exe[0].FullName -WindowStyle Normal -Purpose 'suite-test-build' -Lifetime invocation
- $window=WaitFor {$A::RootElement.FindFirst($TS::Children,[Windows.Automation.PropertyCondition]::new($A::ProcessIdProperty,[int]$app.Identity.pid))} 120 'the Suite window'
+ $window=WaitFor {$w=$A::RootElement.FindFirst($TS::Children,[Windows.Automation.PropertyCondition]::new($A::ProcessIdProperty,[int]$app.Identity.pid));if($w -and (ById $w 'WindowsTweaksSearch')){$w}} 180 'the Windows tweaks page'
  $hwnd=[IntPtr]::new([long]$window.Current.NativeWindowHandle)
- $search=WaitFor {ById $window 'WindowsTweaksSearch'} 120 'the Windows tweaks page'
+ $search=ById $window 'WindowsTweaksSearch'
  WaitFor {ById $window 'WindowsTweaksList'} 120 'the Windows tweaks list'|Out-Null
  $advanced=WaitFor {$window.FindFirst($TS::Descendants,[Windows.Automation.AndCondition]::new([Windows.Automation.PropertyCondition]::new($A::NameProperty,'Show advanced options'),[Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty,[Windows.Automation.ControlType]::CheckBox)))} 60 'the advanced options box'
  $toggle=$advanced.GetCurrentPattern([Windows.Automation.TogglePattern]::Pattern)
@@ -81,7 +88,7 @@ try{
  if($toggle.Current.ToggleState -ne [Windows.Automation.ToggleState]::On){$toggle.Toggle()}
  $value=$search.GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern)
  $value.SetValue($Search)
- $evidence.loaded=WaitFor {$state=RowState $window;if($state -and $state.current -ceq $expectedCurrent -and $state.retry -eq $BeforeFix.IsPresent){$state}} 240 'the row to finish loading'
+ $evidence.loaded=WaitFor {$state=RowState $window;if($state -and $state.current -ceq $expectedCurrent -and $state.retry -eq $expectedRetry){$state}} 240 'the row to finish loading'
  $value.SetValue('')
  [RooIndustriesRowCapture]::SetWindowPos($hwnd,[IntPtr]::new(-1),0,0,0,0,0x0003)|Out-Null
  [RooIndustriesRowCapture]::SetForegroundWindow($hwnd)|Out-Null
@@ -99,13 +106,13 @@ try{
    if($retry){$retry.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke();$states+=@([ordered]@{at=[Math]::Round($now,3);action='retry clicked'})}else{$states+=@([ordered]@{at=[Math]::Round($now,3);action='no retry button'});$done=$now+1}
    $retried=$now;continue
   }
-  $final=$state -and $state.current -ceq $expectedCurrent -and $state.retry -eq $BeforeFix.IsPresent
+  $final=$state -and $state.current -ceq $expectedCurrent -and $state.retry -eq $expectedRetry
   if($retried -and -not$final){$checked=$true}
   if($retried -and -not$done -and $final -and ($checked -or $now -ge $retried+8)){$done=$now}
  }
  if(-not$done){throw ('The row did not settle while recording: '+(($states|ConvertTo-Json -Compress -Depth 5)))}
  $final=RowState $window
- if(-not $final -or $final.current -cne $expectedCurrent -or $final.retry -ne $BeforeFix.IsPresent){throw 'The row did not reach the expected state and retry visibility.'}
+ if(-not $final -or $final.current -cne $expectedCurrent -or $final.retry -ne $expectedRetry){throw 'The row did not reach the expected state and retry visibility.'}
  Shot $window (Join-Path $directory ('row-'+$Label+'.png'))
  $evidence.states=$states;$evidence.final=$final
  [RooIndustriesRowCapture]::SetWindowPos($hwnd,[IntPtr]::new(-2),0,0,0,0,0x0003)|Out-Null
