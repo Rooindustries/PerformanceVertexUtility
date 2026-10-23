@@ -1073,6 +1073,24 @@ try {
             $PreviewPath=$gate.path
             Test-BindingRefusal $gate.label $gate.expect
         }
+        foreach ($edit in @(
+            @{label='edited plan data';edit={param($p) $p.plan[0].data='9'};expect='plan does not match its hash'},
+            @{label='edited plan protection';edit={param($p) $p.plan[3].blocked=$false};expect='plan does not match its hash'},
+            @{label='empty plan';edit={param($p) $p.plan=@()};expect='plan does not match its hash'},
+            @{label='null plan';edit={param($p) $p.plan=$null};expect='plan does not match its hash'},
+            @{label='missing plan';edit={param($p) $p.PSObject.Properties.Remove('plan')};expect='plan does not match its hash'},
+            @{label='edited action value';edit={param($p) $p.actions[0].value=9};expect='actions do not match its plan'},
+            @{label='edited action target';edit={param($p) $p.actions[0].target='HKCU\Different\First'};expect='actions do not match its plan'},
+            @{label='edited action protection';edit={param($p) $p.actions[3].blocked=$false};expect='actions do not match its plan'},
+            @{label='edited service action';edit={param($p) $p.actions[4].action='startup=Manual, state=Running'};expect='actions do not match its plan'},
+            @{label='missing actions';edit={param($p) $p.PSObject.Properties.Remove('actions')};expect='actions do not match its plan'}
+        )) {
+            $saved=Get-Content -LiteralPath $record -Raw|ConvertFrom-Json
+            & $edit.edit $saved
+            $PreviewPath=Join-Path $tempRoot 'binding-edited-preview.json'
+            Write-JsonFile $saved $PreviewPath
+            Test-BindingRefusal ('a preview with '+$edit.label) $edit.expect
+        }
         $PreviewPath=$reviewed.previewPath
         $ConfirmApply=$true
         $result=$null
@@ -1316,6 +1334,28 @@ try {
         $restored=Invoke-RollbackModule
         $left=@($restored.leftAsChanged|Where-Object {$_.type -eq 'dependent'}|ForEach-Object {$_.name}) -join ','
         Test-DependentCase ($restored.success -and $left -ceq 'ProbeDep,ProbeDepChild' -and (Get-FakeStatus) -ceq 'Probe=Automatic/Running ProbeDep=Disabled/Stopped ProbeDepChild=Manual/Stopped ProbeIdle=Manual/Stopped') ('A dependent another program changed is left alone, with what depends on it ('+$left+')')
+
+        $DataRoot=Reset-DependentFixture
+        $applied=Invoke-ReviewedApply
+        $BackupPath=$applied.backupPath
+        $script:fakeServices.ProbeDep.status='Running'
+        $script:fakeServices.ProbeDep.startup='Disabled'
+        $restored=Invoke-RollbackModule
+        Test-DependentCase ($restored.success -and @($restored.leftAsChanged|Where-Object {$_.name -ceq 'ProbeDep'}).Count -eq 1 -and @($restored.alreadyAtOriginal|Where-Object {$_.name -ceq 'ProbeDep'}).Count -eq 0 -and $script:fakeServices.ProbeDep.startup -ceq 'Disabled' -and $script:fakeServices.ProbeDep.status -ceq 'Running') 'A running dependent with changed startup is reported as left changed'
+
+        & {
+            $start=${function:Start-Service}
+            function Start-Service {
+                [CmdletBinding()]param($Name)
+                & $start -Name $Name
+                if ($Name -ceq 'ProbeDep') { $script:fakeServices.ProbeDep.startup='Disabled' }
+            }
+            $DataRoot=Reset-DependentFixture
+            $applied=Invoke-ReviewedApply
+            $BackupPath=$applied.backupPath
+            $restored=Invoke-RollbackModule
+            Test-DependentCase (-not $restored.success -and $restored.failures[0].name -ceq 'ProbeDep' -and $restored.failures[0].error -like '*verification failed*' -and $restored.restoredServices -eq 1 -and $script:fakeServices.ProbeDep.startup -ceq 'Disabled') 'A dependent startup change during restart fails readback without overwriting it'
+        }
 
         $DataRoot=Reset-DependentFixture
         $applied=Invoke-ReviewedApply
@@ -1847,6 +1887,16 @@ public static class RooIndustriesLegacyFixtureRaw {
                 Assert ($refused -like ('*'+$regPath+'\Value: REG_SZ Two -> REG_SZ Three*') -and $state.first -eq 1 -and $state.value -ceq 'Original' -and $state.backups -eq 0) 'The ApplyModule CLI refuses and names a manifest edit made after the preview'
                 $manifest.modules[0].registryValues[1].data='Two'
                 Write-JsonFile $manifest $cliManifest
+                foreach ($representation in 'plan','actions') {
+                    $edited=Get-Content -LiteralPath $preview.previewPath -Raw|ConvertFrom-Json
+                    if ($representation -eq 'plan') { $edited.plan[1].data='Three' } else { $edited.actions[1].value='Three' }
+                    $editedPath=Join-Path $tempRoot 'cli-edited-preview.json'
+                    Write-JsonFile $edited $editedPath
+                    $refused=$null
+                    try { & $HarnessPath @cliArgs -ConfirmApply -PreviewPath $editedPath | Out-Null } catch { $refused=$_.Exception.Message }
+                    $state=Get-CliState
+                    Assert ($refused -like ('*preview '+$representation+'*') -and $state.first -eq 1 -and $state.value -ceq 'Original' -and $state.backups -eq 0) ('The ApplyModule CLI refuses edited preview '+$representation+' before any registry write or backup')
+                }
                 $applied=& $HarnessPath @cliArgs -ConfirmApply -PreviewPath $preview.previewPath
                 $state=Get-CliState
                 Assert ($state.first -eq 2 -and $state.firstKind -ceq 'DWord' -and $state.value -ceq 'Two' -and $state.valueKind -ceq 'String' -and $applied.previewHash -ceq $preview.previewHash -and $state.backups -eq 1) 'The ApplyModule CLI applies the exact reviewed plan'

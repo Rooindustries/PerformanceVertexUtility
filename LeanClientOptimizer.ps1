@@ -447,8 +447,9 @@ function Test-DependentRestore {
     if (Test-ProtectedService $name $Manifest) { return [pscustomobject]@{ state='leftAsChanged'; reason='dependent service is protected' } }
     $current = @(Get-ServiceSnapshot $name | Where-Object { $_.exists -and $_.name -ieq $name })
     if ($current.Count -ne 1) { return [pscustomobject]@{ state='leftAsChanged'; reason='dependent service missing' } }
+    if ($current[0].startType -ne $Dependent.startType) { return [pscustomobject]@{ state='leftAsChanged'; reason='dependent startup or state changed' } }
     if ($current[0].status -eq 'Running') { return [pscustomobject]@{ state='alreadyAtOriginal'; reason=$null } }
-    if ($current[0].status -ne 'Stopped' -or $current[0].startType -ne $Dependent.startType) { return [pscustomobject]@{ state='leftAsChanged'; reason='dependent startup or state changed' } }
+    if ($current[0].status -ne 'Stopped') { return [pscustomobject]@{ state='leftAsChanged'; reason='dependent startup or state changed' } }
     foreach ($required in @($current[0].dependsOn)) {
         if (-not $required) { continue }
         $running = @(Get-ServiceSnapshot $required | Where-Object { $_.exists -and $_.name -ieq $required -and $_.status -eq 'Running' }).Count -eq 1
@@ -533,12 +534,13 @@ function Invoke-SmokeTest {
     function Add-Result([string]$Name, [bool]$Pass, [string]$Detail) {
         $results.Add([pscustomobject]@{ name=$Name; pass=$Pass; detail=$Detail }) | Out-Null
     }
+    $profile = @()
     try {
         $profile = @(Get-NetConnectionProfile -ErrorAction Stop)
         Add-Result 'network-profile' ($profile.Count -gt 0) (($profile | Select-Object -First 1 -ExpandProperty Name) -join ',')
     } catch { Add-Result 'network-profile' $false $_.Exception.Message }
     try {
-        $dnsInterfaces = @(Get-DnsClientServerAddress -ErrorAction Stop | Where-Object { @($_.ServerAddresses).Count -gt 0 })
+        $dnsInterfaces = @(Get-DnsClientServerAddress -ErrorAction Stop | Where-Object { $null -ne $_.InterfaceIndex -and $_.InterfaceIndex -in @($profile.InterfaceIndex) -and @($_.ServerAddresses).Count -gt 0 })
         $dnsClient = Get-Service -Name 'Dnscache' -ErrorAction SilentlyContinue
         $dnsStatus = if ($dnsClient) { [string]$dnsClient.Status } else { 'missing' }
         Add-Result 'dns-client' ($dnsStatus -eq 'Running' -and $dnsInterfaces.Count -gt 0) "Dnscache=$dnsStatus, interfaces with DNS servers=$($dnsInterfaces.Count)"
@@ -665,9 +667,25 @@ function Assert-ModulePreview {
     if ($null -eq $preview -or $preview.dryRun -isnot [bool] -or -not $preview.dryRun) { throw "$PreviewPath is not a preview. $next" }
     if (-not [string]::Equals([string]$preview.moduleId, [string]$Module.id, [StringComparison]::Ordinal)) { throw "The preview $PreviewPath is for module '$($preview.moduleId)', not '$($Module.id)'. $next" }
     if ($preview.previewHash -isnot [string] -or $preview.previewHash -cnotmatch '^[0-9a-f]{64}$') { throw "The preview $PreviewPath has no plan hash, so it was made by an earlier version or edited. $next" }
+    if ($preview.plan -isnot [array] -or -not [string]::Equals((Get-ModulePlanHash @($preview.plan)), $preview.previewHash, [StringComparison]::Ordinal)) { throw "The preview plan does not match its hash. $next" }
     if (-not [string]::Equals($preview.previewHash, $PlanHash, [StringComparison]::Ordinal)) {
         $changes = Get-ModulePlanChanges @($preview.plan) $Plan
         throw "The manifest changed after the preview $PreviewPath`: $($changes -join '; '). $next"
+    }
+    $actionsError = "The preview actions do not match its plan. $next"
+    if ($preview.actions -isnot [array] -or $preview.actions.Count -ne $Plan.Count) { throw $actionsError }
+    for ($index = 0; $index -lt $Plan.Count; $index++) {
+        $entry = $Plan[$index]
+        $action = $preview.actions[$index]
+        $service = $entry.kind -ceq 'service'
+        $target = if ($service) { $entry.name } else { $entry.path + '\' + $entry.name }
+        $verb = if ($service) { 'startup=' + $entry.startup + ', state=' + $entry.targetState } else { 'set' }
+        if ($action.type -isnot [string] -or $action.type -cne $entry.kind -or $action.target -isnot [string] -or $action.target -cne $target -or $action.action -isnot [string] -or $action.action -cne $verb -or $action.blocked -isnot [bool] -or $action.blocked -ne $entry.blocked) { throw $actionsError }
+        if (-not $service) {
+            if (-not $action.PSObject.Properties['value']) { throw $actionsError }
+            try { $data = [string](Get-ManifestRegistrySnapshot ([pscustomobject]@{type=$entry.type;data=$action.value})).oldValue } catch { throw $actionsError }
+            if (-not [string]::Equals($data, $entry.data, [StringComparison]::Ordinal)) { throw $actionsError }
+        }
     }
 }
 
@@ -942,7 +960,7 @@ function Invoke-RollbackModule {
                 $attempted++
                 $writing = $true
                 Start-Service -Name $item.target.name -ErrorAction Stop
-                $verified = @(Get-ServiceSnapshot $item.target.name | Where-Object { $_.exists -and $_.name -ieq $item.target.name -and $_.status -eq 'Running' })
+                $verified = @(Get-ServiceSnapshot $item.target.name | Where-Object { $_.exists -and $_.name -ieq $item.target.name -and $_.status -eq 'Running' -and $_.startType -eq $item.snapshot.startType })
                 if ($verified.Count -ne 1) { throw "Dependent service start verification failed: $($item.target.name)" }
                 $serviceCount++
             } else {

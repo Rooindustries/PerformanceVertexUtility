@@ -15,11 +15,13 @@ try {
     $script:processes = @()
     $script:lookups = 0
     $script:dnsServers = @('192.0.2.53')
-    function Get-NetConnectionProfile { @([pscustomobject]@{ Name = 'Fixture network' }) }
+    $script:profiles = @([pscustomobject]@{ Name = 'Fixture network'; InterfaceIndex = 1 })
+    $script:extraDns = @()
+    function Get-NetConnectionProfile { $script:profiles }
     function Resolve-DnsName { $script:lookups++; @([pscustomobject]@{ Name = 'www.microsoft.com' }) }
     function Test-Connection { $script:lookups++; $true }
     function Invoke-WebRequest { $script:lookups++ }
-    function Get-DnsClientServerAddress { @([pscustomobject]@{ InterfaceAlias = 'Fixture'; ServerAddresses = $script:dnsServers }) }
+    function Get-DnsClientServerAddress { @([pscustomobject]@{ InterfaceAlias = 'Fixture'; InterfaceIndex = 1; ServerAddresses = $script:dnsServers }) + $script:extraDns }
     function Get-PnpDevice { if ($script:bluetooth -eq 'unavailable') { throw [Management.Automation.CommandNotFoundException]::new('Get-PnpDevice') }; @($script:bluetooth) }
     function Get-Service { param([string]$Name) if ($script:services.ContainsKey($Name)) { [pscustomobject]@{ Name = $Name; Status = $script:services[$Name]; StartType = 'Automatic' } } }
     function Get-ItemProperty { @($script:apps | ForEach-Object { [pscustomobject]@{ DisplayName = $_ } }) }
@@ -38,6 +40,20 @@ try {
     $noClient = Invoke-SmokeTest
     $script:services.Dnscache = 'Running'
     Assert ($script:lookups -eq 0 -and -not $noServers.pass -and -not $noClient.pass -and @(@($noServers.results) + @($noClient.results) | Where-Object { $_.name -eq 'dns-client' -and -not $_.pass }).Count -eq 2) 'The local DNS check fails without a DNS server or a running DNS Client service'
+
+    $script:dnsServers = @()
+    $script:extraDns = @([pscustomobject]@{ InterfaceIndex = 2; ServerAddresses = @('192.0.2.54') })
+    $inactiveOnly = Invoke-SmokeTest
+    Assert (-not $inactiveOnly.pass -and @($inactiveOnly.results | Where-Object { $_.name -eq 'dns-client' -and -not $_.pass }).Count -eq 1) 'DNS on a disconnected adapter cannot hide missing DNS on the active network'
+    $script:profiles = @()
+    $noProfiles = Invoke-SmokeTest
+    Assert (-not $noProfiles.pass -and @($noProfiles.results | Where-Object { $_.name -eq 'dns-client' -and -not $_.pass }).Count -eq 1) 'DNS on an unrelated adapter cannot pass without an active network profile'
+    $script:profiles = @([pscustomobject]@{ Name = 'Other fixture network'; InterfaceIndex = 2 })
+    $otherActive = Invoke-SmokeTest
+    Assert ($otherActive.pass -and $script:lookups -eq 0) 'DNS on any active network profile passes without an external lookup'
+    $script:profiles = @([pscustomobject]@{ Name = 'Fixture network'; InterfaceIndex = 1 })
+    $script:dnsServers = @('192.0.2.53')
+    $script:extraDns = @()
 
     $script:bluetooth = @([pscustomobject]@{ Status = 'Error' })
     $script:services.bthserv = 'Stopped'
