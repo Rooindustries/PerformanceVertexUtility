@@ -69,7 +69,7 @@ These must hold on every commit of `main`. Each one names the code that enforces
      - local (`S-1-5-21-...`) and Microsoft Entra (`S-1-12-1-...`) account SIDs with `<sid>`
      - other accounts' profile folders with `<user>`: any folder directly under a `Users` or `Documents and Settings` folder, whether the path starts with a drive, an NT device or volume, a UNC share or `%SystemDrive%`, and with mixed, doubled or JSON-escaped separators and `.` components. Relocated, roaming and network profiles come from Windows' profile list (`BugRedactor.RegisteredProfiles`), and the folders next to them are private too. JSON `\u` escapes in profile roots, separators and account SIDs are recognized without rewriting the surrounding text.
      - a name suffix that older logs left after `%USERPROFILE%`, like `%USERPROFILE%.name\...`, with `<user>`
-     - a one-letter user or PC name in account and host forms (`PC\A`, `AzureAD\A`, `\\X\share`) with `<user>` or `<pc-name>`. As a bare word one letter is far more often ordinary text, so it stays.
+     - a one-letter user or PC name in the forms `PC\A`, `AzureAD\A` and `\\X\share` with `<user>` or `<pc-name>`. As a bare word one letter is far more often ordinary text, so it stays.
 
      The app log is redacted when it's written (`AppLog`).
    - Checked by: `tools/validation/AppSweepUi/BugReportChecks.cs` (run alone with `AppSweepUi bug-report`).
@@ -78,6 +78,7 @@ These must hold on every commit of `main`. Each one names the code that enforces
      - Text that reads as both a path and JSON escapes stays as written: three backslashes before a folder starting with `n`, `r`, `t`, `b` or `f` whose own separator is also followed by one of those letters, `%USERPROFILE%` followed directly by `\u` with no deeper separator after it, and a one-letter account named `b`, `f`, `n`, `r`, `t` or `u` after a single backslash.
      - An old-log suffix after `%USERPROFILE%` that starts with a space or comma and isn't followed by a separator reads as prose and stays.
      - One-letter user and PC names stay readable as bare words.
+     - A one-letter account name after a domain other than the PC name or `AzureAD`, such as `CONTOSO\A`, stays readable.
 
 ### Changing code an invariant depends on
 

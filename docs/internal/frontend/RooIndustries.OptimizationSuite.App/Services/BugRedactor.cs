@@ -25,7 +25,7 @@ public sealed class BugRedactor
         if (!string.IsNullOrWhiteSpace(profile))
         {
             foreach (var form in new[] { profile, profile.Replace("\\", "\\\\"), profile.Replace('\\', '/') }.Distinct())
-                rules.Add((new Regex(Regex.Escape(form), RegexOptions.IgnoreCase | RegexOptions.CultureInvariant), "%USERPROFILE%"));
+                rules.Add((new Regex(Regex.Escape(form) + @"(?![\p{L}\p{N}_])", Options), "%USERPROFILE%"));
         }
         var machine = machineName?.Trim();
         var user = userName?.Trim();
@@ -423,7 +423,7 @@ public sealed class BugRedactor
             var pattern = head + string.Concat(parent.Select(part => @"(?>[\\/]+)" + Regex.Escape(part)));
             if (parent.Length > 0 && ProfileFolders.IsMatch(parent[^1])) continue;
             if (volume == 1 ? parent.Length == 0 : parent.Length < 2)
-                exact.Add("(?<root>" + pattern + SegmentSeparator + ")(?=" + Regex.Escape(named[^1]) + ")");
+                exact.Add("(?<root>" + pattern + SegmentSeparator + ")(?=" + Regex.Escape(named[^1]) + @"(?![\p{L}\p{N}_]))");
             else roots.Add(pattern);
         }
         if (roots.Count == 0 && exact.Count == 0) return ProfileSegment;

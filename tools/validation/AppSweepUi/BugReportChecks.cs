@@ -1001,6 +1001,7 @@ static class BugReportChecks
         var own = new BugRedactor(@"C:\Users\Alice", "Alice", "GAMER-PC");
         var moved = new BugRedactor(@"D:\Profiles\Alice", "Alice", "GAMER-PC", [@"D:\Profiles\Bob", @"\\fs01\profiles$\Carol.V6", @"E:\Client", @"\\nas\Fixture", @"D:\Profiles\Public", @"D:\Profiles\Default"]);
         var single = new BugRedactor(@"C:\Users\A", "A", "X");
+        var direct = new BugRedactor(@"E:\Client", "Client", "GAMER-PC", [@"\\nas\Fixture"]);
         var escapeLetter = new BugRedactor(@"C:\Users\n", "n", "GAMER-PC");
         var cases = new List<(string Issue, BugRedactor Redactor, string Input, string Expected, string[] Private)>
         {
@@ -1011,6 +1012,8 @@ static class BugReportChecks
             ("Relocated profile", moved, @"D:\Profiles\Alice Smith\x and d:/PROFILES/bobby/y", @"D:\Profiles\<user>\x and d:/PROFILES/<user>/y", ["Smith", "bobby"]),
             ("Relocated profile", moved, @"\\fs01\profiles$\Carol.V6\x and \\?\UNC\fs01\profiles$\Zqxroam.V6\y", @"\\fs01\profiles$\<user>\x and \\?\UNC\fs01\profiles$\<user>\y", ["Carol", "Zqxroam"]),
             ("Relocated profile", moved, @"E:\Client\x, \\nas\Fixture\y, E:\Games\z and \\nas\share\w", @"E:\<user>\x, \\nas\<user>\y, E:\Games\z and \\nas\share\w", ["Client", "Fixture"]),
+            ("Relocated profile", moved, @"E:\ClientGames\x and \\nas\FixtureBackup\y", @"E:\ClientGames\x and \\nas\FixtureBackup\y", []),
+            ("Relocated profile", direct, @"E:\ClientGames\x and \\nas\FixtureBackup\y", @"E:\ClientGames\x and \\nas\FixtureBackup\y", []),
             ("Old log suffix", own, @"%USERPROFILE%.Zqxsmith\AppData\x and %USERPROFILE% Zqxsmith\AppData\y", @"<user>\AppData\x and <user>\AppData\y", ["Zqxsmith"]),
             ("Old log suffix", own, @"%userprofile%Zqxsmith", "<user>", ["Zqxsmith"]),
             ("Old log suffix", own, @"Moved %USERPROFILE%%USERPROFILE%-Zqxold\x", @"Moved <user>\x", ["Zqxold"]),
