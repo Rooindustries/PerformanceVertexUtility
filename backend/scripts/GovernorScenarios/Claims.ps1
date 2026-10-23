@@ -231,11 +231,17 @@ function Test-ScenarioClaimsApplyOnceUndoRace {
     Assert ((Read-Field $probe 'cpuPriority') -eq 'Idle') 'Undo does not overwrite it'
 }
 
-function Assert-ClaimsUndoHeld([string]$Journal,[string]$Repo,[Diagnostics.Process]$Process,[string]$Value,[string]$Message){
+function Assert-ClaimsUndoRestored([string]$Journal,[string]$Repo,[Diagnostics.Process]$Process,[string]$Message){
     $undo=Core 'process-restore' @{journalPath=$Journal;repoRoot=$Repo} $script:claimsRules
-    $held=@(Get-ClaimsChange $undo 'cpuPriority')
+    $cpu=@(Get-ClaimsChange $undo 'cpuPriority')
     Note ('undo: '+$Message) ([ordered]@{status=$undo.status;changes=@($undo.changes|ForEach-Object {[ordered]@{name=$_.name;status=$_.status;observed=$_.observed;error=$_.error}})})
-    Assert ($undo.status -eq 'needsReconciliation' -and $held.Count -eq 1 -and $held[0].status -eq 'applied' -and (Read-Field $Process 'cpuPriority') -eq $Value) $Message
+    Assert ($undo.status -eq 'restored' -and $cpu.Count -eq 1 -and $cpu[0].status -eq 'restored' -and (Read-Field $Process 'cpuPriority') -eq 'Normal') $Message
+}
+
+function Write-ClaimsProfilePointer($Applied){
+    $pointer=Join-Path $script:claimsData 'settings\process-profile-recovery.json'
+    [IO.Directory]::CreateDirectory((Split-Path $pointer -Parent))|Out-Null
+    [IO.File]::WriteAllText($pointer,(@{path=[string]$Applied.backup.location;id=[string]$Applied.backup.backupId;generation=[Guid]::NewGuid().ToString('N')}|ConvertTo-Json -Compress),[Text.UTF8Encoding]::new($false))
 }
 
 function Test-ScenarioClaimsApplyOnceUndoOwnChange {
@@ -248,38 +254,79 @@ function Test-ScenarioClaimsApplyOnceUndoOwnChange {
     Assert ($applied.status -eq 'applied' -and (Read-Field $probe 'cpuPriority') -eq 'BelowNormal') 'Apply once lowered the probe CPU priority'
     $session=Invoke-ClaimsFeature 'Start-GameTuneSession.ps1' @{ProfilePath=(New-ClaimsProfile $name 'game');StateRoot=$state;MaxDurationSeconds=1;PollIntervalSeconds=1;ConfirmApply=$true}
     Assert ($session.restorable -eq $true -and (Read-Field $probe 'cpuPriority') -eq 'AboveNormal') 'Game priority raised the CPU priority Apply once had lowered'
-    Assert-ClaimsUndoHeld $applied.journal $repo $probe 'AboveNormal' 'Undo keeps its record while Game priority holds the CPU priority, instead of calling it another program''s value'
+    Assert-ClaimsUndoRestored $applied.journal $repo $probe 'Undo puts the original CPU priority back under Game priority instead of calling its value another program''s'
     $stopped=Invoke-ClaimsFeature 'Stop-GameTuneSession.ps1' @{SessionPath=$session.sessionPath;BackupPath=$session.backupManifestPath;StateRoot=$state;ConfirmApply=$true}
     Note 'gameStop' @{restorable=$stopped.restorable;skipped=@($stopped.skippedItems|ForEach-Object {$_.reason})}
-    Assert ((Read-Field $probe 'cpuPriority') -eq 'AboveNormal') 'Game priority Stop does not put back the Apply once value while Apply once is still open'
-    $probe.Kill();$probe.WaitForExit(10000)|Out-Null
-    Assert ((Restore-ClaimsApplyOnce $applied.journal $script:claimsRules) -eq 'expired') 'Once the app exits the Apply once record closes'
+    Assert ($stopped.restorable -eq $false -and (Read-Field $probe 'cpuPriority') -eq 'Normal') 'Game priority Stop then closes and leaves the original in place'
 
     $name='ClaimsUndoProfile.exe'
     $probe=Start-Probe (Copy-Probe $name)
     $applied=Invoke-ClaimsApplyOnce $probe @{cpuPriority='AboveNormal'} $script:claimsRules $script:claimsData
-    Assert ($applied.status -eq 'applied' -and (Read-Field $probe 'cpuPriority') -eq 'AboveNormal') 'Apply once raised the second probe CPU priority'
     $profile=Invoke-ClaimsFeature 'Apply-ProcessProfile.ps1' @{ProfilePath=(New-ClaimsProfile $name 'background');StateRoot=$state;ConfirmApply=$true}
-    $pointer=Join-Path $script:claimsData 'settings\process-profile-recovery.json'
-    [IO.Directory]::CreateDirectory((Split-Path $pointer -Parent))|Out-Null
-    [IO.File]::WriteAllText($pointer,(@{path=[string]$profile.backup.location;id=[string]$profile.backup.backupId;generation=[Guid]::NewGuid().ToString('N')}|ConvertTo-Json -Compress),[Text.UTF8Encoding]::new($false))
-    Assert ($profile.backup.location -and (Read-Field $probe 'cpuPriority') -eq 'BelowNormal') 'Background priorities lowered the CPU priority Apply once had raised'
-    Assert-ClaimsUndoHeld $applied.journal $repo $probe 'BelowNormal' 'Undo keeps its record while Background priorities holds the CPU priority'
-    Invoke-ClaimsFeature 'Restore-ProcessProfileBackup.ps1' @{BackupPath=[string]$profile.backup.location;ConfirmApply=$true}|Out-Null
-    Assert ((Read-Field $probe 'cpuPriority') -eq 'BelowNormal') 'Background priorities Undo does not put back the Apply once value while Apply once is still open'
+    Write-ClaimsProfilePointer $profile
+    Assert ($applied.status -eq 'applied' -and $profile.backup.location -and (Read-Field $probe 'cpuPriority') -eq 'BelowNormal') 'Background priorities lowered the CPU priority Apply once had raised'
+    Assert-ClaimsUndoRestored $applied.journal $repo $probe 'Undo puts the original CPU priority back under Background priorities'
+    $restored=Invoke-ClaimsFeature 'Restore-ProcessProfileBackup.ps1' @{BackupPath=[string]$profile.backup.location;ConfirmApply=$true}
+    Note 'profileUndo' $restored.status
+    Assert ((Read-Field $probe 'cpuPriority') -eq 'Normal') 'Background priorities Undo then leaves the original in place'
 
     $probe=Start-Probe (Copy-Probe 'ClaimsUndoSession.exe')
+    $memory=Read-Field $probe 'memoryPriority'
+    $boost=if($memory -eq 2){3}else{2}
     $applied=Invoke-ClaimsApplyOnce $probe @{cpuPriority='BelowNormal'} $script:claimsRules $script:claimsData
     $session=Join-Path $script:claimsData ('operations\game-session-'+[Guid]::NewGuid().ToString('N')+'\session')
     [IO.Directory]::CreateDirectory($session)|Out-Null
     $preview=Join-Path $session 'launcher-preview.json'
     $launcher=Join-Path $session 'launcher-journal.json'
-    Core 'process-preview' @{processId=$probe.Id;controls=@{cpuPriority='AboveNormal'};outputPath=$preview} $script:claimsRules|Out-Null
+    Core 'process-preview' @{processId=$probe.Id;controls=@{cpuPriority='AboveNormal';memoryPriority=$boost};outputPath=$preview} $script:claimsRules|Out-Null
     $tuned=Core 'process-apply' @{previewPath=$preview;reviewHash=(Get-FileHash -LiteralPath $preview -Algorithm SHA256).Hash;journalPath=$launcher} $script:claimsRules
-    Assert ($applied.status -eq 'applied' -and $tuned.status -eq 'applied' -and (Read-Field $probe 'cpuPriority') -eq 'AboveNormal') 'A game session record raised the CPU priority Apply once had lowered'
-    Assert-ClaimsUndoHeld $applied.journal $repo $probe 'AboveNormal' 'Undo keeps its record while a game session holds the CPU priority'
-    Assert ((Core 'process-restore' @{journalPath=$launcher;repoRoot=$repo} $script:claimsRules).status -eq 'restored' -and (Read-Field $probe 'cpuPriority') -eq 'BelowNormal') 'Undoing the game session change first puts back the Apply once value'
-    Assert ((Core 'process-restore' @{journalPath=$applied.journal;repoRoot=$repo} $script:claimsRules).status -eq 'restored' -and (Read-Field $probe 'cpuPriority') -eq 'Normal') 'Then Undo restores the original CPU priority'
+    Assert ($applied.status -eq 'applied' -and $tuned.status -eq 'applied' -and (Read-Field $probe 'cpuPriority') -eq 'AboveNormal' -and (Read-Field $probe 'memoryPriority') -eq $boost) 'A game session record raised the CPU priority Apply once had lowered and changed the memory priority'
+    Assert-ClaimsUndoRestored $applied.journal $repo $probe 'Undo puts the original CPU priority back under a game session record'
+    $record=(Read-RooIndustriesOperationJson $launcher).data
+    Note 'sessionRecord' ([ordered]@{status=$record.status;changes=@($record.changes|ForEach-Object {[ordered]@{name=$_.name;status=$_.status}})})
+    Assert ($record.status -eq 'applied' -and (Get-ClaimsChange $record 'cpuPriority')[0].status -eq 'restored' -and (Get-ClaimsChange $record 'memoryPriority')[0].status -eq 'applied' -and (Read-Field $probe 'memoryPriority') -eq $boost) 'Undo first undoes only the game session''s CPU priority, so that record stays consistent and keeps its other setting'
+    Assert ((Core 'process-restore' @{journalPath=$launcher;repoRoot=$repo} $script:claimsRules).status -eq 'restored' -and (Read-Field $probe 'cpuPriority') -eq 'Normal' -and (Read-Field $probe 'memoryPriority') -eq $memory) 'The game session''s own Undo then restores its other setting and finishes'
+
+    $name='ClaimsUndoForeign.exe'
+    $probe=Start-Probe (Copy-Probe $name)
+    $applied=Invoke-ClaimsApplyOnce $probe @{cpuPriority='AboveNormal'} $script:claimsRules $script:claimsData
+    $profile=Invoke-ClaimsFeature 'Apply-ProcessProfile.ps1' @{ProfilePath=(New-ClaimsProfile $name 'background');StateRoot=$state;ConfirmApply=$true}
+    Write-ClaimsProfilePointer $profile
+    Assert ($applied.status -eq 'applied' -and (Read-Field $probe 'cpuPriority') -eq 'BelowNormal') 'Background priorities lowered the CPU priority Apply once had raised'
+    Set-Field $probe 'cpuPriority' 'Idle'
+    $undo=Core 'process-restore' @{journalPath=$applied.journal;repoRoot=$repo} $script:claimsRules
+    $kept=@(Get-ClaimsChange $undo 'cpuPriority')
+    Note 'foreignUndo' ([ordered]@{status=$undo.status;changes=@($undo.changes|ForEach-Object {[ordered]@{name=$_.name;status=$_.status;observed=$_.observed}})})
+    Assert ($undo.status -eq 'restored' -and $kept.Count -eq 1 -and $kept[0].status -eq 'leftAsSet' -and [string]$kept[0].observed -eq 'Idle' -and (Read-Field $probe 'cpuPriority') -eq 'Idle') 'A value another program set over Background priorities is still kept and named'
+    Invoke-ClaimsFeature 'Restore-ProcessProfileBackup.ps1' @{BackupPath=[string]$profile.backup.location;ConfirmApply=$true}|Out-Null
+    Assert ((Read-Field $probe 'cpuPriority') -eq 'Idle') 'Background priorities Undo keeps it too'
+
+    $probe=Start-Probe (Copy-Probe 'ClaimsUndoUnread.exe')
+    $applied=Invoke-ClaimsApplyOnce $probe @{cpuPriority='BelowNormal'} $script:claimsRules $script:claimsData
+    $damaged=Join-Path $script:claimsData ('operations\process-'+[Guid]::NewGuid().ToString('N'))
+    [IO.Directory]::CreateDirectory($damaged)|Out-Null
+    [IO.File]::WriteAllText((Join-Path $damaged 'journal.json'),'{"schemaVersion":1,"status":"unknown"}',[Text.UTF8Encoding]::new($false))
+    Set-Field $probe 'cpuPriority' 'Idle'
+    Assert-ClaimsUndoRestored $applied.journal $repo $probe 'When one of the app''s own records can''t be read, Undo puts the original back'
+}
+
+function Test-ScenarioClaimsApplyOnceUndoOwnRace {
+    $name='ClaimsUndoGameRace.exe'
+    $probe=Start-Probe (Copy-Probe $name)
+    $repo=New-ClaimsRepo
+    $state=Join-Path $repo 'backend\state'
+    $applied=Invoke-ClaimsApplyOnce $probe @{cpuPriority='BelowNormal'}
+    Assert ($applied.status -eq 'applied' -and (Read-Field $probe 'cpuPriority') -eq 'BelowNormal') 'Apply once lowered the probe CPU priority'
+    $call=Invoke-HostLater 'process-restore' @{journalPath=$applied.journal;repoRoot=$repo} @{ROO_INDUSTRIES_TEST_RESTORE_INTENT_PAUSE_MS='10000'}
+    $paused=Wait-Until {(Get-ClaimsChange (Read-RooIndustriesOperationJson $applied.journal).data 'cpuPriority')[0].status -eq 'restoreIntent'} 20
+    Assert ($null -ne $paused -and (Read-Field $probe 'cpuPriority') -eq 'BelowNormal') 'Undo saved its intent and paused before writing'
+    $session=Read-ClaimsOutput (& (Join-Path $scriptsRoot 'Start-GameTuneSession.ps1') -ProfilePath (New-ClaimsProfile $name 'game') -StateRoot $state -MaxDurationSeconds 1 -PollIntervalSeconds 1 -ConfirmApply)
+    Assert ($session.restorable -eq $true -and (Read-Field $probe 'cpuPriority') -eq 'AboveNormal') 'Game priority raised the CPU priority while Undo was paused'
+    $undo=Read-HostLater $call
+    Note 'undo' ([ordered]@{status=$undo.status;error=$undo.error.message;journal=$undo.data.status;changes=@($undo.data.changes|ForEach-Object {[ordered]@{name=$_.name;status=$_.status;observed=$_.observed;error=$_.error}})})
+    Assert ($undo.status -eq 'completed' -and $undo.data.status -eq 'restored' -and (Get-ClaimsChange $undo.data 'cpuPriority')[0].status -eq 'restored' -and (Read-Field $probe 'cpuPriority') -eq 'Normal') 'Undo still puts the original back when Game priority set the value just before Undo wrote'
+    $stopped=Read-ClaimsOutput (& (Join-Path $scriptsRoot 'Stop-GameTuneSession.ps1') -SessionPath $session.sessionPath -BackupPath $session.backupManifestPath -StateRoot $state -ConfirmApply)
+    Assert ($stopped.restorable -eq $false -and (Read-Field $probe 'cpuPriority') -eq 'Normal') 'Game priority Stop then closes and leaves the original in place'
 }
 
 function Test-ScenarioClaimsExitedProcessIgnored {
