@@ -1882,6 +1882,92 @@ if (-not $restored.success) { exit 1 }
             $replayed=Invoke-DependentProcess
             Test-DependentCase ($replayed.result.success -and (@($replayed.calls) -join ',') -ceq 'set Probe Automatic,start Probe' -and @($replayed.result.leftAsChanged|Where-Object {$_.type -eq 'dependent' -and $_.reason -like '*did not confirm*'}).Count -eq 2 -and (Get-FakeStatus) -ceq 'Probe=Automatic/Running ProbeDep=Manual/Stopped ProbeDepChild=Manual/Stopped ProbeIdle=Manual/Stopped') 'Undo restores the service and reports the dependents it cannot prove Apply stopped'
         }
+
+        & {
+            $DataRoot=Reset-DependentFixture
+            $write=${function:Write-JsonFile}
+            function Stop-Service {
+                [CmdletBinding()]param($Name,[switch]$Force)
+                Write-Error 'Fixture service refuses the stop control' -ErrorId CouldNotStopService
+            }
+            function Write-JsonFile {
+                param($Object,$Path)
+                if (@($Object.services|ForEach-Object {$_.dependents}|Where-Object {$_ -and $_.PSObject.Properties['stoppedByApply']}).Count) { throw 'Fixture stop evidence write failure' }
+                & $write $Object $Path
+            }
+            $applyError=$null
+            try { Invoke-ReviewedApply|Out-Null } catch { $applyError=$_.Exception.Message }
+            Test-DependentCase ($applyError -like '*refuses the stop control*' -and $applyError -notlike '*evidence write failure*') ('A refused stop stays the reported cause when its stop evidence cannot be saved ('+$applyError+')')
+        }
+
+        foreach ($latest in $false,$true) { & {
+            param($Latest)
+            $DataRoot=Reset-DependentFixture @(@{name='Probe';startup='Disabled';targetState='Stopped'},@{name='Sticky';startup='Manual';targetState='Stopped'})
+            $script:fakeServices.Sticky=@{startup='Automatic';status='Running';exists=$true;dependsOn=@()}
+            $script:stickyRefuses=$true
+            $stop=${function:Stop-Service}
+            function Stop-Service {
+                [CmdletBinding()]param($Name,[switch]$Force)
+                if ($script:stickyRefuses -and $Name -ceq 'Sticky') { Write-Error "Service 'Sticky' cannot be stopped" -ErrorId CouldNotStopService; return }
+                & $stop -Name $Name -Force:$Force
+            }
+            function Get-RetryStatus { (Get-FakeStatus)+' Sticky='+$script:fakeServices.Sticky.startup+'/'+$script:fakeServices.Sticky.status }
+            $restoredRetry=$restoredState+' Sticky=Automatic/Running'
+            $backupRoot=Join-Path $DataRoot 'backups\fixture'
+            $undoPath={ if ($Latest) { '' } else { $incomplete } }
+            $firstError=$null
+            try { Invoke-ReviewedApply|Out-Null } catch { $firstError=[string]$_.Exception.Message }
+            $incomplete=Join-Path @(Get-ChildItem -LiteralPath $backupRoot -Directory)[0].FullName 'backup.json'
+            $undoFirst='Run Undo with -BackupPath "'+$incomplete+'" before applying again'
+            $saved=Get-Content -LiteralPath $incomplete -Raw|ConvertFrom-Json
+            Test-DependentCase ($firstError -like "*Service 'Sticky' cannot be stopped*" -and $firstError -like '*partly changed*' -and $firstError.Contains($undoFirst) -and $saved.applyCompleted -eq $false -and (Get-RetryStatus) -ceq 'Probe=Disabled/Stopped ProbeDep=Manual/Stopped ProbeDepChild=Manual/Stopped ProbeIdle=Manual/Stopped Sticky=Manual/Running') ('A failed Apply says the PC may be partly changed, names its backup and asks for Undo first ('+$firstError+')')
+            & { $ConfirmApply=$false; $BackupPath=& $undoPath; Invoke-RollbackModule|Out-Null }
+            $script:failStart='Sticky'
+            $failedUndo=& { $BackupPath=& $undoPath; Invoke-RollbackModule }
+            $calls=$script:serviceCalls.Count
+            $hash=(Get-FileHash -LiteralPath $incomplete).Hash
+            $secondError=$null
+            try { Invoke-ReviewedApply|Out-Null } catch { $secondError=[string]$_.Exception.Message }
+            Test-DependentCase (-not $failedUndo.success -and $failedUndo.backupPath -ceq $incomplete -and $secondError.Contains($undoFirst) -and $secondError -like '*Nothing was changed*' -and @(Get-ChildItem -LiteralPath $backupRoot -Directory).Count -eq 1 -and $script:serviceCalls.Count -eq $calls -and (Get-FileHash -LiteralPath $incomplete).Hash -ceq $hash) ('After a partial Apply, an Undo preview or a failed Undo, a second Apply refuses before any backup or write and names the incomplete backup (latest='+$Latest+')')
+            $undone=& { $BackupPath=& $undoPath; Invoke-RollbackModule }
+            $saved=Get-Content -LiteralPath $incomplete -Raw|ConvertFrom-Json
+            Test-DependentCase ($undone.success -and $undone.backupPath -ceq $incomplete -and $saved.undoCompleted -eq $true -and (Get-RetryStatus) -ceq $restoredRetry) ('Undo of the partial Apply restores Probe, Sticky and the dependents (latest='+$Latest+')')
+            $script:stickyRefuses=$false
+            $again=Invoke-ReviewedApply
+            $saved=Get-Content -LiteralPath $again.backupPath -Raw|ConvertFrom-Json
+            $final=& { $BackupPath=''; Invoke-RollbackModule }
+            Test-DependentCase ($again.backupPath -cne $incomplete -and $saved.applyCompleted -eq $true -and @(Get-ChildItem -LiteralPath $backupRoot -Directory).Count -eq 2 -and $final.success -and $final.backupPath -ceq $again.backupPath -and $final.restoredServices -eq 4 -and (Get-RetryStatus) -ceq $restoredRetry) ('After that Undo, Apply runs again, completes, and the latest Undo restores it (latest='+$Latest+')')
+        } $latest }
+
+        & {
+            $DataRoot=Reset-DependentFixture
+            $legacy=Join-Path $DataRoot 'backups\fixture\legacy\backup.json'
+            New-Item -ItemType Directory -Path (Split-Path $legacy -Parent) -Force|Out-Null
+            Write-JsonFile @{moduleId='fixture';timestamp=(Get-Date).AddMinutes(1).ToString('o');applyRequested=$true;registry=@();services=@()} $legacy
+            $applied=Invoke-ReviewedApply
+            Test-DependentCase ((Get-Content -LiteralPath $applied.backupPath -Raw|ConvertFrom-Json).applyCompleted -eq $true -and (Get-FakeStatus) -ceq 'Probe=Disabled/Stopped ProbeDep=Manual/Stopped ProbeDepChild=Manual/Stopped ProbeIdle=Manual/Stopped') 'A newer backup from an earlier version, which has no completion record, does not block Apply'
+        }
+
+        & {
+            $DataRoot=Reset-DependentFixture
+            $ConfirmApply=$false
+            $PreviewPath=(Invoke-ApplyModule).previewPath
+            $manifest=Get-Content -LiteralPath $ManifestPath -Raw|ConvertFrom-Json
+            $manifest.protected.services=@('ProbeDepChild')
+            Write-JsonFile $manifest $ManifestPath
+            $runs=@(Get-ChildItem -LiteralPath (Join-Path $DataRoot 'runs') -File).Count
+            $previewError=$null;$applyError=$null
+            try { Invoke-ApplyModule|Out-Null } catch { $previewError=[string]$_.Exception.Message }
+            $ConfirmApply=$true
+            try { Invoke-ApplyModule|Out-Null } catch { $applyError=[string]$_.Exception.Message }
+            Test-DependentCase ($previewError -like '*ProbeDepChild*' -and $previewError -like '*Nothing was changed*' -and $applyError -ceq $previewError -and $script:serviceCalls.Count -eq 0 -and (Get-FakeStatus) -ceq $restoredState -and -not (Test-Path -LiteralPath (Join-Path $DataRoot 'backups')) -and @(Get-ChildItem -LiteralPath (Join-Path $DataRoot 'runs') -File).Count -eq $runs) ('Preview and Apply refuse to stop a service that a protected service depends on through another dependent, before any change ('+$previewError+')')
+            $manifest.modules[0].services=@(@{name='Probe';startup='Manual';targetState=''})
+            Write-JsonFile $manifest $ManifestPath
+            $calls=$script:serviceCalls.Count
+            $ConfirmApply=$false
+            $startupOnly=Invoke-ApplyModule
+            Test-DependentCase ($startupOnly.dryRun -and $script:serviceCalls.Count -eq $calls) 'A protected dependent does not block a startup change that leaves the service running'
+        }
         Assert ($dependentFailures.Count -eq 0) ('Every dependent-service case holds ('+$dependentFailures.Count+' failed)')
     } }
     if ($Scenario -in 'All','BackupWrite') { & {
@@ -2534,8 +2620,8 @@ public static class RooIndustriesLegacyFixtureRaw {
                 try { $key.SetValue('Value','Original',[Microsoft.Win32.RegistryValueKind]::String) } finally { $key.Dispose() }
                 function Set-RegistryValueFromManifest { param($Item) throw 'Fixture apply failure before write' }
                 $failed=$false
-                try { Invoke-ReviewedApply | Out-Null } catch { $failed=$_.Exception.Message -eq 'Fixture apply failure before write' }
-                Assert $failed 'An apply failure leaves its prior backup available'
+                try { Invoke-ReviewedApply | Out-Null } catch { $failed=$_.Exception.InnerException.Message -ceq 'Fixture apply failure before write' -and $_.Exception.Message -like '*may be partly changed. Run Undo with -BackupPath "*" before applying again. The error was: Fixture apply failure before write' }
+                Assert $failed 'An apply failure names its backup, asks for Undo first and keeps the cause'
                 $BackupPath=''
                 $restored=Invoke-RollbackModule
                 $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($subkey)

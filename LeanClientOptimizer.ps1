@@ -451,7 +451,10 @@ function Set-ServiceFromManifest {
             Set-Service -Name $svc.Name -StartupType Automatic
         }
         if ($Item.targetState -eq 'Stopped') {
-            try { Stop-Service -Name $svc.Name -Force -ErrorAction Stop } finally { Save-DependentStopEvidence $svc.Name $Backup $BackupPath }
+            $stopError = $null
+            try { Stop-Service -Name $svc.Name -Force -ErrorAction Stop } catch { $stopError = $_ }
+            try { Save-DependentStopEvidence $svc.Name $Backup $BackupPath } catch { if (-not $stopError) { throw } }
+            if ($stopError) { throw $stopError }
         }
     }
 }
@@ -654,7 +657,17 @@ function Get-ModulePlan {
         $plan.Add([pscustomobject]@{ kind='registry'; path=[string]$rv.path; name=[string]$rv.name; type=$type; data=$data; blocked=[bool](Test-ProtectedRegistryPath $rv.path $Manifest $rv.name) }) | Out-Null
     }
     foreach ($svc in @($Module.services)) {
-        $plan.Add([pscustomobject]@{ kind='service'; name=[string]$svc.name; startup=[string]$svc.startup; targetState=[string]$svc.targetState; blocked=[bool](Test-ProtectedService $svc.name $Manifest) }) | Out-Null
+        $blocked = [bool](Test-ProtectedService $svc.name $Manifest)
+        if (-not $blocked -and $svc.targetState -eq 'Stopped') {
+            foreach ($snap in @(Get-ServiceSnapshot $svc.name)) {
+                foreach ($dependent in @($snap.dependents)) {
+                    if ($dependent -and (Test-ProtectedService $dependent.name $Manifest)) {
+                        throw "Cannot stop service $($snap.name): the protected service $($dependent.name) depends on it, and Undo does not restart protected services. Nothing was changed."
+                    }
+                }
+            }
+        }
+        $plan.Add([pscustomobject]@{ kind='service'; name=[string]$svc.name; startup=[string]$svc.startup; targetState=[string]$svc.targetState; blocked=$blocked }) | Out-Null
     }
     return ,$plan.ToArray()
 }
@@ -765,6 +778,7 @@ function New-ModuleBackup {
         moduleName = $Module.name
         timestamp = (Get-Date).ToString('o')
         applyRequested = $true
+        applyCompleted = $false
         registry = @($regSnapshots.ToArray())
         services = @($svcSnapshots.ToArray())
         baseline = Get-BenchmarkSnapshot ("pre-" + $Module.id)
@@ -773,6 +787,21 @@ function New-ModuleBackup {
     $path = Join-Path $moduleDir 'backup.json'
     Write-JsonFile $backup $path
     return [pscustomobject]@{ path=$path; backup=$backup }
+}
+
+function Assert-LastApplyFinished {
+    param([object]$Module)
+    $backupRoot = Join-Path $DataRoot ("backups\" + $Module.id)
+    if (-not (Test-Path -LiteralPath $backupRoot)) { return }
+    $newest = @(foreach ($directory in Get-ChildItem -LiteralPath $backupRoot -Directory) {
+        $candidatePath = Join-Path $directory.FullName 'backup.json'
+        if (-not (Test-Path -LiteralPath $candidatePath)) { continue }
+        $candidate = Get-Content -LiteralPath $candidatePath -Raw | ConvertFrom-Json
+        if ($candidate.moduleId -eq $Module.id) { [pscustomobject]@{ path = $candidatePath; timestamp = [datetime]$candidate.timestamp; backup = $candidate } }
+    }) | Sort-Object timestamp -Descending | Select-Object -First 1
+    if ($newest.backup.applyCompleted -is [bool] -and -not $newest.backup.applyCompleted -and $newest.backup.undoCompleted -ne $true) {
+        throw "The last Apply of $($Module.id) stopped before it finished, so this PC may be partly changed. Run Undo with -BackupPath `"$($newest.path)`" before applying again. Nothing was changed."
+    }
 }
 
 function Invoke-ApplyModule {
@@ -784,20 +813,30 @@ function Invoke-ApplyModule {
     Ensure-Dir $DataRoot
     $changeLock = if ($ConfirmApply) { Enter-ChangeLock } else { $null }
     try {
+        if ($ConfirmApply) { Assert-LastApplyFinished $module }
         $created = if ($ConfirmApply) { New-ModuleBackup $manifest $module } else { $null }
         $backupPath = $created.path
         $actions = New-Object System.Collections.Generic.List[object]
-        foreach ($rv in @($module.registryValues)) {
-            $blocked = Test-ProtectedRegistryPath $rv.path $manifest $rv.name
-            $actions.Add([pscustomobject]@{ type='registry'; target=($rv.path + '\' + $rv.name); blocked=$blocked; action='set'; value=$rv.data }) | Out-Null
-            if ($blocked) { continue }
-            if ($ConfirmApply) { Set-RegistryValueFromManifest $rv }
-        }
-        foreach ($svc in @($module.services)) {
-            $blocked = Test-ProtectedService $svc.name $manifest
-            $actions.Add([pscustomobject]@{ type='service'; target=$svc.name; blocked=$blocked; action=('startup=' + $svc.startup + ', state=' + $svc.targetState) }) | Out-Null
-            if ($blocked) { continue }
-            if ($ConfirmApply) { Set-ServiceFromManifest $svc $created.backup $backupPath }
+        try {
+            foreach ($rv in @($module.registryValues)) {
+                $blocked = Test-ProtectedRegistryPath $rv.path $manifest $rv.name
+                $actions.Add([pscustomobject]@{ type='registry'; target=($rv.path + '\' + $rv.name); blocked=$blocked; action='set'; value=$rv.data }) | Out-Null
+                if ($blocked) { continue }
+                if ($ConfirmApply) { Set-RegistryValueFromManifest $rv }
+            }
+            foreach ($svc in @($module.services)) {
+                $blocked = Test-ProtectedService $svc.name $manifest
+                $actions.Add([pscustomobject]@{ type='service'; target=$svc.name; blocked=$blocked; action=('startup=' + $svc.startup + ', state=' + $svc.targetState) }) | Out-Null
+                if ($blocked) { continue }
+                if ($ConfirmApply) { Set-ServiceFromManifest $svc $created.backup $backupPath }
+            }
+            if ($ConfirmApply) {
+                $created.backup.applyCompleted = $true
+                Write-JsonFile $created.backup $backupPath
+            }
+        } catch {
+            if (-not $ConfirmApply) { throw }
+            throw [InvalidOperationException]::new("Apply of $($module.id) stopped before it finished, so this PC may be partly changed. Run Undo with -BackupPath `"$backupPath`" before applying again. The error was: $($_.Exception.Message)", $_.Exception)
         }
     } finally {
         Exit-ChangeLock $changeLock
@@ -1056,6 +1095,10 @@ function Invoke-RollbackModule {
                 $failures.Add([pscustomobject]($item.target + @{ phase='restore'; error=$_.Exception.Message; mayHaveChanged=$writing })) | Out-Null
                 $stopped = $true
             }
+        }
+        if ($ConfirmApply -and $failures.Count -eq 0 -and $backup.applyCompleted -is [bool] -and -not $backup.applyCompleted -and $backup.undoCompleted -ne $true) {
+            $backup | Add-Member -MemberType NoteProperty -Name undoCompleted -Value $true -Force
+            Write-JsonFile $backup $backupPath
         }
         if ($failures.Count) { Write-Host "Rollback incomplete. Backup retained: $backupPath. Review failures and pending settings before retrying." }
         return [pscustomobject]@{
