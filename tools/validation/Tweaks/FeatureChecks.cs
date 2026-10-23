@@ -179,7 +179,7 @@ static class FeatureChecks
     static TweakControlRead FeatureRead(Dictionary<string, string> states) =>
         new(Features, Features.Key, "features", ControlValues.From(states), Parents: states.Keys.ToDictionary(name => name, _ => Array.Empty<string>()));
 
-    sealed class FeatureStore(FakeDism dism, params TweakControlRead[] others) : IControlStore
+    internal sealed class FeatureStore(FakeDism dism, params TweakControlRead[] others) : IControlStore
     {
         private readonly Dictionary<string, TweakControlRead> _values = others.ToDictionary(item => item.Address.Key);
         public string? Fail { get; init; }
@@ -205,7 +205,7 @@ static class FeatureChecks
         Console.WriteLine("Boot identity before and after moving the clock " + moved + ": " + before + " / " + after);
         check(moved > TimeSpan.FromMinutes(9) && before is not null && RegistryTweakStore.SameBoot(before, after), "Moving the clock 10 minutes without a restart keeps the same boot, so a pending feature change is not closed early");
     }
-    sealed class FakeDism : DismServicing
+    internal sealed class FakeDism : DismServicing
     {
         public Dictionary<string, int> Listed { get; } = new(StringComparer.Ordinal) { ["HypervisorPlatform"] = 2, ["TelnetClient"] = 2 };
         public Dictionary<string, int> Info { get; } = new(StringComparer.Ordinal);

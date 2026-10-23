@@ -8,7 +8,7 @@ public static class WindowsFeatures
 {
     private const int RestartRequired = 3010;
     public static bool IsHypervisor(string name) => name.StartsWith("Microsoft-Hyper-V", StringComparison.Ordinal) || name is "HypervisorPlatform" or "VirtualMachinePlatform" or "Containers-DisposableClientVM" or "Windows-Defender-ApplicationGuard";
-    public static TweakControlRead Read(ControlAddress address) => Read(address, DismServicing.Native);
+    public static TweakControlRead Read(ControlAddress address) => Read(address, DismServicing.Current);
     public static TweakControlRead Read(ControlAddress address, DismServicing dism)
     {
         if (address.Target != "system" || address.Property != "features") throw new InvalidDataException("Unknown Windows feature target.");
@@ -51,7 +51,7 @@ public static class WindowsFeatures
         5 => "Enabled", 1 => "Disabled",
         _ => throw new InvalidDataException("Windows feature state cannot be reviewed: " + name + " (" + state + ")."),
     };
-    public static void Write(TweakControlRead before, JsonElement desired) => Write(before, desired, DismServicing.Native);
+    public static void Write(TweakControlRead before, JsonElement desired) => Write(before, desired, DismServicing.Current);
     public static void Write(TweakControlRead before, JsonElement desired, DismServicing dism)
     {
         if (before.RestartPending) throw new InvalidDataException("Restart Windows before changing pending features.");
@@ -86,6 +86,34 @@ public static class WindowsFeatures
     public static string[] Changed(ControlMutation change) => change.After.ValueKind != JsonValueKind.Object || change.Before.Value.ValueKind != JsonValueKind.Object ? [] : change.After.EnumerateObject()
         .Where(property => !change.Before.Value.TryGetProperty(property.Name, out var before) || !ControlValues.Equal(before, property.Value))
         .Select(property => property.Name).Order(StringComparer.Ordinal).ToArray();
+    public static TweakState Release(TweakState state, string id, string[] features)
+    {
+        var held = (state.Controls ?? []).Single(item => item.Original.Id == id);
+        var baseline = held.RestoreValue ?? held.Original.Value;
+        var profiles = new List<TweakProfile>();
+        foreach (var profile in state.Profiles)
+        {
+            var controls = new List<ControlClaim>(); var dropped = new List<TweakSelection>();
+            foreach (var claim in profile.Controls ?? [])
+            {
+                if (claim.Target.Id != id || !claim.Desired.EnumerateObject().Any(feature => features.Contains(feature.Name))) { controls.Add(claim); continue; }
+                dropped.Add(new(claim.SettingId, claim.OptionId));
+                var rest = claim.Desired.EnumerateObject().Where(feature => !features.Contains(feature.Name)).ToArray();
+                if (rest.Any(feature => !baseline.TryGetProperty(feature.Name, out var original) || !ControlValues.Equal(original, feature.Value)))
+                    controls.Add(claim with { Desired = ControlValues.From(rest.ToDictionary(feature => feature.Name, feature => feature.Value)) });
+            }
+            var selections = profile.Selections.Except(dropped).ToArray();
+            if (selections.Length > 0 || profile.Claims.Length > 0 || controls.Count > 0) profiles.Add(profile with { Selections = selections, Controls = controls.ToArray() });
+        }
+        var owned = profiles.SelectMany(profile => profile.Controls ?? []).Any(claim => claim.Target.Id == id);
+        var applied = ControlValues.From(held.Applied.EnumerateObject().ToDictionary(feature => feature.Name,
+            feature => features.Contains(feature.Name) && baseline.TryGetProperty(feature.Name, out var original) ? original : feature.Value));
+        return state with
+        {
+            Revision = Guid.NewGuid().ToString("N"), Profiles = profiles.ToArray(),
+            Controls = (state.Controls ?? []).Where(item => owned || item.Original.Id != id).Select(item => item.Original.Id == id ? item with { Applied = applied } : item).ToArray(),
+        };
+    }
     public static string PendingRecovery(ControlMutation change, TweakControlRead current)
     {
         var kept = Changed(change).Where(name => current.Value.ValueKind == JsonValueKind.Object && current.Value.TryGetProperty(name, out var value) && ControlValues.Equal(value, change.After.GetProperty(name)))
@@ -132,6 +160,11 @@ public static class WindowsFeatures
 public abstract class DismServicing
 {
     public static DismServicing Native { get; } = new NativeDism();
+    internal static DismServicing Current =>
+#if ROO_INDUSTRIES_TEST_HOOKS
+        Environment.GetEnvironmentVariable("ROO_INDUSTRIES_TEST_FEATURE_STATES") is { Length: > 0 } states ? new FileDism(states) :
+#endif
+        Native;
     public bool RestartRequired { get; internal set; }
     public abstract int Initialize();
     public abstract int OpenSession(out uint session);
@@ -143,6 +176,23 @@ public abstract class DismServicing
     public abstract int CloseSession(uint session);
     public abstract int Shutdown();
 }
+
+#if ROO_INDUSTRIES_TEST_HOOKS
+sealed class FileDism(string path) : DismServicing
+{
+    private readonly Dictionary<string, int> _states = OperationFiles.Read<Dictionary<string, int>>(path);
+    private const int Refused = unchecked((int)0x80070005);
+    public override int Initialize() => 0;
+    public override int OpenSession(out uint session) { session = 1; return 0; }
+    public override int GetFeatures(uint session, out (string Name, int State)[] features) { features = _states.Select(item => (item.Key, item.Value)).ToArray(); return 0; }
+    public override int GetFeatureParents(uint session, string feature, out string[] parents) { parents = []; return 0; }
+    public override int GetFeatureState(uint session, string feature, out int state) { state = _states[feature]; return 0; }
+    public override int EnableFeatures(uint session, string features) => Refused;
+    public override int DisableFeatures(uint session, string features, bool removePayload) => Refused;
+    public override int CloseSession(uint session) => 0;
+    public override int Shutdown() => 0;
+}
+#endif
 
 sealed class NativeDism : DismServicing
 {

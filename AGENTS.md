@@ -39,7 +39,7 @@ These must hold on every commit of `main`. Each one names the code that enforces
 2. **Backup before apply.** Every prior value is saved before it changes, never after.
    - Enforced by:
      - Registry tweaks commit in one registry transaction together with the recovery state that holds each original value (`RegistryTweakStore.CommitRegistry` in `RegistryTweaks.cs`).
-     - Services, features, power, file permissions and other controls write a pending journal before the first change. If a step fails, rollback is attempted. If rollback can't finish (for example while Windows servicing waits for a restart), the journal stays and the app asks for recovery (`RegistryTweakStore.Commit`, `ControlTweaks.cs`).
+     - Services, features, power, file permissions and other controls write a pending journal before the first change. If a step fails, rollback is attempted. If rollback can't finish (for example while Windows servicing waits for a restart), the journal stays and the app asks for recovery (`RegistryTweakStore.Commit`, `ControlTweaks.cs`). After a restart, the feature check closes that journal only when each changed feature is finished, back where it was (Windows undid it, so its ownership is released) or no longer listed. A feature in any other state, or a restore Windows undid, keeps the journal (`RegistryTweakStore.Recover`).
      - Process controls save a journal with each original value before the first write, and record each write's intent before making it (`ProcessControlEngine.Apply` and `Execute`).
      - Leftover cleanup backs each entry up before deleting it (`FileCleanupEngine.Apply`, `RegistryCleanupEngine.Apply`).
      - Harness modules write `backup.json` before applying (`New-ModuleBackup`).

@@ -8,14 +8,20 @@ namespace RooIndustries.Optimizer;
 public sealed class RegistryTweakStore : ITweakStore
 {
     private readonly RegistryAddress _stateAddress;
+    private readonly IControlStore _controls;
     public TweakContext Context { get; }
-    public RegistryTweakStore(RegistryAddress? fixtureState = null)
+    public RegistryTweakStore(RegistryAddress? fixtureState = null, IControlStore? fixtureControls = null)
     {
         var owner = OperationOwner.Current();
+#if ROO_INDUSTRIES_TEST_HOOKS
+        if (fixtureState is null && Environment.GetEnvironmentVariable("ROO_INDUSTRIES_TEST_TWEAK_RECOVERY") is { Length: > 0 } testRecovery) fixtureState = new("CurrentUser", "Registry64", testRecovery, "value", "State");
+#endif
         _stateAddress = fixtureState ?? new("LocalMachine", "Registry64", @"Software\RooIndustriesOptimizationSuite\Tweaks\" + owner.UserSid, "value", "State");
         if (fixtureState is not null && (fixtureState.Hive != "CurrentUser" || fixtureState.View != "Registry64" || fixtureState.Kind != "value" || fixtureState.ValueName != "State" ||
             !System.Text.RegularExpressions.Regex.IsMatch(fixtureState.KeyPath, @"^Software\\RooIndustriesTweakTests\\[a-f0-9]{32}\\Recovery$", System.Text.RegularExpressions.RegexOptions.CultureInvariant)))
             throw new InvalidDataException("Registry test recovery must remain inside its isolated test root.");
+        if (fixtureControls is not null && fixtureState is null) throw new InvalidDataException("Test Windows controls require an isolated test recovery store.");
+        _controls = fixtureControls ?? new WindowsControlStore();
         using var machine = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
         using var version = machine.OpenSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion") ?? throw new InvalidOperationException("Windows version is unavailable.");
         if (!int.TryParse(version.GetValue("CurrentBuildNumber") as string, out var build) || version.GetValue("EditionID") is not string edition)
@@ -23,8 +29,18 @@ public sealed class RegistryTweakStore : ITweakStore
         Context = new(owner, "windows-registry:" + OperationFiles.Hash(JsonSerializer.SerializeToUtf8Bytes(_stateAddress, OperationFiles.Json)), build, edition);
     }
     public TweakAssignment[] Resolve(TweakAssignment assignment) => RegistrySelections.Resolve(TweakHardwareValues.Resolve(assignment, TweakHardwareValues.InstalledMemoryKiB), RegistrySelections.Children, Read, RegistrySelections.PrimaryInterfaces);
-    public TweakControlRead ReadControl(ControlAddress address) => new WindowsControlStore().Read(address);
-    public Dictionary<ControlAddress, (TweakControlRead? Read, Exception? Error)> ReadControls(IReadOnlyCollection<ControlAddress> addresses) => new WindowsControlStore().ReadMany(addresses);
+    public TweakControlRead ReadControl(ControlAddress address) => _controls.Read(address);
+    public Dictionary<ControlAddress, (TweakControlRead? Read, Exception? Error)> ReadControls(IReadOnlyCollection<ControlAddress> addresses)
+    {
+        if (_controls is WindowsControlStore native) return native.ReadMany(addresses);
+        var results = new Dictionary<ControlAddress, (TweakControlRead? Read, Exception? Error)>();
+        foreach (var address in addresses.Distinct())
+        {
+            try { results[address] = (_controls.Read(address), null); }
+            catch (Exception error) { results[address] = (null, error); }
+        }
+        return results;
+    }
     public Task<Dictionary<ControlAddress, (TweakControlRead? Read, Exception? Error)>> ReadControlsAsync(IReadOnlyCollection<ControlAddress> addresses)
     {
 #if ROO_INDUSTRIES_TEST_HOOKS
@@ -118,23 +134,45 @@ public sealed class RegistryTweakStore : ITweakStore
             if (journal is null) return false;
             if (!string.Equals(reviewHash, OperationFiles.Hash(JsonSerializer.SerializeToUtf8Bytes(journal, OperationFiles.Json)), StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("The interrupted operation changed after review.");
             var state = Decode(RegistryNative.ReadTweak(_stateAddress).Value);
+            var notices = new List<string>();
             if (journal.Phase == "awaiting-restart" && state?.History.Any(item => item.OperationId == journal.Plan.OperationId) == true)
             {
                 if (SameBoot(journal.Boot)) throw new InvalidDataException(RestartAgain);
-                foreach (var change in journal.Plan.Controls!.Changes)
+                var undone = new List<string>(); var removed = new List<string>(); var restoreUndone = new List<string>(); var unexpected = new List<string>();
+                var released = new List<(string Id, string[] Features)>();
+                foreach (var change in journal.Plan.Controls!.Changes.Where(change => change.Before.Address.Kind == "windows-features"))
                 {
                     var observed = ReadControl(change.Before.Address);
                     if (observed.RestartPending) throw new InvalidDataException(RestartAgain);
-                    if (observed.Id != change.Before.Id || observed.Binding != change.Before.Binding ||
-                        (change.Fields is null ? !ControlValues.Equal(observed.Value, change.After) : change.Fields.Any(field => !ControlValues.Equal(observed.Value.GetProperty(field), change.After.GetProperty(field)))))
-                        throw new InvalidDataException("Windows feature state does not match the accepted changes after restart.");
+                    if (observed.Id != change.Before.Id || observed.Value.ValueKind != JsonValueKind.Object) throw new InvalidDataException("Windows feature state does not match the accepted changes after restart.");
+                    var claimed = state.Profiles.SelectMany(profile => profile.Controls ?? []).Where(claim => claim.Target.Id == change.Before.Id)
+                        .SelectMany(claim => claim.Desired.EnumerateObject()).Select(feature => feature.Name).ToHashSet(StringComparer.Ordinal);
+                    var release = new List<string>();
+                    foreach (var name in WindowsFeatures.Changed(change))
+                    {
+                        var wanted = change.After.GetProperty(name).GetString();
+                        var was = change.Before.Value.TryGetProperty(name, out var prior) ? prior.GetString() : null;
+                        if (!observed.Value.TryGetProperty(name, out var now)) { removed.Add(name); if (claimed.Contains(name)) release.Add(name); }
+                        else if (now.GetString() == wanted) continue;
+                        else if (now.GetString() == was && claimed.Contains(name)) { undone.Add(name + " " + was); release.Add(name); }
+                        else if (now.GetString() == was) restoreUndone.Add(name + " is " + was + " again, its original is " + wanted);
+                        else unexpected.Add(name + " is " + now.GetString() + ", it was " + was + " and this app set " + wanted);
+                    }
+                    if (release.Count > 0) released.Add((change.Before.Id, release.ToArray()));
                 }
+                var problems = new List<string>();
+                if (restoreUndone.Count > 0) problems.Add("Windows undid the restore of these features when it restarted: " + string.Join("; ", restoreUndone) + ". Set them back to their original in Turn Windows features on or off, restart Windows, then check restart completion again.");
+                if (unexpected.Count > 0) problems.Add("Windows left these features in a state this app didn't set: " + string.Join("; ", unexpected) + ". Set each one to one of those in Turn Windows features on or off, restart Windows, then check restart completion again.");
+                if (problems.Count > 0) throw new InvalidDataException(string.Join(" ", problems));
+                foreach (var (id, features) in released) state = WindowsFeatures.Release(state, id, features);
+                if (undone.Count > 0) notices.Add(FeaturesUndone + string.Join(", ", undone) + ".");
+                if (removed.Count > 0) notices.Add(FeaturesRemoved + string.Join(", ", removed) + ".");
             }
-            else ControlExecution.Rollback(journal.Plan.Controls!, journal.Attempted, new WindowsControlStore());
+            else ControlExecution.Rollback(journal.Plan.Controls!, journal.Attempted, _controls);
             using var transaction = RegistryTransaction.Begin();
             if (state is not null)
             {
-                state.Notices = state.Notices.Where(note => note != RestartNotice && note != "Restart Windows to finish the feature changes, then check restart completion in Windows settings.").ToArray();
+                state.Notices = state.Notices.Where(note => note != RestartNotice && note != "Restart Windows to finish the feature changes, then check restart completion in Windows settings.").Concat(notices).ToArray();
                 var saved = RegistryNative.ReadTweak(_stateAddress, transaction);
                 RegistryNative.SetTweak(_stateAddress, saved.NativeKey, new("State", 3, TweakEngine.SerializeState(state)), transaction);
             }
@@ -144,6 +182,8 @@ public sealed class RegistryTweakStore : ITweakStore
         }
         finally { guard.ReleaseMutex(); }
     }
+    public const string FeaturesUndone = "Windows undid these feature changes when it restarted, so they're back to how they were: ";
+    public const string FeaturesRemoved = "Windows no longer lists these features after the restart, so there's nothing to undo for them: ";
     public const string RestartNotice = "Restart Windows (choose Restart, not Shut down) to finish the feature changes, then check restart completion in Windows settings.";
     public const string RestartAgain = "Windows hasn't restarted since the feature changes. Choose Restart, not Shut down, then check them again. With Fast Startup on, Shut down keeps the same session.";
     public static string? CurrentBoot()
@@ -198,7 +238,7 @@ public sealed class RegistryTweakStore : ITweakStore
             WritePending(journal);
             try
             {
-                var pending = ControlExecution.Apply(plan.Controls, new WindowsControlStore(), attempted => { journal = journal with { Attempted = attempted }; WritePending(journal); });
+                var pending = ControlExecution.Apply(plan.Controls, _controls, attempted => { journal = journal with { Attempted = attempted }; WritePending(journal); });
                 if (pending) { journal = journal with { Phase = "awaiting-restart", Boot = boot }; WritePending(journal); }
                 return CommitRegistry(plan, reviewHash, pending);
             }
@@ -206,7 +246,7 @@ public sealed class RegistryTweakStore : ITweakStore
             {
                 var state = Decode(RegistryNative.ReadTweak(_stateAddress).Value);
                 if (state?.History.Any(item => item.OperationId == plan.OperationId && item.ReviewHash == reviewHash) == true) return state;
-                try { ControlExecution.Rollback(plan.Controls, journal.Attempted, new WindowsControlStore()); WritePending(null); }
+                try { ControlExecution.Rollback(plan.Controls, journal.Attempted, _controls); WritePending(null); }
                 catch (Exception recovery) { throw new InvalidOperationException(failure.Message + " Recovery remains pending: " + recovery.Message, failure); }
                 throw;
             }
