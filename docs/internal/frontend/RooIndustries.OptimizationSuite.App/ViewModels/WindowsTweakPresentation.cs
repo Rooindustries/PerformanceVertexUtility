@@ -21,7 +21,7 @@ public partial class TweakSection : ObservableObject
     public override string ToString() => Name;
 }
 
-public sealed record TweakPresentation(string Section, string? Name = null, string? Description = null, string? Topic = null, Dictionary<string, string>? Choices = null, string? Summary = null);
+public sealed record TweakPresentation(string Section, string? Name = null, string? Description = null, string? Topic = null, Dictionary<string, string>? Choices = null, string? Summary = null, Dictionary<string, JsonElement>? Defaults = null);
 
 public static class WindowsTweakPresentation
 {
