@@ -108,14 +108,15 @@ static class EditionLimitedChecks
                     row.Name + " queues Use Windows default when switched off: " + edition);
             }
             await appliedModel.ReviewCommand.ExecuteAsync(null); appliedModel.Approved = true; await appliedModel.ApplyCommand.ExecuteAsync(null);
-            check(applied.Windows.Read(address).Value is null && applied.Windows.Read(settingsAddress).Value is null
-                && new[] { diagnostic, settingsDiagnostic }.All(definition => appliedModel.Rows.Single(item => item.Id == definition.Id) is { ToggleOn: false, IsApplied: false, Current: "No override" }),
-                "Applying the switched-off rows removes both values and the rows read off: " + edition);
+            check(applied.Windows.Read(address).Value is null && applied.Windows.Read(settingsAddress).Value is null, "Applying the switched-off rows removes both values: " + edition);
+            check(new[] { diagnostic, settingsDiagnostic }.All(definition => appliedModel.Rows.Single(item => item.Id == definition.Id) is { IsApplied: false, Current: "No override" } row
+                && row.Selected.Id == definition.Options.Single(option => option.Changes.Single().Dword is null).Id),
+                "Both rows then read No override with the saved Use Windows default choice loaded: " + edition);
             await appliedModel.ReviewRestoreCommand.ExecuteAsync(null); appliedModel.Approved = true; await appliedModel.ApplyCommand.ExecuteAsync(null);
             check(applied.Windows.Read(address).Value is { Type: 4 } restored && restored.Bytes.SequenceEqual(BitConverter.GetBytes(1u))
                 && applied.Windows.Read(settingsAddress).Value is { Type: 4 } restoredSettings && restoredSettings.Bytes.SequenceEqual(BitConverter.GetBytes(3u))
-                && appliedModel.Rows.Single(item => item.Id == diagnostic.Id).AppliedChoice?.Name == "Required diagnostic data"
-                && appliedModel.Rows.Single(item => item.Id == settingsDiagnostic.Id).AppliedChoice?.Name == "Allow Telemetry: 3",
+                && appliedModel.Rows.Single(item => item.Id == diagnostic.Id) is { ToggleOn: true, AppliedChoice.Name: "Required diagnostic data" }
+                && appliedModel.Rows.Single(item => item.Id == settingsDiagnostic.Id) is { ToggleOn: true, AppliedChoice.Name: "Allow Telemetry: 3" },
                 "Undo puts back the exact earlier values and both rows read on again: " + edition);
         }
     }
