@@ -111,7 +111,9 @@ if (args.Length == 0 || (args.Length <= 2 && args[0] is "restore-summary" or "re
         new { control = "priorityClass", currentValue = "AboveNormal", proposedValue = "Normal", outcome = "applied" } },
         controlChanges = new[] { new { control = "gpuPriority", currentValue = "Normal", proposedValue = "Realtime", outcome = "failed" } } } };
     var kept = new[] { new { processName = "Target", control = "priorityClass", currentValue = "Idle" } };
-    const string reason = "priorityClass: Undo could not confirm another program still holds it. Run Undo again.";
+    const string reason = "priorityClass: Undo couldn't confirm another program still holds it, so it was left alone. Run Undo again.";
+    const string profileShown = "priorityClass: Restore couldn't confirm another program still holds it, so it was left alone. Restore again once that app closes; Apply unlocks when Restore finishes.";
+    const string sessionShown = "priorityClass: Restore couldn't confirm another program still holds it, so it was left alone. Restore again once that app closes.";
     var skipped = new[] { new { processName = "Target", reason } };
     try
     {
@@ -151,7 +153,7 @@ if (args.Length == 0 || (args.Length <= 2 && args[0] is "restore-summary" or "re
         Capture("profile-partial", App.Live.ProcessRestoreText, profile);
         Verify(profile.RestoreAvailable && profile.CanRestoreProfile && App.Live.ProcessProfileRecovery?.Path == backup && App.Live.LastProcessRestorePath == backup,
             "Partial profile restore retains and requests its exact recovery artifact");
-        Verify(profile.ActionDetail.StartsWith("Partial restore.", StringComparison.Ordinal) && profile.ActionDetail.Contains(reason, StringComparison.Ordinal)
+        Verify(profile.ActionDetail.StartsWith("Partial restore.", StringComparison.Ordinal) && profile.ActionDetail.Contains(profileShown, StringComparison.Ordinal)
             && !profile.ActionDetail.Contains("BelowNormal", StringComparison.Ordinal), "Partial profile details report the failed confirmation without a stale kept value");
         Verify(profile.ActionDetail.Contains("Peer: CPU AboveNormal → Normal", StringComparison.Ordinal), "Partial profile details retain unrelated restored controls");
         var backendReason = "Restore finished for 1 app(s). 1 app(s) still need attention: Target (PID 123): " + reason + ".";
@@ -169,10 +171,20 @@ if (args.Length == 0 || (args.Length <= 2 && args[0] is "restore-summary" or "re
                 result = new { status = "partial", summary = backendReason, changedItems = restored, leftAsSetItems = Array.Empty<object>(), skippedItems = actualSkipped, restorePendingCount = 1 } });
             await profile.RestoreProfileCommand.ExecuteAsync(null);
             Capture("profile-summary-skipped-" + identity, App.Live.ProcessRestoreText, profile);
-            Verify(profile.ActionDetail.Split(reason, StringSplitOptions.None).Length - 1 == (identity == "matched" ? 1 : 2)
-                && (identity != "shared" || profile.ActionDetail.Contains("Other: " + reason, StringComparison.Ordinal)),
+            Verify(profile.ActionDetail.Split(profileShown, StringSplitOptions.None).Length - 1 == (identity == "matched" ? 1 : 2)
+                && (identity != "shared" || profile.ActionDetail.Contains("Other: " + profileShown, StringComparison.Ordinal)),
                 "Skipped summary deduplication requires the exact numeric process identity: " + identity);
+            Verify(!profile.ActionDetail.Contains("Undo", StringComparison.Ordinal) && !profile.ActionDetail.Contains("..", StringComparison.Ordinal),
+                "A profile Restore that leaves a control names this page's Restore button, with one period, where the backend says Run Undo again: " + identity);
         }
+        App.Live.ProcessRestoreText = JsonSerializer.Serialize(new { actionId = "performance.rollbackProfile", dryRun = false, status = "partial", preview,
+            backup = new { backupId = "summary-backup", location = backup },
+            result = new { status = "partial", summary = "Partial restore.", changedItems = restored, leftAsSetItems = Array.Empty<object>(), restorePendingCount = 1,
+                skippedItems = new[] { new { processName = "Target", reason = "affinityMask: Another saved change still uses this control. Undo that change first, then try again." } } } });
+        await profile.RestoreProfileCommand.ExecuteAsync(null);
+        Capture("profile-partial-managed", App.Live.ProcessRestoreText, profile);
+        Verify(profile.ActionDetail.Contains("Target: affinityMask: Another saved change still uses this control. Restore that change first, then try again.", StringComparison.Ordinal),
+            "A profile Restore blocked by another saved change says Restore that change first");
         foreach (var completeList in new[] { true, false })
         {
             object[] actualKept = completeList ? kept : [kept[0], new { processName = "Other", control = "priorityClass", currentValue = "Idle" }];
@@ -225,7 +237,7 @@ if (args.Length == 0 || (args.Length <= 2 && args[0] is "restore-summary" or "re
         Capture("game-partial", App.Live.GameTuneRestoreText, game);
         Verify(game.MatchTuneRestoreAvailable && game.CanRestoreMatchTune && App.Live.LastGameRestoreRequest == ("summary-session", sessionPath, sessionBackup),
             "Partial game restore retains and requests its exact session artifact");
-        Verify(game.MatchTuneDetail.StartsWith("Partial game restore.", StringComparison.Ordinal) && game.MatchTuneDetail.Contains(reason, StringComparison.Ordinal)
+        Verify(game.MatchTuneDetail.StartsWith("Partial game restore.", StringComparison.Ordinal) && game.MatchTuneDetail.Contains(sessionShown, StringComparison.Ordinal)
             && !game.MatchTuneDetail.Contains("BelowNormal", StringComparison.Ordinal), "Partial game details report the failed confirmation without a stale kept value");
         Verify(game.MatchTuneDetail.Contains("Peer: CPU AboveNormal → Normal", StringComparison.Ordinal), "Confirmed game details use restored-item evidence when changed items are absent");
         var mixed = new object?[] { null, new { processName = "Peer", controlChanges = new object?[] { null,
@@ -261,7 +273,7 @@ if (args.Length == 0 || (args.Length <= 2 && args[0] is "restore-summary" or "re
                 && reopened.MatchTuneDetail.Contains("Peer: CPU AboveNormal → Normal", StringComparison.Ordinal)
                 && !reopened.MatchTuneDetail.Contains("StaleApply", StringComparison.Ordinal) && !reopened.MatchTuneDetail.Contains("BelowNormal", StringComparison.Ordinal),
                 "Reopened game status renders persisted kept and restored controls only: " + retained);
-            Verify(reopened.MatchTuneRestoreAvailable == retained && (!retained || reopened.MatchTuneDetail.Contains(reason, StringComparison.Ordinal)),
+            Verify(reopened.MatchTuneRestoreAvailable == retained && (!retained || reopened.MatchTuneDetail.Contains(sessionShown, StringComparison.Ordinal)),
                 "Reopened game status retains exact recovery and per-control failure: " + retained);
             await reopened.ReloadAsync();
             Verify(reopened.MatchTuneDetail.Contains("CPU Idle (left as another program set it)", StringComparison.Ordinal),
@@ -300,7 +312,7 @@ if (args.Length == 0 || (args.Length <= 2 && args[0] is "restore-summary" or "re
             Verify(reloaded.MatchTuneDetail.Contains("Peer: CPU AboveNormal → Normal", StringComparison.Ordinal) == showApplied
                 && !reloaded.MatchTuneDetail.Contains("Realtime", StringComparison.Ordinal)
                 && (!showKept || reloaded.MatchTuneDetail.Contains("Target: CPU Idle (left as another program set it)", StringComparison.Ordinal))
-                && (phase != "after" || !retained || reloaded.MatchTuneDetail.Contains(reason, StringComparison.Ordinal))
+                && (phase != "after" || !retained || reloaded.MatchTuneDetail.Contains(sessionShown, StringComparison.Ordinal))
                 && reloaded.MatchTuneRestoreAvailable == retained,
                 "Public Reload distinguishes applied controls from completed Undo evidence: " + phase + "/" + status + "/" + variant);
         }
@@ -344,7 +356,7 @@ if (args.Length == 0 || (args.Length <= 2 && args[0] is "restore-summary" or "re
             Capture("game-status-final-phase-" + status + "-" + flag, App.Live.GameTuneStatusText, reloaded);
             var showApplied = status is "active" or "restorable" && flag is "false" or "missing";
             Verify(reloaded.MatchTuneDetail.Contains("Peer: CPU AboveNormal → Normal", StringComparison.Ordinal) == showApplied
-                && reloaded.MatchTuneDetail.Contains(reason, StringComparison.Ordinal) && reloaded.MatchTuneRestoreAvailable == retained,
+                && reloaded.MatchTuneDetail.Contains(sessionShown, StringComparison.Ordinal) && reloaded.MatchTuneRestoreAvailable == retained,
                 "Public Reload limits historical apply details to active/restorable without known Undo: " + status + "/" + flag);
         }
         foreach (var governorState in new[] { "active", "restorable", "failed", "completed" })
