@@ -704,6 +704,32 @@ static class FreshnessChecks
             if (!passed) Console.WriteLine("  simple mode lists [" + string.Join(", ", simple) + "], dns " + (dns is null ? "missing" : dns.CanRetry + "/" + dns.UnavailableHere + "/" + dns.Current + "/" + dns.Detail) + ", storage " + (storage is null ? "missing" : storage.CanRetry + "/" + storage.UnavailableHere + "/" + storage.Current + "/" + storage.Detail) + ", failing " + (failed is null ? "missing" : failed.CanRetry + "/" + failed.Current));
             return passed;
         });
+        await Scenario("Defender on a Windows version without its commands is unavailable here without a retry, while another failed read keeps Couldn't check", async () =>
+        {
+            const string defender = "windows.171a004ed11767da", failing = "windows.3c9ad96209a9da2f";
+            const string defenderMissing = "Microsoft Defender Antivirus is not available with this Windows version.";
+            RegistryAddress Address(string name) => new("CurrentUser", "Registry64", @"Software\RooIndustriesUiModelFixture", "value", name);
+            TweakDefinition Setting(string id) => new(id, id, "System", "Fixture", 10240, 26200, ["*"], "none",
+                [new("on", "On", [new(Address(id), 1)]), new("off", "Off", [new(Address(id), 0)])], [new("Fixture", "fixture", "isolated UI validation")], null, false);
+            var fixture = new Fixture(Path.Combine(root, "missing-defender-command"), new TweakCatalog(1, "missing-defender", [Setting(defender), Setting(failing)], [])) { Missing = false };
+            fixture.TransformStatus = inspection => inspection with { Settings = inspection.Settings.Select(status => status.Id switch
+            {
+                defender => status with { Error = defenderMissing, Supported = false },
+                failing => status with { Error = "Access is denied.", Supported = false },
+                _ => status,
+            }).ToArray() };
+            App.Operations = fixture; var model = new WindowsTweaksViewModel(); await model.ShowAsync();
+            model.ShowAdvanced = false;
+            var simple = model.Rows.Select(row => row.Id).ToArray();
+            model.ShowAdvanced = true;
+            var missing = model.Rows.SingleOrDefault(row => row.Id == defender);
+            var failed = model.Rows.SingleOrDefault(row => row.Id == failing);
+            var passed = simple.SequenceEqual([failing])
+                && missing is { CanRetry: false, UnavailableHere: true, Current: "Not available here" } && missing.Detail == defenderMissing
+                && failed is { CanRetry: true, Current: "Couldn't check" };
+            if (!passed) Console.WriteLine("  simple mode lists [" + string.Join(", ", simple) + "], defender " + (missing is null ? "missing" : missing.CanRetry + "/" + missing.UnavailableHere + "/" + missing.Current + "/" + missing.Detail) + ", failing " + (failed is null ? "missing" : failed.CanRetry + "/" + failed.Current));
+            return passed;
+        });
         await Scenario("A service Windows never lets administrators change is unavailable here without a retry, while a service that is still starting keeps Couldn't check", async () =>
         {
             const string locked = "windows.b356c3123766a188", settling = "windows.4e3841a2d61ce3f9";
