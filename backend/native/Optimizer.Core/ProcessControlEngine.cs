@@ -240,13 +240,14 @@ public sealed class ProcessControlEngine
         return journal;
     }
 
-    public ProcessControlJournal Restore(string journalPath, bool overwrite = false) => Restore(journalPath, overwrite, false, false, !overwrite);
+    public ProcessControlJournal Restore(string journalPath, bool overwrite = false) => Restore(journalPath, overwrite, false, false, null);
 
-    internal ProcessControlJournal RestoreSession(string journalPath) => Restore(journalPath, false, false, false, false);
+    public ProcessControlJournal RestoreApplyOnce(string journalPath, string dataRoot, string? repoRoot) =>
+        Restore(journalPath, false, false, false, (identity, name) => !GovernorClaims.HeldElsewhere(identity, name, dataRoot, repoRoot, journalPath));
 
-    internal ProcessControlJournal RestoreGovernor(string journalPath, bool relinquished) => Restore(journalPath, false, true, relinquished, false);
+    internal ProcessControlJournal RestoreGovernor(string journalPath, bool relinquished) => Restore(journalPath, false, true, relinquished, null);
 
-    private ProcessControlJournal Restore(string journalPath, bool overwrite, bool governor, bool relinquished, bool keepChanged)
+    private ProcessControlJournal Restore(string journalPath, bool overwrite, bool governor, bool relinquished, Func<RunningProcess, string, bool>? keepChanged)
     {
         using var lease = OperationFiles.Lock(journalPath);
         var journal = OperationFiles.Read<ProcessControlJournal>(journalPath);
@@ -286,7 +287,7 @@ public sealed class ProcessControlEngine
                     var current = target.Read(change.Name).Require();
                     if (ProcessTarget.Equivalent(change.Name, current, change.Original)) { change.Status = "restored"; change.Observed = current; change.Error = null; change.ErrorKind = null; Save(journalPath, journal); continue; }
                     if (governor && (relinquished || !ProcessTarget.Equivalent(change.Name, current, change.Desired)) ||
-                        keepChanged && change.Status == "applied" && !ProcessTarget.Equivalent(change.Name, current, change.Desired))
+                        keepChanged is not null && change.Status == "applied" && !ProcessTarget.Equivalent(change.Name, current, change.Desired) && keepChanged(journal.Preview.Identity, change.Name))
                     {
                         LeaveAsSet(change, current);
                         Save(journalPath, journal);
@@ -303,7 +304,7 @@ public sealed class ProcessControlEngine
                         var beforeWrite = target.Read(change.Name).Require();
                         if (!ProcessTarget.Equivalent(change.Name, beforeWrite, change.Desired))
                         {
-                            if (!governor && !keepChanged) throw new InvalidOperationException("The field changed before restoration.");
+                            if (!governor && keepChanged?.Invoke(journal.Preview.Identity, change.Name) != true) throw new InvalidOperationException("The field changed before restoration.");
                             LeaveAsSet(change, beforeWrite);
                             Save(journalPath, journal);
                             continue;

@@ -37,16 +37,7 @@ internal static class GovernorClaims
     {
         if (rules.Count == 0) return;
         var fieldsByRule = rules.Select(rule => ProcessPolicyStore.Fields(rule).ToHashSet(StringComparer.Ordinal)).ToArray();
-        var evidence = new Evidence(dataRoot, fieldsByRule.SelectMany(fields => fields).ToHashSet(StringComparer.Ordinal));
-        ApplyOnce(evidence);
-        CpuSelection(evidence);
-        BackgroundPriorities(evidence);
-        if (!string.IsNullOrWhiteSpace(repoRoot))
-        {
-            var state = Path.Combine(repoRoot, "backend", "state");
-            Sessions(Path.Combine(state, "game-tune-sessions"), "Game priority", evidence);
-            Sessions(Path.Combine(state, "process-governor-sessions"), "Background limits", evidence);
-        }
+        var evidence = Collect(new Evidence(dataRoot, fieldsByRule.SelectMany(fields => fields).ToHashSet(StringComparer.Ordinal)), Journals(dataRoot, "process-*"), repoRoot);
         Dictionary<int, SnapshotProcess>? running = null;
         var owners = new Dictionary<int, string?>();
         foreach (var (rule, fields) in rules.Zip(fieldsByRule))
@@ -66,6 +57,34 @@ internal static class GovernorClaims
             if (evidence.Doubts.FirstOrDefault(doubt => doubt.Fields.Any(fields.Contains)) is { } unread) throw Unreadable(unread, fields, dataRoot);
         }
     }
+
+    public static bool HeldElsewhere(RunningProcess identity, string field, string dataRoot, string? repoRoot, string journalPath)
+    {
+        var self = Path.GetFullPath(journalPath);
+        var journals = Journals(dataRoot, "process-*").Concat(SessionJournals(dataRoot)).Where(path => !string.Equals(Path.GetFullPath(path), self, StringComparison.OrdinalIgnoreCase));
+        var evidence = Collect(new Evidence(dataRoot, ProcessTarget.ControlNames.ToHashSet(StringComparer.Ordinal)), journals, repoRoot);
+        if (evidence.Doubts.Any(doubt => doubt.Fields.Contains(field))) return true;
+        var fields = new HashSet<string>(StringComparer.Ordinal) { field };
+        return evidence.Claims.Any(claim => claim.Fields.Contains(field) && SameInstance(claim, identity) && Held(claim, fields).Count > 0);
+    }
+
+    private static Evidence Collect(Evidence evidence, IEnumerable<string> journals, string? repoRoot)
+    {
+        ApplyOnce(evidence, journals);
+        CpuSelection(evidence);
+        BackgroundPriorities(evidence);
+        if (!string.IsNullOrWhiteSpace(repoRoot))
+        {
+            var state = Path.Combine(repoRoot, "backend", "state");
+            Sessions(Path.Combine(state, "game-tune-sessions"), "Game priority", evidence);
+            Sessions(Path.Combine(state, "process-governor-sessions"), "Background limits", evidence);
+        }
+        return evidence;
+    }
+
+    private static bool SameInstance(Claim claim, RunningProcess identity) => claim.ProcessId == identity.ProcessId && (claim.Created is { } created
+        ? created.ToString(CultureInfo.InvariantCulture) == identity.CreationTimeFileTimeUtc
+        : string.Equals(FileName(claim), Path.GetFileName(identity.ExecutablePath), StringComparison.OrdinalIgnoreCase));
 
     private static bool OtherAccount(Claim claim, string account, Dictionary<int, string?> owners)
     {
@@ -191,10 +210,10 @@ internal static class GovernorClaims
         return index >= 0 ? index : null;
     }
 
-    private static void ApplyOnce(Evidence evidence)
+    private static void ApplyOnce(Evidence evidence, IEnumerable<string> journals)
     {
         if (!evidence.Wants(ProcessTarget.ControlNames)) return;
-        foreach (var path in Journals(evidence.DataRoot, "process-*"))
+        foreach (var path in journals)
         {
             using var document = Open(path, "Apply once", ProcessTarget.ControlNames, evidence);
             if (document is null) continue;
@@ -361,6 +380,21 @@ internal static class GovernorClaims
         var operations = Path.Combine(dataRoot, "operations");
         if (!Directory.Exists(operations)) return [];
         return Directory.EnumerateDirectories(operations, pattern).Select(directory => Path.Combine(directory, "journal.json")).Where(File.Exists).ToArray();
+    }
+
+    private static IEnumerable<string> SessionJournals(string dataRoot)
+    {
+        var operations = Path.Combine(dataRoot, "operations");
+        if (!Directory.Exists(operations)) return [];
+        var paths = new List<string>();
+        foreach (var directory in Directory.EnumerateDirectories(operations, "game-session-*"))
+        {
+            var session = Path.Combine(directory, "session");
+            paths.Add(Path.Combine(session, "launcher-journal.json"));
+            var games = Path.Combine(session, "games");
+            if (Directory.Exists(games)) paths.AddRange(Directory.EnumerateDirectories(games).SelectMany(Directory.EnumerateDirectories).Select(field => Path.Combine(field, "journal.json")));
+        }
+        return paths.Where(File.Exists).ToArray();
     }
 
     private static JsonDocument? Open(string path, string feature, string[] fields, Evidence evidence)

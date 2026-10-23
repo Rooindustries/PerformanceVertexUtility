@@ -543,7 +543,7 @@ public sealed class ProtectedSessions
                     var saved = OperationFiles.Read<ProcessControlJournal>(field.JournalPath!); game.Identity.Verify(saved.Preview.Identity);
                     if (saved.Preview.Desired.Count != 1 || !saved.Preview.Desired.TryGetValue(field.Name, out var savedDesired) || !ProcessTarget.Equivalent(field.Name, savedDesired, state.Preview.Controls[field.Name])) throw new InvalidDataException("Native recovery belongs to another control.");
                     var retained = field.Name is "gpuPriority" or "ioPriority" ? gpuHandles?.Find(game.Identity) : null;
-                    var result = (retained is null ? _controls : _controls.WithTarget(retained)).RestoreSession(field.JournalPath!); field.Status = result.Status;
+                    var result = (retained is null ? _controls : _controls.WithTarget(retained)).Restore(field.JournalPath!); field.Status = result.Status;
                     var last = result.Changes.Single(change => change.Name == field.Name);
                     if (result.Status == "restored" && last.Status == "unchanged") field.Status = "leftAsIs";
                     field.Observed = last.Observed is { } observed ? ControlRead.From(observed) : null; field.Error = last.Error; if (result.Status is not ("restored" or "expired")) errors.Add("Native restoration needs reconciliation: " + field.Name); }
@@ -565,7 +565,7 @@ public sealed class ProtectedSessions
         }
         catch (Exception error) { errors.Add(error.Message); }
         if (state.LauncherJournal is { } journal && File.Exists(journal))
-            try { var result = _controls.RestoreSession(journal); if (result.Status is not ("restored" or "expired")) errors.Add("Launcher restoration needs reconciliation."); }
+            try { var result = _controls.Restore(journal); if (result.Status is not ("restored" or "expired")) errors.Add("Launcher restoration needs reconciliation."); }
             catch (Exception error) { errors.Add(error.Message); }
         state.Errors = state.Errors.Concat(errors).Distinct(StringComparer.Ordinal).ToList();
         state.Status = errors.Count != 0 ? "recoveryRequired" : state.Errors.Count != 0 ? "stoppedWithErrors" : "stopped";

@@ -140,12 +140,12 @@ try
     Check(repeat.Status == "applied", "Duplicate apply observes the existing assignment without a second dispatch");
     var foreignMemory = desiredMemory == 4 ? 1u : 4u;
     Oracle.SetMemory(probe.Handle, foreignMemory);
-    var conflict = engine.Restore(journalPath);
+    var conflict = engine.RestoreApplyOnce(journalPath, root, null);
     var left = conflict.Changes.Single(change => change.Name == "memoryPriority");
     Check(conflict.Status == "restored" && left.Status == "leftAsSet" && left.Error == ProcessControlEngine.LeftAsSet && left.Observed?.GetUInt32() == foreignMemory
         && Oracle.Memory(probe.Handle) == foreignMemory && Oracle.Boost(probe.Handle) == boostBefore, "Restore finishes, keeps and names a field another program changed, and restores independently owned fields");
     Oracle.SetMemory(probe.Handle, desiredMemory);
-    var repeated = engine.Restore(journalPath);
+    var repeated = engine.RestoreApplyOnce(journalPath, root, null);
     Check(repeated.Status == "restored" && Oracle.Memory(probe.Handle) == desiredMemory, "A finished restore does not take back a field it left to another program");
     var postRestore = engine.Apply(previewPath, reviewHash, journalPath);
     Check(postRestore.Status == "restored" && Oracle.Memory(probe.Handle) == desiredMemory, "A restored review cannot be reapplied");
