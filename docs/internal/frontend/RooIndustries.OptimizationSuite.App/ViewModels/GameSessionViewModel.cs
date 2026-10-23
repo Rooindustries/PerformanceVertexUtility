@@ -99,7 +99,7 @@ public partial class GameSessionViewModel : ObservableObject
     private bool AnyChosen => Settings.Any(setting => setting.Selected.Value is not null);
     public string PresetPlaceholder => _customPreset || AnyChosen ? LaunchPresetCatalog.Custom : "Choose a preset";
     public string PresetHint => _presetsError ?? SelectedPreset?.Description
-        ?? (_customPreset || AnyChosen ? "Your own mix of settings. Picking a preset replaces them." : "A preset fills in the settings below. You can still change any of them.");
+        ?? (_customPreset || AnyChosen ? "Your own mix of priorities. Picking a preset replaces them but keeps your CPU cores." : "A preset fills in the settings below. You can still change any of them.");
 
     partial void OnSelectedPresetChanged(LaunchPreset? value)
     {
@@ -122,7 +122,7 @@ public partial class GameSessionViewModel : ObservableObject
     partial void OnGamePathChanged(string value) => Invalidate();
     partial void OnAcceptLauncherScopeChanged(bool value) => Invalidate();
     partial void OnKeepArmedChanged(bool value) => Invalidate();
-    partial void OnAffinityMaskChanged(string? oldValue, string newValue) { Invalidate(); if (!string.IsNullOrEmpty(oldValue)) UseCustomPreset(); }
+    partial void OnAffinityMaskChanged(string value) => Invalidate();
     partial void OnSelectedCoresChanged(GameCoreChoice? value) { if (value is not null) AffinityMask = value.Affinity.Mask; }
     public void NoteChanged()
     {
@@ -257,9 +257,7 @@ public partial class GameSessionViewModel : ObservableObject
             {
                 Status = "That's the game, not its launcher."; Detail = ProtectedSessions.LauncherIsGame; return;
             }
-            _matching = true;
-            try { LoadCores(snapshot, snapshot.Controls["affinity"].Require().Deserialize<AffinityState>(OperationFiles.Json)!); }
-            finally { _matching = false; }
+            LoadCores(snapshot, snapshot.Controls["affinity"].Require().Deserialize<AffinityState>(OperationFiles.Json)!);
             _launcher = snapshot; Status = "Choose priorities and CPU cores, then review your changes."; Detail = "";
         }
         catch (Exception error) { if (version == _version) { Status = "Couldn't read this launcher."; Detail = Closed(error) ? ProtectedSessions.LauncherClosed : error.Message; } }
