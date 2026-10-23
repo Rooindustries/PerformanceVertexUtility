@@ -99,6 +99,36 @@ def apply_windows_defaults(settings, coverage):
             record['compatibility'] = ' '.join(filter(None, [record.get('compatibility'), 'Windows default writes the value Windows keeps instead of deleting it.']))
 
 
+def apply_windows_types(catalog, coverage):
+    values = json.loads((ROOT / 'backend/catalogs/windows-value-types.json').read_text())['values']
+    converted, twins = set(), {}
+    for value in values:
+        for setting in catalog['settings']:
+            for option in setting['options']:
+                for change in option['changes']:
+                    if change.get('dword') is None or not all(change['address'].get(field, '').casefold() == value[field].casefold() for field in ('hive', 'keyPath', 'valueName')):
+                        continue
+                    data = (str(change['dword']) + '\0').encode('utf-16le') if value['type'] == 'REG_SZ' else bytes([change['dword']])
+                    change.update(dword=None, value={'name': change['address']['valueName'], 'type': {'REG_SZ': 1, 'REG_BINARY': 3}[value['type']], 'bytes': base64.b64encode(data).decode()})
+                    converted.add((setting['id'], option['id']))
+    for setting in catalog['settings']:
+        for option in setting['options']:
+            twin = next((other for other in setting['options'] if (setting['id'], option['id']) in converted and (setting['id'], other['id']) not in converted
+                         and other['changes'] == option['changes'] and other.get('controls') == option.get('controls')), None)
+            if twin is None:
+                continue
+            if twin.get('availability') != option.get('availability'):
+                raise ValueError('A converted choice matches another choice with different availability: ' + setting['id'] + '/' + option['id'])
+            option['sameAs'] = twin['id']
+            twins[(setting['id'], option['id'])] = twin['id']
+    for record in coverage:
+        selections = [selection for option in record['options'] for selection in option['selections']]
+        if any((selection['settingId'], selection['optionId']) in converted for selection in selections):
+            record['compatibility'] = ' '.join(filter(None, [record.get('compatibility'), 'Writes the registry type Windows keeps for these values instead of a DWORD.']))
+    for selection in [selection for preset in catalog['presets'] for selection in preset['selections']] + [selection for record in coverage for option in record['options'] for selection in option['selections']]:
+        selection['optionId'] = twins.get((selection['settingId'], selection['optionId']), selection['optionId'])
+
+
 def apply_availability(settings):
     alternatives = json.loads((ROOT / 'backend/catalogs/windows-setting-alternatives.json').read_text())
     ids = {setting['id'] for setting in settings}
@@ -730,6 +760,7 @@ def compile_catalog():
     apply_windows_defaults(settings, coverage + extra_coverage)
     apply_availability(settings)
     mark_protected_services(settings)
+    apply_windows_types(catalog, coverage + extra_coverage)
     settings.sort(key=lambda setting: (setting['category'], setting['name'], setting['id']))
     rules = json.loads((ROOT / 'backend/catalogs/incompatible-settings.json').read_text())['rules']
     by_id = {setting['id']: setting for setting in settings}

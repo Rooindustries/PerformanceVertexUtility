@@ -215,7 +215,7 @@ public partial class WindowsTweakRow : ObservableObject
         Alternatives = (definition.Alternatives ?? []).Where(definitions.ContainsKey).Select(id => new TweakAlternative(
             (WindowsTweakPresentation.For(definitions[id]).Name ?? definitions[id].Name) + (definitions[id].Options.SelectMany(option => option.Changes).FirstOrDefault()?.Address.Hive == "LocalMachine" ? " · Entire PC" : " · This user"),
             new RelayCommand(() => showSetting(id)))).ToArray();
-        Choices = [new("", "Keep current"), .. definition.Options.Select(option => new TweakChoice(option.Id, DisplayChoice(WindowsTweakPresentation.Choice(definition, option))))];
+        Choices = [new("", "Keep current"), .. definition.Options.Where(option => option.SameAs is null).Select(option => new TweakChoice(option.Id, DisplayChoice(WindowsTweakPresentation.Choice(definition, option))))];
         ActionChoices = Choices.Skip(1).ToArray();
         _resetIds = definition.Options.Where(option => IsDefaultAction(option.Name) || IsDefaultAction(WindowsTweakPresentation.Choice(definition, option))).Select(option => option.Id).ToHashSet();
         _action = ActionChoices.FirstOrDefault(choice => !_resetIds.Contains(choice.Id)) ?? ActionChoices.First();
@@ -224,6 +224,7 @@ public partial class WindowsTweakRow : ObservableObject
     }
     public static bool ReadableName(string name) => name.Trim().Length > 0 && char.IsLetterOrDigit(name.Trim()[0]);
     public static string DisplayChoice(string name) => name is "Remove this override" or "Not configured" ? "Use Windows default" : name;
+    public string ChoiceId(string optionId) => Definition.Options.FirstOrDefault(option => option.Id == optionId)?.SameAs ?? optionId;
     private static bool IsDefaultAction(string name) => name is "Remove this override" or "Windows default" or "Use Windows default" or "Not configured" or "source-default" or "Return to previous plan" or "Remove boot override";
     public void Observe(TweakSettingStatus? status, TweakContext? context = null)
     {
@@ -584,7 +585,7 @@ public partial class WindowsTweaksViewModel : ObservableObject
     {
         _loading = true; _profileLoaded = ProfileId.Trim();
         var selected = _savedChoices?.Profiles.SingleOrDefault(profile => profile.Id == ProfileId.Trim())?.Selections ?? _inspection?.State?.Profiles.SingleOrDefault(profile => profile.Id == ProfileId.Trim())?.Selections ?? [];
-        foreach (var row in _all) row.Selected = row.Choices.FirstOrDefault(choice => selected.Any(item => item.SettingId == row.Id && item.OptionId == choice.Id)) ?? row.Choices[0];
+        foreach (var row in _all) row.Selected = row.Choices.FirstOrDefault(choice => selected.Any(item => item.SettingId == row.Id && row.ChoiceId(item.OptionId) == choice.Id)) ?? row.Choices[0];
         _loading = false; Invalidate(); Notify();
     }
     private void RowChanged(object? sender, PropertyChangedEventArgs args)
@@ -882,7 +883,7 @@ public partial class WindowsTweaksViewModel : ObservableObject
         {
             foreach (var option in definition.Options)
             {
-                if (option.Changes is not [var change]) continue;
+                if (option.SameAs is not null || option.Changes is not [var change]) continue;
                 var desired = change.Dword is { } number ? new RegistryValueData(change.Address.ValueName!, 4, BitConverter.GetBytes(number)) : change.Value;
                 if (change.Token is { } token ? TweakTokens.Get(value, token.Name) == token.Value : change.Bits is null && TweakRead.SameValue(value, desired)) return WindowsTweakRow.DisplayChoice(WindowsTweakPresentation.Choice(definition, option));
             }

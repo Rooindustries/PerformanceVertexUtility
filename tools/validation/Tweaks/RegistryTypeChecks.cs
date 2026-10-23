@@ -75,7 +75,9 @@ static class RegistryTypeChecks
                     check(Now().SequenceEqual(start), label + ": Undo after " + option.Name + " puts back " + string.Join(", ", start));
                 }
 
-                var first = row.Options[0];
+                foreach (var hidden in row.Options.Where(option => option.SameAs is not null))
+                    check(Writes(hidden) == Writes(row.Options.Single(option => option.Id == hidden.SameAs)), label + ": hidden " + hidden.Name + " writes exactly what its visible twin writes, so saved choices that picked it keep working");
+                var first = row.Options.First(option => option.SameAs is null);
                 Seed([.. targets.Select(_ => "DWord:0")]);
                 Apply(Engine(row), "older", Pick(first));
                 check(Now().All(state => state == Writes(first)), label + ": " + first.Name + " replaces a number an older app wrote with " + type);
