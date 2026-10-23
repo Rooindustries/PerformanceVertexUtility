@@ -273,8 +273,8 @@ Windows has its starting choice, or any of its choices if the row has a Windows
 default choice, and the choice beside the switch is the one Windows has. Turning
 that row off selects the Windows default for review, or the other value of a
 two-value row without one; it does not restore a backup. Rows without a Windows
-default choice, such as service startup, read on only for their starting choice
-unless that other choice is selected, because one of their values always matches.
+default choice, such as service startup, read on only for their starting choice or
+a selected choice Windows already has, because one of their values always matches.
 Use Windows default explicitly removes the local override, and another policy may
 still control the setting. Choices for missing components
 are saved separately from applied Windows profiles and do not create a recovery
