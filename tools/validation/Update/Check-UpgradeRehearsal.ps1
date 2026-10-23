@@ -5,6 +5,7 @@ if(-not$Source){[IO.Directory]::CreateDirectory($OutRoot)|Out-Null}
 $rows=[Collections.Generic.List[object]]::new()
 try{
  if(-not$Source){
+ function Invoke-HarnessCheckpoint([string]$Name){}
  function Get-HarnessLongPath([string]$Path){$Path}
  function Get-HarnessToolPath([string]$Path){$Path}
  function Test-HarnessPath([string]$Path){[IO.File]::Exists($Path) -or [IO.Directory]::Exists($Path)}

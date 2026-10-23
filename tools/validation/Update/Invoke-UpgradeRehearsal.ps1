@@ -20,9 +20,11 @@ function DataFiles{@(if(Test-HarnessPath $data){Get-HarnessTree $data -FilesOnly
 function Setup([string]$file,[string]$arguments,[string]$label){
  Assert-HarnessInstallStart $exe
  $log=Get-HarnessOutputPath $directory ($label+'.log')
- $owned=Start-OwnedProcess -FilePath $file -ArgumentList ($arguments+' /LOG="'+$log+'"') -Purpose $label
- try{if(-not$owned.process.WaitForExit(600000)){throw ($label+' timed out.')};$code=$owned.process.ExitCode}finally{Stop-HarnessProcess $owned}
- Check ($label+' exit code 0') @{exitCode=$code;log=$log} ($code -eq 0)
+ Invoke-RehearsalMutation $stateEntry ('setup:'+ $label) {
+  $owned=Start-OwnedProcess -FilePath $file -ArgumentList ($arguments+' /LOG="'+$log+'"') -Purpose $label
+  try{if(-not$owned.process.WaitForExit(600000)){throw ($label+' timed out.')};$code=$owned.process.ExitCode}finally{Stop-HarnessProcess $owned}
+  Check ($label+' exit code 0') @{exitCode=$code;log=$log} ($code -eq 0)
+ }
  return $log
 }
 function Start-Recording{
@@ -60,9 +62,11 @@ $paths+=@($oldLinks.folder,$oldLinks.desktop,$newLinks.folder,$newLinks.desktop)
 if($RestoreStateId){
  Assert-HarnessHostLease
  if(Test-HarnessPath $uninstallKey){throw 'Remove only the ledger-owned test installation before restoring; retained.'}
- $entry=@(Get-HarnessEntries|Where-Object {$_.id -ceq $RestoreStateId -and $_.purpose -eq 'upgrade-state' -and $_.state -in 'active','error'})
- if($entry.Count -ne 1){throw 'A unique unrestored rehearsal state entry is required.'}
- Restore-RehearsalState $entry[0];Save 'restore-verification.json' @{restored=$true;stateId=$entry[0].id}
+ $entry=@(Get-HarnessEntries|Where-Object {$_.id -ceq $RestoreStateId -and $_.purpose -eq 'upgrade-state' -and $_.state -in 'active','error','restored'})
+ if($entry.Count -ne 1){throw 'A unique rehearsal state entry is required.'}
+ Restore-RehearsalState $entry[0];$persisted=Get-HarnessEntryById $entry[0].id
+ if(-not$persisted.metadata.restored -or $persisted.state -cne 'restored'){throw 'Rehearsal restoration is not complete.'}
+ Save 'restore-verification.json' @{restored=$persisted.metadata.restored;stateId=$persisted.id}
  Complete-HarnessInvocation 'pass' -Cleanup|Out-Null;return
 }
 $asFound=@{installedVersion=$(if(Test-HarnessPath $uninstallKey){Version}else{$null});installExists=(Test-HarnessPath $install);paths=@($paths|ForEach-Object {Get-RehearsalPathState $_});tasks=@(Get-RehearsalTasks);markers=(Get-RehearsalMarkers $roots)}
@@ -73,7 +77,7 @@ if($PreflightOnly){
  foreach($row in $asFound.paths){Assert-RehearsalPathState $row $row.path}
  $after=@{paths=@($paths|ForEach-Object {Get-RehearsalPathState $_});tasks=@(Get-RehearsalTasks);markers=(Get-RehearsalMarkers $roots)}
  Save 'preflight-after.json' $after
- Check 'preflight leaves file hashes, tasks and registration unchanged' $after (($after.tasks|Sort-Object folder,name|ConvertTo-Json -Depth 20 -Compress) -ceq ($asFound.tasks|Sort-Object folder,name|ConvertTo-Json -Depth 20 -Compress) -and ($after.markers|ConvertTo-Json -Depth 20 -Compress) -ceq ($asFound.markers|ConvertTo-Json -Depth 20 -Compress))
+ Check 'preflight leaves file hashes, tasks and registration unchanged' $after ((Test-RehearsalSnapshot @($after.tasks|Sort-Object folder,name) @($asFound.tasks|Sort-Object folder,name)) -and (Test-RehearsalSnapshot $after.markers $asFound.markers))
  Complete-HarnessInvocation 'pass' -Cleanup|Out-Null;return
 }
 if(-not$canInstall -and -not$MoveAsideExistingState){throw 'Existing app state retained. The rehearsal requires an empty installation, data roots, product tasks and shortcuts.'}
@@ -94,11 +98,12 @@ foreach($file in $oracle.files){if($file.path -notmatch '^[A-Za-z0-9_][A-Za-z0-9
 $installParent=Split-Path $install -Parent
 $paths+=@($(if(Test-HarnessPath $installParent){$install}else{$installParent}))
 if(@(Get-HarnessEntries|Where-Object {$_.purpose -eq 'upgrade-state' -and $_.state -in 'active','error'}).Count){throw 'Restore the earlier rehearsal journal before starting another run.'}
-$stateEntry=Save-RehearsalState $paths $roots
+$stateEntry=Save-RehearsalState $paths $roots $exe
 Save 'state-journal.json' @{stateId=$stateEntry.id;ledger=$script:Harness.LedgerPath;paths=$stateEntry.metadata.paths}
 $status='fail';$installAttempted=$false;$pending=$null
 try{
  Suspend-RehearsalState $stateEntry
+ Initialize-RehearsalRoots $stateEntry
  Initialize-HarnessCache $updates @($NewVersion)
  $downloads=Join-Path $directory 'download';New-HarnessDirectory $downloads 'download' 'run'|Out-Null
  $old=Join-Path $downloads ([IO.Path]::GetFileName(([uri]$OldUrl).AbsolutePath))
@@ -110,7 +115,7 @@ try{
  $before=@{version=Version;key=(Get-ItemProperty $uninstallKey|Select-Object DisplayName,DisplayVersion,InstallLocation,Publisher);old=(Links $oldLinks);new=(Links $newLinks);oldTarget=(Target $oldLinks.app)}
  Save 'old-installed.json' $before
  Check 'old version installed with its shortcuts' $before ($before.version -ceq $OldVersion -and $before.old.app -and $before.old.desktop -and $before.oldTarget -ieq $exe)
- Launch;Settings
+ Start-RehearsalApp $stateEntry;Settings
  if($LiveFeed){$current=WaitStatus ('Version '+$NewVersion+' is ready to install') 150}else{$current=WaitStatus 'You have the latest version' 90}
  Shot 'before-old-settings'
  Check 'old app reads the expected live feed' @{status=$current;pid=$script:app.Id;liveDownload=[bool]$LiveFeed} ($current -ceq $(if($LiveFeed){'Version '+$NewVersion+' is ready to install'}else{'You have the latest version'}))
@@ -144,7 +149,7 @@ try{
   Copy-HarnessFile $NewInstaller $candidate 'candidate-ota-cache' 'retained'|Out-Null
   Copy-HarnessFile $SignedManifest (Join-Path $folder 'manifest.json') 'candidate-signed-manifest' 'retained'|Out-Null
  }
- Launch;Settings;$ready=WaitStatus ('Version '+$NewVersion+' is ready to install') 15
+ Start-RehearsalApp $stateEntry;Settings;$ready=WaitStatus ('Version '+$NewVersion+' is ready to install') 15
  Check 'old app accepts signed candidate' @{status=$ready} ($ready -ceq ('Version '+$NewVersion+' is ready to install'))
  Shot 'before-old-ready';$oldApp=$script:owned
  Click 'UpdateInstallButton';WaitFor {ByName 'Install'} 10 'Install confirmation'|Out-Null
@@ -192,9 +197,10 @@ try{
  }
  try{
   if(Test-HarnessPath $uninstallKey){throw 'Test installation remains; keep archives and restore only after it is removed.'}
-  foreach($row in $stateEntry.metadata.paths){$row.output=Get-RehearsalPathState $row.before.path}
-  $stateEntry.metadata.outputsReady=$true;Set-RehearsalJournal $stateEntry $stateEntry.metadata
+  Stop-RehearsalWriters $stateEntry
+  Save-RehearsalOutputs $stateEntry
   Restore-RehearsalState $stateEntry
+  $stateEntry=Get-HarnessEntryById $stateEntry.id
   Save 'restore-verification.json' @{restored=$true;stateId=$stateEntry.id;paths=@($paths|ForEach-Object {Get-RehearsalPathState $_});markers=(Get-RehearsalMarkers $roots);tasks=@(Get-RehearsalTasks);archives=$stateEntry.metadata.paths.generated}
  }catch{$cleanup.Add($_.Exception.Message)}
  Save 'end-state.json' @{installedKey=(Test-HarnessPath $uninstallKey);installExists=(Test-HarnessPath $install);restored=$stateEntry.metadata.restored;cleanupErrors=@($cleanup)}

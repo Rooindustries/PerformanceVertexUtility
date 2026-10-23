@@ -108,21 +108,33 @@ function Get-HarnessFolderIdentity([string]$Path){
  $plain=if($long.StartsWith('\\?\UNC\',[StringComparison]::OrdinalIgnoreCase)){'\\'+$long.Substring(8)}else{$long.Substring(4)}
  @{path=$plain;creationTimeFileTimeUtc=[IO.Directory]::GetCreationTimeUtc($long).ToFileTimeUtc().ToString()}
 }
+function Invoke-HarnessCheckpoint([string]$Name){if($script:HarnessCheckpoint){& $script:HarnessCheckpoint $Name}}
 function Invoke-HarnessLedger([scriptblock]$Action,[switch]$NoWrite){
  if(-not$script:Harness){throw 'Harness invocation has no verified frame scope.'}
  $stream=$null
  for($attempt=0;$attempt -lt 10;$attempt++){
-  try{$stream=[IO.FileStream]::new((Get-HarnessLongPath $script:Harness.LedgerPath),[IO.FileMode]::Open,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None);break}
+  try{$stream=[IO.FileStream]::new((Get-HarnessLongPath ($script:Harness.LedgerPath+'.lock')),[IO.FileMode]::OpenOrCreate,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None);break}
   catch [IO.IOException]{if($attempt -eq 9){throw};Start-Sleep -Milliseconds 200}
  }
  try{
-  $reader=[IO.StreamReader]::new($stream,[Text.UTF8Encoding]::new($false),$true,4096,$true)
-  try{$ledger=$reader.ReadToEnd()|ConvertFrom-Json}finally{$reader.Dispose()}
+  $ledger=[IO.File]::ReadAllText((Get-HarnessLongPath $script:Harness.LedgerPath))|ConvertFrom-Json
   if($ledger.frameId -cne $script:Harness.FrameId -or $ledger.manifestSha256 -cne $script:Harness.Manifest -or $ledger.machine -cne $env:COMPUTERNAME){throw 'Harness ledger scope changed; retained.'}
   $result=& $Action $ledger
   if(-not$script:Harness.ReadOnly -and -not$NoWrite){
    $bytes=[Text.UTF8Encoding]::new($false).GetBytes(($ledger|ConvertTo-Json -Depth 60))
-   $stream.Position=0;$stream.SetLength(0);$stream.Write($bytes,0,$bytes.Length);$stream.Flush($true)
+   $temp=Get-HarnessLongPath ($script:Harness.LedgerPath+'.'+[Guid]::NewGuid().ToString('N')+'.tmp')
+   Invoke-HarnessCheckpoint 'journal:before-temp'
+   $replacement=[IO.FileStream]::new($temp,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None)
+   try{
+    Invoke-HarnessCheckpoint 'journal:temp-created'
+    $half=[int][Math]::Floor($bytes.Length/2);$replacement.Write($bytes,0,$half)
+    Invoke-HarnessCheckpoint 'journal:partial-write'
+    $replacement.Write($bytes,$half,$bytes.Length-$half);$replacement.Flush($true)
+    Invoke-HarnessCheckpoint 'journal:flushed'
+   }finally{$replacement.Dispose()}
+   Invoke-HarnessCheckpoint 'journal:before-replace'
+   [IO.File]::Replace($temp,(Get-HarnessLongPath $script:Harness.LedgerPath),(Get-HarnessLongPath ($script:Harness.LedgerPath+'.previous')))
+   Invoke-HarnessCheckpoint 'journal:replaced'
   }
   return $result
  }finally{$stream.Dispose()}

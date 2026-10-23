@@ -7,13 +7,13 @@
   },
   {
     "file": "tools/validation/Update/Harness.Common.ps1",
-    "line": 566,
+    "line": 578,
     "text": "'cert'{$path=$Entry.identity.store+'\\'+$Entry.identity.thumbprint;if(Test-Path $path){$cert=Get-Item $path;if($cert.Subject -cne $Entry.identity.subject){throw 'Certificate identity changed; retained.'};Remove-Item -LiteralPath $path -DeleteKey}}",
     "reason": "Verified certificate-store/thumbprint identity; no filesystem path."
   },
   {
     "file": "tools/validation/Update/Harness.Common.ps1",
-    "line": 661,
+    "line": 673,
     "text": "[IO.Directory]::Move((Get-HarnessLongPath $ActiveRoot),(Get-HarnessLongPath $Destination));Set-HarnessEntryState $entry[0].id 'removed';Add-HarnessEntry 'folder' (Get-HarnessFolderIdentity $Destination) 'data-archive' 'run'|Out-Null",
     "reason": "Shared data-archive helper moves both endpoints through Get-HarnessLongPath after ownership/reparse verification."
   },
@@ -85,20 +85,38 @@
   },
   {
     "file": "tools/validation/Update/Check-UpgradeRehearsal.ps1",
-    "line": 11,
+    "line": 12,
     "text": "function Get-HarnessItem([string]$Path,[switch]$Force){$i=Get-Item -LiteralPath $Path -Force;[pscustomobject]@{FullName=$i.FullName;IsDirectory=$i.PSIsContainer;Attributes=$i.Attributes}}",
     "reason": "Linux-only disposable filesystem fixture adapter; real Windows uses the existing extended-path harness helpers."
   },
   {
     "file": "tools/validation/Update/Check-UpgradeRehearsal.ps1",
-    "line": 12,
+    "line": 13,
     "text": "function Get-HarnessTree([string]$Path){Get-ChildItem -LiteralPath $Path -Recurse -Force|ForEach-Object {Get-HarnessItem $_.FullName}}",
     "reason": "Linux-only disposable filesystem fixture adapter; real Windows uses the existing extended-path harness helpers."
   },
   {
     "file": "tools/validation/Update/UpgradeRehearsal.State.ps1",
-    "line": 21,
+    "line": 35,
     "text": "if((Get-HarnessItem $From -Force).IsDirectory){[IO.Directory]::Move((Get-HarnessLongPath $From),(Get-HarnessLongPath $To))}else{[IO.File]::Move((Get-HarnessLongPath $From),(Get-HarnessLongPath $To))}",
     "reason": "Native same-directory NTFS rename preserves original files and ACLs; extended paths are consumed only by .NET, never cmdlets."
+  },
+  {
+    "file": "tools/validation/Update/Check-UpgradeRehearsalRecovery.ps1",
+    "line": 11,
+    "text": "function Get-HarnessItem([string]$Path,[switch]$Force){$i=Get-Item -LiteralPath $Path -Force;[pscustomobject]@{FullName=$i.FullName;IsDirectory=$i.PSIsContainer;Attributes=$i.Attributes}}",
+    "reason": "Linux-only disposable filesystem adapter. Native Windows APIs stay in the production harness; this scenario never connects to Windows."
+  },
+  {
+    "file": "tools/validation/Update/Check-UpgradeRehearsalRecovery.ps1",
+    "line": 12,
+    "text": "function Get-HarnessTree([string]$Path){Get-ChildItem -LiteralPath $Path -Recurse -Force|ForEach-Object {Get-HarnessItem $_.FullName}}",
+    "reason": "Linux-only disposable filesystem adapter. Native Windows APIs stay in the production harness; this scenario never connects to Windows."
+  },
+  {
+    "file": "tools/validation/Update/Check-UpgradeRehearsalRecovery.ps1",
+    "line": 13,
+    "text": "function Get-HarnessFileSha256([string]$Path){(Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash}",
+    "reason": "Linux-only disposable filesystem adapter. Native Windows APIs stay in the production harness; this scenario never connects to Windows."
   }
 ]
