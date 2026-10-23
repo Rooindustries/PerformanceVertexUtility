@@ -102,7 +102,7 @@ function New-PathCandidate {
         [string]$ItemSeed
     )
     $expanded = Resolve-RooIndustriesEnvironmentPath $Path
-    $finalPath = Get-RooIndustriesFinalPath $expanded
+    $finalPath = Get-RooIndustriesLongPath $expanded
     $sharedOwners = @($script:LeftoverPeerInstallLocations | Where-Object {
         (Test-LeftoverPathOverlap $expanded $_.path) -or
             ($finalPath -and $_.finalPath -and (Test-LeftoverPathOverlap $finalPath $_.finalPath))
@@ -208,7 +208,7 @@ try {
         [pscustomobject]@{
             displayName = [string](Get-RooIndustriesUninstallPropertyValue $_ 'displayName' (Get-RooIndustriesUninstallPropertyValue $_ 'appId' ''))
             path = $peerPath
-            finalPath = Get-RooIndustriesFinalPath $peerPath
+            finalPath = Get-RooIndustriesLongPath $peerPath
         }
     })
 
