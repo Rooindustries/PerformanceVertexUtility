@@ -203,8 +203,11 @@ try {
             if ([IO.Path]::GetFileName($fileSystem.GetFolder($pair[0]).ShortPath) -ieq [IO.Path]::GetFileName($pair[0])) { & fsutil.exe file setshortname $pair[0] $pair[1] | Out-Null }
         }
         $appsShort = $fileSystem.GetFolder($spellingApps).ShortPath
+        $protectedRootShort = $fileSystem.GetFolder($protectedRoot).ShortPath
         $protectedShort = $fileSystem.GetFolder($protectedData).ShortPath
-        if ([IO.Path]::GetFileName($appsShort) -ine [IO.Path]::GetFileName($spellingApps) -and [IO.Path]::GetFileName($protectedShort) -ine [IO.Path]::GetFileName($protectedData)) {
+        if ([IO.Path]::GetFileName($appsShort) -ine [IO.Path]::GetFileName($spellingApps) -and
+            [IO.Path]::GetFileName($protectedRootShort) -ine [IO.Path]::GetFileName($protectedRoot) -and
+            [IO.Path]::GetFileName($protectedShort) -ine [IO.Path]::GetFileName($protectedData)) {
             Add-Pass 'Disposable spelling fixtures have actual 8.3 aliases'
         } else { Add-Failure 'Disposable spelling fixtures must have actual 8.3 aliases' }
         $spellingRules = $rules | ConvertTo-Json -Depth 16 | ConvertFrom-Json
