@@ -54,6 +54,7 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
     [NotifyPropertyChangedFor(nameof(CanBuildCleanupList))]
     [NotifyPropertyChangedFor(nameof(CanApplyCleanup))]
     [NotifyPropertyChangedFor(nameof(CanRestoreCleanup))]
+    [NotifyPropertyChangedFor(nameof(ApplyApprovalSummary))]
     private bool _scanBusy;
     [ObservableProperty] private string _leftoverState = "Pick an app, then scan what it leaves behind.";
     [ObservableProperty] private string? _leftoverSummary;
@@ -117,6 +118,8 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
     public bool CanRestoreCleanup => HasSelection && !ScanBusy && CleanupRestoreAvailable;
     public string ApplyApprovalSummary => !HasSelection
         ? "Pick an app first."
+        : WaitingNotice is { } waiting
+            ? waiting
         : RemovalRouteBlocked
             ? SelectedApp is { Removed: true } removedApp ? removedApp.RemovalUnconfirmed ? "Only Restore is available for this app here." : "This app is already removed. Restore puts back what its cleanup removed." : "Can't run this app's remover. Use Remove apps to remove it."
             : !RemovalPathReviewed
@@ -140,6 +143,14 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
 
     private readonly List<InstalledApp> _allApps = new();
     private readonly Dictionary<string, string> _cleanupRecoveryByApp = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, KeptResult> _keptResults = new(StringComparer.Ordinal);
+    private sealed record KeptResult(InstalledApp App, Action Show);
+    private sealed record CleanupRun(InstalledApp App, int Generation, string? Verb = null, string? State = null, string? Detail = null)
+    {
+        public string AppId => App.AppId!;
+        public bool KeepsResult => State is not null;
+    }
+    private CleanupRun? _run;
     private string? _lastCleanupRollbackPath;
     private int _selectionGeneration;
     private bool _listChanged;
@@ -170,11 +181,16 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
         var installed = apps.Select(a => a.AppId).OfType<string>().ToHashSet(StringComparer.Ordinal);
         var removed = saved.Where(recovery => !installed.Contains(recovery.AppId)).ToArray();
         foreach (var recovery in removed) _cleanupRecoveryByApp.TryAdd(recovery.AppId, recovery.ManifestPath);
-        _allApps.AddRange(apps
+        var rows = apps
             .Where(a => a.IsListable && !Naming.IsNonActionable(a.DisplayName)
                         && !LocalDisplayFilter.Default.IsHidden(a.FriendlyName, null, a.PackageId ?? a.DisplayName))
             .Concat(removed.Select(recovery => new InstalledApp { AppId = recovery.AppId, DisplayName = string.IsNullOrWhiteSpace(recovery.DisplayName) ? "Removed app" : recovery.DisplayName, Removed = true, RemovalUnconfirmed = !complete }))
-            .OrderBy(a => a.FriendlyName, StringComparer.OrdinalIgnoreCase));
+            .ToList();
+        var rowIds = rows.Select(a => a.AppId).OfType<string>().ToHashSet(StringComparer.Ordinal);
+        rows.AddRange(_keptResults.Values
+            .Where(kept => !rowIds.Contains(kept.App.AppId!))
+            .Select(kept => new InstalledApp { AppId = kept.App.AppId, DisplayName = kept.App.DisplayName, Removed = true, RemovalUnconfirmed = !complete, ResultWaiting = true }));
+        _allApps.AddRange(rows.OrderBy(a => a.FriendlyName, StringComparer.OrdinalIgnoreCase));
         AppCount = _allApps.Count(a => !a.Removed);
         Sources = inventory?.Sources is { Count: > 0 } s ? string.Join(", ", s.Select(FriendlySource)) : null;
 
@@ -212,7 +228,6 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
     {
         if (value is null) ReloadChangedList();
         _selectionGeneration++;
-        ScanBusy = false;
         RemovalRouteBlocked = false;
         App.Live.DiscardCleanupReview();
         FinalCheckPassed = false;
@@ -280,8 +295,10 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
             CleanupExecutionState = CleanupRestoreAvailable ? "An earlier cleanup of this app can be restored." : "This cleanup can't be restored anymore.";
             CleanupExecutionDetail = "Restore puts back the files that cleanup removed. It does not reinstall the app.";
         }
+        var shown = ShowRunFor(value.AppId);
+        OnPropertyChanged(nameof(ApplyApprovalSummary));
         RefreshActionState();
-        if (!CleanupRestoreAvailable) _ = DiscoverRecoveryAsync(value, _selectionGeneration);
+        if (!CleanupRestoreAvailable && !shown) _ = DiscoverRecoveryAsync(value, _selectionGeneration);
     }
 
     private void BlockRemovalRoute()
@@ -301,7 +318,7 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
         }
 
         var generation = _selectionGeneration;
-        ScanBusy = true;
+        var run = BeginRun(app);
         OfficialPreviewState = "Checking app path...";
         RemovalPathReviewed = false;
         CleanupPlanReady = false;
@@ -380,7 +397,7 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
         }
         finally
         {
-            FinishOperation(generation);
+            FinishOperation(run);
         }
     }
 
@@ -394,7 +411,7 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
         }
 
         var generation = _selectionGeneration;
-        ScanBusy = true;
+        var run = BeginRun(app);
         Leftovers.Clear();
         LeftoverSummary = null;
         LeftoverState = "Scanning for leftovers...";
@@ -445,7 +462,7 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
         }
         finally
         {
-            FinishOperation(generation);
+            FinishOperation(run);
         }
     }
 
@@ -459,7 +476,7 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
         }
 
         var generation = _selectionGeneration;
-        ScanBusy = true;
+        var run = BeginRun(app);
         CleanupPlanState = "Building the removal list...";
         CleanupPlanReady = false;
         RemoverPathApproved = false;
@@ -512,7 +529,7 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
         }
         finally
         {
-            FinishOperation(generation);
+            FinishOperation(run);
         }
     }
 
@@ -526,7 +543,7 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
         }
 
         var generation = _selectionGeneration;
-        ScanBusy = true;
+        var run = BeginRun(app);
         CleanupExecutionState = "Running final check...";
         CleanupExecutionDetail = "Checking the reviewed route and removal list. Nothing will be removed.";
         try
@@ -546,7 +563,7 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
         }
         finally
         {
-            FinishOperation(generation);
+            FinishOperation(run);
         }
     }
 
@@ -559,27 +576,26 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
             return;
         }
 
-        var generation = _selectionGeneration;
-        ScanBusy = true;
-        CleanupExecutionState = "Applying reviewed cleanup...";
-        CleanupExecutionDetail = ApplyApprovalSummary;
+        var run = BeginRun(app, "cleaning up", "Applying reviewed cleanup...", ApplyApprovalSummary);
         try
         {
+            using var running = RunningChanges.Begin();
             var result = await App.Live.RequestUninstallCleanupApplyResultAsync(app.AppId!, RemoverPathApproved, CleanupListApproved, true);
             CaptureRecovery(app.AppId!, result);
-            if (!IsCurrent(app, generation)) return;
-            SummarizeCleanupExecution(result.Value, app.AppId!, result.Error, true);
+            ShowResult(run, () => SummarizeCleanupExecution(result.Value, run.AppId, result.Error, true));
+        }
+        catch (InvalidOperationException error) when (error.Message == RunningChanges.Installing)
+        {
+            CleanupExecutionState = "Cleanup didn't start.";
+            CleanupExecutionDetail = error.Message;
         }
         catch (Exception error)
         {
-            if (IsCurrent(app, generation))
-            {
-                SummarizeCleanupExecution(null, app.AppId!, error.Message, true);
-            }
+            ShowResult(run, () => SummarizeCleanupExecution(null, run.AppId, error.Message, true));
         }
         finally
         {
-            FinishOperation(generation);
+            FinishOperation(run);
         }
     }
 
@@ -588,7 +604,8 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
     {
         var app = SelectedApp;
         var rollbackPath = _lastCleanupRollbackPath;
-        if (app is null || string.IsNullOrWhiteSpace(app.AppId) || string.IsNullOrWhiteSpace(rollbackPath) || ScanBusy)
+        if (ScanBusy) return;
+        if (app is null || string.IsNullOrWhiteSpace(app.AppId) || string.IsNullOrWhiteSpace(rollbackPath))
         {
             CleanupExecutionState = "Nothing to restore yet.";
             CleanupExecutionDetail = "Restore appears after an apply run writes rollback data.";
@@ -596,12 +613,10 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
             return;
         }
 
-        var generation = _selectionGeneration;
-        ScanBusy = true;
-        CleanupExecutionState = "Restoring cleanup...";
-        CleanupExecutionDetail = "Reading the rollback file and putting cleanup targets back.";
+        var run = BeginRun(app, "restoring", "Restoring cleanup...", "Reading the rollback file and putting cleanup targets back.");
         try
         {
+            using var running = RunningChanges.Begin();
             var result = await App.Live.RestoreUninstallCleanupResultAsync(rollbackPath);
             var restored = result.Error is null && IsSuccessfulRestore(result.Value, rollbackPath);
             var markFailed = false;
@@ -610,26 +625,28 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
                 try { App.Live.MarkCleanupRestored(rollbackPath); }
                 catch (Exception error) { AppLog.Write(nameof(UninstallCleanupViewModel), error.ToString()); markFailed = true; }
             }
-            if (restored && _cleanupRecoveryByApp.TryGetValue(app.AppId!, out var retained)
+            if (restored && _cleanupRecoveryByApp.TryGetValue(run.AppId, out var retained)
                 && string.Equals(retained, rollbackPath, StringComparison.Ordinal))
             {
-                _cleanupRecoveryByApp.Remove(app.AppId!);
+                _cleanupRecoveryByApp.Remove(run.AppId);
             }
-            if (!IsCurrent(app, generation)) return;
-            SummarizeCleanupRestore(result.Value, result.Error, restored);
-            if (markFailed) CleanupExecutionDetail = ((CleanupExecutionDetail ?? "") + " The app couldn't save that this restore finished, so it may offer it again after you reopen the app. Restoring again is safe.").Trim();
+            ShowResult(run, () =>
+            {
+                SummarizeCleanupRestore(result.Value, result.Error, restored);
+                if (markFailed) CleanupExecutionDetail = ((CleanupExecutionDetail ?? "") + " The app couldn't save that this restore finished, so it may offer it again after you reopen the app. Restoring again is safe.").Trim();
+            });
         }
         catch (Exception error)
         {
-            if (IsCurrent(app, generation))
+            ShowResult(run, () =>
             {
                 CleanupExecutionState = "Restore failed.";
                 CleanupExecutionDetail = error.Message;
-            }
+            });
         }
         finally
         {
-            FinishOperation(generation);
+            FinishOperation(run);
         }
     }
 
@@ -857,9 +874,46 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
             && ReferenceEquals(SelectedApp, app)
             && string.Equals(SelectedApp?.AppId, app.AppId, StringComparison.Ordinal);
 
-    private void FinishOperation(int generation)
+    private CleanupRun BeginRun(InstalledApp app, string? verb = null, string? state = null, string? detail = null)
     {
-        if (generation != _selectionGeneration) return;
+        var run = new CleanupRun(app, _selectionGeneration, verb, state, detail);
+        _run = run;
+        ScanBusy = true;
+        if (run.KeepsResult) ShowRunFor(run.AppId);
+        return run;
+    }
+
+    private bool ShowRunFor(string? appId)
+    {
+        if (_run is { KeepsResult: true } run && run.AppId == appId)
+        {
+            CleanupExecutionState = run.State!;
+            CleanupExecutionDetail = run.Detail;
+            return true;
+        }
+        if (appId is null || !_keptResults.Remove(appId, out var kept)) return false;
+        kept.Show();
+        return true;
+    }
+
+    private string? WaitingNotice => _run is not { } run || run.Generation == _selectionGeneration && SelectedApp?.AppId == run.AppId
+        ? null
+        : !run.KeepsResult
+            ? "Still checking " + run.App.FriendlyName + ". Wait for it to finish."
+            : SelectedApp?.AppId == run.AppId
+                ? "Still " + run.Verb + " this app. The result shows here when it's done."
+                : "Still " + run.Verb + " " + run.App.FriendlyName + ". Pick it again to see the result.";
+
+    private void ShowResult(CleanupRun run, Action show)
+    {
+        if (SelectedApp?.AppId == run.AppId) show();
+        else _keptResults[run.AppId] = new KeptResult(run.App, show);
+    }
+
+    private void FinishOperation(CleanupRun run)
+    {
+        if (!ReferenceEquals(_run, run)) return;
+        _run = null;
         ScanBusy = false;
         if (!CleanupRestoreAvailable && SelectedApp?.AppId is { Length: > 0 } selected && _cleanupRecoveryByApp.ContainsKey(selected)) SetSelectedRecovery(selected);
         RefreshActionState();
@@ -928,7 +982,7 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
         catch (Exception error) { AppLog.Write(nameof(UninstallCleanupViewModel), error.ToString()); return; }
         if (!IsCurrent(app, generation) || !IsValidRecovery(saved, app.AppId)) return;
         _cleanupRecoveryByApp.TryAdd(app.AppId, saved!);
-        if (ScanBusy || CleanupRestoreAvailable) return;
+        if (_run?.AppId == app.AppId || CleanupRestoreAvailable) return;
         SetSelectedRecovery(app.AppId);
         CleanupExecutionState = "An earlier cleanup of this app can be restored.";
         CleanupExecutionDetail = "Restore puts back the files that cleanup removed. It does not reinstall the app.";

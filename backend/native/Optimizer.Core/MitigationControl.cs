@@ -8,6 +8,12 @@ public static class MitigationControl
     public const string SnapshotField = "$registry";
     private const string Kernel = @"SYSTEM\CurrentControlSet\Control\Session Manager\kernel";
     private static readonly string[] Names = ["MitigationOptions", "MitigationAuditOptions", "EAFModules"];
+    private static readonly Lazy<string?> ReadbackMissing = new(() =>
+    {
+        try { PowerShellControls.Read(new("mitigations", "system", "policy")); return null; }
+        catch (InvalidOperationException error) when (error.Message.EndsWith(" is not available with this Windows version.", StringComparison.Ordinal)) { return error.Message; }
+        catch (Exception) { return null; }
+    });
     private sealed record Field(string Name, int Bit, string Override, bool Audit = false, string? Parent = null, bool HasOption = false);
     private static readonly Field[] Fields =
     [
@@ -56,6 +62,7 @@ public static class MitigationControl
     public static TweakControlRead Read(ControlAddress address)
     {
         if (address.Target != "system" || address.Property != "policy") throw new InvalidDataException("Unknown mitigation policy target.");
+        if (ReadbackMissing.Value is { } missing) throw new InvalidDataException(missing);
         using var transaction = RegistryTransaction.Begin();
         var reads = Names.Select(name => RegistryNative.ReadTweak(Address(name), transaction)).ToArray();
         if (reads.Any(read => !read.KeyExists)) throw new InvalidDataException("The system mitigation registry key is missing.");

@@ -36,11 +36,431 @@ if (args is ["poll-guard"])
     return;
 }
 
+if (args is ["firmware-fixture", var uiFixture, var uiRoot]) { Console.WriteLine(FirmwarePageChecks.Prepare(uiFixture, uiRoot)); return; }
+
+if (args is ["firmware", var firmwareFixture])
+{
+    await FirmwarePageChecks.RunAsync(Check, firmwareFixture);
+    Console.WriteLine($"Completed {count} BIOS page checks.");
+    return;
+}
+
+if (args is ["update-install"])
+{
+    await UpdateInstallChecks.RunAsync(Check);
+    Console.WriteLine($"Completed {count} update install checks.");
+    return;
+}
+
 if (args is ["revisit"])
 {
     await RevisitChecks.RunAsync(Check);
     Console.WriteLine($"Completed {count} app sweep UI checks.");
     return;
+}
+
+if (args is ["cleanup-run"])
+{
+    await CleanupRunChecks.RunAsync(Check);
+    Console.WriteLine($"Completed {count} leftover cleanup run checks.");
+    return;
+}
+
+if (args.Length == 0 || (args.Length <= 2 && args[0] is "restore-summary" or "restore-summary-setup-failure" or "restore-summary-body-failure" or "restore-summary-cleanup-failure" or "restore-summary-body-cleanup-failure"))
+{
+    var keepReceipts = args.Length > 1;
+    string? output = null;
+    string? fixtures = null;
+    DirectoryInfo? generatedOutput = null;
+    var saved = new List<(PropertyInfo Property, object? Value)>();
+    var restoredProperties = 0;
+    Exception? bodyError = null;
+    var cleanupErrors = new List<Exception>();
+    FileStream? cleanupHeld = null;
+    var setupBlockerCreated = false;
+    var fault = args.Length == 0 ? "" : args[0];
+    var failures = new List<string>();
+    var observations = new List<object>();
+    void Verify(bool condition, string message)
+    {
+        if (condition) Check(true, message);
+        else { failures.Add(message); Console.WriteLine("FAIL " + message); }
+    }
+    void Capture(string name, string receipt, PerformanceProfilesViewModel model)
+        => observations.Add(new { name, receipt = JsonSerializer.Deserialize<JsonElement>(receipt), model.ActionTitle, model.ActionDetail,
+            model.RestoreAvailable, model.MatchTuneStatus, model.MatchTuneDetail, model.MatchTuneRestoreAvailable, model.GovernorDetail,
+            recoveryPath = App.Live.ProcessProfileRecovery?.Path, App.Live.LastProcessRestorePath, App.Live.LastGameRestoreRequest });
+    var preview = new[] { new { processName = "Target", controlChanges = Array.Empty<object>(),
+        leftAsSet = new[] { new { control = "priorityClass", currentValue = "BelowNormal" } } } };
+    var restored = new[] { new { processName = "Peer", restoredControls = new[] {
+        new { control = "priorityClass", currentValue = "AboveNormal", proposedValue = "Normal", outcome = "applied" } } } };
+    var applied = new[] { new { processName = "Peer", appliedControls = new[] {
+        new { control = "priorityClass", currentValue = "AboveNormal", proposedValue = "Normal", outcome = "applied" } },
+        controlChanges = new[] { new { control = "gpuPriority", currentValue = "Normal", proposedValue = "Realtime", outcome = "failed" } } } };
+    var kept = new[] { new { processName = "Target", control = "priorityClass", currentValue = "Idle" } };
+    const string reason = "priorityClass: Undo could not confirm another program still holds it. Run Undo again.";
+    var skipped = new[] { new { processName = "Target", reason } };
+    try
+    {
+        output = keepReceipts ? Path.GetFullPath(args[1]) : (generatedOutput = Directory.CreateTempSubdirectory("restore-summary-")).FullName;
+        fixtures = Path.Combine(output, "fixtures-" + Guid.NewGuid().ToString("N"));
+        if (fault == "restore-summary-setup-failure")
+        {
+            using (File.Create(fixtures)) { setupBlockerCreated = true; }
+        }
+        Directory.CreateDirectory(fixtures);
+        foreach (var property in App.Live.GetType().GetProperties(BindingFlags.Instance | BindingFlags.Public).Where(property => property.CanWrite))
+            saved.Add((property, property.GetValue(App.Live)));
+        if (fault is "restore-summary-cleanup-failure" or "restore-summary-body-cleanup-failure")
+            cleanupHeld = new FileStream(Path.Combine(fixtures, "cleanup-held"), FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None);
+        App.Live.LastError = App.Live.OperationError = App.Live.GameTuneResultError = App.Live.GameTuneRestoreError = null;
+        if (fault is "restore-summary-body-failure" or "restore-summary-body-cleanup-failure") File.ReadAllText(Path.Combine(fixtures, "missing-body.json"));
+        App.Live.ProcessProfileRecovery = null;
+        var backup = Path.Combine(fixtures, "process.json");
+        File.WriteAllText(backup, JsonSerializer.Serialize(new { actionId = "performance.applyProfile", backupId = "summary-backup", profileId = "summary-profile",
+            dryRun = false, snapshots = new[] { new { processId = 123 } } }));
+        var profile = new PerformanceProfilesViewModel();
+        App.Live.ProcessPreviewText = JsonSerializer.Serialize(new { actionId = "performance.previewProfile", dryRun = true, status = "preview", preview,
+            result = new { summary = "Restore preview." } });
+        await profile.PreviewPlanCommand.ExecuteAsync(null);
+        Capture("profile-preview", App.Live.ProcessPreviewText, profile);
+        Verify(profile.ActionDetail.Contains("CPU BelowNormal (left as another program set it)", StringComparison.Ordinal), "Profile preview names the proposed kept value");
+        App.Live.ProcessApplyText = JsonSerializer.Serialize(new { actionId = "performance.applyProfile", dryRun = false, status = "success",
+            backup = new { backupId = "summary-backup", location = backup, rollbackSupported = true },
+            result = new { status = "success", summary = "Applied controls.", changedItems = applied } });
+        await profile.ApplyProfileCommand.ExecuteAsync(null);
+        Verify(profile.RestoreAvailable, "Summary profile apply binds the exact recovery artifact");
+        Verify(profile.ActionDetail.Contains("Peer: CPU AboveNormal → Normal", StringComparison.Ordinal), "Confirmed apply details use applied controls");
+        App.Live.ProcessRestoreText = JsonSerializer.Serialize(new { actionId = "performance.rollbackProfile", dryRun = false, status = "partial", preview,
+            backup = new { backupId = "summary-backup", location = backup },
+            result = new { status = "partial", summary = "Partial restore.", changedItems = restored, leftAsSetItems = Array.Empty<object>(), skippedItems = skipped, restorePendingCount = 1 } });
+        await profile.RestoreProfileCommand.ExecuteAsync(null);
+        Capture("profile-partial", App.Live.ProcessRestoreText, profile);
+        Verify(profile.RestoreAvailable && profile.CanRestoreProfile && App.Live.ProcessProfileRecovery?.Path == backup && App.Live.LastProcessRestorePath == backup,
+            "Partial profile restore retains and requests its exact recovery artifact");
+        Verify(profile.ActionDetail.StartsWith("Partial restore.", StringComparison.Ordinal) && profile.ActionDetail.Contains(reason, StringComparison.Ordinal)
+            && !profile.ActionDetail.Contains("BelowNormal", StringComparison.Ordinal), "Partial profile details report the failed confirmation without a stale kept value");
+        Verify(profile.ActionDetail.Contains("Peer: CPU AboveNormal → Normal", StringComparison.Ordinal), "Partial profile details retain unrelated restored controls");
+        var backendReason = "Restore finished for 1 app(s). 1 app(s) still need attention: Target (PID 123): " + reason + ".";
+        foreach (var identity in new[] { "matched", "shared", "missing-id", "string-id" })
+        {
+            object[] actualSkipped = identity switch
+            {
+                "shared" => [new { processName = "Target", processId = 123, reason }, new { processName = "Other", processId = 124, reason }],
+                "missing-id" => [new { processName = "Target", reason }],
+                "string-id" => [new { processName = "Target", processId = "123", reason }],
+                _ => [new { processName = "Target", processId = 123, reason }],
+            };
+            App.Live.ProcessRestoreText = JsonSerializer.Serialize(new { actionId = "performance.rollbackProfile", dryRun = false, status = "partial", preview,
+                backup = new { backupId = "summary-backup", location = backup },
+                result = new { status = "partial", summary = backendReason, changedItems = restored, leftAsSetItems = Array.Empty<object>(), skippedItems = actualSkipped, restorePendingCount = 1 } });
+            await profile.RestoreProfileCommand.ExecuteAsync(null);
+            Capture("profile-summary-skipped-" + identity, App.Live.ProcessRestoreText, profile);
+            Verify(profile.ActionDetail.Split(reason, StringSplitOptions.None).Length - 1 == (identity == "matched" ? 1 : 2)
+                && (identity != "shared" || profile.ActionDetail.Contains("Other: " + reason, StringComparison.Ordinal)),
+                "Skipped summary deduplication requires the exact numeric process identity: " + identity);
+        }
+        foreach (var completeList in new[] { true, false })
+        {
+            object[] actualKept = completeList ? kept : [kept[0], new { processName = "Other", control = "priorityClass", currentValue = "Idle" }];
+            App.Live.ProcessRestoreText = JsonSerializer.Serialize(new { actionId = "performance.rollbackProfile", dryRun = false, status = "partial", preview,
+                backup = new { backupId = "summary-backup", location = backup },
+                result = new { status = "partial", summary = "Restore completed. Left as another program set it: Target CPU priority (Idle).", changedItems = restored,
+                    leftAsSetItems = actualKept, skippedItems = Array.Empty<object>(), restorePendingCount = 1 } });
+            await profile.RestoreProfileCommand.ExecuteAsync(null);
+            Capture("profile-summary-kept-" + completeList, App.Live.ProcessRestoreText, profile);
+            Verify(profile.ActionDetail.Contains("Peer: CPU AboveNormal → Normal", StringComparison.Ordinal) && (completeList
+                ? profile.ActionDetail.Split("Idle", StringSplitOptions.None).Length - 1 == 1
+                : profile.ActionDetail.Contains("Other: CPU Idle (left as another program set it)", StringComparison.Ordinal)
+                    && profile.ActionDetail.Contains("Target: CPU Idle (left as another program set it)", StringComparison.Ordinal)),
+                "Kept summary deduplication requires the complete actual list: " + completeList);
+        }
+        App.Live.ProcessRestoreText = JsonSerializer.Serialize(new { actionId = "performance.rollbackProfile", dryRun = false, status = "success", preview,
+            backup = new { backupId = "summary-backup", location = backup },
+            result = new { status = "success", summary = "Restore completed.", changedItems = applied, leftAsSetItems = kept, skippedItems = Array.Empty<object>(), restorePendingCount = 0 } });
+        await profile.RestoreProfileCommand.ExecuteAsync(null);
+        Capture("profile-success", App.Live.ProcessRestoreText, profile);
+        Verify(!profile.RestoreAvailable && App.Live.ProcessProfileRecovery is null, "Successful profile restore clears only its exact recovery artifact");
+        Verify(profile.ActionDetail.Contains("Target: CPU Idle (left as another program set it)", StringComparison.Ordinal)
+            && !profile.ActionDetail.Contains("BelowNormal", StringComparison.Ordinal), "Confirmed profile details certify the fresh Idle value only");
+        Verify(profile.ActionDetail.Contains("Peer: CPU AboveNormal → Normal", StringComparison.Ordinal) && !profile.ActionDetail.Contains("Realtime", StringComparison.Ordinal),
+            "Confirmed profile details prefer applied controls over stale control changes");
+
+        var sessionPath = Path.Combine(fixtures, "session.json");
+        var sessionBackup = Path.Combine(fixtures, "game.json");
+        File.WriteAllText(sessionBackup, JsonSerializer.Serialize(new { actionId = "performance.gameTune.startSession", backupId = "summary-game-backup",
+            sessionId = "summary-session", profileId = "summary-game", dryRun = false, snapshots = new[] { new { processId = 123 } } }));
+        File.WriteAllText(sessionPath, JsonSerializer.Serialize(new { sessionId = "summary-session", profileId = "summary-game", dryRun = false,
+            restorable = true, backupManifestPath = sessionBackup }));
+        var game = new PerformanceProfilesViewModel { HasGameRunning = true };
+        App.Live.GameTuneText = JsonSerializer.Serialize(new { actionId = "performance.gameTune.startSession", dryRun = true, status = "preview", preview,
+            result = new { summary = "Game restore preview." } });
+        await game.CheckMatchTuneCommand.ExecuteAsync(null);
+        Capture("game-preview", App.Live.GameTuneText, game);
+        Verify(game.MatchTuneDetail.Contains("CPU BelowNormal (left as another program set it)", StringComparison.Ordinal), "Game preview names the proposed kept value");
+        App.Live.GameTuneText = JsonSerializer.Serialize(new { actionId = "performance.gameTune.startSession", dryRun = false, status = "active",
+            sessionId = "summary-session", profileId = "summary-game", sessionPath, backupManifestPath = sessionBackup, restorable = true,
+            summary = new { changedItemCount = 1 }, changedItems = applied });
+        await game.StartMatchTuneCommand.ExecuteAsync(null);
+        Verify(game.MatchTuneRestoreAvailable, "Summary game start binds the exact session recovery artifact");
+        App.Live.GameTuneRestoreText = JsonSerializer.Serialize(new { actionId = "performance.gameTune.stopSession", dryRun = false, status = "completed",
+            sessionId = "summary-session", profileId = "summary-game", sessionPath, backupManifestPath = sessionBackup, restorable = true, preview,
+            result = new { status = "partial", summary = "Partial game restore.", restoredItems = restored, leftAsSetItems = Array.Empty<object>(), skippedItems = skipped } });
+        await game.RestoreMatchTuneCommand.ExecuteAsync(null);
+        Capture("game-partial", App.Live.GameTuneRestoreText, game);
+        Verify(game.MatchTuneRestoreAvailable && game.CanRestoreMatchTune && App.Live.LastGameRestoreRequest == ("summary-session", sessionPath, sessionBackup),
+            "Partial game restore retains and requests its exact session artifact");
+        Verify(game.MatchTuneDetail.StartsWith("Partial game restore.", StringComparison.Ordinal) && game.MatchTuneDetail.Contains(reason, StringComparison.Ordinal)
+            && !game.MatchTuneDetail.Contains("BelowNormal", StringComparison.Ordinal), "Partial game details report the failed confirmation without a stale kept value");
+        Verify(game.MatchTuneDetail.Contains("Peer: CPU AboveNormal → Normal", StringComparison.Ordinal), "Confirmed game details use restored-item evidence when changed items are absent");
+        var mixed = new object?[] { null, new { processName = "Peer", controlChanges = new object?[] { null,
+            new { control = "priorityClass", currentValue = "AboveNormal", proposedValue = "Normal", outcome = "applied" },
+            new { control = "gpuPriority", currentValue = "Normal", proposedValue = "Realtime", outcome = "failed" } } } };
+        App.Live.GameTuneRestoreText = JsonSerializer.Serialize(new { actionId = "performance.gameTune.stopSession", dryRun = false, status = "completed",
+            sessionId = "summary-session", profileId = "summary-game", sessionPath, backupManifestPath = sessionBackup, restorable = false, preview,
+            result = new { status = "rolledBack", summary = "Game restore completed.", restoredItems = mixed, leftAsSetItems = kept, skippedItems = Array.Empty<object>() } });
+        await game.RestoreMatchTuneCommand.ExecuteAsync(null);
+        Capture("game-success", App.Live.GameTuneRestoreText, game);
+        Verify(!game.MatchTuneRestoreAvailable, "Successful game restore finishes its exact session recovery");
+        Verify(game.MatchTuneDetail.Contains("Target: CPU Idle (left as another program set it)", StringComparison.Ordinal)
+            && !game.MatchTuneDetail.Contains("BelowNormal", StringComparison.Ordinal), "Confirmed game details certify the fresh Idle value only");
+        Verify(game.MatchTuneDetail.Contains("Peer: CPU AboveNormal → Normal", StringComparison.Ordinal) && !game.MatchTuneDetail.Contains("Realtime", StringComparison.Ordinal),
+            "Confirmed game details ignore malformed entries and explicitly failed controls without hiding the restored peer");
+        App.Live.Classification = new ProcessClassification { Processes = [new ProcessItem { Name = "Target", Category = "foregroundGame" }] };
+        App.Live.GameTuneStatusError = App.Live.GovernorStatusError = null;
+        foreach (var retained in new[] { false, true })
+        {
+            File.WriteAllText(sessionPath, JsonSerializer.Serialize(new { sessionId = "summary-session", profileId = "summary-game", dryRun = false,
+                restorable = retained, backupManifestPath = sessionBackup }));
+            App.Live.GameTuneStatusText = JsonSerializer.Serialize(new { actionId = "performance.gameTune.sessionStatus", dryRun = false,
+                status = retained ? "restorable" : "completed", sessionId = "summary-session", profileId = "summary-game", sessionPath,
+                backupManifestPath = sessionBackup, restorable = retained, active = false, completed = !retained, failed = false,
+                summary = new { changedItemCount = 1, restoredItemCount = 1, skippedItemCount = retained ? 1 : 0, pollCount = 1 },
+                changedItems = new[] { new { processName = "StaleApply", appliedControls = new[] {
+                    new { control = "priorityClass", currentValue = "Normal", proposedValue = "AboveNormal", outcome = "applied" } } } },
+                restoredItems = restored, leftAsSetItems = kept, skippedItems = retained ? skipped : [], latestLogs = Array.Empty<object>(), preview });
+            var reopened = new PerformanceProfilesViewModel();
+            await reopened.ReloadAsync();
+            Capture("game-reopen-" + retained, App.Live.GameTuneStatusText, reopened);
+            Verify(reopened.MatchTuneDetail.Contains("Target: CPU Idle (left as another program set it)", StringComparison.Ordinal)
+                && reopened.MatchTuneDetail.Contains("Peer: CPU AboveNormal → Normal", StringComparison.Ordinal)
+                && !reopened.MatchTuneDetail.Contains("StaleApply", StringComparison.Ordinal) && !reopened.MatchTuneDetail.Contains("BelowNormal", StringComparison.Ordinal),
+                "Reopened game status renders persisted kept and restored controls only: " + retained);
+            Verify(reopened.MatchTuneRestoreAvailable == retained && (!retained || reopened.MatchTuneDetail.Contains(reason, StringComparison.Ordinal)),
+                "Reopened game status retains exact recovery and per-control failure: " + retained);
+            await reopened.ReloadAsync();
+            Verify(reopened.MatchTuneDetail.Contains("CPU Idle (left as another program set it)", StringComparison.Ordinal),
+                "Repeated public Reload keeps the certified external value: " + retained);
+        }
+        App.Live.GameTuneStatusText = JsonSerializer.Serialize(new { actionId = "performance.gameTune.sessionStatus", dryRun = false, status = "completed",
+            sessionId = "summary-session", profileId = "summary-game", sessionPath, backupManifestPath = sessionBackup, restorable = false,
+            summary = new { changedItemCount = 0, restoredItemCount = 0, skippedItemCount = 0, pollCount = 0 },
+            leftAsSetItems = kept, restoredItems = Array.Empty<object>(), latestLogs = Array.Empty<object>() });
+        var keptOnly = new PerformanceProfilesViewModel();
+        await keptOnly.ReloadAsync();
+        Capture("game-reopen-kept-only", App.Live.GameTuneStatusText, keptOnly);
+        Verify(keptOnly.MatchTuneDetail.Contains("Target: CPU Idle (left as another program set it)", StringComparison.Ordinal) && !keptOnly.MatchTuneRestoreAvailable,
+            "Kept-only legacy session status names its persisted result without logs or counts");
+        foreach (var phase in new[] { "before", "after", "legacy", "legacy-finished" })
+        foreach (var status in phase switch { "before" => new[] { "active", "restorable", "failed" }, "after" => new[] { "completed", "failed", "partial" },
+            "legacy" => new[] { "active", "restorable" }, _ => new[] { "completed", "failed" } })
+        foreach (var variant in phase switch { "before" => new[] { "empty", "missing", "null", "scalar" }, "legacy" => new[] { "empty", "kept" }, _ => new[] { "empty" } })
+        {
+            var retained = status != "completed";
+            File.WriteAllText(sessionPath, JsonSerializer.Serialize(new { sessionId = "summary-session", profileId = "summary-game", dryRun = false,
+                restorable = retained, backupManifestPath = sessionBackup }));
+            var showApplied = phase == "before" && status != "failed" || phase == "legacy" && variant != "kept";
+            var showKept = variant == "kept" || phase == "after" && status != "completed";
+            var receipt = new Dictionary<string, object?> { ["actionId"] = "performance.gameTune.sessionStatus", ["dryRun"] = false,
+                ["status"] = status, ["sessionId"] = "summary-session", ["profileId"] = "summary-game", ["sessionPath"] = sessionPath,
+                ["backupManifestPath"] = sessionBackup, ["restorable"] = retained, ["changedItems"] = applied,
+                ["leftAsSetItems"] = showKept ? kept : Array.Empty<object>(), ["skippedItems"] = phase == "after" && retained ? skipped : Array.Empty<object>(),
+                ["summary"] = new { changedItemCount = 1, restoredItemCount = 0, skippedItemCount = phase == "after" && retained ? 1 : 0, pollCount = 1 } };
+            if (phase is "before" or "after") receipt["restoreAttempted"] = phase == "after";
+            if (variant != "missing") receipt["restoredItems"] = variant switch { "null" => null, "scalar" => "unavailable", _ => Array.Empty<object>() };
+            App.Live.GameTuneStatusText = JsonSerializer.Serialize(receipt);
+            var reloaded = new PerformanceProfilesViewModel();
+            await reloaded.ReloadAsync();
+            Capture("game-status-phase-" + phase + "-" + status + "-" + variant, App.Live.GameTuneStatusText, reloaded);
+            Verify(reloaded.MatchTuneDetail.Contains("Peer: CPU AboveNormal → Normal", StringComparison.Ordinal) == showApplied
+                && !reloaded.MatchTuneDetail.Contains("Realtime", StringComparison.Ordinal)
+                && (!showKept || reloaded.MatchTuneDetail.Contains("Target: CPU Idle (left as another program set it)", StringComparison.Ordinal))
+                && (phase != "after" || !retained || reloaded.MatchTuneDetail.Contains(reason, StringComparison.Ordinal))
+                && reloaded.MatchTuneRestoreAvailable == retained,
+                "Public Reload distinguishes applied controls from completed Undo evidence: " + phase + "/" + status + "/" + variant);
+        }
+        if (Environment.GetEnvironmentVariable("ROO_INDUSTRIES_RESTORE_OPERATION_ARTIFACTS") is { Length: > 0 } operationArtifacts)
+        {
+            foreach (var receiptPath in new[] { "opus/status.json", "legacy-completed/status.json", "legacy-failed/status.json" })
+            {
+                App.Live.GameTuneStatusText = File.ReadAllText(Path.Combine(operationArtifacts, receiptPath));
+                var reloaded = new PerformanceProfilesViewModel();
+                await reloaded.ReloadAsync();
+                Capture("game-raw-legacy-" + receiptPath, App.Live.GameTuneStatusText, reloaded);
+                using var rawStatus = JsonDocument.Parse(App.Live.GameTuneStatusText);
+                Verify(rawStatus.RootElement.GetProperty("restoreAttempted").ValueKind == JsonValueKind.False
+                    && !reloaded.MatchTuneDetail.Contains("CPU Normal → AboveNormal", StringComparison.Ordinal)
+                    && reloaded.MatchTuneDetail.Contains("skipped", StringComparison.Ordinal)
+                    && reloaded.MatchTuneRestoreAvailable == rawStatus.RootElement.GetProperty("restorable").GetBoolean(),
+                    "Public Reload hides stale apply from a real explicit-false legacy zero-write GetStatus: " + receiptPath);
+            }
+            App.Live.GovernorStatusText = File.ReadAllText(Path.Combine(operationArtifacts, "opus/gov-status.json"));
+            var governorReloaded = new PerformanceProfilesViewModel();
+            await governorReloaded.ReloadAsync();
+            Capture("governor-raw-restored-status", App.Live.GovernorStatusText, governorReloaded);
+            Verify(governorReloaded.GovernorDetail == "Finished: 1 changed, 1 restored, 0 skipped across 4 checks.",
+                "Public Reload renders the real restored governor status as counts without stale apply detail");
+        }
+        foreach (var status in new[] { "completed", "failed", "partial", "unknown", "active", "restorable" })
+        foreach (var flag in new[] { "false", "true", "null", "malformed", "missing" })
+        {
+            var retained = status != "completed";
+            File.WriteAllText(sessionPath, JsonSerializer.Serialize(new { sessionId = "summary-session", profileId = "summary-game", dryRun = false,
+                restorable = retained, backupManifestPath = sessionBackup }));
+            var receipt = new Dictionary<string, object?> { ["actionId"] = "performance.gameTune.sessionStatus", ["dryRun"] = false,
+                ["status"] = status, ["sessionId"] = "summary-session", ["profileId"] = "summary-game", ["sessionPath"] = sessionPath,
+                ["backupManifestPath"] = sessionBackup, ["restorable"] = retained, ["changedItems"] = applied,
+                ["restoredItems"] = Array.Empty<object>(), ["leftAsSetItems"] = Array.Empty<object>(), ["skippedItems"] = skipped,
+                ["summary"] = new { changedItemCount = 1, restoredItemCount = 0, skippedItemCount = 1, pollCount = 1 } };
+            if (flag != "missing") receipt["restoreAttempted"] = flag switch { "false" => false, "true" => true, "null" => null, _ => "false" };
+            App.Live.GameTuneStatusText = JsonSerializer.Serialize(receipt);
+            var reloaded = new PerformanceProfilesViewModel();
+            await reloaded.ReloadAsync();
+            Capture("game-status-final-phase-" + status + "-" + flag, App.Live.GameTuneStatusText, reloaded);
+            var showApplied = status is "active" or "restorable" && flag is "false" or "missing";
+            Verify(reloaded.MatchTuneDetail.Contains("Peer: CPU AboveNormal → Normal", StringComparison.Ordinal) == showApplied
+                && reloaded.MatchTuneDetail.Contains(reason, StringComparison.Ordinal) && reloaded.MatchTuneRestoreAvailable == retained,
+                "Public Reload limits historical apply details to active/restorable without known Undo: " + status + "/" + flag);
+        }
+        foreach (var governorState in new[] { "active", "restorable", "failed", "completed" })
+        {
+            App.Live.GovernorStatusText = JsonSerializer.Serialize(new { actionId = "performance.governor.sessionStatus", dryRun = false,
+                status = governorState, restorable = false, changedItems = applied, restoredItems = restored,
+                summary = new { changedItemCount = 1, restoredItemCount = 1, skippedItemCount = 0, pollCount = 2 } });
+            var reloaded = new PerformanceProfilesViewModel();
+            await reloaded.ReloadAsync();
+            Capture("governor-status-counts-" + governorState, App.Live.GovernorStatusText, reloaded);
+            Verify(reloaded.GovernorDetail.Contains("1 changed, 1 restored, 0 skipped across 2 checks.", StringComparison.Ordinal)
+                && !reloaded.GovernorDetail.Contains("CPU", StringComparison.Ordinal),
+                "Governor status keeps counts without historical control rows: " + governorState);
+        }
+        App.Live.GovernorResultError = App.Live.GovernorRestoreError = null;
+        App.Live.GovernorText = JsonSerializer.Serialize(new { actionId = "performance.governor.startSession", dryRun = true, status = "preview", preview,
+            result = new { summary = "Governor preview." } });
+        var governorActions = new PerformanceProfilesViewModel();
+        await governorActions.CheckGovernorCommand.ExecuteAsync(null);
+        Capture("governor-action-preview", App.Live.GovernorText, governorActions);
+        Verify(governorActions.GovernorDetail.Contains("Target: CPU BelowNormal (left as another program set it)", StringComparison.Ordinal),
+            "Governor preview action retains its preview control rows");
+        App.Live.GovernorText = JsonSerializer.Serialize(new { actionId = "performance.governor.startSession", dryRun = false, status = "completed", restorable = false,
+            result = new { summary = "Governor apply.", changedItems = applied } });
+        await governorActions.StartGovernorCommand.ExecuteAsync(null);
+        Capture("governor-action-apply", App.Live.GovernorText, governorActions);
+        Verify(governorActions.GovernorDetail.Contains("Peer: CPU AboveNormal → Normal", StringComparison.Ordinal),
+            "Governor confirmed action retains actual applied control rows");
+        var governorSession = Path.Combine(fixtures, "governor-session.json");
+        var governorBackup = Path.Combine(fixtures, "governor-backup.json");
+        File.WriteAllText(governorBackup, JsonSerializer.Serialize(new { actionId = "performance.governor.startSession", dryRun = false,
+            sessionId = "summary-governor", profileId = "governor-profile", backupId = "governor-backup", snapshots = new[] { new { processId = 123 } } }));
+        File.WriteAllText(governorSession, JsonSerializer.Serialize(new { sessionId = "summary-governor", profileId = "governor-profile",
+            dryRun = false, restorable = true, backupManifestPath = governorBackup }));
+        App.Live.GovernorText = JsonSerializer.Serialize(new { actionId = "performance.governor.startSession", dryRun = false, status = "restorable",
+            sessionId = "summary-governor", profileId = "governor-profile", sessionPath = governorSession, backupManifestPath = governorBackup, restorable = true });
+        await governorActions.StartGovernorCommand.ExecuteAsync(null);
+        App.Live.GovernorRestoreText = JsonSerializer.Serialize(new { actionId = "performance.governor.stopSession", dryRun = false, status = "completed",
+            sessionId = "summary-governor", sessionPath = governorSession, backupManifestPath = governorBackup, restorable = false,
+            result = new { status = "rolledBack", summary = "Governor restored.", restoredItems = restored } });
+        await governorActions.RestoreGovernorCommand.ExecuteAsync(null);
+        Capture("governor-action-restore", App.Live.GovernorRestoreText, governorActions);
+        Verify(governorActions.GovernorDetail.Contains("Peer: CPU AboveNormal → Normal", StringComparison.Ordinal) && !governorActions.GovernorRestoreAvailable,
+            "Governor confirmed restore retains actual restored control rows and closes its exact recovery");
+        if (Environment.GetEnvironmentVariable("ROO_INDUSTRIES_RESTORE_BACKEND_ARTIFACTS") is { Length: > 0 } backendArtifacts)
+        {
+        foreach (var afterUndo in new[] { false, true })
+        {
+            var scenario = "game-pending-BelowNormal-BelowNormal";
+            App.Live.GameTuneStatusText = File.ReadAllText(Path.Combine(backendArtifacts, scenario, afterUndo ? "status-first.json" : "status-before.json"));
+            var recordedSession = Path.Combine(backendArtifacts, scenario, "session.json");
+            var afterRetry = File.ReadAllText(recordedSession);
+            try
+            {
+                File.WriteAllText(recordedSession, File.ReadAllText(Path.Combine(backendArtifacts, scenario, afterUndo ? "session-first.json" : "session-before.json")));
+                var reloaded = new PerformanceProfilesViewModel();
+                await reloaded.ReloadAsync();
+                Capture("game-real-status-phase-" + afterUndo, App.Live.GameTuneStatusText, reloaded);
+                using var statusDocument = JsonDocument.Parse(App.Live.GameTuneStatusText);
+                var phaseKnown = statusDocument.RootElement.TryGetProperty("restoreAttempted", out var attempted)
+                    && attempted.ValueKind == (afterUndo ? JsonValueKind.True : JsonValueKind.False);
+                Verify(phaseKnown && (afterUndo
+                    ? !reloaded.MatchTuneRestoreAvailable && reloaded.MatchTuneDetail.Contains("Target: CPU BelowNormal (left as another program set it)", StringComparison.Ordinal)
+                        && !reloaded.MatchTuneDetail.Contains("OldApply", StringComparison.Ordinal)
+                    : reloaded.MatchTuneRestoreAvailable && reloaded.MatchTuneDetail.Contains("OldApply: CPU Normal → AboveNormal", StringComparison.Ordinal)),
+                    "Public Reload consumes the actual GetStatus Undo phase without rewriting its envelope: " + afterUndo);
+            }
+            finally { File.WriteAllText(recordedSession, afterRetry); }
+        }
+        foreach (var partial in new[] { false, true })
+        {
+            var scenario = partial ? "game-applied-AboveNormal-AboveNormal-gpu" : "game-pending-BelowNormal-BelowNormal";
+            App.Live.GameTuneStatusText = File.ReadAllText(Path.Combine(backendArtifacts, scenario, "status-first.json"));
+            var recordedSession = Path.Combine(backendArtifacts, scenario, "session.json");
+            var afterRetry = File.ReadAllText(recordedSession);
+            try
+            {
+                File.WriteAllText(recordedSession, File.ReadAllText(Path.Combine(backendArtifacts, scenario, "session-first.json")));
+                var reopened = new PerformanceProfilesViewModel();
+                await reopened.ReloadAsync();
+                Capture("game-real-backend-status-" + partial, App.Live.GameTuneStatusText, reopened);
+                Verify(partial
+                    ? reopened.MatchTuneRestoreAvailable && reopened.MatchTuneDetail.Contains("Target: CPU AboveNormal → Normal", StringComparison.Ordinal)
+                        && reopened.MatchTuneDetail.Contains("GPU", StringComparison.Ordinal) && !reopened.MatchTuneDetail.Contains("GPU High → Normal", StringComparison.Ordinal)
+                    : !reopened.MatchTuneRestoreAvailable && reopened.MatchTuneDetail.Contains("Target: CPU BelowNormal (left as another program set it)", StringComparison.Ordinal),
+                    "Public Reload consumes the unmodified real backend status with simulated process I/O: " + partial);
+            }
+            finally { File.WriteAllText(recordedSession, afterRetry); }
+        }
+        }
+        if (failures.Count > 0) throw new InvalidOperationException(string.Join("\n", failures));
+    }
+    catch (Exception restoreSummaryError) { bodyError = restoreSummaryError; }
+    finally
+    {
+        foreach (var entry in saved)
+        {
+            try
+            {
+                entry.Property.SetValue(App.Live, entry.Value);
+                if (!Equals(entry.Property.GetValue(App.Live), entry.Value)) throw new InvalidOperationException("A saved App.Live property was not restored: " + entry.Property.Name);
+                restoredProperties++;
+            }
+            catch (Exception restoreSummaryError) { cleanupErrors.Add(restoreSummaryError); }
+        }
+        try { if (setupBlockerCreated && fixtures is not null) File.Delete(fixtures); }
+        catch (Exception restoreSummaryError) { cleanupErrors.Add(restoreSummaryError); }
+        try { if (fixtures is not null && Directory.Exists(fixtures)) Directory.Delete(fixtures, true); }
+        catch (Exception restoreSummaryError) { cleanupErrors.Add(restoreSummaryError); }
+        if (cleanupHeld is not null)
+        {
+            try { cleanupHeld.Dispose(); }
+            catch (Exception restoreSummaryError) { cleanupErrors.Add(restoreSummaryError); }
+            try { if (fixtures is not null && Directory.Exists(fixtures)) Directory.Delete(fixtures, true); }
+            catch (Exception restoreSummaryError) { cleanupErrors.Add(restoreSummaryError); }
+        }
+        try
+        {
+            if (keepReceipts && output is not null)
+                File.WriteAllText(Path.Combine(output, "receipts.json"), JsonSerializer.Serialize(observations, new JsonSerializerOptions { WriteIndented = true }));
+            else if (generatedOutput is not null)
+                Directory.Delete(generatedOutput.FullName, true);
+        }
+        catch (Exception restoreSummaryError) { cleanupErrors.Add(restoreSummaryError); }
+    }
+    try { Console.WriteLine($"ROO_INDUSTRIES_RESTORE_SUMMARY_CLEANUP:{saved.Count}:{restoredProperties}:{cleanupErrors.Count}"); }
+    catch (Exception restoreSummaryError) { cleanupErrors.Add(restoreSummaryError); }
+    if (bodyError is not null && cleanupErrors.Count == 0) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(bodyError).Throw();
+    if (bodyError is not null) cleanupErrors.Insert(0, bodyError);
+    if (cleanupErrors.Count > 0) throw new AggregateException(cleanupErrors);
+    if (args.Length > 0) { Console.WriteLine($"Completed {count} restore summary UI checks."); return; }
 }
 
 ControlRead Read<T>(T value) => ControlRead.From(value);
@@ -891,21 +1311,26 @@ if (args is [] or ["responses"] or ["cleanup"] or ["race"])
         "A late removal-route result cannot attach to a newly selected app");
 
     var scanA1 = new TaskCompletionSource<LeftoverScan?>(TaskCreationOptions.RunContinuationsAsynchronously);
-    var scanB = new TaskCompletionSource<LeftoverScan?>(TaskCreationOptions.RunContinuationsAsynchronously);
     var scanA2 = new TaskCompletionSource<LeftoverScan?>(TaskCreationOptions.RunContinuationsAsynchronously);
     var aCalls = 0;
-    App.Live.LeftoverScan = id => id == appB.AppId ? scanB.Task : ++aCalls == 1 ? scanA1.Task : scanA2.Task;
+    var bCalls = 0;
+    App.Live.LeftoverScan = id =>
+    {
+        if (id != appB.AppId) return ++aCalls == 1 ? scanA1.Task : scanA2.Task;
+        bCalls++;
+        return Task.FromResult<LeftoverScan?>(EmptyScan(id));
+    };
     cleanup.SelectedApp = appA;
     var firstA = cleanup.ScanLeftoversCommand.ExecuteAsync(null);
     cleanup.SelectedApp = appB;
-    var currentB = cleanup.ScanLeftoversCommand.ExecuteAsync(null);
+    _ = cleanup.ScanLeftoversCommand.ExecuteAsync(null);
     cleanup.SelectedApp = appA;
-    var currentA = cleanup.ScanLeftoversCommand.ExecuteAsync(null);
+    _ = cleanup.ScanLeftoversCommand.ExecuteAsync(null);
+    Check(cleanup.ScanBusy && aCalls == 1 && bCalls == 0, "No B scan or newer A scan starts while the old A scan runs");
     scanA1.SetResult(EmptyScan(appA.AppId!));
     await firstA;
-    scanB.SetResult(EmptyScan(appB.AppId!));
-    await currentB;
-    Check(cleanup.ScanBusy, "Old A and B completions cannot clear the newer A busy state");
+    Check(!cleanup.ScanBusy && !cleanup.LeftoverScanCompleted, "The old A scan unlocks the buttons when it ends without completing the newer A review");
+    var currentA = cleanup.ScanLeftoversCommand.ExecuteAsync(null);
     scanA2.SetResult(new LeftoverScan
     {
         AppId = appA.AppId,
@@ -1040,7 +1465,12 @@ if (args is [] or ["responses"] or ["cleanup"] or ["race"])
                 restoredItems = new[] { new { itemId = "saved", restored = true } },
                 summary = new { restoredCount = 1, blockingGateCount = 0 },
             }));
-            await reopened.RestoreCleanupCommand.ExecuteAsync(null);
+            var markedWhenDone = false;
+            void Marked() { if (!RooIndustries.OptimizationSuite.Services.RunningChanges.Any) markedWhenDone = File.Exists(Path.Combine(runsRoot, "run-a", "restored.json")); }
+            RooIndustries.OptimizationSuite.Services.RunningChanges.Finished += Marked;
+            try { await reopened.RestoreCleanupCommand.ExecuteAsync(null); }
+            finally { RooIndustries.OptimizationSuite.Services.RunningChanges.Finished -= Marked; }
+            Check(markedWhenDone, "Close when done waits until a cleanup restore is saved as finished");
             var again = new UninstallCleanupViewModel { SelectedApp = appA };
             await Task.Delay(200);
             Check(File.Exists(Path.Combine(runsRoot, "run-a", "restored.json")) && !again.CleanupRestoreAvailable,
@@ -1127,8 +1557,10 @@ Check(RooIndustries.OptimizationSuite.Services.BackendScriptPolicy.Timeout(@"C:\
 Check(RooIndustries.OptimizationSuite.Services.BackendScriptPolicy.Timeout(@"C:\x\backend\scripts\Get-BugReportSpecs.ps1") == TimeSpan.FromSeconds(45) && RooIndustries.OptimizationSuite.Services.BackendScriptPolicy.StopWholeTree(@"C:\x\backend\scripts\Get-BugReportSpecs.ps1"),
     "Other backend scripts keep the 45 second limit and stop their whole process tree");
 await BulkRemovalChecks.RunAsync(Check);
+await CleanupRunChecks.RunAsync(Check);
 await RevisitChecks.RunAsync(Check);
 await BugReportChecks.RunAsync(Check);
+await UpdateInstallChecks.RunAsync(Check);
 await PollGuardChecks.RunAsync(Check);
 
 Console.WriteLine($"Completed {count} app sweep UI checks.");

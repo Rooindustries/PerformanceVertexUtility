@@ -20,6 +20,8 @@ Cleanup scans local fixed drives. Network and removable paths are not scanned. A
 
 Cleanup batches retain per-app progress. Stop after this app preserves unstarted entries; resume acknowledges the recorded cancellation without clearing a newer request. Cleanup history and restoration survive desktop restarts. Vendor removal itself is not reversible: recovery restores supported leftover data and does not reinstall the application.
 
+The advanced **Leftover cleanup** tab runs one check, cleanup or restore at a time. You can look at other apps while it runs, but every button stays locked until it ends. A cleanup or restore result shows on its own app when you pick it again. If that app has left the installed list by then, it stays listed until you have seen the result, with no buttons unless a restore is still saved for it.
+
 Desktop operations and backups live under `%LOCALAPPDATA%\RooIndustriesOptimizationSuite\operations`. The whole data folder is writable only by Administrators and SYSTEM; the signed-in user can read it. The sign-in timer task and its worker run without administrator rights, so they keep their state in `%LOCALAPPDATA%\RooIndustriesOptimizationSuite.Timer`, outside the data folder; the app only reads it. Keep them until recovery is no longer needed. The ordinary `tools/scripts/Build-Frontend.ps1` build also publishes the required `Optimizer.Host` helper.
 
 ## Native helper

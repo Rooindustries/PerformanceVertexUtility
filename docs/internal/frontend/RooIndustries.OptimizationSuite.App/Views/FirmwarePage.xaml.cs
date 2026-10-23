@@ -13,14 +13,29 @@ namespace RooIndustries.OptimizationSuite.Views;
 
 public sealed partial class FirmwarePage : Page
 {
-    public FirmwareViewModel ViewModel { get; } = new();
+    public FirmwareViewModel ViewModel { get; } = FirmwareViewModel.ForPage();
     public FirmwarePage()
     {
         FirmwareViewModel.WriteTestsPath = App.CatalogsDirectory is { } catalogs ? Path.Combine(catalogs, "firmware-write-tests.json") : null;
         InitializeComponent();
+        NavigationCacheMode = Microsoft.UI.Xaml.Navigation.NavigationCacheMode.Required;
         Loaded += async (_, _) => await ViewModel.InitializeAsync();
     }
-    private void Back(object sender, RoutedEventArgs e) { if (!ViewModel.Busy) Frame.Navigate(typeof(ToolsDiagnosticsPage)); }
+    private void Back(object sender, RoutedEventArgs e) => Frame.Navigate(typeof(ToolsDiagnosticsPage));
+    private async void StartOver(object sender, RoutedEventArgs e)
+    {
+        if (!ViewModel.CanStartOver) return;
+        try
+        {
+            if (ViewModel.HasUnsavedPicks)
+            {
+                var dialog = new ContentDialog { XamlRoot = XamlRoot, Title = "Discard your BIOS changes?", Content = new TextBlock { Text = "The values you picked will be cleared. Nothing was written to the BIOS, and the original export stays under Saved BIOS sessions.", TextWrapping = TextWrapping.Wrap, MaxWidth = 550 }, PrimaryButtonText = "Discard changes", CloseButtonText = "Keep editing", DefaultButton = ContentDialogButton.Close };
+                if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
+            }
+            await ViewModel.StartOverAsync();
+        }
+        catch (Exception ex) { ViewModel.Message = ex.Message; }
+    }
     private async void ChoosePackage(object sender, RoutedEventArgs e)
     {
         if (ViewModel.Busy || App.MainWindow is null) return;
