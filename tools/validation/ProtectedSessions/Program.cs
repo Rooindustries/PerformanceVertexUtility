@@ -41,6 +41,7 @@ Process Run(string preview,string target){Directory.CreateDirectory(target);acti
 ProtectedSessionState State(string target)=>session.Status(target).State??throw new Exception("Session state missing");
 Process Launch(int number){var gameRoot=Path.Combine(root,"game-"+number);Directory.CreateDirectory(gameRoot);OperationFiles.Write(Path.Combine(root,"launch.json"),new{root=gameRoot,hardware=hardwareGpu?"gpu":"none"});Until(()=>File.Exists(Path.Combine(gameRoot,"ready.json")),"Game fixture did not start");var data=OperationFiles.Read<JsonElement>(Path.Combine(gameRoot,"ready.json"));var game=Process.GetProcessById(data.GetProperty("pid").GetInt32());_ = game.Handle;var identity=FixtureProcess.Ready(Path.Combine(gameRoot,"ready.json"),gamePath,["--game",gameRoot,hardwareGpu?"gpu":"none"],true,evidence);if(FixtureProcess.Created(game)!=identity.Creation){identity.Dispose();game.Dispose();throw new InvalidDataException("Fixture game handle identity mismatch.");}ownedProcesses.Add(game,identity);return game;}
 void CheckGame(Process game,int number){Check(game.WaitForExit(20000)&&game.ExitCode==0,"Owned game fixture exits successfully");if(hardwareGpu){var result=OperationFiles.Read<JsonElement>(Path.Combine(root,"game-"+number,"gpu-result.json"));Check(result.GetProperty("Adapter").GetProperty("VendorId").GetInt32()==0x1002&&result.GetProperty("Adapter").GetProperty("DeviceId").GetInt32()==0x7550&&result.GetProperty("Dispatches").GetInt64()>0&&result.GetProperty("verified").GetArrayLength()==4,"Actual RX9070XT GPU work and independent output checks completed");}}
+double Captured(string target,Process game){var created=FixtureProcess.Created(game);var path=Path.Combine(target,"gpu-handles",game.Id+"-"+created+".transfer.json");Until(()=>File.Exists(path),"The game's GPU launch handle was not captured");var latency=(File.GetCreationTimeUtc(path)-DateTime.FromFileTimeUtc(created)).TotalMilliseconds;Console.WriteLine("MEASURE game "+game.Id+" captured "+latency.ToString("F1")+" ms after launch");return latency;}
 void Restored(string target){Until(()=>File.Exists(Path.Combine(target,"recovery-result.json")),"Recovery watcher did not finish");var state=State(target);Check(state.Status=="stopped"&&state.RegistryStatus=="restored"&&state.JobStatus=="cleared","Recovery reports cleared job and restored launch state");using var key=Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\RooIndustriesLaunchPolicyProbe.exe");Check(key is null,"Approved fixture IFEO image key is absent after restoration");Check(Oracle.Affinity(launcher!)==originalMask&&Oracle.Io(launcher!)==1&&Oracle.Memory(launcher!)==2,"Independent launcher oracle returns original controls");}
 try{
  fixture.Secure();launcherCopy.Create();
@@ -59,10 +60,14 @@ try{
  Check(File.Exists(Path.Combine(root,BrandCompatibility.LauncherLeasePrefix+plan.Launcher.ProcessId+"-"+plan.Launcher.CreationTimeFileTimeUtc+".lock")),"The session keeps its launcher lock inside the protected recovery folder");
  Check(!worker.HasExited&&State(target).JobStatus=="applied"&&worker.MainWindowHandle==IntPtr.Zero,"Worker is armed without an automatic expiry or visible window");
  File.Delete(preview);Check(State(target).Status=="armed","The session retains reviewed bytes independently of the caller preview file");
+ using var capture=new CaptureThread(worker);var waiting=capture.Measure(()=>Thread.Sleep(5000));Console.WriteLine("MEASURE armed, no game: "+waiting);
  using(var game=Launch(1)){
   Until(()=>State(target).Status=="active","Requested controls were not independently applied");
   Check(game.PriorityClass==ProcessPriorityClass.AboveNormal&&Oracle.Io(game)==2&&Oracle.Memory(game)==5&&Oracle.Gpu(game)==3&&Oracle.Affinity(game)==firstMask,"Actual launch, GPU and strict-affinity values match the request");
-  var hold=Stopwatch.StartNew();while(hold.Elapsed.TotalSeconds<12){if(Oracle.Gpu(game)!=3||Oracle.Affinity(game)!=firstMask)throw new InvalidOperationException("A sustained control drifted during the hold");Thread.Sleep(1000);}Check(true,"Independent readback confirms sustained true GPU priority and strict affinity over the hold");
+  var playing=capture.Measure(()=>{var hold=Stopwatch.StartNew();while(hold.Elapsed.TotalSeconds<12){if(Oracle.Gpu(game)!=3||Oracle.Affinity(game)!=firstMask)throw new InvalidOperationException("A sustained control drifted during the hold");Thread.Sleep(1000);}});Check(true,"Independent readback confirms sustained true GPU priority and strict affinity over the hold");
+  Console.WriteLine("MEASURE game running: "+playing);var caught=Captured(target,game);
+  Check(waiting.Wakes<=5&&playing.Wakes<=5,"The armed session reads the process list at most 5 times a second while it waits for the game and while the game runs");
+  Check(caught<=50,"The session catches the game within 50 ms of its launch");
   var contradictory=State(target);var copiedRoot=Path.Combine(root,"contradictory");
   contradictory.LauncherJournal=Path.Combine(copiedRoot,"launcher-journal.json");
   foreach(var field in contradictory.Games.SelectMany(item=>item.Fields)){if(field.JournalPath is not null)field.JournalPath=field.JournalPath.Replace(target,copiedRoot,StringComparison.OrdinalIgnoreCase);}
@@ -80,6 +85,11 @@ try{
    Check(Oracle.Affinity(game)==secondMask&&!worker.HasExited,"Live core changes publish reader-safe state while a prior snapshot remains open");
   }
   session.Command(target,"affinity",new(0,"0x"+firstMask.ToString("X")));Until(()=>Oracle.Affinity(game)==firstMask,"First CPU-subset restoration failed");
+  using(var copy=Launch(5)){
+   Until(()=>State(target).Games.Count==2&&State(target).Status=="active","A second copy started while the game runs did not receive saved controls");
+   Check(Captured(target,copy)<=50&&Oracle.Gpu(copy)==3,"A second copy started while the game runs is caught within 50 ms and gets the GPU priority");
+   File.WriteAllText(Path.Combine(root,"game-5","stop"),"");CheckGame(copy,5);
+  }
   File.WriteAllText(Path.Combine(root,"game-1","stop"),"");CheckGame(game,1);
  }
  Until(()=>State(target).Status=="armed","Session did not rearm after game exit");
@@ -87,8 +97,9 @@ try{
  Until(()=>Oracle.Memory(launcher)==5&&Oracle.Io(launcher)==2,"Launcher defaults were not sustained after a reset");
  Check(Oracle.Memory(launcher)==5&&Oracle.Io(launcher)==2,"Launcher I/O and memory defaults are sustained for the next game start");
  using(var game=Launch(2)){
-  Until(()=>State(target).Games.Count==2&&State(target).Status=="active","Second game instance did not receive saved controls");
+  Until(()=>State(target).Games.Count==3&&State(target).Status=="active","Second game instance did not receive saved controls");
   Check(game.PriorityClass==ProcessPriorityClass.AboveNormal&&Oracle.Gpu(game)==3&&Oracle.Memory(game)==5,"A new game PID receives the same saved launch and actual GPU priorities");
+  Check(Captured(target,game)<=50,"The armed session catches a later game start within 50 ms");
   session.Command(target,"stop");Check(worker.WaitForExit(20000),"Worker stops on explicit request");Restored(target);
   Check(Oracle.Gpu(game)==2&&Oracle.Affinity(game)==originalMask,"Independent live readback confirms GPU and affinity restoration");
   Check(State(target).Games.Last().Fields.Where(field=>field.Route=="launch").All(field=>field.Status=="restartRequired"),"Startup priorities accurately report restart required for a running game");
@@ -97,7 +108,7 @@ try{
  worker.Dispose();worker=null;
  var crashPreview=Review("crash");var crashRoot=Path.Combine(root,"session2");worker=Run(crashPreview,crashRoot);Until(()=>File.Exists(Path.Combine(crashRoot,"session.json"))&&State(crashRoot).Status=="armed","Crash-test session did not arm");
  using(var game=Launch(3)){
-  Until(()=>State(crashRoot).Status=="active","Crash-test controls were not applied");
+  Until(()=>State(crashRoot).Status=="active","Crash-test controls were not applied");Check(Captured(crashRoot,game)<=50,"A new session catches its game within 50 ms");
   Reject(()=>session.Recover(crashRoot,State(crashRoot).Preview.OperationId),"Concurrent recovery cannot take over a live worker");
   ownedProcesses[worker].Stop();Check(worker.WaitForExit(10000),"Only the disposable session worker is terminated for the crash test");Restored(crashRoot);
   Check(Oracle.Gpu(game)==2&&Oracle.Affinity(game)==originalMask,"Independent watcher restores actual GPU priority and job affinity after worker termination");
