@@ -74,7 +74,7 @@ function Private{
  foreach($e in @($script:window.FindAll($TS::Descendants,[Windows.Automation.Condition]::TrueCondition))){
   $text=$e.Current.Name;$value=$null;if($e.TryGetCurrentPattern([Windows.Automation.ValuePattern]::Pattern,[ref]$value)){$text+=' '+$value.Current.Value}
   if(-not@($private|Where-Object {$text.IndexOf($_,[StringComparison]::OrdinalIgnoreCase) -ge 0}).Count){continue}
-  $r=$e.Current.BoundingRectangle;if($r.Width -gt 0 -and $r.Height -gt 0){$rows.Add(@([int]($r.X-$bounds.Left)-2,[int]($r.Y-$bounds.Top)-2,[int][Math]::Ceiling($r.Width)+4,[int][Math]::Ceiling($r.Height)+4))}
+  $r=$e.Current.BoundingRectangle;if($r.Width -gt 0 -and $r.Height -gt 0){$rows.Add(@(([int]($r.X-$bounds.Left)-2),([int]($r.Y-$bounds.Top)-2),([int][Math]::Ceiling($r.Width)+4),([int][Math]::Ceiling($r.Height)+4)))}
  }
  ,$rows.ToArray()
 }
@@ -126,6 +126,7 @@ try{
  $fixtureFolder=Join-Path $OutRoot ('fixture-'+$nonce);New-HarnessDirectory $fixtureFolder 'theme-fixture'|Out-Null
  $fixturePath=Join-Path $fixtureFolder 'ThemeFixture.exe';Copy-HarnessFile (Join-Path $env:SystemRoot 'System32\PING.EXE') $fixturePath|Out-Null
  $fixture=Start-OwnedProcess -FilePath $fixturePath -ArgumentList '-t 127.0.0.1' -WindowStyle Hidden -Purpose 'theme-fixture'
+ (Get-Process -Id $fixture.Identity.pid).PriorityClass='Normal'
  Check 'The fixture starts at Normal priority' ((Priority) -eq 'Normal') (Priority)
 
  $values=[ordered]@{};if($settingsBytes){([Text.Encoding]::UTF8.GetString($settingsBytes)|ConvertFrom-Json).PSObject.Properties|ForEach-Object {$values[$_.Name]=[string]$_.Value}}
