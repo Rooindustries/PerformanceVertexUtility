@@ -91,6 +91,7 @@
         "tools/validation/Update/run_manual_install.py",
         "tools/validation/Update/run_shipped.py",
         "tools/validation/Update/run_trace_checks.py",
+        "tools/validation/UpdateBanner/README.md",
         "tools/validation/BugReportE2E/applog/Program.cs"
       ],
       "reason": "Windows harness staging and host-lease root; existing frames, cleanup ownership and path-length guards depend on this exact path spelling, including its source escaping."
