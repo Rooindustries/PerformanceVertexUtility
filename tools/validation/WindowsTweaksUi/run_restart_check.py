@@ -13,6 +13,12 @@ CHECKS = r"""
 $ErrorActionPreference='Stop'
 $source=__SOURCE__
 Set-Location -LiteralPath $source
+. (Join-Path $source 'tools\validation\Update\Harness.Common.ps1')
+$manifestPath=Join-Path $source 'source-verification.json'
+$manifest=Get-Content -Raw -LiteralPath $manifestPath|ConvertFrom-Json
+Open-HarnessRun (Split-Path $source -Parent) $manifest.frameId (Get-HarnessFileSha256 $manifestPath).ToLowerInvariant() $manifest.frameId
+Assert-HarnessHostLease
+Initialize-HarnessBuildFolders $source
 $env:MSBUILDDISABLENODEREUSE='1';$env:DOTNET_CLI_USE_MSBUILD_SERVER='0';$env:DOTNET_CLI_TELEMETRY_OPTOUT='1';$env:UseSharedCompilation='false'
 $dotnet=@((Join-Path $env:LOCALAPPDATA 'Microsoft\dotnet\dotnet.exe'),(Join-Path $env:USERPROFILE '.dotnet\dotnet.exe'),(Join-Path $env:ProgramFiles 'dotnet\dotnet.exe')|Where-Object {Test-Path -LiteralPath $_ -PathType Leaf}|Where-Object {@(& $_ --list-sdks 2>$null).Count}|Select-Object -First 1)[0]
 . (Join-Path $source 'tools\validation\Tweaks\BootMarkerFixture.Common.ps1')
@@ -42,16 +48,21 @@ def lease(args, receipt):
             time.sleep(60)
 
 
-def encode(capture: Path, frames: Path, output: Path):
-    rows = json.loads(capture.read_text(encoding='utf-8-sig'))['data']['frames']
-    listing = frames / 'frames.txt'
-    lines = []
-    for row in rows:
-        lines += [f"file '{row['file']}'", f"duration {max(float(row['duration']), 0.04):.3f}"]
-    lines.append(f"file '{rows[-1]['file']}'")
-    listing.write_text('\n'.join(lines) + '\n')
-    subprocess.run(['ffmpeg', '-v', 'error', '-y', '-f', 'concat', '-safe', '0', '-i', str(listing), '-vf', 'scale=trunc(min(iw\\,1920)/2)*2:-2', '-r', '30',
-                    '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '20', '-movflags', '+faststart', str(output)], check=True)
+def encode(args, evidence):
+    script = '$directory=' + windows.ps_literal(evidence) + r"""
+$capture=@(Get-ChildItem -LiteralPath $directory -Filter 'capture-*.json')
+if($capture.Count -ne 1){throw 'A single capture receipt is required.'}
+$rows=(Get-Content -Raw -LiteralPath $capture[0].FullName|ConvertFrom-Json).data.frames
+if(-not$rows.Count){throw 'No recorded frames were found.'}
+$lines=@(foreach($row in $rows){"file '"+$row.file+"'";'duration '+[Math]::Max([double]$row.duration,0.04).ToString('0.000',[Globalization.CultureInfo]::InvariantCulture)})
+$lines+="file '"+$rows[-1].file+"'"
+$listing=Join-Path $directory 'frames\frames.txt'
+[IO.File]::WriteAllLines($listing,$lines,[Text.UTF8Encoding]::new($false))
+$ffmpeg=(Get-Command ffmpeg.exe -CommandType Application -ErrorAction Stop).Source
+& $ffmpeg -v error -y -f concat -safe 0 -i $listing -vf 'scale=trunc(min(iw\,1920)/2)*2:-2' -r 30 -c:v libx264 -pix_fmt yuv420p -crf 20 -movflags +faststart (Join-Path $directory 'interaction.mp4')
+if($LASTEXITCODE -ne 0){throw 'Windows video encoding failed.'}
+"""
+    windows.invoke(args.host, args.expected_machine, script, timeout=300)
 
 
 def main():
@@ -65,6 +76,7 @@ def main():
     parser.add_argument('--checks', default='default,--feature-checks,--feature-restart-fixture,--registry-fixture,--controls-fixture',
                         help='Comma-separated Tweaks suite modes; empty skips them')
     parser.add_argument('--skip-capture', action='store_true')
+    parser.add_argument('--expected-outcome', choices=['undone', 'refused'], default='undone')
     args = parser.parse_args()
     args.out_dir.mkdir(parents=True, exist_ok=False)
     receipt = windows.upload_frame(args.host, args.expected_machine, 'roo-industries-restart-check', True, args.parent)
@@ -84,17 +96,20 @@ def main():
             print('\n'.join(line for line in checks.stdout.splitlines() if line.startswith(('PASS', 'FAIL', 'ROO_INDUSTRIES_CHECK', 'Completed', 'Unhandled'))), flush=True)
         if not args.skip_capture:
             result = windows.interactive_frame(args.host, args.expected_machine, receipt, 'tools/validation/WindowsTweaksUi/Capture-RestartCheck.ps1',
-                                               {'Source': receipt['stagingPath'], 'OutRoot': receipt['runRoot'] + r'\capture', 'Label': args.label}, 30)
+                                               {'Source': receipt['stagingPath'], 'OutRoot': receipt['runRoot'] + r'\capture', 'Label': args.label, 'ExpectedOutcome': args.expected_outcome}, 30)
             (args.out_dir / 'capture.log').write_text(result.stdout)
             evidence = next(line.split(' ', 2)[2] for line in result.stdout.splitlines() if line.startswith('ROO_INDUSTRIES_RESTART_CAPTURE pass '))
+            encode(args, evidence)
             windows.run_transport(args.host, 'scp', ['-r', args.host + ':' + evidence.replace('\\', '/'), str(args.out_dir / 'evidence')],
                                   timeout=windows.TRANSFER_TIMEOUT, capture_output=True)
-            capture = next((args.out_dir / 'evidence').glob('capture-*.json'))
-            encode(capture, args.out_dir / 'evidence' / 'frames', args.out_dir / (args.label + '.mp4'))
         status = 'pass'
     finally:
         clear = '& ' + windows.ps_literal(receipt['stagingPath'] + r'\tools\validation\Update\Clear-UpdateFrame.ps1') + ' -Frame ' + windows.ps_literal(receipt['runRoot']) + ' -ExpectedMachine ' + windows.ps_literal(args.expected_machine)
-        closed = windows.invoke(args.host, args.expected_machine, clear, timeout=windows.CLEANUP_TIMEOUT)
+        try:
+            closed = windows.invoke(args.host, args.expected_machine, clear, timeout=windows.CLEANUP_TIMEOUT)
+        except subprocess.CalledProcessError as error:
+            (args.out_dir / 'cleanup.log').write_text((error.stdout or '') + (error.stderr or ''))
+            raise
         (args.out_dir / 'cleanup.log').write_text(closed.stdout)
         print('restart check ' + status + ': ' + str(args.out_dir), flush=True)
 

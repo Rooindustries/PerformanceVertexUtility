@@ -86,8 +86,10 @@ public static class WindowsFeatures
     public static string[] Changed(ControlMutation change) => change.After.ValueKind != JsonValueKind.Object || change.Before.Value.ValueKind != JsonValueKind.Object ? [] : change.After.EnumerateObject()
         .Where(property => !change.Before.Value.TryGetProperty(property.Name, out var before) || !ControlValues.Equal(before, property.Value))
         .Select(property => property.Name).Order(StringComparer.Ordinal).ToArray();
-    public static TweakState Release(TweakState state, string id, string[] features)
+    public static TweakState Reconcile(TweakState state, TweakControlRead observed, string[] features)
     {
+        var id = observed.Id;
+        if (features.Length == 0 && !(state.Controls ?? []).Any(item => item.Original.Id == id && item.Original.Binding != observed.Binding)) return state;
         var held = (state.Controls ?? []).Single(item => item.Original.Id == id);
         var baseline = held.RestoreValue ?? held.Original.Value;
         var profiles = new List<TweakProfile>();
@@ -111,7 +113,8 @@ public static class WindowsFeatures
         return state with
         {
             Revision = Guid.NewGuid().ToString("N"), Profiles = profiles.ToArray(),
-            Controls = (state.Controls ?? []).Where(item => owned || item.Original.Id != id).Select(item => item.Original.Id == id ? item with { Applied = applied } : item).ToArray(),
+            Controls = (state.Controls ?? []).Where(item => owned || item.Original.Id != id).Select(item => item.Original.Id == id
+                ? item with { Original = item.Original with { Binding = observed.Binding, Parents = observed.Parents }, Applied = applied } : item).ToArray(),
         };
     }
     public static string PendingRecovery(ControlMutation change, TweakControlRead current)

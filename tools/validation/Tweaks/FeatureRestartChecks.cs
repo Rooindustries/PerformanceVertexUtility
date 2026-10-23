@@ -125,6 +125,30 @@ static class FeatureRestartChecks
                 var row = f.Engine.Detect().Settings.Single(setting => setting.Id == "platform");
                 check(!row.Supported && row.Error is { } error && error.StartsWith("No choice applies", StringComparison.Ordinal), "The row shows the removed feature as not available here");
             });
+            Scenario("Windows removed one feature while another stays owned", f =>
+            {
+                f.Boot(("HypervisorPlatform", 2), ("VirtualMachinePlatform", 2)); f.Dism.ChangeResult = 3010;
+                f.Apply("mine", ("platform", "on"), ("machine", "on"));
+                f.Restart(); f.Boot(("VirtualMachinePlatform", 4));
+                check(f.Recover() && f.Store.Recovery().Pending is null, "A missing feature closes recovery while the completed feature remains owned");
+                var state = f.Store.ReadState()!; var held = state.Controls!.Single();
+                check(held.Original.Binding == f.Store.ReadControl(Features).Binding && held.Original.Value.GetProperty("VirtualMachinePlatform").GetString() == "Disabled",
+                    "The retained feature uses the current availability snapshot and keeps its original value");
+                f.Apply("other", ("machine", "on")); f.Apply("mine");
+                check(f.Dism.Calls.Count == 0 && f.Dism.Listed["VirtualMachinePlatform"] == 4, "New feature choices remain available and shared ownership keeps the completed change");
+                f.Apply("other");
+                check(f.Dism.Calls.SequenceEqual(["disable VirtualMachinePlatform"]) && f.Dism.Listed["VirtualMachinePlatform"] == 2, "The last owner restores the retained feature's original after another feature disappeared");
+            });
+            Scenario("The available feature map changes without removing an owned feature", f =>
+            {
+                f.Boot(("HypervisorPlatform", 2), ("VirtualMachinePlatform", 2)); f.Dism.ChangeResult = 3010;
+                f.Apply("mine", ("platform", "on"));
+                f.Restart(); f.Boot(("HypervisorPlatform", 4));
+                check(f.Recover() && f.Store.ReadState()!.Controls!.Single().Original.Binding == f.Store.ReadControl(Features).Binding,
+                    "A completed change refreshes the availability snapshot when an unrelated feature disappears");
+                f.Apply("other", ("platform", "on")); f.Apply("mine"); f.Apply("other");
+                check(f.Dism.Calls.SequenceEqual(["disable HypervisorPlatform"]) && f.Dism.Listed["HypervisorPlatform"] == 2, "Feature choices and Undo work after an unrelated availability change");
+            });
             Scenario("A feature in a state this app didn't set keeps its record", f =>
             {
                 f.Boot(("HypervisorPlatform", 2)); f.Dism.ChangeResult = 3010;

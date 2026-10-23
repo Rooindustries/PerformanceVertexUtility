@@ -1,4 +1,4 @@
-param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutRoot,[Parameter(Mandatory)][ValidatePattern('^[a-z][a-z0-9-]{0,30}$')][string]$Label)
+param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutRoot,[Parameter(Mandatory)][ValidatePattern('^[a-z][a-z0-9-]{0,30}$')][string]$Label,[ValidateSet('undone','refused')][string]$ExpectedOutcome='undone')
 $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
 . (Join-Path $Source 'tools\validation\Update\Harness.Common.ps1')
@@ -17,7 +17,7 @@ public static class RooIndustriesRestartCapture {
 '@
 [RooIndustriesRestartCapture]::SetProcessDPIAware()|Out-Null
 $A=[Windows.Automation.AutomationElement];$TS=[Windows.Automation.TreeScope];$CT=[Windows.Automation.ControlType]
-$evidence=[ordered]@{label=$Label;frames=@();states=@()}
+$evidence=[ordered]@{label=$Label;expectedOutcome=$ExpectedOutcome;outcome=$null;frames=@();states=@()}
 function WaitFor([scriptblock]$Probe,[double]$Limit,[string]$What){$deadline=[DateTime]::UtcNow.AddSeconds($Limit);while([DateTime]::UtcNow -lt $deadline){try{$value=& $Probe}catch{$value=$null};if($value){return $value};Start-Sleep -Milliseconds 200};throw ('Timed out waiting for '+$What)}
 function ById($Root,[string]$Id){$Root.FindFirst($TS::Descendants,[Windows.Automation.PropertyCondition]::new($A::AutomationIdProperty,$Id))}
 function ByName($Root,[string]$Name,$Type){$Root.FindFirst($TS::Descendants,[Windows.Automation.AndCondition]::new([Windows.Automation.PropertyCondition]::new($A::NameProperty,$Name),[Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty,$Type)))}
@@ -41,6 +41,8 @@ try{
  if(@(Get-Process -Name 'RooIndustries.OptimizationSuite.App' -ErrorAction SilentlyContinue).Count){throw 'The Suite is already open; this capture does not take over another window.'}
  [IO.File]::WriteAllText($states,'{"HypervisorPlatform":2,"VirtualMachinePlatform":2}',[Text.UTF8Encoding]::new($false))
  $env:MSBUILDDISABLENODEREUSE='1';$env:DOTNET_CLI_USE_MSBUILD_SERVER='0';$env:DOTNET_CLI_TELEMETRY_OPTOUT='1'
+ Initialize-HarnessBuildFolders $Source
+ Ensure-HarnessOutputDirectory (Join-Path $Source 'backend\bin\optimizer')
  $build=Join-Path $directory 'build.log'
  & $dotnet publish (Join-Path $Source 'backend\native\Optimizer.Host\Optimizer.Host.csproj') --configuration Debug --self-contained false -o (Join-Path $Source 'backend\bin\optimizer') --disable-build-servers -p:RooIndustriesTestHooks=true -p:UseSharedCompilation=false *>> $build
  if($LASTEXITCODE -ne 0){throw 'The helper test build failed; see build.log.'}
@@ -71,13 +73,16 @@ try{
   if(-not$checked){if($now -ge $approved+1.5){$apply=ById $window 'WindowsTweaksApply';$evidence.states+=@([ordered]@{at=[Math]::Round($now,3);action='check restart completion';page=(PageState $window)});$apply.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke();$checked=$now};continue}
   if(-not$done){
    $state=PageState $window
-   if($state.status -eq 'Settings were not confirmed' -or $state.detail -like "Windows undid these feature changes*"){$done=$now;$evidence.states+=@([ordered]@{at=[Math]::Round($now,3);action='settled';page=$state})}
+   if($state.status -eq 'Settings were not confirmed'){$evidence.outcome='refused'}
+   elseif($state.detail -like "Windows undid these feature changes*" -and -not$state.reviewRecovery){$evidence.outcome='undone'}
+   if($evidence.outcome){$done=$now;$evidence.states+=@([ordered]@{at=[Math]::Round($now,3);action='settled';page=$state})}
   }
  }
  if(-not$done){throw ('The restart check did not settle while recording: '+((PageState $window)|ConvertTo-Json -Compress))}
  Start-Sleep -Milliseconds 500
  $evidence.final=PageState $window
  Shot $window (Join-Path $directory ('result-'+$Label+'.png'))
+ if($evidence.outcome -cne $ExpectedOutcome){throw ('Expected restart outcome '+$ExpectedOutcome+', observed '+$evidence.outcome)}
  [RooIndustriesRestartCapture]::SetWindowPos($hwnd,[IntPtr]::new(-2),0,0,0,0,0x0003)|Out-Null
  $window.GetCurrentPattern([Windows.Automation.WindowPattern]::Pattern).Close()
  if(-not$app.process.WaitForExit(20000)){Stop-HarnessProcess $app};$app=$null

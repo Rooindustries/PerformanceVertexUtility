@@ -139,7 +139,7 @@ public sealed class RegistryTweakStore : ITweakStore
             {
                 if (SameBoot(journal.Boot)) throw new InvalidDataException(RestartAgain);
                 var undone = new List<string>(); var removed = new List<string>(); var restoreUndone = new List<string>(); var unexpected = new List<string>();
-                var released = new List<(string Id, string[] Features)>();
+                var reconciled = new List<(TweakControlRead Read, string[] Features)>();
                 foreach (var change in journal.Plan.Controls!.Changes.Where(change => change.Before.Address.Kind == "windows-features"))
                 {
                     var observed = ReadControl(change.Before.Address);
@@ -161,13 +161,13 @@ public sealed class RegistryTweakStore : ITweakStore
                         else if (now.GetString() == was && !claimed.Contains(name)) restoreUndone.Add(name + " is " + was + " again (originally " + wanted + ")");
                         else unexpected.Add(name + " is " + now.GetString() + " (it was " + was + ", this app set " + wanted + ")");
                     }
-                    if (release.Count > 0) released.Add((change.Before.Id, release.ToArray()));
+                    reconciled.Add((observed, release.ToArray()));
                 }
                 var problems = new List<string>();
                 if (restoreUndone.Count > 0) problems.Add("Windows undid the restore of these features when it restarted: " + string.Join("; ", restoreUndone) + ". Set them back to their original in Turn Windows features on or off, restart Windows, then check restart completion again.");
                 if (unexpected.Count > 0) problems.Add("Windows left these features in a state this app didn't set: " + string.Join("; ", unexpected) + ". Set each one to either value in Turn Windows features on or off, restart Windows, then check restart completion again.");
                 if (problems.Count > 0) throw new InvalidDataException(string.Join(" ", problems));
-                foreach (var (id, features) in released) state = WindowsFeatures.Release(state, id, features);
+                foreach (var (observed, features) in reconciled) state = WindowsFeatures.Reconcile(state, observed, features);
                 if (undone.Count > 0) notices.Add(FeaturesUndone + string.Join(", ", undone) + ".");
                 if (removed.Count > 0) notices.Add(FeaturesRemoved + string.Join(", ", removed) + ".");
             }
