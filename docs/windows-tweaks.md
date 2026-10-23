@@ -265,9 +265,15 @@ Windows settings includes search, categories, source filters, reusable profiles,
 presets, before/after review, apply, restore and interruption recovery. Every
 setting remains visible and selectable. Each row separates the current reading
 from the proposed change. Choose a value, then turn on the row's switch to select
-that action for review. Turning it off keeps the current setting; it does not undo
-an applied change. Use Windows default explicitly removes the local override,
-and another policy may still control the setting. Choices for missing components
+that action for review; turning it back off clears that selection. A row already
+reads on when Windows has its starting choice, or any of its choices if the row
+has a Windows default choice; the choice beside the switch is the one Windows has.
+Turning that row off selects the Windows default for review, or the other value of
+a two-value row without one; it does not restore a backup. Rows without a Windows
+default choice, such as service startup, read on only for their starting choice,
+because one of their values always matches. Use Windows default explicitly
+removes the local override, and another policy may still control the setting.
+Choices for missing components
 are saved separately from applied Windows profiles and do not create a recovery
 backup. They require a new review before Windows applies them. Backups & history reads
 the actual recovery state. An empty list does not become a sample backup.

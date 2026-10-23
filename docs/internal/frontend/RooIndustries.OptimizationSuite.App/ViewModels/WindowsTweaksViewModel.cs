@@ -189,7 +189,7 @@ public partial class WindowsTweakRow : ObservableObject
     {
         if (status is not { Supported: true, Error: null }) return null;
         var configured = ActionChoices.Where(choice => !_resetIds.Contains(choice.Id) && status.ConfiguredChoices.Contains(choice.Id)).ToArray();
-        return configured.FirstOrDefault(choice => choice == _selected) ?? configured.FirstOrDefault(choice => choice == _recommended);
+        return configured.FirstOrDefault(choice => choice == _selected) ?? configured.FirstOrDefault(choice => choice == _recommended) ?? (_resetIds.Count > 0 ? configured.FirstOrDefault() : null);
     }
     public WindowsTweakRow(TweakDefinition definition, IReadOnlyDictionary<string, TweakDefinition> definitions, Action<string> showSetting, Action? retry = null)
     {

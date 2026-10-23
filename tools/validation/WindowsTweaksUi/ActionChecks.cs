@@ -114,8 +114,7 @@ static class ActionChecks
                 var row = Row(definition.Id); var starting = row.Action.Id;
                 row.Observe(new(definition.Id, definition.Name, true, [option.Id], [], null, definition.Options.Select(item => item.Id).ToArray()));
                 var applied = !resets.Contains(option.Id) && (resets.Count > 0 || option.Id == starting);
-                var found = resets.Count > 0 ? misread : stockMisread;
-                if (row.IsApplied != applied || row.ToggleOn != applied || row.HasPendingChange || row.Action.Id != (applied ? option.Id : starting)) { found.Add(definition.Id + " " + option.Id); continue; }
+                if (row.IsApplied != applied || row.ToggleOn != applied || row.HasPendingChange || row.Action.Id != (applied ? option.Id : starting)) { (resets.Count > 0 ? misread : stockMisread).Add(definition.Id + " " + option.Id); continue; }
                 if (!applied || resets.Count == 0) continue;
                 row.ToggleOn = false;
                 if (!resets.Contains(row.Selected.Id) || row.StateLabel != "Will turn off" || row.Action.Id != option.Id) misread.Add(definition.Id + " " + option.Id + " off");
