@@ -4,6 +4,7 @@ param(
     [string]$ModuleId = '',
     [string]$ManifestPath = '',
     [string]$BackupPath = '',
+    [string]$PreviewPath = '',
     [string]$DataRoot = 'C:\ProgramData\LeanClientOptimizer',
     [int]$WaitSeconds = 0,
     [switch]$ConfirmApply
@@ -28,7 +29,40 @@ function Ensure-Dir {
 
 function Write-JsonFile {
     param([object]$Value, [string]$Path)
-    $Value | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $Path -Encoding UTF8
+    $Path = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Path)
+    $temp = $Path + '.' + [guid]::NewGuid().ToString('N').Substring(0, 8) + '.tmp'
+    try {
+        $Value | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $temp -Encoding UTF8
+        $stream = [IO.File]::Open($temp, [IO.FileMode]::Open, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None)
+        try { $stream.Flush($true) } finally { $stream.Dispose() }
+        if ([IO.File]::Exists($Path)) { [IO.File]::Replace($temp, $Path, [NullString]::Value) } else { [IO.File]::Move($temp, $Path) }
+    } finally {
+        if ([IO.File]::Exists($temp)) { [IO.File]::Delete($temp) }
+    }
+}
+
+function Enter-ChangeLock {
+    $lock = [Threading.Mutex]::new($false, 'Global\RooIndustries.LeanClientOptimizer.Changes')
+    try { $owned = $lock.WaitOne(2000) } catch [Threading.AbandonedMutexException] { $owned = $true }
+    if ($owned) { return $lock }
+    $lock.Dispose()
+    throw 'Another confirmed Apply or Undo is running on this PC. Wait for it to finish, then try again. Nothing was changed.'
+}
+
+function Exit-ChangeLock {
+    param([Threading.Mutex]$Lock)
+    if ($null -eq $Lock) { return }
+    try { $Lock.ReleaseMutex() } finally { $Lock.Dispose() }
+}
+
+function Resolve-BackupFile {
+    param([string]$Path)
+    $full = [IO.Path]::GetFullPath($ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Path))
+    $item = Get-Item -LiteralPath $full -Force
+    if ($item -isnot [IO.FileInfo] -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -or $item.LinkType -eq 'HardLink') {
+        throw "The selected backup $Path is a link or not a file. Select the backup.json file itself. Nothing was changed."
+    }
+    return $item.FullName
 }
 
 function Read-Manifest {
@@ -349,6 +383,23 @@ function Resolve-ServiceTargets {
     return @(Get-Service -Name "$Name`_*" -ErrorAction SilentlyContinue)
 }
 
+function Get-DependentServiceStates {
+    param([object]$Service)
+    $seen = @{}
+    $states = New-Object System.Collections.Generic.List[object]
+    $visit = {
+        param([object]$Parent)
+        foreach ($dependent in @($Parent.DependentServices)) {
+            if (-not $dependent -or $seen.ContainsKey([string]$dependent.Name)) { continue }
+            $seen[[string]$dependent.Name] = $true
+            & $visit $dependent
+            $states.Add([pscustomobject]@{ name=[string]$dependent.Name; status=[string]$dependent.Status; startType=[string]$dependent.StartType }) | Out-Null
+        }
+    }
+    & $visit $Service
+    return ,$states.ToArray()
+}
+
 function Get-ServiceSnapshot {
     param([string]$Name)
     $targets = @(Resolve-ServiceTargets $Name)
@@ -369,13 +420,27 @@ function Get-ServiceSnapshot {
             processId = if ($cim) { $cim.ProcessId } else { 0 }
             pathName = if ($cim) { $cim.PathName } else { $null }
             dependsOn = $deps
+            dependents = Get-DependentServiceStates $svc
         }) | Out-Null
     }
     return @($result.ToArray())
 }
 
+function Save-DependentStopEvidence {
+    param([string]$Name, [object]$Backup, [string]$Path)
+    foreach ($snapshot in @($Backup.services)) {
+        if ($snapshot.name -ine $Name) { continue }
+        foreach ($dependent in @($snapshot.dependents)) {
+            if ($null -eq $dependent -or [string]$dependent.status -cne 'Running') { continue }
+            $current = @(Get-ServiceSnapshot $dependent.name | Where-Object { $_.exists -and $_.name -ieq $dependent.name })
+            $dependent | Add-Member -MemberType NoteProperty -Name stoppedByApply -Value ($current.Count -eq 1 -and $current[0].status -eq 'Stopped') -Force
+        }
+    }
+    Write-JsonFile $Backup $Path
+}
+
 function Set-ServiceFromManifest {
-    param([object]$Item)
+    param([object]$Item, [object]$Backup, [string]$BackupPath)
     $targets = @(Resolve-ServiceTargets $Item.name)
     foreach ($svc in $targets) {
         if ($Item.startup -eq 'Disabled') {
@@ -386,7 +451,10 @@ function Set-ServiceFromManifest {
             Set-Service -Name $svc.Name -StartupType Automatic
         }
         if ($Item.targetState -eq 'Stopped') {
-            Stop-Service -Name $svc.Name -Force -ErrorAction SilentlyContinue
+            $stopError = $null
+            try { Stop-Service -Name $svc.Name -Force -ErrorAction Stop } catch { $stopError = $_ }
+            try { Save-DependentStopEvidence $svc.Name $Backup $BackupPath } catch { if (-not $stopError) { throw } }
+            if ($stopError) { throw $stopError }
         }
     }
 }
@@ -411,6 +479,38 @@ function Restore-ServiceSnapshot {
     if ($Snapshot.status -eq 'Running') {
         Start-Service -Name $Snapshot.name -ErrorAction Stop
     }
+}
+
+function Test-DependentRestore {
+    param([object]$Dependent, [hashtable]$States, [object]$Manifest, [switch]$Planning)
+    $name = [string]$Dependent.name
+    if (Test-ProtectedService $name $Manifest) { return [pscustomobject]@{ state='leftAsChanged'; reason='dependent service is protected' } }
+    $current = @(Get-ServiceSnapshot $name | Where-Object { $_.exists -and $_.name -ieq $name })
+    if ($current.Count -ne 1) { return [pscustomobject]@{ state='leftAsChanged'; reason='dependent service missing' } }
+    if ($current[0].startType -ne $Dependent.startType) { return [pscustomobject]@{ state='leftAsChanged'; reason='dependent startup or state changed' } }
+    if ($Dependent.PSObject.Properties['restoreComplete'] -and $Dependent.restoreComplete -isnot [bool]) { return [pscustomobject]@{ state='leftAsChanged'; reason='dependent restore completion evidence is invalid' } }
+    if ($Dependent.PSObject.Properties['restoreAttempted'] -and $Dependent.restoreAttempted -isnot [bool]) { return [pscustomobject]@{ state='leftAsChanged'; reason='dependent restore attempt evidence is invalid' } }
+    if ($current[0].status -eq 'Running') { return [pscustomobject]@{ state='alreadyAtOriginal'; reason=$null } }
+    if ($Dependent.stoppedByApply -isnot [bool] -or -not $Dependent.stoppedByApply) { return [pscustomobject]@{ state='leftAsChanged'; reason='apply did not confirm that it stopped this service; another program may have stopped it' } }
+    if ($Dependent.restoreComplete -eq $true) { return [pscustomobject]@{ state='leftAsChanged'; reason='dependent was already restored; runtime ownership released' } }
+    if ($Dependent.restoreAttempted -eq $true) { return [pscustomobject]@{ state='leftAsChanged'; reason='a previous Undo tried to start it without a confirmed result; another program may have stopped it' } }
+    if ($current[0].status -ne 'Stopped') { return [pscustomobject]@{ state='leftAsChanged'; reason='dependent startup or state changed' } }
+    foreach ($required in @($current[0].dependsOn)) {
+        if (-not $required) { continue }
+        $running = @(Get-ServiceSnapshot $required | Where-Object { $_.exists -and $_.name -ieq $required -and $_.status -eq 'Running' }).Count -eq 1
+        $state = $States[[string]$required]
+        if (-not $running -and -not ($Planning -and $state -and $state.status -in 'planned','alreadyAtOriginal')) {
+            return [pscustomobject]@{ state='leftAsChanged'; reason="a service it depends on is not running: $required" }
+        }
+    }
+    return [pscustomobject]@{ state='stopped'; reason=$null }
+}
+
+function Save-DependentRestoreComplete {
+    param([object]$Dependent, [object]$Backup, [string]$Path)
+    if ($Dependent.restoreComplete -eq $true) { return }
+    $Dependent | Add-Member -MemberType NoteProperty -Name restoreComplete -Value $true -Force
+    Write-JsonFile $Backup $Path
 }
 
 function Get-ToolInventory {
@@ -486,14 +586,17 @@ function Invoke-SmokeTest {
     function Add-Result([string]$Name, [bool]$Pass, [string]$Detail) {
         $results.Add([pscustomobject]@{ name=$Name; pass=$Pass; detail=$Detail }) | Out-Null
     }
+    $profile = @()
     try {
         $profile = @(Get-NetConnectionProfile -ErrorAction Stop)
         Add-Result 'network-profile' ($profile.Count -gt 0) (($profile | Select-Object -First 1 -ExpandProperty Name) -join ',')
     } catch { Add-Result 'network-profile' $false $_.Exception.Message }
     try {
-        $dns = Resolve-DnsName 'www.microsoft.com' -ErrorAction Stop | Select-Object -First 1
-        Add-Result 'dns' ($null -ne $dns) 'www.microsoft.com resolves'
-    } catch { Add-Result 'dns' $false $_.Exception.Message }
+        $dnsInterfaces = @(Get-DnsClientServerAddress -ErrorAction Stop | Where-Object { $null -ne $_.InterfaceIndex -and $_.InterfaceIndex -in @($profile.InterfaceIndex) -and @($_.ServerAddresses).Count -gt 0 })
+        $dnsClient = Get-Service -Name 'Dnscache' -ErrorAction SilentlyContinue
+        $dnsStatus = if ($dnsClient) { [string]$dnsClient.Status } else { 'missing' }
+        Add-Result 'dns-client' ($dnsStatus -eq 'Running' -and $dnsInterfaces.Count -gt 0) "Dnscache=$dnsStatus, interfaces with DNS servers=$($dnsInterfaces.Count)"
+    } catch { Add-Result 'dns-client' $false $_.Exception.Message }
     try { $bluetooth = @(Get-PnpDevice -Class Bluetooth -PresentOnly -ErrorAction SilentlyContinue).Count -gt 0 } catch { $bluetooth = $true }
     foreach ($svcName in @('WlanSvc','bthserv','WinDefend','BFE','mpssvc','WpnService')) {
         if ($svcName -eq 'bthserv' -and -not $bluetooth) { continue }
@@ -535,10 +638,122 @@ function Get-ModuleById {
     return $module
 }
 
+function Get-ModulePlan {
+    param([object]$Manifest, [object]$Module)
+    $plan = New-Object System.Collections.Generic.List[object]
+    foreach ($rv in @($Module.registryValues)) {
+        $target = "$($rv.path)\$($rv.name)"
+        $type = $null
+        if ($rv.type -is [string]) {
+            foreach ($supported in 'REG_DWORD','REG_QWORD','REG_SZ') {
+                if ([string]::Equals($supported, $rv.type, [StringComparison]::OrdinalIgnoreCase)) { $type = $supported }
+            }
+        }
+        if (-not $type) {
+            $shown = if ($rv.type -is [string]) { "'" + $rv.type + "'" } elseif ($null -eq $rv.type) { 'none' } else { ConvertTo-Json -InputObject $rv.type -Compress }
+            throw "Unsupported registry type $shown for $target. This harness writes only REG_DWORD, REG_QWORD and REG_SZ. Nothing was changed."
+        }
+        try { $data = [string](Get-ManifestRegistrySnapshot $rv).oldValue } catch { throw "Cannot write $target as ${type}: $($_.Exception.Message) Nothing was changed." }
+        $plan.Add([pscustomobject]@{ kind='registry'; path=[string]$rv.path; name=[string]$rv.name; type=$type; data=$data; blocked=[bool](Test-ProtectedRegistryPath $rv.path $Manifest $rv.name) }) | Out-Null
+    }
+    foreach ($svc in @($Module.services)) {
+        $blocked = [bool](Test-ProtectedService $svc.name $Manifest)
+        if (-not $blocked -and $svc.targetState -eq 'Stopped') {
+            foreach ($snap in @(Get-ServiceSnapshot $svc.name)) {
+                foreach ($dependent in @($snap.dependents)) {
+                    if ($dependent -and (Test-ProtectedService $dependent.name $Manifest)) {
+                        throw "Cannot stop service $($snap.name): the protected service $($dependent.name) depends on it, and Undo does not restart protected services. Nothing was changed."
+                    }
+                }
+            }
+        }
+        $plan.Add([pscustomobject]@{ kind='service'; name=[string]$svc.name; startup=[string]$svc.startup; targetState=[string]$svc.targetState; blocked=$blocked }) | Out-Null
+    }
+    return ,$plan.ToArray()
+}
+
+function Get-ModulePlanHash {
+    param([object[]]$Plan)
+    $text = New-Object System.Text.StringBuilder
+    [void]$text.Append('module-plan-v1;')
+    foreach ($entry in $Plan) {
+        foreach ($property in $entry.PSObject.Properties) {
+            $value = [string]$property.Value
+            [void]$text.Append($property.Name).Append('=').Append($value.Length.ToString([Globalization.CultureInfo]::InvariantCulture)).Append(':').Append($value).Append(';')
+        }
+        [void]$text.Append('|')
+    }
+    $chars = $text.ToString().ToCharArray()
+    $bytes = New-Object byte[] ($chars.Length * 2)
+    [Buffer]::BlockCopy($chars, 0, $bytes, 0, $bytes.Length)
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try { $hash = $sha.ComputeHash($bytes) } finally { $sha.Dispose() }
+    return (($hash | ForEach-Object { $_.ToString('x2') }) -join '')
+}
+
+function Get-ModulePlanChanges {
+    param([object[]]$Previewed, [object[]]$Current)
+    $keys = New-Object System.Collections.Generic.List[string]
+    $targets = New-Object 'System.Collections.Generic.Dictionary[string,string]' ([StringComparer]::Ordinal)
+    $before = New-Object 'System.Collections.Generic.Dictionary[string,string]' ([StringComparer]::Ordinal)
+    $after = New-Object 'System.Collections.Generic.Dictionary[string,string]' ([StringComparer]::Ordinal)
+    foreach ($side in @(@{ entries=$Previewed; details=$before }, @{ entries=$Current; details=$after })) {
+        foreach ($entry in @($side.entries)) {
+            if ($null -eq $entry) { continue }
+            $service = [string]$entry.kind -ceq 'service'
+            $key = [string]$entry.kind + [char]0 + [string]$entry.path + [char]0 + [string]$entry.name
+            $detail = if ($entry.blocked -eq $true) { 'protected, skipped' } elseif ($service) { 'startup=' + [string]$entry.startup + ', state=' + [string]$entry.targetState } else { [string]$entry.type + ' ' + [string]$entry.data }
+            if (-not $targets.ContainsKey($key)) {
+                $keys.Add($key)
+                $targets[$key] = if ($service) { 'service ' + [string]$entry.name } else { [string]$entry.path + '\' + [string]$entry.name }
+            }
+            $side.details[$key] = if ($side.details.ContainsKey($key)) { $side.details[$key] + ' then ' + $detail } else { $detail }
+        }
+    }
+    $changes = New-Object System.Collections.Generic.List[string]
+    foreach ($key in $keys) {
+        if (-not $after.ContainsKey($key)) { $changes.Add('removed ' + $targets[$key] + ' (' + $before[$key] + ')') }
+        elseif (-not $before.ContainsKey($key)) { $changes.Add('added ' + $targets[$key] + ' (' + $after[$key] + ')') }
+        elseif (-not [string]::Equals($before[$key], $after[$key], [StringComparison]::Ordinal)) { $changes.Add($targets[$key] + ': ' + $before[$key] + ' -> ' + $after[$key]) }
+    }
+    if ($changes.Count -eq 0) { $changes.Add('the settings are in a different order') }
+    if ($changes.Count -gt 10) { return @($changes.GetRange(0, 10)) + ('and ' + ($changes.Count - 10) + ' more') }
+    return @($changes.ToArray())
+}
+
+function Assert-ModulePreview {
+    param([object]$Module, [object[]]$Plan, [string]$PlanHash)
+    $next = "Nothing was changed. Preview $($Module.id) without -ConfirmApply, review it, then pass its previewPath with -PreviewPath."
+    if ([string]::IsNullOrWhiteSpace($PreviewPath)) { throw "A confirmed apply needs the preview you reviewed. $next" }
+    try { $preview = Get-Content -LiteralPath $PreviewPath -Raw -ErrorAction Stop | ConvertFrom-Json } catch { throw "Cannot read the preview $PreviewPath. $next" }
+    if ($null -eq $preview -or $preview.dryRun -isnot [bool] -or -not $preview.dryRun) { throw "$PreviewPath is not a preview. $next" }
+    if (-not [string]::Equals([string]$preview.moduleId, [string]$Module.id, [StringComparison]::Ordinal)) { throw "The preview $PreviewPath is for module '$($preview.moduleId)', not '$($Module.id)'. $next" }
+    if ($preview.previewHash -isnot [string] -or $preview.previewHash -cnotmatch '^[0-9a-f]{64}$') { throw "The preview $PreviewPath has no plan hash, so it was made by an earlier version or edited. $next" }
+    if ($preview.plan -isnot [array] -or -not [string]::Equals((Get-ModulePlanHash @($preview.plan)), $preview.previewHash, [StringComparison]::Ordinal)) { throw "The preview plan does not match its hash. $next" }
+    if (-not [string]::Equals($preview.previewHash, $PlanHash, [StringComparison]::Ordinal)) {
+        $changes = Get-ModulePlanChanges @($preview.plan) $Plan
+        throw "The manifest changed after the preview $PreviewPath`: $($changes -join '; '). $next"
+    }
+    $actionsError = "The preview actions do not match its plan. $next"
+    if ($preview.actions -isnot [array] -or $preview.actions.Count -ne $Plan.Count) { throw $actionsError }
+    for ($index = 0; $index -lt $Plan.Count; $index++) {
+        $entry = $Plan[$index]
+        $action = $preview.actions[$index]
+        $service = $entry.kind -ceq 'service'
+        $target = if ($service) { $entry.name } else { $entry.path + '\' + $entry.name }
+        $verb = if ($service) { 'startup=' + $entry.startup + ', state=' + $entry.targetState } else { 'set' }
+        if ($action.type -isnot [string] -or $action.type -cne $entry.kind -or $action.target -isnot [string] -or $action.target -cne $target -or $action.action -isnot [string] -or $action.action -cne $verb -or $action.blocked -isnot [bool] -or $action.blocked -ne $entry.blocked) { throw $actionsError }
+        if (-not $service) {
+            if (-not $action.PSObject.Properties['value']) { throw $actionsError }
+            try { $data = [string](Get-ManifestRegistrySnapshot ([pscustomobject]@{type=$entry.type;data=$action.value})).oldValue } catch { throw $actionsError }
+            if (-not [string]::Equals($data, $entry.data, [StringComparison]::Ordinal)) { throw $actionsError }
+        }
+    }
+}
+
 function New-ModuleBackup {
     param([object]$Manifest, [object]$Module)
     $moduleDir = Join-Path $DataRoot ("backups\" + $Module.id + "\" + (Get-NowStamp))
-    Ensure-Dir $moduleDir
     $regSnapshots = New-Object System.Collections.Generic.List[object]
     foreach ($rv in @($Module.registryValues)) {
         if (Test-ProtectedRegistryPath $rv.path $Manifest $rv.name) { continue }
@@ -554,6 +769,7 @@ function New-ModuleBackup {
         foreach ($snap in @(Get-ServiceSnapshot $svc.name)) {
             $startup = if ($svc.startup -in 'Disabled','Manual','Automatic') { $svc.startup } else { $snap.startType }
             $snap | Add-Member -NotePropertyName appliedStartup -NotePropertyValue $startup
+            $snap | Add-Member -NotePropertyName appliedTargetState -NotePropertyValue ([string]$svc.targetState)
             $svcSnapshots.Add($snap) | Out-Null
         }
     }
@@ -562,44 +778,83 @@ function New-ModuleBackup {
         moduleName = $Module.name
         timestamp = (Get-Date).ToString('o')
         applyRequested = $true
+        applyCompleted = $false
         registry = @($regSnapshots.ToArray())
         services = @($svcSnapshots.ToArray())
         baseline = Get-BenchmarkSnapshot ("pre-" + $Module.id)
     }
+    Ensure-Dir $moduleDir
     $path = Join-Path $moduleDir 'backup.json'
     Write-JsonFile $backup $path
-    return $path
+    return [pscustomobject]@{ path=$path; backup=$backup }
+}
+
+function Assert-LastApplyFinished {
+    param([object]$Module)
+    $backupRoot = Join-Path $DataRoot ("backups\" + $Module.id)
+    if (-not (Test-Path -LiteralPath $backupRoot)) { return }
+    $newest = @(foreach ($directory in Get-ChildItem -LiteralPath $backupRoot -Directory) {
+        $candidatePath = Join-Path $directory.FullName 'backup.json'
+        if (-not (Test-Path -LiteralPath $candidatePath)) { continue }
+        $candidate = Get-Content -LiteralPath $candidatePath -Raw | ConvertFrom-Json
+        if ($candidate.moduleId -eq $Module.id) { [pscustomobject]@{ path = $candidatePath; timestamp = [datetime]$candidate.timestamp; backup = $candidate } }
+    }) | Sort-Object timestamp -Descending | Select-Object -First 1
+    if ($newest.backup.applyCompleted -is [bool] -and -not $newest.backup.applyCompleted -and $newest.backup.undoCompleted -ne $true) {
+        throw "The last Apply of $($Module.id) stopped before it finished, so this PC may be partly changed. Run Undo with -BackupPath `"$($newest.path)`" before applying again. Nothing was changed."
+    }
 }
 
 function Invoke-ApplyModule {
     $manifest = Read-Manifest
     $module = Get-ModuleById $manifest $ModuleId
+    $plan = Get-ModulePlan $manifest $module
+    $planHash = Get-ModulePlanHash $plan
+    if ($ConfirmApply) { Assert-ModulePreview $module $plan $planHash }
     Ensure-Dir $DataRoot
-    $backupPath = if ($ConfirmApply) { New-ModuleBackup $manifest $module } else { $null }
-    $actions = New-Object System.Collections.Generic.List[object]
-    foreach ($rv in @($module.registryValues)) {
-        $blocked = Test-ProtectedRegistryPath $rv.path $manifest $rv.name
-        $actions.Add([pscustomobject]@{ type='registry'; target=($rv.path + '\' + $rv.name); blocked=$blocked; action='set'; value=$rv.data }) | Out-Null
-        if ($blocked) { continue }
-        if ($ConfirmApply) { Set-RegistryValueFromManifest $rv }
-    }
-    foreach ($svc in @($module.services)) {
-        $blocked = Test-ProtectedService $svc.name $manifest
-        $actions.Add([pscustomobject]@{ type='service'; target=$svc.name; blocked=$blocked; action=('startup=' + $svc.startup + ', state=' + $svc.targetState) }) | Out-Null
-        if ($blocked) { continue }
-        if ($ConfirmApply) { Set-ServiceFromManifest $svc }
+    $changeLock = if ($ConfirmApply) { Enter-ChangeLock } else { $null }
+    try {
+        if ($ConfirmApply) { Assert-LastApplyFinished $module }
+        $created = if ($ConfirmApply) { New-ModuleBackup $manifest $module } else { $null }
+        $backupPath = $created.path
+        $actions = New-Object System.Collections.Generic.List[object]
+        try {
+            foreach ($rv in @($module.registryValues)) {
+                $blocked = Test-ProtectedRegistryPath $rv.path $manifest $rv.name
+                $actions.Add([pscustomobject]@{ type='registry'; target=($rv.path + '\' + $rv.name); blocked=$blocked; action='set'; value=$rv.data }) | Out-Null
+                if ($blocked) { continue }
+                if ($ConfirmApply) { Set-RegistryValueFromManifest $rv }
+            }
+            foreach ($svc in @($module.services)) {
+                $blocked = Test-ProtectedService $svc.name $manifest
+                $actions.Add([pscustomobject]@{ type='service'; target=$svc.name; blocked=$blocked; action=('startup=' + $svc.startup + ', state=' + $svc.targetState) }) | Out-Null
+                if ($blocked) { continue }
+                if ($ConfirmApply) { Set-ServiceFromManifest $svc $created.backup $backupPath }
+            }
+            if ($ConfirmApply) {
+                $created.backup.applyCompleted = $true
+                Write-JsonFile $created.backup $backupPath
+            }
+        } catch {
+            if (-not $ConfirmApply) { throw }
+            throw [InvalidOperationException]::new("Apply of $($module.id) stopped before it finished, so this PC may be partly changed. Run Undo with -BackupPath `"$backupPath`" before applying again. The error was: $($_.Exception.Message)", $_.Exception)
+        }
+    } finally {
+        Exit-ChangeLock $changeLock
     }
     $after = if ($ConfirmApply) { Get-BenchmarkSnapshot ("post-" + $module.id) } else { $null }
     $smoke = if ($ConfirmApply) { Invoke-SmokeTest } else { $null }
+    $runPath = Join-Path $DataRoot ("runs\apply-" + $module.id + "-" + (Get-NowStamp) + ".json")
     $result = [pscustomobject]@{
         moduleId = $module.id
         dryRun = -not $ConfirmApply
+        previewPath = if ($ConfirmApply) { $PreviewPath } else { $runPath }
+        previewHash = $planHash
         backupPath = $backupPath
+        plan = $plan
         actions = @($actions.ToArray())
         after = $after
         smoke = $smoke
     }
-    $runPath = Join-Path $DataRoot ("runs\apply-" + $module.id + "-" + (Get-NowStamp) + ".json")
     Ensure-Dir (Split-Path $runPath -Parent)
     Write-JsonFile $result $runPath
     return $result
@@ -607,190 +862,261 @@ function Invoke-ApplyModule {
 
 function Invoke-RollbackModule {
     $manifest = Read-Manifest
-    $backupRoot = Join-Path $DataRoot ("backups\" + $ModuleId)
-    $backupPath = $BackupPath
-    if ([string]::IsNullOrWhiteSpace($backupPath)) {
-        if (-not (Test-Path -LiteralPath $backupRoot)) { throw "No backups found for $ModuleId in $backupRoot" }
-        $appliedPaths = @{}
-        $runRoot = Join-Path $DataRoot 'runs'
-        if (Test-Path -LiteralPath $runRoot) {
-            foreach ($runFile in Get-ChildItem -LiteralPath $runRoot -Filter 'apply-*.json' -File) {
-                $run = Get-Content -LiteralPath $runFile.FullName -Raw | ConvertFrom-Json
-                if ($run.moduleId -eq $ModuleId -and $run.dryRun -eq $false -and $run.backupPath) {
-                    $appliedPaths[[System.IO.Path]::GetFullPath($run.backupPath)] = $true
+    $changeLock = if ($ConfirmApply) { Enter-ChangeLock } else { $null }
+    try {
+        $backupRoot = Join-Path $DataRoot ("backups\" + $ModuleId)
+        $backupPath = $BackupPath
+        if ([string]::IsNullOrWhiteSpace($backupPath)) {
+            if (-not (Test-Path -LiteralPath $backupRoot)) { throw "No backups found for $ModuleId in $backupRoot" }
+            $appliedPaths = @{}
+            $runRoot = Join-Path $DataRoot 'runs'
+            if (Test-Path -LiteralPath $runRoot) {
+                foreach ($runFile in Get-ChildItem -LiteralPath $runRoot -Filter 'apply-*.json' -File) {
+                    $run = Get-Content -LiteralPath $runFile.FullName -Raw | ConvertFrom-Json
+                    if ($run.moduleId -eq $ModuleId -and $run.dryRun -eq $false -and $run.backupPath) {
+                        $appliedPaths[[System.IO.Path]::GetFullPath($run.backupPath)] = $true
+                    }
                 }
             }
+            $eligible = @(foreach ($directory in Get-ChildItem -LiteralPath $backupRoot -Directory) {
+                $candidatePath = Join-Path $directory.FullName 'backup.json'
+                if (-not (Test-Path -LiteralPath $candidatePath)) { continue }
+                $candidate = Get-Content -LiteralPath $candidatePath -Raw | ConvertFrom-Json
+                if ($candidate.moduleId -eq $ModuleId -and ($candidate.applyRequested -eq $true -or $appliedPaths.ContainsKey([System.IO.Path]::GetFullPath($candidatePath)))) {
+                    [pscustomobject]@{ path = $candidatePath; timestamp = [datetime]$candidate.timestamp }
+                }
+            })
+            $latest = $eligible | Sort-Object timestamp -Descending | Select-Object -First 1
+            if ($null -eq $latest) { throw "No confirmed-apply backup found for $ModuleId. Select a reviewed legacy backup explicitly with -BackupPath." }
+            $backupPath = $latest.path
         }
-        $eligible = @(foreach ($directory in Get-ChildItem -LiteralPath $backupRoot -Directory) {
-            $candidatePath = Join-Path $directory.FullName 'backup.json'
-            if (-not (Test-Path -LiteralPath $candidatePath)) { continue }
-            $candidate = Get-Content -LiteralPath $candidatePath -Raw | ConvertFrom-Json
-            if ($candidate.moduleId -eq $ModuleId -and ($candidate.applyRequested -eq $true -or $appliedPaths.ContainsKey([System.IO.Path]::GetFullPath($candidatePath)))) {
-                [pscustomobject]@{ path = $candidatePath; timestamp = [datetime]$candidate.timestamp }
+        $backupPath = Resolve-BackupFile $backupPath
+        $backup = Get-Content -LiteralPath $backupPath -Raw | ConvertFrom-Json
+        if ($backup.moduleId -ne $ModuleId) { throw 'The selected backup belongs to a different module.' }
+        $actions = New-Object System.Collections.Generic.List[object]
+        $leftAsChanged = New-Object System.Collections.Generic.List[object]
+        $alreadyAtOriginal = New-Object System.Collections.Generic.List[object]
+        $failures = New-Object System.Collections.Generic.List[object]
+        $pending = New-Object System.Collections.Generic.List[object]
+        $work = New-Object System.Collections.Generic.List[object]
+        $registryCount = 0
+        $serviceCount = 0
+        foreach ($rv in @($backup.registry)) {
+            $target = @{ type='registry'; path=$rv.path; name=$rv.name }
+            try {
+                $reason = if (Test-ProtectedRegistryPath $rv.path $manifest $rv.name) { 'protected setting' }
+                    elseif ($rv.valueExists -isnot [bool]) { 'missing original existence evidence' }
+                    elseif (-not $rv.PSObject.Properties['kind'] -and ([string]::IsNullOrEmpty([string]$rv.name) -or [Globalization.CultureInfo]::CurrentCulture.CompareInfo.Compare([string]$rv.name, '(default)', [Globalization.CompareOptions]::IgnoreCase) -eq 0)) { 'missing original existence evidence for legacy default alias' }
+                    elseif ($rv.valueExists -and -not $rv.kind) { 'missing applied kind evidence in legacy backup' }
+                    elseif (-not $rv.PSObject.Properties['desiredData'] -or -not $rv.type) { 'missing applied value evidence' }
+                    else { $null }
+                if ($reason) {
+                    $leftAsChanged.Add([pscustomobject]($target + @{ reason=$reason })) | Out-Null
+                    Write-Host "Left as changed: $($rv.path)\$($rv.name) ($reason)"
+                    continue
+                }
+                $expected = Get-ManifestRegistrySnapshot ([pscustomobject]@{ type=$rv.type; data=$rv.desiredData })
+                $null = ConvertTo-RegistrySnapshotData $expected.kind (Convert-RegistrySnapshotData $expected)
+                $current = Get-RegistryValueSnapshot $rv -AllowChangedLayout
+                $original = $null
+                try { $original = Get-RegistryRestoreSnapshot $rv } catch { if (Test-RegistrySnapshotEqual $expected $current) { throw } }
+                if ($null -ne $original -and (Test-RegistrySnapshotEqual $original $current)) {
+                    $alreadyAtOriginal.Add([pscustomobject]$target) | Out-Null
+                    Write-Host "Already at original value: $($rv.path)\$($rv.name)"
+                } elseif (-not (Test-RegistrySnapshotEqual $expected $current)) {
+                    $reason = if (Test-RegistryChangedLayout $current) { 'current raw layout cannot have been applied' } else { 'current kind or data changed' }
+                    $leftAsChanged.Add([pscustomobject]($target + @{ reason=$reason })) | Out-Null
+                    Write-Host "Left as changed: $($rv.path)\$($rv.name) ($reason)"
+                } else {
+                    $action = [pscustomobject]($target + @{ action='restore'; status='planned' })
+                    $actions.Add($action) | Out-Null
+                    $work.Add([pscustomobject]@{ target=$target; snapshot=$rv; applied=$expected; original=$original; action=$action }) | Out-Null
+                }
+            } catch {
+                $failures.Add([pscustomobject]($target + @{ phase='preflight'; error=$_.Exception.Message; mayHaveChanged=$false })) | Out-Null
+                $actions.Add([pscustomobject]($target + @{ action='restore'; status='failed' })) | Out-Null
             }
-        })
-        $latest = $eligible | Sort-Object timestamp -Descending | Select-Object -First 1
-        if ($null -eq $latest) { throw "No confirmed-apply backup found for $ModuleId. Select a reviewed legacy backup explicitly with -BackupPath." }
-        $backupPath = $latest.path
-    }
-    $backup = Get-Content -LiteralPath $backupPath -Raw | ConvertFrom-Json
-    if ($backup.moduleId -ne $ModuleId) { throw 'The selected backup belongs to a different module.' }
-    $actions = New-Object System.Collections.Generic.List[object]
-    $leftAsChanged = New-Object System.Collections.Generic.List[object]
-    $alreadyAtOriginal = New-Object System.Collections.Generic.List[object]
-    $failures = New-Object System.Collections.Generic.List[object]
-    $pending = New-Object System.Collections.Generic.List[object]
-    $work = New-Object System.Collections.Generic.List[object]
-    $registryCount = 0
-    $serviceCount = 0
-    foreach ($rv in @($backup.registry)) {
-        $target = @{ type='registry'; path=$rv.path; name=$rv.name }
-        try {
-            $reason = if (Test-ProtectedRegistryPath $rv.path $manifest $rv.name) { 'protected setting' }
-                elseif ($rv.valueExists -isnot [bool]) { 'missing original existence evidence' }
-                elseif (-not $rv.PSObject.Properties['kind'] -and ([string]::IsNullOrEmpty([string]$rv.name) -or [Globalization.CultureInfo]::CurrentCulture.CompareInfo.Compare([string]$rv.name, '(default)', [Globalization.CompareOptions]::IgnoreCase) -eq 0)) { 'missing original existence evidence for legacy default alias' }
-                elseif ($rv.valueExists -and -not $rv.kind) { 'missing applied kind evidence in legacy backup' }
-                elseif (-not $rv.PSObject.Properties['desiredData'] -or -not $rv.type) { 'missing applied value evidence' }
-                else { $null }
-            if ($reason) {
-                $leftAsChanged.Add([pscustomobject]($target + @{ reason=$reason })) | Out-Null
-                Write-Host "Left as changed: $($rv.path)\$($rv.name) ($reason)"
+        }
+        $serviceStates = @{}
+        foreach ($svc in @($backup.services)) {
+            $target = @{ type='service'; name=$svc.name }
+            if ($svc.exists -isnot [bool]) {
+                $leftAsChanged.Add([pscustomobject]($target + @{ reason='missing original existence evidence' })) | Out-Null
+                $serviceStates[[string]$svc.name] = [pscustomobject]@{ status='leftAsChanged' }
+                Write-Host "Left as changed: service $($svc.name) (missing original existence evidence)"
                 continue
             }
-            $expected = Get-ManifestRegistrySnapshot ([pscustomobject]@{ type=$rv.type; data=$rv.desiredData })
-            $null = ConvertTo-RegistrySnapshotData $expected.kind (Convert-RegistrySnapshotData $expected)
-            $current = Get-RegistryValueSnapshot $rv -AllowChangedLayout
-            $original = $null
-            try { $original = Get-RegistryRestoreSnapshot $rv } catch { if (Test-RegistrySnapshotEqual $expected $current) { throw } }
-            if ($null -ne $original -and (Test-RegistrySnapshotEqual $original $current)) {
-                $alreadyAtOriginal.Add([pscustomobject]$target) | Out-Null
-                Write-Host "Already at original value: $($rv.path)\$($rv.name)"
-            } elseif (-not (Test-RegistrySnapshotEqual $expected $current)) {
-                $reason = if (Test-RegistryChangedLayout $current) { 'current raw layout cannot have been applied' } else { 'current kind or data changed' }
-                $leftAsChanged.Add([pscustomobject]($target + @{ reason=$reason })) | Out-Null
-                Write-Host "Left as changed: $($rv.path)\$($rv.name) ($reason)"
-            } else {
-                $action = [pscustomobject]($target + @{ action='restore'; status='planned' })
-                $actions.Add($action) | Out-Null
-                $work.Add([pscustomobject]@{ target=$target; snapshot=$rv; applied=$expected; original=$original; action=$action }) | Out-Null
-            }
-        } catch {
-            $failures.Add([pscustomobject]($target + @{ phase='preflight'; error=$_.Exception.Message; mayHaveChanged=$false })) | Out-Null
-            $actions.Add([pscustomobject]($target + @{ action='restore'; status='failed' })) | Out-Null
-        }
-    }
-    foreach ($svc in @($backup.services)) {
-        $target = @{ type='service'; name=$svc.name }
-        if ($svc.exists -isnot [bool]) {
-            $leftAsChanged.Add([pscustomobject]($target + @{ reason='missing original existence evidence' })) | Out-Null
-            Write-Host "Left as changed: service $($svc.name) (missing original existence evidence)"
-            continue
-        }
-        if (-not $svc.exists) { continue }
-        try {
-            $blocked = Test-ProtectedService $svc.name $manifest
-            $current = @(if (-not $blocked) { Get-ServiceSnapshot $svc.name | Where-Object { $_.exists -and $_.name -ieq $svc.name } })
-            if ($blocked -or $svc.appliedStartup -notin 'Disabled','Manual','Automatic' -or $current.Count -ne 1) {
-                $leftAsChanged.Add([pscustomobject]($target + @{ reason='protected, missing, or applied startup evidence unavailable' })) | Out-Null
-                Write-Host "Left as changed: service $($svc.name) (applied startup unavailable or changed)"
-            } elseif (Test-ServiceRestoreComplete $svc $current[0]) {
-                $alreadyAtOriginal.Add([pscustomobject]$target) | Out-Null
-                Write-Host "Already at original service settings: $($svc.name)"
-            } elseif ($current[0].startType -eq $svc.startType) {
-                $reason = 'original startup matches; recorded Running state is unverified and runtime ownership is unavailable'
-                $leftAsChanged.Add([pscustomobject]($target + @{ reason=$reason })) | Out-Null
-                Write-Host "Left as changed: service $($svc.name) ($reason)"
-            } elseif ($current[0].startType -eq $svc.appliedStartup) {
-                if ($svc.startType -notin 'Disabled','Manual','Automatic') { throw "Unsupported original service startup: $($svc.name)" }
-                $action = [pscustomobject]($target + @{ action='restore'; status='planned' })
-                $actions.Add($action) | Out-Null
-                $work.Add([pscustomobject]@{ target=$target; snapshot=$svc; action=$action }) | Out-Null
-            } else {
-                $leftAsChanged.Add([pscustomobject]($target + @{ reason='current startup changed' })) | Out-Null
-                Write-Host "Left as changed: service $($svc.name)"
-            }
-        } catch {
-            $failures.Add([pscustomobject]($target + @{ phase='preflight'; error=$_.Exception.Message; mayHaveChanged=$false })) | Out-Null
-            $actions.Add([pscustomobject]($target + @{ action='restore'; status='failed' })) | Out-Null
-        }
-    }
-    $stopped = $failures.Count -gt 0
-    $attempted = 0
-    foreach ($item in $work) {
-        if ($stopped) {
-            $item.action.status = 'pending'
-            $pending.Add([pscustomobject]$item.target) | Out-Null
-            continue
-        }
-        if (-not $ConfirmApply) {
-            if ($item.target.type -eq 'registry') { $registryCount++ } else { $serviceCount++ }
-            continue
-        }
-        $writing = $false
-        try {
-            if ($item.target.type -eq 'registry') {
-                $current = Get-RegistryValueSnapshot $item.snapshot -AllowChangedLayout
-                if (Test-RegistrySnapshotEqual $item.original $current) {
-                    $alreadyAtOriginal.Add([pscustomobject]$item.target) | Out-Null
-                    $item.action.status = 'alreadyAtOriginal'
-                    continue
-                }
-                if (-not (Test-RegistrySnapshotEqual $item.applied $current)) {
-                    $reason = if (Test-RegistryChangedLayout $current) { 'current raw layout cannot have been applied' } else { 'changed after preflight' }
-                    $leftAsChanged.Add([pscustomobject]($item.target + @{ reason=$reason })) | Out-Null
-                    $item.action.status = 'leftAsChanged'
-                    Write-Host "Left as changed: $($item.target.path)\$($item.target.name) ($reason)"
-                    continue
-                }
-                $attempted++
-                $writing = $true
-                Restore-RegistryValue $item.snapshot $item.original
-                $registryCount++
-            } else {
-                $svc = $item.snapshot
-                $current = @(Get-ServiceSnapshot $svc.name | Where-Object { $_.exists -and $_.name -ieq $svc.name })
-                if ($current.Count -eq 1 -and (Test-ServiceRestoreComplete $svc $current[0])) {
-                    $alreadyAtOriginal.Add([pscustomobject]$item.target) | Out-Null
-                    $item.action.status = 'alreadyAtOriginal'
-                    continue
-                }
-                if ($current.Count -ne 1 -or $current[0].startType -ne $svc.appliedStartup -or $current[0].startType -eq $svc.startType) {
-                    $reason = if ($current.Count -eq 1 -and $current[0].startType -eq $svc.startType) {
-                        'original startup matches; recorded Running state is unverified and runtime ownership is unavailable'
-                    } else { 'changed after preflight' }
-                    $leftAsChanged.Add([pscustomobject]($item.target + @{ reason=$reason })) | Out-Null
-                    $item.action.status = 'leftAsChanged'
+            if (-not $svc.exists) { continue }
+            try {
+                $blocked = Test-ProtectedService $svc.name $manifest
+                $current = @(if (-not $blocked) { Get-ServiceSnapshot $svc.name | Where-Object { $_.exists -and $_.name -ieq $svc.name } })
+                if ($blocked -or $svc.appliedStartup -notin 'Disabled','Manual','Automatic' -or $current.Count -ne 1) {
+                    $leftAsChanged.Add([pscustomobject]($target + @{ reason='protected, missing, or applied startup evidence unavailable' })) | Out-Null
+                    $serviceStates[[string]$svc.name] = [pscustomobject]@{ status='leftAsChanged' }
+                    Write-Host "Left as changed: service $($svc.name) (applied startup unavailable or changed)"
+                } elseif (Test-ServiceRestoreComplete $svc $current[0]) {
+                    $alreadyAtOriginal.Add([pscustomobject]$target) | Out-Null
+                    $serviceStates[[string]$svc.name] = [pscustomobject]@{ status='alreadyAtOriginal' }
+                    Write-Host "Already at original service settings: $($svc.name)"
+                } elseif ($current[0].startType -eq $svc.startType) {
+                    $reason = 'original startup matches; recorded Running state is unverified and runtime ownership is unavailable'
+                    $leftAsChanged.Add([pscustomobject]($target + @{ reason=$reason })) | Out-Null
+                    $serviceStates[[string]$svc.name] = [pscustomobject]@{ status='leftAsChanged' }
                     Write-Host "Left as changed: service $($svc.name) ($reason)"
-                    continue
+                } elseif ($current[0].startType -eq $svc.appliedStartup) {
+                    if ($svc.startType -notin 'Disabled','Manual','Automatic') { throw "Unsupported original service startup: $($svc.name)" }
+                    $action = [pscustomobject]($target + @{ action='restore'; status='planned' })
+                    $actions.Add($action) | Out-Null
+                    $work.Add([pscustomobject]@{ target=$target; snapshot=$svc; action=$action }) | Out-Null
+                    $serviceStates[[string]$svc.name] = $action
+                } else {
+                    $leftAsChanged.Add([pscustomobject]($target + @{ reason='current startup changed' })) | Out-Null
+                    $serviceStates[[string]$svc.name] = [pscustomobject]@{ status='leftAsChanged' }
+                    Write-Host "Left as changed: service $($svc.name)"
                 }
-                $attempted++
-                $writing = $true
-                Restore-ServiceSnapshot $svc
-                $verified = @(Get-ServiceSnapshot $svc.name | Where-Object { $_.exists -and $_.name -ieq $svc.name })
-                if ($verified.Count -ne 1 -or -not (Test-ServiceRestoreComplete $svc $verified[0])) { throw "Service restore verification failed: $($svc.name)" }
-                $serviceCount++
+            } catch {
+                $failures.Add([pscustomobject]($target + @{ phase='preflight'; error=$_.Exception.Message; mayHaveChanged=$false })) | Out-Null
+                $actions.Add([pscustomobject]($target + @{ action='restore'; status='failed' })) | Out-Null
+                $serviceStates[[string]$svc.name] = [pscustomobject]@{ status='failed' }
             }
-            $item.action.status = 'restored'
-        } catch {
-            $item.action.status = 'failed'
-            $failures.Add([pscustomobject]($item.target + @{ phase='restore'; error=$_.Exception.Message; mayHaveChanged=$writing })) | Out-Null
-            $stopped = $true
         }
-    }
-    if ($failures.Count) { Write-Host "Rollback incomplete. Backup retained: $backupPath. Review failures and pending settings before retrying." }
-    return [pscustomobject]@{
-        moduleId = $ModuleId
-        dryRun = -not $ConfirmApply
-        backupPath = $backupPath
-        success = $failures.Count -eq 0
-        partial = $failures.Count -gt 0 -and $attempted -gt 0
-        restoredRegistry = $registryCount
-        restoredServices = $serviceCount
-        actions = @($actions.ToArray())
-        leftAsChanged = @($leftAsChanged.ToArray())
-        alreadyAtOriginal = @($alreadyAtOriginal.ToArray())
-        failures = @($failures.ToArray())
-        pending = @($pending.ToArray())
+        foreach ($svc in @($backup.services)) {
+            if ($svc.appliedTargetState -ne 'Stopped') { continue }
+            $dependents = @($svc.dependents)
+            for ($index = $dependents.Count - 1; $index -ge 0; $index--) {
+                $dependent = $dependents[$index]
+                if ($null -eq $dependent -or [string]$dependent.status -cne 'Running' -or $serviceStates.ContainsKey([string]$dependent.name)) { continue }
+                $target = @{ type='dependent'; name=[string]$dependent.name; of=[string]$svc.name }
+                try {
+                    $check = Test-DependentRestore $dependent $serviceStates $manifest -Planning
+                    if ($check.state -eq 'alreadyAtOriginal') {
+                        if ($ConfirmApply) { Save-DependentRestoreComplete $dependent $backup $backupPath }
+                        $alreadyAtOriginal.Add([pscustomobject]$target) | Out-Null
+                        $serviceStates[$target.name] = [pscustomobject]@{ status='alreadyAtOriginal' }
+                    } elseif ($check.state -eq 'leftAsChanged') {
+                        $leftAsChanged.Add([pscustomobject]($target + @{ reason=$check.reason })) | Out-Null
+                        $serviceStates[$target.name] = [pscustomobject]@{ status='leftAsChanged' }
+                        Write-Host "Left as changed: dependent service $($target.name) of $($target.of) ($($check.reason))"
+                    } else {
+                        $action = [pscustomobject]($target + @{ action='start'; status='planned' })
+                        $actions.Add($action) | Out-Null
+                        $work.Add([pscustomobject]@{ target=$target; snapshot=$dependent; action=$action }) | Out-Null
+                        $serviceStates[$target.name] = $action
+                    }
+                } catch {
+                    $failures.Add([pscustomobject]($target + @{ phase='preflight'; error=$_.Exception.Message; mayHaveChanged=$false })) | Out-Null
+                    $actions.Add([pscustomobject]($target + @{ action='start'; status='failed' })) | Out-Null
+                    $serviceStates[$target.name] = [pscustomobject]@{ status='failed' }
+                }
+            }
+        }
+        $stopped = $failures.Count -gt 0
+        $attempted = 0
+        foreach ($item in $work) {
+            if ($stopped) {
+                $item.action.status = 'pending'
+                $pending.Add([pscustomobject]$item.target) | Out-Null
+                continue
+            }
+            if (-not $ConfirmApply) {
+                if ($item.target.type -eq 'registry') { $registryCount++ } else { $serviceCount++ }
+                continue
+            }
+            $writing = $false
+            try {
+                if ($item.target.type -eq 'registry') {
+                    $current = Get-RegistryValueSnapshot $item.snapshot -AllowChangedLayout
+                    if (Test-RegistrySnapshotEqual $item.original $current) {
+                        $alreadyAtOriginal.Add([pscustomobject]$item.target) | Out-Null
+                        $item.action.status = 'alreadyAtOriginal'
+                        continue
+                    }
+                    if (-not (Test-RegistrySnapshotEqual $item.applied $current)) {
+                        $reason = if (Test-RegistryChangedLayout $current) { 'current raw layout cannot have been applied' } else { 'changed after preflight' }
+                        $leftAsChanged.Add([pscustomobject]($item.target + @{ reason=$reason })) | Out-Null
+                        $item.action.status = 'leftAsChanged'
+                        Write-Host "Left as changed: $($item.target.path)\$($item.target.name) ($reason)"
+                        continue
+                    }
+                    $attempted++
+                    $writing = $true
+                    Restore-RegistryValue $item.snapshot $item.original
+                    $registryCount++
+                } elseif ($item.target.type -eq 'dependent') {
+                    $check = Test-DependentRestore $item.snapshot $serviceStates $manifest
+                    if ($check.state -eq 'alreadyAtOriginal') {
+                        Save-DependentRestoreComplete $item.snapshot $backup $backupPath
+                        $alreadyAtOriginal.Add([pscustomobject]$item.target) | Out-Null
+                        $item.action.status = 'alreadyAtOriginal'
+                        continue
+                    }
+                    if ($check.state -eq 'leftAsChanged') {
+                        $leftAsChanged.Add([pscustomobject]($item.target + @{ reason=$check.reason })) | Out-Null
+                        $item.action.status = 'leftAsChanged'
+                        Write-Host "Left as changed: dependent service $($item.target.name) of $($item.target.of) ($($check.reason))"
+                        continue
+                    }
+                    $item.snapshot | Add-Member -MemberType NoteProperty -Name restoreAttempted -Value $true -Force
+                    Write-JsonFile $backup $backupPath
+                    $attempted++
+                    $writing = $true
+                    Start-Service -Name $item.target.name -ErrorAction Stop
+                    $verified = @(Get-ServiceSnapshot $item.target.name | Where-Object { $_.exists -and $_.name -ieq $item.target.name -and $_.status -eq 'Running' -and $_.startType -eq $item.snapshot.startType })
+                    if ($verified.Count -ne 1) { throw "Dependent service start verification failed: $($item.target.name)" }
+                    Save-DependentRestoreComplete $item.snapshot $backup $backupPath
+                    $serviceCount++
+                } else {
+                    $svc = $item.snapshot
+                    $current = @(Get-ServiceSnapshot $svc.name | Where-Object { $_.exists -and $_.name -ieq $svc.name })
+                    if ($current.Count -eq 1 -and (Test-ServiceRestoreComplete $svc $current[0])) {
+                        $alreadyAtOriginal.Add([pscustomobject]$item.target) | Out-Null
+                        $item.action.status = 'alreadyAtOriginal'
+                        continue
+                    }
+                    if ($current.Count -ne 1 -or $current[0].startType -ne $svc.appliedStartup -or $current[0].startType -eq $svc.startType) {
+                        $reason = if ($current.Count -eq 1 -and $current[0].startType -eq $svc.startType) {
+                            'original startup matches; recorded Running state is unverified and runtime ownership is unavailable'
+                        } else { 'changed after preflight' }
+                        $leftAsChanged.Add([pscustomobject]($item.target + @{ reason=$reason })) | Out-Null
+                        $item.action.status = 'leftAsChanged'
+                        Write-Host "Left as changed: service $($svc.name) ($reason)"
+                        continue
+                    }
+                    $attempted++
+                    $writing = $true
+                    Restore-ServiceSnapshot $svc
+                    $verified = @(Get-ServiceSnapshot $svc.name | Where-Object { $_.exists -and $_.name -ieq $svc.name })
+                    if ($verified.Count -ne 1 -or -not (Test-ServiceRestoreComplete $svc $verified[0])) { throw "Service restore verification failed: $($svc.name)" }
+                    $serviceCount++
+                }
+                $item.action.status = 'restored'
+            } catch {
+                $item.action.status = 'failed'
+                $failures.Add([pscustomobject]($item.target + @{ phase='restore'; error=$_.Exception.Message; mayHaveChanged=$writing })) | Out-Null
+                $stopped = $true
+            }
+        }
+        if ($ConfirmApply -and $failures.Count -eq 0 -and $backup.applyCompleted -is [bool] -and -not $backup.applyCompleted -and $backup.undoCompleted -ne $true) {
+            $backup | Add-Member -MemberType NoteProperty -Name undoCompleted -Value $true -Force
+            Write-JsonFile $backup $backupPath
+        }
+        if ($failures.Count) { Write-Host "Rollback incomplete. Backup retained: $backupPath. Review failures and pending settings before retrying." }
+        return [pscustomobject]@{
+            moduleId = $ModuleId
+            dryRun = -not $ConfirmApply
+            backupPath = $backupPath
+            success = $failures.Count -eq 0
+            partial = $failures.Count -gt 0 -and $attempted -gt 0
+            restoredRegistry = $registryCount
+            restoredServices = $serviceCount
+            actions = @($actions.ToArray())
+            leftAsChanged = @($leftAsChanged.ToArray())
+            alreadyAtOriginal = @($alreadyAtOriginal.ToArray())
+            failures = @($failures.ToArray())
+            pending = @($pending.ToArray())
+        }
+    } finally {
+        Exit-ChangeLock $changeLock
     }
 }
 

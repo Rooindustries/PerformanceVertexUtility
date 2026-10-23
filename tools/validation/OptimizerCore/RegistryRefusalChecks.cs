@@ -13,8 +13,10 @@ static class RegistryRefusalChecks
         var files = Path.Combine(Path.GetTempPath(), "roo-industries-registry-refusal-" + Guid.NewGuid().ToString("N"));
         using var hive = Microsoft.Win32.RegistryKey.OpenBaseKey(Microsoft.Win32.RegistryHive.CurrentUser, Microsoft.Win32.RegistryView.Registry64);
         Directory.CreateDirectory(files);
+        OwnedRegistryKey? owned = null;
         try
         {
+            owned = OwnedRegistryKey.Create(hive, name);
             using (hive.CreateSubKey(name + "\\Receipts")) { }
             using (var app = hive.CreateSubKey(name + "\\App"))
             {
@@ -67,9 +69,7 @@ static class RegistryRefusalChecks
         }
         finally
         {
-            hive.DeleteSubKeyTree(name, throwOnMissingSubKey: false);
-            using (var parent = hive.OpenSubKey("Software\\RooIndustriesCleanupTests"))
-                if (parent is not null && parent.SubKeyCount == 0 && parent.ValueCount == 0) hive.DeleteSubKey("Software\\RooIndustriesCleanupTests", throwOnMissingSubKey: false);
+            owned?.Dispose();
             Directory.Delete(files, true);
         }
     }
