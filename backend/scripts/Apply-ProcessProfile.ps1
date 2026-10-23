@@ -310,6 +310,8 @@ try {
                     $appliedControls.Add($change) | Out-Null
                 } catch {
                     $failedControls.Add("$([string](Get-RooIndustriesPropertyValue $change 'control' 'unknown')): $($_.Exception.Message)") | Out-Null
+                } finally {
+                    Write-RooIndustriesOperationJson $backupManifest $backupPath
                 }
             }
             $afterControls = Get-RooIndustriesProcessControlState ([int](Get-RooIndustriesPropertyValue $snapshot 'processId' 0)) $null -ReadGpu:(Test-RooIndustriesEntryHasGpuControl $snapshot)
