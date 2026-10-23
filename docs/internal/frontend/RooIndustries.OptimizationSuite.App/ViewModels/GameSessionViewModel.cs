@@ -104,6 +104,7 @@ public partial class GameSessionViewModel : ObservableObject
     {
         if (!_matching && value is not null)
         {
+            Invalidate();
             _customPreset = false;
             _matching = true;
             try
@@ -120,7 +121,7 @@ public partial class GameSessionViewModel : ObservableObject
     partial void OnGamePathChanged(string value) => Invalidate();
     partial void OnAcceptLauncherScopeChanged(bool value) => Invalidate();
     partial void OnKeepArmedChanged(bool value) => Invalidate();
-    partial void OnAffinityMaskChanged(string oldValue, string newValue) { Invalidate(); if (oldValue.Length > 0) UseCustomPreset(); }
+    partial void OnAffinityMaskChanged(string? oldValue, string newValue) { Invalidate(); if (!string.IsNullOrEmpty(oldValue)) UseCustomPreset(); }
     partial void OnSelectedCoresChanged(GameCoreChoice? value) { if (value is not null) AffinityMask = value.Affinity.Mask; }
     public void NoteChanged()
     {
