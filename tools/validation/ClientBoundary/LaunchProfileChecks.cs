@@ -323,6 +323,7 @@ static class LaunchProfileChecks
                     using var retry = Start(Path.Combine(repo, "backend", "bin", "optimizer", "session", "RooIndustries.SessionHost.exe"), "run", Path.Combine(native.SessionRoot, "worker-request.json"));
                     if (!retry.WaitForExit(30000)) { retry.Kill(); retry.WaitForExit(10000); throw new TimeoutException("Sign-in recovery did not finish."); }
                     var result = OperationFiles.Read<ProtectedSessionState>(Path.Combine(native.SessionRoot, "recovery-result.json"));
+                    game.Refresh();
                     signInSafe = retry.ExitCode != 0 && result.Status == "recoveryRequired" && TaskExists(native.SessionRoot) && !game.PriorityBoostEnabled;
                     result.Status = "stoppedWithErrors";
                     OperationFiles.Write(statePath, result);
@@ -341,6 +342,7 @@ static class LaunchProfileChecks
                 {
                     File.Move(retained, journal);
                     var recovered = await App().RecoverGameSessionAsync(native.SessionRoot);
+                    game.Refresh();
                     retryRestored = GameSessionDisplay.Restored(recovered) && !TaskExists(native.SessionRoot) && game.PriorityBoostEnabled == originalBoost;
                     if (!retryRestored)
                     {
@@ -349,7 +351,8 @@ static class LaunchProfileChecks
                     }
                 }
                 Console.WriteLine(JsonSerializer.Serialize(new { discoveryFailed, signInSafe, updateBlocked }));
-                Check(discoveryFailed, "A task discovery error makes cleanup fail instead of reporting success: " + discovery.Error);
+                if (!discoveryFailed) Console.WriteLine(discovery.Error);
+                Check(discoveryFailed, "A task discovery error makes cleanup fail instead of reporting success");
                 Check(signInSafe, "Sign-in recovery keeps its task and fails while a native backup is missing");
                 Check(updateBlocked, "An older stoppedWithErrors session with an unresolved native field blocks an update");
                 Check(retryRestored,
