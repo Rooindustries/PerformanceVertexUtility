@@ -27,7 +27,7 @@ static class ProcessUndoChecks
                 return new(plan, preview, OperationFiles.HashFile(preview), Path.Combine(directory, "journal.json"));
             };
             App.Operations.Applies = review => engine.Apply(review.PreviewPath, review.Hash, review.JournalPath);
-            App.Operations.Restores = journal => engine.Restore(journal);
+            App.Operations.Restores = journal => engine.RestoreApplyOnce(journal, root, null);
             var page = new ProcessControlsViewModel();
             async Task Review(string priority)
             {
