@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Media;
 
 namespace RooIndustries.OptimizationSuite.Services;
 
@@ -13,8 +14,6 @@ public sealed class ThemeService
     private const string EffectsKey = "reducedEffects";
     private const string SimpleModeKey = "simpleMode";
     private const string ProbeBrushKey = "RooIndustriesCanvasBrush";
-    private const string StylesUri = "ms-appx:///Resources/Styles.xaml";
-    private const string StylesProbeKey = "PanelBorderStyle";
 
     public static readonly ThemeOption RooIndustriesBlue = new("roo-industries-blue", "Blue", "ms-appx:///Resources/Theme.RooIndustriesBlue.xaml");
     public static readonly ThemeOption BlackoutGold = new("black-gold", "Blackout Gold", "ms-appx:///Resources/Theme.BlackoutGold.xaml");
@@ -43,10 +42,14 @@ public sealed class ThemeService
         CurrentThemeId = option.Id;
         ReducedEffects = _settings.Get(EffectsKey) == "1";
         SimpleMode = _settings.Get(SimpleModeKey) != "0";
+        var live = LiveTheme();
         if (option.Id != BlackoutGold.Id)
         {
-            SwapDictionary(option);
+            Repaint(live, option);
         }
+#if ROO_INDUSTRIES_TEST_HOOKS
+        RecordThemeKeys("start");
+#endif
     }
 
     public void SetSimpleMode(bool simple)
@@ -86,49 +89,100 @@ public sealed class ThemeService
             return;
         }
 
-        SwapDictionary(option);
+        Repaint(LiveTheme(), option);
         CurrentThemeId = option.Id;
+#if ROO_INDUSTRIES_TEST_HOOKS
+        RecordThemeKeys("switch");
+#endif
         _settings.Set(ThemeKey, option.Id);
         ThemeChanged?.Invoke();
     }
 
-    private static void SwapDictionary(ThemeOption option)
+    private static ResourceDictionary LiveTheme()
     {
         var merged = Application.Current.Resources.MergedDictionaries;
-        var replacement = new ResourceDictionary { Source = new Uri(option.ResourceUri) };
-
-        var swapped = false;
-        for (var i = 0; i < merged.Count; i++)
+        var index = Enumerable.Range(0, merged.Count).First(i => merged[i].ContainsKey(ProbeBrushKey));
+        var loaded = merged[index];
+        if (loaded.Source is null)
         {
-            if (merged[i].ContainsKey(ProbeBrushKey))
-            {
-                merged[i] = replacement;
-                swapped = true;
-                break;
-            }
+            return loaded;
         }
 
-        if (!swapped)
+        var live = new ResourceDictionary();
+        foreach (var (key, value) in loaded.ToArray())
         {
-            merged.Add(replacement);
+            loaded.Remove(key);
+            live[key] = value;
         }
 
-        ReloadStyles(merged);
+        merged[index] = live;
+        return live;
     }
 
-    private static void ReloadStyles(IList<ResourceDictionary> merged)
+#if ROO_INDUSTRIES_TEST_HOOKS
+    private void RecordThemeKeys(string when)
     {
-        for (var i = 0; i < merged.Count; i++)
+        if (Environment.GetEnvironmentVariable("ROO_INDUSTRIES_TEST_THEME_KEYS") is not { Length: > 0 } path) return;
+        var keys = LiveTheme().Keys.Select(key => key.ToString()).Order(StringComparer.Ordinal);
+        System.IO.File.AppendAllText(path, when + "\t" + CurrentThemeId + "\t" + string.Join(",", keys) + Environment.NewLine);
+    }
+#endif
+
+    private static void Repaint(ResourceDictionary live, ThemeOption option)
+    {
+        var next = new ResourceDictionary { Source = new Uri(option.ResourceUri) };
+        var liveKeys = live.Keys.ToHashSet();
+        var nextKeys = next.Keys.ToHashSet();
+        foreach (var key in liveKeys.Where(key => !nextKeys.Contains(key)))
         {
-            if (!merged[i].ContainsKey(StylesProbeKey))
+            live.Remove(key);
+        }
+
+        foreach (var (key, value) in next.ToArray())
+        {
+            if (liveKeys.Contains(key) && Copy(value, live[key]))
             {
                 continue;
             }
 
-            var fresh = new ResourceDictionary();
-            merged[i] = fresh;
-            fresh.Source = new Uri(StylesUri);
-            return;
+            next.Remove(key);
+            live[key] = value;
+        }
+    }
+
+    private static bool Copy(object source, object target)
+    {
+        switch (source, target)
+        {
+            case (SolidColorBrush from, SolidColorBrush to):
+                to.Color = from.Color;
+                to.Opacity = from.Opacity;
+                return true;
+            case (LinearGradientBrush from, LinearGradientBrush to):
+                to.StartPoint = from.StartPoint;
+                to.EndPoint = from.EndPoint;
+                to.Opacity = from.Opacity;
+                CopyStops(from.GradientStops, to.GradientStops);
+                return true;
+            case (RadialGradientBrush from, RadialGradientBrush to):
+                to.Center = from.Center;
+                to.GradientOrigin = from.GradientOrigin;
+                to.RadiusX = from.RadiusX;
+                to.RadiusY = from.RadiusY;
+                to.Opacity = from.Opacity;
+                CopyStops(from.GradientStops, to.GradientStops);
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private static void CopyStops(IList<GradientStop> from, IList<GradientStop> to)
+    {
+        to.Clear();
+        foreach (var stop in from)
+        {
+            to.Add(new GradientStop { Color = stop.Color, Offset = stop.Offset });
         }
     }
 }
