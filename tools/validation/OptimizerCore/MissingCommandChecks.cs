@@ -203,11 +203,10 @@ function Invoke-CimMethod {
                 ("missing", Launcher("", "", Path.Combine(folder.FullName, "no-modules"))),
                 ("failing to load", Launcher("", "", BrokenModule(folder.FullName, "BrokenDefender", LoadFailure, "Get-MpPreference", "Set-MpPreference"))),
             ];
-            var index = 0;
             foreach (var (commands, launcher) in states)
             foreach (var row in rows)
             {
-                var store = new RegistryTweakStore(new("CurrentUser", "Registry64", root + @"\" + index++ + @"\Recovery", "value", "State"));
+                var store = new RegistryTweakStore(new("CurrentUser", "Registry64", root + @"\Recovery", "value", "State"));
                 var engine = new TweakEngine(catalog with { Settings = [row], Presets = [], Incompatible = null }, store);
                 string Review(TweakPlan plan) { var path = Path.Combine(folder.FullName, plan.OperationId + ".json"); OperationFiles.Write(path, plan); return path; }
                 PowerShellControls.Launcher = launcher;
