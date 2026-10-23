@@ -16,12 +16,21 @@ function Write-RooIndustriesOperationJson {
     [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($full)) | Out-Null
     $temporary = $full + '.' + [guid]::NewGuid().ToString('N') + '.tmp'
     $bytes = [Text.UTF8Encoding]::new($false).GetBytes(($Value | ConvertTo-Json -Depth 32))
+    $settled = $false
     try {
         $stream = [IO.FileStream]::new($temporary, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
         try { $stream.Write($bytes,0,$bytes.Length); $stream.Flush($true) } finally { $stream.Dispose() }
-        if ([IO.File]::Exists($full)) { [IO.File]::Replace($temporary,$full,[System.Management.Automation.Language.NullString]::Value) }
-        else { [IO.File]::Move($temporary,$full) }
-    } finally { if ([IO.File]::Exists($temporary)) { [IO.File]::Delete($temporary) } }
+        try {
+            if ([IO.File]::Exists($full)) { [IO.File]::Replace($temporary,$full,[System.Management.Automation.Language.NullString]::Value) }
+            else { [IO.File]::Move($temporary,$full) }
+        } catch {
+            $failure = $_.Exception
+            if ($failure -is [Management.Automation.MethodInvocationException] -and $failure.InnerException) { $failure = $failure.InnerException }
+            if ($failure -isnot [IO.IOException] -or ($failure.HResult -band 0xffff) -notin 1176,1177 -or [IO.File]::Exists($full) -or -not [IO.File]::Exists($temporary)) { throw }
+            [IO.File]::Move($temporary,$full)
+        }
+        $settled = $true
+    } finally { if (($settled -or [IO.File]::Exists($full)) -and [IO.File]::Exists($temporary)) { [IO.File]::Delete($temporary) } }
 }
 
 function Read-RooIndustriesOperationJson {
