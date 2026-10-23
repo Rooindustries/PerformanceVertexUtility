@@ -316,10 +316,13 @@ function Repair-RooIndustriesInterruptedGameTuneSession {
     $rawStatus = [string](Get-RooIndustriesPropertyValue $Session 'sessionStatus' '')
     $ownerId = [int](Get-RooIndustriesPropertyValue $Session 'ownerProcessId' 0)
     $ownerStart = [string](Get-RooIndustriesPropertyValue $Session 'ownerStartTimeUtc' '')
+    $recoverWhenOwnerEnds = [bool](Get-RooIndustriesPropertyValue $Session 'recoverWhenOwnerEnds' $false)
+    $parsedOwnerStart = [datetime]::MinValue
+    $ownerIdentityUnreadable = $recoverWhenOwnerEnds -and ($ownerId -le 0 -or -not [datetime]::TryParse($ownerStart, [ref]$parsedOwnerStart))
     $ownerEnded = Test-RooIndustriesGameTuneOwnerEnded $ownerId $ownerStart
     $workerEnded = Test-RooIndustriesGameTuneOwnerEnded ([int](Get-RooIndustriesPropertyValue $Session 'workerProcessId' 0)) ([string](Get-RooIndustriesPropertyValue $Session 'workerStartTimeUtc' ''))
-    if ($rawStatus -eq 'running') { if (-not $ownerEnded -and -not $workerEnded) { return $Session } }
-    elseif ($rawStatus -ne 'completed' -or -not $ownerEnded -or -not [bool](Get-RooIndustriesPropertyValue $Session 'recoverWhenOwnerEnds' $false) -or -not [bool](Get-RooIndustriesPropertyValue $Session 'restorable' $false)) { return $Session }
+    if ($rawStatus -eq 'running') { if (-not $ownerIdentityUnreadable -and -not $ownerEnded -and -not $workerEnded) { return $Session } }
+    elseif ($rawStatus -ne 'completed' -or (-not $ownerEnded -and -not $ownerIdentityUnreadable) -or -not $recoverWhenOwnerEnds -or -not [bool](Get-RooIndustriesPropertyValue $Session 'restorable' $false)) { return $Session }
     $gate = Enter-RooIndustriesGovernorGate
     if ($null -eq $gate) { return $Session }
     try {
@@ -331,6 +334,7 @@ function Repair-RooIndustriesInterruptedGameTuneSession {
         $Session.completedAtUtc = Get-RooIndustriesUtcStamp
         Write-RooIndustriesGameTuneJsonFile $Session $SessionPath
         try {
+            if ($ownerIdentityUnreadable) { throw 'The saved controller identity could not be checked. Its backup was kept.' }
             $backupPath = [string](Get-RooIndustriesPropertyValue $Session 'backupManifestPath' '')
             if (-not [string]::IsNullOrWhiteSpace($backupPath)) {
                 if (-not [string]::Equals([IO.Path]::GetFullPath($backupPath), (Join-Path (Split-Path $SessionPath -Parent) 'backup.json'), [StringComparison]::OrdinalIgnoreCase)) { throw 'The interrupted session backup is outside its session folder.' }
@@ -491,6 +495,11 @@ function Select-RooIndustriesGameTuneReviewedChanges {
     )
     $reviewed = @(Get-RooIndustriesPropertyArray $Review 'entries' | Where-Object { Test-RooIndustriesGameTuneSameInstance $_ $PreviewEntry })
     if ($reviewed.Count -eq 0) { return @() }
-    $approved = @(Get-RooIndustriesPreviewControlChanges $reviewed[0] | ForEach-Object { "$([string](Get-RooIndustriesPropertyValue $_ 'control' ''))>$([string](Get-RooIndustriesPropertyValue $_ 'proposedValue' $null))" })
-    return @(Get-RooIndustriesArray $Changes | Where-Object { $approved -contains "$([string](Get-RooIndustriesPropertyValue $_ 'control' ''))>$([string](Get-RooIndustriesPropertyValue $_ 'proposedValue' $null))" })
+    foreach ($change in @(Get-RooIndustriesArray $Changes)) {
+        $approved = @(Get-RooIndustriesPreviewControlChanges $reviewed[0] | Where-Object { $_.control -eq $change.control -and (Test-RooIndustriesControlValueEqual $change.control $_.proposedValue $change.proposedValue) })
+        if ($approved.Count -eq 0) { continue }
+        $boundChange = $change.PSObject.Copy()
+        $boundChange.currentValue = $approved[0].currentValue
+        $boundChange
+    }
 }

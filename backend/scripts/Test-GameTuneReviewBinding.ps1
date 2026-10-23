@@ -17,6 +17,9 @@ $helper = "RooIndustriesTuneHelper$suffix.exe"
 $root = Join-Path ([IO.Path]::GetTempPath()) "roo-industries-game-tune-review-$suffix"
 $probes = New-Object System.Collections.Generic.List[System.Diagnostics.Process]
 $profilePath = Join-Path $root 'profile.json'
+$hookPath = Join-Path $PSScriptRoot '..\test-hooks.enabled'
+$hookToken = [guid]::NewGuid().ToString('N')
+$hookOwned = $false
 
 function Write-Profile([string]$GamePriority = 'AboveNormal') {
     $profile = [pscustomobject]@{
@@ -167,9 +170,54 @@ try {
     $review = Invoke-Review 'nogame'
     Test-Refused (Invoke-Start $review 'nogame') 'GAME_TUNE_REVIEW_NO_GAME' 'Start with a review taken while no game ran'
     Add-Check ((Get-Priority $kept) -eq 'Normal') 'A reviewed helper stays unchanged when no game was reviewed' "The helper changed to $(Get-Priority $kept)"
+    Stop-Probe $kept
+
+    foreach ($race in @('gate-race', 'setter-race')) {
+        $a = Start-Probe $gameA
+        $review = Invoke-Review $race
+        $stateRoot = Join-Path $root "$race-state"
+        $output = Join-Path $root "$race-result.json"
+        $gate = $null
+        if ($race -eq 'gate-race') { $gate = Enter-RooIndustriesGovernorGate; if ($null -eq $gate) { throw 'The test could not claim its gate checkpoint.' } }
+        else {
+            $stream = [IO.File]::Open($hookPath, [IO.FileMode]::CreateNew)
+            $stream.Dispose()
+            $hookOwned = $true
+            [IO.File]::WriteAllText($hookPath, $hookToken)
+            $pauseRoot = Join-Path $stateRoot 'game-tune-sessions'
+            New-Item -ItemType Directory -Path $pauseRoot -Force | Out-Null
+            [IO.File]::WriteAllText((Join-Path $pauseRoot 'test-pause-ms.txt'), '5000')
+        }
+        try {
+            $command = "& '$PSScriptRoot\Start-GameTuneSession.ps1' -ProfilePath '$profilePath' -StateRoot '$stateRoot' -ReviewPath '$($review.Path)' -ReviewSha256 '$($review.Sha256)' -PollIntervalSeconds 1 -MaxDurationSeconds 1 -OutputPath '$output' -ConfirmApply"
+            $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
+            $worker = Start-Process "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -ArgumentList '-NoProfile','-EncodedCommand',$encoded -WindowStyle Hidden -PassThru
+            $probes.Add($worker) | Out-Null
+            $checkpoint = if ($race -eq 'gate-race') { 'session.json' } else { 'backup.json' }
+            $deadline = [datetime]::UtcNow.AddSeconds(30)
+            do {
+                $found = @(Get-ChildItem -LiteralPath $stateRoot -Filter $checkpoint -File -Recurse -ErrorAction SilentlyContinue)
+                if ($found.Count) { break }
+                Start-Sleep -Milliseconds 50
+            } while ([datetime]::UtcNow -lt $deadline -and -not $worker.HasExited)
+            if (-not $found.Count) { throw "The $race fixture did not reach $checkpoint." }
+            $a.PriorityClass = 'BelowNormal'
+        } finally { Exit-RooIndustriesGovernorGate $gate }
+        if (-not $worker.WaitForExit(45000)) { throw "The $race worker did not finish." }
+        $result = Read-RooIndustriesJsonFile $output
+        Add-Check ((Get-Priority $a) -eq 'BelowNormal' -and @($result.changedItems).Count -eq 0 -and $result.status -eq 'failed' -and @($result.errors | Where-Object code -eq 'GAME_TUNE_REVIEW_PLAN_CHANGED').Count -eq 1) `
+            "$race preserves the value changed after validation and reports a stale review" "$race overwrote an unreviewed current value or hid the refusal"
+        if ($result.restorable) {
+            & (Join-Path $PSScriptRoot 'Stop-GameTuneSession.ps1') -SessionPath $result.sessionPath -ConfirmApply | Out-Null
+            Add-Check ((Get-Priority $a) -eq 'BelowNormal') "$race Stop leaves the control we never wrote" "$race Stop overwrote an unwritten control"
+        }
+        if ($hookOwned -and [IO.File]::ReadAllText($hookPath) -eq $hookToken) { Remove-Item -LiteralPath $hookPath; $hookOwned = $false }
+        Stop-Probe $a
+    }
 } catch {
     $failures.Add("Game Tune review binding validation failed: $($_.Exception.Message)") | Out-Null
 } finally {
+    if ($hookOwned -and (Test-Path -LiteralPath $hookPath) -and [IO.File]::ReadAllText($hookPath) -eq $hookToken) { Remove-Item -LiteralPath $hookPath }
     foreach ($probe in $probes) { try { Stop-Probe $probe } catch { $failures.Add("Probe cleanup failed: $($_.Exception.Message)") | Out-Null } }
     $fullRoot = [IO.Path]::GetFullPath($root)
     if ($fullRoot.StartsWith([IO.Path]::GetTempPath(), [StringComparison]::OrdinalIgnoreCase) -and (Test-Path -LiteralPath $fullRoot)) { Remove-Item -LiteralPath $fullRoot -Recurse -Force }

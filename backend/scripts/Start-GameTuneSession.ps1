@@ -173,6 +173,7 @@ try {
     $pollIndex = 0
     $lastPreview = @()
     $interrupted = $false
+    $reviewStale = $false
     while ($true) {
         $pollIndex++
         $pollStartedAtUtc = Get-RooIndustriesUtcStamp
@@ -326,6 +327,12 @@ try {
                 $failedControls = New-Object System.Collections.Generic.List[string]
                 foreach ($change in $entryControlChanges) {
                     try {
+                        if ($null -ne $review -and ($reviewStale -or -not (Test-RooIndustriesControlValueEqual $change.control (Get-RooIndustriesProcessControlReadback $identity.process $change.control) $change.currentValue))) {
+                            $change | Add-Member -NotePropertyName outcome -NotePropertyValue 'failed' -Force
+                            if (-not $reviewStale) { $errors.Add((New-RooIndustriesIssue 'GAME_TUNE_REVIEW_PLAN_CHANGED' 'An app setting changed after your review. Review again before starting.' 'error' 'performance.gameTune' $entry.processName $true 'Review again, then start.' $null)) | Out-Null }
+                            $reviewStale = $true
+                            throw 'The reviewed current value changed; its value was kept.'
+                        }
                         Invoke-RooIndustriesProcessControlChange $identity.process $change
                         $appliedControls.Add($change) | Out-Null
                     } catch {
@@ -355,6 +362,7 @@ try {
                     $skipped.Add($skip) | Out-Null
                     $pollSkipped.Add($skip) | Out-Null
                 }
+                if ($reviewStale) { break }
             }
 
             $poll = [pscustomobject]@{
@@ -384,7 +392,7 @@ try {
             Exit-RooIndustriesGovernorGate $gate
         }
 
-        if ($stopwatch.Elapsed.TotalSeconds -ge $MaxDurationSeconds) { break }
+        if ($reviewStale -or $stopwatch.Elapsed.TotalSeconds -ge $MaxDurationSeconds) { break }
         if (($stopwatch.Elapsed.TotalSeconds + $PollIntervalSeconds) -gt $MaxDurationSeconds) { break }
         Start-Sleep -Seconds $PollIntervalSeconds
     }
@@ -392,7 +400,8 @@ try {
     if ($ConfirmApply -and (Test-RooIndustriesGameTuneOwnerEnded $state.ownerProcessId $state.ownerStartTimeUtc)) { $interrupted = $true }
     $sessionStatus = if ($errors.Count -gt 0) { 'failed' } else { 'completed' }
     $resultStatus = if ($ConfirmApply) {
-        if ($changed.Count -gt 0 -and $skipped.Count -gt 0) { 'partial' }
+        if ($errors.Count -gt 0) { 'failed' }
+        elseif ($changed.Count -gt 0 -and $skipped.Count -gt 0) { 'partial' }
         elseif ($changed.Count -gt 0) { 'success' }
         elseif ($skipped.Count -gt 0) { 'failed' }
         else { 'success' }

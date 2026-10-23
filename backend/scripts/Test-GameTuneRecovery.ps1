@@ -144,6 +144,37 @@ try {
     Check ($recovered.completed -and $recovered.recoveryPerformed -and -not $recovered.restorable -and (Priority $run.Game) -eq 'Normal') 'Reopening the app also recovers a session that finished just before the app crashed and reports changed readings'
     Finish $run
 
+    $run = Interrupted 'hidden-restore' -AppOwner -Duration 2
+    Check ($run.Controller.WaitForExit(15000)) 'The first session completes before another Start'
+    $profile = Join-Path $run.Directory 'profile.json'
+    $state = Join-Path $run.Directory 'state'
+    $reviewPath = Join-Path $run.Directory 'second-review.json'
+    $review = & (Join-Path $PSScriptRoot 'Start-GameTuneSession.ps1') -ProfilePath $profile -PollIntervalSeconds 1 -MaxDurationSeconds 1 | ConvertFrom-Json
+    $arguments = @{}
+    if ($null -ne $review.review) {
+        Write-RooIndustriesOperationJson $review.review $reviewPath
+        $arguments = @{ ReviewPath = $reviewPath; ReviewSha256 = (Get-FileHash $reviewPath).Hash }
+    }
+    $second = & (Join-Path $PSScriptRoot 'Start-GameTuneSession.ps1') -ProfilePath $profile -StateRoot $state -PollIntervalSeconds 1 -MaxDurationSeconds 1 -ControllerProcessId $run.App.Id -ControllerStartTimeUtc $run.App.StartTime.ToUniversalTime().ToString('o') @arguments -ConfirmApply | ConvertFrom-Json
+    Check (-not $second.restorable -and $second.sessionPath -ne $run.Path) 'A second Start on the tuned game creates a separate empty session'
+    $before = & (Join-Path $PSScriptRoot 'Get-GameTuneSessionStatus.ps1') -StateRoot $state -RecoverInterrupted | ConvertFrom-Json
+    Check ($before.restorable -and $before.sessionPath -eq $run.Path) 'A newer empty session cannot hide the older Restore'
+    Stop-RooIndustriesValidationProcess $run.App
+    $after = & (Join-Path $PSScriptRoot 'Get-GameTuneSessionStatus.ps1') -StateRoot $state -RecoverInterrupted | ConvertFrom-Json
+    $original = Status $run
+    Check ($after.recoveryPerformed -and -not $original.restorable -and (Priority $run.Game) -eq 'Normal') 'Reopening recovers the older session behind the newer empty session'
+    Finish $run
+
+    $run = Interrupted 'unreadable-controller' -AppOwner -Duration 2
+    Check ($run.Controller.WaitForExit(15000)) 'The controller identity fixture finishes tuning'
+    Stop-RooIndustriesValidationProcess $run.App
+    $session = Read-RooIndustriesJsonFile $run.Path
+    $session.ownerStartTimeUtc = 'unreadable'
+    Write-RooIndustriesOperationJson $session $run.Path
+    $failed = Status $run -Recover
+    Check ($failed.failed -and $failed.restorable -and (Priority $run.Game) -eq 'AboveNormal' -and @($failed.errors | Where-Object code -eq 'GAME_TUNE_RECOVERY_NEEDS_ATTENTION').Count -eq 1) 'An unreadable app controller keeps its backup and reports recovery attention'
+    Finish $run
+
     $run = Interrupted 'unreadable-identity'
     Stop-RooIndustriesValidationProcess $run.Controller
     $session = Read-RooIndustriesJsonFile $run.Path
