@@ -19490,7 +19490,12 @@
                 "kind": "value",
                 "valueName": "MouseSpeed"
               },
-              "dword": 1
+              "dword": null,
+              "value": {
+                "name": "MouseSpeed",
+                "type": 1,
+                "bytes": "MQAAAA=="
+              }
             }
           ],
           "availability": [
@@ -19501,7 +19506,8 @@
                 "*"
               ]
             }
-          ]
+          ],
+          "sameAs": "choice-b7f8b0e92f46b445"
         },
         {
           "id": "choice-95a6ed84299d0109",
@@ -19515,7 +19521,12 @@
                 "kind": "value",
                 "valueName": "MouseSpeed"
               },
-              "dword": 0
+              "dword": null,
+              "value": {
+                "name": "MouseSpeed",
+                "type": 1,
+                "bytes": "MAAAAA=="
+              }
             }
           ],
           "availability": [
@@ -19526,7 +19537,8 @@
                 "*"
               ]
             }
-          ]
+          ],
+          "sameAs": "choice-48d6a69e87a1e228"
         }
       ],
       "sources": [
@@ -19627,7 +19639,12 @@
                 "kind": "value",
                 "valueName": "MouseThreshold1"
               },
-              "dword": 6
+              "dword": null,
+              "value": {
+                "name": "MouseThreshold1",
+                "type": 1,
+                "bytes": "NgAAAA=="
+              }
             }
           ],
           "availability": [
@@ -19638,7 +19655,8 @@
                 "*"
               ]
             }
-          ]
+          ],
+          "sameAs": "choice-0c8d927787c234c4"
         },
         {
           "id": "choice-95a6ed84299d0109",
@@ -19652,7 +19670,12 @@
                 "kind": "value",
                 "valueName": "MouseThreshold1"
               },
-              "dword": 0
+              "dword": null,
+              "value": {
+                "name": "MouseThreshold1",
+                "type": 1,
+                "bytes": "MAAAAA=="
+              }
             }
           ],
           "availability": [
@@ -19663,7 +19686,8 @@
                 "*"
               ]
             }
-          ]
+          ],
+          "sameAs": "choice-a3328a72057554f3"
         }
       ],
       "sources": [
@@ -19764,7 +19788,12 @@
                 "kind": "value",
                 "valueName": "MouseThreshold2"
               },
-              "dword": 10
+              "dword": null,
+              "value": {
+                "name": "MouseThreshold2",
+                "type": 1,
+                "bytes": "MQAwAAAA"
+              }
             }
           ],
           "availability": [
@@ -19775,7 +19804,8 @@
                 "*"
               ]
             }
-          ]
+          ],
+          "sameAs": "choice-c8412e2c9862ae97"
         },
         {
           "id": "choice-95a6ed84299d0109",
@@ -19789,7 +19819,12 @@
                 "kind": "value",
                 "valueName": "MouseThreshold2"
               },
-              "dword": 0
+              "dword": null,
+              "value": {
+                "name": "MouseThreshold2",
+                "type": 1,
+                "bytes": "MAAAAA=="
+              }
             }
           ],
           "availability": [
@@ -19800,7 +19835,8 @@
                 "*"
               ]
             }
-          ]
+          ],
+          "sameAs": "choice-f91ca3596f527da8"
         }
       ],
       "sources": [
@@ -20509,12 +20545,17 @@
                 "kind": "value",
                 "valueName": "SelectiveSuspendEnabled"
               },
-              "dword": 1,
+              "dword": null,
               "selector": {
                 "depth": 2,
                 "suffix": "Device Parameters",
                 "filter": "all",
                 "existingValuesOnly": false
+              },
+              "value": {
+                "name": "SelectiveSuspendEnabled",
+                "type": 3,
+                "bytes": "AQ=="
               }
             }
           ],
@@ -20540,12 +20581,17 @@
                 "kind": "value",
                 "valueName": "SelectiveSuspendEnabled"
               },
-              "dword": 0,
+              "dword": null,
               "selector": {
                 "depth": 2,
                 "suffix": "Device Parameters",
                 "filter": "all",
                 "existingValuesOnly": false
+              },
+              "value": {
+                "name": "SelectiveSuspendEnabled",
+                "type": 3,
+                "bytes": "AA=="
               }
             }
           ],
@@ -20593,12 +20639,17 @@
                 "kind": "value",
                 "valueName": "SelectiveSuspendEnabled"
               },
-              "dword": 1,
+              "dword": null,
               "selector": {
                 "depth": 2,
                 "suffix": "Device Parameters",
                 "filter": "all",
                 "existingValuesOnly": false
+              },
+              "value": {
+                "name": "SelectiveSuspendEnabled",
+                "type": 3,
+                "bytes": "AQ=="
               }
             }
           ],
@@ -20624,12 +20675,17 @@
                 "kind": "value",
                 "valueName": "SelectiveSuspendEnabled"
               },
-              "dword": 0,
+              "dword": null,
               "selector": {
                 "depth": 2,
                 "suffix": "Device Parameters",
                 "filter": "all",
                 "existingValuesOnly": false
+              },
+              "value": {
+                "name": "SelectiveSuspendEnabled",
+                "type": 3,
+                "bytes": "AA=="
               }
             }
           ],
@@ -21667,7 +21723,12 @@
                 "kind": "value",
                 "valueName": "KeyboardDelay"
               },
-              "dword": 0
+              "dword": null,
+              "value": {
+                "name": "KeyboardDelay",
+                "type": 1,
+                "bytes": "MAAAAA=="
+              }
             }
           ],
           "availability": [
@@ -21692,7 +21753,12 @@
                 "kind": "value",
                 "valueName": "KeyboardDelay"
               },
-              "dword": 1
+              "dword": null,
+              "value": {
+                "name": "KeyboardDelay",
+                "type": 1,
+                "bytes": "MQAAAA=="
+              }
             }
           ],
           "availability": [
@@ -67955,12 +68021,17 @@
                 "kind": "value",
                 "valueName": "SelectiveSuspendEnabled"
               },
-              "dword": 1,
+              "dword": null,
               "selector": {
                 "depth": 2,
                 "suffix": "Device Parameters",
                 "filter": "all",
                 "existingValuesOnly": false
+              },
+              "value": {
+                "name": "SelectiveSuspendEnabled",
+                "type": 3,
+                "bytes": "AQ=="
               }
             }
           ],
@@ -67986,12 +68057,17 @@
                 "kind": "value",
                 "valueName": "SelectiveSuspendEnabled"
               },
-              "dword": 0,
+              "dword": null,
               "selector": {
                 "depth": 2,
                 "suffix": "Device Parameters",
                 "filter": "all",
                 "existingValuesOnly": false
+              },
+              "value": {
+                "name": "SelectiveSuspendEnabled",
+                "type": 3,
+                "bytes": "AA=="
               }
             }
           ],
@@ -71019,7 +71095,12 @@
                 "kind": "value",
                 "valueName": "Flags"
               },
-              "dword": 506
+              "dword": null,
+              "value": {
+                "name": "Flags",
+                "type": 1,
+                "bytes": "NQAwADYAAAA="
+              }
             }
           ],
           "availability": [
@@ -71030,7 +71111,8 @@
                 "*"
               ]
             }
-          ]
+          ],
+          "sameAs": "choice-4ab2e532dd520023"
         },
         {
           "id": "choice-e514bb8e79d6a267",
@@ -71044,7 +71126,12 @@
                 "kind": "value",
                 "valueName": "Flags"
               },
-              "dword": 58
+              "dword": null,
+              "value": {
+                "name": "Flags",
+                "type": 1,
+                "bytes": "NQA4AAAA"
+              }
             }
           ],
           "availability": [
@@ -90884,15 +90971,15 @@
       "selections": [
         {
           "settingId": "windows.c55fa4621a954e21",
-          "optionId": "choice-6b253977ea5987f3"
+          "optionId": "choice-b7f8b0e92f46b445"
         },
         {
           "settingId": "windows.079018f691b27542",
-          "optionId": "choice-4b2161bf9c2d794a"
+          "optionId": "choice-0c8d927787c234c4"
         },
         {
           "settingId": "windows.ced5e140ccf6e55d",
-          "optionId": "choice-58acca08b103278c"
+          "optionId": "choice-c8412e2c9862ae97"
         }
       ]
     },
@@ -90902,15 +90989,15 @@
       "selections": [
         {
           "settingId": "windows.c55fa4621a954e21",
-          "optionId": "choice-95a6ed84299d0109"
+          "optionId": "choice-48d6a69e87a1e228"
         },
         {
           "settingId": "windows.079018f691b27542",
-          "optionId": "choice-95a6ed84299d0109"
+          "optionId": "choice-a3328a72057554f3"
         },
         {
           "settingId": "windows.ced5e140ccf6e55d",
-          "optionId": "choice-95a6ed84299d0109"
+          "optionId": "choice-f91ca3596f527da8"
         }
       ]
     },
@@ -91124,7 +91211,7 @@
       "selections": [
         {
           "settingId": "windows.8c7a398b0e1a5c1d",
-          "optionId": "choice-c55db10b623ad078"
+          "optionId": "choice-4ab2e532dd520023"
         }
       ]
     },

@@ -6957,6 +6957,10 @@
         "replaces": {
           "type": "string",
           "minLength": 1
+        },
+        "sameAs": {
+          "type": "string",
+          "minLength": 1
         }
       },
       "anyOf": [

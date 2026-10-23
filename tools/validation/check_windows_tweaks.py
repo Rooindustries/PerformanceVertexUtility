@@ -190,11 +190,61 @@ def check(root):
             failures.append('A shared source feature must reference real setting resources: ' + feature['id'])
         if feature['status'] == 'shared-preset' and feature.get('implementation') not in preset_ids:
             failures.append('A grouped source feature must reference a real preset: ' + feature['id'])
+    windows_types = json.loads((root / 'backend/catalogs/windows-value-types.json').read_text())['values']
+    failures.extend(windows_type_failures(catalog, windows_types))
+    text = {'hive': 'CurrentUser', 'keyPath': 'Fixture', 'valueName': 'Delay', 'type': 'REG_SZ'}
+    def typed(*options, presets=()):
+        address = {'hive': 'CurrentUser', 'keyPath': 'fixture', 'valueName': 'DELAY'}
+        return {'settings': [{'id': 'fixture', 'options': [dict({'id': identifier, 'name': identifier, 'changes': [dict({'address': address}, **write)]}, **extra) for identifier, write, extra in options]}],
+                'presets': [{'id': preset, 'selections': [{'settingId': 'fixture', 'optionId': choice}]} for preset, choice in presets]}
+    one = {'dword': None, 'value': {'name': 'Delay', 'type': 1, 'bytes': 'MQAAAA=='}}
+    if not windows_type_failures(typed(('number', {'dword': 1}, {})), [text]):
+        failures.append('Windows type check must reject a number written where Windows keeps text.')
+    if windows_type_failures(typed(('text', one, {}), ('removal', {'dword': None}, {})), [text]):
+        failures.append('Windows type check must allow text and removal where Windows keeps text.')
+    if not windows_type_failures(typed(('text', one, {})), [dict(text, valueName='other')]):
+        failures.append('Windows type check must reject a value type that names no setting.')
+    if windows_type_failures(typed(('text', one, {}), ('twin', one, {'sameAs': 'text'}), presets=[('picks-text', 'text')]), [text]):
+        failures.append('Windows type check must allow a hidden choice that writes what its visible twin writes.')
+    if not windows_type_failures(typed(('text', one, {}), ('twin', {'dword': None, 'value': dict(one['value'], bytes='MAAAAA==')}, {'sameAs': 'text'})), [text]):
+        failures.append('Windows type check must reject a hidden choice that writes something else.')
+    if not windows_type_failures(typed(('text', one, {}), ('twin', one, {'sameAs': 'text'}), presets=[('picks-twin', 'twin')]), [text]):
+        failures.append('Windows type check must reject a preset that picks a hidden choice.')
     failures.extend(label_failures(root, catalog))
     stated = re.search(r'catalog contains ([\d,]+) setting resources and ([\d,]+) presets derived from ([\d,]+)\s+version/control records', (root / 'docs/windows-tweaks.md').read_text())
     actual_counts = (len(settings), len(catalog['presets']), len(coverage['records']))
     if stated and tuple(int(value.replace(',', '')) for value in stated.groups()) != actual_counts:
         failures.append('docs/windows-tweaks.md states catalog counts ' + ', '.join(stated.groups()) + ' but the catalog has ' + ', '.join(format(value, ',') for value in actual_counts))
+    return failures
+
+
+REGISTRY_TYPES = {'REG_SZ': 1, 'REG_BINARY': 3}
+
+
+def windows_type_failures(catalog, values):
+    failures = []
+    for value in values:
+        def kept(change):
+            return all(change['address'].get(field, '').casefold() == value[field].casefold() for field in ('hive', 'keyPath', 'valueName'))
+        settings = [setting for setting in catalog['settings'] if any(kept(change) for option in setting['options'] for change in option['changes'])]
+        if not settings:
+            failures.append('A value type Windows keeps names no catalog setting: ' + value['keyPath'] + '\\' + value['valueName'])
+        for setting in settings:
+            for option in setting['options']:
+                for change in option['changes']:
+                    written = change.get('value', {}).get('type') if change.get('value') else 4 if change.get('dword') is not None else None
+                    if kept(change) and (written != REGISTRY_TYPES[value['type']] if written is not None else any(change.get(field) is not None for field in ('token', 'bits', 'formula'))):
+                        failures.append('A choice writes a different registry type than Windows keeps (' + value['type'] + '): ' + setting['id'] + '/' + option['id'])
+    for setting in catalog['settings']:
+        options = {option['id']: option for option in setting['options']}
+        for option in setting['options']:
+            twin = options.get(option.get('sameAs'))
+            if 'sameAs' in option and (twin is None or 'sameAs' in twin or twin['changes'] != option['changes'] or twin.get('controls') != option.get('controls') or twin.get('availability') != option.get('availability')):
+                failures.append('A hidden choice must write exactly what its visible twin writes: ' + setting['id'] + '/' + option['id'])
+    hidden = {(setting['id'], option['id']) for setting in catalog['settings'] for option in setting['options'] if 'sameAs' in option}
+    for preset in catalog['presets']:
+        if any((item['settingId'], item['optionId']) in hidden for item in preset['selections']):
+            failures.append('A preset picks a hidden choice instead of its visible twin: ' + preset['id'])
     return failures
 
 

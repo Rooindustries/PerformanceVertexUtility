@@ -71,6 +71,7 @@ try
     if (args is [_, "--power-fixture"]) { PowerChecks.Run(root, Check); Console.WriteLine($"Completed {count} native power checks."); return; }
     if (args is [_, "--file-controls-fixture"]) { NativeFileControlChecks.Run(Check, Reject); Console.WriteLine($"Completed {count} native file-control checks."); return; }
     if (args is [_, "--hosts-fixture"]) { HostsChecks.Native(Check, Reject); Console.WriteLine($"Completed {count} native hosts checks."); return; }
+    if (args is [_, "--windows-types-fixture"]) { RegistryTypeChecks.Run(root, repo, catalog, Check, Reject); Console.WriteLine($"Completed {count} Windows type checks."); return; }
     if (args is [_, "--timer-fixture"]) { TimerChecks.Native(Check); TimerChecks.Job(Check); Console.WriteLine($"Completed {count} native timer checks."); return; }
     if (args is [_, "--power-plan-fixture"]) { PowerPlanChecks.Native(Check, Reject); Console.WriteLine($"Completed {count} native power-plan checks."); return; }
     if (args is [_, "--timer-startup-fixture"] or [_, "--timer-startup-fixture", _])

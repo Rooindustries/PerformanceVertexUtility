@@ -92,6 +92,114 @@
       ]
     },
     {
+      "settingId": "windows.c55fa4621a954e21",
+      "state": "windows-default",
+      "source": "Windows keeps MouseSpeed as text, default \"1\"; read on the test PC, 2026-10-23",
+      "values": [
+        {
+          "address": {
+            "hive": "CurrentUser",
+            "view": "Registry64",
+            "keyPath": "Control Panel\\Mouse",
+            "kind": "value",
+            "valueName": "MouseSpeed"
+          },
+          "type": 1,
+          "data": "1"
+        }
+      ]
+    },
+    {
+      "settingId": "windows.079018f691b27542",
+      "state": "windows-default",
+      "source": "Windows keeps MouseThreshold1 as text, default \"6\"; read on the test PC, 2026-10-23",
+      "values": [
+        {
+          "address": {
+            "hive": "CurrentUser",
+            "view": "Registry64",
+            "keyPath": "Control Panel\\Mouse",
+            "kind": "value",
+            "valueName": "MouseThreshold1"
+          },
+          "type": 1,
+          "data": "6"
+        }
+      ]
+    },
+    {
+      "settingId": "windows.ced5e140ccf6e55d",
+      "state": "windows-default",
+      "source": "Windows keeps MouseThreshold2 as text, default \"10\"; read on the test PC, 2026-10-23",
+      "values": [
+        {
+          "address": {
+            "hive": "CurrentUser",
+            "view": "Registry64",
+            "keyPath": "Control Panel\\Mouse",
+            "kind": "value",
+            "valueName": "MouseThreshold2"
+          },
+          "type": 1,
+          "data": "10"
+        }
+      ]
+    },
+    {
+      "settingId": "windows.8c7a398b0e1a5c1d",
+      "state": "windows-default",
+      "source": "Windows keeps the Sticky Keys flags as text, default \"510\"; read on the test PC, 2026-10-23",
+      "values": [
+        {
+          "address": {
+            "hive": "CurrentUser",
+            "view": "Registry64",
+            "keyPath": "Control Panel\\Accessibility\\StickyKeys",
+            "kind": "value",
+            "valueName": "Flags"
+          },
+          "type": 1,
+          "data": "510"
+        }
+      ]
+    },
+    {
+      "settingId": "windows.c229fc7278c1db76",
+      "state": "windows-default",
+      "source": "Windows keeps the Filter Keys flags as text, default \"126\"; read on the test PC, 2026-10-23",
+      "values": [
+        {
+          "address": {
+            "hive": "CurrentUser",
+            "view": "Registry64",
+            "keyPath": "Control Panel\\Accessibility\\Keyboard Response",
+            "kind": "value",
+            "valueName": "Flags"
+          },
+          "type": 1,
+          "data": "126"
+        }
+      ]
+    },
+    {
+      "settingId": "windows.b73eb3c11fcab9be",
+      "state": "windows-default",
+      "source": "Windows keeps the Toggle Keys flags as text, default \"62\"; read on the test PC, 2026-10-23",
+      "values": [
+        {
+          "address": {
+            "hive": "CurrentUser",
+            "view": "Registry64",
+            "keyPath": "Control Panel\\Accessibility\\ToggleKeys",
+            "kind": "value",
+            "valueName": "Flags"
+          },
+          "type": 1,
+          "data": "62"
+        }
+      ]
+    },
+    {
       "settingId": "windows.83d4b1b8f7a55f84",
       "state": "device-defaults",
       "source": "USB drivers set this on some devices and leave it unset on others; read on the test PC, 2026-10-23",
