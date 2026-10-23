@@ -24,6 +24,7 @@ function Own($p){$r=New-OwnedProcess $p;if($r){$owned.Add($r)};$r}
 function WaitFor([scriptblock]$probe,[double]$seconds,[string]$what){$deadline=[DateTime]::UtcNow.AddSeconds($seconds);while([DateTime]::UtcNow -lt $deadline){try{$v=&$probe}catch{$v=$null};if($v){return $v};Start-Sleep -Milliseconds 100};throw ('Timed out: '+$what)}
 function ById([string]$id){$window.FindFirst($TS::Descendants,[Windows.Automation.PropertyCondition]::new($A::AutomationIdProperty,$id))}
 function Button([string]$name){$window.FindFirst($TS::Descendants,[Windows.Automation.AndCondition]::new([Windows.Automation.PropertyCondition]::new($A::NameProperty,$name),[Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty,$CT::Button)))}
+function ProcessButton([string]$name){$panel=[Windows.Automation.TreeWalker]::RawViewWalker.GetParent((Button 'Review process changes'));while($panel){$buttons=@($panel.FindAll($TS::Descendants,[Windows.Automation.AndCondition]::new([Windows.Automation.PropertyCondition]::new($A::NameProperty,$name),[Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty,$CT::Button))));if($buttons.Count -eq 1){return $buttons[0]};$panel=[Windows.Automation.TreeWalker]::RawViewWalker.GetParent($panel)};throw ('Missing process-card button: '+$name)}
 function Texts{@($window.FindAll($TS::Descendants,[Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty,$CT::Text))|ForEach-Object {$_.Current.Name})}
 function Activate($e){if(-not$e){throw 'Missing UI element'};try{$e.GetCurrentPattern([Windows.Automation.ScrollItemPattern]::Pattern).ScrollIntoView()}catch{};try{$e.GetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern).Select();return}catch{};$e.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()}
 function Nav([string]$name){Activate (WaitFor {@($window.FindAll($TS::Descendants,[Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty,$CT::ListItem))|Where-Object {$_.Current.Name -eq $name})|Select-Object -First 1} 45 $name)}
@@ -58,18 +59,18 @@ try {
   $recorder=Own (Start-Process $Ffmpeg -ArgumentList @('-y','-f','gdigrab','-framerate','30','-offset_x',[int]$r.X,'-offset_y',[int]$r.Y,'-video_size',($w.ToString()+'x'+$h),'-draw_mouse','0','-i','desktop','-t','18','-c:v','libx264','-preset','veryfast','-pix_fmt','yuv420p',('"'+(Join-Path $directory 'restore-offer.mp4')+'"')) -WindowStyle Hidden -PassThru -RedirectStandardError (Join-Path $directory 'ffmpeg.log'))
   Start-Sleep 1
  }
- Nav 'Games';Activate (WaitFor {ById 'BackgroundTab'} 90 'Background tab');$null=WaitFor {Button 'Restore'} 90 'Background apps card'
+ Nav 'Games';Activate (WaitFor {ById 'BackgroundTab'} 90 'Background tab');$null=WaitFor {ProcessButton 'Restore'} 90 'Background apps card'
  if($Label -eq 'before'){
-  Start-Sleep 5;$restore=Button 'Restore'
-  Save 'no-offer' @{restoreEnabled=$restore.Current.IsEnabled;applyEnabled=(Button 'Apply').Current.IsEnabled;stillChanged=(Changed $fixtures).Count;pointer=(Test-Path -LiteralPath $pointer);journal=(Test-Path -LiteralPath $journal)}
+  Start-Sleep 5;$restore=ProcessButton 'Restore'
+  Save 'no-offer' @{restoreEnabled=$restore.Current.IsEnabled;applyEnabled=(ProcessButton 'Apply').Current.IsEnabled;stillChanged=(Changed $fixtures).Count;pointer=(Test-Path -LiteralPath $pointer);journal=(Test-Path -LiteralPath $journal)}
   Shot 'no-offer'
   if($restore.Current.IsEnabled){throw 'Main offered Restore after an interrupted apply'}
  } else {
-  $restore=WaitFor {$b=Button 'Restore';if($b.Current.IsEnabled){$b}} 45 'Restore offered'
+  $restore=WaitFor {$b=ProcessButton 'Restore';if($b.Current.IsEnabled){$b}} 45 'Restore offered'
   $null=WaitFor {@(Texts) -contains "Last apply didn't finish"} 20 'interrupted apply notice'
-  Save 'offer' @{restoreEnabled=$true;applyEnabled=(Button 'Apply').Current.IsEnabled;stillChanged=(Changed $fixtures).Count;pointer=(Test-Path -LiteralPath $pointer);journal=(Test-Path -LiteralPath $journal)}
+  Save 'offer' @{restoreEnabled=$true;applyEnabled=(ProcessButton 'Apply').Current.IsEnabled;stillChanged=(Changed $fixtures).Count;pointer=(Test-Path -LiteralPath $pointer);journal=(Test-Path -LiteralPath $journal)}
   Start-Sleep 3;Shot 'offer';Activate $restore
-  $null=WaitFor {-not(Test-Path -LiteralPath $pointer) -and (Button 'Apply').Current.IsEnabled} 90 'restored'
+  $null=WaitFor {-not(Test-Path -LiteralPath $pointer) -and (ProcessButton 'Apply').Current.IsEnabled} 90 'restored'
   $after=@{};foreach($p in $fixtures){$now=Read $p;$after[[string]$p.Id]=$now;foreach($field in 'priorityClass','affinityMask','ioPriority','memoryPriority'){if([string]$now.$field -cne [string]$before[$p.Id].$field){throw ('UI restore left '+$p.ProcessName+' '+$field+' at '+$now.$field)}}}
   Save 'restored' $after;Start-Sleep 3;Shot 'restored'
   if(-not$recorder.process.WaitForExit(60000)){throw 'Recording did not finish'}
