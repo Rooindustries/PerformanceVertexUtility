@@ -30,5 +30,7 @@
   {"file": "tools/validation/Tweaks/PowerChecks.cs", "target": "RegistryTweakChecks.Root", "reason": "The fixture refuses to start when its recovery root exists."},
   {"file": "tools/validation/Tweaks/RegistryTweakChecks.cs", "target": "Root", "reason": "The fixture refuses to start when its registry root exists."},
   {"file": "tools/validation/Tweaks/RegistryTweakChecks.cs", "target": "@\"Software\\RooIndustriesTweakTests\"", "reason": "Removed only when the parent did not exist before the fixture and is empty."},
-  {"file": "tools/validation/ClientBoundary/LaunchProfileChecks.cs", "target": "Ifeo", "reason": "Image File Execution Options entry for the test-only RooIndustriesProfileGame.exe; Run refuses to start when it exists (NoLaunchPolicy check before the try), so the entry cleanup removes is the one the scenario created."}
+  {"file": "tools/validation/ClientBoundary/LaunchProfileChecks.cs", "target": "Ifeo", "reason": "Image File Execution Options entry for the test-only RooIndustriesProfileGame.exe; Run refuses to start when it exists (NoLaunchPolicy check before the try), so the entry cleanup removes is the one the scenario created."},
+  {"file": "tools/validation/ProtectedSessions/Capture-HighIoInspect.ps1", "target": "$settingsPath", "reason": "The capture refuses to start when the current user's Process Explorer settings key exists, and removes it only when it was absent before the capture; Process Explorer creates it when started with -accepteula."},
+  {"file": "tools/validation/ProtectedSessions/Capture-HighIoInspect.ps1", "target": "$parentPath", "reason": "Removed only when the Sysinternals key was absent before the capture and is empty after the Process Explorer settings it created were removed."}
 ]

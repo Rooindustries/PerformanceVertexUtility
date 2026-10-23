@@ -176,7 +176,7 @@ static class Oracle{
  public static int Gpu(Process p){int status=D3DKMTGetProcessSchedulingPriorityClass(p.Handle,out int value);if(status<0)throw new Exception("GPU query "+status.ToString("X8"));return value;}
  public static void SetGpu(Process p,int value){int status=D3DKMTSetProcessSchedulingPriorityClass(p.Handle,value);if(status<0)throw new Exception("GPU set "+status.ToString("X8"));}
  public static int Io(Process p){int value=0;if(NtQueryInformationProcess(p.Handle,33,ref value,4,IntPtr.Zero)<0)throw new Exception("IO query");return value;}
- public static void SetIo(Process p,int value){if(NtSetInformationProcess(p.Handle,33,ref value,4)<0)throw new Exception("IO set");}
+ public static void SetIo(Process p,int value){var was=false;if(value==3&&RtlAdjustPrivilege(14,true,false,out was)<0)throw new Exception("SeIncreaseBasePriorityPrivilege");try{var status=NtSetInformationProcess(p.Handle,33,ref value,4);if(status<0)throw new Exception("IO set "+status.ToString("X8"));}finally{if(value==3)RtlAdjustPrivilege(14,was,false,out _);}}
  public static uint Memory(Process p){if(!GetProcessInformation(p.Handle,0,out uint value,4))throw new System.ComponentModel.Win32Exception();return value;}
  public static void SetMemory(Process p,uint value){if(!SetProcessInformation(p.Handle,0,ref value,4))throw new System.ComponentModel.Win32Exception();}
  [DllImport("kernel32.dll",SetLastError=true)]static extern bool GetProcessAffinityMask(IntPtr p,out UIntPtr value,out UIntPtr system);
@@ -186,6 +186,7 @@ static class Oracle{
  [DllImport("ntdll.dll")]static extern int NtQueryInformationProcess(IntPtr p,int c,ref int v,int n,IntPtr ret);
  [DllImport("ntdll.dll")]static extern int NtQuerySystemInformation(int kind,IntPtr data,uint size,out uint needed);
  [DllImport("ntdll.dll")]static extern int NtSetInformationProcess(IntPtr p,int c,ref int v,int n);
+ [DllImport("ntdll.dll")]static extern int RtlAdjustPrivilege(int privilege,bool enable,bool thread,out bool previous);
  [DllImport("gdi32.dll")]static extern int D3DKMTGetProcessSchedulingPriorityClass(IntPtr p,out int value);
  [DllImport("gdi32.dll")]static extern int D3DKMTSetProcessSchedulingPriorityClass(IntPtr p,int value);
 }

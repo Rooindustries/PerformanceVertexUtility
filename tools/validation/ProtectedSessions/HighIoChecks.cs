@@ -143,7 +143,7 @@ static class HighIoChecks
                 "After the launcher's helper hands off and exits, the game runs with High I/O priority, Above normal CPU priority and only the chosen CPUs");
             Check(JournalOriginal(session, game) == baselineIo, "The session saved the game's original I/O priority before it set High");
             Snapshot("first launch", session, game);
-            if (inspectSeconds > 0) Console.WriteLine("INSPECT game PID " + game.Id + " for " + inspectSeconds + " s: Task Manager > Details > Set affinity shows only mask 0x" + first.ToString("X") + "; Process Explorer's I/O Priority column shows High.");
+            if (inspectSeconds > 0) Console.WriteLine("INSPECT first launch: game PID " + game.Id + " for " + inspectSeconds + " s; expected I/O 3, affinity 0x" + first.ToString("X"));
             var hold = Stopwatch.StartNew();
             while (hold.Elapsed.TotalSeconds < Math.Max(12, inspectSeconds))
             {
