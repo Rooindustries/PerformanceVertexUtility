@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Linq;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -69,6 +70,7 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
     private SessionRestoreEvidence? _matchTuneRestore;
     private GameTuneReview? _matchTuneReview;
     private (string Status, string Detail)? _matchTuneRefusal;
+    private Dictionary<string, string> _matchTuneReadValues = new(StringComparer.Ordinal);
     private SessionRestoreEvidence? _governorRestore;
 
     private sealed record SessionRestoreEvidence(
@@ -446,6 +448,9 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
             else
             {
                 MatchTuneStatus = "Game restore needs attention";
+                _matchTuneReadValues = RestoreReadValues(response.Value);
+                if (DescribeGameTuneSkips(response.Value, _matchTuneReadValues) is { } skips)
+                    (MatchTuneStatus, MatchTuneDetail) = (skips.Title ?? MatchTuneStatus, skips.Detail);
                 SetMatchTuneRestore(ValidateSessionRestoreEvidence(evidence) ? evidence : null);
             }
         }
@@ -621,6 +626,8 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
         MatchTuneDetail = gameValid
             ? SummarizeSessionAction(game.Value, "No game priorities has changed this PC yet.")
             : game.Error ?? "The game-session status returned invalid evidence.";
+        if (gameValid && ExtractString(game.Value, "sessionStatus") == "failed" && DescribeGameTuneSkips(game.Value, _matchTuneReadValues) is { } skips)
+            (MatchTuneStatus, MatchTuneDetail) = (skips.Title ?? MatchTuneStatus, skips.Detail);
         if (_matchTuneRefusal is { } refusal)
         {
             (MatchTuneStatus, MatchTuneDetail) = refusal;
@@ -826,6 +833,84 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
         }
 
         return fallback;
+    }
+
+    private static Dictionary<string, string> RestoreReadValues(string json)
+    {
+        var values = new Dictionary<string, string>(StringComparer.Ordinal);
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+            if (!root.TryGetProperty("preview", out var preview) || preview.ValueKind != JsonValueKind.Array) return values;
+            foreach (var item in preview.EnumerateArray())
+            {
+                if (!item.TryGetProperty("controlChanges", out var changes) || changes.ValueKind != JsonValueKind.Array) continue;
+                foreach (var change in changes.EnumerateArray())
+                {
+                    var control = ExtractString(change, "control");
+                    if (control is null || !change.TryGetProperty("currentValue", out var current) || current.ValueKind == JsonValueKind.Null) continue;
+                    values[ExtractString(root, "sessionId") + "|" + ExtractString(item, "processId") + "|" + control] = ControlValue(control, current);
+                }
+            }
+        }
+        catch
+        {
+        }
+
+        return values;
+    }
+
+    private static (string? Title, string Detail)? DescribeGameTuneSkips(string? json, IReadOnlyDictionary<string, string> readValues)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+            if (!root.TryGetProperty("skippedItems", out var skipped) || skipped.ValueKind != JsonValueKind.Array) return null;
+            var lines = new List<string>();
+            var left = 0;
+            foreach (var item in skipped.EnumerateArray())
+            {
+                if (ExtractString(item, "outcome") == "alreadyClosed" || ExtractString(item, "reason") is not { Length: > 0 } reason) continue;
+                var game = ExtractString(item, "processName") is { Length: > 0 } name ? name : "The game";
+                foreach (var part in Regex.Split(reason, @"; (?=\w+: )"))
+                {
+                    var match = Regex.Match(part, @"^(priorityClass|affinityMask|ioPriority|memoryPriority|gpuPriority): (.+)$");
+                    if (!match.Success)
+                    {
+                        lines.Add(game + ": " + part);
+                        continue;
+                    }
+                    var control = match.Groups[1].Value;
+                    var setting = control switch
+                    {
+                        "priorityClass" => "CPU priority",
+                        "affinityMask" => "CPU affinity",
+                        "ioPriority" => "I/O priority",
+                        "memoryPriority" => "memory priority",
+                        _ => "GPU priority",
+                    };
+                    if (match.Groups[2].Value != "Left as another program set it.")
+                    {
+                        lines.Add(game + " (" + setting + "): " + match.Groups[2].Value);
+                        continue;
+                    }
+                    left++;
+                    lines.Add(readValues.TryGetValue(ExtractString(root, "sessionId") + "|" + ExtractString(item, "processId") + "|" + control, out var value)
+                        ? game + ": " + setting + " is " + value + " because another program changed it after Game Tune did, so Restore left it."
+                        : game + ": another program changed " + setting + " after Game Tune did, so Restore left it.");
+                }
+            }
+            if (lines.Count == 0) return null;
+            var detail = string.Join("\n", lines) + (left == 0 ? string.Empty : (lines.Count == 1 ? " " : "\n") + "Close the game, then press Restore to finish.");
+            return (left != lines.Count ? null : left == 1 ? "Restore left a setting alone" : "Restore left some settings alone", detail);
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private static string? ExtractIssue(JsonElement root, string property)

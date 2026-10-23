@@ -90,6 +90,9 @@ if (args is ["governor-task", var taskRoot, var taskName, var registered, var en
     return;
 }
 
+if (args is [] or ["game-tune-left-as-set"]) await GameTuneRestoreChecks.LeftAsSetAsync(Check);
+if (args is ["game-tune-left-as-set"]) { Console.WriteLine($"Completed {count} game restore explanation checks."); return; }
+
 if (args is [] or ["governor"]) await GovernorChecks.RunAsync(Check);
 if (args is ["governor"]) { Console.WriteLine($"Completed {count} governor status checks."); return; }
 

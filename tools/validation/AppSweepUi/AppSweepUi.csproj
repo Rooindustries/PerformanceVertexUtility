@@ -33,4 +33,7 @@
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Helpers/Naming.cs" Link="Naming.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Helpers/CollectionHelpers.cs" Link="CollectionHelpers.cs" />
   </ItemGroup>
+  <ItemGroup>
+    <None Update="Fixtures/game-tune-left-as-set.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>
