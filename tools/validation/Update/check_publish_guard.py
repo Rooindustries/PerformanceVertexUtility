@@ -93,25 +93,42 @@ try:
             return after()
         run(name, tool, ['publish', '--installer', str(dummy), '--manifest', str(manifest), '--installer-path', urlparse(url).path[1:], '--feed-path', path] + list(extra), code, text, kept, run_env)
 
+    def precedence(version):
+        core, _, prerelease = version.split('+')[0].partition('-')
+        parts = prerelease.split('.') if prerelease else []
+        return [int(n) for n in core.split('.')], not parts, [(0, int(p), '') if p.isdecimal() else (1, 0, p) for p in parts]
+
     def live_cases(prefix, tool, live, installer, live_feed, run_env):
         path = urlparse(live_feed).path[1:]
         origin = 'https://' + urlparse(live_feed).netloc
         (work / (prefix + 'live.json')).write_bytes(live)
-        live_payload = json.loads(base64.b64decode(json.loads(live)['payload']))
-        live_installer = live_payload['installer']
-        run(prefix + 'equal-live-version-refused', tool, ['publish', '--installer', str(installer), '--manifest', str(work / (prefix + 'live.json')), '--installer-path', urlparse(live_installer['url']).path[1:], '--feed-path', path], 1, 'is not newer than the live beta ' + live_payload['version'], run_env=run_env)
-        for name, version, code, text in [
-            ('older-version-refused', '0.10.9-beta', 1, 'is not newer than the live beta'),
-            ('lower-prerelease-refused', '0.11.0-alpha', 1, 'is not newer than the live beta'),
-            ('longer-prerelease-accepted', '0.11.0-beta.1', 0, 'Dry run: nothing uploaded.'),
-            ('release-over-prerelease-accepted', '0.11.0', 0, 'Dry run: nothing uploaded.'),
-            ('next-patch-accepted', '0.11.1-beta', 0, 'Dry run: nothing uploaded.'),
-        ]:
+        verified = run(prefix + 'live-feed-verified', tool, ['verify', '--manifest', str(work / (prefix + 'live.json')), '--feed-url', live_feed], 0, '"verified": true', run_env=run_env)
+        if verified.returncode:
+            return
+        live_payload = json.loads(verified.stdout)
+        live_version = live_payload['version']
+        lines = [line.strip() for line in (tool.parent / 'released-versions.txt').read_text(encoding='utf-8-sig').splitlines()]
+        floor = max([live_version] + [line for line in lines if line and not line.startswith('#')], key=precedence)
+        newest = ('the live beta ' if floor == live_version else 'the released version ') + floor
+        core, _, prerelease = floor.split('+')[0].partition('-')
+        suffix = '-' + prerelease if prerelease else ''
+        numbers = [int(n) for n in core.split('.')]
+        older = numbers[:]
+        older[max(i for i, n in enumerate(older) if n)] -= 1
+        cases = [
+            ('older-version-refused', '.'.join(map(str, older)) + suffix, 1, 'is not newer than ' + newest),
+            ('lower-prerelease-refused', core + '-alpha', 1, 'is not newer than ' + newest),
+            ('next-patch-accepted', '.'.join(map(str, numbers[:2] + [numbers[2] + 1])) + suffix, 0, 'Dry run: nothing uploaded.'),
+        ]
+        if prerelease:
+            cases += [('longer-prerelease-accepted', core + suffix + '.1', 0, 'Dry run: nothing uploaded.'), ('release-over-prerelease-accepted', core, 0, 'Dry run: nothing uploaded.')]
+        run(prefix + 'equal-live-version-refused', tool, ['publish', '--installer', str(installer), '--manifest', str(work / (prefix + 'live.json')), '--installer-path', urlparse(live_payload['installer']['url']).path[1:], '--feed-path', path], 1, 'is not newer than ' + newest, run_env=run_env)
+        for name, version, code, text in cases:
             publish_case(prefix + name, tool, version, code, text, live, path, origin, run_env)
         run(prefix + 'set-feed-same-as-live-refused', tool, ['set-feed', '--manifest', str(work / (prefix + 'live.json')), '--feed-path', path], 1, 'The live feed already serves this manifest', run_env=run_env)
-        run(prefix + 'set-feed-missing-installer-refused', tool, ['set-feed', '--manifest', str(signed(prefix + 'missing', '0.11.1-beta', {'url': fixture_url('0.11.1-beta', origin), **dummy_identity})), '--feed-path', path], 1, 'HTTP Error 404', run_env=run_env)
+        run(prefix + 'set-feed-missing-installer-refused', tool, ['set-feed', '--manifest', str(signed(prefix + 'missing', live_version, {'url': fixture_url(live_version, origin), **dummy_identity})), '--feed-path', path], 1, 'HTTP Error 404', run_env=run_env)
         run(prefix + 'set-feed-wrong-path-refused', tool, ['set-feed', '--manifest', str(work / (prefix + 'live.json')), '--feed-path', 'u/' + secrets.token_urlsafe(24) + '/beta.json'], 1, 'Feed path differs from the committed feed', run_env=run_env)
-        run(prefix + 'set-feed-rollback-dry-run', tool, ['set-feed', '--manifest', str(signed(prefix + 'rollback', live_payload['version'], live_installer)), '--feed-path', path], 0, 'Replacing the live ' + live_payload['version'] + ' manifest with version ' + live_payload['version'] + '.', run_env=run_env)
+        run(prefix + 'set-feed-rollback-dry-run', tool, ['set-feed', '--manifest', str(signed(prefix + 'rollback', live_version, live_payload['installer'])), '--feed-path', path], 0, 'Replacing the live ' + live_version + ' manifest with version ' + live_version + '.', run_env=run_env)
 
     if not args.local_only:
         with urlopen(Request(feed + '?t=' + str(int(datetime.now(timezone.utc).timestamp())), headers={'Cache-Control': 'no-cache'}), timeout=20) as response:
@@ -166,7 +183,7 @@ try:
     origin = 'https://127.0.0.1:' + str(server.server_address[1])
     local_env = {name: value for name, value in env.items() if not name.lower().endswith('_proxy')}
     local_env['SSL_CERT_FILE'] = str(work / 'fixture-cert.pem')
-    for state, live_version, released in [
+    for state, live_version, listed in [
         ('live-0.11.0-beta-', '0.11.0-beta', b'0.9.0-beta\n0.10.0-beta\n0.11.0-beta\n'),
         ('live-0.11.1-beta-unlisted-', '0.11.1-beta', b'0.9.0-beta\n0.10.0-beta\n0.11.0-beta\n'),
         ('live-0.11.1-beta-listed-', '0.11.1-beta', b'0.9.0-beta\n0.10.0-beta\n0.11.0-beta\n0.11.1-beta\n'),
@@ -177,7 +194,7 @@ try:
         live = signed(state + 'feed', live_version, {'url': live_url, **dummy_identity}).read_bytes()
         served[urlparse(live_url).path] = dummy.read_bytes()
         served[urlparse(state_feed).path] = live
-        live_cases(state, tool_tree(state + 'tree', state_feed + '\n', released), live, dummy, state_feed, local_env)
+        live_cases(state, tool_tree(state + 'tree', state_feed + '\n', listed), live, dummy, state_feed, local_env)
     local_feed_path = 'u/fixture/beta.json'
     released = '\ufeff0.9.0-beta\n0.11.0-beta \n\n# The feed was rolled back to 0.10.0-beta\n0.10.0-beta\n'.encode('utf-8')
     tool = tool_tree('rolled-back-tree', origin + '/' + local_feed_path + '\n', released)
