@@ -25,6 +25,7 @@
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/ViewModels/WindowsTweaksViewModel.cs" Link="WindowsTweaksViewModel.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/ViewModels/WindowsTweakPresentation.cs" Link="WindowsTweakPresentation.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/ViewModels/CpuSetsViewModel.cs" Link="CpuSetsViewModel.cs" />
+    <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/ViewModels/GameSessionViewModel.cs" Link="GameSessionViewModel.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Views/ChangeWatch.cs" Link="ChangeWatch.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/HostOutput.cs" Link="HostOutput.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Models/*.cs" Link="Models/%(Filename)%(Extension)" />
@@ -47,5 +48,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Update="Fixtures/game-tune-restore-skips.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../../backend/catalogs/launch-presets.json" Link="Fixtures/launch-presets.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../../backend/contracts/roo-industries-backend-contracts.schema.json" Link="Fixtures/roo-industries-backend-contracts.schema.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

@@ -15,6 +15,8 @@ void Check(bool condition, string message)
 
 if (args is ["bug-report"]) { await BugReportChecks.RunAsync(Check); Console.WriteLine($"Completed {count} bug report checks."); return; }
 
+if (args is ["game-session-presets"]) { await GameSessionPresetChecks.RunAsync(Check); Console.WriteLine($"Completed {count} game session preset checks."); return; }
+
 if (args is ["bug-report-account-forms"])
 {
     var root = Path.Combine(Path.GetTempPath(), "roo-industries-account-forms-" + Guid.NewGuid().ToString("N"));
@@ -1678,5 +1680,6 @@ await RevisitChecks.RunAsync(Check);
 await BugReportChecks.RunAsync(Check);
 await UpdateInstallChecks.RunAsync(Check);
 await PollGuardChecks.RunAsync(Check);
+await GameSessionPresetChecks.RunAsync(Check);
 
 Console.WriteLine($"Completed {count} app sweep UI checks.");
