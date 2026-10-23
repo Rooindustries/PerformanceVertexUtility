@@ -35,7 +35,8 @@ def stop(process):
     else:
         with contextlib.suppress(ProcessLookupError):
             os.killpg(process.pid, signal.SIGKILL)
-    process.communicate()
+    process.kill()
+    process.wait()
 
 
 def negative_controls(root):
@@ -76,6 +77,9 @@ def gone(pid):
             os.kill(pid, 0)
         except ProcessLookupError:
             return True
+        with contextlib.suppress(FileNotFoundError):
+            if Path(f'/proc/{pid}/stat').read_text().rsplit(')', 1)[1].split()[0] == 'Z':
+                return True
         time.sleep(0.05)
     return False
 
