@@ -77,8 +77,14 @@ static class CoreChoiceChecks
             page.SelectedCpuMode = page.CpuModes.Single(mode => mode.Kind == "logical");
             foreach (var cpu in page.Cpus) cpu.Selected = cpu.Cpu.Index < 8;
             page.SetHardAffinity = true;
-            check(Ticked(page).SequenceEqual(Enumerable.Range(0, 8)) && ProcessTarget.ParseMask(page.AffinityMask) == 0xFF,
-                "Turning on Restrict after choosing preferred CPUs keeps those ticks and restricts the app to them" + " | ticked " + string.Join(",", Ticked(page)) + " mask " + page.AffinityMask);
+            check(Ticked(page).SequenceEqual(Enumerable.Range(0, 8)) && ProcessTarget.ParseMask(page.AffinityMask) == 0xFFFFFFFF,
+                "With preferred logical CPUs chosen, turning on Restrict keeps those ticks and leaves the Restrict mask at the app's current CPUs" + " | ticked " + string.Join(",", Ticked(page)) + " mask " + page.AffinityMask);
+            page.UseCheckedAffinityCommand.Execute(null);
+            check(ProcessTarget.ParseMask(page.AffinityMask) == 0xFF, "Use selected CPUs copies the preferred CPUs into the Restrict mask" + " | " + page.AffinityMask);
+            page.Cpus.Single(cpu => cpu.Cpu.Index == 8).Selected = true;
+            page.AffinityMask = "0xF0";
+            check(Ticked(page).SequenceEqual(Enumerable.Range(0, 9)) && ProcessTarget.ParseMask(page.AffinityMask) == 0xF0 && page.CanPreview,
+                "With preferred logical CPUs, ticking a CPU leaves the Restrict mask alone and typing a mask leaves the ticks alone" + " | ticked " + string.Join(",", Ticked(page)) + " mask " + page.AffinityMask);
 
             var rule = GovernorChecks.Rule("0123456789abcdef0123456789abcdef", "Game rule", identity.ExecutablePath, true) with
             {

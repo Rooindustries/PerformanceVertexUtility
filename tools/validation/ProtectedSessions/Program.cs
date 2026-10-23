@@ -16,7 +16,7 @@ if(args is [var retainedRepo,var retainedDotnet,"--retained-gpu"]) { RetainedGpu
 if(args is [var pairedRepo,var pairedDotnet,"--retained-gpu-high-io"]) { RetainedGpuChecks.Run(pairedRepo,pairedDotnet,true); return; }
 if(args is ["--high-io-launcher",var highIoRoot]) { HighIoChecks.Launcher(highIoRoot); return; }
 if(args is ["--high-io-stub",var stubRoot]) { HighIoChecks.Stub(stubRoot); return; }
-if(args is ["--high-io-stub",var refusingStubRoot,"refuse"]) { HighIoChecks.Stub(refusingStubRoot,true); return; }
+if(args is ["--high-io-stub",var refusingStubRoot,"refuse-write" or "refuse-read"]) { HighIoChecks.Stub(refusingStubRoot,args[2]); return; }
 if(args is ["--high-io-game",var highIoGameRoot]) { HighIoChecks.Game(highIoGameRoot); return; }
 if(args is [var highIoRepo,var highIoDotnet,"--high-io",var inspectSeconds]) { HighIoChecks.Run(highIoRepo,highIoDotnet,int.Parse(inspectSeconds,System.Globalization.CultureInfo.InvariantCulture)); return; }
 if(args is ["--launcher",var launcherRoot]) { Fixtures.Launcher(launcherRoot); return; }
@@ -176,6 +176,7 @@ static class Oracle{
  public static int Gpu(Process p){int status=D3DKMTGetProcessSchedulingPriorityClass(p.Handle,out int value);if(status<0)throw new Exception("GPU query "+status.ToString("X8"));return value;}
  public static void SetGpu(Process p,int value){int status=D3DKMTSetProcessSchedulingPriorityClass(p.Handle,value);if(status<0)throw new Exception("GPU set "+status.ToString("X8"));}
  public static int Io(Process p){int value=0;if(NtQueryInformationProcess(p.Handle,33,ref value,4,IntPtr.Zero)<0)throw new Exception("IO query");return value;}
+ public static bool Debug(bool on){if(RtlAdjustPrivilege(20,on,false,out var was)<0)throw new Exception("SeDebugPrivilege");return was;}
  public static void SetIo(Process p,int value){var was=false;if(value==3&&RtlAdjustPrivilege(14,true,false,out was)<0)throw new Exception("SeIncreaseBasePriorityPrivilege");try{var status=NtSetInformationProcess(p.Handle,33,ref value,4);if(status<0)throw new Exception("IO set "+status.ToString("X8"));}finally{if(value==3)RtlAdjustPrivilege(14,was,false,out _);}}
  public static uint Memory(Process p){if(!GetProcessInformation(p.Handle,0,out uint value,4))throw new System.ComponentModel.Win32Exception();return value;}
  public static void SetMemory(Process p,uint value){if(!SetProcessInformation(p.Handle,0,ref value,4))throw new System.ComponentModel.Win32Exception();}

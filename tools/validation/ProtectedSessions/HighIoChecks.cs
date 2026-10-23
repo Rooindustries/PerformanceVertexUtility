@@ -1,8 +1,11 @@
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Security.Principal;
+using System.Text;
 using System.Text.Json;
 using Microsoft.Win32;
+using Microsoft.Win32.SafeHandles;
 using RooIndustries.Optimizer;
 
 static class HighIoChecks
@@ -77,12 +80,12 @@ static class HighIoChecks
                 if (sessionRoot.Length != 0) Until(() => State(sessionRoot).Games.Any(item => item.Identity.ProcessId == child.Id && item.Identity.CreationTimeFileTimeUtc == identity.Creation.ToString(System.Globalization.CultureInfo.InvariantCulture) && !item.Exited && item.Fields.All(field => field.Status == "applied")), "The session did not apply every control to this game instance.");
                 return child;
             }
-            Process Launch(string sessionRoot)
+            Process Launch(string sessionRoot, bool settled = true)
             {
                 var gameRoot = Path.Combine(root, "game-" + ++games); Directory.CreateDirectory(gameRoot);
                 OperationFiles.Write(Path.Combine(root, "launch.json"), new { root = gameRoot });
                 Until(() => File.Exists(Path.Combine(gameRoot, "stub-exited")), "The launcher's helper did not start the game and exit.");
-                return ReadGame(gameRoot, sessionRoot);
+                return ReadGame(gameRoot, settled ? sessionRoot : "");
             }
             Process Restart(Process predecessor, string sessionRoot)
             {
@@ -105,7 +108,7 @@ static class HighIoChecks
                 File.WriteAllText(Path.Combine(gameRoots[game], "stop"), "");
                 Check(game.WaitForExit(15000) && game.ExitCode == 0, "The owned game fixture exits successfully");
             }
-            string Arm(string name)
+            string Arm(string name, bool withoutPrivilege = false)
             {
                 var previewPath = Path.Combine(root, name + ".preview.json");
                 var reviewed = engine.Preview(launcher.Id, GamePath, new() { ["cpuPriority"] = JsonSerializer.SerializeToElement("AboveNormal"), ["ioPriority"] = JsonSerializer.SerializeToElement(3), ["affinity"] = JsonSerializer.SerializeToElement(new AffinityState(0, "0x" + first.ToString("X")), OperationFiles.Json) }, true);
@@ -113,7 +116,9 @@ static class HighIoChecks
                 var folder = Path.Combine(root, name); states.Add(folder); Directory.CreateDirectory(folder);
                 var request = Path.Combine(folder, "request.json");
                 OperationFiles.Write(request, new { schemaVersion = 1, repoRoot = Path.GetFullPath(repo), sessionRoot = folder, previewPath, reviewHash = OperationFiles.HashFile(previewPath), confirm = true });
-                var worker = Start(Path.Combine(repo, "backend", "bin", "optimizer", "session", "RooIndustries.SessionHost.exe"), "run", request); workers.Add(worker); identities.Add(worker, FixtureProcess.Started(worker, evidence));
+                var host = Path.Combine(repo, "backend", "bin", "optimizer", "session", "RooIndustries.SessionHost.exe");
+                var worker = withoutPrivilege ? RestrictedProcess.StartWithout("SeIncreaseBasePriorityPrivilege", host, "run", request) : Start(host, "run", request);
+                workers.Add(worker); identities.Add(worker, FixtureProcess.Started(worker, evidence));
                 Until(() => File.Exists(Path.Combine(folder, "session.json")) && State(folder).Status == "armed", "The High I/O session did not arm.");
                 return folder;
             }
@@ -188,17 +193,36 @@ static class HighIoChecks
             var replacement = Restart(game, session);
             Check(State(session).Games.Count == 2 && Io(session, game).JournalPath != Io(session, replacement).JournalPath && Oracle.Io(replacement) == 3 && Oracle.Affinity(replacement) == first,
                 "A game that restarts itself gets a distinct journal and the selected High I/O and CPUs on its replacement");
-            var replacementOriginalIo = JournalOriginal(session, replacement);
+            Check(JournalOriginal(session, replacement) == baselineIo,
+                "The restarted copy's saved original is the first copy's original I/O priority, not the High it inherited from the session");
             Snapshot("game restarted itself", session, replacement);
+            Lock(replacement);
+            Oracle.SetIo(replacement, baselineIo);
+            Until(() => Oracle.Io(replacement) == 3 && Io(session, replacement).Reapplications > 0, "A reset on the restarted copy was not put back.");
+            Check(Io(session, replacement).Status == "applied", "When the restarted copy is reset to the original I/O priority, the session puts High back");
             engine.Command(session, "stop");
             Check(workers.Last().WaitForExit(20000), "The self-restart session stops");
             Until(() => File.Exists(Path.Combine(session, "recovery-result.json")), "The self-restart recovery watcher did not finish.");
-            Check(State(session).Status == "stopped" && Oracle.Io(replacement) == replacementOriginalIo && Oracle.Affinity(replacement) == original,
-                "Stop restores the replacement's own captured I/O original, including an inherited High value, and clears the session CPU limit");
-            Check(Io(session, replacement).Status == (replacementOriginalIo == 3 ? "leftAsIs" : "restored"),
-                "A replacement that already had High I/O when it started is reported as left as is, not as restored");
+            Check(State(session).Status == "stopped" && Io(session, replacement).Status == "restored" && Oracle.Io(replacement) == baselineIo && Oracle.Affinity(replacement) == original,
+                "Stop puts the restarted copy back to the first copy's original I/O priority and clears the session CPU limit");
             Snapshot("self-restarted game restored", session, replacement);
             Close(replacement);
+
+            Oracle.SetIo(launcher, 3);
+            try
+            {
+                session = Arm("session-launcher-high");
+                game = Launch(session);
+                Check(Oracle.Io(game) == 3 && JournalOriginal(session, game) == 3, "A game whose launcher already runs at High I/O starts at High, and the session records High as its original");
+                engine.Command(session, "stop");
+                Check(workers.Last().WaitForExit(20000), "The session for a launcher at High stops");
+                Until(() => File.Exists(Path.Combine(session, "recovery-result.json")), "The launcher-High recovery watcher did not finish.");
+                Check(State(session).Status == "stopped" && Io(session, game).Status == "leftAsIs" && Oracle.Io(game) == 3 && Oracle.Affinity(game) == original,
+                    "Stop leaves High that came from the launcher, reports it as left as is and clears the CPU limit");
+                Snapshot("launcher High left as is", session, game);
+                Close(game);
+            }
+            finally { Oracle.SetIo(launcher, launcherIo); }
 
             session = Arm("session2");
             game = Launch(session);
@@ -230,7 +254,7 @@ static class HighIoChecks
 
             session = Arm("session-refusing");
             var refusingRoot = Path.Combine(root, "game-" + ++games); Directory.CreateDirectory(refusingRoot);
-            OperationFiles.Write(Path.Combine(root, "launch.json"), new { root = refusingRoot, refuse = true });
+            OperationFiles.Write(Path.Combine(root, "launch.json"), new { root = refusingRoot, refuse = "write" });
             Until(() => File.Exists(Path.Combine(refusingRoot, "stub-exited")) && File.Exists(Path.Combine(refusingRoot, "ready.json")), "The refusing game did not start.");
             var refusingId = OperationFiles.Read<JsonElement>(Path.Combine(refusingRoot, "ready.json")).GetProperty("pid").GetInt32();
             var refusing = FixtureProcess.Ready(Path.Combine(refusingRoot, "ready.json"), GamePath, ["--high-io-game", refusingRoot], true, evidence);
@@ -258,6 +282,51 @@ static class HighIoChecks
             Check(State(session).Status == "stopped" && Oracle.Affinity(refusingId) == original && Oracle.Io(refusingId) == baselineIo, "Stop clears the CPU limit and leaves the refused I/O priority untouched");
             File.WriteAllText(Path.Combine(refusingRoot, "stop"), "");
             Check(refusing.Wait(15000), "The refusing game fixture exits");
+
+            session = Arm("session-hidden");
+            var hiddenRoot = Path.Combine(root, "game-" + ++games); Directory.CreateDirectory(hiddenRoot);
+            OperationFiles.Write(Path.Combine(root, "launch.json"), new { root = hiddenRoot, refuse = "read" });
+            Until(() => File.Exists(Path.Combine(hiddenRoot, "stub-exited")) && File.Exists(Path.Combine(hiddenRoot, "ready.json")), "The game that refuses read access did not start.");
+            var hiddenId = OperationFiles.Read<JsonElement>(Path.Combine(hiddenRoot, "ready.json")).GetProperty("pid").GetInt32();
+            var debugWas = Oracle.Debug(true);
+            try
+            {
+                var hidden = FixtureProcess.Ready(Path.Combine(hiddenRoot, "ready.json"), GamePath, ["--high-io-game", hiddenRoot], true, evidence);
+                identities.Add(Process.GetProcessById(hiddenId), hidden);
+                var unreadable = false;
+                try { using var query = new ProcessTarget(hiddenId); }
+                catch (RooIndustries.Optimization.CpuSets.NativeFailure failure) when (failure.NativeErrorCode == 5) { unreadable = true; }
+                Check(unreadable, "The disposable game refuses even read access from the moment it starts");
+                Until(() => State(session).Refused?.Contains(hiddenId) == true, "The session did not list the game that refused read access.");
+                var listed = Stopwatch.StartNew();
+                while (listed.Elapsed.TotalSeconds < 6)
+                {
+                    if (workers.Last().HasExited || State(session).Errors.Count != 0 || Oracle.Affinity(hiddenId) != first) throw new InvalidOperationException("The unreadable game ended the session or lost its CPU limit.");
+                    Thread.Sleep(500);
+                }
+                Check(State(session).Games.All(item => item.Identity.ProcessId != hiddenId) && Oracle.Io(hiddenId) == baselineIo,
+                    "A game that won't let the app read it is listed, keeps only the chosen CPUs through the launcher's job, and nothing is written to it");
+                proof.Add(new { phase = "game refused read access", hiddenId, io = Oracle.Io(hiddenId), affinity = "0x" + Oracle.Affinity(hiddenId).ToString("X"), state = State(session) });
+                engine.Command(session, "stop");
+                Check(workers.Last().WaitForExit(20000), "The session with the unreadable game stops");
+                Until(() => File.Exists(Path.Combine(session, "recovery-result.json")), "The unreadable-game recovery watcher did not finish.");
+                Check(State(session).Status == "stopped" && Oracle.Affinity(hiddenId) == original, "Stop clears the CPU limit on the unreadable game");
+                File.WriteAllText(Path.Combine(hiddenRoot, "stop"), "");
+                Check(hidden.Wait(15000), "The unreadable game fixture exits");
+            }
+            finally { Oracle.Debug(debugWas); }
+
+            session = Arm("session-no-privilege", withoutPrivilege: true);
+            game = Launch(session, settled: false);
+            ProtectedFieldState Plain(string name) => State(session).Games.Single(item => item.Identity.ProcessId == game.Id).Fields.Single(field => field.Name == name);
+            Until(() => State(session).Games.Any(item => item.Identity.ProcessId == game.Id) && Plain("ioPriority").Status is "unavailable" or "conflict" && Plain("affinity").Status == "applied", "The session without the privilege did not settle the game.");
+            Check(Plain("ioPriority").Status == "unavailable" && Plain("ioPriority").Error?.Contains("SeIncreaseBasePriorityPrivilege") == true && Plain("ioPriority").JournalPath is null && Oracle.Io(game) == baselineIo && Oracle.Affinity(game) == first,
+                "A session that can't get the privilege for High I/O shows I/O priority as Unavailable with the reason, not as changed elsewhere, and keeps the CPU limit" + " | " + Plain("ioPriority").Status + " " + Plain("ioPriority").Error);
+            engine.Command(session, "stop");
+            Check(workers.Last().WaitForExit(20000), "The session without the privilege stops");
+            Until(() => File.Exists(Path.Combine(session, "recovery-result.json")), "The no-privilege recovery watcher did not finish.");
+            Check(State(session).Status == "stopped" && Oracle.Io(game) == baselineIo && Oracle.Affinity(game) == original, "Stop clears the CPU limit and leaves I/O priority as it was");
+            Close(game);
         }
         finally
         {
@@ -290,8 +359,8 @@ static class HighIoChecks
                 if (File.Exists(path))
                 {
                     var request = OperationFiles.Read<JsonElement>(path); File.Delete(path);
-                    var refuse = request.TryGetProperty("refuse", out var flag) && flag.GetBoolean();
-                    var stub = refuse ? Start(StubPath, "--high-io-stub", request.GetProperty("root").GetString()!, "refuse") : Start(StubPath, "--high-io-stub", request.GetProperty("root").GetString()!);
+                    var refuse = request.TryGetProperty("refuse", out var flag) ? flag.GetString() : null;
+                    var stub = refuse is null ? Start(StubPath, "--high-io-stub", request.GetProperty("root").GetString()!) : Start(StubPath, "--high-io-stub", request.GetProperty("root").GetString()!, "refuse-" + refuse);
                     _ = stub.Handle; children.Add(stub);
                     if (stub.WaitForExit(15000)) File.WriteAllText(Path.Combine(request.GetProperty("root").GetString()!, "stub-exited"), "");
                 }
@@ -301,12 +370,13 @@ static class HighIoChecks
         finally { foreach (var child in children) { if (!child.HasExited) { using var owned = FixtureProcess.Started(child, Path.Combine(root, "process-receipts")); owned.Stop(); child.WaitForExit(10000); } child.Dispose(); } }
     }
 
-    internal static void Stub(string root, bool refuse = false)
+    internal static void Stub(string root, string? refuse = null)
     {
-        if (!refuse) { using var game = Start(GamePath, "--high-io-game", root); return; }
+        if (refuse is null) { using var game = Start(GamePath, "--high-io-game", root); return; }
         using var user = WindowsIdentity.GetCurrent();
         var sid = user.User!.Value;
-        using var refusing = FixtureProcess.Create(GamePath, ["--high-io-game", root], "D:(D;;0x200;;;" + sid + ")(A;;0x1FFFFF;;;" + sid + ")(A;;0x1FFFFF;;;BA)(A;;0x1FFFFF;;;SY)", Path.Combine(root, "process-receipts"));
+        var denied = refuse == "refuse-read" ? "0x101600" : "0x200";
+        using var refusing = FixtureProcess.Create(GamePath, ["--high-io-game", root], "D:(D;;" + denied + ";;;" + sid + ")(A;;0x1FFFFF;;;" + sid + ")(A;;0x1FFFFF;;;BA)(A;;0x1FFFFF;;;SY)", Path.Combine(root, "process-receipts"));
     }
 
     internal static void Game(string root)
@@ -342,4 +412,43 @@ static class HighIoChecks
 
     [DllImport("kernel32.dll")] static extern IntPtr GetCurrentProcess();
     [DllImport("kernel32.dll", SetLastError = true)] static extern bool GetProcessTimes(IntPtr process, out long created, out long exit, out long kernel, out long user);
+}
+
+static class RestrictedProcess
+{
+    internal static Process StartWithout(string privilege, string executable, params string[] args)
+    {
+        if (!OpenProcessToken(GetCurrentProcess(), 0x000B, out var token)) throw new Win32Exception(Marshal.GetLastWin32Error());
+        using (token)
+        {
+            if (!LookupPrivilegeValue(null, privilege, out var luid)) throw new Win32Exception(Marshal.GetLastWin32Error());
+            if (!CreateRestrictedToken(token, 0, 0, IntPtr.Zero, 1, [new LuidAndAttributes { Luid = luid }], 0, IntPtr.Zero, out var restricted)) throw new Win32Exception(Marshal.GetLastWin32Error());
+            using (restricted)
+            {
+                if (RtlAdjustPrivilege(5, true, false, out var quota) < 0) throw new InvalidOperationException("SeIncreaseQuotaPrivilege is unavailable.");
+                try
+                {
+                    var startup = new StartupInfo { Size = Marshal.SizeOf<StartupInfo>() };
+                    var command = new StringBuilder(string.Join(" ", args.Prepend(executable).Select(arg => "\"" + arg + "\"")));
+                    if (!CreateProcessAsUser(restricted, executable, command, IntPtr.Zero, IntPtr.Zero, false, 0x08000000, IntPtr.Zero, Path.GetDirectoryName(executable), ref startup, out var created)) throw new Win32Exception(Marshal.GetLastWin32Error());
+                    CloseHandle(created.Thread);
+                    try { var process = Process.GetProcessById(created.ProcessId); _ = process.Handle; return process; }
+                    finally { CloseHandle(created.Process); }
+                }
+                finally { RtlAdjustPrivilege(5, quota, false, out _); }
+            }
+        }
+    }
+
+    [StructLayout(LayoutKind.Sequential)] struct Luid { public uint Low; public int High; }
+    [StructLayout(LayoutKind.Sequential)] struct LuidAndAttributes { public Luid Luid; public uint Attributes; }
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)] struct StartupInfo { public int Size; public IntPtr Reserved, Desktop, Title; public int X, Y, Width, Height, Columns, Rows, Fill, Flags; public short Show, ExtraSize; public IntPtr Extra, Input, Output, Error; }
+    [StructLayout(LayoutKind.Sequential)] struct ProcessInformation { public IntPtr Process, Thread; public int ProcessId, ThreadId; }
+    [DllImport("kernel32.dll")] static extern IntPtr GetCurrentProcess();
+    [DllImport("kernel32.dll", SetLastError = true)] static extern bool CloseHandle(IntPtr handle);
+    [DllImport("advapi32.dll", SetLastError = true)] static extern bool OpenProcessToken(IntPtr process, uint access, out SafeAccessTokenHandle token);
+    [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)] static extern bool LookupPrivilegeValue(string? system, string name, out Luid luid);
+    [DllImport("advapi32.dll", SetLastError = true)] static extern bool CreateRestrictedToken(SafeAccessTokenHandle token, uint flags, uint disableCount, IntPtr disable, uint deleteCount, LuidAndAttributes[] delete, uint restrictCount, IntPtr restrict, out SafeAccessTokenHandle restricted);
+    [DllImport("advapi32.dll", EntryPoint = "CreateProcessAsUserW", CharSet = CharSet.Unicode, SetLastError = true)] static extern bool CreateProcessAsUser(SafeAccessTokenHandle token, string application, StringBuilder command, IntPtr processAttributes, IntPtr threadAttributes, bool inherit, uint flags, IntPtr environment, string? directory, ref StartupInfo startup, out ProcessInformation created);
+    [DllImport("ntdll.dll")] static extern int RtlAdjustPrivilege(int privilege, bool enable, bool thread, out bool previous);
 }

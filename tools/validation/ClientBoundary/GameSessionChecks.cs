@@ -61,6 +61,9 @@ static class GameSessionChecks
         Check(GameSessionDisplay.Restored(history) && GameSessionDisplay.Title(history) == "Stopped · original settings restored", "A session recovered after an earlier error counts as restored, so a new session can start");
         Check(!GameSessionDisplay.Restored(Ended("recoveryRequired", "restored", "Native restoration needs reconciliation: gpuPriority")), "A session that still needs recovery stays outstanding");
         Check(!GameSessionDisplay.Restored(Ended("stoppedWithErrors", "conflict", "Native restoration needs reconciliation: gpuPriority")), "A field that was not put back keeps the session outstanding");
+        ProtectedSessionStatus Armed(List<int>? refused) { var state = Ended("armed", "pending").State!; state.RegistryStatus = "applied"; state.JobStatus = "applied"; state.Games.Clear(); state.Refused = refused; state.UpdatedAtUtc = DateTime.UtcNow; return new(state, true, null); }
+        Check(GameSessionDisplay.Title(Armed(null)) == "Ready · launch the game normally", "An armed session with no game says it's ready");
+        Check(GameSessionDisplay.Title(Armed([4242])) == "Partially applied · check each control", "A game in the launcher that won't let the app check it shows the session as partly applied, not ready" + " | " + GameSessionDisplay.Title(Armed([4242])));
         var inherited = Ended("stopped", "leftAsIs");
         Check(GameSessionDisplay.Restored(inherited) && ProtectedSessions.IsRestored(inherited.State!), "A field the game already had when it started, left as is, doesn't keep the session outstanding");
         Console.WriteLine("Game session display assertions: " + passed);
