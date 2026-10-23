@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Media;
 
 namespace RooIndustries.OptimizationSuite.Services;
 
@@ -13,8 +14,6 @@ public sealed class ThemeService
     private const string EffectsKey = "reducedEffects";
     private const string SimpleModeKey = "simpleMode";
     private const string ProbeBrushKey = "RooIndustriesCanvasBrush";
-    private const string StylesUri = "ms-appx:///Resources/Styles.xaml";
-    private const string StylesProbeKey = "PanelBorderStyle";
 
     public static readonly ThemeOption RooIndustriesBlue = new("roo-industries-blue", "Blue", "ms-appx:///Resources/Theme.RooIndustriesBlue.xaml");
     public static readonly ThemeOption BlackoutGold = new("black-gold", "Blackout Gold", "ms-appx:///Resources/Theme.BlackoutGold.xaml");
@@ -45,7 +44,7 @@ public sealed class ThemeService
         SimpleMode = _settings.Get(SimpleModeKey) != "0";
         if (option.Id != BlackoutGold.Id)
         {
-            SwapDictionary(option);
+            Repaint(option);
         }
     }
 
@@ -86,49 +85,66 @@ public sealed class ThemeService
             return;
         }
 
-        SwapDictionary(option);
+        Repaint(option);
         CurrentThemeId = option.Id;
         _settings.Set(ThemeKey, option.Id);
         ThemeChanged?.Invoke();
     }
 
-    private static void SwapDictionary(ThemeOption option)
+    private static void Repaint(ThemeOption option)
     {
-        var merged = Application.Current.Resources.MergedDictionaries;
-        var replacement = new ResourceDictionary { Source = new Uri(option.ResourceUri) };
-
-        var swapped = false;
-        for (var i = 0; i < merged.Count; i++)
+        var live = Application.Current.Resources.MergedDictionaries.First(dictionary => dictionary.ContainsKey(ProbeBrushKey));
+        var next = new ResourceDictionary { Source = new Uri(option.ResourceUri) };
+        foreach (var key in live.Keys.Where(key => !next.ContainsKey(key)).ToArray())
         {
-            if (merged[i].ContainsKey(ProbeBrushKey))
-            {
-                merged[i] = replacement;
-                swapped = true;
-                break;
-            }
+            live.Remove(key);
         }
 
-        if (!swapped)
+        foreach (var (key, value) in next.ToArray())
         {
-            merged.Add(replacement);
-        }
-
-        ReloadStyles(merged);
-    }
-
-    private static void ReloadStyles(IList<ResourceDictionary> merged)
-    {
-        for (var i = 0; i < merged.Count; i++)
-        {
-            if (!merged[i].ContainsKey(StylesProbeKey))
+            if (live.TryGetValue(key, out var current) && Copy(value, current))
             {
                 continue;
             }
 
-            var fresh = new ResourceDictionary();
-            merged[i] = fresh;
-            fresh.Source = new Uri(StylesUri);
-            return;
+            next.Remove(key);
+            live[key] = value;
+        }
+    }
+
+    private static bool Copy(object source, object target)
+    {
+        switch (source, target)
+        {
+            case (SolidColorBrush from, SolidColorBrush to):
+                to.Color = from.Color;
+                to.Opacity = from.Opacity;
+                return true;
+            case (LinearGradientBrush from, LinearGradientBrush to):
+                to.StartPoint = from.StartPoint;
+                to.EndPoint = from.EndPoint;
+                to.Opacity = from.Opacity;
+                CopyStops(from.GradientStops, to.GradientStops);
+                return true;
+            case (RadialGradientBrush from, RadialGradientBrush to):
+                to.Center = from.Center;
+                to.GradientOrigin = from.GradientOrigin;
+                to.RadiusX = from.RadiusX;
+                to.RadiusY = from.RadiusY;
+                to.Opacity = from.Opacity;
+                CopyStops(from.GradientStops, to.GradientStops);
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private static void CopyStops(IList<GradientStop> from, IList<GradientStop> to)
+    {
+        to.Clear();
+        foreach (var stop in from)
+        {
+            to.Add(new GradientStop { Color = stop.Color, Offset = stop.Offset });
         }
     }
 }
