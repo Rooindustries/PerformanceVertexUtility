@@ -2,7 +2,7 @@
 
 The Games and Processes panels read live status every 2 seconds. Each read starts a new `Optimizer.Host` process. This suite proves the reads stop while the app window sits behind another window, and that the panel catches up when the user comes back.
 
-It builds the app from the staged source (framework-dependent .NET, self-contained Windows App SDK, so it never runs as an installed copy), starts it next to a maximized probe window it owns, and counts the app's child host processes with `Win32_ProcessStartTrace`. A 10 ms process snapshot loop records each child's action from its command line as a cross-check. Focus changes are confirmed with `GetForegroundWindow` before a window is timed.
+It builds the app from the staged source (framework-dependent .NET, self-contained Windows App SDK, so it never runs as an installed copy), starts it next to a maximized probe window it owns, and counts the app's child host processes with `Win32_ProcessStartTrace`. A 10 ms process snapshot loop records each child's action from its command line as a cross-check. Focus changes are confirmed with `GetForegroundWindow`, and an inactive window starts timing 0.5 s after that. The foreground window is sampled every 100 ms while a window is timed; a case fails if the app comes to the front during an inactive window or another copy of the app appears, since the desktop is shared.
 
 Cases and the counts they require:
 
