@@ -1,5 +1,6 @@
 param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutRoot,[Parameter(Mandatory)][string]$AppExe)
 $ErrorActionPreference='Stop'
+if(-not$env:DOTNET_ROOT -and [IO.Directory]::Exists((Join-Path $env:USERPROFILE '.dotnet'))){$env:DOTNET_ROOT=Join-Path $env:USERPROFILE '.dotnet';$env:DOTNET_ROOT_X64=$env:DOTNET_ROOT}
 . (Join-Path $Source 'tools\validation\LoadTimes\CleanupOwnership.Common.ps1')
 . (Join-Path $Source 'backend\scripts\BrandCompatibility.Common.ps1')
 Add-Type -AssemblyName UIAutomationClient,UIAutomationTypes,System.Drawing

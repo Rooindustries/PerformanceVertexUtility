@@ -4,7 +4,7 @@
 
 While it runs, the staged `backend\profiles\game-session.profile.json` boosts only `Overwatch.exe` and has no background rules, so no real app changes priority. The original bytes are written back in `finally`. The script refuses to run when the app or a process named Overwatch is already running, and removes the review file it created under the app's settings folder.
 
-Stage a frame with the desktop sources, build the app in it, then run the check in the signed-in desktop session:
+Stage a frame with the desktop sources, build the app in it, then run the check in the signed-in desktop session. When no .NET is installed for the whole PC, the check starts the app with the user's `.dotnet` folder as `DOTNET_ROOT`:
 
 ```sh
 python3 -I tools/validation/windows_ssh.py --host <test-pc> --expected-machine <COMPUTERNAME> upload --directory roo-industries-game-tune-ui --parent '<staging-parent>' --include-frontend > frame.json
