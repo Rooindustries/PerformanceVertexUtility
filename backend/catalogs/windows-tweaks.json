@@ -73572,8 +73572,8 @@
           ]
         },
         {
-          "id": "choice-dc6b5cc8eae3dd25",
-          "name": "Allow Telemetry: 3",
+          "id": "choice-6b253977ea5987f3",
+          "name": "Required diagnostic data",
           "changes": [
             {
               "address": {
@@ -73583,7 +73583,7 @@
                 "kind": "value",
                 "valueName": "AllowTelemetry"
               },
-              "dword": 3
+              "dword": 1
             }
           ],
           "availability": [
@@ -73597,8 +73597,8 @@
           ]
         },
         {
-          "id": "choice-6b253977ea5987f3",
-          "name": "Required diagnostic data",
+          "id": "choice-dc6b5cc8eae3dd25",
+          "name": "Allow Telemetry: 3",
           "changes": [
             {
               "address": {
@@ -73608,7 +73608,7 @@
                 "kind": "value",
                 "valueName": "AllowTelemetry"
               },
-              "dword": 1
+              "dword": 3
             }
           ],
           "availability": [
