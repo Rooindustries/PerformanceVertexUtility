@@ -50,15 +50,19 @@ function Focus([IntPtr]$target, [string]$what) {
 }
 function Case([string]$name, [long]$from, [long]$to, [int]$minimum, [int]$maximum, [hashtable]$extra = @{}) {
     Start-Sleep -Seconds 2
+    $hosts = @($watch.Polled() | Where-Object { $_.Name -in $hostNames })
+    $polled = @($hosts | Where-Object { $_.Created -ge $from -and $_.Created -lt $to })
     $traced = @($watch.Traced() | Where-Object { $_.Name -in $hostNames -and $_.Created -ge $from -and $_.Created -lt $to })
-    $polled = @($watch.Polled() | Where-Object { $_.Name -in $hostNames -and $_.Created -ge $from -and $_.Created -lt $to })
+    $seenIds = @($hosts | ForEach-Object { $_.Pid })
+    $untimed = @($hosts | Where-Object { -not $_.Created -and $_.Seen -ge $from -and $_.Seen -lt $to + 20000000 } | ForEach-Object { $_.Pid })
+    $untimed += @($watch.Traced() | Where-Object { $_.Name -in $hostNames -and $_.Pid -notin $seenIds -and $_.Created -ge $from -and $_.Created -lt $to + 20000000 } | ForEach-Object { $_.Pid })
     $other = @($watch.Polled() | Where-Object { $_.Name -notin $hostNames -and $_.Created -ge $from -and $_.Created -lt $to } | ForEach-Object { $_.Name })
-    $result = [ordered]@{ case = $name; seconds = [Math]::Round(($to - $from) / 1e7, 2); hostStarts = $traced.Count; expectedMinimum = $minimum; expectedMaximum = $maximum
-        polledHostStarts = $polled.Count; actions = @($polled | ForEach-Object { Action $_.CommandLine }); otherChildren = $other; from = $from; to = $to }
+    $result = [ordered]@{ case = $name; seconds = [Math]::Round(($to - $from) / 1e7, 2); hostStarts = $polled.Count; expectedMinimum = $minimum; expectedMaximum = $maximum
+        tracedHostStarts = $traced.Count; untimedHostStarts = $untimed; actions = @($polled | ForEach-Object { Action $_.CommandLine }); otherChildren = $other; from = $from; to = $to }
     $result.foreground = $script:held
     $result.otherAppProcesses = @(Get-Process RooIndustries.OptimizationSuite.* -ErrorAction SilentlyContinue | Where-Object { $_.Id -ne $app.Id }).Count
     foreach ($key in $extra.Keys) { $result[$key] = $extra[$key] }
-    $result.passed = $traced.Count -ge $minimum -and $traced.Count -le $maximum -and $extra.passed -ne $false -and $result.otherAppProcesses -eq 0
+    $result.passed = $polled.Count -ge $minimum -and $polled.Count -le $maximum -and -not $untimed.Count -and $extra.passed -ne $false -and $result.otherAppProcesses -eq 0
     $script:held = @{}
     $cases.Add($result) | Out-Null
     Save 'cases.json' $cases
@@ -208,7 +212,7 @@ try {
     throw
 } finally {
     if ($app) { Stop-OwnedValidationApp $app $receipt }
-    if ($watch) { Save 'children.json' @($watch.Traced() | ForEach-Object { [ordered]@{ pid = $_.Pid; name = $_.Name; created = $_.Created } }); $watch.Dispose() }
+    if ($watch) { Save 'children.json' ([ordered]@{ polled = @($watch.Polled() | ForEach-Object { [ordered]@{ pid = $_.Pid; name = $_.Name; created = $_.Created; seen = $_.Seen; action = Action $_.CommandLine } }); traced = @($watch.Traced() | ForEach-Object { [ordered]@{ pid = $_.Pid; name = $_.Name; created = $_.Created } }) }); $watch.Dispose() }
     if ($app -and $gamePath) {
         $sessionCleanup = [Collections.Generic.List[object]]::new()
         foreach ($operation in @(Get-ChildItem -LiteralPath $operations -Directory -Filter 'game-session-*' -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notin $existingOperations })) {
