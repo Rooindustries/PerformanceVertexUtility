@@ -16,7 +16,12 @@ namespace RooIndustries.OptimizationSuite.ViewModels;
 public partial class FirmwareViewModel : ObservableObject
 {
     public static string? WriteTestsPath { get; set; }
+#if ROO_INDUSTRIES_TEST_HOOKS
+    public static string Root => Environment.GetEnvironmentVariable("ROO_INDUSTRIES_TEST_FIRMWARE_ROOT") is { Length: > 0 } fixture ? fixture : Path.Combine(RooIndustries.Optimizer.BrandCompatibility.LocalDataRoot, "firmware");
+#else
     public static string Root => Path.Combine(RooIndustries.Optimizer.BrandCompatibility.LocalDataRoot, "firmware");
+#endif
+    public static FirmwareViewModel ForPage() => new();
     private string? _packageDirectory;
     private string? _sessionDirectory;
     private string? _reviewHash;

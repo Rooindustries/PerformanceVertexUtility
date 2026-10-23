@@ -5,6 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <DefineConstants>$(DefineConstants);ROO_INDUSTRIES_TEST_HOOKS</DefineConstants>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.2" />
@@ -13,6 +14,7 @@
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/ViewModels/BugReportViewModel.cs" Link="BugReportViewModel.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/ViewModels/BulkRemovalViewModel.cs" Link="BulkRemovalViewModel.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/ViewModels/DriversProfilesViewModel.cs" Link="DriversProfilesViewModel.cs" />
+    <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/ViewModels/FirmwareViewModel.cs" Link="FirmwareViewModel.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/ViewModels/MonitoringViewModel.cs" Link="MonitoringViewModel.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/ViewModels/PerformanceProfilesViewModel.cs" Link="PerformanceProfilesViewModel.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/ViewModels/ProcessControlsViewModel.cs" Link="ProcessControlsViewModel.cs" />

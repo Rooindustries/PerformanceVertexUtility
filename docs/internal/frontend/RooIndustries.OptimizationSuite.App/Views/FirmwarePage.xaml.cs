@@ -13,7 +13,7 @@ namespace RooIndustries.OptimizationSuite.Views;
 
 public sealed partial class FirmwarePage : Page
 {
-    public FirmwareViewModel ViewModel { get; } = new();
+    public FirmwareViewModel ViewModel { get; } = FirmwareViewModel.ForPage();
     public FirmwarePage()
     {
         FirmwareViewModel.WriteTestsPath = App.CatalogsDirectory is { } catalogs ? Path.Combine(catalogs, "firmware-write-tests.json") : null;

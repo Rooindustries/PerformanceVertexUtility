@@ -47,8 +47,8 @@
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            <TextBlock Text="{x:Bind ViewModel.StepText, Mode=OneWay}" Foreground="{StaticResource RooIndustriesAccentBrush}" FontWeight="SemiBold" VerticalAlignment="Center" />
-            <ProgressRing Grid.Column="1" IsActive="{x:Bind ViewModel.Busy, Mode=OneWay}" Width="22" Height="22" />
+            <TextBlock Text="{x:Bind ViewModel.StepText, Mode=OneWay}" Foreground="{StaticResource RooIndustriesAccentBrush}" FontWeight="SemiBold" VerticalAlignment="Center" AutomationProperties.AutomationId="FirmwareStep" />
+            <ProgressRing Grid.Column="1" IsActive="{x:Bind ViewModel.Busy, Mode=OneWay}" Width="22" Height="22" AutomationProperties.AutomationId="FirmwareBusy" />
         </Grid>
         <Grid Grid.Row="2">
             <ScrollViewer Visibility="{x:Bind ViewModel.IsSetup, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
