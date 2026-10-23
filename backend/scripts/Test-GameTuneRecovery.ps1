@@ -156,7 +156,7 @@ try {
         $arguments = @{ ReviewPath = $reviewPath; ReviewSha256 = (Get-FileHash $reviewPath).Hash }
     }
     $second = & (Join-Path $PSScriptRoot 'Start-GameTuneSession.ps1') -ProfilePath $profile -StateRoot $state -PollIntervalSeconds 1 -MaxDurationSeconds 1 -ControllerProcessId $run.App.Id -ControllerStartTimeUtc $run.App.StartTime.ToUniversalTime().ToString('o') @arguments -ConfirmApply | ConvertFrom-Json
-    Check (-not $second.restorable -and $second.sessionPath -ne $run.Path) 'A second Start on the tuned game creates a separate empty session'
+    Check ($second.status -eq 'completed' -and -not $second.restorable -and -not [string]::IsNullOrWhiteSpace($second.sessionPath) -and (Test-Path -LiteralPath $second.sessionPath -PathType Leaf) -and $second.sessionPath -ne $run.Path) 'A second Start on the tuned game creates a separate empty session'
     $before = & (Join-Path $PSScriptRoot 'Get-GameTuneSessionStatus.ps1') -StateRoot $state -RecoverInterrupted | ConvertFrom-Json
     Check ($before.restorable -and $before.sessionPath -eq $run.Path) 'A newer empty session cannot hide the older Restore'
     Stop-RooIndustriesValidationProcess $run.App
