@@ -74,10 +74,13 @@ static class GameSessionPresetChecks
             model.SelectedPreset = picked;
             await model.PreviewCommand.ExecuteAsync(null);
             model.AffinityMask = "0x1";
-            check(!model.CanStart && model.ReviewSummary.Length == 0 && model.SelectedPreset is null && model.PresetPlaceholder == LaunchPresetCatalog.Custom,
-                "Editing cores after review clears Start and shows Custom");
+            check(!model.CanStart && model.ReviewSummary.Length == 0 && model.SelectedPreset == picked && model.PresetHint == picked.Description,
+                "Editing cores after review clears Start and keeps " + picked.Name);
+            await model.PreviewCommand.ExecuteAsync(null);
+            check(model.CanStart && model.ReviewSummary.Split('\n')[1] == "Preset: " + picked.Name, "Reviewing cores picked after " + picked.Name + " still names the preset");
+            model.SelectedPreset = model.Presets[1];
+            check(model.AffinityMask == "0x1", "Picking another preset preserves the user's core choice");
             model.SelectedPreset = picked;
-            check(model.AffinityMask == "0x1", "Repicking a preset preserves the user's core choice");
             var first = model.SelectedLauncher;
             App.Operations.ProcessReads = _ => new ProcessControlSnapshot(launcher, ControlRead.From(0u), topology, new Dictionary<string, ControlRead> { ["affinity"] = ControlRead.From(new AffinityState(0, "0x2")) });
             model.SelectedLauncher = new CpuProcessChoice(4200, "other.exe");
@@ -86,6 +89,7 @@ static class GameSessionPresetChecks
             App.Operations.ProcessReads = null;
             model.SelectedLauncher = first;
             check(model.SelectedPreset == picked && model.AffinityMask == "0x3", "Switching back keeps the preset and reloads the first launcher's cores");
+            edited.Selected = edited.Options[^1];
             model.AffinityMask = "0x1";
             model.SelectedPreset = picked;
             await model.PreviewCommand.ExecuteAsync(null);
@@ -114,18 +118,19 @@ static class GameSessionPresetChecks
             await reopened.InitializeAsync();
             check(reopened.SelectedSession is not null && !reopened.CanEdit && reopened.SelectedPreset?.Id == picked.Id && reopened.AffinityMask == "0x1",
                 "Reopening a session started from " + picked.Name + " shows the preset after its custom cores finish loading");
+            reopened.SelectedCores = reopened.CoreChoices.First(choice => choice.Affinity.Mask != "0x1");
+            check(reopened.CanSwitch && reopened.AffinityMask == "0x3" && reopened.SelectedPreset?.Id == picked.Id, "Choosing other cores in a running " + picked.Name + " session keeps the preset");
             App.Operations.GameSessions = [];
             var manual = new GameSessionViewModel();
             await manual.InitializeAsync();
+            manual.SelectedLauncher = manual.Launchers.Single();
+            manual.AffinityMask = "0x1";
+            check(manual.PresetPlaceholder == "Choose a preset" && manual.PresetHint.StartsWith("A preset fills", StringComparison.Ordinal), "Custom cores alone leave the picker on Choose a preset, since presets don't set cores");
             var notified = new List<string?>();
             manual.PropertyChanged += (_, args) => notified.Add(args.PropertyName);
             manual.Settings[0].Selected = manual.Settings[0].Options[1];
             check(manual.PresetPlaceholder == LaunchPresetCatalog.Custom && notified.Contains(nameof(manual.PresetPlaceholder)) && notified.Contains(nameof(manual.PresetHint)),
                 "Manual settings notify the picker to show Custom even when no preset was selected");
-            manual.Settings[0].Selected = manual.Settings[0].Options[0];
-            manual.SelectedLauncher = manual.Launchers.Single();
-            manual.AffinityMask = "0x1";
-            check(manual.PresetPlaceholder == LaunchPresetCatalog.Custom, "Custom cores show Custom even when every priority is Keep current");
             GameSessionViewModel.PresetsPath = Path.Combine(fixtures, "missing-launch-presets.json");
             App.Operations.GameSessions = [];
             var missing = new GameSessionViewModel();
