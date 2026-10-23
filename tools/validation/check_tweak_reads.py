@@ -32,7 +32,8 @@ def check(root):
 
 def stop(process, marker):
     if os.name == 'nt':
-        subprocess.run(['taskkill', '/F', '/T', '/PID', str(process.pid)], capture_output=True)
+        with contextlib.suppress(subprocess.TimeoutExpired):
+            subprocess.run(['taskkill', '/F', '/T', '/PID', str(process.pid)], capture_output=True, timeout=30)
     else:
         with contextlib.suppress(ProcessLookupError):
             os.killpg(process.pid, signal.SIGKILL)
