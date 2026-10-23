@@ -122,9 +122,9 @@ try {
         $gamePath = Join-Path $directory 'PollingFixtureGame.exe'
         Copy-Item "$env:SystemRoot\System32\PING.EXE" $gamePath
     }
-    $probe = Start-Process $probeExe -PassThru
-    $owned.Add((New-OwnedProcess $probe))
-    $probeWindow = WaitFor { $probe.Refresh(); if ($probe.MainWindowHandle -ne [IntPtr]::Zero) { $probe.MainWindowHandle } } 30 'probe window'
+    $probeProcess = Start-Process $probeExe -PassThru
+    $owned.Add((New-OwnedProcess $probeProcess))
+    $probeWindow = WaitFor { $probeProcess.Refresh(); if ($probeProcess.MainWindowHandle -ne [IntPtr]::Zero) { $probeProcess.MainWindowHandle } } 30 'probe window'
 
     $operations = Join-Path (Get-RooIndustriesLocalDataRoot) 'operations'
     $existingOperations = @(if (Test-Path -LiteralPath $operations) { Get-ChildItem -LiteralPath $operations -Directory -Filter 'game-session-*' | ForEach-Object { $_.FullName } })
