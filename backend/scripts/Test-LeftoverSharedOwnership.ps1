@@ -1,4 +1,4 @@
-param([string]$EvidencePath = '')
+param([string]$EvidencePath = '', [switch]$IncludeNetworkAliases)
 
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'BulkUninstall.Common.ps1')
@@ -228,6 +228,75 @@ try {
         if ($missingItem.Count -eq 1 -and $missingItem[0].protected -and -not $missingItem[0].defaultSelected -and @($missingItem[0].metadata.sharedOwners) -contains 'App K') {
             Add-Pass 'A missing peer folder recorded through a short parent keeps its long-named folder shared'
         } else { Add-Failure 'A missing peer folder recorded through a short parent must keep its long-named folder shared' }
+
+        Push-Location -LiteralPath $spellingApps
+        try {
+            $driveRelative = [IO.Path]::GetPathRoot($tempRoot).TrimEnd('\') + 'Missing Relative Peer\cache'
+            if ($null -eq (Get-RooIndustriesLongPath 'Missing Relative Peer\cache') -and $null -eq (Get-RooIndustriesLongPath $driveRelative)) {
+                Add-Pass 'Missing relative and drive-relative peer paths are not resolved through the working folder'
+            } else { Add-Failure 'Missing relative and drive-relative peer paths must not be resolved through the working folder' }
+        } finally { Pop-Location }
+
+        if ($IncludeNetworkAliases) {
+            if ((Get-Service LanmanServer).Status -ne 'Running') { throw 'The optional network fixture needs the existing SMB server running; no service was changed.' }
+            $shareName = 'RooIndustriesAliasFixture-' + [guid]::NewGuid().ToString('N')
+            $shareRoot = '\\localhost\' + $shareName
+            $shareCreated = $false
+            $driveCreated = $false
+            $driveLetter = @([char[]]'ZYXWVUTSRQP' | Where-Object { -not (Test-Path -LiteralPath ($_ + ':\')) -and -not (Get-PSDrive -Name $_ -ErrorAction SilentlyContinue) } | Select-Object -First 1)
+            if ($driveLetter.Count -ne 1) { throw 'The optional network fixture needs one unused drive letter.' }
+            $driveName = [string]$driveLetter[0]
+            $networkFile = Join-Path $spellingApps 'keep-network.txt'
+            [IO.File]::WriteAllText($networkFile, 'Disposable network alias fixture')
+            & fsutil.exe file setshortname $spellingApps 'NETALIAS' | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw 'The network fixture could not assign its test-owned short name.' }
+            $networkShortLeaf = [IO.Path]::GetFileName($fileSystem.GetFolder($spellingApps).ShortPath)
+            if ($networkShortLeaf -ine 'NETALIAS') { throw 'The network fixture needs an actual short name without a tilde.' }
+            try {
+                New-SmbShare -Name $shareName -Path $tempRoot -FullAccess ([Security.Principal.WindowsIdentity]::GetCurrent().Name) -Temporary | Out-Null
+                $shareCreated = $true
+                New-PSDrive -Name $driveName -PSProvider FileSystem -Root $shareRoot -Persist -Scope Script | Out-Null
+                $driveCreated = $true
+                $networkRules = $rules | ConvertTo-Json -Depth 16 | ConvertFrom-Json
+                $networkRules.knownAppRules[0].knownAppDataPaths = @()
+                $networkRulesPath = Join-Path $tempRoot 'network-rules.json'
+                $networkRules | ConvertTo-Json -Depth 16 | Set-Content -LiteralPath $networkRulesPath -Encoding UTF8
+                $surfaces = @(
+                    [pscustomobject]@{ name = 'unc'; root = $shareRoot },
+                    [pscustomobject]@{ name = 'mapped'; root = ($driveName + ':\') }
+                )
+                foreach ($surface in $surfaces) {
+                    $candidatePath = Join-Path $surface.root ([IO.Path]::GetFileName($spellingApps))
+                    $peerPath = Join-Path (Join-Path $surface.root $networkShortLeaf) 'Missing Network Peer\cache'
+                    foreach ($prefixOnly in @($false, $true)) {
+                        $caseName = $surface.name + $(if ($prefixOnly) { '-prefix-only' } else { '-missing-peer' })
+                        $peerLocation = if ($prefixOnly) { $candidatePath + 'Extra\Missing Network Peer' } else { $peerPath }
+                        $networkInventoryPath = Join-Path $tempRoot ($caseName + '-inventory.json')
+                        [pscustomobject]@{ schemaVersion = 1; complete = $true; apps = @(
+                            [pscustomobject]@{ appId = 'fixture:a'; displayName = 'App A'; sourceType = 'registry'; risk = 'low'; protected = $false; installLocation = $candidatePath },
+                            [pscustomobject]@{ appId = 'fixture:k'; displayName = 'App K'; sourceType = 'registry'; risk = 'low'; protected = $false; installLocation = $peerLocation }
+                        ) } | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $networkInventoryPath -Encoding UTF8
+                        $networkScan = ((& (Join-Path $PSScriptRoot 'Preview-LeftoverScan.ps1') -AppId 'fixture:a' -InventoryPath $networkInventoryPath -RulesPath $networkRulesPath) -join [Environment]::NewLine) | ConvertFrom-Json
+                        $evidence.scans[$caseName] = $networkScan
+                        $networkItem = @($networkScan.items | Where-Object { $_.target -eq $candidatePath })
+                        $sharedWithPeer = $networkItem.Count -eq 1 -and @($networkItem[0].metadata.sharedOwners) -contains 'App K'
+                        $correct = @($networkScan.errors).Count -eq 0 -and $networkItem.Count -eq 1 -and $sharedWithPeer -eq (-not $prefixOnly) -and
+                            $networkItem[0].protected -eq (-not $prefixOnly) -and $networkItem[0].defaultSelected -eq $prefixOnly
+                        if ($correct) { Add-Pass ($caseName + ': ownership and selection follow path boundaries through a missing peer') }
+                        else { Add-Failure ($caseName + ': ownership and selection must follow path boundaries through a missing peer') }
+                    }
+                }
+                if (([IO.DriveInfo]::new($driveName + ':\')).DriveType -eq [IO.DriveType]::Network -and [IO.File]::ReadAllText($networkFile) -eq 'Disposable network alias fixture') {
+                    Add-Pass 'The mapped fixture is a non-fixed network drive and scans preserve its bytes'
+                } else { Add-Failure 'The mapped fixture must be a non-fixed network drive and scans must preserve its bytes' }
+            } finally {
+                try { if ($driveCreated) { Remove-PSDrive -Name $driveName -Force } }
+                finally { if ($shareCreated) { Remove-SmbShare -Name $shareName -Force } }
+            }
+            if (-not (Get-SmbShare -Name $shareName -ErrorAction SilentlyContinue) -and -not (Get-PSDrive -Name $driveName -ErrorAction SilentlyContinue) -and -not [IO.Directory]::Exists($driveName + ':\')) {
+                Add-Pass 'Optional network fixtures leave no SMB share or mapped drive behind'
+            } else { Add-Failure 'Optional network fixtures must leave no SMB share or mapped drive behind' }
+        }
     } else {
         Write-Host 'SKIP Shared-folder junction resolution requires Windows.'
     }

@@ -68,19 +68,17 @@ function Get-RooIndustriesLongPath {
     param([string]$Path)
     $long = Get-RooIndustriesFinalPath $Path
     try {
-        if ($null -eq $long -and -not [string]::IsNullOrWhiteSpace($Path)) {
+        if ($null -eq $long -and $Path -match '^(?:[A-Za-z]:[\\/]|[\\/]{2}[^\\/]+[\\/][^\\/]+(?:[\\/]|$))') {
             $current = [System.IO.Path]::GetFullPath($Path)
-            if ($current -match '^[A-Za-z]:\\' -and ([System.IO.DriveInfo]::new($current.Substring(0, 3))).DriveType -eq [System.IO.DriveType]::Fixed) {
-                if ($current.Length -gt 3) { $current = $current.TrimEnd('\') }
-                $tail = ''
-                while ($null -eq $long) {
-                    $parent = [System.IO.Path]::GetDirectoryName($current)
-                    if ([string]::IsNullOrEmpty($parent)) { break }
-                    $tail = '\' + [System.IO.Path]::GetFileName($current) + $tail
-                    $current = $parent
-                    $final = Get-RooIndustriesFinalPath $current
-                    if ($final) { $long = $final + $tail }
-                }
+            if ($current.Length -gt 3) { $current = $current.TrimEnd('\') }
+            $tail = ''
+            while ($null -eq $long) {
+                $parent = [System.IO.Path]::GetDirectoryName($current)
+                if ([string]::IsNullOrEmpty($parent)) { break }
+                $tail = '\' + [System.IO.Path]::GetFileName($current) + $tail
+                $current = $parent
+                $final = Get-RooIndustriesFinalPath $current
+                if ($final) { $long = $final + $tail }
             }
         }
     } catch { }
