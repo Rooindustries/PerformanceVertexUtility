@@ -11,10 +11,17 @@ try {
     # Only operating-system reads are replaced; the real Invoke-SmokeTest decides which checks apply.
     $script:bluetooth = @()
     $script:apps = @()
-    $script:services = @{ WlanSvc = 'Running'; bthserv = 'Running'; WinDefend = 'Running'; BFE = 'Running'; mpssvc = 'Running'; WpnService = 'Running' }
+    $script:services = @{ WlanSvc = 'Running'; bthserv = 'Running'; WinDefend = 'Running'; BFE = 'Running'; mpssvc = 'Running'; WpnService = 'Running'; Dnscache = 'Running' }
     $script:processes = @()
-    function Get-NetConnectionProfile { @([pscustomobject]@{ Name = 'Fixture network' }) }
-    function Resolve-DnsName { @([pscustomobject]@{ Name = 'www.microsoft.com' }) }
+    $script:lookups = 0
+    $script:dnsServers = @('192.0.2.53')
+    $script:profiles = @([pscustomobject]@{ Name = 'Fixture network'; InterfaceIndex = 1 })
+    $script:extraDns = @()
+    function Get-NetConnectionProfile { $script:profiles }
+    function Resolve-DnsName { $script:lookups++; @([pscustomobject]@{ Name = 'www.microsoft.com' }) }
+    function Test-Connection { $script:lookups++; $true }
+    function Invoke-WebRequest { $script:lookups++ }
+    function Get-DnsClientServerAddress { @([pscustomobject]@{ InterfaceAlias = 'Fixture'; InterfaceIndex = 1; ServerAddresses = $script:dnsServers }) + $script:extraDns }
     function Get-PnpDevice { if ($script:bluetooth -eq 'unavailable') { throw [Management.Automation.CommandNotFoundException]::new('Get-PnpDevice') }; @($script:bluetooth) }
     function Get-Service { param([string]$Name) if ($script:services.ContainsKey($Name)) { [pscustomobject]@{ Name = $Name; Status = $script:services[$Name]; StartType = 'Automatic' } } }
     function Get-ItemProperty { @($script:apps | ForEach-Object { [pscustomobject]@{ DisplayName = $_ } }) }
@@ -25,6 +32,28 @@ try {
     $healthy = Invoke-SmokeTest
     Assert ($healthy.pass -and (Names $healthy) -notcontains 'service:Tailscale' -and (Names $healthy) -notcontains 'process:Wispr Flow') 'A healthy PC without Tailscale or Wispr Flow passes the smoke test'
     Assert ((Names $healthy) -notcontains 'service:bthserv') 'A PC without a Bluetooth adapter skips the Bluetooth service check'
+    Assert ($script:lookups -eq 0 -and @($healthy.results | Where-Object { $_.name -eq 'dns-client' -and $_.pass }).Count -eq 1) 'The smoke test checks DNS locally without any network lookup'
+    $script:dnsServers = @()
+    $noServers = Invoke-SmokeTest
+    $script:dnsServers = @('192.0.2.53')
+    $script:services.Dnscache = 'Stopped'
+    $noClient = Invoke-SmokeTest
+    $script:services.Dnscache = 'Running'
+    Assert ($script:lookups -eq 0 -and -not $noServers.pass -and -not $noClient.pass -and @(@($noServers.results) + @($noClient.results) | Where-Object { $_.name -eq 'dns-client' -and -not $_.pass }).Count -eq 2) 'The local DNS check fails without a DNS server or a running DNS Client service'
+
+    $script:dnsServers = @()
+    $script:extraDns = @([pscustomobject]@{ InterfaceIndex = 2; ServerAddresses = @('192.0.2.54') })
+    $inactiveOnly = Invoke-SmokeTest
+    Assert (-not $inactiveOnly.pass -and @($inactiveOnly.results | Where-Object { $_.name -eq 'dns-client' -and -not $_.pass }).Count -eq 1) 'DNS on a disconnected adapter cannot hide missing DNS on the active network'
+    $script:profiles = @()
+    $noProfiles = Invoke-SmokeTest
+    Assert (-not $noProfiles.pass -and @($noProfiles.results | Where-Object { $_.name -eq 'dns-client' -and -not $_.pass }).Count -eq 1) 'DNS on an unrelated adapter cannot pass without an active network profile'
+    $script:profiles = @([pscustomobject]@{ Name = 'Other fixture network'; InterfaceIndex = 2 })
+    $otherActive = Invoke-SmokeTest
+    Assert ($otherActive.pass -and $script:lookups -eq 0) 'DNS on any active network profile passes without an external lookup'
+    $script:profiles = @([pscustomobject]@{ Name = 'Fixture network'; InterfaceIndex = 1 })
+    $script:dnsServers = @('192.0.2.53')
+    $script:extraDns = @()
 
     $script:bluetooth = @([pscustomobject]@{ Status = 'Error' })
     $script:services.bthserv = 'Stopped'

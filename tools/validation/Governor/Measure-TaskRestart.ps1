@@ -1,18 +1,19 @@
 param([Parameter(Mandatory)][string]$UserSid)
 $ErrorActionPreference='Stop'
 $sid=$UserSid
-$dir=Join-Path ([IO.Path]::GetTempPath()) 'roo-industries-governor-restart'
+$id=[Guid]::NewGuid().ToString('N').Substring(0,12)
+$dir=Join-Path ([IO.Path]::GetTempPath()) ('roo-industries-governor-restart-'+$id)
 [IO.Directory]::CreateDirectory($dir)|Out-Null
 $conhost=Join-Path $env:SystemRoot 'System32\conhost.exe'
 $cases=@(
-    @{name='RooIndustriesGovernorRestart-OnFailure';exe='restartOnFailure.exe';repeat=$false;restart=$true},
-    @{name='RooIndustriesGovernorRestart-Repetition';exe='restartRepetition.exe';repeat=$true;restart=$false}
+    @{name=('RooIndustriesGovernorRestart-OnFailure-'+$id);exe='restartOnFailure.exe';repeat=$false;restart=$true},
+    @{name=('RooIndustriesGovernorRestart-Repetition-'+$id);exe='restartRepetition.exe';repeat=$true;restart=$false}
 )
+function Get-CaseProcess($Case){@(Get-Process -Name ([IO.Path]::GetFileNameWithoutExtension($Case.exe)) -ErrorAction SilentlyContinue|Where-Object {$_.Path -and (Split-Path (Split-Path $_.Path -Parent) -Leaf) -eq (Split-Path $dir -Leaf)})}
 $result=[ordered]@{startedAtUtc=[DateTime]::UtcNow.ToString('o');cases=@()}
 try {
     foreach($case in $cases){
         Copy-Item (Join-Path $env:SystemRoot 'System32\PING.EXE') (Join-Path $dir $case.exe) -Force
-        if(Get-ScheduledTask -TaskName $case.name -ErrorAction SilentlyContinue){Unregister-ScheduledTask -TaskName $case.name -Confirm:$false}
         $action=New-ScheduledTaskAction -Execute $conhost -Argument ('--headless "'+(Join-Path $dir $case.exe)+'" -n 3600 127.0.0.1')
         $principal=New-ScheduledTaskPrincipal -UserId $sid -LogonType Interactive -RunLevel Highest
         $settings=if($case.restart){New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew -RestartCount 5 -RestartInterval (New-TimeSpan -Minutes 1)}else{New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew}
@@ -23,7 +24,7 @@ try {
     Start-Sleep -Seconds 5
     $killed=@{}
     foreach($case in $cases){
-        $process=@(Get-Process -Name ([IO.Path]::GetFileNameWithoutExtension($case.exe)) -ErrorAction SilentlyContinue)
+        $process=Get-CaseProcess $case
         $killed[$case.name]=@($process|ForEach-Object {$_.Id})
         $process|Stop-Process -Force
     }
@@ -33,7 +34,7 @@ try {
     while($clock.Elapsed.TotalSeconds -lt 150){
         foreach($case in $cases){
             if($seen.ContainsKey($case.name)){continue}
-            $again=@(Get-Process -Name ([IO.Path]::GetFileNameWithoutExtension($case.exe)) -ErrorAction SilentlyContinue|Where-Object {$killed[$case.name] -notcontains $_.Id})
+            $again=@(Get-CaseProcess $case|Where-Object {$killed[$case.name] -notcontains $_.Id})
             if($again.Count -gt 0){$seen[$case.name]=[Math]::Round($clock.Elapsed.TotalSeconds,1)}
         }
         Start-Sleep -Seconds 2
@@ -47,7 +48,7 @@ try {
 } finally {
     foreach($case in $cases){
         if(Get-ScheduledTask -TaskName $case.name -ErrorAction SilentlyContinue){Stop-ScheduledTask -TaskName $case.name -ErrorAction SilentlyContinue;Unregister-ScheduledTask -TaskName $case.name -Confirm:$false}
-        Get-Process -Name ([IO.Path]::GetFileNameWithoutExtension($case.exe)) -ErrorAction SilentlyContinue|Stop-Process -Force
+        Get-CaseProcess $case|Stop-Process -Force
     }
     Start-Sleep -Seconds 1
     Remove-Item -LiteralPath $dir -Recurse -Force -ErrorAction SilentlyContinue

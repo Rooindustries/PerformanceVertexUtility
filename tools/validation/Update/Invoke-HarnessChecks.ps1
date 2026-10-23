@@ -1,10 +1,10 @@
-param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutRoot,[switch]$Hold,[switch]$TimeoutOnly,[switch]$CacheOnly,[switch]$TrackingOnly,[switch]$ToolsOnly,[switch]$PathsOnly)
+param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutRoot,[switch]$Hold,[switch]$TimeoutOnly,[switch]$CacheOnly,[switch]$TrackingOnly,[switch]$ToolsOnly,[switch]$PathsOnly,[switch]$JournalOnly)
 $ErrorActionPreference='Stop'
 . (Join-Path $Source 'tools\validation\Update\Harness.Common.ps1')
 $nonce=Initialize-HarnessInvocation 'harness-checks' $OutRoot
 Ensure-HarnessOutputDirectory $OutRoot
 $directory=New-HarnessEvidenceDirectory $OutRoot 'checks'
-if(@($Hold,$TimeoutOnly,$CacheOnly,$TrackingOnly,$ToolsOnly,$PathsOnly|Where-Object {$_}).Count -gt 1){throw 'Choose only one harness check mode.'}
+if(@($Hold,$TimeoutOnly,$CacheOnly,$TrackingOnly,$ToolsOnly,$PathsOnly,$JournalOnly|Where-Object {$_}).Count -gt 1){throw 'Choose only one harness check mode.'}
 if($Hold){Write-HarnessResult $directory 'holding.json' @{pid=$PID;nonce=$nonce}|Out-Null;Start-Sleep -Seconds 30;Complete-HarnessInvocation 'pass' -Cleanup|Out-Null;return}
 $rows=[Collections.Generic.List[object]]::new();$status='fail';$main=$script:Harness
 function Passed([string]$Name,$Value){$rows.Add(@{check=$Name;status='pass';observed=$Value})}
@@ -76,6 +76,76 @@ function CloseLongFrame($Fixture){
  if([IO.Directory]::Exists((Get-HarnessLongPath $Fixture.root)) -or @($closed.entries|Where-Object state -EQ 'active').Count){throw 'Long frame or active ledger entry remained.'}
  foreach($entry in $Fixture.owned){Set-HarnessEntryState $entry.id 'removed'}
  return $closed
+}
+if($JournalOnly){
+ try{
+  $frame=LongFrame $false
+  $manifest=(Get-HarnessFileSha256 (Join-Path $frame.root 'source\source-verification.json')).ToLowerInvariant()
+  Open-HarnessRun $frame.root $frame.root.Substring($frame.root.Length-32) $manifest $nonce
+  Invoke-HarnessLedger {param($ledger)
+   $refused=$false;$other=$null
+   try{$other=[IO.FileStream]::new((Get-HarnessLongPath ($script:Harness.LedgerPath+'.lock')),[IO.FileMode]::Open,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None)}catch [IO.IOException]{$refused=$true}finally{if($other){$other.Dispose()}}
+   if(-not$refused){throw 'A competing journal handle entered an exclusive transaction.'}
+   Get-HarnessEntries|Out-Null
+  }|Out-Null
+  $before=@(Get-HarnessEntries).Count
+  [IO.File]::Delete((Get-HarnessLongPath $script:Harness.LedgerPath))
+  Open-HarnessRun $frame.root $frame.root.Substring($frame.root.Length-32) $manifest $nonce
+  if(@(Get-HarnessEntries).Count -ne $before){throw 'Startup did not load the committed previous generation.'}
+  Invoke-HarnessLedger {param($ledger) $null}|Out-Null
+  if(-not(Test-HarnessPath $script:Harness.LedgerPath -PathType Leaf)){throw 'Recovery did not recreate the primary journal.'}
+  $script:Harness=$main
+  CloseLongFrame $frame|Out-Null
+  Passed 'journal lock excludes other handles and permits nested ledger actions' $true
+  Passed 'missing primary opens the verified committed backup and resumes writes' $true
+  Passed 'completed frame removes primary, previous generation and held lock' $true
+  $frame=LongFrame $false
+  $manifest=(Get-HarnessFileSha256 (Join-Path $frame.root 'source\source-verification.json')).ToLowerInvariant()
+  Open-HarnessRun $frame.root $frame.root.Substring($frame.root.Length-32) $manifest $nonce
+  Invoke-HarnessLedger {param($ledger) $null}|Out-Null
+  [IO.File]::Delete((Get-HarnessLongPath $script:Harness.LedgerPath))
+  $script:Harness=$main;CloseLongFrame $frame|Out-Null
+  Passed 'teardown starts from the committed backup when the primary journal is missing' $true
+  $frame=LongFrame $false
+  $manifest=(Get-HarnessFileSha256 (Join-Path $frame.root 'source\source-verification.json')).ToLowerInvariant()
+  Open-HarnessRun $frame.root $frame.root.Substring($frame.root.Length-32) $manifest $nonce
+  Invoke-HarnessLedger {param($ledger) $null}|Out-Null
+  $committed=Get-HarnessFileSha256 $script:Harness.LedgerPath;$message=$null
+  $held=[IO.FileStream]::new((Get-HarnessLongPath ($script:Harness.LedgerPath+'.previous')),[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::Read)
+  try{Invoke-HarnessLedger {param($ledger) $ledger|Add-Member replaceProbe $true}|Out-Null}catch{$message=$_.Exception.Message}finally{$held.Dispose()}
+  $temps=@(Get-HarnessTree $frame.root|Where-Object {$_.FullName -like ($script:Harness.LedgerPath+'.*.tmp')})
+  if(-not$message -or $temps.Count -or (Get-HarnessFileSha256 (Get-HarnessLedgerGeneration)) -cne $committed){throw ('A failed native journal replacement kept its temporary file or changed the committed generation: '+$message)}
+  Invoke-HarnessLedger {param($ledger) $null}|Out-Null
+  $script:Harness=$main;CloseLongFrame $frame|Out-Null
+  Passed 'a native journal replacement failure removes its temporary file and keeps the committed generation' $message
+  $frame=LongFrame $false
+  $manifest=(Get-HarnessFileSha256 (Join-Path $frame.root 'source\source-verification.json')).ToLowerInvariant()
+  Open-HarnessRun $frame.root $frame.root.Substring($frame.root.Length-32) $manifest $nonce
+  Invoke-HarnessLedger {param($ledger) $null}|Out-Null
+  $backup=$script:Harness.LedgerPath+'.previous';$saved=[IO.File]::ReadAllBytes((Get-HarnessLongPath $backup))
+  $foreign=[Text.Encoding]::UTF8.GetString($saved)|ConvertFrom-Json;$foreign.machine='foreign-fixture-machine'
+  [IO.File]::WriteAllText((Get-HarnessLongPath $backup),($foreign|ConvertTo-Json -Depth 60))
+  $hash=Get-HarnessFileSha256 $backup;$script:Harness=$main
+  Rejected 'foreign journal sidecar refuses teardown without changing its bytes' {CloseLongFrame $frame|Out-Null} {(Test-HarnessPath $frame.ledger) -and (Get-HarnessFileSha256 $backup) -ceq $hash}
+  [IO.File]::WriteAllBytes((Get-HarnessLongPath $backup),$saved)
+  $script:Harness=$main
+  $unknown=New-HarnessText ($frame.ledger+'.unproved.tmp') 'uncommitted foreign bytes' 'journal-refusal-fixture'
+  Rejected 'uncommitted temporary file is retained rather than guessed owned' {CloseLongFrame $frame|Out-Null} {(Get-HarnessFileSha256 $unknown.identity.path) -ceq $unknown.identity.hash}
+  $script:Harness=$main;Remove-HarnessEntry $unknown
+  Open-HarnessRun $frame.root $frame.root.Substring($frame.root.Length-32) $manifest $nonce
+  $state=Add-HarnessEntry 'rehearsal-state' @{path='fixture'} 'upgrade-state' 'retained'
+  $script:Harness=$main
+  Rejected 'incomplete rehearsal keeps all recovery authority before teardown' {CloseLongFrame $frame|Out-Null} {Test-HarnessPath $frame.ledger}
+  Open-HarnessRun $frame.root $frame.root.Substring($frame.root.Length-32) $manifest $nonce
+  Set-HarnessEntryState $state.id 'restored'
+  $script:Harness=$main;CloseLongFrame $frame|Out-Null
+  $status='pass'
+ }finally{
+  $script:Harness=$main
+  $status=Complete-HarnessInvocation $status -Cleanup
+  Write-HarnessResult $directory 'receipt.json' @{status=$status;checks=@($rows)}|Out-Null
+ }
+ return
 }
 function PathNormalizationChecks{
  if(-not('RooIndustriesPathOracle' -as [type])){
