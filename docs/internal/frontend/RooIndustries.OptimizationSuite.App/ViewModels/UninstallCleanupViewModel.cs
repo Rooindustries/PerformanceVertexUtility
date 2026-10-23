@@ -151,6 +151,7 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
         public bool KeepsResult => State is not null;
     }
     private CleanupRun? _run;
+    private int _resultRuns;
     private string? _lastCleanupRollbackPath;
     private int _selectionGeneration;
     private bool _listChanged;
@@ -185,11 +186,12 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
             .Where(a => a.IsListable && !Naming.IsNonActionable(a.DisplayName)
                         && !LocalDisplayFilter.Default.IsHidden(a.FriendlyName, null, a.PackageId ?? a.DisplayName))
             .Concat(removed.Select(recovery => new InstalledApp { AppId = recovery.AppId, DisplayName = string.IsNullOrWhiteSpace(recovery.DisplayName) ? "Removed app" : recovery.DisplayName, Removed = true, RemovalUnconfirmed = !complete }))
+            .Select(row => row.AppId is { } id && _keptResults.ContainsKey(id) ? row.Waiting() : row)
             .ToList();
-        var rowIds = rows.Select(a => a.AppId).OfType<string>().ToHashSet(StringComparer.Ordinal);
+        var inventoried = installed.Concat(removed.Select(recovery => recovery.AppId)).ToHashSet(StringComparer.Ordinal);
         rows.AddRange(_keptResults.Values
-            .Where(kept => !rowIds.Contains(kept.App.AppId!))
-            .Select(kept => new InstalledApp { AppId = kept.App.AppId, DisplayName = kept.App.DisplayName, Removed = true, RemovalUnconfirmed = !complete, ResultWaiting = true }));
+            .Where(kept => !inventoried.Contains(kept.App.AppId!))
+            .Select(kept => new InstalledApp { AppId = kept.App.AppId, DisplayName = kept.App.DisplayName, Removed = true, RemovalUnconfirmed = !complete }.Waiting()));
         _allApps.AddRange(rows.OrderBy(a => a.FriendlyName, StringComparer.OrdinalIgnoreCase));
         AppCount = _allApps.Count(a => !a.Removed);
         Sources = inventory?.Sources is { Count: > 0 } s ? string.Join(", ", s.Select(FriendlySource)) : null;
@@ -878,6 +880,7 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
     {
         var run = new CleanupRun(app, _selectionGeneration, verb, state, detail);
         _run = run;
+        if (run.KeepsResult) _resultRuns++;
         ScanBusy = true;
         if (run.KeepsResult) ShowRunFor(run.AppId);
         return run;
@@ -892,6 +895,7 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
             return true;
         }
         if (appId is null || !_keptResults.Remove(appId, out var kept)) return false;
+        _listChanged = true;
         kept.Show();
         return true;
     }
@@ -977,10 +981,11 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
     private async Task DiscoverRecoveryAsync(InstalledApp app, int generation)
     {
         if (string.IsNullOrWhiteSpace(app.AppId)) return;
+        var runs = _resultRuns;
         string? saved;
         try { saved = await App.Live.FindCleanupRecoveryAsync(app.AppId); }
         catch (Exception error) { AppLog.Write(nameof(UninstallCleanupViewModel), error.ToString()); return; }
-        if (!IsCurrent(app, generation) || !IsValidRecovery(saved, app.AppId)) return;
+        if (!IsCurrent(app, generation) || runs != _resultRuns || !IsValidRecovery(saved, app.AppId)) return;
         _cleanupRecoveryByApp.TryAdd(app.AppId, saved!);
         if (_run?.AppId == app.AppId || CleanupRestoreAvailable) return;
         SetSelectedRecovery(app.AppId);
