@@ -188,6 +188,41 @@ try {
         } finally {
             if ($junctionCreated) { [IO.Directory]::Delete($aliasRoot) }
         }
+
+        $spellingApps = Join-Path $tempRoot 'Long Spelling Apps'
+        $protectedRoot = Join-Path $tempRoot 'Protected Spelling Root'
+        $protectedData = Join-Path $protectedRoot 'Vendor Spelling Data'
+        foreach ($folder in @($spellingApps, $protectedData)) { [IO.Directory]::CreateDirectory($folder) | Out-Null }
+        $fileSystem = New-Object -ComObject Scripting.FileSystemObject
+        foreach ($pair in @(@($spellingApps, 'LONGSP~1'), @($protectedRoot, 'PROTEC~1'), @($protectedData, 'VENDOR~1'))) {
+            if ([IO.Path]::GetFileName($fileSystem.GetFolder($pair[0]).ShortPath) -ieq [IO.Path]::GetFileName($pair[0])) { & fsutil.exe file setshortname $pair[0] $pair[1] | Out-Null }
+        }
+        $appsShort = $fileSystem.GetFolder($spellingApps).ShortPath
+        $protectedShort = $fileSystem.GetFolder($protectedData).ShortPath
+        if ([IO.Path]::GetFileName($appsShort) -ine [IO.Path]::GetFileName($spellingApps) -and [IO.Path]::GetFileName($protectedShort) -ine [IO.Path]::GetFileName($protectedData)) {
+            Add-Pass 'Disposable spelling fixtures have actual 8.3 aliases'
+        } else { Add-Failure 'Disposable spelling fixtures must have actual 8.3 aliases' }
+        $spellingRules = $rules | ConvertTo-Json -Depth 16 | ConvertFrom-Json
+        $spellingRules.protectedPaths = @($spellingRules.protectedPaths) + @([pscustomobject]@{ pathPattern = (Get-RooIndustriesFinalPath $protectedRoot) + '*'; reason = 'Disposable protected fixture.' })
+        $missingLong = Join-Path $spellingApps 'Missing Spelling Peer\cache'
+        $spellingRules.knownAppRules[0].knownAppDataPaths = @($protectedShort, $missingLong)
+        $spellingRulesPath = Join-Path $tempRoot 'spelling-rules.json'
+        $spellingRules | ConvertTo-Json -Depth 16 | Set-Content -LiteralPath $spellingRulesPath -Encoding UTF8
+        $spellingInventoryPath = Join-Path $tempRoot 'spelling-inventory.json'
+        [pscustomobject]@{ schemaVersion = 1; complete = $true; apps = @(
+            [pscustomobject]@{ appId = 'fixture:a'; displayName = 'App A'; sourceType = 'registry'; risk = 'low'; protected = $false; installLocation = $appData },
+            [pscustomobject]@{ appId = 'fixture:k'; displayName = 'App K'; sourceType = 'registry'; risk = 'low'; protected = $false; installLocation = (Join-Path $appsShort 'Missing Spelling Peer') }
+        ) } | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $spellingInventoryPath -Encoding UTF8
+        $spellingScan = ((& (Join-Path $PSScriptRoot 'Preview-LeftoverScan.ps1') -AppId 'fixture:a' -InventoryPath $spellingInventoryPath -RulesPath $spellingRulesPath) -join [Environment]::NewLine) | ConvertFrom-Json
+        $evidence.scans['short-name-spelling'] = $spellingScan
+        $protectedItem = @($spellingScan.items | Where-Object { $_.target -eq $protectedShort })
+        $missingItem = @($spellingScan.items | Where-Object { $_.target -eq $missingLong })
+        if (@($spellingScan.errors).Count -eq 0 -and $protectedItem.Count -eq 1 -and $protectedItem[0].protected -and -not $protectedItem[0].defaultSelected) {
+            Add-Pass 'A protected folder given by its 8.3 short name stays protected'
+        } else { Add-Failure 'A protected folder given by its 8.3 short name must stay protected' }
+        if ($missingItem.Count -eq 1 -and $missingItem[0].protected -and -not $missingItem[0].defaultSelected -and @($missingItem[0].metadata.sharedOwners) -contains 'App K') {
+            Add-Pass 'A missing peer folder recorded through a short parent keeps its long-named folder shared'
+        } else { Add-Failure 'A missing peer folder recorded through a short parent must keep its long-named folder shared' }
     } else {
         Write-Host 'SKIP Shared-folder junction resolution requires Windows.'
     }
