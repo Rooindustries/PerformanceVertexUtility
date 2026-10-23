@@ -61,12 +61,19 @@ if($Action -eq 'RemoveAll'){
         catch{$failed=$true;$results+=@{sessionRoot=$root;status='failed';error=$_.Exception.Message}}
     }
     $owner=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
-    foreach($leftover in @(Get-ScheduledTask -TaskName ('Roo Industries Protected Session *'),($script:RooIndustriesLegacyIdentity.gameTask+'*') -ErrorAction SilentlyContinue|Where-Object {
+    try{
+        $leftovers=@(Get-ScheduledTask -ErrorAction Stop|Where-Object {$_.TaskName -like 'Roo Industries Protected Session *' -or $_.TaskName -like ($script:RooIndustriesLegacyIdentity.gameTask+'*')})
+    }
+    catch{$failed=$true;$results+=@{status='failed';error=$_.Exception.Message};$leftovers=@()}
+    foreach($leftover in @($leftovers|Where-Object {
         $parts=@([string]$_.Description -split ' \| ')
         $parts.Count -eq 3 -and $parts[1] -eq $owner -and (Split-Path -Leaf $parts[2]) -eq 'session' -and
             (Split-Path -Leaf (Split-Path -Parent $parts[2])) -like 'game-session-*' -and
             (Split-Path -Parent (Split-Path -Parent $parts[2])) -ieq $OperationsRoot -and -not(Test-Path -LiteralPath (Join-Path $parts[2] 'session.json'))
-    })){Unregister-ScheduledTask -TaskName $leftover.TaskName -Confirm:$false}
+    })){
+        try{Unregister-ScheduledTask -TaskName $leftover.TaskName -Confirm:$false}
+        catch{$failed=$true;$results+=@{taskName=$leftover.TaskName;status='failed';error=$_.Exception.Message}}
+    }
     @{schemaVersion=1;status=$(if($failed){'failed'}else{'completed'});data=@{sessions=$results}}|ConvertTo-Json -Depth 10
     if($failed){exit 1}
     return

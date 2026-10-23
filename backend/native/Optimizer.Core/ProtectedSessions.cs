@@ -65,6 +65,9 @@ public sealed class ProtectedSessions
     private string? _lastStatePath;
     private byte[]? _lastSavedState;
     public ProtectedSessions(Func<RunningProcess, bool> excluded) { _excluded = excluded; _controls = new(excluded); }
+    public static bool IsRestored(ProtectedSessionState state) => state.Status is ("stopped" or "stoppedWithErrors") &&
+        state.RegistryStatus == "restored" && state.JobStatus == "cleared" &&
+        state.Games.All(game => game.Fields.All(field => field.JournalPath is null || field.Status is "restored" or "expired"));
     private static string StatePath(string root) => Path.Combine(Path.GetFullPath(root), "session.json");
     private static string CommandPath(string root) => Path.Combine(Path.GetFullPath(root), "command.json");
     private static JsonElement Value<T>(T value) => JsonSerializer.SerializeToElement(value, OperationFiles.Json);
@@ -148,7 +151,7 @@ public sealed class ProtectedSessions
     {
         if (!File.Exists(StatePath(root))) return new(null, false, null);
         var state = ReadState(root);
-        try { var alive = Alive(state.Host); return new(state, alive, !alive && state.Status is not ("stopped" or "stoppedWithErrors") ? "The worker exited; saved state requires recovery." : alive && DateTime.UtcNow - state.UpdatedAtUtc > TimeSpan.FromSeconds(15) ? "The worker heartbeat is stale." : null); }
+        try { var alive = Alive(state.Host); return new(state, alive, !alive && !IsRestored(state) ? "The worker exited; saved state requires recovery." : alive && DateTime.UtcNow - state.UpdatedAtUtc > TimeSpan.FromSeconds(15) ? "The worker heartbeat is stale." : null); }
         catch (Exception error) { return new(state, null, error.Message); }
     }
     public void Command(string root, string action, AffinityState? affinity = null)
@@ -275,7 +278,7 @@ public sealed class ProtectedSessions
         var state = ReadState(root);
         if (state.Preview.OperationId != operationId) throw new InvalidDataException("Recovery belongs to another session.");
         if (Alive(state.Host)) throw new InvalidOperationException("The worker is still running; request stop first.");
-        if ((state.Status is "stopped" or "stoppedWithErrors") && state.RegistryStatus == "restored" && state.JobStatus == "cleared") return state;
+        if (IsRestored(state)) return state;
         using var imageLease = ImageMutex(state.Preview.GamePath);
         AcquireImage(imageLease, recovering: true);
         try
@@ -445,6 +448,11 @@ public sealed class ProtectedSessions
             catch (Exception error) { errors.Add(error.Message); }
         state.Errors = state.Errors.Concat(errors).Distinct(StringComparer.Ordinal).ToList();
         state.Status = errors.Count != 0 ? "recoveryRequired" : state.Errors.Count != 0 ? "stoppedWithErrors" : "stopped";
+        if (state.Status != "recoveryRequired" && !IsRestored(state))
+        {
+            state.Errors.Add("A native control still needs recovery; its saved state was kept.");
+            state.Status = "recoveryRequired";
+        }
         Save(root, state);
     }
     private bool ReadCommand(string root, ProtectedSessionState state, ProcessJob job)

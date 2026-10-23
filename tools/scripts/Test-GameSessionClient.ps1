@@ -1,4 +1,4 @@
-param([string]$DotNetPath=$env:ROO_INDUSTRIES_DOTNET_EXE, [ValidateSet('','launch-profiles','session-recovery','cleanup-failure')][string]$Mode='')
+param([string]$DotNetPath=$env:ROO_INDUSTRIES_DOTNET_EXE, [ValidateSet('','launch-profiles','session-recovery','cleanup-failure','recovery-completion')][string]$Mode='')
 $ErrorActionPreference='Stop'
 $root=Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 if(-not $DotNetPath){$candidate=Join-Path $env:USERPROFILE '.dotnet/dotnet.exe';$DotNetPath=if(Test-Path $candidate){$candidate}else{(Get-Command dotnet.exe -ErrorAction Stop).Source}}

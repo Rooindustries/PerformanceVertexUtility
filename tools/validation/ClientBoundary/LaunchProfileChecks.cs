@@ -81,7 +81,7 @@ static class LaunchProfileChecks
         Check(document.RootElement.GetProperty("tasks").EnumerateArray().All(task => Schtasks("/Query", "/TN", task.GetString()!).Exit != 0), "A failing scenario leaves no scheduled task behind");
     }
 
-    public static async Task Run(string repo, bool recovery, bool cleanupFault = false)
+    public static async Task Run(string repo, bool recovery, bool cleanupFault = false, bool completion = false)
     {
         var root = Path.Combine(Path.GetTempPath(), "roo-industries-launch-profile-" + Guid.NewGuid().ToString("N"));
         var operations = Path.Combine(root, "operations");
@@ -157,13 +157,22 @@ static class LaunchProfileChecks
         }
         void EndGame(Process game) { File.WriteAllText(Path.Combine(games.Single(item => item.Process == game).Root, "stop"), ""); Check(game.WaitForExit(15000), "The game fixture exits"); }
         async Task<bool> Restored(string sessionRoot) => GameSessionDisplay.Restored(await App().ReadGameSessionAsync(sessionRoot));
-        async Task<(int Exit, string Output)> RemoveAll()
+        async Task<(int Exit, string Output)> RemoveAll(string? operationsRoot = null, bool failTaskDiscovery = false)
         {
-            using var uninstall = Process.Start(new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe"))
+            var start = new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe"))
             {
-                ArgumentList = { "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", Path.Combine(repo, "backend", "scripts", "Invoke-ProtectedGameSession.ps1"), "-Action", "RemoveAll", "-OperationsRoot", operations, "-ConfirmApply" },
+                ArgumentList = { "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass" },
                 UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true,
-            })!;
+            };
+            var script = Path.Combine(repo, "backend", "scripts", "Invoke-ProtectedGameSession.ps1");
+            if (failTaskDiscovery)
+            {
+                var command = "function Get-ScheduledTask { [CmdletBinding()] param([string[]]$TaskName) Write-Error 'Deliberate task discovery failure' -Category ResourceUnavailable }; & '" + script.Replace("'", "''") + "' -Action RemoveAll -OperationsRoot '" + (operationsRoot ?? operations).Replace("'", "''") + "' -ConfirmApply";
+                start.ArgumentList.Add("-EncodedCommand"); start.ArgumentList.Add(Convert.ToBase64String(Encoding.Unicode.GetBytes(command)));
+            }
+            else
+                foreach (var argument in new[] { "-File", script, "-Action", "RemoveAll", "-OperationsRoot", operationsRoot ?? operations, "-ConfirmApply" }) start.ArgumentList.Add(argument);
+            using var uninstall = Process.Start(start)!;
             var output = uninstall.StandardOutput.ReadToEndAsync();
             var error = uninstall.StandardError.ReadToEndAsync();
             await uninstall.WaitForExitAsync();
@@ -179,7 +188,8 @@ static class LaunchProfileChecks
             Check(core != 0 && core != original && Io(first) == 1, "The launcher fixture starts with more than one core and its own I/O priority");
             var controls = new Dictionary<string, JsonElement> { ["cpuPriority"] = V("AboveNormal"), ["ioPriority"] = V(2), ["affinity"] = V(new AffinityState(0, "0x" + core.ToString("X"))) };
 
-            await (recovery ? Recovery() : Profiles());
+            if (completion) await Completion();
+            else await (recovery ? Recovery() : Profiles());
             Console.WriteLine((recovery ? "Session recovery" : "Launch profile") + " assertions: " + passed);
 
             async Task Profiles()
@@ -283,6 +293,68 @@ static class LaunchProfileChecks
                 await Ticks(off, 4);
                 Check((await Sessions()).All(entry => GameSessionDisplay.Restored(entry.Worker)) && NoLaunchPolicy(), "Nothing is set up again after the settings are turned off");
                 await CloseLauncher(sixth);
+            }
+
+            async Task Completion()
+            {
+                var empty = Directory.CreateDirectory(Path.Combine(root, "empty-operations")).FullName;
+                Check((await RemoveAll(empty)).Exit == 0, "Cleanup succeeds when the selected folder has no sessions or matching tasks");
+                var discovery = await RemoveAll(empty, true);
+                using var discoveryResult = JsonDocument.Parse(discovery.Output);
+                var discoveryFailed = discovery.Exit != 0 && discoveryResult.RootElement.GetProperty("status").GetString() == "failed" && discovery.Output.Contains("Deliberate task discovery failure", StringComparison.Ordinal);
+
+                var native = await Arm(first, new() { ["priorityBoost"] = V(false) });
+                var game = await Game(first);
+                await Until(async () => (await App().ReadGameSessionAsync(native.SessionRoot)).State?.Status == "active", "The native probe control did not apply.");
+                PowerLoss(native.SessionRoot); await CloseLauncher(first);
+                var statePath = Path.Combine(native.SessionRoot, "session.json");
+                var checkpoint = File.ReadAllBytes(statePath);
+                var state = OperationFiles.Read<ProtectedSessionState>(statePath);
+                var journal = state.Games.Single().Fields.Single().JournalPath!;
+                var retained = journal + ".retained";
+                var originalBoost = OperationFiles.Read<ProcessControlJournal>(journal).Preview.Original["priorityBoost"].Require().GetBoolean();
+                File.Move(journal, retained);
+                bool signInSafe;
+                bool updateBlocked = false;
+                bool retryRestored = false;
+                try
+                {
+                    Check(originalBoost && !game.PriorityBoostEnabled, "The native probe's priority boost changed from its saved enabled value to disabled");
+                    using var retry = Start(Path.Combine(repo, "backend", "bin", "optimizer", "session", "RooIndustries.SessionHost.exe"), "run", Path.Combine(native.SessionRoot, "worker-request.json"));
+                    if (!retry.WaitForExit(30000)) { retry.Kill(); retry.WaitForExit(10000); throw new TimeoutException("Sign-in recovery did not finish."); }
+                    var result = OperationFiles.Read<ProtectedSessionState>(Path.Combine(native.SessionRoot, "recovery-result.json"));
+                    signInSafe = retry.ExitCode != 0 && result.Status == "recoveryRequired" && TaskExists(native.SessionRoot) && !game.PriorityBoostEnabled;
+                    result.Status = "stoppedWithErrors";
+                    OperationFiles.Write(statePath, result);
+                    using var markers = Registry.LocalMachine.OpenSubKey(PolicyRootSecurity.MarkerKey, true)!;
+                    var marker = PolicyRootSecurity.MarkerName(operations) + PolicyRootSecurity.ProtectedAtSuffix;
+                    var protectedAt = markers.GetValue(marker)!;
+                    try
+                    {
+                        markers.SetValue(marker, DateTime.UtcNow.AddMinutes(1).ToFileTimeUtc(), RegistryValueKind.QWord);
+                        try { updateBlocked = await App().GameSessionsBlockUpdateAsync(); }
+                        catch (InvalidDataException) { updateBlocked = true; }
+                    }
+                    finally { markers.SetValue(marker, protectedAt, RegistryValueKind.QWord); }
+                }
+                finally
+                {
+                    File.Move(retained, journal);
+                    var recovered = await App().RecoverGameSessionAsync(native.SessionRoot);
+                    retryRestored = GameSessionDisplay.Restored(recovered) && !TaskExists(native.SessionRoot) && game.PriorityBoostEnabled == originalBoost;
+                    if (!retryRestored)
+                    {
+                        File.WriteAllBytes(statePath, checkpoint);
+                        await App().RecoverGameSessionAsync(native.SessionRoot);
+                    }
+                }
+                Console.WriteLine(JsonSerializer.Serialize(new { discoveryFailed, signInSafe, updateBlocked }));
+                Check(discoveryFailed, "A task discovery error makes cleanup fail instead of reporting success");
+                Check(signInSafe, "Sign-in recovery keeps its task and fails while a native backup is missing");
+                Check(updateBlocked, "An older stoppedWithErrors session with an unresolved native field blocks an update");
+                Check(retryRestored,
+                    "Returning the backup restores the original native value and removes the recovery task");
+                EndGame(game);
             }
 
             async Task Recovery()

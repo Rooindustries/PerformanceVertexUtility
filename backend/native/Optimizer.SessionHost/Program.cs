@@ -27,7 +27,7 @@ try
         {
             var recovered = engine.Recover(root, stale.Preview.OperationId);
             OperationFiles.Write(Path.Combine(root, "recovery-result.json"), recovered);
-            if (recovered.Status is not ("stopped" or "stoppedWithErrors")) Environment.ExitCode = 1;
+            if (!ProtectedSessions.IsRestored(recovered)) Environment.ExitCode = 1;
             else RemoveTask(root);
         }
     }
