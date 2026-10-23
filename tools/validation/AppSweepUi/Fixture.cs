@@ -29,7 +29,12 @@ namespace RooIndustries.OptimizationSuite.Services
         GovernorTaskState? ScheduledTask = null, IReadOnlySet<string>? Exited = null, IReadOnlySet<string>? Unapplied = null, IReadOnlySet<string>? RunningImages = null, IReadOnlyDictionary<string, bool?>? PathRulesRunning = null);
     public sealed record LiveDataResult<T>(T? Value, string? Error, string? RecoveryPath = null, string? RecoveryGeneration = null) { public bool Stale { get; init; } }
     public sealed record NvidiaProfileRecovery(string ProfileId, string RollbackManifestPath, string ExportPath, string? Generation = null);
-    public sealed record GameSessionEntry(string SessionRoot, ProtectedSessionStatus Worker);
+    public sealed record GameSessionEntry(string SessionRoot, ProtectedSessionStatus Worker, string? ProfileId = null);
+    public sealed record GameSessionReview(ProtectedSessionPreview Plan, string PreviewPath, string Hash, string SessionRoot);
+    public sealed record LaunchProfileEntry(string Root, ProtectedSessionPreview Saved)
+    {
+        public string Title => Path.GetFileName(Saved.GamePath) + " via " + Path.GetFileName(Saved.Launcher.ExecutablePath);
+    }
     public static class ServiceSteps
     {
         public static Func<string, Task>? Pause { get; set; }
@@ -50,6 +55,7 @@ namespace RooIndustries.OptimizationSuite.Services
     public static class OptimizerService
     {
         public static Task<T?> ReadJournalAsync<T>(string path) => throw new InvalidOperationException("Unexpected journal read.");
+        public static string DescribeLaunchProfile(LaunchProfileEntry entry) => "Waiting for " + Path.GetFileName(entry.Saved.Launcher.ExecutablePath) + " to open.";
     }
 
     public static class LiveDataService
@@ -367,6 +373,30 @@ namespace RooIndustries.OptimizationSuite.Services
         public int RetryCalls { get; private set; }
         public Task<PolicyHostState> RetryGovernorRestoreAsync() { RetryCalls++; return RetryRestore(); }
         public Task<GameSessionEntry[]> ReadGameSessionsAsync() => Task.FromResult(GameSessions);
+        public Func<Dictionary<string, JsonElement>, GameSessionReview>? GameReview { get; set; }
+        public Task<GameSessionReview> PreviewGameSessionAsync(int launcherId, string gamePath, Dictionary<string, JsonElement> controls, bool acceptLauncherScope)
+            => GameReview is { } review ? Task.FromResult(review(controls)) : throw new InvalidOperationException("Unexpected game session preview.");
+        public void RequireNoLaunchProfile(ProtectedSessionPreview plan) { }
+        public List<GameSessionReview> StartedSessions { get; } = new();
+        public Task<ProtectedSessionStatus> StartGameSessionAsync(GameSessionReview review)
+        {
+            if (GameReview is null) throw new InvalidOperationException("Unexpected game session start.");
+            StartedSessions.Add(review);
+            return Task.FromResult(new ProtectedSessionStatus(null, true, null));
+        }
+        public List<GameSessionReview> SavedLaunchProfiles { get; } = new();
+        public Task<LaunchProfileEntry> SaveLaunchProfileAsync(GameSessionReview review)
+        {
+            SavedLaunchProfiles.Add(review);
+            return Task.FromResult(new LaunchProfileEntry(review.SessionRoot, review.Plan));
+        }
+        public LaunchProfileEntry[] LaunchProfiles { get; set; } = [];
+        public Task<LaunchProfileEntry[]> ReadLaunchProfilesAsync() => Task.FromResult(LaunchProfiles);
+        public Task<string?> DisableLaunchProfileAsync(string root) => throw new InvalidOperationException("Unexpected saved launch settings turn-off.");
+        public Task<ProtectedSessionStatus> ReadGameSessionAsync(string sessionRoot) => Task.FromResult(GameSessions.FirstOrDefault(entry => entry.SessionRoot == sessionRoot)?.Worker ?? new ProtectedSessionStatus(null, null, "No fixture session."));
+        public Task<ProtectedSessionStatus> StopGameSessionAsync(string sessionRoot) => throw new InvalidOperationException("Unexpected game session stop.");
+        public Task<ProtectedSessionStatus> RecoverGameSessionAsync(string sessionRoot) => throw new InvalidOperationException("Unexpected game session recovery.");
+        public Task<ProtectedSessionStatus> SwitchGameCoresAsync(string sessionRoot, string affinityMask) => throw new InvalidOperationException("Unexpected core switch.");
         public Task<TweakRecovery> ReadWindowsRecoveryAsync(bool fresh = false) => Task.FromResult(WindowsRecovery ?? throw new IOException("Controlled Windows recovery failure"));
         public static readonly TweakContext WindowsContext = new(new("fixture-pc", "fixture-user"), "fixture-store", 26200, "Professional");
         public Task<TweakCatalogResult> ReadWindowsTweakCatalogAsync(bool fresh = false) => Task.FromException<TweakCatalogResult>(new IOException("Controlled Windows catalog read failure"));
