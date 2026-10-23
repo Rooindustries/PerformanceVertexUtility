@@ -194,15 +194,15 @@ function Invoke-CimMethod {
     public static void RunReal(Action<bool, string> check, string repo, string evidence)
     {
         var original = PowerShellControls.Launcher;
-        var folder = Directory.CreateTempSubdirectory("roo-industries-security-rows-");
-        var root = Parent + @"\" + Guid.NewGuid().ToString("N");
-        bool parentExisted;
-        using (var existing = Registry.CurrentUser.OpenSubKey(Parent)) parentExisted = existing is not null;
         int Consent() => int.Parse(WindowsPowerShell("[int](Get-MpPreference).SubmitSamplesConsent"), System.Globalization.CultureInfo.InvariantCulture);
         var log = new List<object>();
         var catalog = OperationFiles.Read<TweakCatalog>(Path.Combine(repo, "backend", "catalogs", "windows-tweaks.json"));
         var rows = catalog.Settings.Where(row => row.Options.Any(option => option.Controls?.Any(control => control.Address.Kind == "defender") == true)).ToArray();
         var first = Consent();
+        var root = Parent + @"\" + Guid.NewGuid().ToString("N");
+        bool parentExisted;
+        using (var existing = Registry.CurrentUser.OpenSubKey(Parent)) parentExisted = existing is not null;
+        var folder = Directory.CreateTempSubdirectory("roo-industries-security-rows-");
         try
         {
             check(rows.Length > 0, "The catalog has Defender rows to apply and undo");
