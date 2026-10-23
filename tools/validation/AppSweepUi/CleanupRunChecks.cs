@@ -279,6 +279,7 @@ static class CleanupRunChecks
                 await run;
                 if (!File.Exists(Path.Combine(runA, "restored.json"))) return "restore was not marked finished";
                 model.SelectedApp = null;
+                await model.RevalidateAsync();
                 var row = model.Apps.SingleOrDefault(app => app.AppId == appA.AppId);
                 if (row is null || ReferenceEquals(row, saved)) return (row is null ? "after reload: " : "list did not reload: ") + Listed(model);
                 if (row.SecondaryLabel != "Finished while you were away. Pick it to see the result.") return "result-only row subtitle: " + row.SecondaryLabel;
@@ -305,6 +306,7 @@ static class CleanupRunChecks
                 remover.SetResult(JsonSerializer.Serialize(new { actionId = "apps.invokeUninstallCleanupApplyPackage", appId = appA.AppId, dryRun = false, status = "cleanup-review-required", executionMode = "real", summary = new { restoreReady = false, deletedCount = 0, blockingGateCount = 0 } }));
                 await run;
                 model.SelectedApp = null;
+                await model.RevalidateAsync();
                 var row = model.Apps.SingleOrDefault(app => app.AppId == appA.AppId);
                 if (row is not { Removed: true }) return (row is null ? "after reload: " : "list did not reload: ") + Listed(model);
                 if (row.SecondaryLabel != "Finished while you were away. Pick it to see the result.") return "result-only row subtitle: " + row.SecondaryLabel;
@@ -316,6 +318,84 @@ static class CleanupRunChecks
                 model.SelectedApp = null;
                 await model.InitializeAsync();
                 return model.Apps.Any(app => app.AppId == appA.AppId) ? "row stayed after its result was shown: " + Listed(model) : null;
+            });
+
+            string Saved(string runs, InstalledApp app)
+            {
+                var run = Directory.CreateDirectory(Path.Combine(runs, Guid.NewGuid().ToString("N"))).FullName;
+                var backup = Path.Combine(run, "backup.bin");
+                File.WriteAllText(backup, "fixture");
+                var manifest = Path.Combine(run, "rollback-manifest.json");
+                File.WriteAllText(manifest, JsonSerializer.Serialize(new { appId = app.AppId, displayName = app.DisplayName, executionStarted = true, restoreSupported = true, fileBackups = new[] { new { itemId = "editor-cache", backupPath = backup } } }));
+                return manifest;
+            }
+
+            await Scenario("An earlier cleanup found while a cleanup of the same app runs doesn't replace that run's result", async () =>
+            {
+                live.CleanupRunsRoot = Path.Combine(root, "runs-" + Guid.NewGuid().ToString("N"));
+                Saved(live.CleanupRunsRoot, appA);
+                live.CleanupRecoveryDelay = TimeSpan.FromMilliseconds(400);
+                try
+                {
+                    live.CleanupApply = (_, _, _, _) => Task.FromResult<string?>(null);
+                    live.LastError = "The cleanup helper stopped.";
+                    var model = new UninstallCleanupViewModel();
+                    Ready(model, appA);
+                    await model.ApplyCleanupCommand.ExecuteAsync(null);
+                    var (state, detail) = (model.CleanupExecutionState, model.CleanupExecutionDetail);
+                    await Task.Delay(TimeSpan.FromMilliseconds(900));
+                    return model.CleanupExecutionState == state && model.CleanupExecutionDetail == detail && !model.CleanupRestoreAvailable
+                        ? null : "after the run: " + state + " / " + detail + "; after the earlier cleanup was found: " + model.CleanupExecutionState + " / " + model.CleanupExecutionDetail + " restore=" + model.CleanupRestoreAvailable;
+                }
+                finally { live.CleanupRecoveryDelay = TimeSpan.Zero; }
+            });
+
+            foreach (var removedByRun in new[] { false, true })
+                await Scenario(removedByRun
+                    ? "A cleanup that removed its app while another app is picked marks the app's saved-cleanup row as waiting until its result is shown"
+                    : "A cleanup that finishes while another app is picked marks its still-installed app's row as waiting until its result is shown", async () =>
+                {
+                    var runs = live.CleanupRunsRoot = Path.Combine(root, "runs-" + Guid.NewGuid().ToString("N"));
+                    live.InstalledApps = new InstalledAppInventory { Apps = [appA, appB], Complete = true };
+                    var remover = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
+                    live.CleanupApply = async (_, _, _, _) => { using var change = DataGeneration.BeginChange(); return await remover.Task; };
+                    var model = new UninstallCleanupViewModel();
+                    await model.InitializeAsync();
+                    Ready(model, model.Apps.Single(app => app.AppId == appA.AppId));
+                    var run = model.ApplyCleanupCommand.ExecuteAsync(null);
+                    model.SelectedApp = model.Apps.Single(app => app.AppId == appB.AppId);
+                    if (removedByRun) live.InstalledApps = new InstalledAppInventory { Apps = [appB], Complete = true };
+                    remover.SetResult(Applied(appA.AppId!, Saved(runs, appA)));
+                    await run;
+                    model.SelectedApp = null;
+                    await model.RevalidateAsync();
+                    var row = model.Apps.SingleOrDefault(app => app.AppId == appA.AppId);
+                    if (row is null || row.Removed != removedByRun || row.SecondaryLabel != "Finished while you were away. Pick it to see the result.")
+                        return "row before its result was shown: " + (row is null ? Listed(model) : "removed=" + row.Removed + " / " + row.SecondaryLabel);
+                    model.SelectedApp = row;
+                    if (model.CleanupExecutionState != "Cleanup applied: 2 items removed.") return "own app: " + model.CleanupExecutionState;
+                    model.SelectedApp = null;
+                    await model.RevalidateAsync();
+                    row = model.Apps.SingleOrDefault(app => app.AppId == appA.AppId);
+                    return row?.SecondaryLabel == "Finished while you were away. Pick it to see the result." ? "row still waiting after its result was shown" : null;
+                });
+
+            await Scenario("A cleanup result for an app that is still installed but hidden from the list doesn't come back as a removed app", async () =>
+            {
+                live.InstalledApps = new InstalledAppInventory { Apps = [appA, appB], Complete = true };
+                var remover = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
+                live.CleanupApply = async (_, _, _, _) => { using var change = DataGeneration.BeginChange(); return await remover.Task; };
+                var model = new UninstallCleanupViewModel();
+                await model.InitializeAsync();
+                Ready(model, model.Apps.Single(app => app.AppId == appA.AppId));
+                var run = model.ApplyCleanupCommand.ExecuteAsync(null);
+                model.SelectedApp = model.Apps.Single(app => app.AppId == appB.AppId);
+                live.InstalledApps = new InstalledAppInventory { Apps = [new InstalledApp { AppId = appA.AppId, DisplayName = null, SourceType = "registry" }, appB], Complete = true };
+                remover.SetResult(Applied(appA.AppId!, Rollback(appA.AppId!)));
+                await run;
+                model.SelectedApp = null;
+                await model.RevalidateAsync();
+                return model.Apps.Any(app => app.AppId == appA.AppId && app.Removed) ? "the installed app came back as removed: " + Listed(model) : null;
             });
         }
         finally
