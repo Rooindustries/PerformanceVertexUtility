@@ -54,7 +54,7 @@ function Save-RehearsalState([string[]]$Paths,[string[]]$Roots){
   if((Test-HarnessPath $saved) -or (Test-HarnessPath $generated)){throw 'Rehearsal archive exists; retained.'}
   @{before=(Get-RehearsalPathState $path);saved=$saved;generated=$generated;movePlanned=$false;archivePlanned=$false;output=$null}
  })
- $state=@{paths=$pathsState;roots=$Roots;tasks=@(Get-RehearsalTasks);markers=(Get-RehearsalMarkers $Roots);taskFolder=('\RooRehearsal_'+$script:Harness.Nonce);started=$false;outputsReady=$false;generatedMarkers=$null;restored=$false}
+ $state=@{paths=$pathsState;roots=$Roots;tasks=@(Get-RehearsalTasks);markers=(Get-RehearsalMarkers $Roots);taskFolder=('\PerformanceVertexRehearsal_'+$script:Harness.Nonce);started=$false;outputsReady=$false;generatedMarkers=$null;restored=$false}
  Add-HarnessEntry 'rehearsal-state' @{path=$script:Harness.Root} 'upgrade-state' 'retained' $state
 }
 function Suspend-RehearsalState($Entry){

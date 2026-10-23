@@ -116,7 +116,7 @@ try{
  Check 'old app reads the expected live feed' @{status=$current;pid=$script:app.Id;liveDownload=[bool]$LiveFeed} ($current -ceq $(if($LiveFeed){'Version '+$NewVersion+' is ready to install'}else{'You have the latest version'}))
  StopApp
  $ruleRoot=Join-Path $data 'process-rules'
- $fixture=Join-Path $directory 'RooRehearsalGame.exe';Copy-HarnessFile (Join-Path $env:SystemRoot 'System32\PING.EXE') $fixture 'rehearsal-process' 'run'|Out-Null
+ $fixture=Join-Path $directory 'PerformanceVertexRehearsalGame.exe';Copy-HarnessFile (Join-Path $env:SystemRoot 'System32\PING.EXE') $fixture 'rehearsal-process' 'run'|Out-Null
  $process=Start-OwnedProcess -FilePath $fixture -ArgumentList '-t 127.0.0.1' -Purpose rehearsal-process
  try{
   $operation=Join-Path $data ('operations\rehearsal-'+$nonce)
