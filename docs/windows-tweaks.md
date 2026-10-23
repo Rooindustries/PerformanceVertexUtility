@@ -34,7 +34,10 @@ or **Windows spotlight** turned off, or Windows diagnostic data **Off** (value 0
 Enterprise, Education, IoT Enterprise and Server retain them. A limit can name one
 value: Microsoft documents that diagnostic data 0 counts as 1 on other editions,
 so both diagnostic data settings also offer **Required diagnostic data** (value 1)
-on every edition. **Remove this override** remains available, including when the
+on every edition, listed right after the value it replaces and marked with `replaces`. When a row's
+starting choice doesn't apply to this PC, its switch starts on the choice that replaces
+it, so on Home and Pro it turns on Required diagnostic data. Rows without a replacement
+keep their starting choice. **Remove this override** remains available, including when the
 limited value was set before this catalog update. An unsupported choice is
 excluded from the applicable current choices; its raw registry value remains in
 the observations. When removing an override is the only choice left for this PC
@@ -261,7 +264,11 @@ python3 tools/validation/check_baseline.py --contracts-only
 Windows settings includes search, categories, source filters, reusable profiles,
 presets, before/after review, apply, restore and interruption recovery. Every
 setting remains visible and selectable. Each row separates the current reading
-from the proposed change. Choose a value, then turn on the row's switch to select
+from the proposed change. A value Windows itself sets, such as automatic DNS or
+the built-in encrypted DNS entries, reads as Windows default. A per-device setting
+whose devices hold different values reads as Varies by device, and an adapter
+setting that is on for only some protocols names them, such as On for IPv4 and IPv6.
+Choose a value, then turn on the row's switch to select
 that action for review. Turning it off keeps the current setting; it does not undo
 an applied change. Use Windows default explicitly removes the local override,
 and another policy may still control the setting. Choices for missing components

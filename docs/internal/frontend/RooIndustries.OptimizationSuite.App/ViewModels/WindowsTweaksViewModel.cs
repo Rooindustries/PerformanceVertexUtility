@@ -76,12 +76,14 @@ public partial class WindowsTweakRow : ObservableObject
     public TweakChoice[] ActionChoices { get; }
     public TweakAlternative[] Alternatives { get; }
     private TweakChoice _action;
+    private bool _actionPicked;
     public TweakChoice Action
     {
         get => _action;
         set
         {
             if (value is null || !ActionChoices.Contains(value) || !SetProperty(ref _action, value)) return;
+            _actionPicked = true;
             if (ToggleOn) Selected = value == AppliedChoice ? Choices[0] : value;
             OnPropertyChanged(nameof(ActionNote));
         }
@@ -129,6 +131,22 @@ public partial class WindowsTweakRow : ObservableObject
         1 or 2 when value.Bytes.Length % 2 == 0 && System.Text.Encoding.Unicode.GetString(value.Bytes).TrimEnd('\0') is { Length: > 0 and <= 40 } text && !text.Contains('\0') => text,
         _ => null,
     };
+    private static bool WindowsDefault(TweakSettingStatus status, Dictionary<string, System.Text.Json.JsonElement> defaults) =>
+        status.Observations.All(read => read.Value is not { } data || defaults.TryGetValue(read.Address.ValueName!, out var value) && (value.ValueKind == System.Text.Json.JsonValueKind.Number
+            ? data is { Type: 4, Bytes.Length: 4 } && value.TryGetUInt32(out var number) && BitConverter.ToUInt32(data.Bytes) == number
+            : value.ValueKind == System.Text.Json.JsonValueKind.String && data is { Type: 1 or 2 } && data.Bytes.Length % 2 == 0 && System.Text.Encoding.Unicode.GetString(data.Bytes).TrimEnd('\0') == value.GetString()))
+        && (status.Controls ?? []).All(control => defaults.TryGetValue(control.Address.Property, out var value) && ControlValues.Equal(control.Value, value));
+    private bool PerDevice => Definition.Options.Any(option => option.Changes.Any(change => change.Selector is not null) || (option.Controls ?? []).Any(control => control.Address.Kind is "device-power" or "network-adapter"));
+    private static bool DevicesDiffer(TweakSettingStatus status) => status.Observations is [var first, _, ..] observed && observed.Any(read => !TweakRead.SameValue(read.Value, first.Value))
+        || status.Controls is [{ Value.ValueKind: System.Text.Json.JsonValueKind.Object } control] && control.Value.EnumerateObject().Select(device => device.Value.GetRawText()).Distinct(StringComparer.Ordinal).Count() > 1;
+    private static string? AdapterFields(TweakControlRead control)
+    {
+        var devices = control.Value.EnumerateObject().Select(device => device.Value).ToArray();
+        if (devices.Length == 0 || devices.Any(device => device.ValueKind != System.Text.Json.JsonValueKind.Object || device.GetRawText() != devices[0].GetRawText())
+            || devices[0].EnumerateObject().Any(field => field.Value.ValueKind is not (System.Text.Json.JsonValueKind.True or System.Text.Json.JsonValueKind.False))) return null;
+        var on = devices[0].EnumerateObject().Where(field => field.Value.ValueKind == System.Text.Json.JsonValueKind.True).Select(field => field.Name switch { "ipv4v1" => "IPv4 version 1", "ipv4" => "IPv4", "ipv6" => "IPv6", _ => field.Name }).ToArray();
+        return on.Length == 0 ? null : "On for " + (on.Length == 1 ? on[0] : string.Join(", ", on[..^1]) + " and " + on[^1]);
+    }
     private static string? ServiceState(TweakControlRead control) => (control.Address.Property, control.Value.ValueKind) switch
     {
         ("startup", System.Text.Json.JsonValueKind.Number) => control.Value.GetInt32() switch { 0 => "Boot", 1 => "System", 2 => "Automatic", 3 => "Manual", 4 => "Disabled", _ => null },
@@ -212,6 +230,8 @@ public partial class WindowsTweakRow : ObservableObject
         AppliedChoice = FindApplied(status);
         _cannotRevert = false;
         if (AppliedChoice is not null && Selected.Id.Length == 0 && _action != AppliedChoice) { _action = AppliedChoice; OnPropertyChanged(nameof(Action)); OnPropertyChanged(nameof(ActionNote)); }
+        else if (AppliedChoice is null && Selected.Id.Length == 0 && !_actionPicked && _action == _recommended && status?.AvailableChoices is { } available && !available.Contains(_action.Id)
+            && ActionChoices.FirstOrDefault(choice => available.Contains(choice.Id) && Definition.Options.Any(option => option.Id == choice.Id && option.Replaces == _action.Id)) is { } usable) { _action = usable; OnPropertyChanged(nameof(Action)); OnPropertyChanged(nameof(ActionNote)); }
         OnPropertyChanged(nameof(AppliedChoice)); OnPropertyChanged(nameof(IsApplied));
         Name = Presentation.Name ?? (status?.Controls?.FirstOrDefault() is { Address.Kind: "service", DisplayName: { } serviceName } && ReadableName(serviceName) ? serviceName : Definition.Name);
         Available = Choices.Length > 1 && status is { Supported: true, Error: null } && status.Controls?.Any(control => control.RestartPending) != true;
@@ -230,6 +250,9 @@ public partial class WindowsTweakRow : ObservableObject
             Current = lastAccess.Value.GetInt32() switch { 2 => "Updated (Windows managed)", 3 => "Not updated (Windows managed)", _ => Current };
         if (status is { Error: null, ConfiguredChoices.Length: 0, Controls: [{ Address.Kind: "mitigations", Value.ValueKind: System.Text.Json.JsonValueKind.Object } policy] } && MitigationFields(Definition) is { Length: > 0 } fields
             && fields.All(field => policy.Value.TryGetProperty(field, out var value) && (value.ValueKind == System.Text.Json.JsonValueKind.String && value.GetString() == "NOTSET" || value.ValueKind == System.Text.Json.JsonValueKind.False)) && NoRawPolicy(policy.Value)) Current = "Windows default";
+        if (Current == "Custom value" && status is { Error: null } && Presentation.Defaults is { } defaults && WindowsDefault(status, defaults)) Current = "Windows default";
+        if (Current == "Custom value" && status is { Error: null } && PerDevice && DevicesDiffer(status)) Current = "Varies by device";
+        if (Current == "Custom value" && status is { Error: null, Controls: [{ Address.Kind: "network-adapter", Value.ValueKind: System.Text.Json.JsonValueKind.Object } adapter] } && AdapterFields(adapter) is { } protocols) Current = protocols;
         if (Current == "Custom value" && status is { Error: null, Controls: null or [] } && status.Observations is [var first, ..] found
             && found.All(read => read.Value is not null && TweakRead.SameValue(read.Value, first.Value)) && RegistryText(first.Value!) is { } value) Current = "Custom value: " + value;
         if (_onlyDefaultHere) Detail = "This Windows edition or version doesn't use this setting. You can keep a saved choice for a matching installation.";

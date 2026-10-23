@@ -29,6 +29,7 @@ public sealed class ProtectedFieldState
     public required string Status { get; set; }
     public ControlRead? Observed { get; set; }
     public string? JournalPath { get; set; }
+    public string? PreviewHash { get; set; }
     public string? Error { get; set; }
     public int Reapplications { get; set; }
 }
@@ -65,6 +66,9 @@ public sealed class ProtectedSessions
     private string? _lastStatePath;
     private byte[]? _lastSavedState;
     public ProtectedSessions(Func<RunningProcess, bool> excluded) { _excluded = excluded; _controls = new(excluded); }
+    public static bool IsRestored(ProtectedSessionState state) => state.Status is ("stopped" or "stoppedWithErrors") &&
+        state.RegistryStatus == "restored" && state.JobStatus == "cleared" &&
+        state.Games.All(game => game.Fields.All(field => field.JournalPath is null || field.Status is "restored" or "expired"));
     private static string StatePath(string root) => Path.Combine(Path.GetFullPath(root), "session.json");
     private static string CommandPath(string root) => Path.Combine(Path.GetFullPath(root), "command.json");
     private static JsonElement Value<T>(T value) => JsonSerializer.SerializeToElement(value, OperationFiles.Json);
@@ -121,11 +125,34 @@ public sealed class ProtectedSessions
     {
         var plan = OperationFiles.Read<ProtectedSessionPreview>(path, hash); VerifyLaunch(plan); return plan;
     }
+
+    public static string? ProfileMismatch(ProtectedSessionPreview saved, ProtectedSessionPreview fresh)
+    {
+        static bool Same(Dictionary<string, JsonElement> left, Dictionary<string, JsonElement> right)
+            => left.Count == right.Count && left.All(pair => right.TryGetValue(pair.Key, out var other) && ProcessTarget.Equivalent(pair.Key, pair.Value, other));
+        if (fresh.SchemaVersion != saved.SchemaVersion || fresh.Owner != saved.Owner) return "It was set up by another Windows account.";
+        if (!string.Equals(fresh.Launcher.ExecutablePath, saved.Launcher.ExecutablePath, StringComparison.OrdinalIgnoreCase) || fresh.LauncherHash != saved.LauncherHash)
+            return "The launcher was updated or changed since you saved these settings.";
+        if (!string.Equals(fresh.GamePath, saved.GamePath, StringComparison.OrdinalIgnoreCase) || fresh.GameHash != saved.GameHash || fresh.GameLength != saved.GameLength || fresh.GameModifiedAtUtc != saved.GameModifiedAtUtc)
+            return "The game changed since you saved these settings.";
+        if (fresh.TopologyHash != saved.TopologyHash || !ProcessTarget.Equivalent("affinity", Value(fresh.OriginalAffinity), Value(saved.OriginalAffinity)))
+            return "The CPU or the launcher's cores changed since you saved these settings.";
+        if (!fresh.AcceptLauncherScope || !saved.AcceptLauncherScope || !Same(fresh.Controls, saved.Controls)) return "The requested settings differ from the saved ones.";
+        var launch = fresh.OriginalLaunchSettings; var original = saved.OriginalLaunchSettings;
+        if (launch.ImageKeyExisted != original.ImageKeyExisted || launch.OptionsKeyExisted != original.OptionsKeyExisted || launch.Values.Count != original.Values.Count ||
+            launch.Values.Any(pair => !original.Values.TryGetValue(pair.Key, out var value) || value != pair.Value))
+            return "Another program changed this game's launch priorities since you saved these settings.";
+        if ((fresh.LauncherChanges is null) != (saved.LauncherChanges is null)) return "The launcher's I/O or memory defaults changed since you saved these settings.";
+        if (fresh.LauncherChanges is { } now && saved.LauncherChanges is { } then && (!Same(now.Desired, then.Desired) || now.Original.Count != then.Original.Count ||
+            now.Original.Any(pair => !then.Original.TryGetValue(pair.Key, out var before) || !pair.Value.Known || !before.Known || !ProcessTarget.Equivalent(pair.Key, pair.Value.Require(), before.Require()))))
+            return "The launcher's I/O or memory defaults changed since you saved these settings.";
+        return null;
+    }
     public ProtectedSessionStatus Status(string root)
     {
         if (!File.Exists(StatePath(root))) return new(null, false, null);
         var state = ReadState(root);
-        try { var alive = Alive(state.Host); return new(state, alive, !alive && state.Status is not ("stopped" or "stoppedWithErrors") ? "The worker exited; saved state requires recovery." : alive && DateTime.UtcNow - state.UpdatedAtUtc > TimeSpan.FromSeconds(15) ? "The worker heartbeat is stale." : null); }
+        try { var alive = Alive(state.Host); return new(state, alive, !alive && !IsRestored(state) ? "The worker exited; saved state requires recovery." : alive && DateTime.UtcNow - state.UpdatedAtUtc > TimeSpan.FromSeconds(15) ? "The worker heartbeat is stale." : null); }
         catch (Exception error) { return new(state, null, error.Message); }
     }
     public void Command(string root, string action, AffinityState? affinity = null)
@@ -252,7 +279,7 @@ public sealed class ProtectedSessions
         var state = ReadState(root);
         if (state.Preview.OperationId != operationId) throw new InvalidDataException("Recovery belongs to another session.");
         if (Alive(state.Host)) throw new InvalidOperationException("The worker is still running; request stop first.");
-        if ((state.Status is "stopped" or "stoppedWithErrors") && state.RegistryStatus == "restored" && state.JobStatus == "cleared") return state;
+        if (IsRestored(state)) return state;
         using var imageLease = ImageMutex(state.Preview.GamePath);
         AcquireImage(imageLease, recovering: true);
         try
@@ -361,8 +388,9 @@ public sealed class ProtectedSessions
                         var path = Path.Combine(folder, "preview.json");
                         var preview = controls.Preview(processId, new() { [field.Name] = desired });
                         identity.Verify(preview.Identity); OperationFiles.Write(path, preview);
+                        var hash = OperationFiles.HashFile(path); field.PreviewHash = hash;
                         field.JournalPath = Path.Combine(folder, "journal.json"); Save(root, state);
-                        var result = controls.Apply(path, OperationFiles.HashFile(path), field.JournalPath);
+                        var result = controls.Apply(path, hash, field.JournalPath);
                         if (result.Status != "applied") throw new InvalidOperationException(string.Join("; ", result.Changes.Select(change => change.Error)));
                     }
                     else if (!ProcessTarget.Equivalent(field.Name, field.Observed.Require(), desired))
@@ -391,16 +419,37 @@ public sealed class ProtectedSessions
         var errors = new List<string>();
         foreach (var game in state.Games)
         {
-            foreach (var field in game.Fields.Where(field => field.JournalPath is not null && File.Exists(field.JournalPath)))
-                try { var saved = OperationFiles.Read<ProcessControlJournal>(field.JournalPath!); game.Identity.Verify(saved.Preview.Identity);
+            var exited = false;
+            try { game.Exited = exited = !Alive(game.Identity); }
+            catch (Exception error) { errors.Add(error.Message); }
+            foreach (var field in game.Fields.Where(field => field.JournalPath is not null))
+                try {
+                    if (!File.Exists(field.JournalPath))
+                    {
+                        if (exited) { field.Status = "expired"; field.Error = null; }
+                        else if (field.Status is ("pending" or "conflict") && field.PreviewHash is { } hash)
+                        {
+                            var preview = OperationFiles.Read<ProcessControlPreview>(Path.Combine(Path.GetDirectoryName(field.JournalPath!)!, "preview.json"), hash);
+                            preview.Owner.Verify(); game.Identity.Verify(preview.Identity);
+                            if (preview.SchemaVersion != 1 || preview.Desired.Count != 1 || !preview.Desired.TryGetValue(field.Name, out var desired) ||
+                                !ProcessTarget.Equivalent(field.Name, desired, state.Preview.Controls[field.Name]) || preview.Original.Count != 1 ||
+                                !preview.Original.TryGetValue(field.Name, out var original) || !original.Known)
+                                throw new InvalidDataException("Native recovery belongs to another control.");
+                            using var target = new ProcessTarget(game.Identity.ProcessId, readControls: [field.Name]);
+                            game.Identity.Verify(target.Identity());
+                            var current = target.Read(field.Name);
+                            if (current.Known && ProcessTarget.Equivalent(field.Name, current.Require(), original.Require()))
+                            { field.Status = "restored"; field.Observed = current; field.Error = null; }
+                        }
+                        continue;
+                    }
+                    var saved = OperationFiles.Read<ProcessControlJournal>(field.JournalPath!); game.Identity.Verify(saved.Preview.Identity);
                     if (saved.Preview.Desired.Count != 1 || !saved.Preview.Desired.TryGetValue(field.Name, out var savedDesired) || !ProcessTarget.Equivalent(field.Name, savedDesired, state.Preview.Controls[field.Name])) throw new InvalidDataException("Native recovery belongs to another control.");
                     var retained = field.Name == "gpuPriority" ? gpuHandles?.Find(game.Identity) : null;
                     var result = (retained is null ? _controls : _controls.WithTarget(retained)).Restore(field.JournalPath!); field.Status = result.Status;
                     var last = result.Changes.Single(change => change.Name == field.Name);
                     field.Observed = last.Observed is { } observed ? ControlRead.From(observed) : null; field.Error = last.Error; if (result.Status is not ("restored" or "expired")) errors.Add("Native restoration needs reconciliation: " + field.Name); }
                 catch (Exception error) { errors.Add(error.Message); }
-            try { game.Exited = !Alive(game.Identity); }
-            catch (Exception error) { errors.Add(error.Message); }
             foreach (var field in game.Fields.Where(field => field.Route == "launch")) field.Status = game.Exited ? "expired" : "restartRequired";
         }
         try
@@ -412,7 +461,7 @@ public sealed class ProtectedSessions
         try
         {
             if (job is not null) job.Clear(ProcessTarget.ParseMask(state.Preview.OriginalAffinity.Mask));
-            else if ((state.JobStatus is "attachIntent" or "applied") && (Alive(state.Preview.Launcher) || Processes(state.Preview.GamePath).Length != 0)) throw new InvalidOperationException("The session job is unavailable; recovery cannot confirm its limits were cleared.");
+            else if ((state.JobStatus is "attachIntent" or "applied") && (Alive(state.Preview.Launcher) || LimitedGame(state))) throw new InvalidOperationException("The session job is unavailable; recovery cannot confirm its limits were cleared.");
             state.JobStatus = "cleared";
             foreach (var field in state.Games.SelectMany(game => game.Fields).Where(field => field.Route == "job")) field.Status = "released";
         }
@@ -422,6 +471,11 @@ public sealed class ProtectedSessions
             catch (Exception error) { errors.Add(error.Message); }
         state.Errors = state.Errors.Concat(errors).Distinct(StringComparer.Ordinal).ToList();
         state.Status = errors.Count != 0 ? "recoveryRequired" : state.Errors.Count != 0 ? "stoppedWithErrors" : "stopped";
+        if (state.Status != "recoveryRequired" && !IsRestored(state))
+        {
+            state.Errors.Add("A native control still needs recovery; its saved state was kept.");
+            state.Status = "recoveryRequired";
+        }
         Save(root, state);
     }
     private bool ReadCommand(string root, ProtectedSessionState state, ProcessJob job)
@@ -544,6 +598,22 @@ public sealed class ProtectedSessions
             Thread.Sleep(50);
         }
         throw new TimeoutException("The recovery watcher did not acknowledge the session job.");
+    }
+    private static bool LimitedGame(ProtectedSessionState state)
+    {
+        var desired = ProcessTarget.ParseMask(state.DesiredAffinity.Mask);
+        if (desired == ProcessTarget.ParseMask(state.Preview.OriginalAffinity.Mask)) return false;
+        foreach (var processId in Processes(state.Preview.GamePath))
+        {
+            try
+            {
+                using var game = new ProcessTarget(processId);
+                if ((ProcessTarget.ParseMask(game.Read("affinity").Require().Deserialize<AffinityState>(OperationFiles.Json)!.Mask) & ~desired) == 0) return true;
+            }
+            catch (ProcessEndedException) { }
+            catch (RooIndustries.Optimization.CpuSets.NativeFailure error) when (error.Api == "OpenProcess" && error.NativeErrorCode == 87) { }
+        }
+        return false;
     }
     private static int[] Processes(string path)
     {

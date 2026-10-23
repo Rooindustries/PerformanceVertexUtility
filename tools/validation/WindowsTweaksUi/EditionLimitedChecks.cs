@@ -10,13 +10,14 @@ static class EditionLimitedChecks
         TweakDefinition Find(string keyPath, string valueName) => catalog.Settings.Single(setting => setting.Options.Any(option => option.Changes is [{ Dword: not null } change] && change.Address.Hive == "LocalMachine" &&
             string.Equals(change.Address.KeyPath, keyPath, StringComparison.OrdinalIgnoreCase) && string.Equals(change.Address.ValueName, valueName, StringComparison.OrdinalIgnoreCase)));
         var diagnostic = Find(@"SOFTWARE\Policies\Microsoft\Windows\DataCollection", "AllowTelemetry");
+        var settingsDiagnostic = Find(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\DataCollection", "AllowTelemetry");
         var tips = Find(@"SOFTWARE\Policies\Microsoft\Windows\CloudContent", "DisableSoftLanding");
         var spotlight = Find(@"SOFTWARE\Policies\Microsoft\Windows\CloudContent", "DisableWindowsSpotlightFeatures");
         var off = diagnostic.Options.Single(option => option.Changes.Single().Dword == 0);
         var required = diagnostic.Options.SingleOrDefault(option => option.Changes.Single().Dword == 1);
         check(required is not null, "Windows diagnostic data has a Required diagnostic data choice");
         var address = off.Changes.Single().Address;
-        var subset = catalog with { Settings = [diagnostic, tips, spotlight], Presets = [], Incompatible = null };
+        var subset = catalog with { Settings = [diagnostic, settingsDiagnostic, tips, spotlight], Presets = [], Incompatible = null };
         async Task<WindowsTweaksViewModel> Load(Fixture fixture)
         {
             App.Operations = fixture; var model = new WindowsTweaksViewModel(); await model.RefreshCommand.ExecuteAsync(null); return model;
@@ -38,6 +39,16 @@ static class EditionLimitedChecks
             check(!diagnosticRow.UnavailableHere && diagnosticRow.Current == "No override" && diagnosticRow.CanApplyChoice(required!.Id) && diagnosticRow.CanApplyChoice(off.Id) == !limitedHere &&
                 diagnosticRow.ActionChoices.Any(choice => choice.Id == required.Id && choice.Name == "Required diagnostic data"),
                 "Windows diagnostic data offers Off only where Windows honors it and Required diagnostic data everywhere: " + edition);
+            foreach (var definition in new[] { diagnostic, settingsDiagnostic })
+            {
+                var row = model.Rows.Single(item => item.Id == definition.Id);
+                var zero = definition.Options.Single(option => option.Changes.Single().Dword == 0).Id;
+                var one = definition.Options.Single(option => option.Changes.Single().Dword == 1).Id;
+                check(row.Action.Id == (limitedHere ? one : zero) && row.CanApplyChoice(row.Action.Id), row.Name + " starts its switch on a choice this PC can use: " + edition);
+                row.ToggleOn = true;
+                check(row.Selected.Id == (limitedHere ? one : zero) && row.CanApplySelected, row.Name + " queues that choice when switched on: " + edition);
+                row.ToggleOn = false;
+            }
             model.ShowAdvanced = false;
             foreach (var definition in new[] { tips, spotlight })
                 check(model.Rows.Any(row => row.Id == definition.Id) == (!limitedHere && !definition.Advanced),

@@ -29,5 +29,6 @@
   {"file": "tools/validation/Tweaks/NativeCoverageChecks.cs", "target": "@\"Software\\RooIndustriesTweakTests\"", "reason": "Removed only when the parent did not exist before the fixture and is empty."},
   {"file": "tools/validation/Tweaks/PowerChecks.cs", "target": "RegistryTweakChecks.Root", "reason": "The fixture refuses to start when its recovery root exists."},
   {"file": "tools/validation/Tweaks/RegistryTweakChecks.cs", "target": "Root", "reason": "The fixture refuses to start when its registry root exists."},
-  {"file": "tools/validation/Tweaks/RegistryTweakChecks.cs", "target": "@\"Software\\RooIndustriesTweakTests\"", "reason": "Removed only when the parent did not exist before the fixture and is empty."}
+  {"file": "tools/validation/Tweaks/RegistryTweakChecks.cs", "target": "@\"Software\\RooIndustriesTweakTests\"", "reason": "Removed only when the parent did not exist before the fixture and is empty."},
+  {"file": "tools/validation/ClientBoundary/LaunchProfileChecks.cs", "target": "Ifeo", "reason": "Image File Execution Options entry for the test-only RooIndustriesProfileGame.exe; Run refuses to start when it exists (NoLaunchPolicy check before the try), so the entry cleanup removes is the one the scenario created."}
 ]

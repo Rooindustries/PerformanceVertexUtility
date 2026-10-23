@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using RooIndustries.Optimizer;
@@ -19,6 +21,16 @@ try
         .Select(name => new Regex("^" + Regex.Escape(name.GetString()!).Replace("\\*", ".*").Replace("\\?", ".") + "$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100))).ToArray();
     var engine = new ProtectedSessions(process => excluded.Any(pattern => pattern.IsMatch(Path.GetFileName(process.ExecutablePath))));
     if (args[0] == "watch") engine.Watch(root, request.OperationId ?? throw new InvalidDataException("Missing session identity."));
+    else if (File.Exists(Path.Combine(root, "session.json")))
+    {
+        if (engine.Status(root) is { HostRunning: false, State: { } stale })
+        {
+            var recovered = engine.Recover(root, stale.Preview.OperationId);
+            OperationFiles.Write(Path.Combine(root, "recovery-result.json"), recovered);
+            if (!ProtectedSessions.IsRestored(recovered)) Environment.ExitCode = 1;
+            else RemoveTask(root);
+        }
+    }
     else
     {
         var result = engine.Run(request.PreviewPath ?? throw new InvalidDataException("Missing preview."), request.ReviewHash ?? throw new InvalidDataException("Missing review hash."), root,
@@ -40,6 +52,15 @@ catch (Exception error)
     if (root is not null) OperationFiles.Write(Path.Combine(root, args.FirstOrDefault() == "watch" ? "watch-error.json" : "worker-error.json"), new { error = error.Message, type = error.GetType().Name, hresult = $"0x{error.HResult:X8}", detail = error.ToString() });
     else Console.Error.WriteLine(error.Message);
     Environment.ExitCode = 1;
+}
+
+static void RemoveTask(string root)
+{
+    var start = new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "schtasks.exe")) { UseShellExecute = false, CreateNoWindow = true };
+    RuntimeEnvironment.Apply(start);
+    foreach (var argument in new[] { "/Delete", "/TN", "Roo Industries Protected Session " + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(root.ToLowerInvariant())))[..16], "/F" }) start.ArgumentList.Add(argument);
+    using var schtasks = Process.Start(start);
+    schtasks?.WaitForExit(30000);
 }
 
 sealed record SessionRequest

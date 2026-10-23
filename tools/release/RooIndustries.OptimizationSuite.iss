@@ -289,6 +289,18 @@ var
 begin
   if CurUninstallStep = usUninstall then
   begin
+    Code := 1;
+    try
+      RunBounded(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
+        '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + ExpandConstant('{app}\backend\scripts\Invoke-ProtectedGameSession.ps1') + '" -Action RemoveAll -ConfirmApply',
+        ExpandConstant('{app}'), GovernorSetupTimeout, Code);
+    except
+      Log('Game session cleanup could not start: ' + GetExceptionMessage);
+      Code := 1;
+    end;
+    Log('Game session cleanup finished with exit code ' + IntToStr(Code));
+    if Code <> 0 then
+      SuppressibleMsgBox('Some game launch settings could not be put back. Install the app again, choose Recover settings under Games, then uninstall it.', mbError, MB_OK, IDOK);
     Folder := ExpandConstant('{app}\setup');
     ForceDirectories(Folder);
     LogPath := Folder + '\governor-uninstall.log';
