@@ -12,6 +12,7 @@ if (args is ["--review2-restore-pending", var pendingOutput, var pendingDirector
 if (args is [var hostDll, var hostAction, "-"] && Path.GetFileName(hostDll) == "Optimizer.Host.dll") { FakeHost.Run(hostAction); return; }
 if (Path.GetFileName(System.Reflection.Assembly.GetEntryAssembly()?.Location) == "Optimizer.Host.dll") { await HostFixture.Run(args); return; }
 if (args is [_, "--game-session-display"]) { GameSessionChecks.Display(); return; }
+if (args is [var presetRepo, "--launch-presets"]) { LaunchPresetChecks.Run(presetRepo); return; }
 if (args is [var gameRepo, "--game-sessions"]) { await GameSessionChecks.Run(gameRepo); return; }
 if (args is [var profileRepo, "--launch-profiles" or "--session-recovery"]) { await LaunchProfileChecks.Run(profileRepo, args[1] == "--session-recovery"); return; }
 if (args is [var cleanupRepo, "--cleanup-failure"]) { await LaunchProfileChecks.CleanupFailure(cleanupRepo); return; }

@@ -10,7 +10,7 @@ The backend provides Windows discovery, process controls, cleanup planning, driv
 | `native` | Process governor and standby-memory helpers |
 | `contracts` | JSON Schema definitions and explicit validation mappings |
 | `capabilities` | Capability descriptions and executor routes |
-| `catalogs` | Driver profiles, utility inventory, and optimization references |
+| `catalogs` | Driver profiles, utility inventory, optimization references, and Games tab launch presets |
 | `profiles` | Process policies and protected-process rules |
 | `uninstall` | Dependency-review policy and leftover selection rules |
 | `samples` | Curated examples; current-PC screens use live discovery |

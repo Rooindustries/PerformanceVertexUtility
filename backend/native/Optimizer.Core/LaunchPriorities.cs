@@ -24,19 +24,24 @@ public sealed class LaunchPriorities
         _image = Path.GetFileName(executable);
         if (string.IsNullOrWhiteSpace(_image) || _image.IndexOfAny(['\\', '/', ':']) >= 0 || !_image.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("Launch priorities require an executable filename.");
-        _values = [];
-        if (controls.TryGetValue("cpuPriority", out var cpu)) _values.Add("CpuPriorityClass", cpu.GetString() switch
+        _values = Values(controls);
+    }
+    internal static Dictionary<string, int> Values(Dictionary<string, JsonElement> controls)
+    {
+        var values = new Dictionary<string, int>();
+        if (controls.TryGetValue("cpuPriority", out var cpu)) values.Add("CpuPriorityClass", cpu.GetString() switch
         { "Idle" => 1, "Normal" => 2, "High" => 3, "BelowNormal" => 5, "AboveNormal" => 6, _ => throw new InvalidDataException("This launch policy does not support real-time CPU priority.") });
         if (controls.TryGetValue("ioPriority", out var io))
         {
             var value = io.GetInt32(); if (value is < 0 or > MaxIoPriority) throw new InvalidDataException("Launch-time I/O priority supports Very Low, Low and Normal.");
-            _values.Add("IoPriority", value);
+            values.Add("IoPriority", value);
         }
         if (controls.TryGetValue("memoryPriority", out var memory))
         {
             var value = memory.GetInt32(); if (value is < 1 or > 5) throw new InvalidDataException("Invalid launch memory priority.");
-            _values.Add("PagePriority", value);
+            values.Add("PagePriority", value);
         }
+        return values;
     }
     public bool HasValues => _values.Count != 0;
     public LaunchPrioritySnapshot Read()

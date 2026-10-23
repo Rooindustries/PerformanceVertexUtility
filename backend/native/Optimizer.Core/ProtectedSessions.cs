@@ -85,10 +85,7 @@ public sealed class ProtectedSessions
         if (!Path.IsPathFullyQualified(gamePath) || !File.Exists(gamePath) || !gamePath.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("Select an installed game executable.");
         gamePath = Path.GetFullPath(gamePath);
-        if (desired.Count == 0 || desired.Keys.Any(name => !StartupFields.Concat(NativeFields).Append("affinity").Contains(name)))
-            throw new InvalidDataException("Select supported protected-session controls.");
-        foreach (var pair in desired) ProcessControlEngine.ValidateValue(pair.Key, pair.Value);
-        if (desired.TryGetValue("gpuPriority", out var gpu) && gpu.GetInt32() == 5) throw new InvalidDataException("Real-time GPU priority is not supported by this session.");
+        ValidateControls(desired);
         ProcessTarget launcher;
         try { launcher = new ProcessTarget(launcherId); }
         catch (Exception error) when (error is ProcessEndedException || error is RooIndustries.Optimization.CpuSets.NativeFailure { Api: "OpenProcess", NativeErrorCode: 87 })
@@ -119,6 +116,15 @@ public sealed class ProtectedSessions
             TopologyHash = CpuSelection.Fingerprint(topology), OriginalAffinity = originalAffinity, Controls = new(desired),
             OriginalLaunchSettings = launch.Read(), LauncherChanges = launcherDesired.Count == 0 ? null : _controls.Preview(launcherId, launcherDesired), AcceptLauncherScope = true,
         };
+    }
+
+    internal static void ValidateControls(Dictionary<string, JsonElement> desired)
+    {
+        if (desired.Count == 0 || desired.Keys.Any(name => !StartupFields.Concat(NativeFields).Append("affinity").Contains(name)))
+            throw new InvalidDataException("Select supported protected-session controls.");
+        foreach (var pair in desired) ProcessControlEngine.ValidateValue(pair.Key, pair.Value);
+        if (desired.TryGetValue("gpuPriority", out var gpu) && gpu.GetInt32() == 5) throw new InvalidDataException("Real-time GPU priority is not supported by this session.");
+        LaunchPriorities.Values(desired);
     }
 
     public ProtectedSessionPreview Check(string path, string hash)

@@ -123,7 +123,7 @@ function Copy-ReleaseData([string]$RepoRoot, [string]$Stage) {
         'uninstall-queue.sample.json'
     )
     foreach ($entry in @(
-        @('backend\catalogs', @('windows-tweaks.json', 'firmware-write-tests.json', 'stutter-optimization-ranking.json', 'nvidia-profile-inspector-nip-catalog.json', 'upstream-settings-inventory.json')),
+        @('backend\catalogs', @('windows-tweaks.json', 'firmware-write-tests.json', 'launch-presets.json', 'stutter-optimization-ranking.json', 'nvidia-profile-inspector-nip-catalog.json', 'upstream-settings-inventory.json')),
         @('backend\profiles', @('*.json')), @('backend\samples', $samples), @('backend\uninstall', @('*.json')), @('modules', @('*.json')))) {
         $source = Join-Path $RepoRoot $entry[0]
         $destination = Join-Path $Stage $entry[0]

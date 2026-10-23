@@ -2393,6 +2393,104 @@
         }
       }
     },
+    "launchPresetCatalog": {
+      "title": "Launch Preset Catalog",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "presets"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "presets": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "name",
+              "description",
+              "settings"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9-]*$"
+              },
+              "name": {
+                "type": "string",
+                "pattern": "^\\S(.*\\S)?$",
+                "maxLength": 32
+              },
+              "description": {
+                "type": "string",
+                "pattern": "\\S",
+                "maxLength": 200
+              },
+              "settings": {
+                "type": "object",
+                "additionalProperties": false,
+                "minProperties": 1,
+                "properties": {
+                  "cpuPriority": {
+                    "enum": [
+                      "Idle",
+                      "BelowNormal",
+                      "Normal",
+                      "AboveNormal",
+                      "High"
+                    ]
+                  },
+                  "ioPriority": {
+                    "enum": [
+                      0,
+                      1,
+                      2
+                    ]
+                  },
+                  "memoryPriority": {
+                    "enum": [
+                      1,
+                      2,
+                      3,
+                      4,
+                      5
+                    ]
+                  },
+                  "gpuPriority": {
+                    "enum": [
+                      0,
+                      1,
+                      2,
+                      3,
+                      4
+                    ]
+                  },
+                  "executionQoS": {
+                    "enum": [
+                      "systemManaged",
+                      "eco",
+                      "high"
+                    ]
+                  },
+                  "priorityBoost": {
+                    "enum": [
+                      true,
+                      false
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "processGovernorProfile": {
       "title": "Process Governor Profile",
       "type": "object",
