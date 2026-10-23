@@ -327,17 +327,18 @@ public static class TimerControl
         }
         Start(roots, autostart: true);
     }
+    // DETACHED_PROCESS, not CREATE_NO_WINDOW: a console exe started with CREATE_NO_WINDOW gets its own hidden conhost for the whole session.
     private static ProcessInfo LaunchWorker(string executable, StringBuilder command, bool userToken)
     {
         if (userToken) return LaunchFromShell(executable, command) ?? throw new InvalidOperationException("The timer needs Windows to start it with your normal rights, but no desktop shell of your Windows user is running. Sign in to Windows normally, then try again.");
         var startup = new StartupInfo { Size = Marshal.SizeOf<StartupInfo>() };
-        if (CreateProcess(executable, command, IntPtr.Zero, IntPtr.Zero, false, 0x09000000, IntPtr.Zero, null, ref startup, out var created)) return created;
+        if (CreateProcess(executable, command, IntPtr.Zero, IntPtr.Zero, false, 0x01000008, IntPtr.Zero, null, ref startup, out var created)) return created;
         var error = Marshal.GetLastWin32Error();
         if (error != 5) throw new Win32Exception(error, "CreateProcessW(timer worker) failed with Win32 " + error + ".");
         if (LaunchFromShell(executable, command) is { } shellChild) return shellChild;
         if (!IsProcessInJob(CurrentProcess(), IntPtr.Zero, out var inJob) || !inJob) throw new Win32Exception(error, "CreateProcessW(timer worker) failed with Win32 " + error + ".");
         if (JobEndsProcessesOnClose()) throw new InvalidOperationException("The timer can't keep running after this app closes because Windows started the app inside a job that ends its processes. Start the app from the Start menu or desktop shortcut and try again.");
-        if (CreateProcess(executable, command, IntPtr.Zero, IntPtr.Zero, false, 0x08000000, IntPtr.Zero, null, ref startup, out created)) return created;
+        if (CreateProcess(executable, command, IntPtr.Zero, IntPtr.Zero, false, 0x00000008, IntPtr.Zero, null, ref startup, out created)) return created;
         error = Marshal.GetLastWin32Error();
         throw new Win32Exception(error, "CreateProcessW(timer worker) failed with Win32 " + error + ".");
     }
@@ -363,7 +364,7 @@ public static class TimerControl
                     Marshal.WriteIntPtr(parent, shell);
                     if (!UpdateProcThreadAttribute(list, 0, 0x00020000, parent, IntPtr.Size, IntPtr.Zero, IntPtr.Zero)) return null;
                     var startup = new StartupInfoEx { Startup = new StartupInfo { Size = Marshal.SizeOf<StartupInfoEx>() }, Attributes = list };
-                    return CreateProcessWithParent(executable, command, IntPtr.Zero, IntPtr.Zero, false, 0x08080000, IntPtr.Zero, null, ref startup, out var created) ? created : null;
+                    return CreateProcessWithParent(executable, command, IntPtr.Zero, IntPtr.Zero, false, 0x00080008, IntPtr.Zero, null, ref startup, out var created) ? created : null;
                 }
                 finally { DeleteProcThreadAttributeList(list); }
             }
