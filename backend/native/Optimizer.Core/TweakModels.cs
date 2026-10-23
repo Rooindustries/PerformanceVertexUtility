@@ -10,7 +10,7 @@ public sealed record TweakToken([property: JsonRequired] string Name, [property:
 public sealed record TweakBits([property: JsonRequired] uint Mask, [property: JsonRequired] uint Value, [property: JsonRequired] uint AbsentDefault);
 public sealed record TweakAssignment([property: JsonRequired] RegistryAddress Address, [property: JsonRequired] uint? Dword, RegistryValueData? Value = null, TweakToken? Token = null, TweakBits? Bits = null, RegistrySelection? Selector = null, string? Formula = null);
 public sealed record TweakAvailability([property: JsonRequired] int MinimumBuild, [property: JsonRequired] int MaximumBuild, [property: JsonRequired] string[] Editions, string[]? Requirements = null);
-public sealed record TweakOption([property: JsonRequired] string Id, [property: JsonRequired] string Name, [property: JsonRequired] TweakAssignment[] Changes, TweakAvailability[]? Availability = null, ControlAssignment[]? Controls = null, DateTime? ValidUntilUtc = null, string[]? DataLoss = null);
+public sealed record TweakOption([property: JsonRequired] string Id, [property: JsonRequired] string Name, [property: JsonRequired] TweakAssignment[] Changes, TweakAvailability[]? Availability = null, ControlAssignment[]? Controls = null, DateTime? ValidUntilUtc = null, string[]? DataLoss = null, string? Replaces = null);
 public sealed record TweakSelection([property: JsonRequired] string SettingId, [property: JsonRequired] string OptionId);
 public sealed record TweakPreset([property: JsonRequired] string Id, [property: JsonRequired] string Name, [property: JsonRequired] TweakSelection[] Selections, bool AvailableOnly = false,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] TweakSelection[]? OptionalSelections = null);

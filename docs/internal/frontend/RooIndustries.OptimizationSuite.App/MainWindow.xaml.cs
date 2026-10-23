@@ -28,24 +28,24 @@ public sealed partial class MainWindow : Window
         ["bug"] = typeof(BugReportPage),
     };
 
+    private string _pendingTag;
+    private string? _ownershipPath;
     private string _currentTag;
     private bool _onSettings;
-    private string _pendingTag;
-    private bool _pendingSettings;
-    private string? _ownershipPath;
+    private readonly HashSet<Page> _pages = new();
+    private readonly HashSet<Page> _stalePages = new();
     private bool _closeWhenIdle;
     private bool _askingToClose;
 
-    public MainWindow() : this("dashboard", false)
+    public MainWindow() : this("dashboard")
     {
     }
 
-    public MainWindow(string navTag, bool onSettings, string? ownershipPath = null)
+    public MainWindow(string navTag, string? ownershipPath = null)
     {
         InitializeComponent();
         Title = "Performance Vertex Utility Beta";
         _pendingTag = navTag;
-        _pendingSettings = onSettings;
         _currentTag = navTag;
         _ownershipPath = ownershipPath;
         ConfigureTitleBar();
@@ -59,7 +59,7 @@ public sealed partial class MainWindow : Window
         AppWindow.Closing += OnClosing;
         RunningChanges.Finished += OnChangesFinished;
         MemoryRelief.Attach(this);
-        ContentFrame.Navigated += (_, _) => MemoryRelief.PageShown();
+        ContentFrame.Navigated += OnNavigated;
         MemoryRelief.PageShown();
         EarlierVersionConsent.Ask = AskEarlierVersionAsync;
         ApplyEffects();
@@ -130,7 +130,9 @@ public sealed partial class MainWindow : Window
         App.Updates.Changed -= OnUpdateChanged;
         AppWindow.Closing -= OnClosing;
         RunningChanges.Finished -= OnChangesFinished;
-        if (ReferenceEquals(App.MainWindow, this)) App.Updates.Stop();
+        if (!ReferenceEquals(App.MainWindow, this)) return;
+        App.Updates.Stop();
+        App.Closing.Cancel();
     }
 
     private void OnDataSettled() => DispatcherQueue.TryEnqueue(async () =>
@@ -205,7 +207,7 @@ public sealed partial class MainWindow : Window
 
     public void OpenOwnershipReview(string path)
     {
-        if (!Nav.IsLoaded) { _pendingTag = "windows"; _pendingSettings = false; _ownershipPath = path; return; }
+        if (!Nav.IsLoaded) { _pendingTag = "windows"; _ownershipPath = path; return; }
         SelectNav("windows");
         if (ContentFrame.Content is WindowsTweaksPage page) _ = page.ShowOwnershipAsync(path, confirm: true);
     }
@@ -261,18 +263,6 @@ public sealed partial class MainWindow : Window
         if (Nav.SettingsItem is NavigationViewItem settingsItem)
             settingsItem.Icon = new ImageIcon { Source = new Microsoft.UI.Xaml.Media.Imaging.SvgImageSource(new Uri("ms-appx:///Assets/Icons/settings.svg")) };
 
-        if (_pendingSettings)
-        {
-            _onSettings = true;
-            Nav.SelectedItem = Nav.SettingsItem;
-            if (ContentFrame.Content is not SettingsPage)
-            {
-                ContentFrame.Navigate(typeof(SettingsPage));
-            }
-
-            return;
-        }
-
         _onSettings = false;
         _currentTag = _pendingTag;
         SelectNav(_pendingTag);
@@ -301,6 +291,26 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    private void OnNavigated(object sender, Microsoft.UI.Xaml.Navigation.NavigationEventArgs args)
+    {
+        MemoryRelief.PageShown();
+        if (args.Content is not Page page) return;
+        if (page.NavigationCacheMode != Microsoft.UI.Xaml.Navigation.NavigationCacheMode.Disabled) _pages.Add(page);
+        if (!_stalePages.Remove(page)) return;
+        if (page.IsLoaded)
+        {
+            Retheme(page);
+            return;
+        }
+
+        void Shown(object loaded, RoutedEventArgs e)
+        {
+            page.Loaded -= Shown;
+            Retheme(page);
+        }
+        page.Loaded += Shown;
+    }
+
     private void Nav_ItemInvoked(NavigationView sender, NavigationViewItemInvokedEventArgs args)
     {
         if (!args.IsSettingsInvoked && !_onSettings && args.InvokedItemContainer is NavigationViewItem { Tag: string tag } && tag == _currentTag
@@ -311,8 +321,16 @@ public sealed partial class MainWindow : Window
     private void OnThemeChanged()
     {
         App.ApplyAccentResourceOverrides();
-        var tag = _currentTag;
-        var settings = _onSettings;
-        DispatcherQueue.TryEnqueue(() => App.RecreateMainWindow(tag, settings));
+        ConfigureTitleBar();
+        _stalePages.UnionWith(_pages);
+        if (ContentFrame.Content is Page current) _stalePages.Remove(current);
+        DispatcherQueue.TryEnqueue(() => Retheme(RootGrid));
+    }
+
+    private static void Retheme(FrameworkElement element)
+    {
+        var theme = element.RequestedTheme;
+        element.RequestedTheme = theme == ElementTheme.Light ? ElementTheme.Dark : ElementTheme.Light;
+        element.RequestedTheme = theme;
     }
 }

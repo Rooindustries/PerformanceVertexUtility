@@ -58,6 +58,17 @@ static class ActionChecks
         var resetRow = new WindowsTweakRow(resetFirst, new Dictionary<string, TweakDefinition> { [setting.Id] = resetFirst }, _ => { });
         check(resetRow.Action.Id == "off" && resetRow.Selected.Id.Length == 0,
             "A directly named Windows-default option never becomes the initial action ahead of an explicit Off choice");
+        var gated = setting with { Id = "fallback-contract", Options = [new("full", "Full", [new(address, 2)]), new("off", "Off", [new(address, 0)]), new("default", "Remove this override", [new(address, null)])] };
+        var gatedRow = new WindowsTweakRow(gated, new Dictionary<string, TweakDefinition> { [gated.Id] = gated }, _ => { });
+        gatedRow.Observe(new TweakSettingStatus(gated.Id, gated.Name, true, [], [], null, ["off", "default"]));
+        check(gatedRow.Action.Id == "full" && gatedRow.Selected.Id.Length == 0, "A starting choice this PC can't use never falls back to a different action");
+        var replaced = gated with { Options = [gated.Options[0], new("required", "Required", [new(address, 1)], Replaces: "full"), .. gated.Options[1..]] };
+        var replacedRow = new WindowsTweakRow(replaced, new Dictionary<string, TweakDefinition> { [replaced.Id] = replaced }, _ => { });
+        replacedRow.Observe(new TweakSettingStatus(replaced.Id, replaced.Name, true, [], [], null, ["required", "off", "default"]));
+        check(replacedRow.Action.Id == "required", "A starting choice this PC can't use moves to the choice that replaces it");
+        replacedRow.Action = replacedRow.ActionChoices.Single(choice => choice.Id == "full");
+        replacedRow.Observe(new TweakSettingStatus(replaced.Id, replaced.Name, true, [], [], null, ["required", "off", "default"]));
+        check(replacedRow.Action.Id == "full", "A choice the user picked beside the switch stays after a refresh");
         var observed = new WindowsTweakRow(setting, new Dictionary<string, TweakDefinition> { [setting.Id] = setting }, _ => { });
         observed.Observe(new(setting.Id, setting.Name, true, ["on"],
             [new() { Address = address, NativeKey = @"\REGISTRY\USER\fixture\Software\RooIndustriesUiModelFixture", KeyExists = true,

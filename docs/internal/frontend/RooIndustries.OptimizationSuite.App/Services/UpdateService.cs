@@ -30,7 +30,7 @@ public sealed class UpdateService
     private readonly SettingsStore _settings = new();
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly CancellationTokenSource _stop = new();
-    private readonly InstallGate _install = new(() => App.Operations.ReadGameSessionsAsync(), () => App.Live.GetGameTuneSessionStatusResultAsync(), InstallGate.TimerOn, InstallDrive);
+    private readonly InstallGate _install = new(async () => { await App.Operations.RecoverStaleGameSessionsAsync(); return await App.Operations.ReadGameSessionsAsync(); }, () => App.Live.GetGameTuneSessionStatusResultAsync(), InstallGate.TimerOn, InstallDrive);
     private DispatcherQueue? _dispatcher;
     private PolicyRootLease? _storageLease;
     private string? _root;

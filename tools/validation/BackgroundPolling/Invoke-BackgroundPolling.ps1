@@ -97,6 +97,7 @@ try {
     if (-not (Test-Path -LiteralPath $dotnet)) { $dotnet = (Get-Command dotnet.exe -ErrorAction Stop).Source }
     $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
     $env:DOTNET_ROOT = Split-Path $dotnet -Parent
+    $env:ROO_INDUSTRIES_DOTNET_EXE = $dotnet
     if (-not (@(& $dotnet --list-runtimes) -match '^Microsoft\.WindowsDesktop\.App 8\.')) { throw ('The .NET 8 Desktop Runtime is missing next to ' + $dotnet + '.') }
     & (Join-Path $Source 'backend\scripts\Build-OptimizerHost.ps1') -DotNetPath $dotnet *> (Join-Path $directory 'build-host.log')
     if ($LASTEXITCODE) { throw 'The optimizer helper build failed; see build-host.log.' }

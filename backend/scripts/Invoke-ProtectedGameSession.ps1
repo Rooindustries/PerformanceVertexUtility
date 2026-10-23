@@ -1,10 +1,11 @@
 param(
-    [Parameter(Mandatory=$true)][ValidateSet('Preview','Start','Status','Affinity','Stop','Recover')][string]$Action,
-    [string]$SessionRoot='', [string]$PreviewPath='', [string]$ReviewHash='',
+    [Parameter(Mandatory=$true)][ValidateSet('Preview','Start','Status','Affinity','Stop','Recover','RemoveAll')][string]$Action,
+    [string]$SessionRoot='', [string]$PreviewPath='', [string]$ReviewHash='', [string]$OperationsRoot='',
     [int]$LauncherProcessId=0, [string]$GamePath='', [string]$ControlsPath='', [string]$AffinityMask='',
     [string]$HostDirectory='', [string]$DotNetPath='', [switch]$AcceptLauncherScope, [switch]$AcceptEarlierVersion, [switch]$ConfirmApply
 )
 $ErrorActionPreference='Stop'
+$dotNetOverride=$DotNetPath
 . (Join-Path $PSScriptRoot 'BrandCompatibility.Common.ps1')
 $repoRoot=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 if(-not $HostDirectory){$HostDirectory=Join-Path $repoRoot 'backend\bin\optimizer'}
@@ -15,6 +16,11 @@ if(-not $DotNetPath -and (Test-Path -LiteralPath (Join-Path $HostDirectory 'host
 if(-not $DotNetPath){$DotNetPath=Get-RooIndustriesDevelopmentDotNet $HostDirectory}
 $DotNetPath=[IO.Path]::GetFullPath($DotNetPath)
 if($Action -notin @('Preview','Status') -and -not $ConfirmApply){throw 'Review the protected-session operation before using -ConfirmApply.'}
+function Test-Restored($Worker){
+    return $Worker -and $Worker.hostRunning -eq $false -and -not $Worker.error -and $Worker.state -and
+        $Worker.state.status -in @('stopped','stoppedWithErrors') -and $Worker.state.registryStatus -eq 'restored' -and $Worker.state.jobStatus -eq 'cleared' -and
+        @($Worker.state.games|ForEach-Object {$_.fields}|Where-Object {$_.journalPath -and $_.status -notin @('restored','expired')}).Count -eq 0
+}
 function Invoke-Core([string]$Operation,[hashtable]$Fields=@{}) {
     $request=@{schemaVersion=1;repoRoot=$repoRoot;confirm=[bool]$ConfirmApply}
     if($SessionRoot){$request.sessionRoot=$SessionRoot}
@@ -39,6 +45,39 @@ if($Action -eq 'Start'){
         $SessionRoot=Join-Path $operations ('game-session-'+$plan.operationId+'\session')
     }
 }
+if($Action -eq 'RemoveAll'){
+    if(-not $OperationsRoot){$OperationsRoot=Join-Path (Get-RooIndustriesLocalDataRoot) 'operations'}
+    $OperationsRoot=[IO.Path]::GetFullPath($OperationsRoot).TrimEnd('\','/')
+    $results=@();$failed=$false
+    $directories=if(Test-Path -LiteralPath $OperationsRoot){@(Get-ChildItem -LiteralPath $OperationsRoot -Directory -Filter 'game-session-*')}else{@()}
+    foreach($directory in $directories){
+        $root=Join-Path $directory.FullName 'session'
+        if(-not(Test-Path -LiteralPath (Join-Path $root 'session.json'))){continue}
+        try{
+            $result=(& $PSCommandPath -Action Stop -SessionRoot $root -HostDirectory $HostDirectory -DotNetPath $dotNetOverride -ConfirmApply)|ConvertFrom-Json
+            if(-not(Test-Restored $result.data.worker)){throw 'The session still needs recovery; its saved state and task were kept.'}
+            $results+=@{sessionRoot=$root;status='restored'}
+        }
+        catch{$failed=$true;$results+=@{sessionRoot=$root;status='failed';error=$_.Exception.Message}}
+    }
+    $owner=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+    try{
+        $leftovers=@(Get-ScheduledTask -ErrorAction Stop|Where-Object {$_.TaskName -like 'Roo Industries Protected Session *' -or $_.TaskName -like ($script:RooIndustriesLegacyIdentity.gameTask+'*')})
+    }
+    catch{$failed=$true;$results+=@{status='failed';error=$_.Exception.Message};$leftovers=@()}
+    foreach($leftover in @($leftovers|Where-Object {
+        $parts=@([string]$_.Description -split ' \| ')
+        $parts.Count -eq 3 -and $parts[1] -eq $owner -and (Split-Path -Leaf $parts[2]) -eq 'session' -and
+            (Split-Path -Leaf (Split-Path -Parent $parts[2])) -like 'game-session-*' -and
+            (Split-Path -Parent (Split-Path -Parent $parts[2])) -ieq $OperationsRoot -and -not(Test-Path -LiteralPath (Join-Path $parts[2] 'session.json'))
+    })){
+        try{Unregister-ScheduledTask -TaskName $leftover.TaskName -Confirm:$false}
+        catch{$failed=$true;$results+=@{taskName=$leftover.TaskName;status='failed';error=$_.Exception.Message}}
+    }
+    @{schemaVersion=1;status=$(if($failed){'failed'}else{'completed'});data=@{sessions=$results}}|ConvertTo-Json -Depth 10
+    if($failed){exit 1}
+    return
+}
 if(-not $SessionRoot){throw 'Provide the session directory returned by Start.'}
 $SessionRoot=[IO.Path]::GetFullPath($SessionRoot)
 $owner=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
@@ -58,7 +97,7 @@ if($Action -eq 'Start'){
     $execute=New-RooIndustriesElevatedTaskAction $workerExe @('run',$requestPath) (Split-Path $workerExe -Parent)
     $principal=New-ScheduledTaskPrincipal -UserId $owner -LogonType Interactive -RunLevel Highest
     $settings=New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -Priority 6
-    Register-ScheduledTask -TaskName $taskName -Description $description -Action $execute -Principal $principal -Settings $settings -Force|Out-Null
+    Register-ScheduledTask -TaskName $taskName -Description $description -Action $execute -Principal $principal -Settings $settings -Trigger (New-ScheduledTaskTrigger -AtLogOn -User $owner) -Force|Out-Null
     Start-ScheduledTask -TaskName $taskName
     $clock=[Diagnostics.Stopwatch]::StartNew()
     do {$status=Invoke-Core 'protected-session-status';if($status.hostRunning -eq $true -and $status.state.status -in @('armed','active','partial')){break};if($status.state -and $status.hostRunning -eq $false){if(Test-Path (Join-Path $SessionRoot 'worker-error.json')){$failure=Get-Content -Raw (Join-Path $SessionRoot 'worker-error.json')|ConvertFrom-Json;throw ('Session startup failed: '+$failure.error+' '+$failure.hresult)};throw ('Session stopped during startup: '+($status.state.errors -join '; '))};Start-Sleep -Milliseconds 200}while($clock.Elapsed.TotalSeconds -lt 35)
@@ -76,13 +115,13 @@ if($Action -eq 'Stop'){
     $clock=[Diagnostics.Stopwatch]::StartNew()
     do {$status=Invoke-Core 'protected-session-status';if($status.hostRunning -eq $false){break};Start-Sleep -Milliseconds 200}while($clock.Elapsed.TotalSeconds -lt 30)
     if($status.hostRunning -ne $false){throw 'Worker shutdown is not verified; recovery state was retained.'}
-    if($status.state){Invoke-Core 'protected-session-recover' @{operationId=$status.state.preview.operationId;acceptEarlierVersion=[bool]$AcceptEarlierVersion}|Out-Null}
-    if($task){Unregister-ScheduledTask -TaskName $taskName -Confirm:$false}
+    if($status.state -and -not(Test-Restored $status)){Invoke-Core 'protected-session-recover' @{operationId=$status.state.preview.operationId;acceptEarlierVersion=[bool]$AcceptEarlierVersion}|Out-Null}
+    if($task -and (Test-Restored (Invoke-Core 'protected-session-status')) -and (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue)){Unregister-ScheduledTask -TaskName $taskName -Confirm:$false}
 }
 if($Action -eq 'Recover'){
     $status=Invoke-Core 'protected-session-status'
     if(-not $status.state){throw 'There is no session recovery state.'}
     Invoke-Core 'protected-session-recover' @{operationId=$status.state.preview.operationId;acceptEarlierVersion=[bool]$AcceptEarlierVersion}|Out-Null
-    if($task){Unregister-ScheduledTask -TaskName $taskName -Confirm:$false}
+    if($task -and (Test-Restored (Invoke-Core 'protected-session-status')) -and (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue)){Unregister-ScheduledTask -TaskName $taskName -Confirm:$false}
 }
 @{schemaVersion=1;status='completed';data=@{sessionRoot=$SessionRoot;taskName=$taskName;worker=(Invoke-Core 'protected-session-status')}}|ConvertTo-Json -Depth 40
