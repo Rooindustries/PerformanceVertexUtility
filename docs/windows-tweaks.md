@@ -283,11 +283,17 @@ from the proposed change. A value Windows itself sets, such as automatic DNS or
 the built-in encrypted DNS entries, reads as Windows default. A per-device setting
 whose devices hold different values reads as Varies by device, and an adapter
 setting that is on for only some protocols names them, such as On for IPv4 and IPv6.
-Choose a value, then turn on the row's switch to select
-that action for review. Turning it off keeps the current setting; it does not undo
-an applied change. Use Windows default explicitly removes the local override,
-and another policy may still control the setting. Where Windows keeps the value
-itself, Windows default writes Windows' value instead. Choices for missing components
+Choose a value, then turn on the row's switch to select that action for review;
+turning it back off clears that selection. Before another choice is selected, a row
+reads on when Windows has its starting choice, or any of its choices if the row has
+a Windows default choice, and the choice beside the switch is the one Windows has.
+Turning that row off selects the Windows default for review, or the other value of
+a two-value row without one; it does not restore a backup. Rows without a Windows
+default choice, such as service startup, read on only for their starting choice or
+a selected choice Windows already has, because one of their values always matches.
+Use Windows default explicitly removes the local override, and another policy may
+still control the setting. Where Windows keeps the value itself, Windows default
+writes Windows' value instead. Choices for missing components
 are saved separately from applied Windows profiles and do not create a recovery
 backup. They require a new review before Windows applies them. Backups & history reads
 the actual recovery state. An empty list does not become a sample backup.
