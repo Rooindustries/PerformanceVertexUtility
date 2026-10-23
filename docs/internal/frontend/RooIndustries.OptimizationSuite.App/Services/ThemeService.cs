@@ -42,9 +42,10 @@ public sealed class ThemeService
         CurrentThemeId = option.Id;
         ReducedEffects = _settings.Get(EffectsKey) == "1";
         SimpleMode = _settings.Get(SimpleModeKey) != "0";
+        var live = LiveTheme();
         if (option.Id != BlackoutGold.Id)
         {
-            Repaint(option);
+            Repaint(live, option);
         }
 #if ROO_INDUSTRIES_TEST_HOOKS
         RecordThemeKeys("start");
@@ -88,7 +89,7 @@ public sealed class ThemeService
             return;
         }
 
-        Repaint(option);
+        Repaint(LiveTheme(), option);
         CurrentThemeId = option.Id;
 #if ROO_INDUSTRIES_TEST_HOOKS
         RecordThemeKeys("switch");
@@ -98,7 +99,25 @@ public sealed class ThemeService
     }
 
     private static ResourceDictionary LiveTheme()
-        => Application.Current.Resources.MergedDictionaries.First(dictionary => dictionary.ContainsKey(ProbeBrushKey));
+    {
+        var merged = Application.Current.Resources.MergedDictionaries;
+        var index = Enumerable.Range(0, merged.Count).First(i => merged[i].ContainsKey(ProbeBrushKey));
+        var loaded = merged[index];
+        if (loaded.Source is null)
+        {
+            return loaded;
+        }
+
+        var live = new ResourceDictionary();
+        foreach (var (key, value) in loaded.ToArray())
+        {
+            loaded.Remove(key);
+            live[key] = value;
+        }
+
+        merged[index] = live;
+        return live;
+    }
 
 #if ROO_INDUSTRIES_TEST_HOOKS
     private void RecordThemeKeys(string when)
@@ -109,9 +128,8 @@ public sealed class ThemeService
     }
 #endif
 
-    private static void Repaint(ThemeOption option)
+    private static void Repaint(ResourceDictionary live, ThemeOption option)
     {
-        var live = LiveTheme();
         var next = new ResourceDictionary { Source = new Uri(option.ResourceUri) };
         var liveKeys = live.Keys.ToHashSet();
         var nextKeys = next.Keys.ToHashSet();
