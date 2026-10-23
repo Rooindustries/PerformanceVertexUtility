@@ -320,6 +320,18 @@ static class UpdateInstallChecks
             finally { biosHold?.Dispose(); }
             check(biosHold is not null && closed.Count == 0 && firmware.Message == RunningChanges.Installing && firmware.CanApply && !RunningChanges.Any,
                 "A BIOS write that starts while setup launches is refused with its reason, and the review stays ready to retry");
+
+            Pause();
+            ServiceSteps.Pause = null;
+            Set(removing, "_phase", "preview");
+            cleanup!.RemovalPathReviewed = true; cleanup.LeftoverScanCompleted = true; cleanup.CleanupPlanReady = true;
+            cleanup.RemoverPathApproved = true; cleanup.CleanupListApproved = true;
+            cleanup.FinalCheckPassed = true; cleanup.RealCleanupApproved = true;
+            App.Live.CleanupApply = (_, _, _, _) => throw new IOException("Controlled cleanup input write failure");
+            await removing.ApplyCommand.ExecuteAsync(null);
+            await cleanup.ApplyCleanupCommand.ExecuteAsync(null);
+            check(!RunningChanges.Any && closed.SequenceEqual([true, true]) && removing.Status == "Removal needs checking." && cleanup.CleanupExecutionDetail == "Controlled cleanup input write failure",
+                "A removal or cleanup that fails while preparing its files stops counting as running, and Close when done fires for each");
         }
         finally
         {
