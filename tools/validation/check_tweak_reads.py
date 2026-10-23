@@ -42,22 +42,31 @@ def negative_controls(root):
     if os.name == 'nt':
         return {}
     saved = {name: os.environ.get(name) for name in ('DOTNET', 'TWEAK_READS_TIMEOUT')}
-    with tempfile.TemporaryDirectory() as folder:
-        stub, child = Path(folder) / 'dotnet', Path(folder) / 'child'
-        stub.write_text(f'#!/bin/sh\nsleep 30 &\necho $! > "{child}"\nwait\n')
-        stub.chmod(0o755)
-        os.environ.update(DOTNET=str(stub), TWEAK_READS_TIMEOUT='1')
-        started = time.monotonic()
-        try:
-            failures = check(root)
-        finally:
-            for name, value in saved.items():
-                if value is None:
-                    os.environ.pop(name, None)
-                else:
-                    os.environ[name] = value
-        stopped = time.monotonic() - started < 15 and gone(int(child.read_text()))
-    return {'a hung read walk': stopped and len(failures) == 1 and failures[0].startswith('The Windows Tweaks read walk did not finish within 1 seconds')}
+    results = {}
+    for label, spawn in (('a hung read walk', 'sleep 30 &'), ('a hung read walk whose child left its process group', 'setsid sleep 30 &')):
+        with tempfile.TemporaryDirectory() as folder:
+            stub, child = Path(folder) / 'dotnet', Path(folder) / 'child'
+            stub.write_text(f'#!/bin/sh\n{spawn}\necho $! > "{child}"\nwait\n')
+            stub.chmod(0o755)
+            os.environ.update(DOTNET=str(stub), TWEAK_READS_TIMEOUT='1')
+            started = time.monotonic()
+            try:
+                failures = check(root)
+            finally:
+                for name, value in saved.items():
+                    if value is None:
+                        os.environ.pop(name, None)
+                    else:
+                        os.environ[name] = value
+            pid = int(child.read_text())
+            stopped = time.monotonic() - started < 15
+            if spawn.startswith('setsid'):
+                with contextlib.suppress(ProcessLookupError):
+                    os.kill(pid, signal.SIGKILL)
+            else:
+                stopped = stopped and gone(pid)
+        results[label] = stopped and len(failures) == 1 and failures[0].startswith('The Windows Tweaks read walk did not finish within 1 seconds')
+    return results
 
 
 def gone(pid):
