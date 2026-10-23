@@ -4,6 +4,8 @@ $root=Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 if(-not $DotNetPath){$candidate=Join-Path $env:USERPROFILE '.dotnet/dotnet.exe';$DotNetPath=if(Test-Path $candidate){$candidate}else{(Get-Command dotnet.exe -ErrorAction Stop).Source}}
 & $DotNetPath run --project (Join-Path $root 'tools/validation/ClientBoundary/ClientBoundary.csproj') -c Release -p:UseSharedCompilation=false -- $root --game-session-display
 if($LASTEXITCODE -ne 0){throw 'Game-session display checks failed'}
+& $DotNetPath run --project (Join-Path $root 'tools/validation/ClientBoundary/ClientBoundary.csproj') -c Release -p:UseSharedCompilation=false -- $root --launch-presets
+if($LASTEXITCODE -ne 0){throw 'Launch preset checks failed'}
 & (Join-Path $root 'backend/scripts/Build-OptimizerHost.ps1') -DotNetPath $DotNetPath
 if($LASTEXITCODE -ne 0){throw 'Session package build failed'}
 & $DotNetPath publish (Join-Path $root 'backend/native/Optimizer.Host/Optimizer.Host.csproj') -c Release -r win-x64 --self-contained true -o (Join-Path $root 'backend/bin/optimizer') -p:UseSharedCompilation=false

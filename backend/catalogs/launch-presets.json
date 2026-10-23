@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "presets": [
+    {
+      "id": "competitive",
+      "name": "Competitive",
+      "description": "Sets the game's CPU and GPU priority to High and its power mode to High performance, and allows dynamic priority boosts.",
+      "settings": {
+        "cpuPriority": "High",
+        "gpuPriority": 4,
+        "executionQoS": "high",
+        "priorityBoost": true
+      }
+    },
+    {
+      "id": "balanced",
+      "name": "Balanced",
+      "description": "Raises the game's CPU and GPU priority one step, to Above normal. Everything else stays as it is.",
+      "settings": {
+        "cpuPriority": "AboveNormal",
+        "gpuPriority": 3
+      }
+    },
+    {
+      "id": "streaming",
+      "name": "Streaming",
+      "description": "Raises the game's CPU priority to Above normal and sets its power mode to High performance. GPU priority stays as it is, for when a streaming or capture app runs next to the game.",
+      "settings": {
+        "cpuPriority": "AboveNormal",
+        "executionQoS": "high"
+      }
+    }
+  ]
+}

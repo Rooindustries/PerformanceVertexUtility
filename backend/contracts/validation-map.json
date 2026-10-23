@@ -1,6 +1,7 @@
 {
   "schemas": {
     "backend/catalogs/frontend-label-map.json": "frontendLabelMap",
+    "backend/catalogs/launch-presets.json": "launchPresetCatalog",
     "backend/profiles/lightweight-governor-budget.profile.json": "lightweightGovernorBudgetProfile",
     "backend/profiles/persistent-policy.profile.json": "processPolicyProfile",
     "backend/profiles/probalance-governor.profile.json": "processGovernorProfile",
