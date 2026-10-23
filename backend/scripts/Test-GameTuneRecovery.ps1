@@ -1,4 +1,12 @@
+param([switch]$InMemory, [string]$OutRoot = '')
+
 $ErrorActionPreference = 'Stop'
+if ($InMemory) {
+    $source = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
+    if ([string]::IsNullOrWhiteSpace($OutRoot)) { $OutRoot = Join-Path ([IO.Path]::GetTempPath()) ('roo-industries-game-tune-ownership-' + [guid]::NewGuid().ToString('N').Substring(0, 6)) }
+    & (Join-Path $source 'tools/validation/GameTune/Test-GameTuneRecoveryOwnership.ps1') -Source $source -Out $OutRoot
+    exit $LASTEXITCODE
+}
 . (Join-Path $PSScriptRoot 'Validation.Common.ps1')
 . (Join-Path $PSScriptRoot 'GameTuneSession.Common.ps1')
 $root = Join-Path ([IO.Path]::GetTempPath()) ('roo-industries-tune-recovery-' + [guid]::NewGuid().ToString('N').Substring(0, 6))

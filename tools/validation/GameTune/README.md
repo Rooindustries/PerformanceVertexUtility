@@ -13,3 +13,15 @@ python3 -I tools/validation/windows_ssh.py --host <test-pc> --expected-machine <
 ```
 
 `OutRoot` receives window screenshots (`01-before-review`, `02-reviewed`, `03-after-start`, plus `04-restored` on a failing build), the card text beside each one, `result.json` with each probe's priority, `cleanup.json`, and JPEG frames for the video under `frames`.
+
+## Recovery and Stop ownership
+
+The recovery suite also has a Linux-compatible mode:
+
+```sh
+pwsh -NoProfile -File backend/scripts/Test-GameTuneRecovery.ps1 -InMemory -OutRoot '<evidence-directory>'
+```
+
+It runs the real recovery, Stop and status scripts against saved session files with in-memory process adapters. It checks foreign writes between recovery preflight and Stop preview, before each restore and at the setter's final read; all five controls, pending and failed writes, partial restores, already restored values, missing saved values and read-only previews; and repeated upgrade refreshes with an older running record and a newer Restore. `result.json` records each assertion, control write, result and saved journal. These checks do not change real process controls or replace the Windows recovery suite.
+
+To compare another source revision, run `tools/validation/GameTune/Test-GameTuneRecoveryOwnership.ps1 -Source '<source-copy>' -Out '<evidence-directory>'`. `-Scenario RecoveryRace`, `ManualRace`, `Controls` or `LegacySelection` selects one group.

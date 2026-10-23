@@ -51,9 +51,10 @@ These must hold on every commit of `main`. Each one names the code that enforces
      - The process governor leaves a value another program set and says "Left as another program set it." (`ProcessControlEngine.LeftAsSet`). Other process restores stop and report reconciliation when the value drifted (`ProcessControlEngine.Restore`).
      - Cleanup restores verify their backups and refuse a conflicting destination (`FileCleanupEngine.Restore`, `RegistryCleanupEngine.Restore`).
      - Harness rollback verifies restored registry kinds/data and original service startup plus Running when required, preserves later changes and ambiguous runtime states, and reports missing ownership evidence (`Invoke-RollbackModule`). Other original service runtime states keep startup-only behavior. It removes only its values, keeping parent keys and unrelated entries.
-   - Checked by: `tools/validation/Tweaks`, `tools/validation/OptimizerCore` (`Test-OptimizerCore.ps1`), `tools/validation/AppSweepUi/GovernorChecks.cs`, `Test-LegacyModuleRollback.ps1`.
+     - Game Tune Stop and automatic recovery compare each control with the session's saved applied value immediately before restoring. Controls already at their original value need no write. Another program's value is kept and reported, and the session and backup remain available for recovery (`Stop-GameTuneSession.ps1`).
+   - Checked by: `tools/validation/Tweaks`, `tools/validation/OptimizerCore` (`Test-OptimizerCore.ps1`), `tools/validation/AppSweepUi/GovernorChecks.cs`, `Test-LegacyModuleRollback.ps1`, `Test-GameTuneRecovery.ps1 -InMemory`.
    - Known gaps:
-     - Game Tune Stop and profile backup restores overwrite a value another program set afterwards. Background-limit restores already keep it.
+     - Profile backup restores overwrite a value another program set afterwards. Background-limit restores already keep it.
 4. **No surprise defaults.** A PC only gets what the user chose. Presets are fixed catalog entries.
    - Enforced by: `tools/validation/check_windows_tweaks.py` requires the FPS preset to list exactly the measured winners in `backend/catalogs/fps-preset.json`. Each pick must be a real catalog option with benchmark evidence, and the setting known to break a PC after a reboot is excluded.
    - A PR that changes what a PC gets by default says so in its first line.

@@ -34,7 +34,8 @@ function New-GameTuneRestorePreview {
     $originalIoPriority = Get-RooIndustriesPropertyValue $Snapshot 'originalIoPriority' $null
     $originalMemoryPriority = Get-RooIndustriesPropertyValue $Snapshot 'originalMemoryPriority' $null
     $originalGpuPriority = Get-RooIndustriesPropertyValue $Snapshot 'originalGpuPriority' $null
-    $recorded = @(Get-RooIndustriesRestorableProcessControls $Snapshot (Get-RooIndustriesPropertyValue $Candidate 'currentControlState' $null) | ForEach-Object { [string](Get-RooIndustriesPropertyValue $_ 'control' '') })
+    $savedControls = @(Get-RooIndustriesPropertyArray $Snapshot 'controlChanges')
+    $recorded = @($savedControls | ForEach-Object { [string](Get-RooIndustriesPropertyValue $_ 'control' '') })
     $restoresAll = $null -eq $Snapshot.PSObject.Properties['controlChanges']
     $blocked = (-not $Candidate.exists) -or (-not $Candidate.matches)
     $ended = $blocked -and [bool](Get-RooIndustriesPropertyValue $Candidate 'instanceEnded' $false)
@@ -47,19 +48,19 @@ function New-GameTuneRestorePreview {
     }
     $controlChanges = New-Object System.Collections.Generic.List[object]
     if (-not $blocked) {
-        if (($restoresAll -or $recorded -contains 'priorityClass') -and -not [string]::IsNullOrWhiteSpace($originalPriority) -and (Test-RooIndustriesPriorityAllowed $originalPriority -Restoring) -and [string]$Candidate.currentPriorityClass -ne $originalPriority) {
+        if (($restoresAll -or $recorded -contains 'priorityClass') -and -not [string]::IsNullOrWhiteSpace($originalPriority) -and (Test-RooIndustriesPriorityAllowed $originalPriority -Restoring)) {
             $controlChanges.Add((New-RooIndustriesControlChange 'priorityClass' $Candidate.currentPriorityClass $originalPriority 'restorePriority' 'Restore original process priority.')) | Out-Null
         }
-        if (($restoresAll -or $recorded -contains 'affinityMask') -and $null -ne $originalAffinityMask -and (Test-RooIndustriesAffinityMaskAllowed $originalAffinityMask) -and [int64]$Candidate.currentAffinityMask -ne [int64]$originalAffinityMask) {
+        if (($restoresAll -or $recorded -contains 'affinityMask') -and $null -ne $originalAffinityMask -and (Test-RooIndustriesAffinityMaskAllowed $originalAffinityMask)) {
             $controlChanges.Add((New-RooIndustriesControlChange 'affinityMask' $Candidate.currentAffinityMask ([int64]$originalAffinityMask) 'restoreAffinity' 'Restore original CPU affinity.')) | Out-Null
         }
-        if (($restoresAll -or $recorded -contains 'ioPriority') -and -not [string]::IsNullOrWhiteSpace([string]$originalIoPriority) -and (Test-RooIndustriesIoPriorityAllowed $originalIoPriority -Restoring) -and [string]$Candidate.currentIoPriority -ne [string]$originalIoPriority) {
+        if (($restoresAll -or $recorded -contains 'ioPriority') -and -not [string]::IsNullOrWhiteSpace([string]$originalIoPriority) -and (Test-RooIndustriesIoPriorityAllowed $originalIoPriority -Restoring)) {
             $controlChanges.Add((New-RooIndustriesControlChange 'ioPriority' $Candidate.currentIoPriority $originalIoPriority 'restoreIoPriority' 'Restore original I/O priority.')) | Out-Null
         }
-        if (($restoresAll -or $recorded -contains 'memoryPriority') -and -not [string]::IsNullOrWhiteSpace([string]$originalMemoryPriority) -and (Test-RooIndustriesMemoryPriorityAllowed $originalMemoryPriority) -and [string]$Candidate.currentMemoryPriority -ne [string]$originalMemoryPriority) {
+        if (($restoresAll -or $recorded -contains 'memoryPriority') -and -not [string]::IsNullOrWhiteSpace([string]$originalMemoryPriority) -and (Test-RooIndustriesMemoryPriorityAllowed $originalMemoryPriority)) {
             $controlChanges.Add((New-RooIndustriesControlChange 'memoryPriority' $Candidate.currentMemoryPriority $originalMemoryPriority 'restoreMemoryPriority' 'Restore original memory priority.')) | Out-Null
         }
-        if (($restoresAll -or $recorded -contains 'gpuPriority') -and -not [string]::IsNullOrWhiteSpace([string]$originalGpuPriority) -and (Test-RooIndustriesGpuPriorityAllowed $originalGpuPriority) -and [string]$Candidate.currentGpuPriority -ne [string]$originalGpuPriority) {
+        if (($restoresAll -or $recorded -contains 'gpuPriority') -and -not [string]::IsNullOrWhiteSpace([string]$originalGpuPriority) -and (Test-RooIndustriesGpuPriorityAllowed $originalGpuPriority)) {
             if ([bool](Get-RooIndustriesPropertyValue (Get-RooIndustriesPropertyValue $Candidate 'currentControlState' $null) 'gpuPriorityAvailable' $false)) {
                 $controlChanges.Add((New-RooIndustriesControlChange 'gpuPriority' $Candidate.currentGpuPriority $originalGpuPriority 'restoreGpuPriority' 'Restore original GPU priority.')) | Out-Null
             } else {
@@ -68,11 +69,22 @@ function New-GameTuneRestorePreview {
                 $controlChanges.Add((New-RooIndustriesControlChange 'gpuPriority' $Candidate.currentGpuPriority $originalGpuPriority 'restoreGpuPriority' 'GPU scheduling priority is unavailable for this restore target.' $true $reason)) | Out-Null
             }
         }
-        if ($controlChanges.Count -eq 0) {
-            $reason = 'Process already matches the Game Tune backup.'
+        foreach ($change in $controlChanges) {
+            $saved = @($savedControls | Where-Object { $_.control -eq $change.control })
+            $applied = if ($saved.Count -eq 1) { Get-RooIndustriesPropertyValue $saved[0] 'proposedValue' $null } elseif ($restoresAll) {
+                $field = switch ($change.control) { 'priorityClass' { 'proposedPriorityClass' }; 'affinityMask' { 'proposedAffinityMask' }; 'ioPriority' { 'proposedIoPriority' }; 'memoryPriority' { 'proposedMemoryPriority' }; 'gpuPriority' { 'proposedGpuPriority' } }
+                Get-RooIndustriesPropertyValue $Snapshot $field $null
+            } else { $null }
+            $change | Add-Member -NotePropertyName appliedValue -NotePropertyValue $applied
+        }
+        if (@($savedControls | Where-Object { $_.control -notin @($controlChanges | ForEach-Object { $_.control }) }).Count -gt 0) {
+            $blocked = $true
+            $reason = 'A saved control has no valid original value. Its current value and backup were kept.'
         }
     }
-    $proposedAction = if ($blocked -or $controlChanges.Count -eq 0) { 'noChange' } elseif ($controlChanges.Count -eq 1 -and [string](Get-RooIndustriesPropertyValue $controlChanges[0] 'control' '') -eq 'priorityClass') { 'restorePriority' } else { 'restoreProcessControls' }
+    $pendingChanges = @($controlChanges | Where-Object { -not (Test-RooIndustriesControlValueEqual $_.control $_.currentValue $_.proposedValue) })
+    if (-not $blocked -and $pendingChanges.Count -eq 0) { $reason = 'Process already matches the Game Tune backup.' }
+    $proposedAction = if ($blocked -or $pendingChanges.Count -eq 0) { 'noChange' } elseif ($pendingChanges.Count -eq 1 -and [string](Get-RooIndustriesPropertyValue $pendingChanges[0] 'control' '') -eq 'priorityClass') { 'restorePriority' } else { 'restoreProcessControls' }
 
     return [pscustomobject]@{
         previewId = ("game-tune-restore-$processName-$processId").ToLowerInvariant() -replace '[^a-z0-9\-]+', '-'
@@ -106,8 +118,8 @@ function New-GameTuneRestorePreview {
         risk = 'low'
         confidence = 'medium'
         protected = $false
-        requiresConfirmation = ($controlChanges.Count -gt 0 -and -not $blocked)
-        rollbackSupported = ($controlChanges.Count -gt 0 -and -not $blocked)
+        requiresConfirmation = ($pendingChanges.Count -gt 0 -and -not $blocked)
+        rollbackSupported = ($pendingChanges.Count -gt 0 -and -not $blocked)
         currentState = [pscustomobject]@{
             priorityClass = $Candidate.currentPriorityClass
             affinityMask = $Candidate.currentAffinityMask
@@ -250,10 +262,16 @@ try {
             $failedControls = New-Object System.Collections.Generic.List[string]
             foreach ($change in $entryControlChanges) {
                 try {
+                    $current = Get-RooIndustriesProcessControlReadback $live $change.control
+                    if (Test-RooIndustriesControlValueEqual $change.control $current $change.proposedValue) { continue }
+                    if ($null -eq $change.appliedValue) { throw 'The saved applied value is missing. Its current value and backup were kept.' }
+                    if (-not (Test-RooIndustriesControlValueEqual $change.control $current $change.appliedValue)) { throw 'Left as another program set it.' }
+                    $change.currentValue = $change.appliedValue
                     Invoke-RooIndustriesProcessControlChange $live $change
                     $appliedControls.Add($change) | Out-Null
                 } catch {
-                    $failedControls.Add("$([string](Get-RooIndustriesPropertyValue $change 'control' 'unknown')): $($_.Exception.Message)") | Out-Null
+                    $reason = if ($_.Exception.Message -eq 'The control changed externally; its current value was preserved.') { 'Left as another program set it.' } else { $_.Exception.Message }
+                    $failedControls.Add("$([string](Get-RooIndustriesPropertyValue $change 'control' 'unknown')): $reason") | Out-Null
                 }
             }
             if ($appliedControls.Count -gt 0) {
@@ -314,7 +332,7 @@ try {
     } else {
         'preview'
     }
-    $sessionStatus = if ($ConfirmApply -and $status -in @('restored', 'partial')) { 'completed' } elseif ($status -eq 'failed') { 'failed' } else { 'preview' }
+    $sessionStatus = if ($ConfirmApply -and $skipped.Count -gt 0) { 'failed' } elseif ($ConfirmApply) { 'completed' } else { 'preview' }
 
     $warnings = New-Object System.Collections.Generic.List[object]
     if (-not $ConfirmApply) {

@@ -298,6 +298,16 @@ function New-RooIndustriesGameTuneResult {
     }
 }
 
+function Test-RooIndustriesGameTuneOwnerRunning {
+    param([int]$OwnerId, [string]$OwnerStart)
+    $savedTime = [datetime]::MinValue
+    if ($OwnerId -le 0 -or -not [datetime]::TryParse($OwnerStart, [ref]$savedTime)) { return $false }
+    $owner = Get-Process -Id $OwnerId -ErrorAction SilentlyContinue
+    if ($null -eq $owner) { return $false }
+    try { return Test-RooIndustriesProcessStartTime $OwnerStart ($owner.StartTime.ToUniversalTime().ToString('o')) }
+    catch { return $false }
+}
+
 function Test-RooIndustriesGameTuneOwnerEnded {
     param([int]$OwnerId, [string]$OwnerStart)
     $savedTime = [datetime]::MinValue

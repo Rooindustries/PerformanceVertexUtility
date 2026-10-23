@@ -61,7 +61,12 @@ try {
         if ($RecoverInterrupted) { $record.data = Repair-RooIndustriesInterruptedGameTuneSession $record.data $record.path }
         if ($before -ne [string]$record.data.sessionStatus -or $restorable -ne [bool]$record.data.restorable) { $recoveryPerformed = $true }
     }
-    $selected = $sessions | Sort-Object @{ Expression = { if ($_.data.sessionStatus -eq 'running') { 3 } elseif ($_.data.restorable) { 2 } elseif ($_.data.sessionStatus -eq 'failed') { 1 } else { 0 } }; Descending = $true }, @{ Expression = { $_.started }; Descending = $true } | Select-Object -First 1
+    $selected = $sessions | Sort-Object @{ Expression = {
+        if ($_.data.sessionStatus -eq 'running' -and (Test-RooIndustriesGameTuneOwnerRunning ([int](Get-RooIndustriesPropertyValue $_.data 'ownerProcessId' 0)) ([string](Get-RooIndustriesPropertyValue $_.data 'ownerStartTimeUtc' '')))) { 3 }
+        elseif ($_.data.restorable) { 2 }
+        elseif ($_.data.sessionStatus -eq 'failed') { 1 }
+        else { 0 }
+    }; Descending = $true }, @{ Expression = { $_.started }; Descending = $true } | Select-Object -First 1
     if ($null -eq $selected) { throw 'No saved Game Tune session could be read. The saved files were kept.' }
     $session = $selected.data
     $resolvedSessionPath = $selected.path
