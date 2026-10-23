@@ -1003,9 +1003,13 @@ static class BugReportChecks
         var single = new BugRedactor(@"C:\Users\A", "A", "X");
         var direct = new BugRedactor(@"E:\Client", "Alice", "GAMER-PC", [@"\\nas\Fixture"]);
         var nested = new BugRedactor(@"C:\Users\Alice", "Alice", "GAMER-PC", [@"D:\Work\Users\Bob", @"\\fs01\Users\Carol", @"D:\Work\Documents and Settings\Bob"]);
+        var ownNested = new BugRedactor(@"D:\Work\Users\Alice", "Alice", "GAMER-PC");
         var escapeLetter = new BugRedactor(@"C:\Users\n", "n", "GAMER-PC");
         var cases = new List<(string Issue, BugRedactor Redactor, string Input, string Expected, string[] Private)>
         {
+            ("Unregistered UNC Users", own, "//fs01/share/Users/Bob/x and \\/\\/fs01\\/share\\/Users\\/Carol\\/y", "//fs01/share/Users/<user>/x and \\/\\/fs01\\/share\\/Users\\/<user>\\/y", ["Bob", "Carol"]),
+            ("Users URL", own, "https://host/Users/Bob/x and https:\\/\\/host\\/Users\\/Carol\\/y", "https://host/Users/Bob/x and https:\\/\\/host\\/Users\\/Carol\\/y", []),
+            ("Own nested profile", ownNested, @"D:\Work\Users\Alice\x and d:/work/users/Alice/y", @"%USERPROFILE%\x and %USERPROFILE%/y", []),
             ("Entra SID", own, @"Signed in as S-1-12-1-111-222-333-444 under HKEY_USERS\s-1-12-1-111-222-333-444\Software", @"Signed in as <sid> under HKEY_USERS\<sid>\Software", ["111-222-333-444"]),
             ("Entra SID", own, "System S-1-5-18, Administrators S-1-5-32-544, Everyone S-1-1-0 and S-1-12-1 stay", "System S-1-5-18, Administrators S-1-5-32-544, Everyone S-1-1-0 and S-1-12-1 stay", []),
             ("Relocated profile", moved, @"D:\Profiles\Bob\AppData\x.log and D:\Profiles\Zqxnew\y", @"D:\Profiles\<user>\AppData\x.log and D:\Profiles\<user>\y", ["Bob", "Zqxnew"]),

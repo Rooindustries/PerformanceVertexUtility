@@ -198,17 +198,18 @@ public sealed class BugRedactor
 
     private IEnumerable<Match> Profiles(string text)
     {
-        if (ReferenceEquals(_segment, ProfileSegment))
-        {
-            foreach (Match match in _segment.Matches(text)) yield return match;
-            yield break;
-        }
         using var urls = HttpUrls.Matches(text).Cast<Match>().GetEnumerator();
         var hasUrl = urls.MoveNext();
+        var previousAccount = -1;
         foreach (Match match in _segment.Matches(text))
         {
+            if (match.Groups["run"].Index == previousAccount) continue;
             while (hasUrl && urls.Current.Index + urls.Current.Length <= match.Index) hasUrl = urls.MoveNext();
-            if (!match.Groups["network"].Success || !hasUrl || match.Index < urls.Current.Index) yield return match;
+            if (!match.Groups["network"].Success || !hasUrl || match.Index < urls.Current.Index)
+            {
+                previousAccount = match.Groups["run"].Index;
+                yield return match;
+            }
         }
     }
 
@@ -456,7 +457,7 @@ public sealed class BugRedactor
     private const string User = "\u0001", PcName = "\u0002", Sid = "\u0003";
     private const RegexOptions Options = RegexOptions.IgnoreCase | RegexOptions.CultureInvariant;
     private const string ComponentEnd = @"(?=[\\/""\x00-\x1F:<>|?*]|$)";
-    private const string StandardRoots = @"[A-Za-z]:(?>[\\/]+)(?:Users|Documents and Settings)|(?<![\\/]|[A-Za-z]:)(?>\\+)(?:Users|Documents and Settings)";
+    private const string StandardRoots = @"[A-Za-z]:(?>[\\/]+)(?:Users|Documents and Settings)|(?<network>(?<![\\/]|[A-Za-z]:)(?>[\\/]+)(?:Users|Documents and Settings))";
     private const string SegmentSeparator = @"(?>(?:\\+(?=/)|/+(?=(?>\\+)(?!u[0-9A-Fa-f]{4}))|[\\/]+\.(?=[\\/]))*)(?<sep>(?>\\+|/+))";
     private const string SegmentRun = @"(?<run>(?>(?:(?!\k<sep>)\\+u[0-9A-Fa-f]{4}|(?![A-Za-z]:[\\/])[^\\/""\x00-\x1F:<>|?*])*)(?>[\u0001-\u0003](?:(?!\k<sep>)\\+u[0-9A-Fa-f]{4}|(?![A-Za-z]:[\\/])[^\\/""\x00-\x1F:<>|?*])*)*)";
     private static readonly HashSet<string> SharedProfiles = new(["Public", "Default", "Default User", "All Users"], StringComparer.OrdinalIgnoreCase);
