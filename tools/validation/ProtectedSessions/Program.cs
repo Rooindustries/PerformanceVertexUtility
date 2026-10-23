@@ -13,6 +13,9 @@ if(args is ["--cleanup-sentinel",var sentinelFrame]) { FixtureCleanupChecks.Sent
 if(args is ["--retained-launcher",var retainedRoot]) { RetainedGpuChecks.Launcher(retainedRoot); return; }
 if(args is ["--retained-game",var retainedGame,var retainedSession]) { RetainedGpuChecks.Game(retainedGame,retainedSession); return; }
 if(args is [var retainedRepo,var retainedDotnet,"--retained-gpu"]) { RetainedGpuChecks.Run(retainedRepo,retainedDotnet); return; }
+if(args is ["--high-io-launcher",var highIoRoot]) { HighIoChecks.Launcher(highIoRoot); return; }
+if(args is ["--high-io-stub",var stubRoot]) { HighIoChecks.Stub(stubRoot); return; }
+if(args is [var highIoRepo,var highIoDotnet,"--high-io",var inspectSeconds]) { HighIoChecks.Run(highIoRepo,highIoDotnet,int.Parse(inspectSeconds,System.Globalization.CultureInfo.InvariantCulture)); return; }
 if(args is ["--launcher",var launcherRoot]) { Fixtures.Launcher(launcherRoot); return; }
 if(args is ["--hold-lock",var holdPath,var holdReady,var holdStop]) { Fixtures.Hold(holdPath,holdReady,holdStop); return; }
 if(args is ["--game",var gameRoot,var hardware]) { Fixtures.Game(gameRoot,hardware=="gpu"); return; }

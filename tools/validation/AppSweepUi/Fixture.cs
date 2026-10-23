@@ -29,7 +29,9 @@ namespace RooIndustries.OptimizationSuite.Services
         GovernorTaskState? ScheduledTask = null, IReadOnlySet<string>? Exited = null, IReadOnlySet<string>? Unapplied = null, IReadOnlySet<string>? RunningImages = null, IReadOnlyDictionary<string, bool?>? PathRulesRunning = null);
     public sealed record LiveDataResult<T>(T? Value, string? Error, string? RecoveryPath = null, string? RecoveryGeneration = null) { public bool Stale { get; init; } }
     public sealed record NvidiaProfileRecovery(string ProfileId, string RollbackManifestPath, string ExportPath, string? Generation = null);
-    public sealed record GameSessionEntry(string SessionRoot, ProtectedSessionStatus Worker);
+    public sealed record GameSessionEntry(string SessionRoot, ProtectedSessionStatus Worker, string? ProfileId = null);
+    public sealed record GameSessionReview(ProtectedSessionPreview Plan, string PreviewPath, string Hash, string SessionRoot);
+    public sealed record LaunchProfileEntry(string Root, string Title);
     public static class ServiceSteps
     {
         public static Func<string, Task>? Pause { get; set; }
@@ -50,6 +52,7 @@ namespace RooIndustries.OptimizationSuite.Services
     public static class OptimizerService
     {
         public static Task<T?> ReadJournalAsync<T>(string path) => throw new InvalidOperationException("Unexpected journal read.");
+        public static string DescribeLaunchProfile(LaunchProfileEntry entry) => entry.Title;
     }
 
     public static class LiveDataService
@@ -367,6 +370,18 @@ namespace RooIndustries.OptimizationSuite.Services
         public int RetryCalls { get; private set; }
         public Task<PolicyHostState> RetryGovernorRestoreAsync() { RetryCalls++; return RetryRestore(); }
         public Task<GameSessionEntry[]> ReadGameSessionsAsync() => Task.FromResult(GameSessions);
+        public Func<Dictionary<string, JsonElement>, GameSessionReview>? GameReview { get; set; }
+        public Task<GameSessionReview> PreviewGameSessionAsync(int launcherId, string gamePath, Dictionary<string, JsonElement> controls, bool acceptLauncherScope)
+            => GameReview is { } review && acceptLauncherScope ? Task.FromResult(review(controls)) : throw new InvalidOperationException("Unexpected game session preview.");
+        public void RequireNoLaunchProfile(ProtectedSessionPreview plan) => throw new InvalidOperationException("Unexpected launch profile check.");
+        public Task<ProtectedSessionStatus> StartGameSessionAsync(GameSessionReview review) => throw new InvalidOperationException("Unexpected game session start.");
+        public Task<LaunchProfileEntry> SaveLaunchProfileAsync(GameSessionReview review) => throw new InvalidOperationException("Unexpected launch profile save.");
+        public Task<ProtectedSessionStatus> ReadGameSessionAsync(string sessionRoot) => throw new InvalidOperationException("Unexpected game session read.");
+        public Task<LaunchProfileEntry[]> ReadLaunchProfilesAsync() => Task.FromResult(Array.Empty<LaunchProfileEntry>());
+        public Task<string?> DisableLaunchProfileAsync(string root) => throw new InvalidOperationException("Unexpected launch profile change.");
+        public Task<ProtectedSessionStatus> StopGameSessionAsync(string sessionRoot) => throw new InvalidOperationException("Unexpected game session stop.");
+        public Task<ProtectedSessionStatus> RecoverGameSessionAsync(string sessionRoot) => throw new InvalidOperationException("Unexpected game session recovery.");
+        public Task<ProtectedSessionStatus> SwitchGameCoresAsync(string sessionRoot, string affinityMask) => throw new InvalidOperationException("Unexpected core switch.");
         public Task<TweakRecovery> ReadWindowsRecoveryAsync(bool fresh = false) => Task.FromResult(WindowsRecovery ?? throw new IOException("Controlled Windows recovery failure"));
         public static readonly TweakContext WindowsContext = new(new("fixture-pc", "fixture-user"), "fixture-store", 26200, "Professional");
         public Task<TweakCatalogResult> ReadWindowsTweakCatalogAsync(bool fresh = false) => Task.FromException<TweakCatalogResult>(new IOException("Controlled Windows catalog read failure"));
