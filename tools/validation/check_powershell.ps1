@@ -50,6 +50,88 @@ function Test-PowerShellControls {
     }
 }
 
+function Get-GovernorGateFixtureFailures([string]$Root, [string[]]$Files) {
+    $real = 'backend/scripts/GovernorOwnership.Common.ps1'
+    $fixture = 'tools/validation/Background/RestoreSimulation.Common.ps1'
+    $trees = @{}
+    foreach ($relative in $Files) {
+        $tokens = $null
+        $parseErrors = $null
+        $trees[$relative] = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $Root $relative), [ref]$tokens, [ref]$parseErrors)
+    }
+    $enter = $trees[$real].Find({ param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Enter-RooIndustriesGovernorGate' }, $true)
+    $release = $trees[$real].Find({ param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Exit-RooIndustriesGovernorGate' }, $true)
+    if ($null -eq $enter -or $null -eq $release) { return "${real}:1: GovernorGateFixture: the real Enter-RooIndustriesGovernorGate or Exit-RooIndustriesGovernorGate is missing." }
+    $returned = @($enter.Body.FindAll({ param($node) $node -is [System.Management.Automation.Language.ReturnStatementAst] -and $node.Pipeline.Extent.Text -match '^\$\w+$' -and $node.Pipeline.Extent.Text -ne '$null' }, $true) | ForEach-Object { $_.Pipeline.Extent.Text.Substring(1) })
+    $constructed = @($enter.Body.FindAll({ param($node) $node -is [System.Management.Automation.Language.AssignmentStatementAst] -and $node.Left -is [System.Management.Automation.Language.VariableExpressionAst] -and $returned -contains $node.Left.VariablePath.UserPath }, $true) |
+        ForEach-Object { $_.Right.FindAll({ param($node) $node -is [System.Management.Automation.Language.InvokeMemberExpressionAst] -and $node.Static -and $node.Member.Extent.Text -eq 'new' -and $node.Expression -is [System.Management.Automation.Language.TypeExpressionAst] }, $true) } |
+        ForEach-Object { $_.Expression.TypeName.FullName -as [type] } | Select-Object -Unique)
+    if ($constructed.Count -ne 1) { return "${real}:$($enter.Extent.StartLineNumber): GovernorGateFixture: could not find the one type the real governor gate returns." }
+    $gateType = $constructed[0]
+    $called = [Collections.Generic.SortedSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    foreach ($relative in @($Files | Where-Object { $_ -like 'backend/scripts/*' })) {
+        $gates = @($trees[$relative].FindAll({ param($node) $node -is [System.Management.Automation.Language.AssignmentStatementAst] -and $node.Left -is [System.Management.Automation.Language.VariableExpressionAst] -and $null -ne $node.Right.Find({ param($inner) $inner -is [System.Management.Automation.Language.CommandAst] -and $inner.GetCommandName() -eq 'Enter-RooIndustriesGovernorGate' }, $true) }, $true) | ForEach-Object { $_.Left.VariablePath.UserPath })
+        if ($relative -eq $real) { $gates += @($release.Parameters | ForEach-Object { $_.Name.VariablePath.UserPath }) }
+        foreach ($member in $trees[$relative].FindAll({ param($node) $node -is [System.Management.Automation.Language.MemberExpressionAst] -and $node.Expression -is [System.Management.Automation.Language.VariableExpressionAst] -and $gates -contains $node.Expression.VariablePath.UserPath }, $true)) {
+            [void]$called.Add($member.Member.Extent.Text)
+        }
+    }
+    foreach ($relative in $Files) {
+        if ($relative -eq $real) { continue }
+        foreach ($fake in $trees[$relative].FindAll({ param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Enter-RooIndustriesGovernorGate' }, $true)) {
+            $builds = $fake.Body.Find({ param($node) ($node -is [System.Management.Automation.Language.CommandAst] -and $node.GetCommandName() -eq 'New-FixtureGovernorGate') -or ($node -is [System.Management.Automation.Language.InvokeMemberExpressionAst] -and $node.Static -and $node.Member.Extent.Text -eq 'new' -and $node.Expression -is [System.Management.Automation.Language.TypeExpressionAst] -and ($node.Expression.TypeName.FullName -as [type]) -eq $gateType) }, $true)
+            if ($null -eq $builds) { '{0}:{1}: GovernorGateFixture: a fake Enter-RooIndustriesGovernorGate must return a {2} like the real gate; build it with New-FixtureGovernorGate.' -f $relative, $fake.Extent.StartLineNumber, $gateType.FullName }
+        }
+    }
+    $builder = if ($trees.ContainsKey($fixture)) { $trees[$fixture].Find({ param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'New-FixtureGovernorGate' }, $true) } else { $null }
+    if ($null -eq $builder) { return "${fixture}:1: GovernorGateFixture: New-FixtureGovernorGate is missing." }
+    $shell = [powershell]::Create()
+    try {
+        $null = $shell.AddScript($builder.Extent.Text + "`n" + $release.Extent.Text + "`n" + @'
+$script:Released = 0
+$script:Disposed = 0
+$script:Held = $true
+$gate = New-FixtureGovernorGate
+$counted = @($gate.PSObject.Methods | Where-Object { $_.MemberType -eq 'ScriptMethod' } | ForEach-Object { $_.Name })
+$failure = $null
+try { Exit-RooIndustriesGovernorGate $gate } catch { $failure = $_.Exception.Message }
+[pscustomobject]@{ type = $gate.GetType(); counted = $counted; failure = $failure; balanced = $script:Released -eq 1 -and $script:Disposed -eq 1 -and -not $script:Held }
+'@)
+        $observed = @($shell.Invoke())
+    } finally {
+        $shell.Dispose()
+    }
+    if ($observed.Count -ne 1) { return "${fixture}:$($builder.Extent.StartLineNumber): GovernorGateFixture: New-FixtureGovernorGate did not run." }
+    $observed = $observed[0]
+    if ($observed.type -ne $gateType) { '{0}:{1}: GovernorGateFixture: New-FixtureGovernorGate returns {2}, but the real gate is {3}.' -f $fixture, $builder.Extent.StartLineNumber, $observed.type, $gateType.FullName }
+    foreach ($name in $called) {
+        if ($observed.counted -notcontains $name) { '{0}:{1}: GovernorGateFixture: the backend calls {2} on the governor gate, but the fake gate does not count it.' -f $fixture, $builder.Extent.StartLineNumber, $name }
+    }
+    if ($observed.failure -or -not $observed.balanced) { '{0}:{1}: GovernorGateFixture: the real Exit-RooIndustriesGovernorGate did not release and dispose the fake gate exactly once. {2}' -f $fixture, $builder.Extent.StartLineNumber, $observed.failure }
+}
+
+function Test-GovernorGateFixtureControls {
+    $temporary = Join-Path ([IO.Path]::GetTempPath()) ('governor-gate-check-' + [Guid]::NewGuid().ToString('N'))
+    $copied = @('backend/scripts/GovernorOwnership.Common.ps1', 'tools/validation/Background/RestoreSimulation.Common.ps1')
+    $cases = @(
+        @{ File = 'backend/scripts/Caller.ps1'; Source = 'function Invoke-Caller { $gate = Enter-RooIndustriesGovernorGate; try {} finally { $gate.Close() } }'; Expected = '*the backend calls Close on the governor gate*' },
+        @{ File = 'tools/validation/Fake.ps1'; Source = 'function Enter-RooIndustriesGovernorGate { return [pscustomobject]@{} }'; Expected = 'tools/validation/Fake.ps1:1: GovernorGateFixture: *' }
+    )
+    try {
+        foreach ($relative in @($copied + @($cases | ForEach-Object { $_.File }))) { [void][IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName((Join-Path $temporary $relative))) }
+        foreach ($relative in $copied) { [IO.File]::Copy((Join-Path $root $relative), (Join-Path $temporary $relative)) }
+        foreach ($case in $cases) {
+            [IO.File]::WriteAllText((Join-Path $temporary $case.File), $case.Source, [Text.UTF8Encoding]::new($false))
+            $observed = @(Get-GovernorGateFixtureFailures -Root $temporary -Files @($copied + $case.File))
+            if (-not @($observed | Where-Object { $_ -like $case.Expected }).Count) {
+                "Negative control failed: $($case.File) did not produce $($case.Expected)"
+            }
+        }
+    } finally {
+        if ([IO.Directory]::Exists($temporary)) { [IO.Directory]::Delete($temporary, $true) }
+    }
+}
+
 $failures = [Collections.Generic.List[string]]::new()
 $parsed = 0
 $analyzed = 0
@@ -73,6 +155,8 @@ try {
         }
     }
     Test-PowerShellControls | ForEach-Object { $failures.Add($_) }
+    Get-GovernorGateFixtureFailures -Root $root -Files $files | ForEach-Object { $failures.Add($_) }
+    Test-GovernorGateFixtureControls | ForEach-Object { $failures.Add($_) }
 } catch {
     $failures.Add($_.Exception.Message)
 }
