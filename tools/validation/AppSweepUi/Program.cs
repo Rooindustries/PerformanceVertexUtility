@@ -29,6 +29,15 @@ if (args is ["governor-left-as-set"])
     return;
 }
 
+if (args is ["firmware-fixture", var uiFixture, var uiRoot]) { Console.WriteLine(FirmwarePageChecks.Prepare(uiFixture, uiRoot)); return; }
+
+if (args is ["firmware", var firmwareFixture])
+{
+    await FirmwarePageChecks.RunAsync(Check, firmwareFixture);
+    Console.WriteLine($"Completed {count} BIOS page checks.");
+    return;
+}
+
 if (args is ["update-install"])
 {
     await UpdateInstallChecks.RunAsync(Check);

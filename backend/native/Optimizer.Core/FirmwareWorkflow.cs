@@ -52,7 +52,7 @@ public sealed class FirmwareWorkflow
 
     public string Load()
     {
-        using var operation = OperationFiles.Lock(Path.Combine(_root, "operation"));
+        using var operation = Lock();
         var identity = _provider.ReadIdentity(); identity.Validate();
         var package = _provider.PackageFingerprint;
         if (string.IsNullOrWhiteSpace(package)) throw new InvalidDataException("The SCEWIN package has not been verified.");
@@ -76,7 +76,7 @@ public sealed class FirmwareWorkflow
 
     public string Review(string directory, IReadOnlyDictionary<string, string> selections)
     {
-        using var operation = OperationFiles.Lock(Path.Combine(_root, "operation"));
+        using var operation = Lock();
         var (session, script) = ReadSession(directory);
         if (File.Exists(Path.Combine(directory, "journal.json"))) throw new InvalidDataException("This export already has an import attempt. Load current settings before making another change.");
         VerifyIdentity(session, requireSameBoot: true);
@@ -94,7 +94,7 @@ public sealed class FirmwareWorkflow
 
     public FirmwareJournal Apply(string directory, string reviewedHash)
     {
-        using var operation = OperationFiles.Lock(Path.Combine(_root, "operation"));
+        using var operation = Lock();
         var (session, original, review) = ReadReview(directory, reviewedHash);
         var path = Path.Combine(directory, "journal.json");
         if (File.Exists(path))
@@ -139,7 +139,7 @@ public sealed class FirmwareWorkflow
 
     public FirmwareJournal Verify(string directory)
     {
-        using var operation = OperationFiles.Lock(Path.Combine(_root, "operation"));
+        using var operation = Lock();
         var journalPath = Path.Combine(directory, "journal.json");
         var journal = OperationFiles.Read<FirmwareJournal>(journalPath);
         var (session, original, review) = ReadReview(directory, journal.ReviewHash);
@@ -188,6 +188,15 @@ public sealed class FirmwareWorkflow
             return next;
         }
         catch { Directory.Delete(next, recursive: true); throw; }
+    }
+
+    private FileStream Lock()
+    {
+        try { return OperationFiles.Lock(Path.Combine(_root, "operation")); }
+        catch (IOException error) when (error.HResult == unchecked((int)0x80070020))
+        {
+            throw new IOException("Another BIOS read or write is still running. Wait for it to finish, then try again.", error);
+        }
     }
 
     private (FirmwareSession Session, FirmwareScript Script) ReadSession(string directory)
