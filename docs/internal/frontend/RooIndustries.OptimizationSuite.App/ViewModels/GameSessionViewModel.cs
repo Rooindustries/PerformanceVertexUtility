@@ -332,8 +332,8 @@ public partial class GameSessionViewModel : ObservableObject
     {
         await RefreshProfilesAsync();
         if (Busy || _review is not null || _sessionRoot is null && (SelectedLauncher is not null || !string.IsNullOrWhiteSpace(GamePath))) return;
-        if (SelectedSession is { } current && !GameSessionDisplay.Restored(current.Worker)) return;
         if (!await TryRefreshAsync()) return;
+        if (SelectedSession is { } current && !GameSessionDisplay.Restored(current.Worker)) return;
         if (Sessions.FirstOrDefault(entry => !GameSessionDisplay.Restored(entry.Worker)) is { } armed) SelectedSession = armed;
     }
 
