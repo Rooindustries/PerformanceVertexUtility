@@ -491,7 +491,7 @@ try {
                 $details = if ($failedReasons.Count -gt 0) { $failedReasons -join '; ' } else { $entry.reason }
                 $entry.processName + ' (PID ' + $entry.processId + '): ' + $details
             }) -join '; '
-            "Restore finished for $finishedCount app(s). $($pending.Count) app(s) still need attention: $attention." + $leftText + $closedText
+            "Restore finished for $finishedCount app(s). $($pending.Count) app(s) still need attention: $($attention.TrimEnd([char]'.'))." + $leftText + $closedText
         }
     } else {
         "Rollback preview completed. No process control changes were applied."

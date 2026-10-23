@@ -735,6 +735,7 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
         .Replace("Undo couldn't confirm", "Restore couldn't confirm", StringComparison.Ordinal)
         .Replace("Run Undo again..", "Run Undo again.", StringComparison.Ordinal)
         .Replace("Run Undo again.", profile ? "Restore again once that app closes; Apply unlocks when Restore finishes." : "Restore again once that app closes.", StringComparison.Ordinal)
+        .Replace("It resets when that app restarts.", profile ? "It resets when that app restarts; then Restore again to unlock Apply." : "It resets when that app restarts; then Restore again.", StringComparison.Ordinal)
         .Replace("Undo that change first", "Restore that change first", StringComparison.Ordinal);
 
     private static string ProcessSummary(string? json, string fallback)

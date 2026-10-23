@@ -63,6 +63,12 @@ function Get-RooIndustriesProcessOperationDirectories {
     }
 }
 
+function New-RooIndustriesDamagedOperation([string]$Path, [string]$Reason) {
+    $data = (Get-RooIndustriesLocalDataRoot).TrimEnd([char[]]'\/')
+    $shown = if ($Path.StartsWith($data, [StringComparison]::OrdinalIgnoreCase)) { $Path.Substring($data.Length).TrimStart([char[]]'\/') } else { $Path }
+    return [IO.InvalidDataException]::new('A saved change file is damaged: ' + $shown + ' (' + $Reason + ').')
+}
+
 function Read-RooIndustriesProcessOperationOwnership {
     $clock = [Diagnostics.Stopwatch]::StartNew()
     $claims = New-Object System.Collections.Generic.List[object]
@@ -84,15 +90,15 @@ function Read-RooIndustriesProcessOperationOwnership {
     foreach ($path in $journals) {
         $read = Read-RooIndustriesGovernorJson $path 800 $clock $true
         if ($read.state -eq 'missing') { continue }
-        if ($read.state -ne 'read') { throw [IO.InvalidDataException]::new('A saved process operation could not be read: ' + $read.message) }
+        if ($read.state -ne 'read') { throw (New-RooIndustriesDamagedOperation $path ('it could not be read: ' + $read.message)) }
         $journal = $read.data
         if (-not $read.objectRoot -or $journal -isnot [pscustomobject] -or ($journal.schemaVersion -isnot [int] -and $journal.schemaVersion -isnot [long]) -or $journal.schemaVersion -ne 1 -or
             $journal.status -isnot [string] -or $journal.status -cnotin @('applying','applied','needsReconciliation','restored','expired')) {
-            throw [IO.InvalidDataException]::new('A saved process operation has an unknown schema or state.')
+            throw (New-RooIndustriesDamagedOperation $path 'unknown schema or state')
         }
         if ($journal.status -cin @('restored','expired')) { continue }
         if ($journal.changes -isnot [array] -or $journal.preview -isnot [pscustomobject] -or $journal.preview.identity -isnot [pscustomobject]) {
-            throw [IO.InvalidDataException]::new('A saved process operation has no complete identity or change list.')
+            throw (New-RooIndustriesDamagedOperation $path 'no complete identity or change list')
         }
         $identity = $journal.preview.identity
         $creation = 0L
@@ -102,16 +108,16 @@ function Read-RooIndustriesProcessOperationOwnership {
             $identity.creationTimeFileTimeUtc -isnot [string] -or -not [long]::TryParse($identity.creationTimeFileTimeUtc, [ref]$creation) -or $creation -le 0 -or
             $executable -isnot [string] -or [string]::IsNullOrWhiteSpace($executable) -or -not [IO.Path]::IsPathRooted($executable) -or
             ([IO.Path]::DirectorySeparatorChar -eq '\' -and $executable -notmatch '^(?:[A-Za-z]:[\\/]|\\\\[^\\]+\\[^\\]+(?:\\|$))')) {
-            throw [IO.InvalidDataException]::new('A saved process operation has an invalid process identity.')
+            throw (New-RooIndustriesDamagedOperation $path 'invalid process identity')
         }
         $attempted = New-Object 'System.Collections.Generic.HashSet[string]'
         foreach ($change in $journal.changes) {
             if ($change -isnot [pscustomobject] -or $change.name -isnot [string] -or $change.status -isnot [string] -or
                 $change.status -cnotin @('pending','unchanged','applyIntent','applied','restoreIntent','restored','leftAsSet')) {
-                throw [IO.InvalidDataException]::new('A saved process operation has an unknown change state.')
+                throw (New-RooIndustriesDamagedOperation $path 'unknown change state')
             }
             $control = switch -CaseSensitive ($change.name) { 'priorityClass' { 'cpuPriority' } 'affinityMask' { 'affinity' } default { $change.name } }
-            if ($script:RooIndustriesGovernorAllControls -cnotcontains $control) { throw [IO.InvalidDataException]::new('A saved process operation has an unknown control.') }
+            if ($script:RooIndustriesGovernorAllControls -cnotcontains $control) { throw (New-RooIndustriesDamagedOperation $path 'unknown control') }
             if ($change.status -cin @('applyIntent','applied','restoreIntent') -or ($change.status -ceq 'pending' -and $journal.status -ceq 'applying')) {
                 [void]$attempted.Add($control)
             }
