@@ -1,4 +1,4 @@
-param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutRoot,[string]$ReceiptPath='',[string[]]$Scenario=@())
+param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutRoot,[string]$ReceiptPath='',[string[]]$Scenario=@(),[ValidateSet('default','harness-blocked')][string]$Group='default')
 $ErrorActionPreference='Stop'
 if($env:OS -ne 'Windows_NT' -or $PSVersionTable.PSVersion.Major -ne 5 -or -not[Environment]::Is64BitProcess){throw 'These required manual E2E gates need Windows PowerShell5.1 x64.'}
 foreach($command in 'Assert-FrameSourceSnapshot','Assert-ProtectedFrame','Assert-PlainAncestry','Get-HarnessPlainPath','Get-HarnessLongPath','Get-HarnessTree','Get-HarnessFileSha256'){
@@ -113,7 +113,7 @@ try{
  & (Join-Path $Source 'tools\validation\Background\Test-RestoreKeepsOtherValue.ps1') -Source $Source -OutRoot $legacy
  if(-not [IO.File]::Exists((Join-Path $legacy 'summary.json'))){throw 'Legacy group lacks its asserted completion artifact.'}
  $parameters=@{Source=$Source;OutRoot=$native;ActorExe=$actor;SourceCommit=$receipt.sourceCommit;OriginalSource=$originalSource;ReviewedSource=$reviewedSource}
- if($Scenario.Count){$parameters.Scenario=$Scenario}
+ if($Scenario.Count){$parameters.Scenario=$Scenario}else{$parameters.Group=$Group}
  & {. (Join-Path $Source 'tools\validation\Background\Test-RestoreSerialization.ps1') @parameters}
  $summary=Get-Content -LiteralPath (Join-Path $native 'serialization-summary.json') -Raw|ConvertFrom-Json
  if(-not$summary.passed -or @($summary.cases).Count -eq 0 -or $summary.actualCaseCount -ne $summary.expectedCaseCount -or @($summary.selectedTriples).Count -ne @($summary.cases).Count){throw 'Native group lacks asserted cleanup/completion.'}
@@ -134,5 +134,5 @@ finally{if($inputProbe){try{$inputProbe.Dispose()}catch{$cleanupError=$_.Excepti
 if($bodyError -and $cleanupError){throw [AggregateException]::new([Exception[]]@($bodyError,$cleanupError))}
 if($bodyError){[Runtime.ExceptionServices.ExceptionDispatchInfo]::Capture($bodyError).Throw()}
 if($cleanupError){[Runtime.ExceptionServices.ExceptionDispatchInfo]::Capture($cleanupError).Throw()}
-$null=New-HarnessText (Join-Path $directory 'gates.json') (@{sourceCommit=$receipt.sourceCommit;manifestSha256=$receipt.manifestSha256;frameId=$receipt.frameId;sourceFileCount=@($finalSource.files.PSObject.Properties).Count;originalSourceFileCount=$originalCount;reviewedSourceCommit=$inputs.reviewedSourceCommit;reviewedSourceFileCount=$reviewedCount;reviewedManifestSha256=$bindings[$reviewedManifestPath].sha256;serializationExpectedCount=$summary.expectedCaseCount;serializationActualCount=$summary.actualCaseCount;serializationTriples=$summary.selectedTriples;publishedFileCount=$publishedCount;inputFileIdentity=$inputEntries[0].identity;engine=$PSVersionTable.PSVersion.ToString();restoreSessionId=(Get-Process -Id $PID).SessionId;passed=$true;scope='Selected real backend serialization/provenance and output groups only; C6/UI8/media/both vision remain separate required gates';selectedScenarios=$Scenario}|ConvertTo-Json -Depth 15) 'restore-e2e-completion' 'frame'
+$null=New-HarnessText (Join-Path $directory 'gates.json') (@{sourceCommit=$receipt.sourceCommit;manifestSha256=$receipt.manifestSha256;frameId=$receipt.frameId;sourceFileCount=@($finalSource.files.PSObject.Properties).Count;originalSourceFileCount=$originalCount;reviewedSourceCommit=$inputs.reviewedSourceCommit;reviewedSourceFileCount=$reviewedCount;reviewedManifestSha256=$bindings[$reviewedManifestPath].sha256;serializationExpectedCount=$summary.expectedCaseCount;serializationActualCount=$summary.actualCaseCount;serializationGroup=$summary.group;serializationTriples=$summary.selectedTriples;publishedFileCount=$publishedCount;inputFileIdentity=$inputEntries[0].identity;engine=$PSVersionTable.PSVersion.ToString();restoreSessionId=(Get-Process -Id $PID).SessionId;passed=$true;scope='Selected real backend serialization/provenance and output groups only; C6/UI8/media/both vision remain separate required gates';selectedScenarios=$Scenario}|ConvertTo-Json -Depth 15) 'restore-e2e-completion' 'frame'
 'ROO_INDUSTRIES_RESTORE_E2E_GATES_COMPLETE'

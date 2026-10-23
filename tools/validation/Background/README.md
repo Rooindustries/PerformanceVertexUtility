@@ -156,7 +156,8 @@ and retain each export directory's original active Harness creation identity.
 `OriginalSource` remains the b0 interleaving input; it does not stand in for c50.
 
 The group refuses another user, machine, source frame or terminal session.
-`-Scenario` selects named native cases; its completion artifact states exactly
+`-Scenario` selects named native cases and `-Group` selects the `default` or
+`harness-blocked` group described below; the completion artifact states exactly
 which cases ran. It does not certify omitted cases or the whole release gate.
 
 `Test-RestoreSerialization.ps1` exercises real Windows controls and both actual
@@ -199,16 +200,24 @@ outside tampering. They require refusal, pending recovery and zero setters,
 then remove the original breakpoint and use the unchanged backup for a fresh
 positive Undo.
 
-The default authored selection has 84 scenario names and 672 serialization
-histories: the existing 622 plus five late-exit names across both bodies and
-all five controls (50). The 10 keeps-other-value and 10 output cases stay
-unchanged, making 692 top-level histories. Each of the 10 postwrite histories
-has two fresh-original producer legs, so the 50 new histories require 60
-producer legs. These counts describe authored selections, not completed runs.
-These are SOURCE-DERIVED counts, UNRUN until real Windows completion receipts
-exist. Explicit incompatible `-Control` fails. Selected runs record exact
-kind/control/scenario triples and expected/actual counts. No subset certifies
-the default grid, C6 or rendered proof.
+The serialization grid has 84 scenario names and 672 histories across both
+bodies and all five controls, split into two groups. The default group has the
+31 names that pass on real Windows: 278 histories, or 298 top-level histories
+with the 10 keeps-other-value and 10 output cases. The `harness-blocked` group
+(`-Group harness-blocked`) has the other 53 names and 394 histories, including
+the five late-exit names. They fail because of bugs in this test harness, not
+in restore: breakpoint callbacks can't reach the driver's helpers or the
+backend's live variables, the governor fixture registers its image under a
+`\\?\` path, the debug privilege lets the identity-denied case open the process
+anyway, and the late-exit histories don't record their ordering proof.
+
+The restore gate is incomplete until those are fixed. ROO-673 tracks the repair
+and moves each name back into the default group once it passes. Each of the 10
+postwrite histories has two fresh-original producer legs, so the 50 late-exit
+histories need 60 producer legs. Explicit incompatible `-Control` fails.
+Selected runs record their group, the exact kind/control/scenario triples and
+expected/actual counts. No subset certifies the default group, C6 or rendered
+proof.
 
 Late-exit histories stop the original only after the actual restore caller's
 execution identity check. They use breakpoints bound to the named Common
