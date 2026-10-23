@@ -1,4 +1,4 @@
-param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutRoot,[int]$Probes=60,[string[]]$Cases=@('timeout','killed','closed','rebooted','other-program','stale-journal','race','full'))
+param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutRoot,[int]$Probes=60,[string[]]$Cases=@('boundaries','timeout','killed','closed','rebooted','other-program','stale-journal','race','full'))
 $ErrorActionPreference='Stop'
 . (Join-Path $Source 'tools\validation\LoadTimes\CleanupOwnership.Common.ps1')
 Add-Type -Path (Join-Path $Source 'tools\validation\Background\Oracle.cs')
@@ -16,10 +16,10 @@ $finishing='The last apply is still finishing. Try again in a moment.'
 
 function Save($name,$value){[IO.File]::WriteAllText((Join-Path $directory ($name+'.json')),($value|ConvertTo-Json -Depth 45),$utf8)}
 function Own($p){$r=New-OwnedProcess $p;if($r){$owned.Add($r)};$r}
-function Fixtures($case){
+function Fixtures($case,[int]$count=$Probes){
  $folder=Join-Path $directory $case;[IO.Directory]::CreateDirectory($folder)|Out-Null
- @(for($i=0;$i -lt $Probes;$i++){
-  $path=Join-Path $folder ('RooCut'+$tag+$case.Substring(0,2)+$i.ToString('00')+'.exe');Copy-Item "$env:SystemRoot\System32\PING.EXE" $path
+ @(for($i=0;$i -lt $count;$i++){
+  $path=Join-Path $folder ('RooIndustriesCut'+$tag+$case.Substring(0,2)+$i.ToString('00')+'.exe');Copy-Item "$env:SystemRoot\System32\PING.EXE" $path
   $p=Start-Process $path -ArgumentList '-t 127.0.0.1' -WindowStyle Hidden -PassThru;$null=Own $p
   $p.PriorityClass='Normal';[RooIndustriesBackgroundOracle]::SetIo($p,2);[RooIndustriesBackgroundOracle]::SetMemory($p,5);$p
  })
@@ -58,6 +58,59 @@ function RestoreAll($fixtures,$before,$settings,$name,$keep=@{}){
 function StopFixtures($fixtures){foreach($p in $fixtures){Stop-OwnedProcess ($owned|Where-Object {$_.Identity.pid -eq $p.Id}|Select-Object -First 1)}}
 
 try {
+ if($Cases -contains 'boundaries'){
+  $applyPath=Join-Path $root 'backend\scripts\Apply-ProcessProfile.ps1';$commonPath=Join-Path $root 'backend\scripts\ProcessProfile.Common.ps1';$statePath=Join-Path $root 'backend\scripts\OperationState.Common.ps1'
+  $applyText=[IO.File]::ReadAllText($applyPath);$commonText=[IO.File]::ReadAllText($commonPath);$stateText=[IO.File]::ReadAllText($statePath);$boundaryFailures=@()
+  try {
+   $points=@('backup-before','backup-flushed','backup-after','backup-replacing','backup-replaced','output')+@('priorityClass','affinityMask','ioPriority','memoryPriority','gpuPriority'|ForEach-Object {$_+'-before';$_+'-written';$_+'-after'})
+   foreach($point in $points){
+    $name='boundary-'+$point;$fixtures=Fixtures $name 1;Profile $fixtures;$before=Before $fixtures;$settings=Settings $name
+    try {
+     $profilePath=Join-Path $root 'backend\profiles\game-session.profile.json';$profile=Get-Content -Raw $profilePath|ConvertFrom-Json
+     $mask=[long]$fixtures[0].ProcessorAffinity.ToInt64();$profile.rules[0].action|Add-Member affinityMask ($mask -band (-$mask));$profile.rules[0].action|Add-Member ioPriority 'VeryLow';$profile.rules[0].action|Add-Member gpuPriority 'BelowNormal'
+     [IO.File]::WriteAllText($profilePath,($profile|ConvertTo-Json -Depth 30),$utf8)
+     $gpuBefore=[RooIndustriesBackgroundOracle]::Gpu($fixtures[0]);$marker=Join-Path $settings 'checkpoint.txt'
+     $checkpoint="function Wait-RooIndustriesInterruptedBoundary([string]`$point){if(`$point -ceq '$point'){[IO.File]::WriteAllText('$($marker.Replace("'","''"))',`$point);while(`$true){Start-Sleep -Milliseconds 100}}}"
+     $instrumented=$applyText.Replace(". (Join-Path `$PSScriptRoot 'ProcessProfile.Common.ps1')",". (Join-Path `$PSScriptRoot 'ProcessProfile.Common.ps1')`r`n"+$checkpoint)
+     $instrumented=$instrumented.Replace('Write-RooIndustriesOperationJson $backupManifest $backupPath',"Wait-RooIndustriesInterruptedBoundary 'backup-before'; Write-RooIndustriesOperationJson `$backupManifest `$backupPath; Wait-RooIndustriesInterruptedBoundary 'backup-after'")
+     $instrumented=$instrumented.Replace('Write-RooIndustriesJsonOutput $envelope $OutputPath',"Wait-RooIndustriesInterruptedBoundary 'output'; Write-RooIndustriesJsonOutput `$envelope `$OutputPath")
+     [IO.File]::WriteAllText($applyPath,$instrumented,$utf8)
+     $start=$commonText.IndexOf('function Invoke-RooIndustriesProcessControlChange {');if($start -lt 0){throw 'The real process writer was not found'}
+     $tail=$commonText.Substring($start).Replace('switch ($control) {',"Wait-RooIndustriesInterruptedBoundary (`$control+'-before'); switch (`$control) {")
+     $tail=$tail.Replace('$actual = Get-RooIndustriesProcessControlReadback $Process $control',"Wait-RooIndustriesInterruptedBoundary (`$control+'-written'); `$actual = Get-RooIndustriesProcessControlReadback `$Process `$control")
+     $tail=$tail.Replace("`$Change.outcome = 'applied'","`$Change.outcome = 'applied'; Wait-RooIndustriesInterruptedBoundary (`$control+'-after')")
+     [IO.File]::WriteAllText($commonPath,($commonText.Substring(0,$start)+$tail),$utf8)
+     $stateInstrumented=$stateText.Replace('$stream.Flush($true)',"`$stream.Flush(`$true); Wait-RooIndustriesInterruptedBoundary 'backup-flushed'")
+     $stateInstrumented=$stateInstrumented.Replace('[IO.File]::Replace($temporary,$full,[System.Management.Automation.Language.NullString]::Value)',"Wait-RooIndustriesInterruptedBoundary 'backup-replacing'; [IO.File]::Replace(`$temporary,`$full,[System.Management.Automation.Language.NullString]::Value); Wait-RooIndustriesInterruptedBoundary 'backup-replaced'")
+     [IO.File]::WriteAllText($statePath,$stateInstrumented,$utf8)
+     $app=StartApply $settings ($name+'-apply');$script=ScriptOf $app;$deadline=[DateTime]::UtcNow.AddSeconds(120)
+     while(-not(Test-Path -LiteralPath $marker)){if($script.process.HasExited -or [DateTime]::UtcNow -gt $deadline){throw ('The real apply never reached '+$point)};Start-Sleep -Milliseconds 10}
+     Stop-OwnedProcess $app;Stop-OwnedProcess $script;$null=$app.process.WaitForExit(15000);$null=$script.process.WaitForExit(15000)
+     [IO.File]::WriteAllText($applyPath,$applyText,$utf8);[IO.File]::WriteAllText($commonPath,$commonText,$utf8);[IO.File]::WriteAllText($statePath,$stateText,$utf8)
+     $atCut=Read $fixtures[0];Save ($name+'-cut') @{point=$point;before=$before[$fixtures[0].Id];after=$atCut;gpuBefore=$gpuBefore;gpuAfter=[RooIndustriesBackgroundOracle]::Gpu($fixtures[0])}
+     if($point -match '^(priorityClass|affinityMask|ioPriority|memoryPriority)-(before|written|after)$'){
+      $control=$Matches[1];$position=$Matches[2];$wanted=switch($control){'priorityClass'{'BelowNormal'};'affinityMask'{$mask -band (-$mask)};'ioPriority'{0};'memoryPriority'{2}}
+      $expected=if($position -eq 'before'){$before[$fixtures[0].Id][$control]}else{$wanted}
+      if([string]$atCut[$control] -cne [string]$expected){throw ('The cut did not observe the real '+$control+' write at '+$point)}
+     }
+     if($point -match '^gpuPriority-(before|written|after)$'){
+      $expected=if($Matches[1] -eq 'before'){$gpuBefore}else{1}
+      if([RooIndustriesBackgroundOracle]::Gpu($fixtures[0]) -ne $expected){throw ('The cut did not observe the real GPU priority write at '+$point)}
+     }
+     if($point -in 'backup-before','backup-flushed'){
+      $inspect=Service 'inspect' $settings ($name+'-relaunch');if($inspect.pending -or $inspect.recovery -or -not(Same $atCut $before[$fixtures[0].Id])){throw 'An apply killed before its backup left changes or blocked Apply'}
+     }else{
+      $null=Offered $settings ($name+'-relaunch');$null=RestoreAll $fixtures $before $settings ($name+'-restore')
+      if([RooIndustriesBackgroundOracle]::Gpu($fixtures[0]) -ne $gpuBefore){throw ('Restore changed the original GPU priority at '+$point)}
+     }
+     $results[$name]='passed'
+    } catch {$boundaryFailures+=($point+': '+$_.Exception.Message);$results[$name]=$_.Exception.Message}
+    finally {StopFixtures $fixtures;[IO.File]::WriteAllText($applyPath,$applyText,$utf8);[IO.File]::WriteAllText($commonPath,$commonText,$utf8);[IO.File]::WriteAllText($statePath,$stateText,$utf8)}
+   }
+   Save 'boundaries' $results
+   if($boundaryFailures.Count){throw ($boundaryFailures -join '; ')}
+  } finally {[IO.File]::WriteAllText($applyPath,$applyText,$utf8);[IO.File]::WriteAllText($commonPath,$commonText,$utf8);[IO.File]::WriteAllText($statePath,$stateText,$utf8)}
+ }
  if($Cases -contains 'timeout'){
   $fixtures=Fixtures 'timeout';Profile $fixtures;$before=Before $fixtures;$settings=Settings 'timeout'
   try {
@@ -121,10 +174,16 @@ try {
   [IO.File]::WriteAllText($journal,(@{path=(Join-Path $folder 'backup.json');generation=$generationId}|ConvertTo-Json),$utf8)
   $empty=Service 'inspect' $settings 'stale-journal-unstarted';$state=State $settings;Save 'stale-journal-unstarted-state' $state
   if($empty.pending -or $state.journal -or (Test-Path $folder) -or $state.archived.Count -ne 1){throw 'A journal whose apply changed nothing was not cleared'}
-  $outside=Join-Path $directory 'stale-journal-outside.json';[IO.File]::WriteAllText($outside,'{"actionId":"performance.applyProfile"}',$utf8);$outsideHash=(Get-FileHash $outside).Hash
+  $outside=Join-Path $directory 'outside-backup.json';[IO.File]::WriteAllText($outside,'{"actionId":"performance.applyProfile"}',$utf8);$outsideHash=(Get-FileHash $outside).Hash
   [IO.File]::WriteAllText($journal,(@{path=$outside;generation=$generationId}|ConvertTo-Json),$utf8)
   $foreign=Service 'inspect' $settings 'stale-journal-outside';$state=State $settings;Save 'stale-journal-outside-state' $state
   if($foreign.pending -or $state.journal -or $state.archived.Count -ne 2 -or (Get-FileHash $outside).Hash -ne $outsideHash){throw 'A journal naming a file outside its folder was not set aside'}
+  $invalidJournals=@('null','{}',(@{path=$null;generation=$generationId}|ConvertTo-Json),(@{path=(Join-Path $folder 'backup.json');generation=$null}|ConvertTo-Json),'{"path":"unused","generation":"old-version"}',(@{path='unused';generation=$generationId;schemaVersion=2}|ConvertTo-Json))
+  for($i=0;$i -lt $invalidJournals.Count;$i++){
+   [IO.File]::WriteAllText($journal,$invalidJournals[$i],$utf8);$hash=(Get-FileHash $journal).Hash;$archivedBefore=@((State $settings).archived)
+   $invalid=Service 'inspect' $settings ('stale-journal-shape-'+$i);$state=State $settings;$newArchives=@($state.archived|Where-Object {$_ -notin $archivedBefore})
+   if($invalid.pending -or $invalid.recovery -or $state.journal -or $newArchives.Count -ne 1 -or (Get-FileHash (Join-Path $settings $newArchives[0])).Hash -ne $hash){throw ('An invalid journal was not kept intact: '+$invalidJournals[$i])}
+  }
   $results['stale-journal']='passed'
  }
  if($Cases -contains 'race'){

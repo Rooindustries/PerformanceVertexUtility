@@ -18,7 +18,7 @@ def main():
     parser.add_argument('--host', default=os.environ.get('ROO_TEST_SSH_HOST'))
     parser.add_argument('--expected-machine', default=os.environ.get('ROO_TEST_COMPUTER'))
     parser.add_argument('--receipt', type=Path, required=True)
-    parser.add_argument('--scenario', required=True, choices=['build', 'presets', 'placement-origins', 'direction', 'game-memory', 'limits-memory', 'identity', 'memory-controls', 'memory-ownership', 'fix-round', 'review2', 'priority', 'games', 'guides', 'services', 'background-ui', 'recovery-ui', 'invalid-recovery-ui', 'recovery-slot', 'interrupted-apply', 'settings-corruption', 'gpu-release', 'memory', 'install'])
+    parser.add_argument('--scenario', required=True, choices=['build', 'presets', 'placement-origins', 'direction', 'game-memory', 'limits-memory', 'identity', 'memory-controls', 'memory-ownership', 'fix-round', 'review2', 'priority', 'games', 'guides', 'services', 'background-ui', 'recovery-ui', 'invalid-recovery-ui', 'recovery-slot', 'interrupted-apply', 'interrupted-apply-ui', 'settings-corruption', 'gpu-release', 'memory', 'install'])
     parser.add_argument('--out-root')
     parser.add_argument('--arguments', default='{}')
     args = parser.parse_args()
@@ -30,7 +30,7 @@ def main():
     output = args.out_root or receipt['runRoot'] + '\\evidence'
     fields = {'Source': source, 'OutRoot': output}
     fields.update(json.loads(args.arguments))
-    scripts = {'build': 'Build-Merged.ps1', 'memory': 'Measure-MemoryBaseline.ps1', 'memory-ownership': 'Test-MemoryOwnership.ps1', 'fix-round': 'Test-FixRound.ps1', 'review2': 'Test-Review2.ps1', 'recovery-slot': 'Test-RecoverySlot.ps1', 'interrupted-apply': 'Test-InterruptedApply.ps1', 'settings-corruption': 'Test-SettingsCorruption.ps1', 'gpu-release': 'Test-GpuRelease.ps1'}
+    scripts = {'build': 'Build-Merged.ps1', 'memory': 'Measure-MemoryBaseline.ps1', 'memory-ownership': 'Test-MemoryOwnership.ps1', 'fix-round': 'Test-FixRound.ps1', 'review2': 'Test-Review2.ps1', 'recovery-slot': 'Test-RecoverySlot.ps1', 'interrupted-apply': 'Test-InterruptedApply.ps1', 'interrupted-apply-ui': 'Test-InterruptedApplyUi.ps1', 'settings-corruption': 'Test-SettingsCorruption.ps1', 'gpu-release': 'Test-GpuRelease.ps1'}
     if args.scenario in ('presets', 'placement-origins', 'direction', 'game-memory', 'limits-memory', 'identity', 'memory-controls'):
         script = 'Invoke-BackgroundScenario.ps1'
         fields['Scenario'] = args.scenario
@@ -49,7 +49,7 @@ def main():
         script = 'tools/validation/Background/' + script
     if args.scenario == 'memory':
         fields['FocusSamples'] = True
-    minutes = 35 if args.scenario == 'memory' else 20 if args.scenario == 'interrupted-apply' else 10
+    minutes = 35 if args.scenario == 'memory' else 20 if args.scenario.startswith('interrupted-apply') else 10
     try:
         if args.scenario == 'install':
             install_spec = importlib.util.spec_from_file_location('update_manual_install', REPO / 'tools/validation/Update/run_manual_install.py')

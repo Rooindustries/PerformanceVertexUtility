@@ -108,6 +108,24 @@ vary a mid-session release and subsequent re-restraint, checking the original
 GPU value independently after each restore. Manual update failures with automatic
 downloads off must invite another Download, without claiming a scheduled retry.
 
+`interrupted-apply` cuts a Lower apply off part way through 60 owned probes: through
+the app's cancellation path, by killing the app and its script, and by closing the app
+while the script keeps running. A second Apply must be refused until that script ends.
+Relaunch after the script ends must offer Restore, and Restore must return each probe's CPU priority,
+affinity, I/O and memory priority to the exact original. It also covers the probes
+closing before Restore (it says so and finishes), another program changing a priority
+after the apply (Restore keeps it), a broken, stale or misplaced apply journal (set
+aside with its bytes kept, or cleared when nothing changed), two applies at once (one
+restore point), the timing of a full apply, and an empty `backend\state`. The
+`boundaries` case pauses before and after the real CPU, affinity, I/O, memory and GPU
+writes, backup creation and replacement, and result output. The journal cases also
+check missing fields, null values and unknown versions. Pass
+`--arguments '{"Cases":["timeout"]}'` to run named cases. `interrupted-apply-ui`
+repeats the cut against a built app stage (`AppStage`, from `Build-Release.ps1
+-UpdateFeedUrl ''`) and captures the Background apps card: `Label` `before` expects no
+Restore, `after` expects the offer, clicks Restore, checks every probe and records the
+interaction with ffmpeg.
+
 Direction checks must catch Windows CPU enum values being mistaken for priority
 order, a low CPU value suppressing independently needed I/O or memory changes,
 and a fresh value becoming lower between preview and write. Idle / I/O VeryLow /

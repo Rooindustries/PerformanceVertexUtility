@@ -41,9 +41,10 @@ These must hold on every commit of `main`. Each one names the code that enforces
      - Registry tweaks commit in one registry transaction together with the recovery state that holds each original value (`RegistryTweakStore.CommitRegistry` in `RegistryTweaks.cs`).
      - Services, features, power, file permissions and other controls write a pending journal before the first change. If a step fails, rollback is attempted. If rollback can't finish (for example while Windows servicing waits for a restart), the journal stays and the app asks for recovery (`RegistryTweakStore.Commit`, `ControlTweaks.cs`).
      - Process controls save a journal with each original value before the first write, and record each write's intent before making it (`ProcessControlEngine.Apply` and `Execute`).
+     - Process profile applies write their backup, with every planned control marked as theirs, before the first change, to a path the app records before the script starts. An apply that is cut off, or whose result is lost, is offered for Restore on the next page load (`Apply-ProcessProfile.ps1 -RecoveryJournal`, `LiveDataService.SettleProcessApply`).
      - Leftover cleanup backs each entry up before deleting it (`FileCleanupEngine.Apply`, `RegistryCleanupEngine.Apply`).
      - Harness modules write `backup.json` before applying (`New-ModuleBackup`).
-   - Checked by: `tools/validation/Tweaks`, `tools/validation/OptimizerCore` (`Test-OptimizerCore.ps1`), `tools/validation/AppSweepUi`, `Test-LegacyModuleRollback.ps1`.
+   - Checked by: `tools/validation/Tweaks`, `tools/validation/OptimizerCore` (`Test-OptimizerCore.ps1`), `tools/validation/AppSweepUi`, `Test-LegacyModuleRollback.ps1`, `tools/validation/Background/Test-InterruptedApply.ps1`.
 3. **Undo restores the exact prior value.** Undo writes back the saved original, with the same value kind and data, and checks it. If another program changed the setting after we applied ours, undo keeps that program's value and says which setting it left.
    - Enforced by:
      - Windows tweaks restore the saved original and read it back. DWORDs round-trip bit for bit, and a setting changed by someone else is reported as left changed (`TweakComposition.Resolve`, `LeftAsChanged`, the readback in `CommitRegistry`).

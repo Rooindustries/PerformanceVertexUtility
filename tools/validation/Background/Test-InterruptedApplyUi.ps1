@@ -35,7 +35,7 @@ try {
  & $dotnet publish (Join-Path $Source 'tools\validation\ClientBoundary\ClientBoundary.csproj') -c Release -p:UseSharedCompilation=false -r win-x64 --self-contained false -o (Join-Path $directory 'probe') *> (Join-Path $directory 'probe-build.log')
  if($LASTEXITCODE){throw 'Client probe build failed'}
  $tag=[Guid]::NewGuid().ToString('N').Substring(0,6);$folder=Join-Path $directory 'fixtures';[IO.Directory]::CreateDirectory($folder)|Out-Null
- $fixtures=@(for($i=0;$i -lt $Probes;$i++){$path=Join-Path $folder ('RooCutUi'+$tag+$i.ToString('00')+'.exe');Copy-Item "$env:SystemRoot\System32\PING.EXE" $path;$p=Start-Process $path -ArgumentList '-t 127.0.0.1' -WindowStyle Hidden -PassThru;$null=Own $p;$p.PriorityClass='Normal';[RooIndustriesBackgroundOracle]::SetIo($p,2);[RooIndustriesBackgroundOracle]::SetMemory($p,5);$p})
+ $fixtures=@(for($i=0;$i -lt $Probes;$i++){$path=Join-Path $folder ('RooIndustriesCutUi'+$tag+$i.ToString('00')+'.exe');Copy-Item "$env:SystemRoot\System32\PING.EXE" $path;$p=Start-Process $path -ArgumentList '-t 127.0.0.1' -WindowStyle Hidden -PassThru;$null=Own $p;$p.PriorityClass='Normal';[RooIndustriesBackgroundOracle]::SetIo($p,2);[RooIndustriesBackgroundOracle]::SetMemory($p,5);$p})
  $before=@{};foreach($p in $fixtures){$before[$p.Id]=Read $p};Save 'before' @($before.Values)
  $profile=[Text.Encoding]::UTF8.GetString($profileBytes).TrimStart([char]0xfeff)|ConvertFrom-Json;$profile.profileId='roo655-interrupted-apply-ui';$profile.foregroundGame.processNames=@();$profile.targetGames=@()
  $profile.rules=@([pscustomobject]@{ruleId='fixture';enabled=$true;match=@{processNames=@($fixtures|ForEach-Object {$_.ProcessName+'.exe'})};action=@{actionType='setPriority';priorityClass='BelowNormal'}})
