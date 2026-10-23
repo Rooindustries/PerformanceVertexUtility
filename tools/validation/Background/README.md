@@ -131,7 +131,9 @@ The journal cases also check missing fields, null values and unknown versions. P
 repeats the cut against a built app stage (`AppStage`, from `Build-Release.ps1
 -UpdateFeedUrl ''`) and captures the Background apps card: `Label` `before` expects no
 Restore, `after` expects the offer, clicks Restore, checks every probe and records the
-interaction with ffmpeg.
+interaction with ffmpeg. When Restore keeps the one control in flight at the cut ("Restore
+needs attention"), it checks every other probe first, closes that probe and requires the
+next Restore to finish and unlock Apply.
 
 `Test-InterruptedApplyJournal.ps1 -Out <dir>` runs on Linux or Windows without touching
 real processes. It runs the real `Apply-ProcessProfile.ps1` with a fixed preview and

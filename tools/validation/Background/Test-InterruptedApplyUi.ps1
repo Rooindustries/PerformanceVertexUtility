@@ -70,12 +70,21 @@ try {
   $null=WaitFor {@(Texts) -contains "Last apply didn't finish"} 20 'interrupted apply notice'
   Save 'offer' @{restoreEnabled=$true;applyEnabled=(ProcessButton 'Apply').Current.IsEnabled;stillChanged=(Changed $fixtures).Count;pointer=(Test-Path -LiteralPath $pointer);journal=(Test-Path -LiteralPath $journal)}
   Start-Sleep 3;Shot 'offer';Activate $restore
-  $null=WaitFor {-not(Test-Path -LiteralPath $pointer) -and (ProcessButton 'Apply').Current.IsEnabled} 90 'restored'
-  $after=@{};foreach($p in $fixtures){$now=Read $p;$after[[string]$p.Id]=$now;foreach($field in 'priorityClass','affinityMask','ioPriority','memoryPriority'){if([string]$now.$field -cne [string]$before[$p.Id].$field){throw ('UI restore left '+$p.ProcessName+' '+$field+' at '+$now.$field)}}}
+  $outcome=WaitFor {if(-not(Test-Path -LiteralPath $pointer) -and (ProcessButton 'Apply').Current.IsEnabled){'restored'}elseif(@(Texts) -contains 'Restore needs attention'){'unconfirmed'}} 90 'restore result'
+  if($outcome -eq 'unconfirmed'){
+   $left=@($fixtures|Where-Object {$p=$_;$now=Read $p;@('priorityClass','affinityMask','ioPriority','memoryPriority'|Where-Object {[string]$now.$_ -cne [string]$before[$p.Id].$_}).Count})
+   if($left.Count -ne 1 -or -not(Test-Path -LiteralPath $pointer) -or (ProcessButton 'Apply').Current.IsEnabled -or -not(@(Texts) -match [regex]::Escape($left[0].ProcessName+'.exe')).Count){throw ('Restore kept more than the one control in flight at the cut: '+(@($left|ForEach-Object {$_.ProcessName}) -join ', '))}
+   Save 'unconfirmed' @{process=$left[0].ProcessName;state=(Read $left[0]);applyEnabled=$false;pointer=$true}
+   Start-Sleep 3;Shot 'unconfirmed'
+   Stop-OwnedProcess ($owned|Where-Object {$_.Identity.pid -eq $left[0].Id}|Select-Object -First 1);$null=$left[0].WaitForExit(15000)
+   Activate (WaitFor {$b=ProcessButton 'Restore';if($b.Current.IsEnabled){$b}} 45 'Restore offered after the app closed')
+   $null=WaitFor {-not(Test-Path -LiteralPath $pointer) -and (ProcessButton 'Apply').Current.IsEnabled} 90 'restored after the app closed'
+  }
+  $after=@{};foreach($p in $fixtures){if($p.HasExited){continue};$now=Read $p;$after[[string]$p.Id]=$now;foreach($field in 'priorityClass','affinityMask','ioPriority','memoryPriority'){if([string]$now.$field -cne [string]$before[$p.Id].$field){throw ('UI restore left '+$p.ProcessName+' '+$field+' at '+$now.$field)}}}
   Save 'restored' $after;Start-Sleep 3;Shot 'restored'
   if(-not$recorder.process.WaitForExit(60000)){throw 'Recording did not finish'}
  }
- Save 'done' @{status='passed';label=$Label;cut=$cut}
+ Save 'done' @{status='passed';label=$Label;cut=$cut;unconfirmed=($outcome -eq 'unconfirmed')}
 } catch {if($window){try{Shot 'failure'}catch{}};Save 'failure' @{error=$_.Exception.Message;stack=$_.ScriptStackTrace};throw}
 finally {
  if($app){Stop-OwnedValidationApp $app $receipt}
