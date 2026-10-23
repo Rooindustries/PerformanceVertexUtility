@@ -52,6 +52,13 @@ if (args is ["revisit"])
     return;
 }
 
+if (args is ["cleanup-run"])
+{
+    await CleanupRunChecks.RunAsync(Check);
+    Console.WriteLine($"Completed {count} leftover cleanup run checks.");
+    return;
+}
+
 ControlRead Read<T>(T value) => ControlRead.From(value);
 var error = new ApiError("fixture", "win32", 5, "read", "Controlled affinity read failure");
 Dictionary<string, ControlRead> Controls(ControlRead cpuSets, ControlRead affinity) => new()
@@ -900,21 +907,26 @@ if (args is [] or ["responses"] or ["cleanup"] or ["race"])
         "A late removal-route result cannot attach to a newly selected app");
 
     var scanA1 = new TaskCompletionSource<LeftoverScan?>(TaskCreationOptions.RunContinuationsAsynchronously);
-    var scanB = new TaskCompletionSource<LeftoverScan?>(TaskCreationOptions.RunContinuationsAsynchronously);
     var scanA2 = new TaskCompletionSource<LeftoverScan?>(TaskCreationOptions.RunContinuationsAsynchronously);
     var aCalls = 0;
-    App.Live.LeftoverScan = id => id == appB.AppId ? scanB.Task : ++aCalls == 1 ? scanA1.Task : scanA2.Task;
+    var bCalls = 0;
+    App.Live.LeftoverScan = id =>
+    {
+        if (id != appB.AppId) return ++aCalls == 1 ? scanA1.Task : scanA2.Task;
+        bCalls++;
+        return Task.FromResult<LeftoverScan?>(EmptyScan(id));
+    };
     cleanup.SelectedApp = appA;
     var firstA = cleanup.ScanLeftoversCommand.ExecuteAsync(null);
     cleanup.SelectedApp = appB;
-    var currentB = cleanup.ScanLeftoversCommand.ExecuteAsync(null);
+    _ = cleanup.ScanLeftoversCommand.ExecuteAsync(null);
     cleanup.SelectedApp = appA;
-    var currentA = cleanup.ScanLeftoversCommand.ExecuteAsync(null);
+    _ = cleanup.ScanLeftoversCommand.ExecuteAsync(null);
+    Check(cleanup.ScanBusy && aCalls == 1 && bCalls == 0, "No B scan or newer A scan starts while the old A scan runs");
     scanA1.SetResult(EmptyScan(appA.AppId!));
     await firstA;
-    scanB.SetResult(EmptyScan(appB.AppId!));
-    await currentB;
-    Check(cleanup.ScanBusy, "Old A and B completions cannot clear the newer A busy state");
+    Check(!cleanup.ScanBusy && !cleanup.LeftoverScanCompleted, "The old A scan unlocks the buttons when it ends without completing the newer A review");
+    var currentA = cleanup.ScanLeftoversCommand.ExecuteAsync(null);
     scanA2.SetResult(new LeftoverScan
     {
         AppId = appA.AppId,
@@ -1141,6 +1153,7 @@ Check(RooIndustries.OptimizationSuite.Services.BackendScriptPolicy.Timeout(@"C:\
 Check(RooIndustries.OptimizationSuite.Services.BackendScriptPolicy.Timeout(@"C:\x\backend\scripts\Get-BugReportSpecs.ps1") == TimeSpan.FromSeconds(45) && RooIndustries.OptimizationSuite.Services.BackendScriptPolicy.StopWholeTree(@"C:\x\backend\scripts\Get-BugReportSpecs.ps1"),
     "Other backend scripts keep the 45 second limit and stop their whole process tree");
 await BulkRemovalChecks.RunAsync(Check);
+await CleanupRunChecks.RunAsync(Check);
 await RevisitChecks.RunAsync(Check);
 await BugReportChecks.RunAsync(Check);
 await UpdateInstallChecks.RunAsync(Check);
