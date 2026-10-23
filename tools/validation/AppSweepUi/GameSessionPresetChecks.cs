@@ -59,6 +59,10 @@ static class GameSessionPresetChecks
             edited.Selected = edited.Options[0];
             check(model.SelectedPreset is null && model.PresetPlaceholder == LaunchPresetCatalog.Custom, "Putting a setting back keeps Custom until a preset is picked again");
             model.GamePath = Path.Combine(fixtures, "game.exe"); model.AcceptLauncherScope = true; model.KeepArmed = true;
+            await model.PreviewCommand.ExecuteAsync(null);
+            check(model.CanStart && !model.ReviewSummary.Contains("Preset:", StringComparison.Ordinal), "A custom review makes no preset claim even when the values happen to match one");
+            model.SelectedPreset = picked;
+            check(!model.CanStart && model.ReviewSummary.Length == 0, "Picking a preset after a custom review requires a new review even when its values are identical");
             foreach (var setting in model.Settings)
             {
                 model.SelectedPreset = picked;
