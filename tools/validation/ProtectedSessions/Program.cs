@@ -5,6 +5,7 @@ using Microsoft.Win32;
 using RooIndustries.Optimizer;
 
 if(args is ["--fixture-cleanup-checks",var cleanupFrame]) { FixtureCleanupChecks.Run(cleanupFrame); return; }
+if(args is ["--runtime-root",var runtimeReceipt]) { File.WriteAllText(runtimeReceipt,System.Runtime.InteropServices.RuntimeEnvironment.GetRuntimeDirectory()); return; }
 if(args is ["run",var cleanupHost]) { FixtureCleanupChecks.Sentinel(); return; }
 if(args is ["watch",var cleanupWatch]) { FixtureCleanupChecks.Sentinel(); return; }
 if(args is ["--cleanup-sentinel",var privateSentinelFrame,var privateSentinel]) { FixtureCleanupChecks.Sentinel(); return; }

@@ -29,7 +29,6 @@ static class LaunchProfileChecks
     {
         var start = new ProcessStartInfo(path) { UseShellExecute = false, CreateNoWindow = true };
         foreach (var argument in arguments) start.ArgumentList.Add(argument);
-        start.Environment["DOTNET_ROOT_X64"] = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".dotnet");
         return Process.Start(start) ?? throw new InvalidOperationException("Owned fixture did not start.");
     }
     static ulong Affinity(Process process)
@@ -63,25 +62,35 @@ static class LaunchProfileChecks
 
     public static async Task CleanupFailure(string repo)
     {
-        var start = new ProcessStartInfo(Environment.ProcessPath!) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
-        if (string.Equals(Path.GetFileNameWithoutExtension(Environment.ProcessPath), "dotnet", StringComparison.OrdinalIgnoreCase)) start.ArgumentList.Add(typeof(LaunchProfileChecks).Assembly.Location);
-        start.ArgumentList.Add(repo); start.ArgumentList.Add("--launch-profile-cleanup-fault");
-        using var child = Process.Start(start)!;
-        var output = child.StandardOutput.ReadToEndAsync(); var error = child.StandardError.ReadToEndAsync();
-        await child.WaitForExitAsync();
-        var stdout = await output; var stderr = await error;
-        Console.WriteLine(stdout);
-        if (!stderr.Contains("Deliberate profile assertion failure", StringComparison.Ordinal)) Console.WriteLine(stderr);
-        Check(child.ExitCode != 0 && stderr.Contains("Deliberate profile assertion failure", StringComparison.Ordinal), "A cleanup error preserves the original failing assertion");
-        var receipt = stdout.Split('\n').Single(line => line.StartsWith("Cleanup receipt: ", StringComparison.Ordinal))["Cleanup receipt: ".Length..];
-        using var document = JsonDocument.Parse(receipt);
-        var root = document.RootElement.GetProperty("root").GetString()!;
-        using var markers = Registry.LocalMachine.OpenSubKey(PolicyRootSecurity.MarkerKey);
-        Check(!Directory.Exists(root) && markers?.GetValue(PolicyRootSecurity.MarkerName(Path.Combine(root, "operations"))) is null && NoLaunchPolicy(), "A failing scenario still removes its fixture folder, marker and launch policy");
-        Check(document.RootElement.GetProperty("tasks").EnumerateArray().All(task => Schtasks("/Query", "/TN", task.GetString()!).Exit != 0), "A failing scenario leaves no scheduled task behind");
+        foreach (var (mode, expected) in new[] { ("--launch-profile-cleanup-fault", "Deliberate profile assertion failure"), ("--launch-profile-setup-fault", "System.IO.FileNotFoundException"), ("--launch-profile-readiness-fault", "Deliberate standalone readiness failure") })
+        {
+            var start = new ProcessStartInfo(Environment.ProcessPath!) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
+            if (string.Equals(Path.GetFileNameWithoutExtension(Environment.ProcessPath), "dotnet", StringComparison.OrdinalIgnoreCase)) start.ArgumentList.Add(typeof(LaunchProfileChecks).Assembly.Location);
+            start.ArgumentList.Add(repo); start.ArgumentList.Add(mode);
+            using var child = Process.Start(start)!;
+            var output = child.StandardOutput.ReadToEndAsync(); var error = child.StandardError.ReadToEndAsync();
+            await child.WaitForExitAsync();
+            var stdout = await output; var stderr = await error;
+            Console.WriteLine(stdout);
+            if (!stderr.Contains(expected, StringComparison.Ordinal)) Console.WriteLine(stderr);
+            Check(child.ExitCode != 0 && stderr.Contains(expected, StringComparison.Ordinal), mode + " preserves the original failure");
+            var receipt = stdout.Split('\n').Single(line => line.StartsWith("Cleanup receipt: ", StringComparison.Ordinal))["Cleanup receipt: ".Length..];
+            using var document = JsonDocument.Parse(receipt);
+            var root = document.RootElement.GetProperty("root").GetString()!;
+            using var markers = Registry.LocalMachine.OpenSubKey(PolicyRootSecurity.MarkerKey);
+            var bin = Path.Combine(repo, "tools", "validation", "ProtectedSessions", "bin", "publish");
+            Check(!Directory.Exists(root) && markers?.GetValue(PolicyRootSecurity.MarkerName(Path.Combine(root, "operations"))) is null && NoLaunchPolicy() &&
+                !File.Exists(Path.Combine(bin, "RooIndustriesProfileGame.exe")) && !File.Exists(Path.Combine(bin, "RooIndustriesProfileLauncher.exe")), "A failing scenario still removes its fixture copies, folder, marker and launch policy");
+            Check(document.RootElement.GetProperty("tasks").EnumerateArray().All(task => Schtasks("/Query", "/TN", task.GetString()!).Exit != 0), "A failing scenario leaves no scheduled task behind");
+            Check(document.RootElement.GetProperty("processes").EnumerateArray().All(entry =>
+            {
+                try { using var process = Process.GetProcessById(entry.GetProperty("id").GetInt32()); return process.HasExited || process.StartTime.ToUniversalTime().ToFileTimeUtc() != entry.GetProperty("created").GetInt64(); }
+                catch (ArgumentException) { return true; }
+            }), "A failing scenario leaves no owned probe process behind");
+        }
     }
 
-    public static async Task Run(string repo, bool recovery, bool cleanupFault = false, bool completion = false)
+    public static async Task Run(string repo, bool recovery, bool cleanupFault = false, bool completion = false, string? harnessFault = null)
     {
         var root = Path.Combine(Path.GetTempPath(), "roo-industries-launch-profile-" + Guid.NewGuid().ToString("N"));
         var operations = Path.Combine(root, "operations");
@@ -100,10 +109,6 @@ static class LaunchProfileChecks
             return app;
         }
         Check(NoLaunchPolicy(), "The probe game starts without launch priorities");
-        Directory.CreateDirectory(root);
-        File.Copy(Path.Combine(bin, "RooIndustriesLaunchPolicyProbe.exe"), gamePath, true);
-        File.Copy(Path.Combine(bin, "RooIndustriesLaunchPolicyProbe.exe"), launcherPath, true);
-        Environment.SetEnvironmentVariable("ROO_INDUSTRIES_BACKEND_ROOT", repo);
 
         async Task<Process> OpenLauncher()
         {
@@ -146,13 +151,18 @@ static class LaunchProfileChecks
             Check(NtSuspendProcess(worker.Handle) == 0 && NtSuspendProcess(watcher.Handle) == 0, "The session worker and its watcher are frozen together, like a power loss");
             worker.Kill(); watcher.Kill(); worker.WaitForExit(10000); watcher.WaitForExit(10000);
         }
-        async Task<Process> Game(Process? launcher)
+        async Task<Process> Game(Process? launcher, bool failReadiness = false)
         {
             var folder = Path.Combine(root, "game-" + (games.Count + 1)); Directory.CreateDirectory(folder);
-            if (launcher is null) Start(gamePath, "--game", folder, "none").Dispose();
+            Process? game = null;
+            if (launcher is null)
+            {
+                game = failReadiness ? Start(gamePath, "--hold-lock", Path.Combine(folder, "held"), Path.Combine(folder, "holder-ready.json"), Path.Combine(folder, "stop")) : Start(gamePath, "--game", folder, "none");
+                games.Add((game, folder));
+            }
             else OperationFiles.Write(Path.Combine(launchers.Single(item => item.Process == launcher).Root, "launch.json"), new { root = folder, hardware = "none", exe = Path.GetFileName(gamePath) });
-            await Until(() => Task.FromResult(File.Exists(Path.Combine(folder, "ready.json"))), "The game fixture did not start.");
-            var game = Process.GetProcessById(OperationFiles.Read<JsonElement>(Path.Combine(folder, "ready.json")).GetProperty("pid").GetInt32()); games.Add((game, folder));
+            await Until(() => Task.FromResult(File.Exists(Path.Combine(folder, "ready.json"))), failReadiness ? "Deliberate standalone readiness failure" : "The game fixture did not start.", failReadiness ? 2 : 60);
+            if (game is null) { game = Process.GetProcessById(OperationFiles.Read<JsonElement>(Path.Combine(folder, "ready.json")).GetProperty("pid").GetInt32()); games.Add((game, folder)); }
             return game;
         }
         void EndGame(Process game) { File.WriteAllText(Path.Combine(games.Single(item => item.Process == game).Root, "stop"), ""); Check(game.WaitForExit(15000), "The game fixture exits"); }
@@ -182,6 +192,18 @@ static class LaunchProfileChecks
         Exception? scenarioError = null;
         try
         {
+            Environment.SetEnvironmentVariable("ROO_INDUSTRIES_BACKEND_ROOT", repo);
+            Directory.CreateDirectory(root);
+            File.Copy(Path.Combine(bin, "RooIndustriesLaunchPolicyProbe.exe"), gamePath, true);
+            File.Copy(harnessFault == "setup" ? Path.Combine(root, "missing-fixture.exe") : Path.Combine(bin, "RooIndustriesLaunchPolicyProbe.exe"), launcherPath, true);
+            if (Environment.GetEnvironmentVariable("DOTNET_ROOT_X64") is { Length: > 0 } runtime)
+            {
+                var receipt = Path.Combine(root, "runtime.txt");
+                using var probe = Start(gamePath, "--runtime-root", receipt);
+                if (!probe.WaitForExit(15000)) { probe.Kill(); probe.WaitForExit(10000); throw new TimeoutException("The runtime probe did not finish."); }
+                Check(probe.ExitCode == 0 && File.ReadAllText(receipt).StartsWith(Path.GetFullPath(runtime).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase), "The fixture apphost loads the runtime selected by the caller");
+            }
+            if (harnessFault == "readiness") { await Game(null, true); return; }
             var first = await OpenLauncher();
             var original = Affinity(first);
             var core = original & (~original + 1);
@@ -470,10 +492,12 @@ static class LaunchProfileChecks
                 catch (Exception error) { errors.Add(error); }
             }
             var tasks = new List<string>();
+            var processes = new List<object>();
             Clean(() =>
             {
                 if (Directory.Exists(operations)) tasks.AddRange(Directory.EnumerateDirectories(operations, "game-session-*").Select(directory => TaskName(Path.Combine(directory, "session"))));
                 if (unrelatedSession is not null) tasks.Add(TaskName(unrelatedSession));
+                processes.AddRange(games.Concat(launchers).Select(entry => new { id = entry.Process.Id, created = entry.Process.StartTime.ToUniversalTime().ToFileTimeUtc() }));
             });
             await CleanAsync(async () =>
             {
@@ -523,7 +547,7 @@ static class LaunchProfileChecks
                 markers?.DeleteValue(PolicyRootSecurity.MarkerName(operations), false);
                 markers?.DeleteValue(PolicyRootSecurity.MarkerName(operations) + PolicyRootSecurity.ProtectedAtSuffix, false);
             });
-            if (cleanupFault) Console.WriteLine("Cleanup receipt: " + JsonSerializer.Serialize(new { root, tasks }));
+            if (cleanupFault || harnessFault is not null) Console.WriteLine("Cleanup receipt: " + JsonSerializer.Serialize(new { root, tasks, processes }));
             foreach (var error in errors) Console.WriteLine("Cleanup: " + error.Message);
             if (scenarioError is null && errors.Count != 0) throw new AggregateException(errors);
         }
