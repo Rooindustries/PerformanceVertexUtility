@@ -16,8 +16,11 @@ public static class MemoryRelief
     private static int _foreground;
     private static Window? _window;
     private static int _generation;
+    private static bool _activated;
 
     public static bool Minimized { get; private set; }
+    public static bool Active => _activated && !Minimized;
+    public static event Action? ActiveChanged;
 
     public static void Attach(Window window)
     {
@@ -34,8 +37,10 @@ public static class MemoryRelief
         _window.Activated -= OnActivated;
         _window = null;
         Minimized = false;
+        _activated = false;
         Interlocked.Increment(ref _generation);
         Interlocked.Increment(ref _foreground);
+        ActiveChanged?.Invoke();
     }
 
     public static void PageShown()
@@ -76,12 +81,17 @@ public static class MemoryRelief
         Minimized = minimized;
         var generation = Interlocked.Increment(ref _generation);
         if (minimized) Schedule(generation, MinimizedDelay);
+        ActiveChanged?.Invoke();
     }
 
     private static void OnActivated(object sender, WindowActivatedEventArgs args)
     {
         var generation = Interlocked.Increment(ref _generation);
-        if (args.WindowActivationState == WindowActivationState.Deactivated) Schedule(generation, Minimized ? MinimizedDelay : BackgroundDelay);
+        var activated = args.WindowActivationState != WindowActivationState.Deactivated;
+        if (!activated) Schedule(generation, Minimized ? MinimizedDelay : BackgroundDelay);
+        if (activated == _activated) return;
+        _activated = activated;
+        ActiveChanged?.Invoke();
     }
 
     private static void Schedule(int generation, TimeSpan delay)

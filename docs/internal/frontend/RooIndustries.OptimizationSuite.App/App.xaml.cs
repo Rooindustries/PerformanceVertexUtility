@@ -112,6 +112,7 @@ public partial class App : Application
         else if (primary is not null) primary.Activated += OnRedirected;
 #if ROO_INDUSTRIES_TEST_HOOKS
         AppLog.Write("test", "test hooks enabled");
+        if (RooIndustries.Optimizer.BrandCompatibility.EnvironmentValue("ROO_INDUSTRIES_TEST_HOLD_CHANGE") is { Length: > 0 } hold) _ = HoldChangeAsync(hold);
 #endif
         Theme.ApplyPersistedTheme();
         ApplyAccentResourceOverrides();
@@ -138,6 +139,18 @@ public partial class App : Application
         foreach (var path in waiting) ShowRedirect(path);
         Updates.Start(MainWindow.DispatcherQueue);
     }
+
+#if ROO_INDUSTRIES_TEST_HOOKS
+    private static async System.Threading.Tasks.Task HoldChangeAsync(string flag)
+    {
+        while (true)
+        {
+            while (!System.IO.File.Exists(flag)) await System.Threading.Tasks.Task.Delay(250);
+            using (DataGeneration.BeginChange())
+                while (System.IO.File.Exists(flag)) await System.Threading.Tasks.Task.Delay(250);
+        }
+    }
+#endif
 
     private static readonly object RedirectGate = new();
     private static readonly System.Collections.Generic.List<string?> PendingRedirects = new();

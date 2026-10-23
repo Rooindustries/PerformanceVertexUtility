@@ -252,6 +252,9 @@ Value =0A
             {
                 if (!entered.Wait(TimeSpan.FromSeconds(10))) throw new TimeoutException("Fixture import did not start.");
                 Reject(() => flow.Apply(parallel.Directory, parallel.Hash), "A second firmware operation cannot run while another import is active");
+                var busy = "";
+                try { flow.Load(); } catch (IOException error) { busy = error.Message; }
+                check(busy == "Another BIOS read or write is still running. Wait for it to finish, then try again.", "A BIOS read during an active import says plainly that another one is running");
             }
             finally { release.Set(); }
             check(task.GetAwaiter().GetResult().Status == "restartRequired", "The original import completes after the concurrent attempt is rejected");

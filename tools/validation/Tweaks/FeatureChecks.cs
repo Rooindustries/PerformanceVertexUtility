@@ -179,7 +179,7 @@ static class FeatureChecks
     static TweakControlRead FeatureRead(Dictionary<string, string> states) =>
         new(Features, Features.Key, "features", ControlValues.From(states), Parents: states.Keys.ToDictionary(name => name, _ => Array.Empty<string>()));
 
-    sealed class FeatureStore(FakeDism dism, params TweakControlRead[] others) : IControlStore
+    internal sealed class FeatureStore(FakeDism dism, params TweakControlRead[] others) : IControlStore
     {
         private readonly Dictionary<string, TweakControlRead> _values = others.ToDictionary(item => item.Address.Key);
         public string? Fail { get; init; }
@@ -205,7 +205,7 @@ static class FeatureChecks
         Console.WriteLine("Boot identity before and after moving the clock " + moved + ": " + before + " / " + after);
         check(moved > TimeSpan.FromMinutes(9) && before is not null && RegistryTweakStore.SameBoot(before, after), "Moving the clock 10 minutes without a restart keeps the same boot, so a pending feature change is not closed early");
     }
-    sealed class FakeDism : DismServicing
+    internal sealed class FakeDism : DismServicing
     {
         public Dictionary<string, int> Listed { get; } = new(StringComparer.Ordinal) { ["HypervisorPlatform"] = 2, ["TelnetClient"] = 2 };
         public Dictionary<string, int> Info { get; } = new(StringComparer.Ordinal);
@@ -213,13 +213,18 @@ static class FeatureChecks
         public int ChangeResult { get; set; }
         public int CloseAfterChange { get; set; }
         public int ReadCloseResult { get; set; }
+        public int InfoResult { get; set; }
         public bool InfoShowsPending { get; set; } = true;
         private bool _changed;
         public override int Initialize() => 0;
         public override int OpenSession(out uint session) { session = 7; return 0; }
         public override int GetFeatures(uint session, out (string Name, int State)[] features) { features = Listed.Select(item => (item.Key, item.Value)).ToArray(); return 0; }
         public override int GetFeatureParents(uint session, string feature, out string[] parents) { parents = []; return 0; }
-        public override int GetFeatureState(uint session, string feature, out int state) { state = Info.TryGetValue(feature, out var info) ? info : Listed[feature]; return 0; }
+        public override int GetFeatureState(uint session, string feature, out int state)
+        {
+            if (!Info.TryGetValue(feature, out state) && !Listed.TryGetValue(feature, out state)) { state = -1; return unchecked((int)0x800F080C); }
+            return InfoResult;
+        }
         public override int EnableFeatures(uint session, string features) => Change("enable " + features, features, 4, 5);
         public override int DisableFeatures(uint session, string features, bool removePayload) => Change("disable " + features, features, removePayload ? 3 : 2, 1);
         private int Change(string call, string features, int target, int pending)

@@ -30,6 +30,28 @@ namespace RooIndustries.OptimizationSuite.Services
     public sealed record LiveDataResult<T>(T? Value, string? Error, string? RecoveryPath = null, string? RecoveryGeneration = null) { public bool Stale { get; init; } }
     public sealed record NvidiaProfileRecovery(string ProfileId, string RollbackManifestPath, string ExportPath, string? Generation = null);
     public sealed record GameSessionEntry(string SessionRoot, ProtectedSessionStatus Worker);
+    public static class ServiceSteps
+    {
+        public static Func<string, Task>? Pause { get; set; }
+        public static List<string> Written { get; } = new();
+        public static async Task<T> Then<T>(string helper, Func<T> write, Action? prepare = null)
+        {
+            if (Pause is not { } pause) { prepare?.Invoke(); return write(); }
+            await pause(helper + " starts");
+            prepare?.Invoke();
+            using (DataGeneration.BeginChange()) await pause(helper);
+            await pause(helper + " returned");
+            var result = write();
+            Written.Add(helper);
+            return result;
+        }
+    }
+
+    public static class OptimizerService
+    {
+        public static Task<T?> ReadJournalAsync<T>(string path) => throw new InvalidOperationException("Unexpected journal read.");
+    }
+
     public static class LiveDataService
     {
         public static NvidiaProfileRecovery? NvidiaRecoveryFromApplyResult(string profileId, string? json, string? rollbackManifestPath, string? generation) => null;
@@ -114,17 +136,23 @@ namespace RooIndustries.OptimizationSuite.Services
         public Task<LiveDataResult<string>> ApplyProcessProfileResultAsync(CancellationToken cancellationToken = default, string preset = "lower")
         {
             LastProcessPreset = preset;
-            var recovery = ProcessProfileRecovery.FromApply(ProcessApplyText);
-            if (recovery is not null) ProcessProfileRecovery = recovery;
-            return Task.FromResult(new LiveDataResult<string>(ProcessApplyText, OperationError ?? (ProcessApplyText is null ? LastError : null), recovery?.Path, recovery?.Generation));
+            return ServiceSteps.Then("background priorities", () =>
+            {
+                var recovery = ProcessProfileRecovery.FromApply(ProcessApplyText);
+                if (recovery is not null) ProcessProfileRecovery = recovery;
+                return new LiveDataResult<string>(ProcessApplyText, OperationError ?? (ProcessApplyText is null ? LastError : null), recovery?.Path, recovery?.Generation);
+            });
         }
         public Task<LiveDataResult<string>> RestoreProcessProfileResultAsync(ProcessProfileRecovery recovery, CancellationToken cancellationToken = default)
         {
             LastProcessRestorePath = recovery.Path;
-            var error = OperationError ?? (ProcessRestoreText is null ? LastError : null);
-            var completed = error is null && recovery.RestoreCompleted(ProcessRestoreText) && ProcessProfileRecovery == recovery;
-            if (completed) ProcessProfileRecovery = null;
-            return Task.FromResult(new LiveDataResult<string>(ProcessRestoreText, error, completed ? null : recovery.Path, completed ? null : recovery.Generation));
+            return ServiceSteps.Then("background restore", () =>
+            {
+                var error = OperationError ?? (ProcessRestoreText is null ? LastError : null);
+                var completed = error is null && recovery.RestoreCompleted(ProcessRestoreText) && ProcessProfileRecovery == recovery;
+                if (completed) ProcessProfileRecovery = null;
+                return new LiveDataResult<string>(ProcessRestoreText, error, completed ? null : recovery.Path, completed ? null : recovery.Generation);
+            });
         }
         public Task<LiveDataResult<string>> RunGameTuneSessionResultAsync(bool confirmApply, int maxDurationSeconds, int pollIntervalSeconds, CancellationToken cancellationToken = default)
             => Task.FromResult(new LiveDataResult<string>(GameTuneText, GameTuneResultError ?? (GameTuneText is null ? LastError : null)));
@@ -149,15 +177,23 @@ namespace RooIndustries.OptimizationSuite.Services
             => Task.FromResult(new LiveDataResult<string>(NvidiaProbeText, OperationError ?? (NvidiaProbeText is null ? LastError : null)));
         public Task<LiveDataResult<string>> PreviewNvidiaProfileResultAsync(string profileId, CancellationToken cancellationToken = default)
             => Task.FromResult(new LiveDataResult<string>(NvidiaPreviewText, OperationError ?? (NvidiaPreviewText is null ? LastError : null)));
+        public NvidiaProfileRecovery? NvidiaApplyRecovery { get; set; }
         public Task<LiveDataResult<string>> ApplyNvidiaProfileResultAsync(string profileId, bool exportReviewed, bool userApproved, bool benchmarkEvidenceAttached, CancellationToken cancellationToken = default)
-            => Task.FromResult(new LiveDataResult<string>(NvidiaApplyText, OperationError ?? NvidiaApplyError ?? (NvidiaApplyText is null ? LastError : null)));
+            => ServiceSteps.Then("NVIDIA profile", () =>
+            {
+                if (NvidiaApplyRecovery is { } saved) NvidiaRecovery = saved;
+                return new LiveDataResult<string>(NvidiaApplyText, OperationError ?? NvidiaApplyError ?? (NvidiaApplyText is null ? LastError : null));
+            });
         public Task<NvidiaProfileRecovery?> ReadNvidiaProfileRecoveryAsync(string profileId)
             => Task.FromResult(NvidiaRecovery?.ProfileId == profileId ? NvidiaRecovery : null);
         public Task<LiveDataResult<string>> RestoreNvidiaProfileResultAsync(NvidiaProfileRecovery recovery, bool userApproved, CancellationToken cancellationToken = default)
         {
             LastNvidiaRestoreRecovery = recovery;
-            if (ClearNvidiaRecoveryOnRestore) NvidiaRecovery = null;
-            return Task.FromResult(new LiveDataResult<string>(NvidiaRestoreText, OperationError ?? NvidiaRestoreError ?? (NvidiaRestoreText is null ? LastError : null)));
+            return ServiceSteps.Then("NVIDIA restore", () =>
+            {
+                if (ClearNvidiaRecoveryOnRestore) NvidiaRecovery = null;
+                return new LiveDataResult<string>(NvidiaRestoreText, OperationError ?? NvidiaRestoreError ?? (NvidiaRestoreText is null ? LastError : null));
+            });
         }
         public Task<LiveDataResult<string>> PreviewStutterOptimizationResultAsync(CancellationToken cancellationToken = default)
             => Task.FromResult(new LiveDataResult<string>(StutterPreviewText, OperationError ?? (StutterPreviewText is null ? LastError : null)));
@@ -239,11 +275,15 @@ namespace RooIndustries.OptimizationSuite.Services
         public Task<BulkRemovalSession?> ReadLastRemovalAsync() => Task.FromResult(LastRemoval);
         public Task<(string Path, BulkRemovalJournal State)[]> ReadRemovalHistoryAsync() => Task.FromResult(RemovalHistory);
         public Task<CleanupBatchSession[]> ReadCleanupHistoryAsync() => Task.FromResult(Array.Empty<CleanupBatchSession>());
-        public Task<RemovalCleanupReview?> ReadLastFileCleanupAsync() => Task.FromResult<RemovalCleanupReview?>(null);
+        public RemovalCleanupReview? FileRestore { get; set; }
+        public Task<RemovalCleanupReview?> ReadLastFileCleanupAsync() => Task.FromResult(FileRestore);
         public Task<OptimizerResult<BulkRemovalJournal>> DismissRemovalAsync(string journal) { Dismissed.Add(journal); return DismissRemoval(journal); }
         public Task<OptimizerResult<BulkRemovalJournal>> ReconcileRemovalAsync(string journal) => ReconcileRemoval(journal);
         public Task<BulkRemovalReview> PreviewRemovalAsync(string[] appIds, bool includeAllAppxUsers = false) => throw new InvalidOperationException("Unexpected removal preview call.");
-        public Task<OptimizerResult<BulkRemovalJournal>> ApplyRemovalAsync(BulkRemovalReview review, bool dependenciesReviewed, IProgress<BulkRemovalJournal> progress) => throw new InvalidOperationException("Unexpected removal call.");
+        public string? RemovalPointer { get; set; }
+        public Task<OptimizerResult<BulkRemovalJournal>> ApplyRemovalAsync(BulkRemovalReview review, bool dependenciesReviewed, IProgress<BulkRemovalJournal> progress)
+            => ServiceSteps.Pause is null ? throw new InvalidOperationException("Unexpected removal call.")
+                : ServiceSteps.Then("removal", () => new OptimizerResult<BulkRemovalJournal> { Status = "success" }, () => RemovalPointer = review.JournalPath);
         public Task<OptimizerResult<BulkRemovalJournal>> CancelRemovalAsync(string journal) => throw new InvalidOperationException("Unexpected cancel call.");
         public Task<LeftoverDiscoveryResult> DiscoverLeftoversAsync(string queueJournalPath, string appId, CancellationToken cancellationToken) => throw new InvalidOperationException("Unexpected leftover scan.");
         public Task<CleanupPart> PreviewDeepCleanupAsync(string queueJournalPath, string appId, string[] itemIds, bool acceptKeyRecreation) => throw new InvalidOperationException("Unexpected cleanup preview.");
@@ -251,7 +291,29 @@ namespace RooIndustries.OptimizationSuite.Services
         public Task<CleanupBatchJournal> ApplyCleanupBatchAsync(CleanupBatchReview review, string? cancellationId, IProgress<CleanupBatchJournal> progress) => throw new InvalidOperationException("Unexpected cleanup apply.");
         public Task<CleanupBatchCancellation> CancelCleanupBatchAsync(string journalPath) => throw new InvalidOperationException("Unexpected cleanup cancel.");
         public Task<CleanupBatchJournal> RestoreCleanupBatchAsync(string journalPath) => throw new InvalidOperationException("Unexpected cleanup restore.");
-        public Task<OptimizerResult<FileCleanupResult>> RestoreRemovedFilesAsync(RemovalCleanupReview review) => throw new InvalidOperationException("Unexpected file restore.");
+        public Task<OptimizerResult<FileCleanupResult>> RestoreRemovedFilesAsync(RemovalCleanupReview review)
+            => ServiceSteps.Then("earlier files restore", () =>
+            {
+                if (FileRestore != review) throw new InvalidOperationException("Unexpected file restore.");
+                FileRestore = null;
+                return new OptimizerResult<FileCleanupResult> { Status = "success" };
+            });
+        public string? CpuPointer { get; set; }
+        public Task<OptimizerResult<CpuSetSnapshot>> ReadCpuSetsAsync(int processId, CancellationToken cancellationToken = default) => throw new InvalidOperationException("Unexpected CPU read.");
+        public Task<CpuSetReview> PreviewCpuSetsAsync(int processId, uint[] ids, bool resetDefault) => throw new InvalidOperationException("Unexpected CPU preview.");
+        public Task<bool> ReleaseEndedCpuSessionAsync(string journal) => Task.FromResult(false);
+        public Task<OptimizerResult<CpuSetJournal>> ApplyCpuSetsAsync(CpuSetReview review)
+        {
+            CpuPointer = review.JournalPath;
+            return ServiceSteps.Then("CPU selection", () => new OptimizerResult<CpuSetJournal> { Status = "success", Changed = true, RestoreAvailable = true });
+        }
+        public Task<OptimizerResult<CpuSetJournal>> RestoreCpuSetsAsync(string journal)
+            => ServiceSteps.Then("CPU restore", () =>
+            {
+                if (CpuPointer != journal) throw new InvalidOperationException("Unexpected CPU restore.");
+                CpuPointer = null;
+                return new OptimizerResult<CpuSetJournal> { Status = "restored" };
+            });
         public ProcessControlSnapshot? ProcessSnapshot { get; set; }
         public GameSessionEntry[] GameSessions { get; set; } = [];
         public TweakRecovery? WindowsRecovery { get; set; } = new(null, null, null);
@@ -262,35 +324,55 @@ namespace RooIndustries.OptimizationSuite.Services
         public Func<Dictionary<string, JsonElement>, ProcessControlReview>? Review { get; set; }
         public Task<ProcessControlReview> PreviewControlsAsync(int processId, Dictionary<string, JsonElement> controls, CpuSelection? selection)
             => Review is { } review ? Task.FromResult(review(controls)) : throw new InvalidOperationException("Unexpected preview call.");
+        public string? ProcessPointer { get; set; }
+        public ProcessControlJournal? ControlsJournal { get; set; }
         public Task<ProcessControlJournal> ApplyControlsAsync(ProcessControlReview review)
-            => throw new InvalidOperationException("Unexpected apply call.");
+        {
+            if (ControlsJournal is not { } journal) throw new InvalidOperationException("Unexpected apply call.");
+            ProcessPointer = review.JournalPath;
+            return ServiceSteps.Then("process controls", () => journal);
+        }
         public Task<ProcessControlJournal> RestoreControlsAsync(string journalPath)
-            => throw new InvalidOperationException("Unexpected restore call.");
+            => ServiceSteps.Then("process controls restore", () =>
+            {
+                if (ProcessPointer != journalPath || ControlsJournal is not { } journal) throw new InvalidOperationException("Unexpected restore call.");
+                ProcessPointer = null;
+                journal.Status = "restored";
+                return journal;
+            });
         public Task<SavedProcessRule[]> ReadRulesAsync() => Task.FromResult(Array.Empty<SavedProcessRule>());
         public Task<PolicyWorkerStatus> ReadPolicyStatusAsync() => Task.FromResult(new PolicyWorkerStatus(null, false, null));
         public Action<SavedProcessRule>? RuleSaved { get; set; }
-        public Task<SavedProcessRule> SaveRuleAsync(SavedProcessRule rule) { RuleSaved?.Invoke(rule); return Task.FromResult(rule); }
+        public Task<SavedProcessRule> SaveRuleAsync(SavedProcessRule rule) => ServiceSteps.Then("rule save", () => { RuleSaved?.Invoke(rule); return rule; });
         public List<string> DeletedRules { get; } = new();
         public Action<string>? RuleDeleted { get; set; }
-        public Task<JsonElement> DeleteRuleAsync(string ruleId) { DeletedRules.Add(ruleId); RuleDeleted?.Invoke(ruleId); return Task.FromResult(JsonSerializer.SerializeToElement(new { })); }
+        public Task<JsonElement> DeleteRuleAsync(string ruleId) => ServiceSteps.Then("rule delete", () => { DeletedRules.Add(ruleId); RuleDeleted?.Invoke(ruleId); return JsonSerializer.SerializeToElement(new { }); });
         public Exception? PolicyWorkerError { get; set; }
         public Task<PolicyWorkerRegistration> PolicyWorkerAsync(string action)
-            => PolicyWorkerError is { } failure ? Task.FromException<PolicyWorkerRegistration>(failure) : Task.FromResult(new PolicyWorkerRegistration("fixture", false, false, false, false, false, 0, 0, false, "missing", null, new PolicyWorkerStatus(null, false, null)));
+            => ServiceSteps.Then("governor " + action, () => PolicyWorkerError is { } failure ? throw failure : new PolicyWorkerRegistration("fixture", false, false, false, false, false, 0, 0, false, "missing", null, new PolicyWorkerStatus(null, false, null)));
         public GovernorSnapshot Governor { get; set; } = new(new PolicySummary(false, "missing", false, 0, 0, null), new PolicyWorkerStatus(null, false, null), [], new());
         public Exception? GovernorError { get; set; }
-        public Task<GovernorSnapshot> ReadGovernorAsync() => GovernorError is { } error ? Task.FromException<GovernorSnapshot>(error) : Task.FromResult(Governor);
+        public Func<Task<GovernorSnapshot>>? GovernorRead { get; set; }
+        public Task<GovernorSnapshot> ReadGovernorAsync() => GovernorRead is { } read ? read() : GovernorError is { } error ? Task.FromException<GovernorSnapshot>(error) : Task.FromResult(Governor);
         public Func<Task<PolicyHostState>> RetryRestore { get; set; } = () => throw new InvalidOperationException("Unexpected governor restore retry.");
         public int RetryCalls { get; private set; }
         public Task<PolicyHostState> RetryGovernorRestoreAsync() { RetryCalls++; return RetryRestore(); }
         public Task<GameSessionEntry[]> ReadGameSessionsAsync() => Task.FromResult(GameSessions);
-        public Task<TweakRecovery> ReadWindowsRecoveryAsync() => Task.FromResult(WindowsRecovery ?? throw new IOException("Controlled Windows recovery failure"));
+        public Task<TweakRecovery> ReadWindowsRecoveryAsync(bool fresh = false) => Task.FromResult(WindowsRecovery ?? throw new IOException("Controlled Windows recovery failure"));
+        public static readonly TweakContext WindowsContext = new(new("fixture-pc", "fixture-user"), "fixture-store", 26200, "Professional");
+        public Task<TweakCatalogResult> ReadWindowsTweakCatalogAsync(bool fresh = false) => Task.FromException<TweakCatalogResult>(new IOException("Controlled Windows catalog read failure"));
+        public Task<TweakChoiceFile> ReadWindowsChoicesAsync() => Task.FromException<TweakChoiceFile>(new IOException("Controlled saved choices read failure"));
+        public Task<TweakInspection> ReadWindowsTweaksAsync(bool fresh = false, bool streamed = true) => Task.FromException<TweakInspection>(new IOException("Controlled Windows settings read failure"));
+        public event Action<TweakInspection, long>? WindowsTweaksPartial { add { } remove { } }
+        public (TweakInspection Inspection, long Generation)? PendingWindowsTweaks => null;
+        public Task<WindowsTweakReview> PreviewWindowsTweaksAsync(string profileId, TweakSelection[] selections) => throw new InvalidOperationException("Unexpected Windows settings preview.");
+        public Task<WindowsTweakReview> PreviewOwnershipAsync(string path) => throw new InvalidOperationException("Unexpected ownership preview.");
+        public Task<JsonElement> RecoverWindowsTweaksAsync(string hash) => throw new InvalidOperationException("Unexpected Windows settings recovery.");
+        public Task<TweakChoiceFile> SaveWindowsChoicesAsync(TweakCatalog catalog, string profileId, TweakSelection[] selections, string? revision)
+            => ServiceSteps.Then(selections.Length == 0 ? "remove saved choices" : "save choices", () => new TweakChoiceFile(1, WindowsContext.Owner, "fixture-revision", []));
+        public Task<TweakApplyResult> ApplyWindowsTweaksAsync(WindowsTweakReview review, bool accepted)
+            => ServiceSteps.Then("Windows helper", () => new TweakApplyResult(new TweakState { SchemaVersion = 1, Context = WindowsContext, Revision = "fixture-revision", Profiles = [], Held = [], CreatedKeys = [], History = [], Notices = [] }, true, false));
     }
-}
 
-namespace RooIndustries.OptimizationSuite.ViewModels
-{
-    public sealed record CpuProcessChoice(int Id, string Name)
-    {
-        public override string ToString() => Name;
-    }
+    public sealed record WindowsTweakReview(TweakPlan Plan, string Path, string Hash);
 }

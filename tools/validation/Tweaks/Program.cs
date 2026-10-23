@@ -6,7 +6,7 @@ using RooIndustries.Optimizer;
 if (args is ["--service-probe"]) { ServiceProbe.Start(); return; }
 if (args is ["--service-probe-slow-start", var probeName, var probeDelay]) { ServiceProbe.Start(probeName, int.Parse(probeDelay)); return; }
 if (args is ["--kill-apply-child", var killFiles]) { KillApplyChecks.Child(killFiles); return; }
-if (args is ["--timer-worker", var timerLaunch]) { TimerControl.RunWorker(timerLaunch); return; }
+if (args is ["--timer-worker", var timerLaunch]) { TimerStartupChecks.Worker(timerLaunch); return; }
 if (args is ["--timer-autostart", var timerRoot]) { TimerControl.RunAutostart(timerRoot); return; }
 if (args is ["--timer-detached-start", var detachedRoot]) { TimerChecks.DetachedStart(detachedRoot); return; }
 if (args is ["--timer-detached-stop", var stopRoot]) { TimerChecks.DetachedStop(stopRoot); return; }
@@ -73,7 +73,12 @@ try
     if (args is [_, "--hosts-fixture"]) { HostsChecks.Native(Check, Reject); Console.WriteLine($"Completed {count} native hosts checks."); return; }
     if (args is [_, "--timer-fixture"]) { TimerChecks.Native(Check); TimerChecks.Job(Check); Console.WriteLine($"Completed {count} native timer checks."); return; }
     if (args is [_, "--power-plan-fixture"]) { PowerPlanChecks.Native(Check, Reject); Console.WriteLine($"Completed {count} native power-plan checks."); return; }
-    if (args is [_, "--timer-startup-fixture"]) { TimerStartupChecks.Native(Check); Console.WriteLine($"Completed {count} native startup checks."); return; }
+    if (args is [_, "--timer-startup-fixture"] or [_, "--timer-startup-fixture", _])
+    {
+        try { TimerStartupChecks.Native(Check, args.Length == 3 ? args[2] : null); Console.WriteLine($"Completed {count} native startup checks."); }
+        catch (Exception error) { Console.Error.WriteLine(error); Environment.ExitCode = 1; }
+        return;
+    }
     if (args is [_, "--download-blocker-fixture"]) { DownloadBlockerChecks.Native(Check); Console.WriteLine($"Completed {count} native download blocker checks."); return; }
     if (args is [_, "--catalog-integration"]) { CatalogIntegrationChecks.Run(root, catalog, Check, Reject); Console.WriteLine($"Completed {count} catalog integration checks."); return; }
     if (args is [_, "--recover-controls-fixture"]) { NativeControlChecks.RecoverFixture(); return; }
@@ -100,6 +105,8 @@ try
     if (args is [_, "--kill-apply-fixture"]) { KillApplyChecks.Run(root, Check); Console.WriteLine($"Completed {count} kill-apply checks."); return; }
     if (args is [_, "--detect-checks"]) { DetectChecks.Run(root, Check); Console.WriteLine($"Completed {count} detection checks."); return; }
     if (args is [_, "--feature-checks"]) { FeatureChecks.Run(root, catalog, Check); Console.WriteLine($"Completed {count} feature checks."); return; }
+    if (args is [_, "--seed-feature-restart", var seedKey, var seedStates]) { FeatureRestartChecks.Seed(catalog, root, seedKey, seedStates); return; }
+    if (args is [_, "--feature-restart-fixture"]) { FeatureRestartChecks.Run(root, Check); Console.WriteLine($"Completed {count} feature restart checks."); return; }
     if (args is [_, "--registry-fixture"]) { RegistryTweakChecks.Run(root, Check, Reject); Console.WriteLine($"Completed {count} native registry checks."); return; }
     catalog.Validate();
     Check(catalog.Settings.Select(item => item.Id).Distinct().Count() == catalog.Settings.Length, "Catalog setting identities are unique");
