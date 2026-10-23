@@ -1,8 +1,10 @@
 using System.Diagnostics;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Xml.Linq;
 using Microsoft.Win32;
 using RooIndustries.OptimizationSuite.Models;
 using RooIndustries.OptimizationSuite.Services;
@@ -69,7 +71,14 @@ static class LaunchProfileChecks
         var launcherPath = Path.Combine(bin, "RooIndustriesProfileLauncher.exe");
         var launchers = new List<(Process Process, string Root)>();
         var games = new List<(Process Process, string Root)>();
-        OptimizerService App() => new(new BackendLocator(), operations);
+        var clients = new List<OptimizerService>();
+        string? unrelatedSession = null;
+        OptimizerService App()
+        {
+            var app = new OptimizerService(new BackendLocator(), operations);
+            clients.Add(app);
+            return app;
+        }
         Check(NoLaunchPolicy(), "The probe game starts without launch priorities");
         Directory.CreateDirectory(root);
         File.Copy(Path.Combine(bin, "RooIndustriesLaunchPolicyProbe.exe"), gamePath, true);
@@ -128,6 +137,18 @@ static class LaunchProfileChecks
         }
         void EndGame(Process game) { File.WriteAllText(Path.Combine(games.Single(item => item.Process == game).Root, "stop"), ""); Check(game.WaitForExit(15000), "The game fixture exits"); }
         async Task<bool> Restored(string sessionRoot) => GameSessionDisplay.Restored(await App().ReadGameSessionAsync(sessionRoot));
+        async Task<(int Exit, string Output)> RemoveAll()
+        {
+            using var uninstall = Process.Start(new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe"))
+            {
+                ArgumentList = { "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", Path.Combine(repo, "backend", "scripts", "Invoke-ProtectedGameSession.ps1"), "-Action", "RemoveAll", "-OperationsRoot", operations, "-ConfirmApply" },
+                UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true,
+            })!;
+            var output = uninstall.StandardOutput.ReadToEndAsync();
+            var error = uninstall.StandardError.ReadToEndAsync();
+            await uninstall.WaitForExitAsync();
+            return (uninstall.ExitCode, await output + await error);
+        }
 
         try
         {
@@ -239,8 +260,18 @@ static class LaunchProfileChecks
             async Task Recovery()
             {
                 var signIn = await Arm(first, controls);
-                Check(TaskXml(signIn.SessionRoot).Contains("<LogonTrigger>", StringComparison.Ordinal) && TaskXml(signIn.SessionRoot).Contains(System.Security.Principal.WindowsIdentity.GetCurrent().User!.Value, StringComparison.Ordinal),
+                var taskXml = TaskXml(signIn.SessionRoot);
+                Check(taskXml.Contains("<LogonTrigger>", StringComparison.Ordinal) && taskXml.Contains(System.Security.Principal.WindowsIdentity.GetCurrent().User!.Value, StringComparison.Ordinal),
                     "A new session's task also starts at this user's sign-in");
+                unrelatedSession = Path.Combine(root, "other-operations", "game-session-" + Guid.NewGuid().ToString("N"), "session");
+                var document = XDocument.Parse(taskXml.Replace(signIn.SessionRoot, unrelatedSession, StringComparison.Ordinal));
+                var ns = document.Root!.Name.Namespace;
+                document.Root.Element(ns + "Triggers")!.RemoveNodes();
+                document.Root.Element(ns + "Actions")!.ReplaceNodes(new XElement(ns + "Exec",
+                    new XElement(ns + "Command", Path.Combine(Environment.SystemDirectory, "cmd.exe")), new XElement(ns + "Arguments", "/c exit 0")));
+                var taskFile = Path.Combine(root, "unrelated-task.xml");
+                document.Save(taskFile);
+                Check(Schtasks("/Create", "/TN", TaskName(unrelatedSession), "/XML", taskFile).Exit == 0, "An unrelated recovery folder has its own inert task");
                 PowerLoss(signIn.SessionRoot);
                 await CloseLauncher(first);
                 Check(!await Restored(signIn.SessionRoot) && Equals(Launch("CpuPriorityClass"), 6), "A power loss leaves the game's launch priorities behind");
@@ -266,6 +297,10 @@ static class LaunchProfileChecks
                 var refused = await App().RecoverGameSessionAsync(reboot.SessionRoot);
                 Check(!GameSessionDisplay.Restored(refused) && Affinity(orphan) == core && refused.State!.Errors.Any(error => error.Contains("job is unavailable", StringComparison.Ordinal)),
                     "Recover still refuses while a game left from the crashed session keeps its core limit");
+                Check(TaskExists(reboot.SessionRoot), "Blocked recovery keeps its sign-in recovery task");
+                var blocked = await RemoveAll();
+                Check(blocked.Exit != 0 && TaskExists(reboot.SessionRoot) && !await Restored(reboot.SessionRoot) && Affinity(orphan) == core,
+                    "Uninstall cleanup reports blocked recovery and keeps its journal and task");
                 EndGame(orphan);
                 var fresh = await Game(null);
                 Check(Affinity(fresh) == original && GameSessionDisplay.Restored(await App().RecoverGameSessionAsync(reboot.SessionRoot)) && NoLaunchPolicy(), "Recover works while a new copy of the game runs, as after a restart");
@@ -276,18 +311,13 @@ static class LaunchProfileChecks
                 await Until(async () => await Restored(ended.SessionRoot), "Closing the launcher did not end the session.");
                 Check(TaskExists(ended.SessionRoot), "A session that ended with its launcher still has its task");
                 var live = await OpenLauncher();
-                var running = await Arm(live, controls);
-                var uninstall = Process.Start(new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe"))
-                {
-                    ArgumentList = { "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", Path.Combine(repo, "backend", "scripts", "Invoke-ProtectedGameSession.ps1"), "-Action", "RemoveAll", "-OperationsRoot", operations, "-ConfirmApply" },
-                    UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true,
-                })!;
-                var output = await uninstall.StandardOutput.ReadToEndAsync() + await uninstall.StandardError.ReadToEndAsync();
-                await uninstall.WaitForExitAsync();
-                Console.WriteLine(output.Trim());
+                await Arm(live, controls);
+                var uninstall = await RemoveAll();
+                Console.WriteLine(uninstall.Output.Trim());
                 var sessions = await Sessions();
-                Check(uninstall.ExitCode == 0 && sessions.Length == 6 && sessions.All(entry => GameSessionDisplay.Restored(entry.Worker) && !TaskExists(entry.SessionRoot)) && NoLaunchPolicy() && Affinity(live) == original && Io(live) == 1,
+                Check(uninstall.Exit == 0 && sessions.Length == 6 && sessions.All(entry => GameSessionDisplay.Restored(entry.Worker) && !TaskExists(entry.SessionRoot)) && NoLaunchPolicy() && Affinity(live) == original && Io(live) == 1,
                     "Uninstall cleanup stops the running session, restores everything and removes every session task");
+                Check(TaskExists(unrelatedSession), "Uninstall cleanup leaves tasks from another recovery folder alone");
             }
         }
         catch
@@ -324,10 +354,18 @@ static class LaunchProfileChecks
                 File.Delete(gamePath); File.Delete(launcherPath);
             }
             await Task.Delay(1000);
-            if (Directory.Exists(operations))
-                foreach (var session in Directory.EnumerateDirectories(operations, "game-session-*").Select(directory => Path.Combine(directory, "session")))
-                    if (TaskExists(session)) Console.WriteLine("Cleanup: a session task remains for " + session);
+            foreach (var entry in await App().ReadGameSessionsAsync())
+            {
+                var restored = await App().RecoverGameSessionAsync(entry.SessionRoot);
+                if (!GameSessionDisplay.Restored(restored) || TaskExists(entry.SessionRoot)) throw new InvalidOperationException("A test session still needs recovery.");
+            }
+            foreach (var client in clients)
+                (typeof(OptimizerService).GetField("_storageLease", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(client) as IDisposable)?.Dispose();
+            if (unrelatedSession is not null && TaskExists(unrelatedSession)) Schtasks("/Delete", "/TN", TaskName(unrelatedSession), "/F");
             Directory.Delete(root, true);
+            using var markers = Registry.LocalMachine.OpenSubKey(PolicyRootSecurity.MarkerKey, true);
+            markers?.DeleteValue(PolicyRootSecurity.MarkerName(operations), false);
+            markers?.DeleteValue(PolicyRootSecurity.MarkerName(operations) + PolicyRootSecurity.ProtectedAtSuffix, false);
         }
     }
 

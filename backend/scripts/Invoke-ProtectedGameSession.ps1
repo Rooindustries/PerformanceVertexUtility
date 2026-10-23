@@ -15,6 +15,11 @@ if(-not $DotNetPath -and (Test-Path -LiteralPath (Join-Path $HostDirectory 'host
 if(-not $DotNetPath){$DotNetPath=Get-RooIndustriesDevelopmentDotNet $HostDirectory}
 $DotNetPath=[IO.Path]::GetFullPath($DotNetPath)
 if($Action -notin @('Preview','Status') -and -not $ConfirmApply){throw 'Review the protected-session operation before using -ConfirmApply.'}
+function Test-Restored($Worker){
+    return $Worker -and $Worker.hostRunning -eq $false -and -not $Worker.error -and $Worker.state -and
+        $Worker.state.status -in @('stopped','stoppedWithErrors') -and $Worker.state.registryStatus -eq 'restored' -and $Worker.state.jobStatus -eq 'cleared' -and
+        @($Worker.state.games|ForEach-Object {$_.fields}|Where-Object {$_.journalPath -and $_.status -notin @('restored','expired')}).Count -eq 0
+}
 function Invoke-Core([string]$Operation,[hashtable]$Fields=@{}) {
     $request=@{schemaVersion=1;repoRoot=$repoRoot;confirm=[bool]$ConfirmApply}
     if($SessionRoot){$request.sessionRoot=$SessionRoot}
@@ -41,15 +46,26 @@ if($Action -eq 'Start'){
 }
 if($Action -eq 'RemoveAll'){
     if(-not $OperationsRoot){$OperationsRoot=Join-Path (Get-RooIndustriesLocalDataRoot) 'operations'}
+    $OperationsRoot=[IO.Path]::GetFullPath($OperationsRoot).TrimEnd('\','/')
     $results=@();$failed=$false
-    foreach($directory in @(Get-ChildItem -LiteralPath $OperationsRoot -Directory -Filter 'game-session-*' -ErrorAction SilentlyContinue)){
+    $directories=if(Test-Path -LiteralPath $OperationsRoot){@(Get-ChildItem -LiteralPath $OperationsRoot -Directory -Filter 'game-session-*')}else{@()}
+    foreach($directory in $directories){
         $root=Join-Path $directory.FullName 'session'
         if(-not(Test-Path -LiteralPath (Join-Path $root 'session.json'))){continue}
-        try{& $PSCommandPath -Action Stop -SessionRoot $root -HostDirectory $HostDirectory -ConfirmApply|Out-Null;$results+=@{sessionRoot=$root;status='restored'}}
+        try{
+            $result=(& $PSCommandPath -Action Stop -SessionRoot $root -HostDirectory $HostDirectory -DotNetPath $DotNetPath -ConfirmApply)|ConvertFrom-Json
+            if(-not(Test-Restored $result.data.worker)){throw 'The session still needs recovery; its saved state and task were kept.'}
+            $results+=@{sessionRoot=$root;status='restored'}
+        }
         catch{$failed=$true;$results+=@{sessionRoot=$root;status='failed';error=$_.Exception.Message}}
     }
     $owner=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
-    foreach($leftover in @(Get-ScheduledTask -TaskName ('Roo Industries Protected Session *'),($script:RooIndustriesLegacyIdentity.gameTask+'*') -ErrorAction SilentlyContinue|Where-Object {$parts=@([string]$_.Description -split ' \| ');$parts.Count -eq 3 -and $parts[1] -eq $owner -and -not(Test-Path -LiteralPath (Join-Path $parts[2] 'session.json'))})){Unregister-ScheduledTask -TaskName $leftover.TaskName -Confirm:$false}
+    foreach($leftover in @(Get-ScheduledTask -TaskName ('Roo Industries Protected Session *'),($script:RooIndustriesLegacyIdentity.gameTask+'*') -ErrorAction SilentlyContinue|Where-Object {
+        $parts=@([string]$_.Description -split ' \| ')
+        $parts.Count -eq 3 -and $parts[1] -eq $owner -and (Split-Path -Leaf $parts[2]) -eq 'session' -and
+            (Split-Path -Leaf (Split-Path -Parent $parts[2])) -like 'game-session-*' -and
+            (Split-Path -Parent (Split-Path -Parent $parts[2])) -ieq $OperationsRoot -and -not(Test-Path -LiteralPath (Join-Path $parts[2] 'session.json'))
+    })){Unregister-ScheduledTask -TaskName $leftover.TaskName -Confirm:$false}
     @{schemaVersion=1;status=$(if($failed){'failed'}else{'completed'});data=@{sessions=$results}}|ConvertTo-Json -Depth 10
     if($failed){exit 1}
     return
@@ -92,12 +108,12 @@ if($Action -eq 'Stop'){
     do {$status=Invoke-Core 'protected-session-status';if($status.hostRunning -eq $false){break};Start-Sleep -Milliseconds 200}while($clock.Elapsed.TotalSeconds -lt 30)
     if($status.hostRunning -ne $false){throw 'Worker shutdown is not verified; recovery state was retained.'}
     if($status.state){Invoke-Core 'protected-session-recover' @{operationId=$status.state.preview.operationId;acceptEarlierVersion=[bool]$AcceptEarlierVersion}|Out-Null}
-    if($task -and (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue)){Unregister-ScheduledTask -TaskName $taskName -Confirm:$false}
+    if($task -and (Test-Restored (Invoke-Core 'protected-session-status')) -and (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue)){Unregister-ScheduledTask -TaskName $taskName -Confirm:$false}
 }
 if($Action -eq 'Recover'){
     $status=Invoke-Core 'protected-session-status'
     if(-not $status.state){throw 'There is no session recovery state.'}
     Invoke-Core 'protected-session-recover' @{operationId=$status.state.preview.operationId;acceptEarlierVersion=[bool]$AcceptEarlierVersion}|Out-Null
-    if($task -and (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue)){Unregister-ScheduledTask -TaskName $taskName -Confirm:$false}
+    if($task -and (Test-Restored (Invoke-Core 'protected-session-status')) -and (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue)){Unregister-ScheduledTask -TaskName $taskName -Confirm:$false}
 }
 @{schemaVersion=1;status='completed';data=@{sessionRoot=$SessionRoot;taskName=$taskName;worker=(Invoke-Core 'protected-session-status')}}|ConvertTo-Json -Depth 40

@@ -73,7 +73,7 @@ After a system restart, or if both worker and watcher were terminated, the sessi
   -SessionRoot $sessionRoot -ConfirmApply
 ```
 
-Recovery cannot take over a live worker. Create a new preview and session directory to start again after stop/recovery. The existing session's saved controls remain available for that review. The uninstaller runs `-Action RemoveAll`, which stops or recovers each of the user's sessions and removes their tasks.
+Recovery cannot take over a live worker. Create a new preview and session directory to start again after stop/recovery. The existing session's saved controls remain available for that review. The uninstaller runs `-Action RemoveAll`, which stops or recovers each session in the selected recovery folder and removes its task once restoration is confirmed. A blocked recovery reports failure and keeps its journal and sign-in task. Tasks belonging to another recovery folder are left alone.
 
 ## Validation
 
