@@ -12,7 +12,7 @@ internal sealed record GpuHandleReady(GpuHandleTransfer Transfer, ControlRead Or
 
 internal sealed class LaunchGpuHandles : IDisposable
 {
-    internal static bool Supported => OperatingSystem.IsWindowsVersionAtLeast(10, 0, 26100, 4770);
+    internal static bool Supported => LaunchProcessSnapshot.Supported;
     private readonly string _root;
     private readonly ProtectedSessionState _state;
     private readonly RunningProcess _watcher;
@@ -178,6 +178,18 @@ internal sealed class LaunchGpuHandles : IDisposable
 
 internal sealed class LaunchProcessSnapshot : IDisposable
 {
+    internal static bool Supported
+    {
+        get
+        {
+            if (!OperatingSystem.IsWindows()) return false;
+            var status = NtQuerySystemInformation(252, IntPtr.Zero, 0, out _);
+            if (status == 0 || status == unchecked((int)0xC0000004)) return true;
+            if (status == unchecked((int)0xC0000002) || status == unchecked((int)0xC0000003)) return false;
+            throw new InvalidOperationException($"SystemBasicProcessInformation capability query failed with NTSTATUS 0x{status:X8}.");
+        }
+    }
+
     [StructLayout(LayoutKind.Sequential)] private struct BasicProcess
     {
         public uint Next; public IntPtr Pid, Parent; public ulong Sequence; public ushort NameLength, NameMaximum; public IntPtr Name;

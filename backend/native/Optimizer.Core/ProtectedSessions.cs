@@ -78,8 +78,8 @@ public sealed class ProtectedSessions
     private static string Route(string name, JsonElement value) => name == "affinity" ? "job" : Launched(name, value) ? "launch" : "native";
     private static Dictionary<string, JsonElement> LaunchControls(Dictionary<string, JsonElement> controls) => controls.Where(pair => pair.Key != "ioPriority" || Launched(pair.Key, pair.Value)).ToDictionary(pair => pair.Key, pair => pair.Value);
     private static Dictionary<string, JsonElement> LauncherDefaults(Dictionary<string, JsonElement> controls) => controls.Where(pair => pair.Key is "ioPriority" or "memoryPriority" && Launched(pair.Key, pair.Value)).ToDictionary(pair => pair.Key, pair => pair.Value);
-    private static bool RetainHandles(ProtectedSessionPreview plan) => LaunchGpuHandles.Supported &&
-        (plan.Controls.ContainsKey("gpuPriority") || plan.Controls.TryGetValue("ioPriority", out var io) && !Launched("ioPriority", io));
+    private static bool RetainHandles(ProtectedSessionPreview plan) =>
+        (plan.Controls.ContainsKey("gpuPriority") || plan.Controls.TryGetValue("ioPriority", out var io) && !Launched("ioPriority", io)) && LaunchGpuHandles.Supported;
 
     public const string LauncherClosed = "The launcher you picked has closed. Open it again, press Refresh and choose it under Launcher.";
     public const string LauncherIsGame = "Choose the launcher that starts the game, such as Steam or Battle.net, not the game itself.";
