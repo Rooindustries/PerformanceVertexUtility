@@ -93,6 +93,7 @@ A PR that touches any of the code above:
 
 - Validation never runs real app uninstallers, deletes user data, imports real NVIDIA profiles, or changes services, registry settings or drivers as a side effect. Use disposable fixtures and probe processes, and remove everything you create, registry values included, in `finally`.
 - Clean up test-owned processes, fixtures, helpers and temporary power plans. `backend/state` must stay empty.
+- Cleanup removes only what the fixture created. Registry fixtures in `tools/validation/OptimizerCore` use `OwnedRegistryKey`, which deletes only the keys Windows reports it created. Any other delete of a fixed name (registry key, task, service, account, folder) needs the guard that proves the fixture created it, listed in `tools/validation/fixture-cleanup-allowlist.json`; `check_baseline.py` fails otherwise.
 - Keep personal and test-machine identifiers (user folders, emails, private addresses, machine names) out of the repo. The baseline check fails on them.
 - Keep Windows paths short. Windows PowerShell 5.1 can't open paths over 259 characters, and long user folders get close.
 

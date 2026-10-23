@@ -14,8 +14,10 @@ static class CleanupBatchChecks
         var batchPath = Path.Combine(root, "operations", "batch-review.json");
         var journalPath = Path.Combine(root, "operations", "batch-journal.json");
         ApplicationCleanup App(string source, string appId) => new(() => contexts[appId], [root], [new("CurrentUser", "Registry64", registryRoot, "key", null)]);
+        OwnedRegistryKey? owned = null;
         try
         {
+            owned = OwnedRegistryKey.Create(hive, registryRoot);
             foreach (var name in new[] { "Roo Industries Batch One", "Roo Industries Batch Two" })
             {
                 var source = Path.Combine(root, name);
@@ -139,9 +141,7 @@ static class CleanupBatchChecks
         {
             foreach (var plan in plans)
                 if (plan.Registry is { } part) hive.DeleteSubKeyTree(OperationFiles.Read<RegistryCleanupPreview>(part.PreviewPath).Receipt.KeyPath, false);
-            hive.DeleteSubKeyTree(registryRoot, false);
-            using (var parent = hive.OpenSubKey("Software\\RooIndustriesCleanupBatchTests"))
-                if (parent is not null && parent.SubKeyCount == 0 && parent.ValueCount == 0) hive.DeleteSubKey("Software\\RooIndustriesCleanupBatchTests", false);
+            owned?.Dispose();
             if (Directory.Exists(root)) Directory.Delete(root, true);
         }
         check(!Directory.Exists(root), "Batch validation removes its cancellation markers, receipts and data fixtures");
