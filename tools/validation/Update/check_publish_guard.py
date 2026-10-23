@@ -23,7 +23,7 @@ from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.x509.oid import NameOID
 
 root = Path(__file__).resolve().parents[3]
-parser = argparse.ArgumentParser(description='Dry-run publish and set-feed against the live signed feed (GET only) and a local rolled-back feed; a fake vercel proves nothing is uploaded.')
+parser = argparse.ArgumentParser(description='Dry-run publish and set-feed against the live signed feed (GET only), then publish and roll back against a local HTTPS fixture; fake vercel commands keep every upload on this machine.')
 parser.add_argument('--published-installer', type=Path)
 parser.add_argument('--local-only', action='store_true', help='Run only the rolled-back feed cases against a local HTTPS fixture.')
 parser.add_argument('--tool', type=Path, default=root / 'tools/release/publish_update.py')
@@ -82,7 +82,7 @@ try:
         rows.append({'case': name, 'passed': problem is None, 'problem': problem, 'exitCode': result.returncode, 'expectedExitCode': code, 'expectedText': text, 'output': output})
         print(('PASS ' if problem is None else 'FAIL ') + name + ('' if problem is None else ': ' + problem))
 
-    def publish_case(name, tool, version, code, text, live, path, origin='https://' + host, run_env=env):
+    def publish_case(name, tool, version, code, text, live, path, origin='https://' + host, run_env=env, extra=()):
         url = fixture_url(version, origin)
         manifest = signed(name, version, {'url': url, **dummy_identity})
         rollback = manifest.with_name(manifest.stem + '.previous-live.json')
@@ -91,7 +91,7 @@ try:
                 return 'rollback copy differs from the live manifest'
             if code != 0 and rollback.exists():
                 return 'a refused publish wrote a rollback copy'
-        run(name, tool, ['publish', '--installer', str(dummy), '--manifest', str(manifest), '--installer-path', urlparse(url).path[1:], '--feed-path', path], code, text, kept, run_env)
+        run(name, tool, ['publish', '--installer', str(dummy), '--manifest', str(manifest), '--installer-path', urlparse(url).path[1:], '--feed-path', path] + list(extra), code, text, kept, run_env)
 
     if not args.local_only:
         with urlopen(Request(feed + '?t=' + str(int(datetime.now(timezone.utc).timestamp())), headers={'Cache-Control': 'no-cache'}), timeout=20) as response:
@@ -131,7 +131,9 @@ try:
     served = {}
     class Fixture(http.server.BaseHTTPRequestHandler):
         def do_GET(self):
-            body = served.get(urlparse(self.path).path)
+            path = urlparse(self.path).path
+            blob = work / 'blob' / path[1:]
+            body = served.get(path, blob.read_bytes() if blob.is_file() else None)
             if body is None:
                 self.send_error(404)
                 return
@@ -168,6 +170,42 @@ try:
     below = fixture_url('0.9.0-beta', origin)
     served[urlparse(below).path] = dummy.read_bytes()
     run('set-feed-below-released-dry-run', tool, ['set-feed', '--manifest', str(signed('below-released', '0.9.0-beta', {'url': below, **dummy_identity})), '--feed-path', local_feed_path], 0, 'Replacing the live 0.10.0-beta manifest with version 0.9.0-beta.', run_env=local_env)
+    blob_bin = work / 'blob-bin'
+    blob_bin.mkdir()
+    (blob_bin / 'vercel').write_text('#!/bin/sh\nfile=$3\nwhile [ $# -gt 1 ]; do\n  [ "$1" = --pathname ] && target="' + str(work / 'blob') + '/$2"\n  shift\ndone\nmkdir -p "$(dirname "$target")" && cp "$file" "$target"\n')
+    (blob_bin / 'vercel').chmod(0o755)
+    armed_env = dict(local_env, BLOB_READ_WRITE_TOKEN='publish-guard-fixture')
+    upload_env = dict(armed_env, PATH=str(blob_bin) + os.pathsep + local_env['PATH'])
+    for flow, listed_first in [('listed-then-rolled-back', True), ('rolled-back-before-listed', False)]:
+        flow_path = 'u/' + flow + '/beta.json'
+        tool = tool_tree(flow + '-tree', origin + '/' + flow_path + '\n', b'0.9.0-beta\n0.10.0-beta\n0.11.0-beta')
+        released_list = tool.parent / 'released-versions.txt'
+        before = released_list.read_bytes()
+        previous_url = fixture_url('0.11.0-beta', origin)
+        previous = signed(flow + '-previous', '0.11.0-beta', {'url': previous_url, **dummy_identity})
+        for blob_path, source in [(urlparse(previous_url).path[1:], dummy), (flow_path, previous)]:
+            (work / 'blob' / blob_path).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy(source, work / 'blob' / blob_path)
+        bad_url = fixture_url('0.11.1-beta', origin)
+        bad = signed(flow + '-bad', '0.11.1-beta', {'url': bad_url, **dummy_identity})
+        def listed():
+            if released_list.read_bytes() != before + b'\n0.11.1-beta\n':
+                return 'the verified publish did not add 0.11.1-beta to released-versions.txt once, keeping the other lines'
+        run(flow + '-publish-adds-released-version', tool, ['publish', '--installer', str(dummy), '--manifest', str(bad), '--installer-path', urlparse(bad_url).path[1:], '--feed-path', flow_path, '--yes-publish'], 0, 'Commit that line to main', listed, upload_env)
+        rollback = ['set-feed', '--manifest', str(bad.with_name(bad.stem + '.previous-live.json')), '--feed-path', flow_path, '--yes-publish']
+        if not listed_first:
+            released_list.write_bytes(before)
+            def still_live():
+                if (work / 'blob' / flow_path).read_bytes() != bad.read_bytes():
+                    return 'the refused rollback changed the feed'
+            run(flow + '-unlisted-rollback-refused', tool, rollback, 1, 'The live beta 0.11.1-beta is not in released-versions.txt. Add it there before rolling back', still_live, armed_env)
+            for version in ['0.11.1-beta', '0.11.1-alpha']:
+                publish_case(flow + '-live-' + version + '-refused', tool, version, 1, 'is not newer than the live beta 0.11.1-beta', bad.read_bytes(), flow_path, origin, armed_env, ['--yes-publish'])
+            released_list.write_bytes(before + b'\n0.11.1-beta\n')
+        run(flow + '-rollback', tool, rollback, 0, 'The feed now serves version 0.11.0-beta, verified over HTTPS.', run_env=upload_env)
+        for version in ['0.11.1-beta', '0.11.1-alpha']:
+            publish_case(flow + '-republish-' + version + '-refused', tool, version, 1, 'is not newer than the released version 0.11.1-beta, so testers who already have 0.11.1-beta would not be offered it', previous.read_bytes(), flow_path, origin, armed_env, ['--yes-publish'])
+        publish_case(flow + '-newer-accepted', tool, '0.11.2-beta', 0, 'Dry run: nothing uploaded.', previous.read_bytes(), flow_path, origin, local_env)
     uploads = (work / 'vercel-calls.txt').read_text().splitlines() if (work / 'vercel-calls.txt').exists() else []
     rows.append({'case': 'no-upload-attempted', 'passed': not uploads, 'calls': uploads})
     print(('PASS ' if not uploads else 'FAIL ') + 'no-upload-attempted')

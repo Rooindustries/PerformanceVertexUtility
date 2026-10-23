@@ -17,12 +17,12 @@ Testers' apps read the signed feed in `update-feed.txt`. They only offer a versi
    python3 tools/release/publish_update.py publish ... --yes-publish
    ```
 
-   Both runs stop if the version is not newer than the live beta and every version in `released-versions.txt`, or if the live feed doesn't verify (repair it with `set-feed` first). A rollback lowers the live feed but not that list, so testers who kept a rolled-back version are still offered the next publish. They save the live manifest as `<version>-feed.previous-live.json`, which is the rollback copy. After uploading, the tool reads the feed and the installer back over HTTPS.
-4. Add the published version to `released-versions.txt` on `main`.
+   Both runs stop if the version is not newer than the live beta and every version in `released-versions.txt`, or if the live feed doesn't verify (repair it with `set-feed` first). A rollback lowers the live feed but not that list, so testers who kept a rolled-back version are still offered the next publish. They save the live manifest as `<version>-feed.previous-live.json`, which is the rollback copy. After uploading, the tool reads the feed and the installer back over HTTPS, then adds the version to `released-versions.txt` in this checkout.
+4. `publish` has already written the new line in `released-versions.txt`. Commit it to `main`. Until it is merged, publish only from this checkout: after a rollback, a checkout without the line would accept the same version again.
 
 ## Rolling back
 
-Point the feed back at the saved manifest. The tool first checks that its installer still downloads with the signed bytes:
+Point the feed back at the saved manifest. If the live version isn't in `released-versions.txt` yet, add it first. `set-feed` refuses to roll back a live version newer than everything in that list, so a rebuilt copy of the bad version can't be published again. The tool also checks that the saved installer still downloads with the signed bytes:
 
 ```sh
 python3 tools/release/publish_update.py set-feed --manifest <version>-feed.previous-live.json --feed-path <feed path>
@@ -31,6 +31,6 @@ python3 tools/release/publish_update.py set-feed --manifest <version>-feed.previ
 
 This stops new downloads within about a minute. An app that already downloaded the bad version can still install it from its cache, and an app that installed it keeps it, because apps never move to a lower version. To replace a version testers already have, publish a fixed build with a higher version.
 
-If a publish stops after the installer upload, the immutable installer path can't be uploaded again. Run `set-feed` with the new manifest to finish it.
+If a publish stops after the installer upload, the immutable installer path can't be uploaded again. Run `set-feed` with the new manifest to finish it, then add its version to `released-versions.txt`.
 
 Before publication, run the [release upgrade rehearsal](../validation/Update/README.md#release-upgrade-rehearsal) with the signed manifest and matching installer as inputs. Run its read-only preflight first. Use an exclusive test window for `-MoveAsideExistingState`, and require `restore-verification` with `restored: true`, an empty `cleanupErrors` list and a passing invocation. Retain its ownership ledger and data archives. After publication, repeat with `-LiveFeed` to prove the real old app downloads and installs the live release.

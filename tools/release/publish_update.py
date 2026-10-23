@@ -246,6 +246,26 @@ def live_feed(feed):
     return data, verify_manifest(data, feed_url=feed)
 
 
+def released_versions():
+    lines = [line.strip() for line in (ROOT / "tools/release/released-versions.txt").read_text(encoding="utf-8-sig").splitlines()]
+    return [line for line in lines if line and not line.startswith("#")]
+
+
+def release_floor(live_version):
+    listed = max(released_versions(), key=precedence, default=None)
+    return max((version for version in (listed, live_version) if version), key=precedence, default=None), listed
+
+
+def record_release(version):
+    path = ROOT / "tools/release/released-versions.txt"
+    if version in released_versions():
+        return
+    text = path.read_text(encoding="utf-8-sig")
+    with path.open("a", encoding="utf-8", newline="") as out:
+        out.write(("\n" if text and not text.endswith("\n") else "") + version + "\n")
+    print("Added " + version + " to tools/release/released-versions.txt. Commit that line to main.")
+
+
 def check_feed_path(feed, feed_path):
     if not re.fullmatch(r"u/[A-Za-z0-9_-]+/beta\.json", feed_path) or urlparse(feed).path != "/" + feed_path:
         raise ValueError("Feed path differs from the committed feed")
@@ -286,12 +306,10 @@ def publish(args):
     if urlparse(payload["installer"]["url"]).path != "/" + args.installer_path:
         raise ValueError("Installer path differs from the signed URL")
     current, live = live_feed(feed)
-    if precedence(payload["version"]) <= precedence(live["version"]):
-        raise ValueError("Version " + payload["version"] + " is not newer than the live beta " + live["version"] + ", so testers would not be offered it")
-    released = [line.strip() for line in (ROOT / "tools/release/released-versions.txt").read_text(encoding="utf-8-sig").splitlines()]
-    floor = max((line for line in released if line and not line.startswith("#")), key=precedence, default=None)
-    if floor and precedence(payload["version"]) <= precedence(floor):
-        raise ValueError("Version " + payload["version"] + " is not newer than the released version " + floor + ", so testers who already have " + floor + " would not be offered it")
+    floor, _ = release_floor(live["version"])
+    if precedence(payload["version"]) <= precedence(floor):
+        source = "the live beta " if precedence(floor) == precedence(live["version"]) else "the released version "
+        raise ValueError("Version " + payload["version"] + " is not newer than " + source + floor + ", so testers who already have " + floor + " would not be offered it")
     rollback = Path(args.manifest).with_name(Path(args.manifest).stem + ".previous-live.json")
     rollback.write_bytes(current)
     print("Saved the live " + live["version"] + " manifest for rollback: " + str(rollback))
@@ -310,6 +328,7 @@ def publish(args):
         raise ValueError("Published feed has not propagated to the signed bytes yet")
     check_online_installer(published["installer"])
     print("Published manifest and installer verified over HTTPS.")
+    record_release(payload["version"])
 
 
 def set_feed(args):
@@ -321,9 +340,12 @@ def set_feed(args):
         current, live = live_feed(feed)
         state = "the live " + live["version"] + " manifest"
     except (ValueError, KeyError, TypeError, AttributeError, OSError, InvalidSignature) as error:
-        current, state = None, "a live feed that does not verify (" + ("Invalid signature" if isinstance(error, InvalidSignature) else str(error)) + ")"
+        current, live, state = None, None, "a live feed that does not verify (" + ("Invalid signature" if isinstance(error, InvalidSignature) else str(error)) + ")"
     if current == data:
         raise ValueError("The live feed already serves this manifest")
+    floor, listed = release_floor(live and live["version"])
+    if floor != listed and precedence(payload["version"]) < precedence(floor):
+        raise ValueError("The live beta " + floor + " is not in released-versions.txt. Add it there before rolling back, so testers who already have " + floor + " are offered the next publish")
     check_online_installer(payload["installer"])
     print("Replacing " + state + " with version " + payload["version"] + ".")
     command = ["vercel", "blob", "put", str(args.manifest), "--access", "public", "--pathname", args.feed_path, "--allow-overwrite", "--cache-control-max-age", "60", "--content-type", "application/json"]
