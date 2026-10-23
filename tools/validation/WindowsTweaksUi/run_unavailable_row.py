@@ -46,7 +46,7 @@ def encode(capture: Path, frames: Path, output: Path):
     lines.append(f"file '{rows[-1]['file']}'")
     listing.write_text('\n'.join(lines) + '\n')
     subprocess.run(['ffmpeg', '-v', 'error', '-y', '-f', 'concat', '-safe', '0', '-i', str(listing), '-vf', 'scale=trunc(min(iw\\,1920)/2)*2:-2', '-r', '30',
-                    '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '20', '-movflags', '+faststart', str(output)], check=True)
+                    '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '20', '-movflags', '+faststart', str(output)], check=True, timeout=600)
 
 
 def main():
@@ -69,6 +69,12 @@ def main():
             checks = windows.invoke(args.host, args.expected_machine, CHECKS.replace('__SOURCE__', windows.ps_literal(receipt['stagingPath'])), timeout=1800)
             (args.out_dir / 'checks.log').write_text(checks.stdout)
             print('\n'.join(line for line in checks.stdout.splitlines() if line.startswith(('PASS', 'FAIL', 'ROO_INDUSTRIES_CHECK', 'Completed', 'Exception'))), flush=True)
+            markers = [line.split() for line in checks.stdout.splitlines() if line.startswith('ROO_INDUSTRIES_CHECK')]
+            expected = {'output', 'control-reads', 'freshness'}
+            if (len(markers) != len(expected)
+                    or any(len(marker) != 3 or marker[1] not in expected or marker[2] != '0' for marker in markers)
+                    or {marker[1] for marker in markers} != expected):
+                raise RuntimeError('Remote checks failed or returned incomplete results: ' + json.dumps(markers))
         result = windows.interactive_frame(args.host, args.expected_machine, receipt, 'tools/validation/WindowsTweaksUi/Capture-UnavailableRow.ps1',
                                            {'Source': receipt['stagingPath'], 'OutRoot': receipt['runRoot'] + r'\capture', 'Label': args.label}, 30)
         (args.out_dir / 'capture.log').write_text(result.stdout)
