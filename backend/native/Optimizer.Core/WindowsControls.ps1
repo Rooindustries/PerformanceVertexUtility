@@ -14,7 +14,6 @@ function Get-ControlError($failure){
 $script:Commands=@{
     'firewall-profile'=@('Windows Firewall','Get-NetFirewallProfile','Set-NetFirewallProfile')
     'mitigations'=@('Exploit protection','Get-ProcessMitigation')
-    'defender'=@('Microsoft Defender Antivirus','Get-MpPreference','Set-MpPreference')
     'device-power'=@('Device power management','Get-PnpDevice')
     'dns-over-https'=@('Encrypted DNS','Get-DnsClientDohServerAddress','Add-DnsClientDohServerAddress','Set-DnsClientDohServerAddress','Remove-DnsClientDohServerAddress')
     'teredo'=@('Teredo','Get-NetTeredoConfiguration','Set-NetTeredoConfiguration')
@@ -113,6 +112,18 @@ function Get-MitigationFields {
     if($fields.Count -eq 0){throw 'Windows returned no typed mitigation fields.'}
     return $fields
 }
+function Get-DefenderPreference {
+    try{$preference=@(Get-CimInstance -Namespace root/Microsoft/Windows/Defender -ClassName MSFT_MpPreference)}
+    catch{
+        $failure=$_
+        $service=@(try{Get-CimInstance -ClassName Win32_Service -Filter "Name='WinDefend'"}catch{throw $failure})
+        if($service.Count -eq 0){throw 'Microsoft Defender Antivirus is not installed.'}
+        if($service[0].State -eq 'Stopped'){throw 'Microsoft Defender Antivirus is not available with its service stopped. Windows stops it when another antivirus takes over.'}
+        throw $failure
+    }
+    if($preference.Count -ne 1 -or $null -eq $preference[0].SubmitSamplesConsent){throw 'The Defender preference is unavailable.'}
+    return $preference[0]
+}
 function Get-BootObject {
     $store=Invoke-CimMethod -Namespace root/wmi -ClassName BcdStore -MethodName OpenStore -Arguments @{File=''}
     if($store.ReturnValue -isnot [bool] -or -not $store.ReturnValue){throw 'BCD OpenStore did not succeed.'}
@@ -161,9 +172,7 @@ function Read-Control($address){
         }
         'defender' {
             if($address.target -ne 'system' -or $address.property -ne 'SubmitSamplesConsent'){throw 'Unknown Defender preference.'}
-            $preference=Get-MpPreference
-            if($null -eq $preference.SubmitSamplesConsent){throw 'The Defender preference is unavailable.'}
-            $value=[int]$preference.SubmitSamplesConsent
+            $value=[int](Get-DefenderPreference).SubmitSamplesConsent
         }
         'device-power' {
             if($address.target -ne 'non-network' -or $address.property -ne 'enabled'){throw 'Unknown power-device selection.'}
@@ -269,7 +278,8 @@ function Write-Control($address,$value){
         'mitigations' { throw 'System mitigation writes require the native registry transaction.' }
         'defender' {
             if($value -notin @(0,1,2,3)){throw 'Invalid sample-submission choice.'}
-            Set-MpPreference -SubmitSamplesConsent ([int]$value)
+            $result=Invoke-CimMethod -Namespace root/Microsoft/Windows/Defender -ClassName MSFT_MpPreference -MethodName Set -Arguments @{SubmitSamplesConsent=[byte]$value}
+            if($result.ReturnValue -ne 0){throw ('Microsoft Defender Antivirus refused the change: '+$result.ReturnValue)}
         }
         'device-power' {
             foreach($device in @(Get-PowerDevices)){
