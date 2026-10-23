@@ -13,7 +13,7 @@ python3 tools/validation/windows_ssh.py --host "$host" --expected-machine "$mach
   --arguments "$arguments"
 ```
 
-`All` builds and runs both fixtures once. `AppLog` selects only the nine-write disk fixture; `Rendered` selects only the eight-scene WinUI fixture. The entry refuses a different commit, manifest, machine, frame, invocation context, reused output or changed source. Builds require the existing user-local .NET 8 SDK and pass `--disable-build-servers` for each build command. Rendered proof also requires the WinUI prerequisites, UI Automation and existing ffmpeg with libx264. Missing prerequisites fail the run; this recipe installs nothing.
+`All` builds and runs both fixtures once. `AppLog` selects only the nine-write disk fixture; `Rendered` selects only the eight-scene WinUI fixture. The entry refuses a different commit, manifest, machine, frame, invocation context, reused output or changed source. Builds require the existing user-local .NET 8 SDK and pass `--disable-build-servers` for each build command; the rendered fixture runs on that same .NET. Rendered proof also requires the WinUI prerequisites, UI Automation and existing ffmpeg with libx264. Missing prerequisites fail the run; this recipe installs nothing.
 
 The AppLog fixture links the actual logger and redactor. Its sole root-selection stub directs real writes into the original-owned empty leaf; current profile, user and machine values remain real, and the redactor reads the PC's real profile list. Its private receipt contains those values and the raw log bytes. Retrieve it privately. The required phase marker is `ROO_INDUSTRIES_BUG_REPORT_APPLOG_9PASS` with nine exact payloads, native exit zero and matching source, binary, sink and file hashes.
 
