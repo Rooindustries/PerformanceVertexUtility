@@ -119,7 +119,8 @@ public partial class WindowsTweakRow : ObservableObject
     public TweakChoice? AppliedChoice { get; private set; }
     public bool IsApplied => AppliedChoice is not null;
     private static readonly string[] LackedHere = ["Win32 1060", "0x80070002", "Windows driver", "Office installation", "devices expose", "No active adapter", "is not installed", "is not available with", "Hard-linked file permissions", "doesn't let administrators change the"];
-    private static bool PcLacks(string error) => error.StartsWith("No choice applies", StringComparison.Ordinal) || LackedHere.Any(text => error.Contains(text, StringComparison.Ordinal));
+    private static bool PcLacks(string error) => !error.Contains("couldn't load its PowerShell commands", StringComparison.Ordinal)
+        && (error.StartsWith("No choice applies", StringComparison.Ordinal) || LackedHere.Any(text => error.Contains(text, StringComparison.Ordinal)));
     private static bool NoRawPolicy(System.Text.Json.JsonElement value) => value.TryGetProperty(MitigationControl.SnapshotField, out var raw) && raw.ValueKind == System.Text.Json.JsonValueKind.Object
         && raw.TryGetProperty("MitigationOptions", out var options) && options.ValueKind == System.Text.Json.JsonValueKind.Null && raw.TryGetProperty("MitigationAuditOptions", out var audit) && audit.ValueKind == System.Text.Json.JsonValueKind.Null;
     private static string[] MitigationFields(TweakDefinition definition) => definition.Options.SelectMany(option => option.Controls ?? []).Where(control => control.Address.Kind == "mitigations" && control.Value.ValueKind == System.Text.Json.JsonValueKind.Object)
