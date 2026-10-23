@@ -1,5 +1,8 @@
 param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutRoot,[Parameter(Mandatory)][ValidatePattern('^[a-z0-9-]{1,40}$')][string]$Label)
 $ErrorActionPreference='Stop';$ProgressPreference='SilentlyContinue'
+. (Get-HarnessToolPath (Join-Path $Source 'tools\validation\Update\Harness.Common.ps1'))
+$nonce=Initialize-HarnessInvocation 'update-banner' $OutRoot
+Ensure-HarnessOutputDirectory $OutRoot
 Add-Type -AssemblyName UIAutomationClient,UIAutomationTypes,System.Drawing
 Add-Type -TypeDefinition @'
 using System;
@@ -226,5 +229,6 @@ try{
  [IO.File]::WriteAllText((Join-Path $out 'results.json'),(ConvertTo-Json @{label=$Label;checks=$checks;failed=$failed} -Depth 8),[Text.UTF8Encoding]::new($false))
  Compress-Archive -Path (Join-Path $out '*') -DestinationPath (Join-Path $OutRoot ($Label+'.zip'))
  Write-Output ('Completed '+$checks.Count+' checks, '+$failed+' failed.')
+ Complete-HarnessInvocation $(if($failed){'fail'}else{'pass'}) -Cleanup|Out-Null
 }
 if($failed){throw ([string]$failed+' update banner checks failed.')}
