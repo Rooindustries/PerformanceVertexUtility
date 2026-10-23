@@ -94,11 +94,16 @@ static class RegistryTweakChecks
             {
                 var (hiveName, path, name, kept) = (stock.GetProperty("hive").GetString(), stock.GetProperty("keyPath").GetString()!, stock.GetProperty("valueName").GetString()!, stock.GetProperty("dword").GetUInt32());
                 bool Kept(RegistryAddress address) => address.Hive == hiveName && address.KeyPath.Equals(path, StringComparison.OrdinalIgnoreCase) && string.Equals(address.ValueName, name, StringComparison.OrdinalIgnoreCase);
-                var fixture = Root + @"\Stock\" + path;
+                var (fixture, missing) = (Root + @"\Stock\" + path, Root + @"\Missing\" + path);
                 var definition = catalog.Settings.Single(setting => setting.Options.Any(option => option.Changes.Any(change => Kept(change.Address))));
-                var row = definition with { Options = definition.Options.Select(option => option with { Changes = option.Changes.Select(change => Kept(change.Address) ? change with { Address = change.Address with { Hive = "CurrentUser", KeyPath = fixture } } : change).ToArray() }).ToArray() };
-                if (row.Options.Any(option => option.Controls is { Length: > 0 } || option.Changes.Any(change => change.Address.Hive != "CurrentUser" || !change.Address.KeyPath.StartsWith(Root + @"\", StringComparison.Ordinal))))
-                    throw new InvalidDataException(definition.Name + " also changes a target outside the fixture; it will not be applied.");
+                TweakDefinition Remap(string target)
+                {
+                    var moved = definition with { Options = definition.Options.Select(option => option with { Changes = option.Changes.Select(change => Kept(change.Address) ? change with { Address = change.Address with { Hive = "CurrentUser", KeyPath = target } } : change).ToArray() }).ToArray() };
+                    if (moved.Options.Any(option => option.Controls is { Length: > 0 } || option.Changes.Any(change => change.Address.Hive != "CurrentUser" || !change.Address.KeyPath.StartsWith(Root + @"\", StringComparison.Ordinal))))
+                        throw new InvalidDataException(definition.Name + " also changes a target outside the fixture; it will not be applied.");
+                    return moved;
+                }
+                var row = Remap(fixture);
                 var reset = row.Options.Single(option => option.Name is "Windows default" or "Remove this override");
                 var other = row.Options.First(option => option.Id != reset.Id);
                 var on = other.Changes.Single().Dword!.Value;
@@ -120,11 +125,11 @@ static class RegistryTweakChecks
                 Set(kept);
 
                 var untouched = Preview(engine, "stock", Pick(reset));
-                check(untouched.Plan.Changes.Length == 0, definition.Name + ": Use Windows default on stock Windows changes nothing");
+                check(untouched.Plan.Changes.Length == 0, definition.Name + ": Windows default on stock Windows changes nothing");
                 engine.Apply(untouched.Path, untouched.Hash);
-                check(Dword() == kept && Siblings(), definition.Name + ": Use Windows default keeps Windows' REG_DWORD " + kept + " and the policy's other values");
+                check(Dword() == kept && Siblings(), definition.Name + ": Windows default keeps Windows' REG_DWORD " + kept + " and the policy's other values");
                 Apply(engine, "stock", []);
-                check(Dword() == kept && Siblings(), definition.Name + ": Undo after Use Windows default on stock Windows leaves Windows' value");
+                check(Dword() == kept && Siblings(), definition.Name + ": Undo after Windows default on stock Windows leaves Windows' value");
 
                 Apply(engine, "on", Pick(other));
                 check(Dword() == on && Siblings(), definition.Name + ": " + other.Name + " writes REG_DWORD " + on);
@@ -133,19 +138,25 @@ static class RegistryTweakChecks
 
                 Set(on);
                 Apply(engine, "reset", Pick(reset));
-                check(Dword() == kept && Siblings(), definition.Name + ": Use Windows default turns an earlier " + on + " back into Windows' " + kept);
+                check(Dword() == kept && Siblings(), definition.Name + ": Windows default turns an earlier " + on + " back into Windows' " + kept);
                 Apply(engine, "reset", []);
-                check(Dword() == on && Siblings(), definition.Name + ": Undo after Use Windows default restores the exact earlier REG_DWORD " + on);
+                check(Dword() == on && Siblings(), definition.Name + ": Undo after Windows default restores the exact earlier REG_DWORD " + on);
 
                 Set(null);
                 Apply(engine, "absent", Pick(reset));
-                check(Dword() == kept && Siblings(), definition.Name + ": Use Windows default puts Windows' value back after something deleted it");
+                check(Dword() == kept && Siblings(), definition.Name + ": Windows default puts Windows' value back after something deleted it");
                 Apply(engine, "absent", []);
                 check(!Present() && Siblings(), definition.Name + ": Undo after that removes only the value it wrote and keeps the policy key and its other values");
+                Apply(Engine(Remap(missing)), "missing", Pick(reset));
+                using (var key = hive.OpenSubKey(missing)) check(key?.GetValueKind(name) == RegistryValueKind.DWord && Equals(key.GetValue(name), unchecked((int)kept)), definition.Name + ": Windows default writes Windows' value where the policy key is missing");
+                Apply(Engine(Remap(missing)), "missing", []);
+                using (var key = hive.OpenSubKey(Root + @"\Missing")) check(key is null, definition.Name + ": Undo there removes the policy keys it created");
 
                 Set(kept);
                 Apply(Engine(legacy), "legacy", Pick(reset));
                 check(!Present() && Siblings(), definition.Name + ": the older catalog's Remove this override deleted Windows' value");
+                reject(() => Engine(row).Preview("other", Pick(reset)), definition.Name + ": another profile can't pick Windows default while the older app's profile still holds the removal");
+                check(!Present() && Siblings(), definition.Name + ": that refused review writes nothing");
                 Apply(Engine(row), "legacy", []);
                 check(Dword() == kept && Siblings(), definition.Name + ": after an update and restart, Undo of a profile the older app applied puts Windows' REG_DWORD " + kept + " back");
                 Apply(Engine(legacy), "saved", Pick(reset));
@@ -158,7 +169,7 @@ static class RegistryTweakChecks
                 var fault = Preview(engine, "fault", Pick(reset));
                 var before = State();
                 reject(() => new RegistryTweakStore(recovery).Commit(fault.Plan with { Changes = [.. fault.Plan.Changes, fault.Plan.Changes.Single() with { After = new(name, 4, [1]) }] }, fault.Hash),
-                    definition.Name + ": a Use Windows default write followed by a failing write in the same transaction is rejected");
+                    definition.Name + ": a Windows default write followed by a failing write in the same transaction is rejected");
                 check(Dword() == on && Siblings() && (State() ?? []).SequenceEqual(before ?? []), definition.Name + ": the rolled-back write leaves the earlier value and the recovery record unchanged");
             }
         }
