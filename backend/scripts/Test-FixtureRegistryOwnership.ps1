@@ -17,18 +17,23 @@ public static class RooIndustriesFixtureParent {
     }
 }
 '@
-$parents=@('RooIndustriesCleanupTests','RooIndustriesDiscoveryTests','RooIndustriesPublishedPathTests','RooIndustriesApplicationCleanupTests','RooIndustriesExclusionTests','RooIndustriesCleanupBatchTests')
+$areaParents=@{registry=@('RooIndustriesCleanupTests');discovery=@('RooIndustriesDiscoveryTests','RooIndustriesPublishedPathTests');cleanup=@('RooIndustriesApplicationCleanupTests','RooIndustriesExclusionTests');batch=@('RooIndustriesCleanupBatchTests')}
+$parents=@($areaParents.Values|ForEach-Object {$_})
 $hive=[Microsoft.Win32.RegistryKey]::OpenBaseKey([Microsoft.Win32.RegistryHive]::CurrentUser,[Microsoft.Win32.RegistryView]::Registry64)
 function Read-Parent([string]$Name){$key=$hive.OpenSubKey('Software\'+$Name);if(-not $key){return 'absent'};try{return ('{0} subkeys, {1} values' -f $key.SubKeyCount,$key.ValueCount)}finally{$key.Dispose()}}
+function Invoke-Area([string]$Run){& (Join-Path $PSScriptRoot 'Test-OptimizerCore.ps1') -DotNetPath $DotNetPath -Area $Run|Out-Host;Check ($LASTEXITCODE -eq 0) ('Optimizer core '+$Run+' checks pass')}
 $existing=@($parents|Where-Object {(Read-Parent $_) -ne 'absent'})
 if($existing.Count){Write-Output ('SKIP These fixture parents already exist, so they cannot stand in for another program''s keys: '+($existing -join ', '));return}
+foreach($run in $Area){
+    Invoke-Area $run
+    foreach($name in $areaParents[$run]){Check ((Read-Parent $name) -eq 'absent') ('The '+$run+' checks remove the '+$name+' key they created')}
+}
 $created=New-Object System.Collections.Generic.List[string]
 try {
     foreach($name in $parents){if([RooIndustriesFixtureParent]::CreateNew('Software\'+$name)){$created.Add($name)}}
     Check ($created.Count -eq $parents.Count) 'Every empty stand-in parent key is created by this test'
     foreach($run in $Area){
-        & (Join-Path $PSScriptRoot 'Test-OptimizerCore.ps1') -DotNetPath $DotNetPath -Area $run|Out-Host
-        Check ($LASTEXITCODE -eq 0) ('Optimizer core '+$run+' checks pass')
+        Invoke-Area $run
         foreach($name in $created){$state=Read-Parent $name;Check ($state -eq '0 subkeys, 0 values') ('An empty '+$name+' key that existed before the '+$run+' checks is kept ('+$state+')')}
     }
 } finally {
