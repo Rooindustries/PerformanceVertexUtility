@@ -48,6 +48,7 @@ public sealed class InstalledApp
     public string? QuietUninstallString { get; set; }
     [JsonIgnore] public bool Removed { get; init; }
     [JsonIgnore] public bool RemovalUnconfirmed { get; init; }
+    [JsonIgnore] public bool ResultWaiting { get; init; }
 
     private static readonly Dictionary<string, string> KnownPackages = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -92,6 +93,7 @@ public sealed class InstalledApp
     {
         get
         {
+            if (ResultWaiting) return "Finished while you were away. Pick it to see the result.";
             if (Removed) return RemovalUnconfirmed ? "Its saved cleanup can be restored." : "Removed. Its cleanup can be restored.";
             var pub = PublisherDisplay;
             if (!string.IsNullOrWhiteSpace(pub)
