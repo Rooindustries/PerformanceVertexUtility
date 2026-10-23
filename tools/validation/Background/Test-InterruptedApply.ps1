@@ -1,4 +1,4 @@
-param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutRoot,[string]$BackendSource='',[int]$Probes=60,[string[]]$Cases=@('startup-race','journal-path','boundaries','replace-failure','timeout','killed','closed','rebooted','other-program','stale-journal','race','full'))
+param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutRoot,[string]$BackendSource='',[int]$Probes=60,[string[]]$Cases=@('startup-race','journal-path','boundaries','replace-failure','timeout','killed','closed','rebooted','unwritten','stale-journal','race','full'))
 $ErrorActionPreference='Stop'
 . (Join-Path $Source 'tools\validation\LoadTimes\CleanupOwnership.Common.ps1')
 Add-Type -Path (Join-Path $Source 'tools\validation\Background\Oracle.cs')
@@ -257,6 +257,22 @@ try {
    if(@($raw.result.alreadyClosedItems).Count -ne $snapshots -or $raw.result.summary -notmatch 'Already closed or restarted:'){throw 'Restore after the apps closed did not say so'}
    $results.rebooted=$raw
   } finally {StopFixtures $fixtures}
+ }
+ if($Cases -contains 'unwritten'){
+  $fixtures=Fixtures 'unwritten' 2;Profile $fixtures;$before=Before $fixtures;$settings=Settings 'unwritten'
+  $commonPath=Join-Path $root 'backend\scripts\ProcessProfile.Common.ps1';$commonText=[IO.File]::ReadAllText($commonPath);$app=$null;$script=$null
+  try {
+   $marker=Join-Path $settings 'second-control.txt';$start=$commonText.IndexOf('function Invoke-RooIndustriesProcessControlChange {');if($start -lt 0){throw 'The real process writer was not found'}
+   $pause="if(`$control -eq 'priorityClass'){`$script:rooInterruptedControls++;if(`$script:rooInterruptedControls -eq 2){[IO.File]::WriteAllText('$($marker.Replace("'","''"))','second');while(`$true){Start-Sleep -Milliseconds 20}}}; switch (`$control) {"
+   [IO.File]::WriteAllText($commonPath,($commonText.Substring(0,$start)+$commonText.Substring($start).Replace('switch ($control) {',$pause)),$utf8)
+   $app=StartApply $settings 'unwritten-apply';$script=ScriptOf $app;$deadline=[DateTime]::UtcNow.AddSeconds(120)
+   while(-not(Test-Path -LiteralPath $marker)){if($script.process.HasExited -or [DateTime]::UtcNow -gt $deadline){throw 'The apply never reached the second control'};Start-Sleep -Milliseconds 10}
+   Stop-OwnedProcess $app;Stop-OwnedProcess $script;$null=$app.process.WaitForExit(15000);$null=$script.process.WaitForExit(15000);MidApply $fixtures 'unwritten'
+   $target=@($fixtures|Where-Object {$_.Refresh();[string]$_.PriorityClass -eq 'Normal'})[0];$target.PriorityClass='Idle';Save 'unwritten-other-program' (Read $target)
+   [IO.File]::WriteAllText($commonPath,$commonText,$utf8)
+   $inspect=Offered $settings 'unwritten-relaunch';Save 'unwritten-backup' (Get-Content -Raw -LiteralPath $inspect.recovery.Path|ConvertFrom-Json)
+   $results.unwritten=RestoreAll $fixtures $before $settings 'unwritten-restore' @{$target.Id='Idle'}
+  }finally{if($app){Stop-OwnedProcess $app};if($script){Stop-OwnedProcess $script};[IO.File]::WriteAllText($commonPath,$commonText,$utf8);StopFixtures $fixtures}
  }
  if($Cases -contains 'other-program'){
   $fixtures=Fixtures 'other';Profile $fixtures;$before=Before $fixtures;$settings=Settings 'other-program'

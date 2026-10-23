@@ -113,14 +113,17 @@ the app's cancellation path, by killing the app and its script, and by closing t
 while the script keeps running. A second Apply must be refused until that script ends.
 Relaunch after the script ends must offer Restore, and Restore must return each probe's CPU priority,
 affinity, I/O and memory priority to the exact original. It also covers the probes
-closing before Restore (it says so and finishes), another program changing a priority
-after the apply (Restore keeps it), a broken, stale or misplaced apply journal (set
+closing before Restore (it says so and finishes), another program changing an
+unwritten priority (Restore keeps it), a broken, stale or misplaced apply journal (set
 aside with its bytes kept, or cleared when nothing changed), two applies at once (one
 restore point), the timing of a full apply, and an empty `backend\state`. The
 `boundaries` case pauses before and after the real CPU, affinity, I/O, memory and GPU
 writes, backup creation and replacement, and result output. The journal cases also
 check missing fields, null values and unknown versions. Pass
-`--arguments '{"Cases":["timeout"]}'` to run named cases. `interrupted-apply-ui`
+`--arguments '{"Cases":["timeout"]}'` to run named cases. The separate
+`other-program` case changes a priority already written by Apply; run it as a merge
+gate after PR #76 supplies that restore behavior. It is excluded from the default
+case list until that dependency lands. `interrupted-apply-ui`
 repeats the cut against a built app stage (`AppStage`, from `Build-Release.ps1
 -UpdateFeedUrl ''`) and captures the Background apps card: `Label` `before` expects no
 Restore, `after` expects the offer, clicks Restore, checks every probe and records the

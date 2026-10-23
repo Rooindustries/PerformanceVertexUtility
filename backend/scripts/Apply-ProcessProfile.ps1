@@ -270,8 +270,6 @@ try {
             $backupPath = Join-Path (Join-Path $resolvedStateRoot (Join-Path 'process-profile-backups' $backupId)) 'backup.json'
         }
         Ensure-RooIndustriesDirectory (Split-Path $backupPath -Parent)
-        foreach ($snapshot in @($snapshots.ToArray())) { Set-SnapshotOutcome $snapshot 'applied' }
-
         $backupManifest = [pscustomobject]@{
             schemaVersion = 1
             productName = $script:RooIndustriesProcessProductName
