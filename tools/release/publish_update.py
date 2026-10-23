@@ -11,6 +11,8 @@ import subprocess
 import struct
 import sys
 from datetime import datetime, timezone
+from http.client import HTTPException
+from urllib.error import HTTPError
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
@@ -27,6 +29,13 @@ def check_version(value):
     match = VERSION.fullmatch(value) if isinstance(value, str) else None
     if not match or (match[4] and any(p.isascii() and p.isdecimal() and len(p) > 1 and p[0] == "0" for p in match[4].split("."))):
         raise ValueError("Invalid SemVer release version")
+
+
+def precedence(value):
+    check_version(value)
+    match = VERSION.fullmatch(value)
+    parts = match[4].split(".") if match[4] else []
+    return [(len(n), n) for n in match.groups()[:3]], not parts, [(0, len(p), p) if p.isdecimal() else (1, p) for p in parts]
 
 
 def unique(pairs):
@@ -231,38 +240,46 @@ def fetch(url, limit):
         data = response.read(limit + 1)
         if len(data) > limit:
             raise ValueError("Published response exceeds its bound")
+        if response.length:
+            raise ValueError("Published response ended early")
         return data
 
 
-def publish(args):
-    feed = (ROOT / "tools/release/update-feed.txt").read_text().strip()
-    payload = verify_manifest(Path(args.manifest).read_bytes(), args.installer, feed)
-    if not re.fullmatch(r"b/[A-Za-z0-9_-]+/RooIndustries-OptimizationSuite-[0-9A-Za-z.+-]+-setup\.exe", args.installer_path):
-        raise ValueError("Use an immutable b/<random>/<installer> path")
-    if not re.fullmatch(r"u/[A-Za-z0-9_-]+/beta\.json", args.feed_path) or urlparse(feed).path != "/" + args.feed_path:
-        raise ValueError("Feed path differs from the committed feed")
-    if urlparse(payload["installer"]["url"]).path != "/" + args.installer_path:
-        raise ValueError("Installer path differs from the signed URL")
-    commands = [
-        ["vercel", "blob", "put", str(args.installer), "--access", "public", "--pathname", args.installer_path, "--content-type", "application/octet-stream"],
-        ["vercel", "blob", "put", str(args.manifest), "--access", "public", "--pathname", args.feed_path, "--allow-overwrite", "--cache-control-max-age", "60", "--content-type", "application/json"],
-    ]
-    for command in commands:
-        print(shlex.join(command))
-    if not args.yes_publish:
-        print("Dry run: nothing uploaded. Publishing requires --yes-publish and user authorization.")
+def feed_bytes(feed):
+    return fetch(feed + "?t=" + str(int(datetime.now(timezone.utc).timestamp())), 65536)
+
+
+def live_feed(feed):
+    data = feed_bytes(feed)
+    return data, verify_manifest(data, feed_url=feed)
+
+
+def released_versions():
+    lines = [line.strip() for line in (ROOT / "tools/release/released-versions.txt").read_text(encoding="utf-8-sig").splitlines()]
+    return [line for line in lines if line and not line.startswith("#")]
+
+
+def release_floor(live_version):
+    listed = max(released_versions(), key=precedence, default=None)
+    return max((version for version in (listed, live_version) if version), key=precedence, default=None), listed
+
+
+def record_release(version):
+    path = ROOT / "tools/release/released-versions.txt"
+    if version in released_versions():
         return
-    if not os.environ.get("BLOB_READ_WRITE_TOKEN"):
-        raise ValueError("BLOB_READ_WRITE_TOKEN is missing from the environment")
-    for index, command in enumerate(commands):
-        result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
-        if result.returncode:
-            raise ValueError("Blob upload " + str(index + 1) + " failed with exit code " + str(result.returncode))
-    remote = fetch(feed + "?t=" + str(int(datetime.now(timezone.utc).timestamp())), 65536)
-    published = verify_manifest(remote, feed_url=feed)
-    if remote != Path(args.manifest).read_bytes():
-        raise ValueError("Published feed has not propagated to the signed bytes yet")
-    item = published["installer"]
+    text = path.read_text(encoding="utf-8-sig")
+    with path.open("a", encoding="utf-8", newline="") as out:
+        out.write(("\n" if text and not text.endswith("\n") else "") + version + "\n")
+    print("Added " + version + " to tools/release/released-versions.txt. Commit that line to main.")
+
+
+def check_feed_path(feed, feed_path):
+    if not re.fullmatch(r"u/[A-Za-z0-9_-]+/beta\.json", feed_path) or urlparse(feed).path != "/" + feed_path:
+        raise ValueError("Feed path differs from the committed feed")
+
+
+def check_online_installer(item):
     sha = hashlib.sha256()
     total = 0
     with urlopen(Request(item["url"], headers={"Cache-Control": "no-cache"}), timeout=20) as response:
@@ -276,7 +293,90 @@ def publish(args):
             sha.update(block)
     if (total, sha.hexdigest()) != (item["size"], item["sha256"].lower()):
         raise ValueError("Published installer differs from the signed manifest")
+
+
+def upload(commands):
+    if not os.environ.get("BLOB_READ_WRITE_TOKEN"):
+        raise ValueError("BLOB_READ_WRITE_TOKEN is missing from the environment")
+    for index, command in enumerate(commands):
+        result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
+        if result.returncode:
+            raise ValueError("Blob upload " + str(index + 1) + " failed with exit code " + str(result.returncode))
+
+
+def publish(args):
+    feed = (ROOT / "tools/release/update-feed.txt").read_text().strip()
+    data = Path(args.manifest).read_bytes()
+    payload = verify_manifest(data, args.installer, feed)
+    if not re.fullmatch(r"b/[A-Za-z0-9_-]+/RooIndustries-OptimizationSuite-[0-9A-Za-z.+-]+-setup\.exe", args.installer_path):
+        raise ValueError("Use an immutable b/<random>/<installer> path")
+    check_feed_path(feed, args.feed_path)
+    if urlparse(payload["installer"]["url"]).path != "/" + args.installer_path:
+        raise ValueError("Installer path differs from the signed URL")
+    current, live = live_feed(feed)
+    floor, _ = release_floor(live["version"])
+    if precedence(payload["version"]) <= precedence(floor):
+        source = "the live beta " if precedence(floor) == precedence(live["version"]) else "the released version "
+        raise ValueError("Version " + payload["version"] + " is not newer than " + source + floor + ", so testers who already have " + floor + " would not be offered it")
+    rollback = Path(args.manifest).with_name(Path(args.manifest).stem + ".previous-live.json")
+    rollback.write_bytes(current)
+    print("Saved the live " + live["version"] + " manifest for rollback: " + str(rollback))
+    commands = [
+        ["vercel", "blob", "put", str(args.installer), "--access", "public", "--pathname", args.installer_path, "--content-type", "application/octet-stream"],
+        ["vercel", "blob", "put", str(args.manifest), "--access", "public", "--pathname", args.feed_path, "--allow-overwrite", "--cache-control-max-age", "60", "--content-type", "application/json"],
+    ]
+    for command in commands:
+        print(shlex.join(command))
+    if not args.yes_publish:
+        print("Dry run: nothing uploaded. Publishing requires --yes-publish and user authorization.")
+        return
+    upload(commands)
+    remote, published = live_feed(feed)
+    if remote != data:
+        raise ValueError("Published feed has not propagated to the signed bytes yet")
+    check_online_installer(published["installer"])
     print("Published manifest and installer verified over HTTPS.")
+    try:
+        record_release(payload["version"])
+    except (OSError, ValueError) as error:
+        print("Published, but couldn't add " + payload["version"] + " to released-versions.txt (" + str(error) + "); add it by hand.", file=sys.stderr)
+        return 1
+
+
+def set_feed(args):
+    feed = (ROOT / "tools/release/update-feed.txt").read_text().strip()
+    data = Path(args.manifest).read_bytes()
+    payload = verify_manifest(data, feed_url=feed)
+    check_feed_path(feed, args.feed_path)
+    try:
+        current = feed_bytes(feed)
+    except (ValueError, OSError, HTTPException) as error:
+        if not isinstance(error, HTTPError) or error.code != 404:
+            raise ValueError("Couldn't read the live feed (" + str(error) + "); try again")
+        current, live, state = None, None, "a live feed that does not verify (" + str(error) + ")"
+    else:
+        try:
+            live = verify_manifest(current, feed_url=feed)
+            state = "the live " + live["version"] + " manifest"
+        except (ValueError, KeyError, TypeError, AttributeError, InvalidSignature) as error:
+            current, live, state = None, None, "a live feed that does not verify (" + ("Invalid signature" if isinstance(error, InvalidSignature) else str(error)) + ")"
+    if current == data:
+        raise ValueError("The live feed already serves this manifest")
+    floor, listed = release_floor(live and live["version"])
+    if floor != listed and precedence(payload["version"]) < precedence(floor):
+        raise ValueError("The live beta " + floor + " is not in released-versions.txt. Add it there before rolling back, so testers who already have " + floor + " are offered the next publish")
+    check_online_installer(payload["installer"])
+    print("Replacing " + state + " with version " + payload["version"] + ".")
+    command = ["vercel", "blob", "put", str(args.manifest), "--access", "public", "--pathname", args.feed_path, "--allow-overwrite", "--cache-control-max-age", "60", "--content-type", "application/json"]
+    print(shlex.join(command))
+    if not args.yes_publish:
+        print("Dry run: nothing uploaded. Changing the feed requires --yes-publish and user authorization.")
+        return
+    upload([command])
+    remote, _ = live_feed(feed)
+    if remote != data:
+        raise ValueError("The feed has not propagated to the signed bytes yet")
+    print("The feed now serves version " + payload["version"] + ", verified over HTTPS.")
 
 
 def main():
@@ -293,6 +393,10 @@ def main():
     for name in ("installer", "manifest", "installer-path", "feed-path"):
         send.add_argument("--" + name, required=True)
     send.add_argument("--yes-publish", action="store_true")
+    point = commands.add_parser("set-feed")
+    for name in ("manifest", "feed-path"):
+        point.add_argument("--" + name, required=True)
+    point.add_argument("--yes-publish", action="store_true")
     args = parser.parse_args()
     try:
         if args.command == "manifest":
@@ -300,8 +404,10 @@ def main():
         elif args.command == "verify":
             payload = verify_manifest(Path(args.manifest).read_bytes(), args.installer, args.feed_url)
             print(json.dumps({"verified": True, "version": payload["version"], "installer": payload["installer"]}))
+        elif args.command == "set-feed":
+            set_feed(args)
         else:
-            publish(args)
+            return publish(args) or 0
     except (ValueError, KeyError, TypeError, AttributeError, OSError, struct.error, InvalidSignature) as error:
         print("Update release refused: " + ("Invalid signature" if isinstance(error, InvalidSignature) else str(error)), file=sys.stderr)
         return 1
