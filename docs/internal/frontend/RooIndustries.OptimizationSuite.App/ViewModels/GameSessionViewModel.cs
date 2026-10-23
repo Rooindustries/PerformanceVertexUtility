@@ -256,7 +256,9 @@ public partial class GameSessionViewModel : ObservableObject
             {
                 Status = "That's the game, not its launcher."; Detail = ProtectedSessions.LauncherIsGame; return;
             }
-            LoadCores(snapshot, snapshot.Controls["affinity"].Require().Deserialize<AffinityState>(OperationFiles.Json)!);
+            _matching = true;
+            try { LoadCores(snapshot, snapshot.Controls["affinity"].Require().Deserialize<AffinityState>(OperationFiles.Json)!); }
+            finally { _matching = false; }
             _launcher = snapshot; Status = "Choose priorities and CPU cores, then review your changes."; Detail = "";
         }
         catch (Exception error) { if (version == _version) { Status = "Couldn't read this launcher."; Detail = Closed(error) ? ProtectedSessions.LauncherClosed : error.Message; } }
