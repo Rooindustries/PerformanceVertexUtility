@@ -2,6 +2,7 @@ param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutRo
 $ErrorActionPreference='Stop';$ProgressPreference='SilentlyContinue'
 . (Get-HarnessToolPath (Join-Path $Source 'tools\validation\Update\Harness.Common.ps1'))
 . (Get-HarnessToolPath (Join-Path $Source 'backend\scripts\BrandCompatibility.Common.ps1'))
+. (Get-HarnessToolPath (Join-Path $Source 'tools\validation\UiAutomation\ComboChoice.Common.ps1'))
 $nonce=Initialize-HarnessInvocation 'theme-keeps-work' $OutRoot
 Assert-HarnessHostLease;Ensure-HarnessOutputDirectory $OutRoot
 Add-Type -AssemblyName UIAutomationClient,UIAutomationTypes,System.Drawing,System.Windows.Forms
@@ -55,18 +56,7 @@ function Close{if(Alive){$script:app.process.CloseMainWindow()|Out-Null;if(-not$
 function Nav([string]$name){$nav=WaitFor {ById 'Nav'} 60 'navigation';(Pattern (WaitFor {Named $nav $name $CT::ListItem} 30 ('nav '+$name)) ([Windows.Automation.SelectionItemPattern])).Select();Start-Sleep -Milliseconds 1500}
 function Tab([string]$id){(Pattern (WaitFor {ById $id} 60 $id) ([Windows.Automation.SelectionItemPattern])).Select();Start-Sleep -Milliseconds 800}
 function Press([string]$id){(Pattern (WaitFor {$e=ById $id;if($e -and $e.Current.IsEnabled){$e}} 120 $id) ([Windows.Automation.InvokePattern])).Invoke()}
-function Choose([string]$id,[string]$like){
- (Pattern (WaitFor {$c=ById $id;if($c -and $c.Current.IsEnabled){$c}} 120 $id) ([Windows.Automation.ExpandCollapsePattern])).Expand()
- $item=$null
- for($page=0;-not$item -and $page -lt 40;$page++){
-  Start-Sleep -Milliseconds 250;$combo=ById $id
-  $item=@($combo.FindAll($TS::Descendants,(Of $CT::ListItem))|Where-Object {$_.Current.Name -like $like})|Select-Object -First 1
-  if(-not$item){$scroll=@($combo.FindAll($TS::Descendants,[Windows.Automation.Condition]::TrueCondition)|Where-Object {try{(Pattern $_ ([Windows.Automation.ScrollPattern])).Current.VerticallyScrollable}catch{$false}})|Select-Object -First 1;if(-not$scroll){break};(Pattern $scroll ([Windows.Automation.ScrollPattern])).Scroll([Windows.Automation.ScrollAmount]::NoAmount,[Windows.Automation.ScrollAmount]::LargeIncrement)}
- }
- if(-not$item){throw ('Choice missing: '+$like)}
- (Pattern $item ([Windows.Automation.SelectionItemPattern])).Select();Start-Sleep -Milliseconds 500
- try{(Pattern (ById $id) ([Windows.Automation.ExpandCollapsePattern])).Collapse()}catch{}
-}
+function Choose([string]$id,[string]$like){Select-ComboChoice $script:window $id $like 120|Out-Null}
 function Theme([string]$name){Nav 'Settings';Choose 'ThemePicker' $name;Start-Sleep -Seconds 3}
 function Text([string]$id){$e=ById $id;if($e){Scrub $e.Current.Name}else{'missing'}}
 function Private{

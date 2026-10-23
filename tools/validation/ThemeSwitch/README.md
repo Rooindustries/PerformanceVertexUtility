@@ -10,7 +10,7 @@ python3 -I tools/validation/ThemeSwitch/run_theme.py --host <test-pc> --expected
 
 The driver stages a source frame, waits for the shared host lease, runs `Invoke-ThemeSwitch.ps1` in the signed-in desktop session, downloads the evidence, clears the frame and encodes the video. It exits 0 only when every check passes.
 
-The script builds the app and its helper from the staged source with test hooks, then drives the real app with UI Automation. It never applies anything to the PC except one process priority change on a disposable copy of `PING.EXE`, which the Games page undoes. It saves the user's `settings.json` before starting and writes the original bytes back at the end.
+The script builds the app and its helper from the staged source with test hooks, then drives the real app with UI Automation. It never applies anything to the PC except one process priority change on a disposable copy of `PING.EXE`, which the Games page undoes. It saves the user's `settings.json` before starting and writes the original bytes back at the end. The build points the Windows App SDK's packaging folder at a short path, because the default one inside a staged frame passes the 259-character limit. The fixture is set to Normal priority right after it starts, since the interactive task runs below normal and its children inherit that. Dropdown choices go through `tools/validation/UiAutomation/ComboChoice.Common.ps1`, which finds the item even when the long process list hasn't drawn it yet and checks the dropdown really took the choice.
 
 | Way it can fail | Check |
 | --- | --- |
