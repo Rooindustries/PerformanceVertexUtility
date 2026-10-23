@@ -66,21 +66,26 @@ public static extern uint GetFinalPathNameByHandleW(Microsoft.Win32.SafeHandles.
 
 function Get-RooIndustriesLongPath {
     param([string]$Path)
+    $long = Get-RooIndustriesFinalPath $Path
     try {
-        if ([string]::IsNullOrWhiteSpace($Path)) { return $null }
-        $current = [System.IO.Path]::GetFullPath($Path)
-        if ($current -notmatch '^[A-Za-z]:\\') { return $null }
-        if (([System.IO.DriveInfo]::new($current.Substring(0, 3))).DriveType -ne [System.IO.DriveType]::Fixed) { return $null }
-        if ($current.Length -gt 3) { $current = $current.TrimEnd('\') }
-        $tail = ''
-        while (-not [string]::IsNullOrEmpty($current)) {
-            $final = Get-RooIndustriesFinalPath $current
-            if ($final) { return $final + $tail }
-            $tail = '\' + [System.IO.Path]::GetFileName($current) + $tail
-            $current = [System.IO.Path]::GetDirectoryName($current)
+        if ($null -eq $long -and -not [string]::IsNullOrWhiteSpace($Path)) {
+            $current = [System.IO.Path]::GetFullPath($Path)
+            if ($current -match '^[A-Za-z]:\\' -and ([System.IO.DriveInfo]::new($current.Substring(0, 3))).DriveType -eq [System.IO.DriveType]::Fixed) {
+                if ($current.Length -gt 3) { $current = $current.TrimEnd('\') }
+                $tail = ''
+                while ($null -eq $long) {
+                    $parent = [System.IO.Path]::GetDirectoryName($current)
+                    if ([string]::IsNullOrEmpty($parent)) { break }
+                    $tail = '\' + [System.IO.Path]::GetFileName($current) + $tail
+                    $current = $parent
+                    $final = Get-RooIndustriesFinalPath $current
+                    if ($final) { $long = $final + $tail }
+                }
+            }
         }
     } catch { }
-    return $null
+    if ($long -match '^[A-Za-z]:$') { $long += '\' }
+    return $long
 }
 
 function Read-RooIndustriesUninstallJsonFile {

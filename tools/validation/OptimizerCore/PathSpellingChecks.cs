@@ -25,110 +25,114 @@ static class PathSpellingChecks
             var peer = Directory.CreateDirectory(Path.Combine(apps, "Peer Spelling Tool")).FullName;
             var settings = Path.Combine(install, "settings.txt");
             File.WriteAllText(settings, "fixture");
-            var appsShort = Alias(check, apps, "LONGSP~1");
-            var installShort = Alias(check, install, "ROOSPE~1");
-            var peerShort = Alias(check, peer, "PEERSP~1");
-            var authority = new CleanupAuthority
+            var appsShort = Alias(apps, "LONGSP~1");
+            var installShort = Alias(install, "ROOSPE~1");
+            var peerShort = Alias(peer, "PEERSP~1");
+            if (appsShort is not null && installShort is not null && peerShort is not null)
             {
-                AppId = "fixture:path-spelling", ProviderIdentityHash = new string('C', 64), Owner = OperationOwner.Current(),
-                ProviderQueryComplete = true, RegistrationPresent = false, RebootPending = false, RemoverRunning = false, RemovalResolved = true,
-            };
-            var application = new CleanupApplication { AppId = authority.AppId, DisplayName = App, Publisher = "Fixture", InstallLocation = install, PackageFamilyName = null };
-            CleanupApplication PeerAt(string location) => application with { AppId = "fixture:spelling-peer", DisplayName = Peer, InstallLocation = location };
-            var queue = Path.Combine(root, "queue.json");
+                var authority = new CleanupAuthority
+                {
+                    AppId = "fixture:path-spelling", ProviderIdentityHash = new string('C', 64), Owner = OperationOwner.Current(),
+                    ProviderQueryComplete = true, RegistrationPresent = false, RebootPending = false, RemoverRunning = false, RemovalResolved = true,
+                };
+                var application = new CleanupApplication { AppId = authority.AppId, DisplayName = App, Publisher = "Fixture", InstallLocation = install, PackageFamilyName = null };
+                CleanupApplication PeerAt(string location) => application with { AppId = "fixture:spelling-peer", DisplayName = Peer, InstallLocation = location };
+                var queue = Path.Combine(root, "queue.json");
 
-            (LeftoverCandidate[] Found, LeftoverCandidate Key, bool Refused, bool Intact) Case(string name, string? peerLocation, Action<RegistryKey> write)
-            {
-                var scope = registryRoot + "\\" + name;
-                using (var created = hive.CreateSubKey(scope + "\\" + App)) write(created);
-                var before = Snapshot(hive, scope + "\\" + App);
-                var context = new CleanupContext(queue, authority, application, peerLocation is null ? [] : [PeerAt(peerLocation)], true);
-                var engine = new ApplicationCleanup(() => context, [], [new("CurrentUser", "Registry64", scope, "key", null)]);
-                var found = engine.Scan(CancellationToken.None).Candidates;
-                var key = found.Single(item => item.Kind == "registryKey");
-                var refused = false;
-                try { engine.Preview(Path.Combine(root, "review-" + name, "review.json"), [key.ItemId], true, true); }
-                catch (InvalidDataException) { refused = true; }
-                return (found, key, refused, Snapshot(hive, scope + "\\" + App) == before);
+                (LeftoverCandidate[] Found, LeftoverCandidate Key, bool Refused, bool Intact) Case(string name, string? peerLocation, Action<RegistryKey> write)
+                {
+                    var scope = registryRoot + "\\" + name;
+                    using (var created = hive.CreateSubKey(scope + "\\" + App)) write(created);
+                    var before = Snapshot(hive, scope + "\\" + App);
+                    var context = new CleanupContext(queue, authority, application, peerLocation is null ? [] : [PeerAt(peerLocation)], true);
+                    var engine = new ApplicationCleanup(() => context, [], [new("CurrentUser", "Registry64", scope, "key", null)]);
+                    var found = engine.Scan(CancellationToken.None).Candidates;
+                    var key = found.Single(item => item.Kind == "registryKey");
+                    var refused = false;
+                    try { engine.Preview(Path.Combine(root, "review-" + name, "review.json"), [key.ItemId], true, true); }
+                    catch (InvalidDataException) { refused = true; }
+                    return (found, key, refused, Snapshot(hive, scope + "\\" + App) == before);
+                }
+
+                var dll = Path.Combine(peer, "peer.dll");
+                var shared = new (string Name, string Peer, Action<RegistryKey> Write)[]
+                {
+                    ("short-peer-long-value", peerShort, key => key.SetValue("Plugin", "\"" + dll + "\"")),
+                    ("long-peer-short-value", peer, key => key.SetValue("Plugin", Path.Combine(peerShort, "peer.dll"))),
+                    ("long-peer-mixed-value", peer, key => key.SetValue("Plugin", "\"" + Path.Combine(appsShort, Path.GetFileName(peer), "peer.dll") + "\" --run")),
+                    ("doubled-separators", peer, key => key.SetValue("Plugin", dll.Replace("\\", "\\\\"))),
+                    ("semicolon-after", peer, key => key.SetValue("Paths", peer + ";C:\\Other Spelling\\bin")),
+                    ("semicolon-before", peer, key => key.SetValue("Paths", "C:\\Other Spelling\\bin;" + Path.Combine(peer, "bin"))),
+                    ("comma-list", peer, key => key.SetValue("Paths", "C:\\Other Spelling\\bin," + peer)),
+                    ("quoted-list-with-spaces", peer, key => key.SetValue("Paths", "\"C:\\Other Spelling\\bin\"; \"" + peerShort + "\"")),
+                    ("multi-string", peer, key => key.SetValue("Paths", new[] { "C:\\Other Spelling\\bin", "plugins=" + peer + ";extra" }, RegistryValueKind.MultiString)),
+                    ("quoted-short-peer-trailing-separators", "\"" + peerShort.ToUpperInvariant() + "\\\\\"", key => key.SetValue("Plugin", dll.ToLowerInvariant())),
+                    ("missing-peer-through-short-parent", Path.Combine(appsShort, "Missing Spelling Peer"), key => key.SetValue("Plugin", Path.Combine(apps, "Missing Spelling Peer", "peer.dll"))),
+                };
+                foreach (var item in shared)
+                {
+                    var result = Case(item.Name, item.Peer, item.Write);
+                    Console.WriteLine("MEASURE pathSpelling " + JsonSerializer.Serialize(new { Scenario = item.Name, result.Key.SharedOwners, result.Refused, result.Intact }));
+                    check(result.Key.SharedOwners.Contains(Peer) && result.Refused && result.Intact, item.Name + ": the key keeps its shared owner, whole-key preview is refused and its values stay intact");
+                }
+
+                var distinct = Case("prefix-only", peer, key =>
+                {
+                    key.SetValue("Old", "\"" + peer + "-Old\\peer.dll\"");
+                    key.SetValue("Joined", peer + "Extra\\peer.dll");
+                    key.SetValue("Comma", "\"" + peer + ", Inc\\peer.dll\"");
+                    key.SetValue("ShortPrefix", peerShort + "X\\peer.dll");
+                });
+                check(distinct.Key.SharedOwners.Count == 0 && !distinct.Refused && distinct.Intact,
+                    "Paths that only share the peer's prefix, including a folder name with a comma, are not shared and the key stays previewable: " + string.Join(", ", distinct.Key.SharedOwners));
+
+                var named = Case("app-short-value", null, key => key.SetValue("Launcher", "\"" + Path.Combine(installShort, "app.exe") + "\" --start"));
+                check(named.Found.Any(item => item.Kind == "registryValue" && item.Registry?.ValueName == "Launcher" && item.SharedOwners.Count == 0),
+                    "A value that names the removed app through its short path is offered as that app's leftover");
+
+                var pluginPeer = PeerAt(Path.Combine(installShort, "Plugins", "Missing Spelling Plugin"));
+                var fileContext = new CleanupContext(queue, authority, application, [pluginPeer], true);
+                var fileEngine = new ApplicationCleanup(() => fileContext, [], []);
+                var folder = fileEngine.Scan(CancellationToken.None).Candidates.Single(item => item.Target == install);
+                var folderRefused = false;
+                try { fileEngine.Preview(Path.Combine(root, "review-folder", "review.json"), [folder.ItemId], true, true); }
+                catch (InvalidDataException) { folderRefused = true; }
+                check(folder.SharedOwners.Contains(Peer) && folderRefused && File.ReadAllText(settings) == "fixture",
+                    "A peer recorded at a missing folder inside the app folder's short path keeps the folder shared and refuses its preview");
+
+                var appearScope = registryRoot + "\\appear";
+                var appearKey = appearScope + "\\" + App;
+                using (var key = hive.CreateSubKey(appearKey)) key.SetValue("Plugin", "\"" + Path.Combine(install, "Shared Plugin", "plugin.dll") + "\"");
+                var appearBefore = Snapshot(hive, appearKey);
+                var appearContext = new CleanupContext(queue, authority, application, [], true);
+                var appearEngine = new ApplicationCleanup(() => appearContext, [], [new("CurrentUser", "Registry64", appearScope, "key", null)]);
+                var selection = appearEngine.Scan(CancellationToken.None).Candidates.Where(item => item.Kind == "registryKey" || item.Target == install).Select(item => item.ItemId).ToArray();
+                var reviewPath = Path.Combine(root, "review-appear", "review.json");
+                appeared = appearEngine.Preview(reviewPath, selection, true, true);
+                appearContext = appearContext with { Peers = [PeerAt(Path.Combine(installShort, "Shared Plugin"))] };
+                var applied = appearEngine.Apply(reviewPath, OperationFiles.HashFile(reviewPath), Path.Combine(root, "review-appear", "journal.json"));
+                check(selection.Length == 2 && applied.Status == "needsReconciliation" && Snapshot(hive, appearKey) == appearBefore && File.ReadAllText(settings) == "fixture",
+                    "A peer that appears through a short path after review stops cleanup before any registry or file deletion");
+                var again = false;
+                try { appearEngine.Preview(Path.Combine(root, "review-appear-again", "review.json"), selection, true, true); }
+                catch (InvalidDataException) { again = true; }
+                check(again && Snapshot(hive, appearKey) == appearBefore, "A fresh review with that peer installed refuses both the key and the folder");
+
+                var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+                var windowsFolder = new[] { "Windows NT", "Windows Defender", "Windows Mail", "Windows Photo Viewer" }.Select(name => Path.Combine(programFiles, name)).FirstOrDefault(Directory.Exists);
+                var windowsShort = windowsFolder is null ? null : ShortPath(windowsFolder);
+                if (windowsShort is null || string.Equals(windowsShort, windowsFolder, StringComparison.OrdinalIgnoreCase)) Console.WriteLine("SKIP No Windows folder under Program Files has an 8.3 alias on this volume");
+                else
+                {
+                    var windowsScope = registryRoot + "\\windows-owned";
+                    using (var created = hive.CreateSubKey(windowsScope + "\\Settings")) created.SetValue("Tool", "\"" + Path.Combine(windowsShort, "tool.exe") + "\"");
+                    var owned = new LeftoverDiscovery(application with { InstallLocation = windowsShort }, []).Scan(CancellationToken.None, [], [new("CurrentUser", "Registry64", windowsScope, "key", null)]);
+                    check(owned.Candidates.Length == 0 && LeftoverDiscovery.MicrosoftOwnedPath(Path.Combine(windowsShort, "Roo Industries Example")),
+                        "An app installed in a Windows-owned folder given by its 8.3 alias offers neither that folder nor values that name it");
+                }
+
             }
-
-            var dll = Path.Combine(peer, "peer.dll");
-            var shared = new (string Name, string Peer, Action<RegistryKey> Write)[]
-            {
-                ("short-peer-long-value", peerShort, key => key.SetValue("Plugin", "\"" + dll + "\"")),
-                ("long-peer-short-value", peer, key => key.SetValue("Plugin", Path.Combine(peerShort, "peer.dll"))),
-                ("long-peer-mixed-value", peer, key => key.SetValue("Plugin", "\"" + Path.Combine(appsShort, Path.GetFileName(peer), "peer.dll") + "\" --run")),
-                ("doubled-separators", peer, key => key.SetValue("Plugin", dll.Replace("\\", "\\\\"))),
-                ("semicolon-after", peer, key => key.SetValue("Paths", peer + ";C:\\Other Spelling\\bin")),
-                ("semicolon-before", peer, key => key.SetValue("Paths", "C:\\Other Spelling\\bin;" + Path.Combine(peer, "bin"))),
-                ("comma-list", peer, key => key.SetValue("Paths", "C:\\Other Spelling\\bin," + peer)),
-                ("quoted-list-with-spaces", peer, key => key.SetValue("Paths", "\"C:\\Other Spelling\\bin\"; \"" + peerShort + "\"")),
-                ("multi-string", peer, key => key.SetValue("Paths", new[] { "C:\\Other Spelling\\bin", "plugins=" + peer + ";extra" }, RegistryValueKind.MultiString)),
-                ("quoted-short-peer-trailing-separators", "\"" + peerShort.ToUpperInvariant() + "\\\\\"", key => key.SetValue("Plugin", dll.ToLowerInvariant())),
-                ("missing-peer-through-short-parent", Path.Combine(appsShort, "Missing Spelling Peer"), key => key.SetValue("Plugin", Path.Combine(apps, "Missing Spelling Peer", "peer.dll"))),
-            };
-            foreach (var item in shared)
-            {
-                var result = Case(item.Name, item.Peer, item.Write);
-                Console.WriteLine("MEASURE pathSpelling " + JsonSerializer.Serialize(new { Scenario = item.Name, result.Key.SharedOwners, result.Refused, result.Intact }));
-                check(result.Key.SharedOwners.Contains(Peer) && result.Refused && result.Intact, item.Name + ": the key keeps its shared owner, whole-key preview is refused and its values stay intact");
-            }
-
-            var distinct = Case("prefix-only", peer, key =>
-            {
-                key.SetValue("Old", "\"" + peer + "-Old\\peer.dll\"");
-                key.SetValue("Joined", peer + "Extra\\peer.dll");
-                key.SetValue("Comma", "\"" + peer + ", Inc\\peer.dll\"");
-                key.SetValue("ShortPrefix", peerShort + "X\\peer.dll");
-            });
-            check(distinct.Key.SharedOwners.Count == 0 && !distinct.Refused && distinct.Intact,
-                "Paths that only share the peer's prefix, including a folder name with a comma, are not shared and the key stays previewable: " + string.Join(", ", distinct.Key.SharedOwners));
-
-            var named = Case("app-short-value", null, key => key.SetValue("Launcher", "\"" + Path.Combine(installShort, "app.exe") + "\" --start"));
-            check(named.Found.Any(item => item.Kind == "registryValue" && item.Registry?.ValueName == "Launcher" && item.SharedOwners.Count == 0),
-                "A value that names the removed app through its short path is offered as that app's leftover");
-
-            var pluginPeer = PeerAt(Path.Combine(installShort, "Plugins", "Missing Spelling Plugin"));
-            var fileContext = new CleanupContext(queue, authority, application, [pluginPeer], true);
-            var fileEngine = new ApplicationCleanup(() => fileContext, [], []);
-            var folder = fileEngine.Scan(CancellationToken.None).Candidates.Single(item => item.Target == install);
-            var folderRefused = false;
-            try { fileEngine.Preview(Path.Combine(root, "review-folder", "review.json"), [folder.ItemId], true, true); }
-            catch (InvalidDataException) { folderRefused = true; }
-            check(folder.SharedOwners.Contains(Peer) && folderRefused && File.ReadAllText(settings) == "fixture",
-                "A peer recorded at a missing folder inside the app folder's short path keeps the folder shared and refuses its preview");
-
-            var appearScope = registryRoot + "\\appear";
-            var appearKey = appearScope + "\\" + App;
-            using (var key = hive.CreateSubKey(appearKey)) key.SetValue("Plugin", "\"" + Path.Combine(install, "Shared Plugin", "plugin.dll") + "\"");
-            var appearBefore = Snapshot(hive, appearKey);
-            var appearContext = new CleanupContext(queue, authority, application, [], true);
-            var appearEngine = new ApplicationCleanup(() => appearContext, [], [new("CurrentUser", "Registry64", appearScope, "key", null)]);
-            var selection = appearEngine.Scan(CancellationToken.None).Candidates.Where(item => item.Kind == "registryKey" || item.Target == install).Select(item => item.ItemId).ToArray();
-            var reviewPath = Path.Combine(root, "review-appear", "review.json");
-            appeared = appearEngine.Preview(reviewPath, selection, true, true);
-            appearContext = appearContext with { Peers = [PeerAt(Path.Combine(installShort, "Shared Plugin"))] };
-            var applied = appearEngine.Apply(reviewPath, OperationFiles.HashFile(reviewPath), Path.Combine(root, "review-appear", "journal.json"));
-            check(selection.Length == 2 && applied.Status == "needsReconciliation" && Snapshot(hive, appearKey) == appearBefore && File.ReadAllText(settings) == "fixture",
-                "A peer that appears through a short path after review stops cleanup before any registry or file deletion");
-            var again = false;
-            try { appearEngine.Preview(Path.Combine(root, "review-appear-again", "review.json"), selection, true, true); }
-            catch (InvalidDataException) { again = true; }
-            check(again && Snapshot(hive, appearKey) == appearBefore, "A fresh review with that peer installed refuses both the key and the folder");
-
-            var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
-            var windowsFolder = new[] { "Windows NT", "Windows Defender", "Windows Mail", "Windows Photo Viewer" }.Select(name => Path.Combine(programFiles, name)).FirstOrDefault(Directory.Exists);
-            var windowsShort = windowsFolder is null ? null : ShortPath(windowsFolder);
-            if (windowsShort is null || string.Equals(windowsShort, windowsFolder, StringComparison.OrdinalIgnoreCase)) Console.WriteLine("SKIP No Windows folder under Program Files has an 8.3 alias on this volume");
-            else
-            {
-                var windowsScope = registryRoot + "\\windows-owned";
-                using (var created = hive.CreateSubKey(windowsScope + "\\Settings")) created.SetValue("Tool", "\"" + Path.Combine(windowsShort, "tool.exe") + "\"");
-                var owned = new LeftoverDiscovery(application with { InstallLocation = windowsShort }, []).Scan(CancellationToken.None, [], [new("CurrentUser", "Registry64", windowsScope, "key", null)]);
-                check(owned.Candidates.Length == 0 && LeftoverDiscovery.MicrosoftOwnedPath(Path.Combine(windowsShort, "Roo Industries Example")),
-                    "An app installed in a Windows-owned folder given by its 8.3 alias offers neither that folder nor values that name it");
-            }
-
+            else Console.WriteLine("SKIP Shared-owner spelling fixtures have no available 8.3 aliases");
             ProtectedRoots(check, root);
             RealRoots(check);
         }
@@ -149,9 +153,15 @@ static class PathSpellingChecks
         File.WriteAllText(Path.Combine(temp, "keep.txt"), "fixture");
         var ordinary = Directory.CreateDirectory(Path.Combine(root, "Ordinary Spelling App")).FullName;
         File.WriteAllText(Path.Combine(ordinary, "data.txt"), "fixture");
-        var parentShort = Alias(check, parent, "PROTEC~1");
-        var tempShort = Path.Combine(parent, Path.GetFileName(Alias(check, temp, "PROTTEMP", force: true)));
-        var ordinaryShort = Alias(check, ordinary, "ORDINA~1");
+        var parentShort = Alias(parent, "PROTEC~1");
+        var tempAlias = Alias(temp, "PROTTEMP", force: true);
+        var ordinaryShort = Alias(ordinary, "ORDINA~1");
+        if (parentShort is null || tempAlias is null || ordinaryShort is null)
+        {
+            Console.WriteLine("SKIP Protected-root spelling fixtures have no available 8.3 aliases");
+            return;
+        }
+        var tempShort = Path.Combine(parent, Path.GetFileName(tempAlias));
         foreach (var (name, tmp, paths) in new[] { ("long-temp-short-candidates", temp, new[] { tempShort, parentShort, ordinaryShort }), ("short-temp-long-candidates", tempShort, new[] { temp, parent, ordinary }) })
         {
             using var result = JsonDocument.Parse(Probe(check, name, tmp, paths));
@@ -213,24 +223,35 @@ static class PathSpellingChecks
             "LocalLow itself is a protected cleanup root while an app folder inside it stays eligible");
     }
 
-    static string Alias(Action<bool, string> check, string path, string name, bool force = false)
+    static string? Alias(string path, string name, bool force = false)
     {
-        if (force || string.Equals(Path.GetFileName(ShortPath(path)), Path.GetFileName(path), StringComparison.OrdinalIgnoreCase))
+        var brief = ShortPath(path);
+        if (force || brief is null || string.Equals(Path.GetFileName(brief), Path.GetFileName(path), StringComparison.OrdinalIgnoreCase))
         {
             using var handle = CreateFile(path, 0x10000000, 7, IntPtr.Zero, 3, 0x02000000, IntPtr.Zero);
-            var assigned = false; var error = 0;
-            using (new PrivilegeScope("Assign a disposable 8.3 alias", "SeRestorePrivilege"))
+            PrivilegeScope privilege;
+            try
             {
-                assigned = !handle.IsInvalid && SetFileShortName(handle, name);
-                if (!assigned) error = Marshal.GetLastWin32Error();
+                privilege = new PrivilegeScope("Assign a disposable 8.3 alias", "SeRestorePrivilege");
             }
-            check(assigned, "Disposable fixture " + Path.GetFileName(path) + " gets an explicit 8.3 alias (error " + error + ")");
+            catch (System.ComponentModel.Win32Exception error) when (error.NativeErrorCode is 5 or 1300 or 1314)
+            {
+                Console.WriteLine("SKIP Disposable 8.3 alias assignment needs an unavailable privilege (error " + error.NativeErrorCode + ")");
+                return null;
+            }
+            using (privilege)
+            {
+                if (handle.IsInvalid || !SetFileShortName(handle, name))
+                {
+                    Console.WriteLine("SKIP Disposable 8.3 alias assignment failed (error " + Marshal.GetLastWin32Error() + ")");
+                    return null;
+                }
+            }
         }
-        var brief = ShortPath(path);
+        brief = ShortPath(path);
         var leaf = Path.GetFileName(brief);
-        check(leaf is not null && !string.Equals(leaf, Path.GetFileName(path), StringComparison.OrdinalIgnoreCase) && (force ? string.Equals(leaf, name, StringComparison.OrdinalIgnoreCase) : leaf.Contains('~')),
-            "Disposable fixture " + Path.GetFileName(path) + " has an actual 8.3 alias");
-        return brief!;
+        return leaf is not null && !string.Equals(leaf, Path.GetFileName(path), StringComparison.OrdinalIgnoreCase) &&
+            (force ? string.Equals(leaf, name, StringComparison.OrdinalIgnoreCase) : leaf.Contains('~')) ? brief : null;
     }
 
     static string? ShortPath(string path)

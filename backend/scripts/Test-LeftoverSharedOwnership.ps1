@@ -165,6 +165,11 @@ try {
     } else { Add-Failure 'Scan D must keep its distinct folder default selected with the invalid G peer present' }
 
     if ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT) {
+        $driveRoot = [IO.Path]::GetPathRoot($tempRoot)
+        $resolvedDriveRoot = Get-RooIndustriesLongPath $driveRoot
+        if ($resolvedDriveRoot -ieq $driveRoot -and [IO.Path]::GetFullPath($resolvedDriveRoot) -ieq $driveRoot) {
+            Add-Pass 'Resolving a drive root keeps its trailing separator and never becomes relative to the current folder'
+        } else { Add-Failure 'Resolving a drive root must keep its trailing separator and never become relative to the current folder' }
         $realRoot = Join-Path $tempRoot 'real'
         $realShared = Join-Path $realRoot 'Shared'
         $aliasRoot = Join-Path $tempRoot 'alias'
