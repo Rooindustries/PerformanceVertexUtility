@@ -29,6 +29,13 @@ def check_version(value):
         raise ValueError("Invalid SemVer release version")
 
 
+def precedence(value):
+    check_version(value)
+    match = VERSION.fullmatch(value)
+    parts = match[4].split(".") if match[4] else []
+    return [(len(n), n) for n in match.groups()[:3]], not parts, [(0, len(p), p) if p.isdecimal() else (1, p) for p in parts]
+
+
 def unique(pairs):
     result = {}
     for key, value in pairs:
@@ -234,35 +241,17 @@ def fetch(url, limit):
         return data
 
 
-def publish(args):
-    feed = (ROOT / "tools/release/update-feed.txt").read_text().strip()
-    payload = verify_manifest(Path(args.manifest).read_bytes(), args.installer, feed)
-    if not re.fullmatch(r"b/[A-Za-z0-9_-]+/RooIndustries-OptimizationSuite-[0-9A-Za-z.+-]+-setup\.exe", args.installer_path):
-        raise ValueError("Use an immutable b/<random>/<installer> path")
-    if not re.fullmatch(r"u/[A-Za-z0-9_-]+/beta\.json", args.feed_path) or urlparse(feed).path != "/" + args.feed_path:
+def live_feed(feed):
+    data = fetch(feed + "?t=" + str(int(datetime.now(timezone.utc).timestamp())), 65536)
+    return data, verify_manifest(data, feed_url=feed)
+
+
+def check_feed_path(feed, feed_path):
+    if not re.fullmatch(r"u/[A-Za-z0-9_-]+/beta\.json", feed_path) or urlparse(feed).path != "/" + feed_path:
         raise ValueError("Feed path differs from the committed feed")
-    if urlparse(payload["installer"]["url"]).path != "/" + args.installer_path:
-        raise ValueError("Installer path differs from the signed URL")
-    commands = [
-        ["vercel", "blob", "put", str(args.installer), "--access", "public", "--pathname", args.installer_path, "--content-type", "application/octet-stream"],
-        ["vercel", "blob", "put", str(args.manifest), "--access", "public", "--pathname", args.feed_path, "--allow-overwrite", "--cache-control-max-age", "60", "--content-type", "application/json"],
-    ]
-    for command in commands:
-        print(shlex.join(command))
-    if not args.yes_publish:
-        print("Dry run: nothing uploaded. Publishing requires --yes-publish and user authorization.")
-        return
-    if not os.environ.get("BLOB_READ_WRITE_TOKEN"):
-        raise ValueError("BLOB_READ_WRITE_TOKEN is missing from the environment")
-    for index, command in enumerate(commands):
-        result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
-        if result.returncode:
-            raise ValueError("Blob upload " + str(index + 1) + " failed with exit code " + str(result.returncode))
-    remote = fetch(feed + "?t=" + str(int(datetime.now(timezone.utc).timestamp())), 65536)
-    published = verify_manifest(remote, feed_url=feed)
-    if remote != Path(args.manifest).read_bytes():
-        raise ValueError("Published feed has not propagated to the signed bytes yet")
-    item = published["installer"]
+
+
+def check_online_installer(item):
     sha = hashlib.sha256()
     total = 0
     with urlopen(Request(item["url"], headers={"Cache-Control": "no-cache"}), timeout=20) as response:
@@ -276,7 +265,73 @@ def publish(args):
             sha.update(block)
     if (total, sha.hexdigest()) != (item["size"], item["sha256"].lower()):
         raise ValueError("Published installer differs from the signed manifest")
+
+
+def upload(commands):
+    if not os.environ.get("BLOB_READ_WRITE_TOKEN"):
+        raise ValueError("BLOB_READ_WRITE_TOKEN is missing from the environment")
+    for index, command in enumerate(commands):
+        result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
+        if result.returncode:
+            raise ValueError("Blob upload " + str(index + 1) + " failed with exit code " + str(result.returncode))
+
+
+def publish(args):
+    feed = (ROOT / "tools/release/update-feed.txt").read_text().strip()
+    data = Path(args.manifest).read_bytes()
+    payload = verify_manifest(data, args.installer, feed)
+    if not re.fullmatch(r"b/[A-Za-z0-9_-]+/RooIndustries-OptimizationSuite-[0-9A-Za-z.+-]+-setup\.exe", args.installer_path):
+        raise ValueError("Use an immutable b/<random>/<installer> path")
+    check_feed_path(feed, args.feed_path)
+    if urlparse(payload["installer"]["url"]).path != "/" + args.installer_path:
+        raise ValueError("Installer path differs from the signed URL")
+    current, live = live_feed(feed)
+    if precedence(payload["version"]) <= precedence(live["version"]):
+        raise ValueError("Version " + payload["version"] + " is not newer than the live beta " + live["version"] + ", so testers would not be offered it")
+    rollback = Path(args.manifest).with_name(Path(args.manifest).stem + ".previous-live.json")
+    rollback.write_bytes(current)
+    print("Saved the live " + live["version"] + " manifest for rollback: " + str(rollback))
+    commands = [
+        ["vercel", "blob", "put", str(args.installer), "--access", "public", "--pathname", args.installer_path, "--content-type", "application/octet-stream"],
+        ["vercel", "blob", "put", str(args.manifest), "--access", "public", "--pathname", args.feed_path, "--allow-overwrite", "--cache-control-max-age", "60", "--content-type", "application/json"],
+    ]
+    for command in commands:
+        print(shlex.join(command))
+    if not args.yes_publish:
+        print("Dry run: nothing uploaded. Publishing requires --yes-publish and user authorization.")
+        return
+    upload(commands)
+    remote, published = live_feed(feed)
+    if remote != data:
+        raise ValueError("Published feed has not propagated to the signed bytes yet")
+    check_online_installer(published["installer"])
     print("Published manifest and installer verified over HTTPS.")
+
+
+def set_feed(args):
+    feed = (ROOT / "tools/release/update-feed.txt").read_text().strip()
+    data = Path(args.manifest).read_bytes()
+    payload = verify_manifest(data, feed_url=feed)
+    check_feed_path(feed, args.feed_path)
+    try:
+        current, live = live_feed(feed)
+        state = "the live " + live["version"] + " manifest"
+    except (ValueError, KeyError, TypeError, AttributeError, OSError, InvalidSignature) as error:
+        current, state = None, "a live feed that does not verify (" + ("Invalid signature" if isinstance(error, InvalidSignature) else str(error)) + ")"
+    if current == data:
+        raise ValueError("The live feed already serves this manifest")
+    check_online_installer(payload["installer"])
+    print("Replacing " + state + " with version " + payload["version"] + ".")
+    command = ["vercel", "blob", "put", str(args.manifest), "--access", "public", "--pathname", args.feed_path, "--allow-overwrite", "--cache-control-max-age", "60", "--content-type", "application/json"]
+    print(shlex.join(command))
+    if not args.yes_publish:
+        print("Dry run: nothing uploaded. Changing the feed requires --yes-publish and user authorization.")
+        return
+    upload([command])
+    remote, _ = live_feed(feed)
+    if remote != data:
+        raise ValueError("The feed has not propagated to the signed bytes yet")
+    print("The feed now serves version " + payload["version"] + ", verified over HTTPS.")
 
 
 def main():
@@ -293,6 +348,10 @@ def main():
     for name in ("installer", "manifest", "installer-path", "feed-path"):
         send.add_argument("--" + name, required=True)
     send.add_argument("--yes-publish", action="store_true")
+    point = commands.add_parser("set-feed")
+    for name in ("manifest", "feed-path"):
+        point.add_argument("--" + name, required=True)
+    point.add_argument("--yes-publish", action="store_true")
     args = parser.parse_args()
     try:
         if args.command == "manifest":
@@ -300,6 +359,8 @@ def main():
         elif args.command == "verify":
             payload = verify_manifest(Path(args.manifest).read_bytes(), args.installer, args.feed_url)
             print(json.dumps({"verified": True, "version": payload["version"], "installer": payload["installer"]}))
+        elif args.command == "set-feed":
+            set_feed(args)
         else:
             publish(args)
     except (ValueError, KeyError, TypeError, AttributeError, OSError, struct.error, InvalidSignature) as error:
