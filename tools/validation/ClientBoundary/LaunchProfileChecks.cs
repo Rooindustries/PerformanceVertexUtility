@@ -98,8 +98,8 @@ static class LaunchProfileChecks
         var bin = Path.Combine(repo, "tools", "validation", "ProtectedSessions", "bin", "publish");
         var gamePath = Path.Combine(bin, "RooIndustriesProfileGame.exe");
         var launcherPath = Path.Combine(bin, "RooIndustriesProfileLauncher.exe");
-        var launchers = new List<(Process Process, string Root)>();
-        var games = new List<(Process Process, string Root)>();
+        var launchers = new List<(Process Process, string Root, long Created)>();
+        var games = new List<(Process Process, string Root, long Created)>();
         var clients = new List<OptimizerService>();
         string? unrelatedSession = null;
         OptimizerService App()
@@ -113,7 +113,7 @@ static class LaunchProfileChecks
         async Task<Process> OpenLauncher()
         {
             var folder = Path.Combine(root, "launcher-" + (launchers.Count + 1)); Directory.CreateDirectory(folder);
-            var process = Start(launcherPath, "--launcher", folder); launchers.Add((process, folder));
+            var process = Start(launcherPath, "--launcher", folder); launchers.Add((process, folder, process.StartTime.ToUniversalTime().ToFileTimeUtc()));
             await Until(() => Task.FromResult(File.Exists(Path.Combine(folder, "launcher-ready.json"))), "Launcher fixture did not start.");
             return process;
         }
@@ -158,11 +158,11 @@ static class LaunchProfileChecks
             if (launcher is null)
             {
                 game = failReadiness ? Start(gamePath, "--hold-lock", Path.Combine(folder, "held"), Path.Combine(folder, "holder-ready.json"), Path.Combine(folder, "stop")) : Start(gamePath, "--game", folder, "none");
-                games.Add((game, folder));
+                games.Add((game, folder, game.StartTime.ToUniversalTime().ToFileTimeUtc()));
             }
             else OperationFiles.Write(Path.Combine(launchers.Single(item => item.Process == launcher).Root, "launch.json"), new { root = folder, hardware = "none", exe = Path.GetFileName(gamePath) });
             await Until(() => Task.FromResult(File.Exists(Path.Combine(folder, "ready.json"))), failReadiness ? "Deliberate standalone readiness failure" : "The game fixture did not start.", failReadiness ? 2 : 60);
-            if (game is null) { game = Process.GetProcessById(OperationFiles.Read<JsonElement>(Path.Combine(folder, "ready.json")).GetProperty("pid").GetInt32()); games.Add((game, folder)); }
+            if (game is null) { game = Process.GetProcessById(OperationFiles.Read<JsonElement>(Path.Combine(folder, "ready.json")).GetProperty("pid").GetInt32()); games.Add((game, folder, game.StartTime.ToUniversalTime().ToFileTimeUtc())); }
             return game;
         }
         void EndGame(Process game) { File.WriteAllText(Path.Combine(games.Single(item => item.Process == game).Root, "stop"), ""); Check(game.WaitForExit(15000), "The game fixture exits"); }
@@ -569,7 +569,7 @@ static class LaunchProfileChecks
             {
                 if (Directory.Exists(operations)) tasks.AddRange(Directory.EnumerateDirectories(operations, "game-session-*").Select(directory => TaskName(Path.Combine(directory, "session"))));
                 if (unrelatedSession is not null) tasks.Add(TaskName(unrelatedSession));
-                processes.AddRange(games.Concat(launchers).Select(entry => new { id = entry.Process.Id, created = entry.Process.StartTime.ToUniversalTime().ToFileTimeUtc() }));
+                processes.AddRange(games.Concat(launchers).Select(entry => new { id = entry.Process.Id, created = entry.Created }));
             });
             await CleanAsync(async () =>
             {
@@ -585,12 +585,12 @@ static class LaunchProfileChecks
                         else if (entry.Worker.State is not null) await cleanup.RecoverGameSessionAsync(entry.SessionRoot);
                     });
             });
-            foreach (var (game, folder) in games) Clean(() =>
+            foreach (var (game, folder, _) in games) Clean(() =>
             {
                 try { if (!game.HasExited) { File.WriteAllText(Path.Combine(folder, "stop"), ""); if (!game.WaitForExit(10000)) { game.Kill(); game.WaitForExit(10000); } } }
                 finally { game.Dispose(); }
             });
-            foreach (var (launcher, folder) in launchers) Clean(() =>
+            foreach (var (launcher, folder, _) in launchers) Clean(() =>
             {
                 try { if (!launcher.HasExited) { File.WriteAllText(Path.Combine(folder, "stop-launcher"), ""); if (!launcher.WaitForExit(15000)) { launcher.Kill(); launcher.WaitForExit(10000); } } }
                 finally { launcher.Dispose(); }
