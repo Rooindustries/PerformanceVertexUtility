@@ -91,6 +91,7 @@
         "tools/validation/Update/run_manual_install.py",
         "tools/validation/Update/run_shipped.py",
         "tools/validation/Update/run_trace_checks.py",
+        "tools/validation/UpdateBanner/README.md",
         "tools/validation/BugReportE2E/applog/Program.cs"
       ],
       "reason": "Windows harness staging and host-lease root; existing frames, cleanup ownership and path-length guards depend on this exact path spelling, including its source escaping."
@@ -174,6 +175,7 @@
         "tools/validation/Update/Build-ShippedAlpha.ps1",
         "tools/validation/Update/Invoke-ShippedScenario.ps1",
         "tools/validation/Update/Invoke-UpdateFixture.ps1",
+        "tools/validation/Update/Invoke-UpgradeRehearsal.ps1",
         "tools/validation/Update/UpdateProbe/Program.cs",
         "tools/validation/windows_ssh.py"
       ],
@@ -255,7 +257,8 @@
       "files": [
         "tools/validation/Governor/Fixtures/BrandCompatibility.0.9.0-beta.ps1",
         "tools/validation/LoadTimes/Test-ElevatedLaunchers.ps1",
-        "tools/validation/Release/Invoke-IntegrationVerification.ps1"
+        "tools/validation/Release/Invoke-IntegrationVerification.ps1",
+        "tools/validation/Update/UpgradeRehearsal.State.ps1"
       ],
       "reason": "Legacy protected-session scheduled-task prefix; discovery and cleanup must find tasks created by earlier versions."
     },
@@ -477,10 +480,13 @@
         "tools/validation/Release/Test-HistoricalBlackwell.ps1",
         "tools/validation/Release/Test-RecoveryLongPaths.ps1",
         "tools/validation/SetupMigration/Test-SetupMigration.ps1",
+        "tools/validation/Update/Check-UpgradeRehearsalRecovery.ps1",
         "tools/validation/Update/Collect-RestartEvidence.ps1",
         "tools/validation/Update/Harness.Common.ps1",
         "tools/validation/Update/Invoke-ShippedScenario.ps1",
         "tools/validation/Update/Invoke-UpdateScenario.ps1",
+        "tools/validation/Update/Invoke-UpgradeRehearsal.ps1",
+        "tools/validation/Update/UpgradeRehearsal.State.ps1",
         "tools/validation/Update/run_shipped.py"
       ],
       "reason": "Legacy data directory, registry root, process image and scheduled-task prefix from BrandCompatibility; migration, ownership and historical recovery must recognize the existing identities."

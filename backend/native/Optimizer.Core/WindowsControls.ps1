@@ -11,6 +11,26 @@ function Get-ControlError($failure){
     if($failure.Exception.Data['RooIndustriesControlChanged'] -eq $true){$result.resourceChanged=$true}
     return ($result|ConvertTo-Json -Compress)
 }
+$script:Commands=@{
+    'firewall-profile'=@('Windows Firewall','Get-NetFirewallProfile','Set-NetFirewallProfile')
+    'mitigations'=@('Exploit protection','Get-ProcessMitigation')
+    'defender'=@('Microsoft Defender Antivirus','Get-MpPreference','Set-MpPreference')
+    'device-power'=@('Device power management','Get-PnpDevice')
+    'dns-over-https'=@('Encrypted DNS','Get-DnsClientDohServerAddress','Add-DnsClientDohServerAddress','Set-DnsClientDohServerAddress','Remove-DnsClientDohServerAddress')
+    'teredo'=@('Teredo','Get-NetTeredoConfiguration','Set-NetTeredoConfiguration')
+    'memory'=@('Memory compression','Get-MMAgent','Enable-MMAgent','Disable-MMAgent')
+    'reserved-storage'=@('Reserved storage','Get-WindowsReservedStorageState','Set-WindowsReservedStorageState')
+    'windows-feature'=@('Windows feature servicing','Get-WindowsOptionalFeature','Enable-WindowsOptionalFeature','Disable-WindowsOptionalFeature')
+    'network-adapter'=@('Network adapter configuration','Get-NetAdapter','Get-NetRoute','Get-NetAdapterBinding','Enable-NetAdapterBinding','Disable-NetAdapterBinding','Get-NetAdapterLso','Set-NetAdapterLso','Get-NetAdapterRsc','Set-NetAdapterRsc','Get-NetAdapterAdvancedProperty','Set-NetAdapterAdvancedProperty')
+}
+$script:Missing=@{}
+function Assert-Commands([string]$kind){
+    if(-not $script:Missing.ContainsKey($kind)){
+        $feature,$names=$script:Commands[$kind]
+        $script:Missing[$kind]=if($feature -and @($names|Where-Object {-not (Get-Command $_ -ErrorAction SilentlyContinue)}).Count){$feature+' is not available with this Windows version.'}else{''}
+    }
+    if($script:Missing[$kind]){throw $script:Missing[$kind]}
+}
 function Invoke-SystemTool([string]$name,[string[]]$arguments){
     $output=& (Join-Path ([Environment]::GetFolderPath('System')) $name) @arguments 2>&1
     if($LASTEXITCODE -ne 0){throw ($name+' exited '+$LASTEXITCODE+': '+($output -join ' '))}
@@ -94,6 +114,7 @@ function Get-BootType($address){
 }
 function Read-Control($address){
     $address=[pscustomobject]@{kind=$address.kind;target=$address.target;property=$address.property}
+    Assert-Commands $address.kind
     $binding=$address.kind+':'+$address.target
     $value=$null
     $displayName=$null
@@ -140,7 +161,6 @@ function Read-Control($address){
         }
         'dns-over-https' {
             if($address.property -ne 'configuration'){throw 'Unknown encrypted DNS control.'}
-            if(-not (Get-Command Get-DnsClientDohServerAddress -ErrorAction SilentlyContinue)){throw 'Encrypted DNS is not available with this Windows version.'}
             $ip=([Net.IPAddress]::Parse($address.target)).ToString()
             if($script:BatchDoh){if($null -eq $script:DohServers){$script:DohServers=@(Get-DnsClientDohServerAddress)};$servers=$script:DohServers}else{$servers=Get-DnsClientDohServerAddress}
             $entries=@($servers|Where-Object {([Net.IPAddress]::Parse($_.ServerAddress)).ToString() -ceq $ip})
@@ -168,7 +188,6 @@ function Read-Control($address){
         }
         'reserved-storage' {
             if($address.target -ne 'system' -or $address.property -ne 'enabled'){throw 'Unknown reserved-storage setting.'}
-            if(-not (Get-Command Get-WindowsReservedStorageState -ErrorAction SilentlyContinue)){throw 'Reserved storage is not available with this Windows version.'}
             $state=[string](Get-WindowsReservedStorageState).ReservedStorageState
             if($state -notin @('Enabled','Disabled')){throw ('Reserved storage has an unresolved state: '+$state)}
             $value=$state -eq 'Enabled'

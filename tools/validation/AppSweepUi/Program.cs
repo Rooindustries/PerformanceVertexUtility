@@ -29,6 +29,13 @@ if (args is ["governor-left-as-set"])
     return;
 }
 
+if (args is ["update-install"])
+{
+    await UpdateInstallChecks.RunAsync(Check);
+    Console.WriteLine($"Completed {count} update install checks.");
+    return;
+}
+
 if (args is ["revisit"])
 {
     await RevisitChecks.RunAsync(Check);
@@ -463,7 +470,7 @@ if (args is [] or ["responses"] or ["cleanup"] or ["race"])
 {
     if (args is not (["cleanup"] or ["race"]))
     {
-    var oldBackup = Path.Combine(Path.GetTempPath(), "old-process-backup.json");
+    var oldBackup = Path.Combine(Path.GetTempPath(), "old-process-backup-" + Guid.NewGuid().ToString("N") + ".json");
     File.WriteAllText(oldBackup, "{}");
     App.Live.LatestProcessBackup = oldBackup;
     App.Live.ProcessPreviewText = null;
@@ -1033,7 +1040,12 @@ if (args is [] or ["responses"] or ["cleanup"] or ["race"])
                 restoredItems = new[] { new { itemId = "saved", restored = true } },
                 summary = new { restoredCount = 1, blockingGateCount = 0 },
             }));
-            await reopened.RestoreCleanupCommand.ExecuteAsync(null);
+            var markedWhenDone = false;
+            void Marked() { if (!RooIndustries.OptimizationSuite.Services.RunningChanges.Any) markedWhenDone = File.Exists(Path.Combine(runsRoot, "run-a", "restored.json")); }
+            RooIndustries.OptimizationSuite.Services.RunningChanges.Finished += Marked;
+            try { await reopened.RestoreCleanupCommand.ExecuteAsync(null); }
+            finally { RooIndustries.OptimizationSuite.Services.RunningChanges.Finished -= Marked; }
+            Check(markedWhenDone, "Close when done waits until a cleanup restore is saved as finished");
             var again = new UninstallCleanupViewModel { SelectedApp = appA };
             await Task.Delay(200);
             Check(File.Exists(Path.Combine(runsRoot, "run-a", "restored.json")) && !again.CleanupRestoreAvailable,
@@ -1122,5 +1134,6 @@ Check(RooIndustries.OptimizationSuite.Services.BackendScriptPolicy.Timeout(@"C:\
 await BulkRemovalChecks.RunAsync(Check);
 await RevisitChecks.RunAsync(Check);
 await BugReportChecks.RunAsync(Check);
+await UpdateInstallChecks.RunAsync(Check);
 
 Console.WriteLine($"Completed {count} app sweep UI checks.");

@@ -11,8 +11,10 @@ static class RegistryChecks
         var files = Path.Combine(Path.GetTempPath(), "roo-industries-registry-" + Guid.NewGuid().ToString("N"));
         using var hive = RegistryKey.OpenBaseKey(RegistryHive.CurrentUser, RegistryView.Registry64);
         Directory.CreateDirectory(files);
+        OwnedRegistryKey? owned = null;
         try
         {
+            owned = OwnedRegistryKey.Create(hive, name);
             using (var sentinel = hive.CreateSubKey(name + "\\Sentinel")) sentinel.SetValue("Keep", "unchanged");
             using (hive.CreateSubKey(name + "\\Receipts")) { }
             using (var app = hive.CreateSubKey(name + "\\App"))
@@ -150,9 +152,7 @@ static class RegistryChecks
         }
         finally
         {
-            hive.DeleteSubKeyTree(name, throwOnMissingSubKey: false);
-            using (var parent = hive.OpenSubKey("Software\\RooIndustriesCleanupTests"))
-                if (parent is not null && parent.SubKeyCount == 0 && parent.ValueCount == 0) hive.DeleteSubKey("Software\\RooIndustriesCleanupTests", throwOnMissingSubKey: false);
+            owned?.Dispose();
             Directory.Delete(files, true);
         }
         check(hive.OpenSubKey(name) is null && !Directory.Exists(files), "Registry validation removes keys, receipts and backup fixtures");

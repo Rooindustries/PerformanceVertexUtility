@@ -29,11 +29,22 @@ has taken effect in a running app or improved gaming performance.
 `backend/catalogs/windows-policy-editions.json` records Microsoft's registry-policy
 edition limits. The compiler applies them after combining all sources, so a
 wildcard from another source cannot bypass a limit. Home, Pro, Windows 10 S and Windows 11 SE editions no
-longer offer **Consumer suggestions and promotions: Blocked**. Enterprise,
-Education, IoT Enterprise and Server retain it. **Remove this override** remains
-available, including when the blocked value was set before this catalog update.
-An unsupported choice is excluded from the applicable current choices; its raw
-registry value remains in the observations.
+longer offer **Consumer suggestions and promotions: Blocked**, **Windows tips**
+or **Windows spotlight** turned off, or Windows diagnostic data **Off** (value 0).
+Enterprise, Education, IoT Enterprise and Server retain them. A limit can name one
+value: Microsoft documents that diagnostic data 0 counts as 1 on other editions,
+so both diagnostic data settings also offer **Required diagnostic data** (value 1)
+on every edition. **Remove this override** remains available, including when the
+limited value was set before this catalog update. An unsupported choice is
+excluded from the applicable current choices; its raw registry value remains in
+the observations. When removing an override is the only choice left for this PC
+and nothing is set, the Windows settings page shows the row as
+**Not available here**, without Retry, and hides it in simple mode.
+
+The lock screen policy, third-party spotlight suggestions and Windows Update
+deferral keep their existing availability. Microsoft's current references list
+Pro for the first two, and the Windows Update page describes which editions the
+service is offered on rather than stating that Home ignores the registry policy.
 
 Edition gates match exact edition IDs, `*` for every edition, or a trailing `*`
 for a family, such as `Enterprise*` or `Server*`. This keeps evaluation, LTSC,
@@ -98,10 +109,10 @@ Create a new preview file, inspect it, then apply its exact SHA-256:
 `-PresetId explorer-details` can replace `-SelectionsPath`. The original presets `privacy-basics` and `activity-history-off` remain available. Generated source presets are included only when every required setting effect has an executor. Presets are named
 selections of the same controls, with no separate execution bodies.
 
-Strict source presets mark consumer blocking in `optionalSelections`: they skip
-that choice on Home, Pro, Windows 10 S and Windows 11 SE and report it in `skipped`. Their other choices
-remain required, and a read failure still refuses the preset. Consumer blocking
-also remains required when its edition supports it. Presets already marked
+Strict source presets mark edition-limited choices in `optionalSelections`: they
+skip them on Home, Pro, Windows 10 S and Windows 11 SE and report them in `skipped`.
+Their other choices remain required, and a read failure still refuses the preset.
+Edition-limited choices also remain required when the edition supports them. Presets already marked
 `availableOnly` keep their existing filtering. A preset with no available choices
 is refused without changing an existing profile. Saved choices can retain an
 unavailable selection for another edition, but cannot apply it here. Existing
