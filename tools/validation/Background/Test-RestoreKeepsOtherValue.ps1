@@ -34,7 +34,7 @@ function Test-LeftItem($result,[int]$processId,[string]$control,[string]$value){
 }
 function Assert-UnprovenReason($result,[string]$kind){
  $text=$result|ConvertTo-Json -Depth 40 -Compress
- if($text -notlike '*It resets when that app restarts.*' -or $text -like '*Run Undo again*'){throw ($kind+' Undo of a value it can''t prove it set must say the value resets when that app restarts, not Run Undo again: '+$text)}
+ if($text -notlike '*It resets when that app restarts.*' -or $text -like '*Run Undo again*' -or [string]$result.result.summary -like '*..*'){throw ($kind+' Undo of a value it can''t prove it set must say the value resets when that app restarts, not Run Undo again, and end the summary with one period: '+$text)}
 }
 function Set-ChangeBreakpoint($p,[string]$Command,[string]$Value){
  $race=@{done=$false;process=$p;value=$Value}
@@ -45,7 +45,7 @@ function Set-ConfirmationChangeBreakpoint($p,[string]$Value){
  return Set-PSBreakpoint -Command Confirm-RooIndustriesRestoreControl -Action ({if(-not$race.done){$race.done=$true;$race.process.PriorityClass=$race.value}}.GetNewClosure())
 }
 
-function Invoke-GameScenario([string]$name,[ValidateSet('before','race','back','original','pending')][string]$Mode){
+function Invoke-GameScenario([string]$name,[ValidateSet('before','race','back','original','pending','damaged')][string]$Mode){
  $directory=Join-Path $OutRoot $name;[IO.Directory]::CreateDirectory($directory)|Out-Null
  $game=$null;$breakpoint=$null
  try{
@@ -65,6 +65,20 @@ function Invoke-GameScenario([string]$name,[ValidateSet('before','race','back','
   if($applied.priorityClass -ne 'AboveNormal' -or $applied.affinityMask -ne $affinity){throw ('Game Tune did not apply priority and affinity to the fixture: '+$applied.priorityClass+' '+$applied.affinityMask)}
   $statusBefore=& (Join-Path $Source 'backend\scripts\Get-GameTuneSessionStatus.ps1') -SessionPath $start.sessionPath|ConvertFrom-Json;Save $directory 'status-before' $statusBefore
   if($statusBefore.restoreAttempted -isnot [bool] -or $statusBefore.restoreAttempted){throw 'Game Tune status did not identify the pre-Undo phase'}
+  if($Mode -eq 'damaged'){
+   $damaged=[IO.Directory]::CreateDirectory((Join-Path $OutRoot ('owned-data\operations\game-session-roo711-'+[guid]::NewGuid().ToString('N')+'\session'))).Parent.FullName
+   try{
+    [IO.File]::WriteAllText((Join-Path $damaged 'session\launcher-journal.json'),'{',$utf8)
+    $undo=Invoke-E2EBackend 'Stop-GameTuneSession.ps1' -SessionPath $start.sessionPath -ConfirmApply|ConvertFrom-Json;Save $directory 'undo-first' $undo
+   }finally{[IO.Directory]::Delete($damaged,$true)}
+   $text=$undo|ConvertTo-Json -Depth 40 -Compress;$held=Read-Fixture $p
+   if($held.priorityClass -ne 'AboveNormal' -or $held.affinityMask -ne $affinity -or -not $undo.restorable -or $text -notlike '*A saved change file is damaged: operations\\game-session-roo711-*' -or $text -like '*Run Undo again*'){throw ('A Game Tune Stop refused by a damaged saved change must change nothing and name the file: '+$text)}
+   $undo=Invoke-E2EBackend 'Stop-GameTuneSession.ps1' -SessionPath $start.sessionPath -ConfirmApply|ConvertFrom-Json;Save $directory 'undo' $undo
+   $after=Read-Fixture $p
+   if($after.priorityClass -ne 'Normal' -or $after.affinityMask -ne $before.affinityMask -or $undo.restorable -or $undo.status -ne 'completed'){throw ('The next Game Tune Stop did not restore: '+$after.priorityClass+' '+$after.affinityMask+' '+$undo.status+' restorable '+$undo.restorable)}
+   Save $directory 'done' @{passed=$true;mode=$Mode;refused='A saved change file is damaged: operations\game-session-roo711-...';restored='priorityClass Normal and affinityMask'}
+   return
+  }
   if($Mode -eq 'pending'){
    $backup=Get-Content -LiteralPath $start.backupManifestPath -Raw|ConvertFrom-Json
    $pendingControls=0
@@ -173,7 +187,7 @@ function Invoke-ProfileScenario([string]$name,[ValidateSet('before','race','back
    $text=$undo|ConvertTo-Json -Depth 40 -Compress
    $expected=if($Mode -eq 'damaged'){'A saved change file is damaged: operations\\process-roo711-'}else{'Background limits were busy, so this setting was left alone. Try again in a moment.'}
    foreach($fixture in $kept,$untouched){if((Read-Fixture $fixture.process).priorityClass -ne 'AboveNormal'){throw ('A refused profile Undo changed fixture '+$fixture.process.Id)}}
-   if($undo.result.restorePendingCount -lt 1 -or $text -notlike ('*'+$expected+'*') -or $text -like '*Run Undo again*'){throw ('A profile Undo refused by '+$(if($Mode -eq 'damaged'){'a damaged saved change'}else{'busy background limits'})+' must say so: '+$text)}
+   if($undo.result.restorePendingCount -lt 1 -or $text -notlike ('*'+$expected+'*') -or $text -like '*Run Undo again*' -or [string]$undo.result.summary -like '*..*'){throw ('A profile Undo refused by '+$(if($Mode -eq 'damaged'){'a damaged saved change'}else{'busy background limits'})+' must say so: '+$text)}
    $undo=Invoke-E2EBackend 'Restore-ProcessProfileBackup.ps1' -BackupPath $apply.backup.location -ConfirmApply|ConvertFrom-Json;Save $directory 'undo' $undo
    foreach($fixture in $kept,$untouched){if((Read-Fixture $fixture.process).priorityClass -ne 'Normal'){throw ('The next profile Undo did not restore fixture '+$fixture.process.Id)}}
    if($undo.status -ne 'success' -or $undo.result.restorePendingCount -ne 0){throw ('The next profile Undo did not finish: '+$undo.status+' pending '+$undo.result.restorePendingCount)}
@@ -231,10 +245,11 @@ Invoke-ProfileScenario 'profile-race' 'race'
 Invoke-ProfileScenario 'profile-back' 'back'
 Invoke-GameScenario 'game-original' 'original'
 Invoke-GameScenario 'game-pending' 'pending'
+Invoke-GameScenario 'game-damaged-saved-change' 'damaged'
 Invoke-ProfileScenario 'profile-original' 'original'
 Invoke-ProfileScenario 'profile-pending' 'pending'
 Invoke-ProfileScenario 'profile-damaged-saved-change' 'damaged'
 Invoke-ProfileScenario 'profile-governor-busy' 'busy'
 if($failures.Count){throw ($failures -join '; ')}
-[IO.File]::WriteAllText((Join-Path $OutRoot 'summary.json'),(@{passed=$true;cases=12;engine=$PSVersionTable.PSVersion.ToString()}|ConvertTo-Json))
+[IO.File]::WriteAllText((Join-Path $OutRoot 'summary.json'),(@{passed=$true;cases=13;engine=$PSVersionTable.PSVersion.ToString()}|ConvertTo-Json))
 'ROO_INDUSTRIES_RESTORE_KEEPS_VALUE_E2E_COMPLETE'
