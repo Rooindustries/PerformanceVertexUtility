@@ -579,9 +579,15 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
         var run = BeginRun(app, "cleaning up", "Applying reviewed cleanup...", ApplyApprovalSummary);
         try
         {
+            using var running = RunningChanges.Begin();
             var result = await App.Live.RequestUninstallCleanupApplyResultAsync(app.AppId!, RemoverPathApproved, CleanupListApproved, true);
             CaptureRecovery(app.AppId!, result);
             ShowResult(run, () => SummarizeCleanupExecution(result.Value, run.AppId, result.Error, true));
+        }
+        catch (InvalidOperationException error) when (error.Message == RunningChanges.Installing)
+        {
+            CleanupExecutionState = "Cleanup didn't start.";
+            CleanupExecutionDetail = error.Message;
         }
         catch (Exception error)
         {
@@ -610,6 +616,7 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
         var run = BeginRun(app, "restoring", "Restoring cleanup...", "Reading the rollback file and putting cleanup targets back.");
         try
         {
+            using var running = RunningChanges.Begin();
             var result = await App.Live.RestoreUninstallCleanupResultAsync(rollbackPath);
             var restored = result.Error is null && IsSuccessfulRestore(result.Value, rollbackPath);
             var markFailed = false;
