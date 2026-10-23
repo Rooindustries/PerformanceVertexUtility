@@ -292,7 +292,8 @@ end;
 
     $malformed=Join-Path $work 'malformed-recovery.xml'
     [IO.File]::WriteAllText($malformed,'<Task',[Text.Encoding]::Unicode)
-    $ErrorActionPreference='Continue'; $probe=@(& (Join-Path $env:SystemRoot 'System32\schtasks.exe') /Create /TN ('\'+$probeName) /XML $malformed /F 2>&1); $probeExit=$LASTEXITCODE; $ErrorActionPreference='Stop'
+    $previous=$ErrorActionPreference;$ErrorActionPreference='Continue'
+    try{$probe=@(& (Join-Path $env:SystemRoot 'System32\schtasks.exe') /Create /TN ('\'+$probeName) /XML $malformed /F 2>&1);$probeExit=$LASTEXITCODE}finally{$ErrorActionPreference=$previous}
     Check ($probeExit -ne 0 -and $null -eq (Get-ScheduledTask -TaskName $probeName -ErrorAction SilentlyContinue)) 'Task Scheduler rejects a malformed recovery file, which is how the refused-recovery scenarios deny the recovery task' ('exit='+$probeExit+' '+($probe -join ' '))
 
     Unregister-ScheduledTask -TaskName $taskName -Confirm:$false

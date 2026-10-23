@@ -66,7 +66,8 @@ public static class FakeHost {
     }
     $setupFolder=Join-Path $app 'setup'
     [IO.Directory]::CreateDirectory($setupFolder)|Out-Null
-    $output=@(& (Join-Path $PSHOME 'powershell.exe') -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $script -Action Suspend -AppRoot $app -StatePath (Join-Path $setupFolder 'governor-suspended.json') -LogPath (Join-Path $setupFolder 'governor-setup.log') -SetupProcessId $PID 2>&1)
+    $previous=$ErrorActionPreference;$ErrorActionPreference='Continue'
+    try{$output=@(& (Join-Path $PSHOME 'powershell.exe') -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $script -Action Suspend -AppRoot $app -StatePath (Join-Path $setupFolder 'governor-suspended.json') -LogPath (Join-Path $setupFolder 'governor-setup.log') -SetupProcessId $PID 2>&1)}finally{$ErrorActionPreference=$previous}
     Check ($LASTEXITCODE -eq 0) ('Governor setup suspends the earlier version''s tasks: '+(($output|Select-Object -Last 3) -join ' / '))
     foreach($case in $cases){
         Check ((Get-ScheduledTask -TaskName $case.task).State -eq 'Disabled') ('The '+$case.label+' rules folder''s task is suspended')
