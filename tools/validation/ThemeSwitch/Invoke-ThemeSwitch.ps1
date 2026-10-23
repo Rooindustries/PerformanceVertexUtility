@@ -117,7 +117,8 @@ try{
  $dotnet=Join-Path $env:USERPROFILE '.dotnet\dotnet.exe';$flags=' -c Release --disable-build-servers -p:UseSharedCompilation=false -p:RooIndustriesTestHooks=true -p:GovernorTestHooks=true'
  Invoke-HarnessProcess (Get-HarnessToolPath $dotnet) ('publish "'+(Get-HarnessToolPath (Join-Path $Source 'backend\native\Optimizer.Host\Optimizer.Host.csproj'))+'" --self-contained false -o "'+(Get-HarnessToolPath $helper)+'"'+$flags) 'theme-helper-build'|Out-Null
  $project=Join-Path $Source 'docs\internal\frontend\RooIndustries.OptimizationSuite.App\RooIndustries.OptimizationSuite.App.csproj'
- $build=Invoke-HarnessProcess (Get-HarnessToolPath $dotnet) ('build "'+(Get-HarnessToolPath $project)+'" -p:Platform=x64 -p:RuntimeIdentifier=win-x64 -p:SelfContained=false -p:WindowsAppSDKSelfContained=true'+$flags) 'theme-app-build'
+ $wasdk=Join-Path $OutRoot 'wasdk';New-HarnessDirectory $wasdk 'generated-build'|Out-Null
+ $build=Invoke-HarnessProcess (Get-HarnessToolPath $dotnet) ('build "'+(Get-HarnessToolPath $project)+'" -p:Platform=x64 -p:RuntimeIdentifier=win-x64 -p:SelfContained=false -p:WindowsAppSDKSelfContained=true -p:SelfContainedIntermediateOutputPath='+(Get-HarnessToolPath $wasdk)+'\'+$flags) 'theme-app-build'
  Check 'The WinUI app builds with zero warnings' ($build -match '0 Warning\(s\)' -and $build -match '0 Error\(s\)')
  $exe=@(Get-HarnessTree (Join-Path ([IO.Path]::GetDirectoryName($project)) 'bin') -FilesOnly|Where-Object {[IO.Path]::GetFileName($_.FullName) -ieq 'RooIndustries.OptimizationSuite.App.exe'}|ForEach-Object {$_.FullName})
  if($exe.Count -ne 1){throw ('Expected one built app, found '+$exe.Count)};$exe=$exe[0]
