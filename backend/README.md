@@ -48,6 +48,16 @@ with a fresh probe. Raw readbacks are saved under
 `artifacts/validation/launch-preset-*.json`. This suite needs the Windows host
 lease and its owned frame; it does not capture the desktop picker or review.
 
+`tools/validation/ProtectedSessions/Capture-LaunchPresetUi.ps1` covers the
+desktop side. Run it through `windows_ssh.py interactive-frame` on a frame
+staged with `--include-frontend`, passing `Source`, `OutRoot` and a short
+`Label`. It builds the app from that frame, starts a disposable launcher, and
+drives the Games tab: each preset, a priority edit (Custom), a core edit (the
+preset stays), and Review. It saves window screenshots, the text each one
+shows, and JPEG frames for a video. On a build without the picker it fills
+Competitive's values by hand and reviews them. It never selects Start, and it
+removes the Review files it created under the app's data folder.
+
 ## Validation
 
 The desktop saves the Game priority Review and its hash. Start checks the reviewed process IDs, creation times, executable paths and controls before changing anything, then limits every poll to that saved plan. A closed or restarted reviewed game, changed profile or edited review refuses the whole Start. Older direct backend calls without a review retain their existing behavior.
