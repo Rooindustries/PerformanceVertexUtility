@@ -205,7 +205,7 @@ function Test-ScenarioClaimsApplyOnceUndoKeepsOtherValue {
     Assert ($applied.status -eq 'applied' -and (Read-Field $probe 'cpuPriority') -eq 'BelowNormal' -and (Read-Field $probe 'memoryPriority') -eq 3) 'Apply once lowered the probe CPU and memory priority'
     Set-Field $probe 'cpuPriority' 'Idle'
     $undo=Core 'process-restore' @{journalPath=$applied.journal}
-    $kept=Get-ClaimsChange $undo 'cpuPriority'
+    $kept=@(Get-ClaimsChange $undo 'cpuPriority')
     Note 'undo' ([ordered]@{status=$undo.status;changes=@($undo.changes|ForEach-Object {[ordered]@{name=$_.name;status=$_.status;observed=$_.observed;error=$_.error}})})
     Assert ($undo.status -eq 'restored' -and $kept.Count -eq 1 -and $kept[0].status -eq 'leftAsSet' -and $kept[0].error -ceq 'Left as another program set it.' -and [string]$kept[0].observed -eq 'Idle') 'Undo finishes and names the CPU priority another program set after Apply once'
     Assert ((Read-Field $probe 'cpuPriority') -eq 'Idle' -and (Read-Field $probe 'memoryPriority') -eq $memoryBefore) 'Undo keeps the other program''s CPU priority and restores the memory priority it changed'
@@ -225,7 +225,7 @@ function Test-ScenarioClaimsApplyOnceUndoRace {
     Assert ($null -ne $paused -and (Read-Field $probe 'cpuPriority') -eq 'BelowNormal') 'Undo saved its intent and paused before writing'
     Set-Field $probe 'cpuPriority' 'Idle'
     $undo=Read-HostLater $call
-    $kept=Get-ClaimsChange $undo.data 'cpuPriority'
+    $kept=@(Get-ClaimsChange $undo.data 'cpuPriority')
     Note 'undo' ([ordered]@{status=$undo.status;error=$undo.error.message;journal=$undo.data.status;changes=@($undo.data.changes|ForEach-Object {[ordered]@{name=$_.name;status=$_.status;observed=$_.observed;error=$_.error}})})
     Assert ($undo.status -eq 'completed' -and $undo.data.status -eq 'restored' -and $kept.Count -eq 1 -and $kept[0].status -eq 'leftAsSet' -and [string]$kept[0].observed -eq 'Idle') 'A value another program sets just before Undo writes is named and Undo finishes'
     Assert ((Read-Field $probe 'cpuPriority') -eq 'Idle') 'Undo does not overwrite it'
