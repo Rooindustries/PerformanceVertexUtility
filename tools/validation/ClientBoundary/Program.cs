@@ -62,12 +62,15 @@ try
     File.WriteAllText(Path.Combine(scripts, "New-CleanupDeletionManifest.ps1"), "param([string]$AppId)\nGet-Content -LiteralPath (Join-Path $PSScriptRoot 'cleanup.json') -Raw -Encoding UTF8\n");
     var original = Path.Combine(fixture, "reviewed.txt");
     var later = Path.Combine(fixture, "unreviewed.txt");
+    var otherApp = Path.Combine(fixture, "other-app.txt");
     File.WriteAllText(original, "reviewed original");
     File.WriteAllText(later, "unreviewed original");
+    File.WriteAllText(otherApp, "other app original");
     const string appId = "fixture:client-boundary";
-    var official = new { actionId = "apps.previewOfficialUninstall", commands = new[] { new { appId, blocked = false, @protected = false, reviewRequired = true, executable = (string?)null } }, errors = Array.Empty<object>() };
-    File.WriteAllText(Path.Combine(scripts, "official.json"), JsonSerializer.Serialize(official));
-    object Manifest(string target) => new { manifestId = "client-review", appId, items = new[] { new { itemId = "reviewed", type = "file", target, @protected = false } }, errors = Array.Empty<object>() };
+    const string otherAppId = "fixture:client-boundary-other";
+    object Route(string app) => new { actionId = "apps.previewOfficialUninstall", commands = new[] { new { appId = app, blocked = false, @protected = false, reviewRequired = true, executable = (string?)null } }, errors = Array.Empty<object>() };
+    File.WriteAllText(Path.Combine(scripts, "official.json"), JsonSerializer.Serialize(Route(appId)));
+    object Manifest(string target, string app = appId) => new { manifestId = "client-review", appId = app, items = new[] { new { itemId = "reviewed", type = "file", target, @protected = false } }, errors = Array.Empty<object>() };
     File.WriteAllText(Path.Combine(scripts, "cleanup.json"), JsonSerializer.Serialize(Manifest(original)));
     gateRoot = Directory.CreateDirectory(Path.Combine(fixture, "gate-root")).FullName;
     if (OperatingSystem.IsWindows() && RooIndustries.Optimizer.PolicyRootSecurity.Elevated())
@@ -85,21 +88,37 @@ try
     Check(await service.GetCleanupManifestAsync(appId) is not null, "Client reads the reviewed cleanup list");
     // Change the discovery response after review; execution must still use the approved snapshot.
     File.WriteAllText(Path.Combine(scripts, "cleanup.json"), JsonSerializer.Serialize(Manifest(later)));
-    var applyResult = await service.RequestUninstallCleanupApplyResultAsync(appId, true, true, true);
+    // Hold Apply after it takes its snapshot, then switch to and review another app before it continues.
+    var cleanupOperations = ((Lazy<OptimizerService>)typeof(LiveDataService).GetField("_operations", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(service)!).Value;
+    var storageGate = (SemaphoreSlim)typeof(OptimizerService).GetField("_storageGate", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(cleanupOperations)!;
+    Task<LiveDataResult<string>> applying;
+    await storageGate.WaitAsync();
+    try
+    {
+        applying = service.RequestUninstallCleanupApplyResultAsync(appId, true, true, true);
+        Check(!applying.IsCompleted, "Apply waits to open its data folder after taking the reviewed snapshot");
+        service.DiscardCleanupReview();
+        File.WriteAllText(Path.Combine(scripts, "official.json"), JsonSerializer.Serialize(Route(otherAppId)));
+        File.WriteAllText(Path.Combine(scripts, "cleanup.json"), JsonSerializer.Serialize(Manifest(otherApp, otherAppId)));
+        Check(await service.GetOfficialUninstallPreviewAsync(otherAppId) is not null && await service.GetCleanupManifestAsync(otherAppId) is not null, "Another app is selected and reviewed while Apply prepares");
+    }
+    finally { storageGate.Release(); }
+    var applyResult = await applying;
     savedRollback = applyResult.RecoveryPath;
     var json = applyResult.Value;
-    Check(!string.IsNullOrWhiteSpace(json), "Client receives the real executor result" + (string.IsNullOrWhiteSpace(json) ? ": " + applyResult.Error : ""));
+    Check(!string.IsNullOrWhiteSpace(json), "Switching apps while Apply prepares still runs the approved cleanup" + (string.IsNullOrWhiteSpace(json) ? ": " + applyResult.Error : ""));
     using var applied = JsonDocument.Parse(json!);
     var status = applied.RootElement.GetProperty("status").GetString();
     if (status != "success") Console.WriteLine(json);
     Check(status == "success", "Client app identity, hashes and approvals satisfy the executor");
-    Check(!File.Exists(original) && File.Exists(later), "Apply removes only the reviewed target after discovery changes");
+    Check(!File.Exists(original) && File.Exists(later) && File.ReadAllText(otherApp) == "other app original", "Apply removes only the reviewed app's target after discovery and the selected app change");
     var rollback = applied.RootElement.GetProperty("rollback").GetProperty("rollbackManifestPath").GetString()!;
     recoveryRoot = Path.GetDirectoryName(rollback);
     Check(applyResult.RecoveryPath == rollback && File.Exists(rollback), "Client retains the durable recovery location");
     var restored = await service.RestoreUninstallCleanupTextAsync(rollback);
     using var restore = JsonDocument.Parse(restored!);
     Check(restore.RootElement.GetProperty("status").GetString() == "success" && File.ReadAllText(original) == "reviewed original", "Client restores the original bytes through the real restore command");
+    Check(await service.RequestUninstallCleanupApplyTextAsync(appId, true, true, true) is null && File.Exists(original), "The earlier app's approval cannot run once another app is reviewed");
     service.DiscardCleanupReview();
     Check(await service.RequestUninstallCleanupApplyTextAsync(appId, true, true, true) is null && File.Exists(later), "Discarded approval cannot be reused to remove newly discovered files");
 
