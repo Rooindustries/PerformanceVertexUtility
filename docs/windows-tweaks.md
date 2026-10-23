@@ -178,7 +178,10 @@ read after restart shows each changed feature's final state. Pending servicing
 blocks another feature change or restoration. No automatic restart occurs.
 When Windows undid a change during the restart, the check releases that
 feature's ownership, keeps the rest of the profile, closes the journal and
-adds a notice. A feature Windows no longer lists is released the same way.
+adds a notice. A feature Windows no longer lists is released only when a
+direct DISM check confirms it is absent or superseded. A partially installed
+changed feature keeps the journal and every claim until servicing finishes.
+An unrelated partially installed feature does not block normal reads or applies.
 A feature in a state this app didn't set, or a restore Windows undid, keeps
 the journal and names the feature so the user can set it in Turn Windows
 features on or off and check again.

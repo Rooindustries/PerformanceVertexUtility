@@ -213,13 +213,14 @@ static class FeatureChecks
         public int ChangeResult { get; set; }
         public int CloseAfterChange { get; set; }
         public int ReadCloseResult { get; set; }
+        public int InfoResult { get; set; }
         public bool InfoShowsPending { get; set; } = true;
         private bool _changed;
         public override int Initialize() => 0;
         public override int OpenSession(out uint session) { session = 7; return 0; }
         public override int GetFeatures(uint session, out (string Name, int State)[] features) { features = Listed.Select(item => (item.Key, item.Value)).ToArray(); return 0; }
         public override int GetFeatureParents(uint session, string feature, out string[] parents) { parents = []; return 0; }
-        public override int GetFeatureState(uint session, string feature, out int state) { state = Info.TryGetValue(feature, out var info) ? info : Listed[feature]; return 0; }
+        public override int GetFeatureState(uint session, string feature, out int state) { state = Info.TryGetValue(feature, out var info) ? info : Listed[feature]; return InfoResult; }
         public override int EnableFeatures(uint session, string features) => Change("enable " + features, features, 4, 5);
         public override int DisableFeatures(uint session, string features, bool removePayload) => Change("disable " + features, features, removePayload ? 3 : 2, 1);
         private int Change(string call, string features, int target, int pending)

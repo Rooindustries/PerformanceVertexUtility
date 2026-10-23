@@ -9,8 +9,9 @@ public sealed class RegistryTweakStore : ITweakStore
 {
     private readonly RegistryAddress _stateAddress;
     private readonly IControlStore _controls;
+    private readonly DismServicing? _fixtureDism;
     public TweakContext Context { get; }
-    public RegistryTweakStore(RegistryAddress? fixtureState = null, IControlStore? fixtureControls = null)
+    public RegistryTweakStore(RegistryAddress? fixtureState = null, IControlStore? fixtureControls = null, DismServicing? fixtureDism = null)
     {
         var owner = OperationOwner.Current();
 #if ROO_INDUSTRIES_TEST_HOOKS
@@ -20,8 +21,9 @@ public sealed class RegistryTweakStore : ITweakStore
         if (fixtureState is not null && (fixtureState.Hive != "CurrentUser" || fixtureState.View != "Registry64" || fixtureState.Kind != "value" || fixtureState.ValueName != "State" ||
             !System.Text.RegularExpressions.Regex.IsMatch(fixtureState.KeyPath, @"^Software\\RooIndustriesTweakTests\\[a-f0-9]{32}\\Recovery$", System.Text.RegularExpressions.RegexOptions.CultureInvariant)))
             throw new InvalidDataException("Registry test recovery must remain inside its isolated test root.");
-        if (fixtureControls is not null && fixtureState is null) throw new InvalidDataException("Test Windows controls require an isolated test recovery store.");
+        if ((fixtureControls is not null || fixtureDism is not null) && fixtureState is null) throw new InvalidDataException("Test Windows controls require an isolated test recovery store.");
         _controls = fixtureControls ?? new WindowsControlStore();
+        _fixtureDism = fixtureDism;
         using var machine = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
         using var version = machine.OpenSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion") ?? throw new InvalidOperationException("Windows version is unavailable.");
         if (!int.TryParse(version.GetValue("CurrentBuildNumber") as string, out var build) || version.GetValue("EditionID") is not string edition)
@@ -138,7 +140,7 @@ public sealed class RegistryTweakStore : ITweakStore
             if (journal.Phase == "awaiting-restart" && state?.History.Any(item => item.OperationId == journal.Plan.OperationId) == true)
             {
                 if (SameBoot(journal.Boot)) throw new InvalidDataException(RestartAgain);
-                var undone = new List<string>(); var removed = new List<string>(); var restoreUndone = new List<string>(); var unexpected = new List<string>();
+                var undone = new List<string>(); var removed = new List<string>(); var restoreUndone = new List<string>(); var unexpected = new List<string>(); var unfinished = new List<string>();
                 var reconciled = new List<(TweakControlRead Read, string[] Features)>();
                 foreach (var change in journal.Plan.Controls!.Changes.Where(change => change.Before.Address.Kind == "windows-features"))
                 {
@@ -149,23 +151,39 @@ public sealed class RegistryTweakStore : ITweakStore
                         .SelectMany(claim => claim.Desired.EnumerateObject()).Select(feature => feature.Name).ToHashSet(StringComparer.Ordinal);
                     var held = (state.Controls ?? []).SingleOrDefault(item => item.Original.Id == change.Before.Id);
                     var baseline = held?.RestoreValue ?? held?.Original.Value;
+                    string[] Accepted(string name)
+                    {
+                        var wanted = change.After.GetProperty(name).GetString()!;
+                        return claimed.Contains(name) && change.Before.Value.TryGetProperty(name, out var prior) && prior.GetString() != wanted &&
+                            baseline is { ValueKind: JsonValueKind.Object } original && original.TryGetProperty(name, out var saved) && ControlValues.Equal(prior, saved)
+                            ? [wanted, prior.GetString()!] : [wanted];
+                    }
+                    var changed = WindowsFeatures.Changed(change);
+                    var missing = WindowsFeatures.ReadStates(changed.Where(name => !observed.Value.TryGetProperty(name, out _)).ToArray(), _fixtureDism);
                     var release = new List<string>();
-                    foreach (var name in WindowsFeatures.Changed(change))
+                    foreach (var name in changed)
                     {
                         var wanted = change.After.GetProperty(name).GetString();
                         var was = change.Before.Value.TryGetProperty(name, out var prior) ? prior.GetString() : null;
-                        if (!observed.Value.TryGetProperty(name, out var now)) { removed.Add(name); if (claimed.Contains(name)) release.Add(name); }
-                        else if (now.GetString() == wanted) continue;
-                        else if (now.GetString() == was && claimed.Contains(name) && baseline is { ValueKind: JsonValueKind.Object } original &&
-                            original.TryGetProperty(name, out var saved) && ControlValues.Equal(now, saved)) { undone.Add(name + " " + was); release.Add(name); }
+                        var accepted = Accepted(name);
+                        if (!observed.Value.TryGetProperty(name, out var now))
+                        {
+                            if (missing[name] is 0 or 6) { removed.Add(name); if (claimed.Contains(name)) release.Add(name); }
+                            else unfinished.Add(name);
+                        }
+                        else if (accepted.Contains(now.GetString(), StringComparer.Ordinal))
+                        {
+                            if (now.GetString() != wanted) { undone.Add(name + " " + was); release.Add(name); }
+                        }
                         else if (now.GetString() == was && !claimed.Contains(name)) restoreUndone.Add(name + " is " + was + " again (originally " + wanted + ")");
-                        else unexpected.Add(name + " is " + now.GetString() + " (it was " + was + ", this app set " + wanted + ")");
+                        else unexpected.Add(name + " is " + now.GetString() + "; set it to " + string.Join(" or ", accepted));
                     }
                     reconciled.Add((observed, release.ToArray()));
                 }
                 var problems = new List<string>();
+                if (unfinished.Count > 0) problems.Add("Windows hasn't finished changing these features: " + string.Join(", ", unfinished) + ". Restart Windows or finish them in Turn Windows features on or off, then check restart completion again.");
                 if (restoreUndone.Count > 0) problems.Add("Windows undid the restore of these features when it restarted: " + string.Join("; ", restoreUndone) + ". Set them back to their original in Turn Windows features on or off, restart Windows, then check restart completion again.");
-                if (unexpected.Count > 0) problems.Add("Windows left these features in a state this app didn't set: " + string.Join("; ", unexpected) + ". Set each one to either value in Turn Windows features on or off, restart Windows, then check restart completion again.");
+                if (unexpected.Count > 0) problems.Add("Windows left these features in a state this app didn't set: " + string.Join("; ", unexpected) + ". Change them in Turn Windows features on or off, restart Windows, then check restart completion again.");
                 if (problems.Count > 0) throw new InvalidDataException(string.Join(" ", problems));
                 foreach (var (observed, features) in reconciled) state = WindowsFeatures.Reconcile(state, observed, features);
                 if (undone.Count > 0) notices.Add(FeaturesUndone + string.Join(", ", undone) + ".");

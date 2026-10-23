@@ -104,6 +104,41 @@ static class FeatureRestartChecks
                 f.Apply("mine");
                 check(f.Dism.Calls.SequenceEqual(["disable HypervisorPlatform"]) && f.Dism.Listed["HypervisorPlatform"] == 2, "Undo of the finished change restores the original state");
             });
+            Scenario("A changed feature is partially installed after restart", f =>
+            {
+                f.Boot(("HypervisorPlatform", 2), ("VirtualMachinePlatform", 4)); f.Dism.ChangeResult = 3010;
+                f.Apply("mine", ("platform", "on"), ("machine", "off"));
+                var state = f.Raw("State");
+                f.Restart(); var pending = f.Raw("Pending");
+                f.Boot(("HypervisorPlatform", 7), ("VirtualMachinePlatform", 7)); f.Dism.InfoResult = unchecked((int)0x80070005);
+                check(f.Refusal(() => f.Recover()).Contains("DismGetFeatureInfo(HypervisorPlatform) failed with HRESULT 0x80070005") &&
+                    f.Raw("Pending")!.SequenceEqual(pending!) && f.Raw("State")!.SequenceEqual(state!), "An exact-state query failure preserves the journal and every claim");
+                f.Boot(("HypervisorPlatform", 7), ("VirtualMachinePlatform", 4));
+                var refusal = f.Refusal(() => f.Recover());
+                check(refusal == "Windows hasn't finished changing these features: HypervisorPlatform. Restart Windows or finish them in Turn Windows features on or off, then check restart completion again.",
+                    "A partially installed changed feature refuses recovery with instructions: " + refusal);
+                check(f.Raw("Pending")!.SequenceEqual(pending!) && f.Raw("State")!.SequenceEqual(state!) && f.Store.ReadState()!.Profiles.Single().Controls!.Length == 2,
+                    "Unfinished servicing keeps the exact journal, saved originals and every claim, including the other reverted feature");
+                check(f.Refusal(() => f.Apply("other", ("flag", "one"))) == unlocked, "Other changes wait while the changed feature is partially installed");
+                f.Boot(("HypervisorPlatform", 4), ("VirtualMachinePlatform", 2));
+                check(f.Recover() && f.Store.Recovery().Pending is null && f.Store.ReadState()!.Profiles.Single().Controls!.Length == 2,
+                    "Once servicing finishes, recovery closes the journal and keeps both completed changes owned");
+                f.Apply("mine");
+                check(f.Dism.Calls.SequenceEqual(["disable HypervisorPlatform", "enable VirtualMachinePlatform"]) && f.Dism.Listed["HypervisorPlatform"] == 2 && f.Dism.Listed["VirtualMachinePlatform"] == 4,
+                    "Undo still restores both exact original feature values after partial installation finishes");
+            });
+            Scenario("An unrelated feature is partially installed", f =>
+            {
+                f.Boot(("HypervisorPlatform", 2), ("UnrelatedFeature", 7));
+                var read = f.Store.ReadControl(Features);
+                check(!read.RestartPending && !read.Value.TryGetProperty("UnrelatedFeature", out _) && f.Configured("platform").SequenceEqual(["off"]),
+                    "An unrelated partially installed feature does not block normal discovery");
+                f.Apply("mine", ("platform", "on"));
+                check(f.Store.Recovery().Pending is null && f.Dism.Listed["HypervisorPlatform"] == 4 && f.Dism.Listed["UnrelatedFeature"] == 7,
+                    "A normal apply changes only the selected feature while unrelated partial servicing stays untouched");
+                f.Apply("mine");
+                check(f.Dism.Listed["HypervisorPlatform"] == 2 && f.Dism.Listed["UnrelatedFeature"] == 7, "Undo also works with unrelated partial servicing");
+            });
             Scenario("Two restarts: still pending after the first, undone after the second", f =>
             {
                 f.Boot(("HypervisorPlatform", 2)); f.Dism.ChangeResult = 3010;
@@ -119,6 +154,7 @@ static class FeatureRestartChecks
                 f.Boot(("HypervisorPlatform", 2), ("VirtualMachinePlatform", 2)); f.Dism.ChangeResult = 3010;
                 f.Apply("mine", ("platform", "on"));
                 f.Restart(); f.Boot(("VirtualMachinePlatform", 2));
+                f.Dism.Info["HypervisorPlatform"] = 0;
                 check(f.Recover() && f.Store.Recovery().Pending is null, "A feature Windows no longer lists closes the pending record");
                 var state = f.Store.ReadState()!;
                 check(state.Profiles.Length == 0 && state.Controls is { Length: 0 } && state.Notices.SequenceEqual([RegistryTweakStore.FeaturesRemoved + "HypervisorPlatform."]), "The removed feature is released with a notice: " + string.Join(" | ", state.Notices));
@@ -130,6 +166,7 @@ static class FeatureRestartChecks
                 f.Boot(("HypervisorPlatform", 2), ("VirtualMachinePlatform", 2)); f.Dism.ChangeResult = 3010;
                 f.Apply("mine", ("platform", "on"), ("machine", "on"));
                 f.Restart(); f.Boot(("VirtualMachinePlatform", 4));
+                f.Dism.Info["HypervisorPlatform"] = 6;
                 check(f.Recover() && f.Store.Recovery().Pending is null, "A missing feature closes recovery while the completed feature remains owned");
                 var state = f.Store.ReadState()!; var held = state.Controls!.Single();
                 check(held.Original.Binding == f.Store.ReadControl(Features).Binding && held.Original.Value.GetProperty("VirtualMachinePlatform").GetString() == "Disabled",
@@ -156,7 +193,7 @@ static class FeatureRestartChecks
                 var before = f.Raw("State");
                 f.Restart(); f.Boot(("HypervisorPlatform", 3));
                 var refusal = f.Refusal(() => f.Recover());
-                check(refusal == "Windows left these features in a state this app didn't set: HypervisorPlatform is DisabledWithPayloadRemoved (it was Disabled, this app set Enabled). Set each one to either value in Turn Windows features on or off, restart Windows, then check restart completion again.",
+                check(refusal == "Windows left these features in a state this app didn't set: HypervisorPlatform is DisabledWithPayloadRemoved; set it to Enabled or Disabled. Change them in Turn Windows features on or off, restart Windows, then check restart completion again.",
                     "An unexpected feature state names the feature and the states that close the record: " + refusal);
                 check(f.Store.Recovery().Pending is not null && f.Raw("State")!.SequenceEqual(before!) && f.Refusal(() => f.Apply("other", ("flag", "one"))) == unlocked, "The record and saved state stay unchanged");
                 f.Restart(); f.Boot(("HypervisorPlatform", 4));
@@ -185,7 +222,10 @@ static class FeatureRestartChecks
                 f.Apply("mine", ("platform", "off"));
                 var state = f.Raw("State");
                 f.Restart(); var pending = f.Raw("Pending"); f.Boot(("HypervisorPlatform", 4));
-                check(f.Refusal(() => f.Recover()).Length > 0 && f.Raw("Pending")!.SequenceEqual(pending!) && f.Raw("State")!.SequenceEqual(state!),
+                var refusal = f.Refusal(() => f.Recover());
+                check(refusal == "Windows left these features in a state this app didn't set: HypervisorPlatform is Enabled; set it to Disabled. Change them in Turn Windows features on or off, restart Windows, then check restart completion again.",
+                    "The replacement instructions name only Disabled, the value that can finish recovery: " + refusal);
+                check(f.Raw("Pending")!.SequenceEqual(pending!) && f.Raw("State")!.SequenceEqual(state!),
                     "An undone replacement retains the journal and original while the feature differs from that original");
                 check(f.Refusal(() => f.Apply("other", ("flag", "one"))) == unlocked, "Other changes wait while the original still needs recovery");
                 f.Restart(); f.Boot(("HypervisorPlatform", 2));
@@ -302,7 +342,7 @@ static class FeatureRestartChecks
         {
             Dism = new FeatureChecks.FakeDism(); Dism.Listed.Clear();
             foreach (var (name, state) in features) Dism.Listed[name] = state;
-            Store = new(_recovery, new FeatureChecks.FeatureStore(Dism, Others)); Engine = new(_catalog, Store);
+            Store = new(_recovery, new FeatureChecks.FeatureStore(Dism, Others), Dism); Engine = new(_catalog, Store);
         }
         public (string Path, string Hash, TweakPlan Plan) Preview(string profile, params (string Setting, string Option)[] picks)
         {

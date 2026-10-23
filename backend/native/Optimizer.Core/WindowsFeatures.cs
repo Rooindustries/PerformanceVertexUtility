@@ -45,6 +45,29 @@ public static class WindowsFeatures
         }
         return dism.RestartRequired ? read with { RestartPending = true } : read;
     }
+    public static Dictionary<string, int> ReadStates(string[] names, DismServicing? dism = null)
+    {
+        var states = new Dictionary<string, int>(StringComparer.Ordinal);
+        if (names.Length == 0) return states;
+        dism ??= DismServicing.Current;
+        Check(dism.Initialize(), "DismInitialize");
+        uint session = 0; var opened = false;
+        try
+        {
+            Check(dism.OpenSession(out session), "DismOpenSession"); opened = true;
+            foreach (var name in names.Distinct(StringComparer.Ordinal))
+            {
+                Check(dism.GetFeatureState(session, name, out var state), "DismGetFeatureInfo(" + name + ")");
+                states.Add(name, state);
+            }
+        }
+        finally
+        {
+            var close = opened ? dism.CloseSession(session) : 0; var shutdown = dism.Shutdown();
+            Check(close, "DismCloseSession"); Check(shutdown, "DismShutdown");
+        }
+        return states;
+    }
     private static string State(string name, int state) => state switch
     {
         2 => "Disabled", 3 => "DisabledWithPayloadRemoved", 4 => "Enabled",
