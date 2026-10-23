@@ -11,6 +11,7 @@ internal sealed class CleanupPath
     private readonly string? _existing;
     private readonly string[] _tail = [];
     private (Regex Named, Regex Listed, string[] Leaves)? _patterns;
+    internal static Action<string, NativeFiles.PathWalk>? AfterResolveForTest;
 
     public CleanupPath(string path)
     {
@@ -19,7 +20,8 @@ internal sealed class CleanupPath
         for (var current = Lexical; ;)
         {
             var walked = NativeFiles.ResolvedPath(current);
-            if (tail.Count == 0) Walk = walked.Walk;
+            AfterResolveForTest?.Invoke(current, walked.Walk);
+            Walk = walked.Walk;
             if (walked.Path is not null) { _existing = walked.Path; break; }
             if (walked.Walk != NativeFiles.PathWalk.Absent || Path.GetDirectoryName(current) is not { Length: > 0 } parent) break;
             tail.Insert(0, Path.GetFileName(current));

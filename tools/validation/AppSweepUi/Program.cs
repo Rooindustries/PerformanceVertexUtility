@@ -472,7 +472,7 @@ if (args is [] or ["responses"] or ["cleanup"] or ["race"])
 {
     if (args is not (["cleanup"] or ["race"]))
     {
-    var oldBackup = Path.Combine(Path.GetTempPath(), "old-process-backup.json");
+    var oldBackup = Path.Combine(Path.GetTempPath(), "old-process-backup-" + Guid.NewGuid().ToString("N") + ".json");
     File.WriteAllText(oldBackup, "{}");
     App.Live.LatestProcessBackup = oldBackup;
     App.Live.ProcessPreviewText = null;

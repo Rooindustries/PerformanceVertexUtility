@@ -12,14 +12,14 @@ function Add-DnsClientDohServerAddress {
  $script:entry
 }
 '@
-function Run-Helper([string]$body){
+function Run-Helper([string]$body,[int]$timeout=15000){
  $start=[Diagnostics.ProcessStartInfo]::new((Join-Path $env:SystemRoot 'System32/WindowsPowerShell/v1.0/powershell.exe'))
  $start.UseShellExecute=$false;$start.CreateNoWindow=$true;$start.RedirectStandardOutput=$true;$start.RedirectStandardError=$true
  $start.Arguments='-NoProfile -NonInteractive -EncodedCommand '+[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes('$body=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($env:ROO_INDUSTRIES_OUTPUT_TEST)); & ([ScriptBlock]::Create($body))'))
  $start.EnvironmentVariables['ROO_INDUSTRIES_OUTPUT_TEST']=[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($providers+[Environment]::NewLine+$body))
  $start.EnvironmentVariables['ROO_INDUSTRIES_CONTROL_REQUEST']=[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes(($request|ConvertTo-Json -Depth 10 -Compress)))
  $process=[Diagnostics.Process]::new();$process.StartInfo=$start
- try{$process.Start()|Out-Null;$stdout=$process.StandardOutput.ReadToEndAsync();$stderr=$process.StandardError.ReadToEndAsync();if(-not $process.WaitForExit(15000)){$process.Kill();$process.WaitForExit();throw 'Helper fixture timed out'};[Threading.Tasks.Task]::WaitAll(@($stdout,$stderr));if($process.ExitCode -ne 0){throw $stderr.Result};return $stdout.Result}finally{$process.Dispose()}
+ try{$process.Start()|Out-Null;$stdout=$process.StandardOutput.ReadToEndAsync();$stderr=$process.StandardError.ReadToEndAsync();if(-not $process.WaitForExit($timeout)){$process.Kill();$process.WaitForExit();throw 'Helper fixture timed out'};[Threading.Tasks.Task]::WaitAll(@($stdout,$stderr));if($process.ExitCode -ne 0){throw $stderr.Result};return $stdout.Result}finally{$process.Dispose()}
 }
 $fixed=Run-Helper $source
 $parsed=$fixed|ConvertFrom-Json
@@ -46,8 +46,58 @@ $stray=@($lines | Where-Object { $_ -notmatch '^ROO_INDUSTRIES_CONTROL \d+ ' })
 if($stray.Count -lt 1){throw ('The fixture output line did not reach standard output: '+($lines -join ' | '))}
 if(@($stray | Where-Object { [array]::IndexOf($lines,$_) -lt $firstIndex -or [array]::IndexOf($lines,$_) -gt $secondIndex }).Count){throw ('Output from one batch read leaked next to another address: '+($lines -join ' | '))}
 Write-Host ('PASS batched reads keep request order and keep each read''s stray output before its own result ('+$stray.Count+' stray lines before the second result)')
-$providers='Import-Module Microsoft.PowerShell.Utility; $global:PSModuleAutoLoadingPreference=''None'''
-$request=@{action='read-batch';addresses=@([ordered]@{kind='dns-over-https';target='203.0.113.253';property='configuration'},[ordered]@{kind='reserved-storage';target='system';property='enabled'})}
+$hidden='Import-Module Microsoft.PowerShell.Utility; $global:PSModuleAutoLoadingPreference=''None'''
+$guarded=[ordered]@{
+ 'Windows Firewall'=[ordered]@{kind='firewall-profile';target='Public';property='enabled'}
+ 'Exploit protection'=[ordered]@{kind='mitigations';target='system';property='policy'}
+ 'Microsoft Defender Antivirus'=[ordered]@{kind='defender';target='system';property='SubmitSamplesConsent'}
+ 'Device power management'=[ordered]@{kind='device-power';target='non-network';property='enabled'}
+ 'Encrypted DNS'=[ordered]@{kind='dns-over-https';target='203.0.113.253';property='configuration'}
+ 'Teredo'=[ordered]@{kind='teredo';target='system';property='type'}
+ 'Memory compression'=[ordered]@{kind='memory';target='system';property='compression'}
+ 'Reserved storage'=[ordered]@{kind='reserved-storage';target='system';property='enabled'}
+ 'Windows feature servicing'=[ordered]@{kind='windows-feature';target='Microsoft-Hyper-V-All';property='enabled'}
+ 'Network adapter configuration'=[ordered]@{kind='network-adapter';target='primary';property='ipv6-binding'}
+}
+function Unavailable([string]$feature){$feature+' is not available with this Windows version.'}
+$providers=$hidden
+$request=@{action='read-batch';addresses=@($guarded.Values)}
 $missing=@((Run-Helper $source) -split "`r?`n" | Where-Object { $_ -match '^ROO_INDUSTRIES_CONTROL \d+ ' } | ForEach-Object { ($_ -replace '^ROO_INDUSTRIES_CONTROL \d+ ','')|ConvertFrom-Json })
-if($missing.Count -ne 2 -or $missing[0].error -cne 'Encrypted DNS is not available with this Windows version.' -or $missing[1].error -cne 'Reserved storage is not available with this Windows version.'){throw ('A Windows version without the encrypted DNS or reserved storage commands must read as not available: '+(($missing|ForEach-Object { $_.error }) -join ' | '))}
-Write-Host 'PASS Windows versions without the encrypted DNS or reserved storage commands read those rows as not available'
+$features=@($guarded.Keys)
+$wrong=@(for($index=0;$index -lt $features.Count;$index++){if($missing.Count -le $index -or $missing[$index].error -cne (Unavailable $features[$index])){$features[$index]+': '+$(if($missing.Count -gt $index){[string]$missing[$index].error}else{'no result'})}})
+if($missing.Count -ne $features.Count -or $wrong.Count){throw ('A Windows version without a setting''s PowerShell commands must read that row as not available: '+($wrong -join ' | '))}
+Write-Host ('PASS Windows versions without a setting''s PowerShell commands read all '+$features.Count+' command-backed kinds, Defender included, as not available')
+$setters='Set-NetFirewallProfile','Set-MpPreference','Add-DnsClientDohServerAddress','Set-DnsClientDohServerAddress','Remove-DnsClientDohServerAddress','Set-NetTeredoConfiguration','Enable-MMAgent','Disable-MMAgent','Set-WindowsReservedStorageState','Enable-WindowsOptionalFeature','Disable-WindowsOptionalFeature','Enable-NetAdapterBinding','Disable-NetAdapterBinding','Set-NetAdapterLso','Set-NetAdapterRsc','Set-NetAdapterAdvancedProperty','Set-CimInstance'
+$providers=$hidden+[Environment]::NewLine+(($setters|ForEach-Object {'function '+$_+' {[Console]::Out.WriteLine(''FIXTURE SETTER RAN'')}'}) -join [Environment]::NewLine)
+foreach($feature in $features){
+ $address=$guarded[$feature]
+ $request=@{action='write';address=$address;before=@{address=$address;identity=$address.kind+':'+$address.target+':'+$address.property;binding=$address.kind+':'+$address.target;value=$null};after=1}
+ $output=Run-Helper $source
+ if($output -match 'FIXTURE SETTER RAN' -or ($output|ConvertFrom-Json).error -cne (Unavailable $feature)){throw ('An apply or undo without '+$feature+'''s getter must stop as not available before any setter runs: '+$output)}
+}
+Write-Host ('PASS applies and undos of all '+$features.Count+' command-backed kinds stop as not available before any setter runs')
+$providers=$hidden+@'
+
+$script:consent=1
+function Get-MpPreference {[pscustomobject]@{SubmitSamplesConsent=$script:consent}}
+function Set-MpPreference {param([int]$SubmitSamplesConsent) $script:consent=$SubmitSamplesConsent}
+'@
+$defender=$guarded['Microsoft Defender Antivirus']
+$request=@{action='write';address=$defender;before=@{address=$defender;identity='defender:system:SubmitSamplesConsent';binding='defender:system';value=1};after=2}
+$present=Run-Helper $source
+$parsed=$present|ConvertFrom-Json
+if($null -ne $parsed.error -or $parsed.value -ne 2){throw ('Windows with the Defender commands must still read and change the Defender row: '+$present)}
+Write-Host 'PASS Windows with the Defender commands still reads and changes the Defender row'
+$getters=@{'firewall-profile'='Get-NetFirewallProfile';'mitigations'='Get-ProcessMitigation';'defender'='Get-MpPreference';'device-power'='Get-PnpDevice';'dns-over-https'='Get-DnsClientDohServerAddress';'teredo'='Get-NetTeredoConfiguration';'memory'='Get-MMAgent';'reserved-storage'='Get-WindowsReservedStorageState';'network-adapter'='Get-NetAdapter'}
+$providers=''
+$local=@($guarded.Values|Where-Object { $_.kind -ne 'windows-feature' })
+$request=@{action='read-batch';addresses=$local}
+$reads=@((Run-Helper $source 120000) -split "`r?`n" | Where-Object { $_ -match '^ROO_INDUSTRIES_CONTROL \d+ ' } | ForEach-Object { ($_ -replace '^ROO_INDUSTRIES_CONTROL \d+ ','')|ConvertFrom-Json })
+if($reads.Count -ne $local.Count){throw ('Every read-only check on this PC must return a result: '+$reads.Count+' of '+$local.Count)}
+$wrong=@(for($index=0;$index -lt $local.Count;$index++){
+ $kind=$local[$index].kind;$read=$reads[$index]
+ Write-Host ('  '+$kind+': '+$(if($null -ne $read.error){'error '+$read.error}else{'read'}))
+ if((Get-Command $getters[$kind] -ErrorAction SilentlyContinue) -and [string]$read.error -like '* is not available with this Windows version.'){$kind}
+})
+if($wrong.Count){throw ('A PC that has a setting''s PowerShell commands must not read it as not available: '+($wrong -join ', '))}
+Write-Host ('PASS this PC reads every command-backed kind whose commands it has, without calling it not available ('+$local.Count+' read-only reads)')
