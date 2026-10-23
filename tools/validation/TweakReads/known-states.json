@@ -1,0 +1,5853 @@
+{
+  "schemaVersion": 1,
+  "registry": [
+    {
+      "settingId": "windows.1ebf12e827d8a37f",
+      "state": "windows-default",
+      "source": "Automatic (DHCP) DNS keeps NameServer as an empty string on each interface; read on the test PC, 2026-10-23",
+      "values": [
+        {
+          "address": {
+            "hive": "LocalMachine",
+            "view": "Registry64",
+            "keyPath": "SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters\\Interfaces\\{11111111-2222-3333-4444-555555555555}",
+            "kind": "value",
+            "valueName": "NameServer"
+          },
+          "type": 1,
+          "data": ""
+        }
+      ]
+    },
+    {
+      "settingId": "windows.190ec8140565cdbe",
+      "state": "windows-default",
+      "source": "PolicyManager default store value on Windows 11 Pro 26200, read on the test PC, 2026-10-23",
+      "values": [
+        {
+          "address": {
+            "hive": "LocalMachine",
+            "view": "Registry64",
+            "keyPath": "SOFTWARE\\Microsoft\\PolicyManager\\default\\Update\\ExcludeWUDriversInQualityUpdate",
+            "kind": "value",
+            "valueName": "value"
+          },
+          "type": 4,
+          "data": 0
+        }
+      ]
+    },
+    {
+      "settingId": "windows.d564e4921d5ee555",
+      "state": "windows-default",
+      "source": "Windows default 0x380000 (3.5 GB); read on the test PC, 2026-10-23",
+      "values": [
+        {
+          "address": {
+            "hive": "LocalMachine",
+            "view": "Registry64",
+            "keyPath": "SYSTEM\\CurrentControlSet\\Control",
+            "kind": "value",
+            "valueName": "SvcHostSplitThresholdInKB"
+          },
+          "type": 4,
+          "data": 3670016
+        }
+      ]
+    },
+    {
+      "settingId": "windows.09240c8c2144ffde",
+      "state": "windows-default",
+      "source": "Windows default for the sign-in screen (Num Lock off, 0x80000000); read on the test PC, 2026-10-23",
+      "values": [
+        {
+          "address": {
+            "hive": "Users",
+            "view": "Registry64",
+            "keyPath": ".Default\\Control Panel\\Keyboard",
+            "kind": "value",
+            "valueName": "InitialKeyboardIndicators"
+          },
+          "type": 1,
+          "data": "2147483648"
+        }
+      ]
+    },
+    {
+      "settingId": "windows.b048256362718da0",
+      "state": "windows-default",
+      "source": "Windows keeps KeyboardDelay as text, default \"1\"; read on the test PC, 2026-10-23",
+      "values": [
+        {
+          "address": {
+            "hive": "CurrentUser",
+            "view": "Registry64",
+            "keyPath": "Control Panel\\Keyboard",
+            "kind": "value",
+            "valueName": "KeyboardDelay"
+          },
+          "type": 1,
+          "data": "1"
+        }
+      ]
+    },
+    {
+      "settingId": "windows.83d4b1b8f7a55f84",
+      "state": "device-defaults",
+      "source": "USB drivers set this on some devices and leave it unset on others; read on the test PC, 2026-10-23",
+      "values": [
+        {
+          "address": {
+            "hive": "LocalMachine",
+            "view": "Registry64",
+            "keyPath": "SYSTEM\\CurrentControlSet\\Enum\\USB\\0000\\0000\\Device Parameters",
+            "kind": "value",
+            "valueName": "AllowIdleIrpInD3"
+          },
+          "type": 4,
+          "data": 1
+        }
+      ]
+    },
+    {
+      "settingId": "windows.12a2f7d075db4a7a",
+      "state": "device-defaults",
+      "source": "USB drivers set this on some devices and leave it unset on others; read on the test PC, 2026-10-23",
+      "values": [
+        {
+          "address": {
+            "hive": "LocalMachine",
+            "view": "Registry64",
+            "keyPath": "SYSTEM\\CurrentControlSet\\Enum\\USB\\0000\\0000\\Device Parameters",
+            "kind": "value",
+            "valueName": "DeviceSelectiveSuspended"
+          },
+          "type": 4,
+          "data": 1
+        }
+      ]
+    },
+    {
+      "settingId": "windows.f5b1784349813d36",
+      "state": "device-defaults",
+      "source": "USB drivers set this on some devices and leave it unset on others; read on the test PC, 2026-10-23",
+      "values": [
+        {
+          "address": {
+            "hive": "LocalMachine",
+            "view": "Registry64",
+            "keyPath": "SYSTEM\\CurrentControlSet\\Enum\\USB\\0000\\0000\\Device Parameters",
+            "kind": "value",
+            "valueName": "EnhancedPowerManagementEnabled"
+          },
+          "type": 4,
+          "data": 1
+        }
+      ]
+    },
+    {
+      "settingId": "windows.c858b5629e74495c",
+      "state": "device-defaults",
+      "source": "USB drivers set this as binary on some devices and leave it unset on others; read on the test PC, 2026-10-23",
+      "values": [
+        {
+          "address": {
+            "hive": "LocalMachine",
+            "view": "Registry64",
+            "keyPath": "SYSTEM\\CurrentControlSet\\Enum\\USB\\0000\\0000\\Device Parameters",
+            "kind": "value",
+            "valueName": "SelectiveSuspendEnabled"
+          },
+          "type": 3,
+          "data": "00"
+        }
+      ]
+    }
+  ],
+  "controls": [
+    {
+      "address": {
+        "kind": "scheduled-task",
+        "target": "\\Microsoft\\Windows\\Application Experience\\AitAgent",
+        "property": "enabled"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "error": "The system cannot find the file specified. (0x80070002)"
+    },
+    {
+      "address": {
+        "kind": "scheduled-task",
+        "target": "\\Microsoft\\Windows\\SettingSync\\BackgroundUploadTask",
+        "property": "enabled"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "error": "The system cannot find the file specified. (0x80070002)"
+    },
+    {
+      "address": {
+        "kind": "scheduled-task",
+        "target": "\\Microsoft\\Windows\\Customer Experience Improvement Program\\BthSQM",
+        "property": "enabled"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "error": "The system cannot find the file specified. (0x80070002)"
+    },
+    {
+      "address": {
+        "kind": "scheduled-task",
+        "target": "\\Microsoft\\Windows\\Customer Experience Improvement Program\\Consolidator",
+        "property": "enabled"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "scheduled-task",
+          "target": "\\Microsoft\\Windows\\Customer Experience Improvement Program\\Consolidator",
+          "property": "enabled"
+        },
+        "identity": "scheduled-task:\\MICROSOFT\\WINDOWS\\CUSTOMER EXPERIENCE IMPROVEMENT PROGRAM\\CONSOLIDATOR",
+        "binding": "96613933BA5B44414188639376710D92AE6CD5FAA47A95114885071E9921CAE1",
+        "value": false,
+        "displayName": null,
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "scheduled-task",
+        "target": "\\Microsoft\\Windows\\Device Information\\Device",
+        "property": "enabled"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "scheduled-task",
+          "target": "\\Microsoft\\Windows\\Device Information\\Device",
+          "property": "enabled"
+        },
+        "identity": "scheduled-task:\\MICROSOFT\\WINDOWS\\DEVICE INFORMATION\\DEVICE",
+        "binding": "21CD6F8AD76A7548B6C372F8D8571A5E873708D0D5E9D0971FAA772D112D17E7",
+        "value": true,
+        "displayName": null,
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "scheduled-task",
+        "target": "\\Microsoft\\Windows\\NetTrace\\GatherNetworkInfo",
+        "property": "enabled"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "error": "The system cannot find the file specified. (0x80070002)"
+    },
+    {
+      "address": {
+        "kind": "scheduled-task",
+        "target": "\\Microsoft\\Windows\\Customer Experience Improvement Program\\KernelCeipTask",
+        "property": "enabled"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "error": "The system cannot find the file specified. (0x80070002)"
+    },
+    {
+      "address": {
+        "kind": "scheduled-task",
+        "target": "\\Microsoft\\Windows\\Application Experience\\Microsoft Compatibility Appraiser",
+        "property": "enabled"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "error": "The system cannot find the file specified. (0x80070002)"
+    },
+    {
+      "address": {
+        "kind": "scheduled-task",
+        "target": "\\Microsoft\\Windows\\DiskDiagnostic\\Microsoft-Windows-DiskDiagnosticDataCollector",
+        "property": "enabled"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "scheduled-task",
+          "target": "\\Microsoft\\Windows\\DiskDiagnostic\\Microsoft-Windows-DiskDiagnosticDataCollector",
+          "property": "enabled"
+        },
+        "identity": "scheduled-task:\\MICROSOFT\\WINDOWS\\DISKDIAGNOSTIC\\MICROSOFT-WINDOWS-DISKDIAGNOSTICDATACOLLECTOR",
+        "binding": "57C467253BD5EC0BCBDC5A43B268F40EE83D579037EB1CDC1710F4E0BC23B232",
+        "value": false,
+        "displayName": null,
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "scheduled-task",
+        "target": "\\Microsoft\\Windows\\Application Experience\\ProgramDataUpdater",
+        "property": "enabled"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "error": "The system cannot find the file specified. (0x80070002)"
+    },
+    {
+      "address": {
+        "kind": "scheduled-task",
+        "target": "\\Microsoft\\Windows\\Autochk\\Proxy",
+        "property": "enabled"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "scheduled-task",
+          "target": "\\Microsoft\\Windows\\Autochk\\Proxy",
+          "property": "enabled"
+        },
+        "identity": "scheduled-task:\\MICROSOFT\\WINDOWS\\AUTOCHK\\PROXY",
+        "binding": "256534E32D49B44453A9D821E4D0F2AC5190BC043FA476EB4201D7C726813ECA",
+        "value": false,
+        "displayName": null,
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "scheduled-task",
+        "target": "\\Microsoft\\Windows\\WindowsUpdate\\Scheduled Start",
+        "property": "enabled"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "scheduled-task",
+          "target": "\\Microsoft\\Windows\\WindowsUpdate\\Scheduled Start",
+          "property": "enabled"
+        },
+        "identity": "scheduled-task:\\MICROSOFT\\WINDOWS\\WINDOWSUPDATE\\SCHEDULED START",
+        "binding": "43B72DB802A31DE1D080D88F9C4E8FEABB981735332D673D6752DE745230EE67",
+        "value": true,
+        "displayName": null,
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "scheduled-task",
+        "target": "\\Microsoft\\Windows\\Defrag\\ScheduledDefrag",
+        "property": "enabled"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "scheduled-task",
+          "target": "\\Microsoft\\Windows\\Defrag\\ScheduledDefrag",
+          "property": "enabled"
+        },
+        "identity": "scheduled-task:\\MICROSOFT\\WINDOWS\\DEFRAG\\SCHEDULEDDEFRAG",
+        "binding": "A567FBAD240735FAB0338B5CBF532FDDF9C4208C9EACD2F689AB37882D864D95",
+        "value": true,
+        "displayName": null,
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "scheduled-task",
+        "target": "\\Microsoft\\Windows\\PI\\Sqm-Tasks",
+        "property": "enabled"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "scheduled-task",
+          "target": "\\Microsoft\\Windows\\PI\\Sqm-Tasks",
+          "property": "enabled"
+        },
+        "identity": "scheduled-task:\\MICROSOFT\\WINDOWS\\PI\\SQM-TASKS",
+        "binding": "3FC838F126704798367D4220774B815418739B80D180EF502459F4A457781F4F",
+        "value": false,
+        "displayName": null,
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "scheduled-task",
+        "target": "\\Microsoft\\Windows\\Customer Experience Improvement Program\\UsbCeip",
+        "property": "enabled"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "scheduled-task",
+          "target": "\\Microsoft\\Windows\\Customer Experience Improvement Program\\UsbCeip",
+          "property": "enabled"
+        },
+        "identity": "scheduled-task:\\MICROSOFT\\WINDOWS\\CUSTOMER EXPERIENCE IMPROVEMENT PROGRAM\\USBCEIP",
+        "binding": "9373ED82730C4C645076A434DFCFCD3A476838F5243E858EBAE0E40F771D3116",
+        "value": false,
+        "displayName": null,
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "mitigations",
+        "target": "system",
+        "property": "policy"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "mitigations",
+          "target": "system",
+          "property": "policy"
+        },
+        "identity": "mitigations:system:policy",
+        "binding": "system-mitigations:registry-v1:\\REGISTRY\\MACHINE\\SYSTEM\\ControlSet001\\Control\\Session Manager\\kernel",
+        "value": {
+          "$registry": {
+            "MitigationOptions": null,
+            "MitigationAuditOptions": null,
+            "EAFModules": null
+          },
+          "Dep.Enable": "NOTSET",
+          "Dep.OverrideDEP": false,
+          "Dep.EmulateAtlThunks": "OFF",
+          "Sehop.Enable": "NOTSET",
+          "Sehop.OverrideSEHOP": false,
+          "Aslr.ForceRelocateImages": "NOTSET",
+          "Aslr.OverrideForceRelocateImages": false,
+          "Aslr.RequireInfo": "OFF",
+          "Aslr.BottomUp": "NOTSET",
+          "Aslr.OverrideBottomUp": false,
+          "Aslr.HighEntropy": "NOTSET",
+          "Aslr.OverrideHighEntropy": false,
+          "StrictHandle.Enable": "NOTSET",
+          "StrictHandle.OverrideStrictHandle": false,
+          "Cfg.Enable": "NOTSET",
+          "Cfg.OverrideCFG": false,
+          "Cfg.SuppressExports": "OFF",
+          "ExtensionPoint.DisableExtensionPoints": "NOTSET",
+          "ExtensionPoint.OverrideExtensionPoint": false,
+          "DynamicCode.BlockDynamicCode": "NOTSET",
+          "DynamicCode.OverrideDynamicCode": false,
+          "DynamicCode.Audit": "NOTSET",
+          "FontDisable.Audit": "NOTSET",
+          "FontDisable.OverrideFontDisable": false,
+          "ImageLoad.BlockRemoteImageLoads": "NOTSET",
+          "ImageLoad.OverrideBlockRemoteImageLoads": false,
+          "ImageLoad.AuditRemoteImageLoads": "NOTSET"
+        },
+        "displayName": null,
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "BITS",
+        "property": "running"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "BITS",
+          "property": "running"
+        },
+        "identity": "service:BITS:running",
+        "binding": "E183877087AEF262F3CFED29185FFF4B3BDBB7478636BE9400837C08B68FB081",
+        "value": false,
+        "displayName": "Background Intelligent Transfer Service: running",
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "BITS",
+        "property": "startup"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "BITS",
+          "property": "startup"
+        },
+        "identity": "service:BITS:startup",
+        "binding": "E183877087AEF262F3CFED29185FFF4B3BDBB7478636BE9400837C08B68FB081",
+        "value": 3,
+        "displayName": "Background Intelligent Transfer Service: startup",
+        "allowedValues": [
+          2,
+          3,
+          4
+        ],
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "BTAGService",
+        "property": "running"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "BTAGService",
+          "property": "running"
+        },
+        "identity": "service:BTAGSERVICE:running",
+        "binding": "CF7447F87C5A07468748A1444CD0C33D08331404B7A5CAB4D66DCCD8A434D9CD",
+        "value": true,
+        "displayName": "Bluetooth Audio Gateway Service: running",
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "BTAGService",
+        "property": "startup"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "BTAGService",
+          "property": "startup"
+        },
+        "identity": "service:BTAGSERVICE:startup",
+        "binding": "CF7447F87C5A07468748A1444CD0C33D08331404B7A5CAB4D66DCCD8A434D9CD",
+        "value": 3,
+        "displayName": "Bluetooth Audio Gateway Service: startup",
+        "allowedValues": [
+          2,
+          3,
+          4
+        ],
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "BTHMODEM",
+        "property": "running"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "error": "This is a Windows driver. It cannot be started or stopped while Windows is running: BTHMODEM"
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "BTHMODEM",
+        "property": "startup"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "BTHMODEM",
+          "property": "startup"
+        },
+        "identity": "service:BTHMODEM:startup",
+        "binding": "D39B44B59492DBC1AF3A71EB33E49A86B978466A9A7EA224CCF4718300508A94",
+        "value": 3,
+        "displayName": "Bluetooth Modem Communications Driver: startup",
+        "allowedValues": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "BTHPORT",
+        "property": "running"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "error": "This is a Windows driver. It cannot be started or stopped while Windows is running: BTHPORT"
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "BTHPORT",
+        "property": "startup"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "BTHPORT",
+          "property": "startup"
+        },
+        "identity": "service:BTHPORT:startup",
+        "binding": "906E631FD7815C22712192B2A9A63804BCF5C9DD1D1C8A120C713D30CA9EF6A5",
+        "value": 3,
+        "displayName": "Bluetooth Port Driver: startup",
+        "allowedValues": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "BTHUSB",
+        "property": "running"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "error": "This is a Windows driver. It cannot be started or stopped while Windows is running: BTHUSB"
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "BTHUSB",
+        "property": "startup"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "BTHUSB",
+          "property": "startup"
+        },
+        "identity": "service:BTHUSB:startup",
+        "binding": "5F06E3545D0E620631935D3A63A164B3A78080FDB59514745EFA40A5AA815A4C",
+        "value": 3,
+        "displayName": "Bluetooth Radio USB Driver: startup",
+        "allowedValues": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "BluetoothUserService",
+        "property": "running"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "BluetoothUserService",
+          "property": "running"
+        },
+        "identity": "service:BLUETOOTHUSERSERVICE:running",
+        "binding": "74F214AE966F00BA44AAC2E273EB06525FB34FA440184F28FCEBF4389F8BB2F5",
+        "value": false,
+        "displayName": "Bluetooth User Support Service: running",
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "BluetoothUserService",
+        "property": "startup"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "BluetoothUserService",
+          "property": "startup"
+        },
+        "identity": "service:BLUETOOTHUSERSERVICE:startup",
+        "binding": "74F214AE966F00BA44AAC2E273EB06525FB34FA440184F28FCEBF4389F8BB2F5",
+        "value": 3,
+        "displayName": "Bluetooth User Support Service: startup",
+        "allowedValues": [
+          2,
+          3,
+          4
+        ],
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "BthA4dp",
+        "property": "running"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "error": "OpenService(BthA4dp) failed (Win32 1060)."
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "BthA4dp",
+        "property": "startup"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "error": "OpenService(BthA4dp) failed (Win32 1060)."
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "BthAvctpSvc",
+        "property": "running"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "BthAvctpSvc",
+          "property": "running"
+        },
+        "identity": "service:BTHAVCTPSVC:running",
+        "binding": "E7B16CB49C67B302A3267FA8EB0C4898443C10D5180393F1E5935EEE24EDE03B",
+        "value": true,
+        "displayName": "AVCTP service: running",
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "BthAvctpSvc",
+        "property": "startup"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "BthAvctpSvc",
+          "property": "startup"
+        },
+        "identity": "service:BTHAVCTPSVC:startup",
+        "binding": "E7B16CB49C67B302A3267FA8EB0C4898443C10D5180393F1E5935EEE24EDE03B",
+        "value": 3,
+        "displayName": "AVCTP service: startup",
+        "allowedValues": [
+          2,
+          3,
+          4
+        ],
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "BthEnum",
+        "property": "running"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "error": "This is a Windows driver. It cannot be started or stopped while Windows is running: BthEnum"
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "BthEnum",
+        "property": "startup"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "BthEnum",
+          "property": "startup"
+        },
+        "identity": "service:BTHENUM:startup",
+        "binding": "1C932CBB4A17F5FE44B74A11ACC8557EF5E06A7D9F3C2D1F17A35EB1352B6FA5",
+        "value": 3,
+        "displayName": "Bluetooth Enumerator Service: startup",
+        "allowedValues": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "BthHFEnum",
+        "property": "running"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "error": "This is a Windows driver. It cannot be started or stopped while Windows is running: BthHFEnum"
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "BthHFEnum",
+        "property": "startup"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "BthHFEnum",
+          "property": "startup"
+        },
+        "identity": "service:BTHHFENUM:startup",
+        "binding": "0E4E6221B407A37382C7939585522AC39DF61A5BE1EB0917C5ED9152C51DFE66",
+        "value": 3,
+        "displayName": "Microsoft Bluetooth Hands-Free Profile driver: startup",
+        "allowedValues": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "BthLEEnum",
+        "property": "running"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "error": "This is a Windows driver. It cannot be started or stopped while Windows is running: BthLEEnum"
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "BthLEEnum",
+        "property": "startup"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "BthLEEnum",
+          "property": "startup"
+        },
+        "identity": "service:BTHLEENUM:startup",
+        "binding": "2A52A10635C5FF169F165714F0A1AC84595F8E97AAABB9EFF1B30C1F1AF931D3",
+        "value": 3,
+        "displayName": "Bluetooth Low Energy Driver: startup",
+        "allowedValues": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "BthMini",
+        "property": "running"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "error": "This is a Windows driver. It cannot be started or stopped while Windows is running: BthMini"
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "BthMini",
+        "property": "startup"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "BthMini",
+          "property": "startup"
+        },
+        "identity": "service:BTHMINI:startup",
+        "binding": "27806E6961F68C71A22ECB217061690F11FB2197E7088A43E4F7AC350B674076",
+        "value": 3,
+        "displayName": "Bluetooth Radio Driver: startup",
+        "allowedValues": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "CDPUserSvc",
+        "property": "startup"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "CDPUserSvc",
+          "property": "startup"
+        },
+        "identity": "service:CDPUSERSVC:startup",
+        "binding": "EEE3D3FF7C6E21807A459FCC239AE70FE3326B9319DA3DE56A38D21855D85241",
+        "value": 4,
+        "displayName": "Connected Devices Platform User Service: startup",
+        "allowedValues": [
+          2,
+          3,
+          4
+        ],
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "CscService",
+        "property": "startup"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "CscService",
+          "property": "startup"
+        },
+        "identity": "service:CSCSERVICE:startup",
+        "binding": "0086E595FA87C98D10A662570739CB60E920C2047937061EA79EFE3DA2A40D42",
+        "value": 4,
+        "displayName": "Offline Files: startup",
+        "allowedValues": [
+          2,
+          3,
+          4
+        ],
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "DcpSvc",
+        "property": "running"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "error": "OpenService(DcpSvc) failed (Win32 1060)."
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "DcpSvc",
+        "property": "startup"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "error": "OpenService(DcpSvc) failed (Win32 1060)."
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "DevicesFlowUserSvc",
+        "property": "running"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "DevicesFlowUserSvc",
+          "property": "running"
+        },
+        "identity": "service:DEVICESFLOWUSERSVC:running",
+        "binding": "7AC15AD1209D1EA18EBB0627C6CDE3C9CBCE24E165A6584D9AB1885688357F3E",
+        "value": false,
+        "displayName": "DevicesFlow: running",
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "DevicesFlowUserSvc",
+        "property": "startup"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "DevicesFlowUserSvc",
+          "property": "startup"
+        },
+        "identity": "service:DEVICESFLOWUSERSVC:startup",
+        "binding": "7AC15AD1209D1EA18EBB0627C6CDE3C9CBCE24E165A6584D9AB1885688357F3E",
+        "value": 3,
+        "displayName": "DevicesFlow: startup",
+        "allowedValues": [
+          2,
+          3,
+          4
+        ],
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "DiagTrack",
+        "property": "running"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "DiagTrack",
+          "property": "running"
+        },
+        "identity": "service:DIAGTRACK:running",
+        "binding": "594ABA44891AA569A598EFEA98318C2F1C236AC0FB8908E7B8914511538E9FED",
+        "value": false,
+        "displayName": "Connected User Experiences and Telemetry: running",
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "DiagTrack",
+        "property": "startup"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "DiagTrack",
+          "property": "startup"
+        },
+        "identity": "service:DIAGTRACK:startup",
+        "binding": "594ABA44891AA569A598EFEA98318C2F1C236AC0FB8908E7B8914511538E9FED",
+        "value": 4,
+        "displayName": "Connected User Experiences and Telemetry: startup",
+        "allowedValues": [
+          2,
+          3,
+          4
+        ],
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "HidBth",
+        "property": "running"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "error": "This is a Windows driver. It cannot be started or stopped while Windows is running: HidBth"
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "HidBth",
+        "property": "startup"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "HidBth",
+          "property": "startup"
+        },
+        "identity": "service:HIDBTH:startup",
+        "binding": "9A263B3DFB0CFE16B3A2CF17C4AF9CB8C65F746A6F1D7A0DFD20A247F994AAA9",
+        "value": 3,
+        "displayName": "Microsoft Bluetooth HID Miniport: startup",
+        "allowedValues": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "HvHost",
+        "property": "running"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "HvHost",
+          "property": "running"
+        },
+        "identity": "service:HVHOST:running",
+        "binding": "772E6ACD88FF01D0E91FFFC30D5694AC193E08DC0D07DB0361715336C83D03A7",
+        "value": true,
+        "displayName": "HV Host Service: running",
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "HvHost",
+        "property": "startup"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "HvHost",
+          "property": "startup"
+        },
+        "identity": "service:HVHOST:startup",
+        "binding": "772E6ACD88FF01D0E91FFFC30D5694AC193E08DC0D07DB0361715336C83D03A7",
+        "value": 3,
+        "displayName": "HV Host Service: startup",
+        "allowedValues": [
+          2,
+          3,
+          4
+        ],
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "InventorySvc",
+        "property": "running"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "InventorySvc",
+          "property": "running"
+        },
+        "identity": "service:INVENTORYSVC:running",
+        "binding": "A631E2E0AD84853C6BC68AF34236A3653461B2AB6E8EB138A00FA42042E2BFC1",
+        "value": false,
+        "displayName": "Inventory and Compatibility Appraisal service: running",
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "InventorySvc",
+        "property": "startup"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "InventorySvc",
+          "property": "startup"
+        },
+        "identity": "service:INVENTORYSVC:startup",
+        "binding": "A631E2E0AD84853C6BC68AF34236A3653461B2AB6E8EB138A00FA42042E2BFC1",
+        "value": 3,
+        "displayName": "Inventory and Compatibility Appraisal service: startup",
+        "allowedValues": [
+          2,
+          3,
+          4
+        ],
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "MapsBroker",
+        "property": "startup"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "MapsBroker",
+          "property": "startup"
+        },
+        "identity": "service:MAPSBROKER:startup",
+        "binding": "FCEA08F80BB93E75FB902C5056DAE30CC384D3473CC5874F7EB1832087F08FD0",
+        "value": 4,
+        "displayName": "Downloaded Maps Manager: startup",
+        "allowedValues": [
+          2,
+          3,
+          4
+        ],
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "MessagingService",
+        "property": "startup"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "MessagingService",
+          "property": "startup"
+        },
+        "identity": "service:MESSAGINGSERVICE:startup",
+        "binding": "EEE3D3FF7C6E21807A459FCC239AE70FE3326B9319DA3DE56A38D21855D85241",
+        "value": 4,
+        "displayName": "MessagingService: startup",
+        "allowedValues": [
+          2,
+          3,
+          4
+        ],
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "Microsoft_Bluetooth_AvrcpTransport",
+        "property": "running"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "error": "This is a Windows driver. It cannot be started or stopped while Windows is running: Microsoft_Bluetooth_AvrcpTransport"
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "Microsoft_Bluetooth_AvrcpTransport",
+        "property": "startup"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "Microsoft_Bluetooth_AvrcpTransport",
+          "property": "startup"
+        },
+        "identity": "service:MICROSOFT_BLUETOOTH_AVRCPTRANSPORT:startup",
+        "binding": "D156767B566697F5C10ABA3AD2D1A35402AFC7F321390FD56217C70FE94FF95C",
+        "value": 3,
+        "displayName": "Microsoft Bluetooth Avrcp Transport Driver: startup",
+        "allowedValues": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "NPSMSvc",
+        "property": "running"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "NPSMSvc",
+          "property": "running"
+        },
+        "identity": "service:NPSMSVC:running",
+        "binding": "F203D4705A3564EE60A19C3FA74325A94832C5C2719AF8F725B887D86E29E612",
+        "value": false,
+        "displayName": "Now Playing Session Manager Service: running",
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "NPSMSvc",
+        "property": "startup"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "NPSMSvc",
+          "property": "startup"
+        },
+        "identity": "service:NPSMSVC:startup",
+        "binding": "F203D4705A3564EE60A19C3FA74325A94832C5C2719AF8F725B887D86E29E612",
+        "value": 3,
+        "displayName": "Now Playing Session Manager Service: startup",
+        "allowedValues": [
+          2,
+          3,
+          4
+        ],
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "Ndu",
+        "property": "startup"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "Ndu",
+          "property": "startup"
+        },
+        "identity": "service:NDU:startup",
+        "binding": "2348F83CF12A4B254E6C3A4E35EA210265607264A8CF4BB1CBDAB04D61F69B73",
+        "value": 2,
+        "displayName": "Windows Network Data Usage Monitoring Driver: startup",
+        "allowedValues": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "NetBT",
+        "property": "running"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "error": "This is a Windows driver. It cannot be started or stopped while Windows is running: NetBT"
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "NetBT",
+        "property": "startup"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "NetBT",
+          "property": "startup"
+        },
+        "identity": "service:NETBT:startup",
+        "binding": "BA32E659587E676A29EF7A2357E19AB2763A268FD001D6C6BA1E15D115D914B6",
+        "value": 1,
+        "displayName": "NetBT: startup",
+        "allowedValues": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "OneSyncSvc",
+        "property": "startup"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "OneSyncSvc",
+          "property": "startup"
+        },
+        "identity": "service:ONESYNCSVC:startup",
+        "binding": "C403222CCC03515DB8EF5B550FF1A2DF278F436DE5C60556A29CB66F827AD021",
+        "value": 4,
+        "displayName": "Sync Host: startup",
+        "allowedValues": [
+          2,
+          3,
+          4
+        ],
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "PcaSvc",
+        "property": "running"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "PcaSvc",
+          "property": "running"
+        },
+        "identity": "service:PCASVC:running",
+        "binding": "772E6ACD88FF01D0E91FFFC30D5694AC193E08DC0D07DB0361715336C83D03A7",
+        "value": true,
+        "displayName": "Program Compatibility Assistant Service: running",
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "PcaSvc",
+        "property": "startup"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "PcaSvc",
+          "property": "startup"
+        },
+        "identity": "service:PCASVC:startup",
+        "binding": "772E6ACD88FF01D0E91FFFC30D5694AC193E08DC0D07DB0361715336C83D03A7",
+        "value": 3,
+        "displayName": "Program Compatibility Assistant Service: startup",
+        "allowedValues": [
+          2,
+          3,
+          4
+        ],
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "PimIndexMaintenanceSvc",
+        "property": "startup"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "PimIndexMaintenanceSvc",
+          "property": "startup"
+        },
+        "identity": "service:PIMINDEXMAINTENANCESVC:startup",
+        "binding": "EEE3D3FF7C6E21807A459FCC239AE70FE3326B9319DA3DE56A38D21855D85241",
+        "value": 4,
+        "displayName": "Contact Data: startup",
+        "allowedValues": [
+          2,
+          3,
+          4
+        ],
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "PrintDeviceConfigurationService",
+        "property": "running"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "PrintDeviceConfigurationService",
+          "property": "running"
+        },
+        "identity": "service:PRINTDEVICECONFIGURATIONSERVICE:running",
+        "binding": "0086E595FA87C98D10A662570739CB60E920C2047937061EA79EFE3DA2A40D42",
+        "value": false,
+        "displayName": "Print Device Configuration Service: running",
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "PrintDeviceConfigurationService",
+        "property": "startup"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "PrintDeviceConfigurationService",
+          "property": "startup"
+        },
+        "identity": "service:PRINTDEVICECONFIGURATIONSERVICE:startup",
+        "binding": "0086E595FA87C98D10A662570739CB60E920C2047937061EA79EFE3DA2A40D42",
+        "value": 4,
+        "displayName": "Print Device Configuration Service: startup",
+        "allowedValues": [
+          2,
+          3,
+          4
+        ],
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "PrintNotify",
+        "property": "running"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "PrintNotify",
+          "property": "running"
+        },
+        "identity": "service:PRINTNOTIFY:running",
+        "binding": "B31DA894EE82549A8EDEE558B48F3B5232F1A69ADBF6F29F127C3499960384F7",
+        "value": false,
+        "displayName": "Printer Extensions and Notifications: running",
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "PrintNotify",
+        "property": "startup"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "PrintNotify",
+          "property": "startup"
+        },
+        "identity": "service:PRINTNOTIFY:startup",
+        "binding": "B31DA894EE82549A8EDEE558B48F3B5232F1A69ADBF6F29F127C3499960384F7",
+        "value": 4,
+        "displayName": "Printer Extensions and Notifications: startup",
+        "allowedValues": [
+          2,
+          3,
+          4
+        ],
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "PrintScanBrokerService",
+        "property": "running"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "PrintScanBrokerService",
+          "property": "running"
+        },
+        "identity": "service:PRINTSCANBROKERSERVICE:running",
+        "binding": "963FEC3610ACE371CF4747D095210E76F678FE2E41D7E53C8452FD7A1D0C2C5F",
+        "value": false,
+        "displayName": "PrintScanBrokerService: running",
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "PrintScanBrokerService",
+        "property": "startup"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "PrintScanBrokerService",
+          "property": "startup"
+        },
+        "identity": "service:PRINTSCANBROKERSERVICE:startup",
+        "binding": "963FEC3610ACE371CF4747D095210E76F678FE2E41D7E53C8452FD7A1D0C2C5F",
+        "value": 4,
+        "displayName": "PrintScanBrokerService: startup",
+        "allowedValues": [
+          2,
+          3,
+          4
+        ],
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "RFCOMM",
+        "property": "running"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "error": "This is a Windows driver. It cannot be started or stopped while Windows is running: RFCOMM"
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "RFCOMM",
+        "property": "startup"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "RFCOMM",
+          "property": "startup"
+        },
+        "identity": "service:RFCOMM:startup",
+        "binding": "7A76B9DB42744192CAE99D92E4084A875B543F184DC099398A74CC378582639F",
+        "value": 3,
+        "displayName": "Bluetooth Device (RFCOMM Protocol TDI): startup",
+        "allowedValues": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "SEMgrSvc",
+        "property": "startup"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "SEMgrSvc",
+          "property": "startup"
+        },
+        "identity": "service:SEMGRSVC:startup",
+        "binding": "E2E7DE5A6D91076DCA20365C94414BC66077C13961BC75EE86321C2C5AEF568A",
+        "value": 4,
+        "displayName": "Payments and NFC/SE Manager: startup",
+        "allowedValues": [
+          2,
+          3,
+          4
+        ],
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "SharedAccess",
+        "property": "running"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "SharedAccess",
+          "property": "running"
+        },
+        "identity": "service:SHAREDACCESS:running",
+        "binding": "E183877087AEF262F3CFED29185FFF4B3BDBB7478636BE9400837C08B68FB081",
+        "value": true,
+        "displayName": "Internet Connection Sharing (ICS): running",
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "SharedAccess",
+        "property": "startup"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "SharedAccess",
+          "property": "startup"
+        },
+        "identity": "service:SHAREDACCESS:startup",
+        "binding": "E183877087AEF262F3CFED29185FFF4B3BDBB7478636BE9400837C08B68FB081",
+        "value": 3,
+        "displayName": "Internet Connection Sharing (ICS): startup",
+        "allowedValues": [
+          2,
+          3,
+          4
+        ],
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "Spooler",
+        "property": "running"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "Spooler",
+          "property": "running"
+        },
+        "identity": "service:SPOOLER:running",
+        "binding": "054D27525BFD679B37E24C991DA8FF2FE0EB25276FC8DA1BBC5184745E2E9F98",
+        "value": false,
+        "displayName": "Print Spooler: running",
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "Spooler",
+        "property": "startup"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "Spooler",
+          "property": "startup"
+        },
+        "identity": "service:SPOOLER:startup",
+        "binding": "054D27525BFD679B37E24C991DA8FF2FE0EB25276FC8DA1BBC5184745E2E9F98",
+        "value": 4,
+        "displayName": "Print Spooler: startup",
+        "allowedValues": [
+          2,
+          3,
+          4
+        ],
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "StorSvc",
+        "property": "startup"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "StorSvc",
+          "property": "startup"
+        },
+        "identity": "service:STORSVC:startup",
+        "binding": "B9D547FAAABDB8CB75252934E0C552A846E7C84632376E978A65294C8758D1EF",
+        "value": 2,
+        "displayName": "Storage Service: startup",
+        "allowedValues": [
+          2,
+          3,
+          4
+        ],
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "SysMain",
+        "property": "running"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "SysMain",
+          "property": "running"
+        },
+        "identity": "service:SYSMAIN:running",
+        "binding": "772E6ACD88FF01D0E91FFFC30D5694AC193E08DC0D07DB0361715336C83D03A7",
+        "value": false,
+        "displayName": "SysMain: running",
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "SysMain",
+        "property": "startup"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "SysMain",
+          "property": "startup"
+        },
+        "identity": "service:SYSMAIN:startup",
+        "binding": "772E6ACD88FF01D0E91FFFC30D5694AC193E08DC0D07DB0361715336C83D03A7",
+        "value": 4,
+        "displayName": "SysMain: startup",
+        "allowedValues": [
+          2,
+          3,
+          4
+        ],
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "UnistoreSvc",
+        "property": "startup"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "UnistoreSvc",
+          "property": "startup"
+        },
+        "identity": "service:UNISTORESVC:startup",
+        "binding": "29369C53DC351C4424AB9689C2E6F61B7E0A2229DFC68E0817401607B2EE98D3",
+        "value": 4,
+        "displayName": "User Data Storage: startup",
+        "allowedValues": [
+          2,
+          3,
+          4
+        ],
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "UserDataSvc",
+        "property": "startup"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "UserDataSvc",
+          "property": "startup"
+        },
+        "identity": "service:USERDATASVC:startup",
+        "binding": "EEE3D3FF7C6E21807A459FCC239AE70FE3326B9319DA3DE56A38D21855D85241",
+        "value": 4,
+        "displayName": "User Data Access: startup",
+        "allowedValues": [
+          2,
+          3,
+          4
+        ],
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "UsoSvc",
+        "property": "delayed-start"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "UsoSvc",
+          "property": "delayed-start"
+        },
+        "identity": "service:USOSVC:delayed-start",
+        "binding": "79A63F2F4B6F422CADB4F2ACD8CCE20565EE20BDFA3ED54C93B738D279DC4618",
+        "value": true,
+        "displayName": "Update Orchestrator Service: delayed start",
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "UsoSvc",
+        "property": "running"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "UsoSvc",
+          "property": "running"
+        },
+        "identity": "service:USOSVC:running",
+        "binding": "79A63F2F4B6F422CADB4F2ACD8CCE20565EE20BDFA3ED54C93B738D279DC4618",
+        "value": true,
+        "displayName": "Update Orchestrator Service: running",
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "UsoSvc",
+        "property": "startup"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "UsoSvc",
+          "property": "startup"
+        },
+        "identity": "service:USOSVC:startup",
+        "binding": "79A63F2F4B6F422CADB4F2ACD8CCE20565EE20BDFA3ED54C93B738D279DC4618",
+        "value": 2,
+        "displayName": "Update Orchestrator Service: startup",
+        "allowedValues": [
+          2,
+          3,
+          4
+        ],
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "Vid",
+        "property": "running"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "error": "This is a Windows driver. It cannot be started or stopped while Windows is running: Vid"
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "Vid",
+        "property": "startup"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "Vid",
+          "property": "startup"
+        },
+        "identity": "service:VID:startup",
+        "binding": "F4B860AC92466FE946AE0C0B16127C50BFCFE7C48F8EBD2B50860DCF4103B1E2",
+        "value": 1,
+        "displayName": "Vid: startup",
+        "allowedValues": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "WFDSConMgrSvc",
+        "property": "startup"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "WFDSConMgrSvc",
+          "property": "startup"
+        },
+        "identity": "service:WFDSCONMGRSVC:startup",
+        "binding": "8A8C1DD8D088D6FF2D420E02182BDADCB15C64227BF6E09D537862CE60631DA9",
+        "value": 3,
+        "displayName": "Wi-Fi Direct Services Connection Manager Service: startup",
+        "allowedValues": [
+          2,
+          3,
+          4
+        ],
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "WMPNetworkSvc",
+        "property": "running"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "error": "OpenService(WMPNetworkSvc) failed (Win32 1060)."
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "WMPNetworkSvc",
+        "property": "startup"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "error": "OpenService(WMPNetworkSvc) failed (Win32 1060)."
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "WSAIFabricSvc",
+        "property": "startup"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "WSAIFabricSvc",
+          "property": "startup"
+        },
+        "identity": "service:WSAIFABRICSVC:startup",
+        "binding": "7243AD909F5906DF160424A73FED6E202142C10C4EEFE021FD2939AFA5D9F223",
+        "value": 4,
+        "displayName": "Windows AI Components Host: startup",
+        "allowedValues": [
+          2,
+          3,
+          4
+        ],
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "WSearch",
+        "property": "running"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "WSearch",
+          "property": "running"
+        },
+        "identity": "service:WSEARCH:running",
+        "binding": "FC47D719E1E139E44CB52ECCBD0217ACDB20431BC066313100337396BD776984",
+        "value": false,
+        "displayName": "Windows Search: running",
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "WSearch",
+        "property": "startup"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "WSearch",
+          "property": "startup"
+        },
+        "identity": "service:WSEARCH:startup",
+        "binding": "FC47D719E1E139E44CB52ECCBD0217ACDB20431BC066313100337396BD776984",
+        "value": 4,
+        "displayName": "Windows Search: startup",
+        "allowedValues": [
+          2,
+          3,
+          4
+        ],
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "MpsSvc",
+        "property": "running"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "MpsSvc",
+          "property": "running"
+        },
+        "identity": "service:MPSSVC:running",
+        "binding": "F60054C6E94397D7C008135D6D62F041116F47694B0E3271ADB5D152616EAF7F",
+        "value": true,
+        "displayName": "Windows Defender Firewall: running",
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "MpsSvc",
+        "property": "startup"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "error": "Windows doesn't let administrators change the startup of this service: MpsSvc"
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "WlanSvc",
+        "property": "running"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "WlanSvc",
+          "property": "running"
+        },
+        "identity": "service:WLANSVC:running",
+        "binding": "C0E7E0FAF50EBE0F433D927604C0750DBBFA167A1849DBA6DE3F16F0E29C2389",
+        "value": true,
+        "displayName": "WLAN AutoConfig: running",
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "WlanSvc",
+        "property": "startup"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "WlanSvc",
+          "property": "startup"
+        },
+        "identity": "service:WLANSVC:startup",
+        "binding": "C0E7E0FAF50EBE0F433D927604C0750DBBFA167A1849DBA6DE3F16F0E29C2389",
+        "value": 2,
+        "displayName": "WLAN AutoConfig: startup",
+        "allowedValues": [
+          2,
+          3,
+          4
+        ],
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "WpnService",
+        "property": "running"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "WpnService",
+          "property": "running"
+        },
+        "identity": "service:WPNSERVICE:running",
+        "binding": "79A63F2F4B6F422CADB4F2ACD8CCE20565EE20BDFA3ED54C93B738D279DC4618",
+        "value": true,
+        "displayName": "Windows Push Notifications System Service: running",
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "WpnService",
+        "property": "startup"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "WpnService",
+          "property": "startup"
+        },
+        "identity": "service:WPNSERVICE:startup",
+        "binding": "79A63F2F4B6F422CADB4F2ACD8CCE20565EE20BDFA3ED54C93B738D279DC4618",
+        "value": 2,
+        "displayName": "Windows Push Notifications System Service: startup",
+        "allowedValues": [
+          2,
+          3,
+          4
+        ],
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "WpnUserService",
+        "property": "startup"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "WpnUserService",
+          "property": "startup"
+        },
+        "identity": "service:WPNUSERSERVICE:startup",
+        "binding": "EEE3D3FF7C6E21807A459FCC239AE70FE3326B9319DA3DE56A38D21855D85241",
+        "value": 2,
+        "displayName": "Windows Push Notifications User Service: startup",
+        "allowedValues": [
+          2,
+          3,
+          4
+        ],
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "bthserv",
+        "property": "running"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "bthserv",
+          "property": "running"
+        },
+        "identity": "service:BTHSERV:running",
+        "binding": "268280F0BF319F572FE10FC0F992F404D54254E8E7AB2241674CCB463E4271D5",
+        "value": true,
+        "displayName": "Bluetooth Support Service: running",
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "bthserv",
+        "property": "startup"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "bthserv",
+          "property": "startup"
+        },
+        "identity": "service:BTHSERV:startup",
+        "binding": "268280F0BF319F572FE10FC0F992F404D54254E8E7AB2241674CCB463E4271D5",
+        "value": 3,
+        "displayName": "Bluetooth Support Service: startup",
+        "allowedValues": [
+          2,
+          3,
+          4
+        ],
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "diagnosticshub.standardcollector.service",
+        "property": "running"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "error": "OpenService(diagnosticshub.standardcollector.service) failed (Win32 1060)."
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "diagnosticshub.standardcollector.service",
+        "property": "startup"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "error": "OpenService(diagnosticshub.standardcollector.service) failed (Win32 1060)."
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "dmwappushservice",
+        "property": "running"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "dmwappushservice",
+          "property": "running"
+        },
+        "identity": "service:DMWAPPUSHSERVICE:running",
+        "binding": "79A63F2F4B6F422CADB4F2ACD8CCE20565EE20BDFA3ED54C93B738D279DC4618",
+        "value": false,
+        "displayName": "Device Management Wireless Application Protocol (WAP) Push message Routing Service: running",
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "dmwappushservice",
+        "property": "startup"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "dmwappushservice",
+          "property": "startup"
+        },
+        "identity": "service:DMWAPPUSHSERVICE:startup",
+        "binding": "79A63F2F4B6F422CADB4F2ACD8CCE20565EE20BDFA3ED54C93B738D279DC4618",
+        "value": 4,
+        "displayName": "Device Management Wireless Application Protocol (WAP) Push message Routing Service: startup",
+        "allowedValues": [
+          2,
+          3,
+          4
+        ],
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "fhsvc",
+        "property": "running"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "fhsvc",
+          "property": "running"
+        },
+        "identity": "service:FHSVC:running",
+        "binding": "772E6ACD88FF01D0E91FFFC30D5694AC193E08DC0D07DB0361715336C83D03A7",
+        "value": false,
+        "displayName": "File History Service: running",
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "fhsvc",
+        "property": "startup"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "fhsvc",
+          "property": "startup"
+        },
+        "identity": "service:FHSVC:startup",
+        "binding": "772E6ACD88FF01D0E91FFFC30D5694AC193E08DC0D07DB0361715336C83D03A7",
+        "value": 3,
+        "displayName": "File History Service: startup",
+        "allowedValues": [
+          2,
+          3,
+          4
+        ],
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "hvcrash",
+        "property": "running"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "error": "This is a Windows driver. It cannot be started or stopped while Windows is running: hvcrash"
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "hvcrash",
+        "property": "startup"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "hvcrash",
+          "property": "startup"
+        },
+        "identity": "service:HVCRASH:startup",
+        "binding": "F6C79C8AF4F33EA881B7560412764C70D6D6B56C9C133DEF989DF67AEA0B41A7",
+        "value": 4,
+        "displayName": "hvcrash: startup",
+        "allowedValues": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "hvservice",
+        "property": "running"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "error": "This is a Windows driver. It cannot be started or stopped while Windows is running: hvservice"
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "hvservice",
+        "property": "startup"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "hvservice",
+          "property": "startup"
+        },
+        "identity": "service:HVSERVICE:startup",
+        "binding": "D56002CDD7CE3FAD0282101EC616FC640953A3263ABDE33E8D91F02FBCC5107E",
+        "value": 3,
+        "displayName": "Microsoft Hypervisor Service Driver: startup",
+        "allowedValues": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "hyperkbd",
+        "property": "running"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "error": "This is a Windows driver. It cannot be started or stopped while Windows is running: hyperkbd"
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "hyperkbd",
+        "property": "startup"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "hyperkbd",
+          "property": "startup"
+        },
+        "identity": "service:HYPERKBD:startup",
+        "binding": "E34A18013CFB223EB1C1431E34F9861678EC165378523E14D0A56B5845784D2C",
+        "value": 3,
+        "displayName": "hyperkbd: startup",
+        "allowedValues": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "hypervideo",
+        "property": "running"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "error": "This is a Windows driver. It cannot be started or stopped while Windows is running: hypervideo"
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "hypervideo",
+        "property": "startup"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "hypervideo",
+          "property": "startup"
+        },
+        "identity": "service:HYPERVIDEO:startup",
+        "binding": "A299A7FB330AC3D848708A74CAE63DB793210B01B83B47FC1212213EA0C524D3",
+        "value": 3,
+        "displayName": "HyperVideo: startup",
+        "allowedValues": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "icssvc",
+        "property": "running"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "icssvc",
+          "property": "running"
+        },
+        "identity": "service:ICSSVC:running",
+        "binding": "BCAFA5C5511868054F1FFED7309116B5D47CA705B66D69DAF436D92591EC17B5",
+        "value": false,
+        "displayName": "Windows Mobile Hotspot Service: running",
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "icssvc",
+        "property": "startup"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "icssvc",
+          "property": "startup"
+        },
+        "identity": "service:ICSSVC:startup",
+        "binding": "BCAFA5C5511868054F1FFED7309116B5D47CA705B66D69DAF436D92591EC17B5",
+        "value": 4,
+        "displayName": "Windows Mobile Hotspot Service: startup",
+        "allowedValues": [
+          2,
+          3,
+          4
+        ],
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "lfsvc",
+        "property": "running"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "lfsvc",
+          "property": "running"
+        },
+        "identity": "service:LFSVC:running",
+        "binding": "AE6E993ACDBEDB1F6B3FDD85DD099E702ABA620469C68D07793779AEB516CF63",
+        "value": false,
+        "displayName": "Geolocation Service: running",
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "lfsvc",
+        "property": "startup"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "lfsvc",
+          "property": "startup"
+        },
+        "identity": "service:LFSVC:startup",
+        "binding": "AE6E993ACDBEDB1F6B3FDD85DD099E702ABA620469C68D07793779AEB516CF63",
+        "value": 4,
+        "displayName": "Geolocation Service: startup",
+        "allowedValues": [
+          2,
+          3,
+          4
+        ],
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "printworkflowusersvc",
+        "property": "running"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "printworkflowusersvc",
+          "property": "running"
+        },
+        "identity": "service:PRINTWORKFLOWUSERSVC:running",
+        "binding": "815812C3D17E6F173A26E5669887741A73CC4CCAE6A9A2647EC3F4A7B5D3166B",
+        "value": false,
+        "displayName": "PrintWorkflow: running",
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "printworkflowusersvc",
+        "property": "startup"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "error": "Windows doesn't let administrators change the startup of this service: printworkflowusersvc"
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "stisvc",
+        "property": "running"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "stisvc",
+          "property": "running"
+        },
+        "identity": "service:STISVC:running",
+        "binding": "4E03122E167B06C2429C39AE34875066277D49D9E3EFF52A3AA50F6BE956D6D0",
+        "value": true,
+        "displayName": "Windows Image Acquisition (WIA): running",
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "stisvc",
+        "property": "startup"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "stisvc",
+          "property": "startup"
+        },
+        "identity": "service:STISVC:startup",
+        "binding": "4E03122E167B06C2429C39AE34875066277D49D9E3EFF52A3AA50F6BE956D6D0",
+        "value": 2,
+        "displayName": "Windows Image Acquisition (WIA): startup",
+        "allowedValues": [
+          2,
+          3,
+          4
+        ],
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "usbprint",
+        "property": "running"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "error": "This is a Windows driver. It cannot be started or stopped while Windows is running: usbprint"
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "usbprint",
+        "property": "startup"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "usbprint",
+          "property": "startup"
+        },
+        "identity": "service:USBPRINT:startup",
+        "binding": "D7CA0E6426DEFBDCC6F5C50DC7348115666637BA9EB0E4155E2A117F5E4C7107",
+        "value": 3,
+        "displayName": "Microsoft USB PRINTER Class: startup",
+        "allowedValues": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "vmicguestinterface",
+        "property": "running"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "vmicguestinterface",
+          "property": "running"
+        },
+        "identity": "service:VMICGUESTINTERFACE:running",
+        "binding": "F799E798D0CE260867838527D80D1CBF72BA8F5903C8090A77F0BF9A2A27A722",
+        "value": false,
+        "displayName": "Hyper-V Guest Service Interface: running",
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "vmicguestinterface",
+        "property": "startup"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "vmicguestinterface",
+          "property": "startup"
+        },
+        "identity": "service:VMICGUESTINTERFACE:startup",
+        "binding": "F799E798D0CE260867838527D80D1CBF72BA8F5903C8090A77F0BF9A2A27A722",
+        "value": 3,
+        "displayName": "Hyper-V Guest Service Interface: startup",
+        "allowedValues": [
+          2,
+          3,
+          4
+        ],
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "vmicheartbeat",
+        "property": "running"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "vmicheartbeat",
+          "property": "running"
+        },
+        "identity": "service:VMICHEARTBEAT:running",
+        "binding": "9A076B9CDCB489758379B13C503B33696F612D417BA59252CC2C2D5D91145FB5",
+        "value": false,
+        "displayName": "Hyper-V Heartbeat Service: running",
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "vmicheartbeat",
+        "property": "startup"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "vmicheartbeat",
+          "property": "startup"
+        },
+        "identity": "service:VMICHEARTBEAT:startup",
+        "binding": "9A076B9CDCB489758379B13C503B33696F612D417BA59252CC2C2D5D91145FB5",
+        "value": 3,
+        "displayName": "Hyper-V Heartbeat Service: startup",
+        "allowedValues": [
+          2,
+          3,
+          4
+        ],
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "vmickvpexchange",
+        "property": "running"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "vmickvpexchange",
+          "property": "running"
+        },
+        "identity": "service:VMICKVPEXCHANGE:running",
+        "binding": "F799E798D0CE260867838527D80D1CBF72BA8F5903C8090A77F0BF9A2A27A722",
+        "value": false,
+        "displayName": "Hyper-V Data Exchange Service: running",
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "vmickvpexchange",
+        "property": "startup"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "vmickvpexchange",
+          "property": "startup"
+        },
+        "identity": "service:VMICKVPEXCHANGE:startup",
+        "binding": "F799E798D0CE260867838527D80D1CBF72BA8F5903C8090A77F0BF9A2A27A722",
+        "value": 3,
+        "displayName": "Hyper-V Data Exchange Service: startup",
+        "allowedValues": [
+          2,
+          3,
+          4
+        ],
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "vmicrdv",
+        "property": "running"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "vmicrdv",
+          "property": "running"
+        },
+        "identity": "service:VMICRDV:running",
+        "binding": "9A076B9CDCB489758379B13C503B33696F612D417BA59252CC2C2D5D91145FB5",
+        "value": false,
+        "displayName": "Hyper-V Remote Desktop Virtualization Service: running",
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "vmicrdv",
+        "property": "startup"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "vmicrdv",
+          "property": "startup"
+        },
+        "identity": "service:VMICRDV:startup",
+        "binding": "9A076B9CDCB489758379B13C503B33696F612D417BA59252CC2C2D5D91145FB5",
+        "value": 3,
+        "displayName": "Hyper-V Remote Desktop Virtualization Service: startup",
+        "allowedValues": [
+          2,
+          3,
+          4
+        ],
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "vmicshutdown",
+        "property": "running"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "vmicshutdown",
+          "property": "running"
+        },
+        "identity": "service:VMICSHUTDOWN:running",
+        "binding": "F799E798D0CE260867838527D80D1CBF72BA8F5903C8090A77F0BF9A2A27A722",
+        "value": false,
+        "displayName": "Hyper-V Guest Shutdown Service: running",
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "vmicshutdown",
+        "property": "startup"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "vmicshutdown",
+          "property": "startup"
+        },
+        "identity": "service:VMICSHUTDOWN:startup",
+        "binding": "F799E798D0CE260867838527D80D1CBF72BA8F5903C8090A77F0BF9A2A27A722",
+        "value": 3,
+        "displayName": "Hyper-V Guest Shutdown Service: startup",
+        "allowedValues": [
+          2,
+          3,
+          4
+        ],
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "vmictimesync",
+        "property": "running"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "vmictimesync",
+          "property": "running"
+        },
+        "identity": "service:VMICTIMESYNC:running",
+        "binding": "8A8C1DD8D088D6FF2D420E02182BDADCB15C64227BF6E09D537862CE60631DA9",
+        "value": false,
+        "displayName": "Hyper-V Time Synchronization Service: running",
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "vmictimesync",
+        "property": "startup"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "vmictimesync",
+          "property": "startup"
+        },
+        "identity": "service:VMICTIMESYNC:startup",
+        "binding": "8A8C1DD8D088D6FF2D420E02182BDADCB15C64227BF6E09D537862CE60631DA9",
+        "value": 3,
+        "displayName": "Hyper-V Time Synchronization Service: startup",
+        "allowedValues": [
+          2,
+          3,
+          4
+        ],
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "vmicvmsession",
+        "property": "running"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "vmicvmsession",
+          "property": "running"
+        },
+        "identity": "service:VMICVMSESSION:running",
+        "binding": "F799E798D0CE260867838527D80D1CBF72BA8F5903C8090A77F0BF9A2A27A722",
+        "value": false,
+        "displayName": "Hyper-V PowerShell Direct Service: running",
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "vmicvmsession",
+        "property": "startup"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "vmicvmsession",
+          "property": "startup"
+        },
+        "identity": "service:VMICVMSESSION:startup",
+        "binding": "F799E798D0CE260867838527D80D1CBF72BA8F5903C8090A77F0BF9A2A27A722",
+        "value": 3,
+        "displayName": "Hyper-V PowerShell Direct Service: startup",
+        "allowedValues": [
+          2,
+          3,
+          4
+        ],
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "vmicvss",
+        "property": "running"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "vmicvss",
+          "property": "running"
+        },
+        "identity": "service:VMICVSS:running",
+        "binding": "F799E798D0CE260867838527D80D1CBF72BA8F5903C8090A77F0BF9A2A27A722",
+        "value": false,
+        "displayName": "Hyper-V Volume Shadow Copy Requestor: running",
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "vmicvss",
+        "property": "startup"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "vmicvss",
+          "property": "startup"
+        },
+        "identity": "service:VMICVSS:startup",
+        "binding": "F799E798D0CE260867838527D80D1CBF72BA8F5903C8090A77F0BF9A2A27A722",
+        "value": 3,
+        "displayName": "Hyper-V Volume Shadow Copy Requestor: startup",
+        "allowedValues": [
+          2,
+          3,
+          4
+        ],
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "wcncsvc",
+        "property": "running"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "wcncsvc",
+          "property": "running"
+        },
+        "identity": "service:WCNCSVC:running",
+        "binding": "47F1EE3E0C399000A5C86D5DE7FE941E0CE64F840385571986F16546BDEE42EE",
+        "value": false,
+        "displayName": "Windows Connect Now - Config Registrar: running",
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "wcncsvc",
+        "property": "startup"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "wcncsvc",
+          "property": "startup"
+        },
+        "identity": "service:WCNCSVC:startup",
+        "binding": "47F1EE3E0C399000A5C86D5DE7FE941E0CE64F840385571986F16546BDEE42EE",
+        "value": 3,
+        "displayName": "Windows Connect Now - Config Registrar: startup",
+        "allowedValues": [
+          2,
+          3,
+          4
+        ],
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "wisvc",
+        "property": "running"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "wisvc",
+          "property": "running"
+        },
+        "identity": "service:WISVC:running",
+        "binding": "79A63F2F4B6F422CADB4F2ACD8CCE20565EE20BDFA3ED54C93B738D279DC4618",
+        "value": false,
+        "displayName": "Windows Insider Service: running",
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "wisvc",
+        "property": "startup"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "wisvc",
+          "property": "startup"
+        },
+        "identity": "service:WISVC:startup",
+        "binding": "79A63F2F4B6F422CADB4F2ACD8CCE20565EE20BDFA3ED54C93B738D279DC4618",
+        "value": 4,
+        "displayName": "Windows Insider Service: startup",
+        "allowedValues": [
+          2,
+          3,
+          4
+        ],
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "wuauserv",
+        "property": "running"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "wuauserv",
+          "property": "running"
+        },
+        "identity": "service:WUAUSERV:running",
+        "binding": "79A63F2F4B6F422CADB4F2ACD8CCE20565EE20BDFA3ED54C93B738D279DC4618",
+        "value": false,
+        "displayName": "Windows Update: running",
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "service",
+        "target": "wuauserv",
+        "property": "startup"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "service",
+          "target": "wuauserv",
+          "property": "startup"
+        },
+        "identity": "service:WUAUSERV:startup",
+        "binding": "79A63F2F4B6F422CADB4F2ACD8CCE20565EE20BDFA3ED54C93B738D279DC4618",
+        "value": 3,
+        "displayName": "Windows Update: startup",
+        "allowedValues": [
+          2,
+          3,
+          4
+        ],
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "timer",
+        "target": "system",
+        "property": "half-millisecond"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "timer",
+          "target": "system",
+          "property": "half-millisecond"
+        },
+        "identity": "timer:C:\\USERS\\CLIENT\\APPDATA\\LOCAL\\ROOINDUSTRIESOPTIMIZATIONSUITE\\OPERATIONS\\WINDOWS-TIMER",
+        "binding": "native-timer:5000:156250",
+        "value": false,
+        "displayName": "0.5 ms timer request is stopped",
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "hosts",
+        "target": "system",
+        "property": "adobe-block"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "hosts",
+          "target": "system",
+          "property": "adobe-block"
+        },
+        "identity": "hosts:C:\\WINDOWS\\SYSTEM32\\DRIVERS\\ETC\\HOSTS",
+        "binding": "510522E88C726D4C8620DF5CD7FCF9B9027FA85A597BA6565D4882D39E5C2925",
+        "value": {
+          "block": null,
+          "outside": "77u/IyBDb3B5cmlnaHQgKGMpIDE5OTMtMjAwOSBNaWNyb3NvZnQgQ29ycC4NCiMNCiMgVGhpcyBpcyBhIHNhbXBsZSBIT1NUUyBmaWxlIHVzZWQgYnkgTWljcm9zb2Z0IFRDUC9JUCBmb3IgV2luZG93cy4NCiMNCiMgVGhpcyBmaWxlIGNvbnRhaW5zIHRoZSBtYXBwaW5ncyBvZiBJUCBhZGRyZXNzZXMgdG8gaG9zdCBuYW1lcy4gRWFjaA0KIyBlbnRyeSBzaG91bGQgYmUga2VwdCBvbiBhbiBpbmRpdmlkdWFsIGxpbmUuIFRoZSBJUCBhZGRyZXNzIHNob3VsZA0KIyBiZSBwbGFjZWQgaW4gdGhlIGZpcnN0IGNvbHVtbiBmb2xsb3dlZCBieSB0aGUgY29ycmVzcG9uZGluZyBob3N0IG5hbWUuDQojIFRoZSBJUCBhZGRyZXNzIGFuZCB0aGUgaG9zdCBuYW1lIHNob3VsZCBiZSBzZXBhcmF0ZWQgYnkgYXQgbGVhc3Qgb25lDQojIHNwYWNlLg0KIw0KIyBBZGRpdGlvbmFsbHksIGNvbW1lbnRzIChzdWNoIGFzIHRoZXNlKSBtYXkgYmUgaW5zZXJ0ZWQgb24gaW5kaXZpZHVhbA0KIyBsaW5lcyBvciBmb2xsb3dpbmcgdGhlIG1hY2hpbmUgbmFtZSBkZW5vdGVkIGJ5IGEgJyMnIHN5bWJvbC4NCiMNCiMgRm9yIGV4YW1wbGU6DQojDQojICAgICAgMTAyLjU0Ljk0Ljk3ICAgICByaGluby5hY21lLmNvbSAgICAgICAgICAjIHNvdXJjZSBzZXJ2ZXINCiMgICAgICAgMzguMjUuNjMuMTAgICAgIHguYWNtZS5jb20gICAgICAgICAgICAgICMgeCBjbGllbnQgaG9zdA0KDQojIGxvY2FsaG9zdCBuYW1lIHJlc29sdXRpb24gaXMgaGFuZGxlZCB3aXRoaW4gRE5TIGl0c2VsZi4NCiMJMTI3LjAuMC4xICAgICAgIGxvY2FsaG9zdA0KIwk6OjEgICAgICAgICAgICAgbG9jYWxob3N0DQojIEFkZGVkIGJ5IERvY2tlciBEZXNrdG9wDQojIFRvIGFsbG93IHRoZSBzYW1lIGt1YmUgY29udGV4dCB0byB3b3JrIG9uIHRoZSBob3N0IGFuZCB0aGUgY29udGFpbmVyOg0KIyBFbmQgb2Ygc2VjdGlvbg0K"
+        },
+        "displayName": null,
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "file-acl",
+        "target": "application-telemetry",
+        "property": "permissions"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "error": "aitagent.exe is not installed on this PC."
+    },
+    {
+      "address": {
+        "kind": "file-acl",
+        "target": "compatibility-telemetry",
+        "property": "permissions"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "error": "Hard-linked file permissions require a separate review."
+    },
+    {
+      "address": {
+        "kind": "file-acl",
+        "target": "device-census",
+        "property": "permissions"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "error": "Hard-linked file permissions require a separate review."
+    },
+    {
+      "address": {
+        "kind": "file-acl",
+        "target": "diagnostic-runner",
+        "property": "permissions"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "error": "DiagTrackRunner.exe is not installed on this PC."
+    },
+    {
+      "address": {
+        "kind": "hibernation",
+        "target": "system",
+        "property": "configuration"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "hibernation",
+          "target": "system",
+          "property": "configuration"
+        },
+        "identity": "HIBERNATION|SYSTEM|CONFIGURATION",
+        "binding": "power-capabilities:s4=True",
+        "value": {
+          "mode": "Off",
+          "sizePercent": 0,
+          "configuredType": null,
+          "enabled": 0,
+          "defaultEnabled": 1,
+          "fastStartup": 1
+        },
+        "displayName": "Hibernation",
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "windows-features",
+        "target": "system",
+        "property": "features"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "windows-features",
+          "target": "system",
+          "property": "features"
+        },
+        "identity": "WINDOWS-FEATURES|SYSTEM|FEATURES",
+        "binding": "B1489EA07B4635ED25A76D9A74CD85D5618E9CC847F05F7750D6FEDCD66F5512",
+        "value": {
+          "Printing-XPSServices-Features": "Disabled",
+          "TelnetClient": "Disabled",
+          "TFTP": "Disabled",
+          "TIFFIFilter": "Disabled",
+          "VirtualMachinePlatform": "Enabled",
+          "Client-ProjFS": "Disabled",
+          "SimpleTCP": "Disabled",
+          "WorkFolders-Client": "Disabled",
+          "NetFx3": "DisabledWithPayloadRemoved",
+          "WCF-HTTP-Activation": "Disabled",
+          "WCF-NonHTTP-Activation": "Disabled",
+          "IIS-WebServerRole": "Disabled",
+          "IIS-WebServer": "Disabled",
+          "IIS-CommonHttpFeatures": "Disabled",
+          "IIS-HttpErrors": "Disabled",
+          "IIS-HttpRedirect": "Disabled",
+          "IIS-ApplicationDevelopment": "Disabled",
+          "IIS-Security": "Disabled",
+          "IIS-RequestFiltering": "Disabled",
+          "IIS-NetFxExtensibility": "Disabled",
+          "IIS-NetFxExtensibility45": "Disabled",
+          "IIS-HealthAndDiagnostics": "Disabled",
+          "IIS-HttpLogging": "Disabled",
+          "IIS-LoggingLibraries": "Disabled",
+          "IIS-RequestMonitor": "Disabled",
+          "IIS-HttpTracing": "Disabled",
+          "IIS-URLAuthorization": "Disabled",
+          "IIS-IPSecurity": "Disabled",
+          "IIS-Performance": "Disabled",
+          "IIS-HttpCompressionDynamic": "Disabled",
+          "IIS-WebServerManagementTools": "Disabled",
+          "IIS-ManagementScriptingTools": "Disabled",
+          "IIS-IIS6ManagementCompatibility": "Disabled",
+          "IIS-Metabase": "Disabled",
+          "WAS-WindowsActivationService": "Disabled",
+          "WAS-ProcessModel": "Disabled",
+          "WAS-NetFxEnvironment": "Disabled",
+          "WAS-ConfigurationAPI": "Disabled",
+          "IIS-HostableWebCore": "Disabled",
+          "WCF-Services45": "Enabled",
+          "WCF-HTTP-Activation45": "Disabled",
+          "WCF-TCP-Activation45": "Disabled",
+          "WCF-Pipe-Activation45": "Disabled",
+          "WCF-MSMQ-Activation45": "Disabled",
+          "WCF-TCP-PortSharing45": "Disabled",
+          "IIS-StaticContent": "Disabled",
+          "IIS-DefaultDocument": "Disabled",
+          "IIS-DirectoryBrowsing": "Disabled",
+          "IIS-WebDAV": "Disabled",
+          "IIS-WebSockets": "Disabled",
+          "IIS-ApplicationInit": "Disabled",
+          "IIS-ISAPIFilter": "Disabled",
+          "IIS-ISAPIExtensions": "Disabled",
+          "IIS-ASPNET": "Disabled",
+          "IIS-ASPNET45": "Disabled",
+          "IIS-ASP": "Disabled",
+          "IIS-CGI": "Disabled",
+          "IIS-ServerSideIncludes": "Disabled",
+          "IIS-CustomLogging": "Disabled",
+          "IIS-BasicAuthentication": "Disabled",
+          "IIS-HttpCompressionStatic": "Disabled",
+          "IIS-ManagementConsole": "Disabled",
+          "IIS-ManagementService": "Disabled",
+          "IIS-WMICompatibility": "Disabled",
+          "IIS-LegacyScripts": "Disabled",
+          "IIS-FTPServer": "Disabled",
+          "IIS-FTPSvc": "Disabled",
+          "IIS-FTPExtensibility": "Disabled",
+          "MSMQ-Container": "Disabled",
+          "MSMQ-DCOMProxy": "Disabled",
+          "MSMQ-Server": "Disabled",
+          "MSMQ-ADIntegration": "Disabled",
+          "MSMQ-HTTP": "Disabled",
+          "MSMQ-Multicast": "Disabled",
+          "MSMQ-Triggers": "Disabled",
+          "IIS-CertProvider": "Disabled",
+          "IIS-WindowsAuthentication": "Disabled",
+          "IIS-DigestAuthentication": "Disabled",
+          "IIS-ClientCertificateMappingAuthentication": "Disabled",
+          "IIS-IISCertificateMappingAuthentication": "Disabled",
+          "IIS-ODBCLogging": "Disabled",
+          "SMB1Protocol-Deprecation": "Disabled",
+          "MediaPlayback": "Enabled",
+          "DirectoryServices-ADAM-Client": "Disabled",
+          "SmbDirect": "Disabled",
+          "AppServerClient": "Disabled",
+          "Printing-PrintToPDFServices-Features": "Disabled",
+          "LegacyComponents": "Disabled",
+          "DirectPlay": "Disabled",
+          "MSRDC-Infrastructure": "Enabled",
+          "NetFx4-AdvSrvs": "Enabled",
+          "NetFx4Extended-ASPNET45": "Disabled",
+          "SMB1Protocol": "Disabled",
+          "SMB1Protocol-Client": "Disabled",
+          "SMB1Protocol-Server": "Disabled",
+          "MultiPoint-Connector": "Disabled",
+          "MultiPoint-Connector-Services": "Disabled",
+          "MultiPoint-Tools": "Disabled",
+          "Recall": "DisabledWithPayloadRemoved",
+          "SearchEngine-Client-Package": "Enabled",
+          "Sysmon": "Disabled",
+          "Sysmon-Service": "Disabled",
+          "Microsoft-RemoteDesktopConnection": "Enabled",
+          "Microsoft-Windows-Camera-CCX-Deployment": "Enabled",
+          "HypervisorPlatform": "Disabled",
+          "Windows-Identity-Foundation": "Disabled",
+          "Microsoft-Windows-Subsystem-Linux": "Enabled",
+          "Printing-Foundation-Features": "Disabled",
+          "Printing-Foundation-InternetPrinting-Client": "Disabled",
+          "Printing-Foundation-LPDPrintService": "Disabled",
+          "Printing-Foundation-LPRPortMonitor": "Disabled",
+          "Microsoft-Hyper-V-All": "Enabled",
+          "Microsoft-Hyper-V": "Enabled",
+          "Microsoft-Hyper-V-Tools-All": "Enabled",
+          "Microsoft-Hyper-V-Management-PowerShell": "Enabled",
+          "Microsoft-Hyper-V-Hypervisor": "Enabled",
+          "Microsoft-Hyper-V-Services": "Enabled",
+          "Microsoft-Hyper-V-Management-Clients": "Enabled",
+          "HostGuardian": "Disabled",
+          "Client-DeviceLockdown": "Disabled",
+          "Client-EmbeddedShellLauncher": "Disabled",
+          "Client-EmbeddedBootExp": "Disabled",
+          "Client-EmbeddedLogon": "Disabled",
+          "Client-KeyboardFilter": "Disabled",
+          "Client-UnifiedWriteFilter": "Disabled",
+          "Containers-DisposableClientVM": "Disabled",
+          "Containers-Server-For-Application-Guard": "Disabled",
+          "HyperV-KernelInt-VirtualDevice": "Disabled",
+          "HyperV-Guest-KernelInt": "Disabled",
+          "DataCenterBridging": "Disabled",
+          "ServicesForNFS-ClientOnly": "Disabled",
+          "ClientForNFS-Infrastructure": "Disabled",
+          "NFS-Administration": "Disabled",
+          "Containers": "Disabled",
+          "Containers-HNS": "Disabled",
+          "Containers-SDN": "Disabled"
+        },
+        "displayName": "Windows optional features",
+        "allowedValues": null,
+        "parents": {
+          "VirtualMachinePlatform": [],
+          "Recall": [],
+          "HypervisorPlatform": [],
+          "Microsoft-Hyper-V-All": [],
+          "Microsoft-Hyper-V": [
+            "Microsoft-Hyper-V-All"
+          ],
+          "Microsoft-Hyper-V-Tools-All": [
+            "Microsoft-Hyper-V-All"
+          ],
+          "Microsoft-Hyper-V-Management-PowerShell": [
+            "Microsoft-Hyper-V-Tools-All"
+          ],
+          "Microsoft-Hyper-V-Hypervisor": [
+            "Microsoft-Hyper-V"
+          ],
+          "Microsoft-Hyper-V-Services": [
+            "Microsoft-Hyper-V"
+          ],
+          "Microsoft-Hyper-V-Management-Clients": [
+            "Microsoft-Hyper-V-Tools-All"
+          ],
+          "Containers-DisposableClientVM": []
+        },
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "download-blocker",
+        "target": "logitech-downloads",
+        "property": "blocked"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "download-blocker",
+          "target": "logitech-downloads",
+          "property": "blocked"
+        },
+        "identity": "download-blocker:C:\\PROGRAM FILES\\LOGIDOWNLOADASSISTANT",
+        "binding": "17767302149972357043:33000000000001000000000000000000",
+        "value": false,
+        "displayName": "Restrict new writes to LogiDownloadAssistant",
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": "6277993C736819E09E1AB5CE081BA4AB1124AC157BD8FFCAD9D838D82C84CA92"
+      }
+    },
+    {
+      "address": {
+        "kind": "file-acl",
+        "target": "store-search",
+        "property": "permissions"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "file-acl",
+          "target": "store-search",
+          "property": "permissions"
+        },
+        "identity": "file-acl:17767302149972357043:BF650600000037000000000000000000",
+        "binding": "17767302149972357043:BF650600000037000000000000000000:134371952343420020",
+        "value": {
+          "owner": "S-1-5-21-111111111-222222222-333333333-1001",
+          "group": "S-1-5-21-111111111-222222222-333333333-513",
+          "flags": 33796,
+          "dacl": "AgCIAAQAAAAAEDAA/wEfAAEIAAAAAAAPAwAAAAaf7l9Jp21JeRrJKBhcbP6ODp40LTKLpK3I9WgAECQA/wEfAAEFAAAAAAAFFQAAAMdrnwaO1z4NVUPeE+kDAAAAEBQA/wEfAAEBAAAAAAAFEgAAAAAQGAD/AR8AAQIAAAAAAAUgAAAAIAIAAA=="
+        },
+        "displayName": null,
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "download-blocker",
+        "target": "razer-downloads",
+        "property": "blocked"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "download-blocker",
+          "target": "razer-downloads",
+          "property": "blocked"
+        },
+        "identity": "download-blocker:C:\\WINDOWS\\INSTALLER\\RAZER",
+        "binding": "17767302149972357043:A90C0000000001000000000000000000",
+        "value": false,
+        "displayName": "Restrict new writes to Razer",
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": "6277993C736819E09E1AB5CE081BA4AB1124AC157BD8FFCAD9D838D82C84CA92"
+      }
+    },
+    {
+      "address": {
+        "kind": "timer-startup",
+        "target": "system",
+        "property": "enabled"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "timer-startup",
+          "target": "system",
+          "property": "enabled"
+        },
+        "identity": "timer-startup:RooIndustries.Timer.2395F9E1EDA79C92",
+        "binding": "S-1-5-21-111111111-222222222-333333333-1001",
+        "value": false,
+        "displayName": "Start the timer request at Windows sign-in",
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "power-plan",
+        "target": "ultimate",
+        "property": "selection"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "power-plan",
+          "target": "ultimate",
+          "property": "selection"
+        },
+        "identity": "power-selection:S-1-5-21-111111111-222222222-333333333-1001",
+        "binding": "8c831057-e42b-e8ac-65f7-06733dbfb550",
+        "value": {
+          "active": "8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c",
+          "plan": null,
+          "template": "25FA6BAA3A2AAEF90B6617591BF04A70CDFC408FA3B63A92EC8D634B3F2B844A",
+          "original": "8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c"
+        },
+        "displayName": "Ultimate Performance power plan",
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "file-acl",
+        "target": "telemetry-consent",
+        "property": "permissions"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "error": "Hard-linked file permissions require a separate review."
+    },
+    {
+      "address": {
+        "kind": "network-adapter",
+        "target": "primary",
+        "property": "ipv6-binding"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "network-adapter",
+          "target": "interfaces:11111111-2222-3333-4444-555555555555",
+          "property": "ipv6-binding"
+        },
+        "identity": "network-adapter:interfaces:11111111-2222-3333-4444-555555555555:ipv6-binding",
+        "binding": "network-adapter:interfaces:11111111-2222-3333-4444-555555555555:{11111111-2222-3333-4444-555555555555}:PCI\\VEN_10EC&DEV_8126&SUBSYS_88E01043&REV_01\\01000000684CE00000:1126.28.50.1224:Realtek PCIe 5GbE Family Controller",
+        "value": {
+          "{11111111-2222-3333-4444-555555555555}": true
+        },
+        "displayName": null,
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "network-adapter",
+        "target": "primary",
+        "property": "lso"
+      },
+      "state": "device-defaults",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "network-adapter",
+          "target": "interfaces:11111111-2222-3333-4444-555555555555",
+          "property": "lso"
+        },
+        "identity": "network-adapter:interfaces:11111111-2222-3333-4444-555555555555:lso",
+        "binding": "network-adapter:interfaces:11111111-2222-3333-4444-555555555555:{11111111-2222-3333-4444-555555555555}:PCI\\VEN_10EC&DEV_8126&SUBSYS_88E01043&REV_01\\01000000684CE00000:1126.28.50.1224:Realtek PCIe 5GbE Family Controller",
+        "value": {
+          "{11111111-2222-3333-4444-555555555555}": {
+            "ipv4v1": false,
+            "ipv4": true,
+            "ipv6": true
+          }
+        },
+        "displayName": null,
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "network-adapter",
+        "target": "primary",
+        "property": "rsc"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "network-adapter",
+          "target": "interfaces:11111111-2222-3333-4444-555555555555",
+          "property": "rsc"
+        },
+        "identity": "network-adapter:interfaces:11111111-2222-3333-4444-555555555555:rsc",
+        "binding": "network-adapter:interfaces:11111111-2222-3333-4444-555555555555:{11111111-2222-3333-4444-555555555555}:PCI\\VEN_10EC&DEV_8126&SUBSYS_88E01043&REV_01\\01000000684CE00000:1126.28.50.1224:Realtek PCIe 5GbE Family Controller",
+        "value": {
+          "{11111111-2222-3333-4444-555555555555}": {
+            "ipv4": true,
+            "ipv6": true
+          }
+        },
+        "displayName": null,
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "device-power",
+        "target": "non-network",
+        "property": "enabled"
+      },
+      "state": "device-defaults",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "device-power",
+          "target": "non-network",
+          "property": "enabled"
+        },
+        "identity": "device-power:non-network:enabled",
+        "binding": "device-power:non-network:FIXTURE\\DEVICE\\0|FIXTURE\\DEVICE\\1|FIXTURE\\DEVICE\\2|FIXTURE\\DEVICE\\3|FIXTURE\\DEVICE\\4|FIXTURE\\DEVICE\\5|FIXTURE\\DEVICE\\6|FIXTURE\\DEVICE\\7|FIXTURE\\DEVICE\\8|FIXTURE\\DEVICE\\9|FIXTURE\\DEVICE\\10|FIXTURE\\DEVICE\\11|FIXTURE\\DEVICE\\12|FIXTURE\\DEVICE\\13|FIXTURE\\DEVICE\\14|FIXTURE\\DEVICE\\15|FIXTURE\\DEVICE\\16|FIXTURE\\DEVICE\\17|FIXTURE\\DEVICE\\18|FIXTURE\\DEVICE\\19|FIXTURE\\DEVICE\\20|FIXTURE\\DEVICE\\21|FIXTURE\\DEVICE\\22|FIXTURE\\DEVICE\\23|FIXTURE\\DEVICE\\24|FIXTURE\\DEVICE\\25|FIXTURE\\DEVICE\\26|FIXTURE\\DEVICE\\27|FIXTURE\\DEVICE\\28|FIXTURE\\DEVICE\\29|FIXTURE\\DEVICE\\30|FIXTURE\\DEVICE\\31|FIXTURE\\DEVICE\\32|FIXTURE\\DEVICE\\33|FIXTURE\\DEVICE\\34",
+        "value": {
+          "FIXTURE\\DEVICE\\0": true,
+          "FIXTURE\\DEVICE\\1": true,
+          "FIXTURE\\DEVICE\\2": true,
+          "FIXTURE\\DEVICE\\3": true,
+          "FIXTURE\\DEVICE\\4": true,
+          "FIXTURE\\DEVICE\\5": true,
+          "FIXTURE\\DEVICE\\6": true,
+          "FIXTURE\\DEVICE\\7": true,
+          "FIXTURE\\DEVICE\\8": true,
+          "FIXTURE\\DEVICE\\9": true,
+          "FIXTURE\\DEVICE\\10": true,
+          "FIXTURE\\DEVICE\\11": true,
+          "FIXTURE\\DEVICE\\12": true,
+          "FIXTURE\\DEVICE\\13": true,
+          "FIXTURE\\DEVICE\\14": true,
+          "FIXTURE\\DEVICE\\15": true,
+          "FIXTURE\\DEVICE\\16": true,
+          "FIXTURE\\DEVICE\\17": true,
+          "FIXTURE\\DEVICE\\18": true,
+          "FIXTURE\\DEVICE\\19": true,
+          "FIXTURE\\DEVICE\\20": true,
+          "FIXTURE\\DEVICE\\21": true,
+          "FIXTURE\\DEVICE\\22": true,
+          "FIXTURE\\DEVICE\\23": true,
+          "FIXTURE\\DEVICE\\24": true,
+          "FIXTURE\\DEVICE\\25": true,
+          "FIXTURE\\DEVICE\\26": true,
+          "FIXTURE\\DEVICE\\27": true,
+          "FIXTURE\\DEVICE\\28": true,
+          "FIXTURE\\DEVICE\\29": false,
+          "FIXTURE\\DEVICE\\30": false,
+          "FIXTURE\\DEVICE\\31": true,
+          "FIXTURE\\DEVICE\\32": true,
+          "FIXTURE\\DEVICE\\33": true,
+          "FIXTURE\\DEVICE\\34": true
+        },
+        "displayName": null,
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "teredo",
+        "target": "system",
+        "property": "type"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "teredo",
+          "target": "system",
+          "property": "type"
+        },
+        "identity": "teredo:system:type",
+        "binding": "teredo:system",
+        "value": "Default",
+        "displayName": null,
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "firewall-blocklist",
+        "target": "RooIndustries-Block-10558acb7e47c5ed",
+        "property": "rule"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "firewall-blocklist",
+          "target": "RooIndustries-Block-10558acb7e47c5ed",
+          "property": "rule"
+        },
+        "identity": "firewall-blocklist:RooIndustries-Block-10558acb7e47c5ed:rule",
+        "binding": "firewall-blocklist:RooIndustries-Block-10558acb7e47c5ed",
+        "value": null,
+        "displayName": null,
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "firewall-blocklist",
+        "target": "RooIndustries-Block-4d669707b6ade5b7",
+        "property": "rule"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "firewall-blocklist",
+          "target": "RooIndustries-Block-4d669707b6ade5b7",
+          "property": "rule"
+        },
+        "identity": "firewall-blocklist:RooIndustries-Block-4d669707b6ade5b7:rule",
+        "binding": "firewall-blocklist:RooIndustries-Block-4d669707b6ade5b7",
+        "value": null,
+        "displayName": null,
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "firewall-blocklist",
+        "target": "RooIndustries-Block-3ecc66299cc842f0",
+        "property": "rule"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "firewall-blocklist",
+          "target": "RooIndustries-Block-3ecc66299cc842f0",
+          "property": "rule"
+        },
+        "identity": "firewall-blocklist:RooIndustries-Block-3ecc66299cc842f0:rule",
+        "binding": "firewall-blocklist:RooIndustries-Block-3ecc66299cc842f0",
+        "value": null,
+        "displayName": null,
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "firewall-profile",
+        "target": "Domain",
+        "property": "enabled"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "firewall-profile",
+          "target": "Domain",
+          "property": "enabled"
+        },
+        "identity": "firewall-profile:Domain:enabled",
+        "binding": "firewall-profile:Domain",
+        "value": "True",
+        "displayName": "Domain firewall: local True, effective True",
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "firewall-profile",
+        "target": "Private",
+        "property": "enabled"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "firewall-profile",
+          "target": "Private",
+          "property": "enabled"
+        },
+        "identity": "firewall-profile:Private:enabled",
+        "binding": "firewall-profile:Private",
+        "value": "True",
+        "displayName": "Private firewall: local True, effective True",
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "firewall-profile",
+        "target": "Public",
+        "property": "enabled"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "firewall-profile",
+          "target": "Public",
+          "property": "enabled"
+        },
+        "identity": "firewall-profile:Public:enabled",
+        "binding": "firewall-profile:Public",
+        "value": "True",
+        "displayName": "Public firewall: local True, effective True",
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "defender",
+        "target": "system",
+        "property": "SubmitSamplesConsent"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "defender",
+          "target": "system",
+          "property": "SubmitSamplesConsent"
+        },
+        "identity": "defender:system:SubmitSamplesConsent",
+        "binding": "defender:system",
+        "value": 1,
+        "displayName": null,
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "dns-over-https",
+        "target": "1.0.0.1",
+        "property": "configuration"
+      },
+      "state": "windows-default",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "dns-over-https",
+          "target": "1.0.0.1",
+          "property": "configuration"
+        },
+        "identity": "dns-over-https:1.0.0.1:configuration",
+        "binding": "dns-over-https:1.0.0.1",
+        "value": {
+          "template": "https://cloudflare-dns.com/dns-query",
+          "allowFallback": false,
+          "autoUpgrade": false
+        },
+        "displayName": null,
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "dns-over-https",
+        "target": "1.0.0.2",
+        "property": "configuration"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "dns-over-https",
+          "target": "1.0.0.2",
+          "property": "configuration"
+        },
+        "identity": "dns-over-https:1.0.0.2:configuration",
+        "binding": "dns-over-https:1.0.0.2",
+        "value": null,
+        "displayName": null,
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "dns-over-https",
+        "target": "1.0.0.3",
+        "property": "configuration"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "dns-over-https",
+          "target": "1.0.0.3",
+          "property": "configuration"
+        },
+        "identity": "dns-over-https:1.0.0.3:configuration",
+        "binding": "dns-over-https:1.0.0.3",
+        "value": null,
+        "displayName": null,
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "dns-over-https",
+        "target": "1.1.1.1",
+        "property": "configuration"
+      },
+      "state": "windows-default",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "dns-over-https",
+          "target": "1.1.1.1",
+          "property": "configuration"
+        },
+        "identity": "dns-over-https:1.1.1.1:configuration",
+        "binding": "dns-over-https:1.1.1.1",
+        "value": {
+          "template": "https://cloudflare-dns.com/dns-query",
+          "allowFallback": false,
+          "autoUpgrade": false
+        },
+        "displayName": null,
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "dns-over-https",
+        "target": "1.1.1.2",
+        "property": "configuration"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "dns-over-https",
+          "target": "1.1.1.2",
+          "property": "configuration"
+        },
+        "identity": "dns-over-https:1.1.1.2:configuration",
+        "binding": "dns-over-https:1.1.1.2",
+        "value": null,
+        "displayName": null,
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "dns-over-https",
+        "target": "1.1.1.3",
+        "property": "configuration"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "dns-over-https",
+          "target": "1.1.1.3",
+          "property": "configuration"
+        },
+        "identity": "dns-over-https:1.1.1.3:configuration",
+        "binding": "dns-over-https:1.1.1.3",
+        "value": null,
+        "displayName": null,
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "dns-over-https",
+        "target": "149.112.112.112",
+        "property": "configuration"
+      },
+      "state": "windows-default",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "dns-over-https",
+          "target": "149.112.112.112",
+          "property": "configuration"
+        },
+        "identity": "dns-over-https:149.112.112.112:configuration",
+        "binding": "dns-over-https:149.112.112.112",
+        "value": {
+          "template": "https://dns.quad9.net/dns-query",
+          "allowFallback": false,
+          "autoUpgrade": false
+        },
+        "displayName": null,
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "dns-over-https",
+        "target": "194.242.2.2",
+        "property": "configuration"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "dns-over-https",
+          "target": "194.242.2.2",
+          "property": "configuration"
+        },
+        "identity": "dns-over-https:194.242.2.2:configuration",
+        "binding": "dns-over-https:194.242.2.2",
+        "value": null,
+        "displayName": null,
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "dns-over-https",
+        "target": "194.242.2.3",
+        "property": "configuration"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "dns-over-https",
+          "target": "194.242.2.3",
+          "property": "configuration"
+        },
+        "identity": "dns-over-https:194.242.2.3:configuration",
+        "binding": "dns-over-https:194.242.2.3",
+        "value": null,
+        "displayName": null,
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "dns-over-https",
+        "target": "194.242.2.4",
+        "property": "configuration"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "dns-over-https",
+          "target": "194.242.2.4",
+          "property": "configuration"
+        },
+        "identity": "dns-over-https:194.242.2.4:configuration",
+        "binding": "dns-over-https:194.242.2.4",
+        "value": null,
+        "displayName": null,
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "dns-over-https",
+        "target": "194.242.2.5",
+        "property": "configuration"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "dns-over-https",
+          "target": "194.242.2.5",
+          "property": "configuration"
+        },
+        "identity": "dns-over-https:194.242.2.5:configuration",
+        "binding": "dns-over-https:194.242.2.5",
+        "value": null,
+        "displayName": null,
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "dns-over-https",
+        "target": "194.242.2.6",
+        "property": "configuration"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "dns-over-https",
+          "target": "194.242.2.6",
+          "property": "configuration"
+        },
+        "identity": "dns-over-https:194.242.2.6:configuration",
+        "binding": "dns-over-https:194.242.2.6",
+        "value": null,
+        "displayName": null,
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "dns-over-https",
+        "target": "194.242.2.9",
+        "property": "configuration"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "dns-over-https",
+          "target": "194.242.2.9",
+          "property": "configuration"
+        },
+        "identity": "dns-over-https:194.242.2.9:configuration",
+        "binding": "dns-over-https:194.242.2.9",
+        "value": null,
+        "displayName": null,
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "dns-over-https",
+        "target": "2001:4860:4860::8844",
+        "property": "configuration"
+      },
+      "state": "windows-default",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "dns-over-https",
+          "target": "2001:4860:4860::8844",
+          "property": "configuration"
+        },
+        "identity": "dns-over-https:2001:4860:4860::8844:configuration",
+        "binding": "dns-over-https:2001:4860:4860::8844",
+        "value": {
+          "template": "https://dns.google/dns-query",
+          "allowFallback": false,
+          "autoUpgrade": false
+        },
+        "displayName": null,
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "dns-over-https",
+        "target": "2001:4860:4860::8888",
+        "property": "configuration"
+      },
+      "state": "windows-default",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "dns-over-https",
+          "target": "2001:4860:4860::8888",
+          "property": "configuration"
+        },
+        "identity": "dns-over-https:2001:4860:4860::8888:configuration",
+        "binding": "dns-over-https:2001:4860:4860::8888",
+        "value": {
+          "template": "https://dns.google/dns-query",
+          "allowFallback": false,
+          "autoUpgrade": false
+        },
+        "displayName": null,
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "dns-over-https",
+        "target": "208.67.220.220",
+        "property": "configuration"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "dns-over-https",
+          "target": "208.67.220.220",
+          "property": "configuration"
+        },
+        "identity": "dns-over-https:208.67.220.220:configuration",
+        "binding": "dns-over-https:208.67.220.220",
+        "value": null,
+        "displayName": null,
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "dns-over-https",
+        "target": "208.67.222.222",
+        "property": "configuration"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "dns-over-https",
+          "target": "208.67.222.222",
+          "property": "configuration"
+        },
+        "identity": "dns-over-https:208.67.222.222:configuration",
+        "binding": "dns-over-https:208.67.222.222",
+        "value": null,
+        "displayName": null,
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "dns-over-https",
+        "target": "2606:4700:4700::1001",
+        "property": "configuration"
+      },
+      "state": "windows-default",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "dns-over-https",
+          "target": "2606:4700:4700::1001",
+          "property": "configuration"
+        },
+        "identity": "dns-over-https:2606:4700:4700::1001:configuration",
+        "binding": "dns-over-https:2606:4700:4700::1001",
+        "value": {
+          "template": "https://cloudflare-dns.com/dns-query",
+          "allowFallback": false,
+          "autoUpgrade": false
+        },
+        "displayName": null,
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "dns-over-https",
+        "target": "2606:4700:4700::1002",
+        "property": "configuration"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "dns-over-https",
+          "target": "2606:4700:4700::1002",
+          "property": "configuration"
+        },
+        "identity": "dns-over-https:2606:4700:4700::1002:configuration",
+        "binding": "dns-over-https:2606:4700:4700::1002",
+        "value": null,
+        "displayName": null,
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "dns-over-https",
+        "target": "2606:4700:4700::1003",
+        "property": "configuration"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "dns-over-https",
+          "target": "2606:4700:4700::1003",
+          "property": "configuration"
+        },
+        "identity": "dns-over-https:2606:4700:4700::1003:configuration",
+        "binding": "dns-over-https:2606:4700:4700::1003",
+        "value": null,
+        "displayName": null,
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "dns-over-https",
+        "target": "2606:4700:4700::1111",
+        "property": "configuration"
+      },
+      "state": "windows-default",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "dns-over-https",
+          "target": "2606:4700:4700::1111",
+          "property": "configuration"
+        },
+        "identity": "dns-over-https:2606:4700:4700::1111:configuration",
+        "binding": "dns-over-https:2606:4700:4700::1111",
+        "value": {
+          "template": "https://cloudflare-dns.com/dns-query",
+          "allowFallback": false,
+          "autoUpgrade": false
+        },
+        "displayName": null,
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "dns-over-https",
+        "target": "2606:4700:4700::1112",
+        "property": "configuration"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "dns-over-https",
+          "target": "2606:4700:4700::1112",
+          "property": "configuration"
+        },
+        "identity": "dns-over-https:2606:4700:4700::1112:configuration",
+        "binding": "dns-over-https:2606:4700:4700::1112",
+        "value": null,
+        "displayName": null,
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "dns-over-https",
+        "target": "2606:4700:4700::1113",
+        "property": "configuration"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "dns-over-https",
+          "target": "2606:4700:4700::1113",
+          "property": "configuration"
+        },
+        "identity": "dns-over-https:2606:4700:4700::1113:configuration",
+        "binding": "dns-over-https:2606:4700:4700::1113",
+        "value": null,
+        "displayName": null,
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "dns-over-https",
+        "target": "2620:119:35::35",
+        "property": "configuration"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "dns-over-https",
+          "target": "2620:119:35::35",
+          "property": "configuration"
+        },
+        "identity": "dns-over-https:2620:119:35::35:configuration",
+        "binding": "dns-over-https:2620:119:35::35",
+        "value": null,
+        "displayName": null,
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "dns-over-https",
+        "target": "2620:119:53::53",
+        "property": "configuration"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "dns-over-https",
+          "target": "2620:119:53::53",
+          "property": "configuration"
+        },
+        "identity": "dns-over-https:2620:119:53::53:configuration",
+        "binding": "dns-over-https:2620:119:53::53",
+        "value": null,
+        "displayName": null,
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "dns-over-https",
+        "target": "2620:fe::9",
+        "property": "configuration"
+      },
+      "state": "windows-default",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "dns-over-https",
+          "target": "2620:fe::9",
+          "property": "configuration"
+        },
+        "identity": "dns-over-https:2620:fe::9:configuration",
+        "binding": "dns-over-https:2620:fe::9",
+        "value": {
+          "template": "https://dns.quad9.net/dns-query",
+          "allowFallback": false,
+          "autoUpgrade": false
+        },
+        "displayName": null,
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "dns-over-https",
+        "target": "2620:fe::fe",
+        "property": "configuration"
+      },
+      "state": "windows-default",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "dns-over-https",
+          "target": "2620:fe::fe",
+          "property": "configuration"
+        },
+        "identity": "dns-over-https:2620:fe::fe:configuration",
+        "binding": "dns-over-https:2620:fe::fe",
+        "value": {
+          "template": "https://dns.quad9.net/dns-query",
+          "allowFallback": false,
+          "autoUpgrade": false
+        },
+        "displayName": null,
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "dns-over-https",
+        "target": "2a07:e340::2",
+        "property": "configuration"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "dns-over-https",
+          "target": "2a07:e340::2",
+          "property": "configuration"
+        },
+        "identity": "dns-over-https:2a07:e340::2:configuration",
+        "binding": "dns-over-https:2a07:e340::2",
+        "value": null,
+        "displayName": null,
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "dns-over-https",
+        "target": "2a07:e340::3",
+        "property": "configuration"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "dns-over-https",
+          "target": "2a07:e340::3",
+          "property": "configuration"
+        },
+        "identity": "dns-over-https:2a07:e340::3:configuration",
+        "binding": "dns-over-https:2a07:e340::3",
+        "value": null,
+        "displayName": null,
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "dns-over-https",
+        "target": "2a07:e340::4",
+        "property": "configuration"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "dns-over-https",
+          "target": "2a07:e340::4",
+          "property": "configuration"
+        },
+        "identity": "dns-over-https:2a07:e340::4:configuration",
+        "binding": "dns-over-https:2a07:e340::4",
+        "value": null,
+        "displayName": null,
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "dns-over-https",
+        "target": "2a07:e340::5",
+        "property": "configuration"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "dns-over-https",
+          "target": "2a07:e340::5",
+          "property": "configuration"
+        },
+        "identity": "dns-over-https:2a07:e340::5:configuration",
+        "binding": "dns-over-https:2a07:e340::5",
+        "value": null,
+        "displayName": null,
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "dns-over-https",
+        "target": "2a07:e340::6",
+        "property": "configuration"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "dns-over-https",
+          "target": "2a07:e340::6",
+          "property": "configuration"
+        },
+        "identity": "dns-over-https:2a07:e340::6:configuration",
+        "binding": "dns-over-https:2a07:e340::6",
+        "value": null,
+        "displayName": null,
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "dns-over-https",
+        "target": "2a07:e340::9",
+        "property": "configuration"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "dns-over-https",
+          "target": "2a07:e340::9",
+          "property": "configuration"
+        },
+        "identity": "dns-over-https:2a07:e340::9:configuration",
+        "binding": "dns-over-https:2a07:e340::9",
+        "value": null,
+        "displayName": null,
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "dns-over-https",
+        "target": "2a10:50c0::ad1:ff",
+        "property": "configuration"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "dns-over-https",
+          "target": "2a10:50c0::ad1:ff",
+          "property": "configuration"
+        },
+        "identity": "dns-over-https:2a10:50c0::ad1:ff:configuration",
+        "binding": "dns-over-https:2a10:50c0::ad1:ff",
+        "value": null,
+        "displayName": null,
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "dns-over-https",
+        "target": "2a10:50c0::ad2:ff",
+        "property": "configuration"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "dns-over-https",
+          "target": "2a10:50c0::ad2:ff",
+          "property": "configuration"
+        },
+        "identity": "dns-over-https:2a10:50c0::ad2:ff:configuration",
+        "binding": "dns-over-https:2a10:50c0::ad2:ff",
+        "value": null,
+        "displayName": null,
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "dns-over-https",
+        "target": "2a10:50c0::bad1:ff",
+        "property": "configuration"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "dns-over-https",
+          "target": "2a10:50c0::bad1:ff",
+          "property": "configuration"
+        },
+        "identity": "dns-over-https:2a10:50c0::bad1:ff:configuration",
+        "binding": "dns-over-https:2a10:50c0::bad1:ff",
+        "value": null,
+        "displayName": null,
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "dns-over-https",
+        "target": "2a10:50c0::bad2:ff",
+        "property": "configuration"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "dns-over-https",
+          "target": "2a10:50c0::bad2:ff",
+          "property": "configuration"
+        },
+        "identity": "dns-over-https:2a10:50c0::bad2:ff:configuration",
+        "binding": "dns-over-https:2a10:50c0::bad2:ff",
+        "value": null,
+        "displayName": null,
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "dns-over-https",
+        "target": "8.8.4.4",
+        "property": "configuration"
+      },
+      "state": "windows-default",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "dns-over-https",
+          "target": "8.8.4.4",
+          "property": "configuration"
+        },
+        "identity": "dns-over-https:8.8.4.4:configuration",
+        "binding": "dns-over-https:8.8.4.4",
+        "value": {
+          "template": "https://dns.google/dns-query",
+          "allowFallback": false,
+          "autoUpgrade": false
+        },
+        "displayName": null,
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "dns-over-https",
+        "target": "8.8.8.8",
+        "property": "configuration"
+      },
+      "state": "windows-default",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "dns-over-https",
+          "target": "8.8.8.8",
+          "property": "configuration"
+        },
+        "identity": "dns-over-https:8.8.8.8:configuration",
+        "binding": "dns-over-https:8.8.8.8",
+        "value": {
+          "template": "https://dns.google/dns-query",
+          "allowFallback": false,
+          "autoUpgrade": false
+        },
+        "displayName": null,
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "dns-over-https",
+        "target": "9.9.9.9",
+        "property": "configuration"
+      },
+      "state": "windows-default",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "dns-over-https",
+          "target": "9.9.9.9",
+          "property": "configuration"
+        },
+        "identity": "dns-over-https:9.9.9.9:configuration",
+        "binding": "dns-over-https:9.9.9.9",
+        "value": {
+          "template": "https://dns.quad9.net/dns-query",
+          "allowFallback": false,
+          "autoUpgrade": false
+        },
+        "displayName": null,
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "dns-over-https",
+        "target": "94.140.14.14",
+        "property": "configuration"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "dns-over-https",
+          "target": "94.140.14.14",
+          "property": "configuration"
+        },
+        "identity": "dns-over-https:94.140.14.14:configuration",
+        "binding": "dns-over-https:94.140.14.14",
+        "value": null,
+        "displayName": null,
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "dns-over-https",
+        "target": "94.140.14.15",
+        "property": "configuration"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "dns-over-https",
+          "target": "94.140.14.15",
+          "property": "configuration"
+        },
+        "identity": "dns-over-https:94.140.14.15:configuration",
+        "binding": "dns-over-https:94.140.14.15",
+        "value": null,
+        "displayName": null,
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "dns-over-https",
+        "target": "94.140.15.15",
+        "property": "configuration"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "dns-over-https",
+          "target": "94.140.15.15",
+          "property": "configuration"
+        },
+        "identity": "dns-over-https:94.140.15.15:configuration",
+        "binding": "dns-over-https:94.140.15.15",
+        "value": null,
+        "displayName": null,
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "dns-over-https",
+        "target": "94.140.15.16",
+        "property": "configuration"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "dns-over-https",
+          "target": "94.140.15.16",
+          "property": "configuration"
+        },
+        "identity": "dns-over-https:94.140.15.16:configuration",
+        "binding": "dns-over-https:94.140.15.16",
+        "value": null,
+        "displayName": null,
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "boot-configuration",
+        "target": "current",
+        "property": "disabledynamictick"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "boot-configuration",
+          "target": "current",
+          "property": "disabledynamictick"
+        },
+        "identity": "boot-configuration:current:disabledynamictick",
+        "binding": "boot-configuration:current:{66666666-7777-8888-9999-000000000000}:270532611",
+        "value": null,
+        "displayName": null,
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "boot-configuration",
+        "target": "current",
+        "property": "hypervisorlaunchtype"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "boot-configuration",
+          "target": "current",
+          "property": "hypervisorlaunchtype"
+        },
+        "identity": "boot-configuration:current:hypervisorlaunchtype",
+        "binding": "boot-configuration:current:{66666666-7777-8888-9999-000000000000}:270532611",
+        "value": 1,
+        "displayName": null,
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "memory",
+        "target": "system",
+        "property": "compression"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "memory",
+          "target": "system",
+          "property": "compression"
+        },
+        "identity": "memory:system:compression",
+        "binding": "memory:system",
+        "value": false,
+        "displayName": null,
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "filesystem",
+        "target": "ntfs",
+        "property": "last-access"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "filesystem",
+          "target": "ntfs",
+          "property": "last-access"
+        },
+        "identity": "filesystem:ntfs:last-access",
+        "binding": "filesystem:ntfs",
+        "value": 2,
+        "displayName": null,
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    },
+    {
+      "address": {
+        "kind": "reserved-storage",
+        "target": "system",
+        "property": "enabled"
+      },
+      "state": "observed",
+      "source": "Windows 11 Pro 25H2 (build 26200) read on the test PC, 2026-10-23",
+      "read": {
+        "address": {
+          "kind": "reserved-storage",
+          "target": "system",
+          "property": "enabled"
+        },
+        "identity": "reserved-storage:system:enabled",
+        "binding": "reserved-storage:system",
+        "value": true,
+        "displayName": null,
+        "allowedValues": null,
+        "parents": null,
+        "restartPending": false,
+        "lostLease": false,
+        "evidenceHash": null
+      }
+    }
+  ]
+}

@@ -120,9 +120,9 @@ public partial class App : Application
         var initialNav = RooIndustries.Optimizer.BrandCompatibility.EnvironmentValue("ROO_INDUSTRIES_INITIAL_NAV");
         var commandLine = System.Environment.GetCommandLineArgs();
         var ownershipPath = commandLine.Length == 3 && commandLine[1] == "--ownership-review" ? ExternalOwnershipPath(commandLine[2]) : null;
-        MainWindow = ownershipPath is not null ? new MainWindow("windows", false, ownershipPath) : string.IsNullOrWhiteSpace(initialNav)
+        MainWindow = ownershipPath is not null ? new MainWindow("windows", ownershipPath) : string.IsNullOrWhiteSpace(initialNav)
             ? new MainWindow()
-            : new MainWindow(initialNav.Trim(), false);
+            : new MainWindow(initialNav.Trim());
         MainWindow.Activate();
         if (MainWindow.AppWindow.Presenter is Microsoft.UI.Windowing.OverlappedPresenter presenter)
         {
@@ -229,50 +229,6 @@ public partial class App : Application
     [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr window);
     [System.Runtime.InteropServices.DllImport("shell32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)] private static extern IntPtr CommandLineToArgvW(string commandLine, out int count);
     [System.Runtime.InteropServices.DllImport("kernel32.dll")] private static extern IntPtr LocalFree(IntPtr memory);
-
-    public static void RecreateMainWindow(string navTag, bool onSettings)
-    {
-        var previous = MainWindow;
-
-        var wasMaximized = false;
-        var wasMinimized = false;
-        if (previous?.AppWindow.Presenter is Microsoft.UI.Windowing.OverlappedPresenter previousPresenter)
-        {
-            wasMaximized = previousPresenter.State == Microsoft.UI.Windowing.OverlappedPresenterState.Maximized;
-            wasMinimized = previousPresenter.State == Microsoft.UI.Windowing.OverlappedPresenterState.Minimized;
-        }
-
-        var next = new MainWindow(navTag, onSettings);
-        MainWindow = next;
-
-        if (previous is not null && !wasMaximized && !wasMinimized)
-        {
-            try
-            {
-                var pos = previous.AppWindow.Position;
-                var size = previous.AppWindow.Size;
-                next.AppWindow.MoveAndResize(new Windows.Graphics.RectInt32(pos.X, pos.Y, size.Width, size.Height));
-            }
-            catch
-            {
-            }
-        }
-
-        next.Activate();
-
-        if (wasMaximized && next.AppWindow.Presenter is Microsoft.UI.Windowing.OverlappedPresenter nextPresenter)
-        {
-            try
-            {
-                nextPresenter.Maximize();
-            }
-            catch
-            {
-            }
-        }
-
-        previous?.Close();
-    }
 
     public static void ApplyAccentResourceOverrides()
     {

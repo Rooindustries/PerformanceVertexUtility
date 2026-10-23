@@ -18,6 +18,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
       - run: python -m pip install -r tools/validation/requirements.txt
       - run: python tools/validation/check_baseline.py
   python-tests:

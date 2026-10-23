@@ -183,7 +183,7 @@ $owned=$null;$stdout=$null;$stderr=$null;$recorder=$null;$seenIds=New-Object Sys
 $frames=Join-Path $CaptureOut 'video-frames';$null=New-HarnessDirectory $frames 'roo70-owned-window-video' 'frame'
 try{
  $exe=Join-Path $BuildOut 'desktop\Roo70.RenderedBugReportFixture.exe';$null=Get-RooIndustriesOriginalFile $exe;Assert-HarnessInstallStart $exe
- $start=[Diagnostics.ProcessStartInfo]::new($exe);$start.UseShellExecute=$false;$start.WorkingDirectory=(Join-Path $BuildOut 'desktop');$start.RedirectStandardOutput=$true;$start.RedirectStandardError=$true
+ $start=[Diagnostics.ProcessStartInfo]::new($exe);$start.UseShellExecute=$false;$start.WorkingDirectory=(Join-Path $BuildOut 'desktop');$start.RedirectStandardOutput=$true;$start.RedirectStandardError=$true;$start.EnvironmentVariables['DOTNET_ROOT']=Join-Path $env:USERPROFILE '.dotnet'
  $start.Arguments=Join-RooIndustriesWindowsArguments @('--owned-root',$DataRoot,'--nonce',$binding.uiNonce,'--output',$UiOutput)
  Set-RooIndustriesReaderEnvironment $start 'roo70-rendered-ui'
  $owned=Start-OwnedProcess -StartInfo $start -Purpose 'roo70-isolated-rendered-bug-report'
