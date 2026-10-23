@@ -6,6 +6,7 @@ using System.Security.Principal;
 using System.ComponentModel;
 using System.Text;
 using System.Text.Json;
+using Microsoft.Win32.SafeHandles;
 
 namespace RooIndustries.Optimizer;
 
@@ -15,6 +16,10 @@ public sealed record TimerWorkerState(TimerLaunch Launch, int ProcessId, long Cr
 public static class TimerControl
 {
     internal sealed record Roots(string Control, string State);
+
+#if GOVERNOR_TEST_HOOKS
+    private static Func<SafeProcessHandle, int, int>? WorkerStartedForTest { get; set; }
+#endif
 
     internal static bool AllowElevatedWorker
     {
@@ -135,14 +140,14 @@ public static class TimerControl
         if (!Read(before.Address).Same(before)) throw new InvalidDataException("Timer ownership changed after review.");
         if (desired.GetBoolean()) Start(roots); else Stop(roots);
     }
-    private static void Start(Roots roots)
+    private static void Start(Roots roots, bool autostart = false)
     {
         var existing = State(roots);
         using var prior = existing is null ? null : Running(existing);
         if (prior is not null) throw new InvalidOperationException("An existing timer worker has not stopped.");
         var assembly = Assembly.GetEntryAssembly()?.Location ?? throw new InvalidDataException("Timer worker packaging is unavailable.");
         var launch = new TimerLaunch(OperationOwner.Current(), Guid.NewGuid().ToString("N"), roots.Control, assembly, OperationFiles.HashFile(assembly));
-        var path = Path.Combine(roots.Control, "launch.json");
+        var path = Path.Combine(autostart ? roots.State : roots.Control, "launch.json");
         var executable = Environment.ProcessPath ?? throw new InvalidDataException("Timer host executable is unavailable.");
         var command = new StringBuilder().Append('"').Append(executable).Append('"');
         if (Path.GetFileNameWithoutExtension(executable).Equals("dotnet", StringComparison.OrdinalIgnoreCase)) command.Append(" \"").Append(assembly).Append('"');
@@ -152,12 +157,13 @@ public static class TimerControl
         ProcessInfo created;
         try { created = LaunchWorker(executable, command, userToken); }
         catch { File.Delete(path); throw; }
-        Process worker;
-        try { worker = Process.GetProcessById(created.ProcessId); }
-        finally { CloseHandle(created.Thread); CloseHandle(created.Process); }
-        using var workerLifetime = worker;
+        using var worker = new SafeProcessHandle(created.Process, ownsHandle: true);
+        CloseHandle(created.Thread);
         try
         {
+#if GOVERNOR_TEST_HOOKS
+            if (WorkerStartedForTest is { } started) created.ProcessId = started(worker, created.ProcessId);
+#endif
             var deadline = Stopwatch.StartNew();
             while (deadline.Elapsed < TimeSpan.FromSeconds(15))
             {
@@ -165,20 +171,39 @@ public static class TimerControl
                 if (state?.Launch.SessionId == launch.SessionId)
                 {
                     if (state.Error is not null) throw new IOException(state.Error);
-                    if (state.ProcessId == worker.Id && state.Acquired && !state.Released) return;
+                    if (state.ProcessId == created.ProcessId && state.Acquired && !state.Released) return;
                 }
-                if (worker.HasExited) throw new IOException("Timer worker exited before acquisition: " + worker.ExitCode);
+                if (WaitForWorker(worker, 0))
+                {
+                    if (!GetExitCodeProcess(worker, out var code)) throw new Win32Exception(Marshal.GetLastWin32Error(), "GetExitCodeProcess(timer worker) failed.");
+                    throw new IOException("Timer worker exited before acquisition: " + unchecked((int)code));
+                }
                 Thread.Sleep(50);
             }
             throw new TimeoutException("Timer worker did not confirm acquisition.");
         }
         catch
         {
-            OperationFiles.Write(Path.Combine(roots.Control, "stop.json"), launch);
-            if (!worker.WaitForExit(5000)) { worker.Kill(); worker.WaitForExit(); }
+            if (!autostart) OperationFiles.Write(Path.Combine(roots.Control, "stop.json"), launch);
+            if (!WaitForWorker(worker, autostart ? 0u : 5000u))
+            {
+                if (!TerminateProcess(worker, uint.MaxValue))
+                {
+                    var error = Marshal.GetLastWin32Error();
+                    if (error != 5 || !WaitForWorker(worker, 0)) throw new Win32Exception(error, "TerminateProcess(timer worker) failed.");
+                }
+                WaitForWorker(worker, uint.MaxValue);
+            }
             throw;
         }
     }
+    private static bool WaitForWorker(SafeProcessHandle worker, uint milliseconds)
+        => WaitForSingleObject(worker, milliseconds) switch
+        {
+            0 => true,
+            0x102 => false,
+            _ => throw new Win32Exception(Marshal.GetLastWin32Error(), "WaitForSingleObject(timer worker) failed.")
+        };
     private static void Stop(Roots roots)
     {
         var state = State(roots);
@@ -240,8 +265,6 @@ public static class TimerControl
         catch (Exception error) when (error is Win32Exception or InvalidOperationException or NotSupportedException) { return null; }
     }
     public static void RunWorker(string launchPath)
-        => RunWorker(launchPath, null);
-    private static void RunWorker(string launchPath, Action? ready)
     {
         var launch = OperationFiles.Read<TimerLaunch>(launchPath); launch.Owner.Verify();
         var roots = RootsOf(launch.Root);
@@ -268,7 +291,6 @@ public static class TimerControl
                 if (applied.Elapsed > TimeSpan.FromSeconds(2)) throw new InvalidOperationException("Windows did not apply the 0.5 ms timer request (current interval " + (current / 10000.0).ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) + " ms).");
                 Thread.Sleep(50);
             }
-            ready?.Invoke();
             while (true)
             {
                 var path = Path.Combine(roots.Control, "stop.json");
@@ -298,23 +320,25 @@ public static class TimerControl
         Directory.CreateDirectory(roots.State);
         using var guard = OperationFiles.Lock(Path.Combine(roots.State, "control"));
         var state = State(roots); using var running = state is null ? null : Running(state);
-        if (running is not null) return;
-        var assembly = Assembly.GetEntryAssembly()!.Location;
-        var launch = new TimerLaunch(OperationOwner.Current(), Guid.NewGuid().ToString("N"), roots.Control, assembly, OperationFiles.HashFile(assembly));
-        var path = Path.Combine(roots.State, "launch.json"); OperationFiles.Write(path, launch);
-        RunWorker(path, guard.Dispose);
+        if (running is not null)
+        {
+            if (state is { Acquired: true, Released: false, Error: null }) return;
+            throw new IOException("The existing timer worker has not confirmed acquisition.");
+        }
+        Start(roots, autostart: true);
     }
+    // DETACHED_PROCESS, not CREATE_NO_WINDOW: a console exe started with CREATE_NO_WINDOW gets its own hidden conhost for the whole session.
     private static ProcessInfo LaunchWorker(string executable, StringBuilder command, bool userToken)
     {
         if (userToken) return LaunchFromShell(executable, command) ?? throw new InvalidOperationException("The timer needs Windows to start it with your normal rights, but no desktop shell of your Windows user is running. Sign in to Windows normally, then try again.");
         var startup = new StartupInfo { Size = Marshal.SizeOf<StartupInfo>() };
-        if (CreateProcess(executable, command, IntPtr.Zero, IntPtr.Zero, false, 0x09000000, IntPtr.Zero, null, ref startup, out var created)) return created;
+        if (CreateProcess(executable, command, IntPtr.Zero, IntPtr.Zero, false, 0x01000008, IntPtr.Zero, null, ref startup, out var created)) return created;
         var error = Marshal.GetLastWin32Error();
         if (error != 5) throw new Win32Exception(error, "CreateProcessW(timer worker) failed with Win32 " + error + ".");
         if (LaunchFromShell(executable, command) is { } shellChild) return shellChild;
         if (!IsProcessInJob(CurrentProcess(), IntPtr.Zero, out var inJob) || !inJob) throw new Win32Exception(error, "CreateProcessW(timer worker) failed with Win32 " + error + ".");
         if (JobEndsProcessesOnClose()) throw new InvalidOperationException("The timer can't keep running after this app closes because Windows started the app inside a job that ends its processes. Start the app from the Start menu or desktop shortcut and try again.");
-        if (CreateProcess(executable, command, IntPtr.Zero, IntPtr.Zero, false, 0x08000000, IntPtr.Zero, null, ref startup, out created)) return created;
+        if (CreateProcess(executable, command, IntPtr.Zero, IntPtr.Zero, false, 0x00000008, IntPtr.Zero, null, ref startup, out created)) return created;
         error = Marshal.GetLastWin32Error();
         throw new Win32Exception(error, "CreateProcessW(timer worker) failed with Win32 " + error + ".");
     }
@@ -340,7 +364,7 @@ public static class TimerControl
                     Marshal.WriteIntPtr(parent, shell);
                     if (!UpdateProcThreadAttribute(list, 0, 0x00020000, parent, IntPtr.Size, IntPtr.Zero, IntPtr.Zero)) return null;
                     var startup = new StartupInfoEx { Startup = new StartupInfo { Size = Marshal.SizeOf<StartupInfoEx>() }, Attributes = list };
-                    return CreateProcessWithParent(executable, command, IntPtr.Zero, IntPtr.Zero, false, 0x08080000, IntPtr.Zero, null, ref startup, out var created) ? created : null;
+                    return CreateProcessWithParent(executable, command, IntPtr.Zero, IntPtr.Zero, false, 0x00080008, IntPtr.Zero, null, ref startup, out var created) ? created : null;
                 }
                 finally { DeleteProcThreadAttributeList(list); }
             }
@@ -393,6 +417,9 @@ public static class TimerControl
     [DllImport("kernel32.dll", EntryPoint = "CreateProcessW", CharSet = CharSet.Unicode, SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)] private static extern bool CreateProcess(string application, StringBuilder command, IntPtr processSecurity, IntPtr threadSecurity, [MarshalAs(UnmanagedType.Bool)] bool inheritHandles, uint flags, IntPtr environment, string? directory, ref StartupInfo startup, out ProcessInfo process);
     [DllImport("kernel32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool CloseHandle(IntPtr handle);
+    [DllImport("kernel32.dll", SetLastError = true)] private static extern uint WaitForSingleObject(SafeProcessHandle process, uint milliseconds);
+    [DllImport("kernel32.dll", SetLastError = true)] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool GetExitCodeProcess(SafeProcessHandle process, out uint code);
+    [DllImport("kernel32.dll", SetLastError = true)] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool TerminateProcess(SafeProcessHandle process, uint code);
     [DllImport("shell32.dll", CharSet = CharSet.Unicode)] private static extern IntPtr CommandLineToArgvW(string line, out int count);
     [DllImport("kernel32.dll")] private static extern IntPtr LocalFree(IntPtr memory);
     [DllImport("ntdll.dll")] private static extern int NtQueryInformationProcess(IntPtr process, int kind, IntPtr information, uint length, out uint returned);
