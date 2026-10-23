@@ -114,6 +114,7 @@ def apply_availability(settings):
 def apply_policy_editions(catalog):
     policies = json.loads((ROOT / 'backend/catalogs/windows-policy-editions.json').read_text())['policies']
     constrained = set()
+    equivalents = []
     for setting in catalog['settings']:
         for option in setting['options']:
             gates = copy.deepcopy(option.get('availability', [{'minimumBuild': setting['minimumBuild'], 'maximumBuild': setting['maximumBuild'], 'editions': setting['editions']}]))
@@ -123,9 +124,11 @@ def apply_policy_editions(catalog):
                     continue
                 address = change['address']
                 for policy in policies:
-                    if not all(address.get(field, '').casefold() == policy[field].casefold() for field in ('hive', 'keyPath', 'valueName')):
+                    if not all(address.get(field, '').casefold() == policy[field].casefold() for field in ('hive', 'keyPath', 'valueName')) or 'dword' in policy and change.get('dword') != policy['dword']:
                         continue
                     matched = True
+                    if 'equivalentChoice' in policy:
+                        equivalents.append((setting, change, policy['equivalentChoice']))
                     for gate in gates:
                         gate['editions'] = policy['editions'] if '*' in gate['editions'] else sorted(edition for edition in gate['editions'] if any(edition.casefold().startswith(allowed[:-1].casefold()) if allowed.endswith('*') else edition.casefold() == allowed.casefold() for allowed in policy['editions']))
                     gates = [gate for gate in gates if gate['editions']]
@@ -134,6 +137,12 @@ def apply_policy_editions(catalog):
                     raise ValueError('A registry policy edition constraint excludes every source gate: ' + setting['id'] + '/' + option['id'])
                 option['availability'] = gates
                 constrained.add((setting['id'], option['id']))
+    for setting, change, equivalent in equivalents:
+        replacement = {'address': change['address'], 'dword': equivalent['dword']}
+        if any(option['changes'] == [replacement] for option in setting['options']):
+            continue
+        setting['options'].append({'id': 'choice-' + digest(desired(replacement)), 'name': equivalent['name'], 'changes': [replacement],
+                                   'availability': [{'minimumBuild': setting['minimumBuild'], 'maximumBuild': setting['maximumBuild'], 'editions': ['*']}]})
     for preset in catalog['presets']:
         optional = [item for item in preset['selections'] if (item['settingId'], item['optionId']) in constrained]
         if optional and not preset.get('availableOnly', False):

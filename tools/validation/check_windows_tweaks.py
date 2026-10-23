@@ -25,6 +25,37 @@ def edition_overlap_failures(catalog, exceptions):
     return failures
 
 
+def policy_matches(change, policy):
+    address = change['address']
+    return (all(address.get(field, '').casefold() == policy[field].casefold() for field in ('hive', 'keyPath', 'valueName')) and
+            any(change.get(field) is not None for field in ('dword', 'value', 'token', 'bits', 'formula')) and
+            ('dword' not in policy or change.get('dword') == policy['dword']))
+
+
+def edition_allowed(edition, editions):
+    return any(edition.casefold().startswith(item[:-1].casefold()) if item.endswith('*') else edition.casefold() == item.casefold() for item in editions)
+
+
+def policy_gate_failures(catalog, policies):
+    failures = []
+    for setting in catalog['settings']:
+        for option in setting['options']:
+            gates = option.get('availability', [{'editions': setting['editions']}])
+            for policy in policies:
+                if not any(policy_matches(change, policy) for change in option['changes']):
+                    continue
+                if any(not edition_allowed(edition, policy['editions']) for gate in gates for edition in gate['editions']):
+                    failures.append('A choice Windows ignores on some editions is offered there: ' + setting['id'] + '/' + option['id'])
+                equivalent = policy.get('equivalentChoice')
+                if equivalent and not any(
+                    [change['address'] for change in other['changes']] == [option['changes'][0]['address']] and other['changes'][0].get('dword') == equivalent['dword'] and
+                    any('*' in gate['editions'] for gate in other.get('availability', [{'editions': setting['editions']}]))
+                    for other in setting['options']
+                ):
+                    failures.append('Editions without ' + option['name'] + ' need the documented equivalent choice: ' + setting['id'])
+    return failures
+
+
 def check(root):
     failures = []
     catalog = json.loads((root / 'backend/catalogs/windows-tweaks.json').read_text())
@@ -46,6 +77,23 @@ def check(root):
     restricted['minimumBuild'] = 26101
     if edition_overlap_failures(fixture, set()):
         failures.append('Edition overlap check must allow disjoint build ranges.')
+    failures.extend(policy_gate_failures(catalog, policy_editions['policies']))
+    policy = {'hive': 'LocalMachine', 'keyPath': 'Fixture', 'valueName': 'Level', 'dword': 0, 'editions': ['Enterprise*'], 'equivalentChoice': {'dword': 1}}
+    address = {'hive': 'LocalMachine', 'keyPath': 'fixture', 'valueName': 'level'}
+    def gated(editions, extra=()):
+        options = [{'id': 'off', 'name': 'Off', 'changes': [{'address': address, 'dword': 0}], 'availability': [{'editions': editions}]}, *extra]
+        return {'settings': [{'id': 'fixture', 'editions': ['*'], 'options': options}]}
+    required = {'id': 'required', 'name': 'Required', 'changes': [{'address': address, 'dword': 1}], 'availability': [{'editions': ['*']}]}
+    if not policy_gate_failures(gated(['*'], [required]), [policy]):
+        failures.append('Policy edition check must reject a limited value offered on every edition.')
+    if not policy_gate_failures(gated(['Enterprise', 'Professional'], [required]), [policy]):
+        failures.append('Policy edition check must reject a limited value offered on an edition outside its families.')
+    if policy_gate_failures(gated(['Enterprise', 'EnterpriseS', 'Enterprise*'], [required]), [policy]):
+        failures.append('Policy edition check must allow a limited value inside its edition families.')
+    if not policy_gate_failures(gated(['Enterprise']), [policy]):
+        failures.append('Policy edition check must require the documented equivalent choice on other editions.')
+    if policy_gate_failures(gated(['Enterprise'], [required, {'id': 'full', 'name': 'Full', 'changes': [{'address': address, 'dword': 3}], 'availability': [{'editions': ['*']}]}, {'id': 'remove', 'name': 'Remove', 'changes': [{'address': address, 'dword': None}]}]), [policy]):
+        failures.append('Policy edition check must leave other values and override removal on every edition.')
     powers = [setting for setting in settings if any(control['address']['kind'] == 'hibernation' for option in setting['options'] for control in option.get('controls', []))]
     modes = [setting for setting in powers if any('mode' in control['value'] for option in setting['options'] for control in option.get('controls', []))]
     startup = [setting for setting in powers if any('fastStartup' in control['value'] for option in setting['options'] for control in option.get('controls', []))]

@@ -74,6 +74,7 @@ if (args is ["--policy-editions", var policyRepo])
     {
         await RetainedRequirementChecks.Run(root, OperationFiles.Read<TweakCatalog>(Path.Combine(policyRepo, "backend/catalogs/windows-tweaks.json")), Check);
         await PolicyProfileChecks.Run(root, OperationFiles.Read<TweakCatalog>(Path.Combine(policyRepo, "backend/catalogs/windows-tweaks.json")), Check);
+        await EditionLimitedChecks.Run(root, OperationFiles.Read<TweakCatalog>(Path.Combine(policyRepo, "backend/catalogs/windows-tweaks.json")), Check);
         Console.WriteLine($"Completed {count} policy profile UI checks.");
     }
     finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
@@ -96,6 +97,7 @@ try
         await RetainedRequirementChecks.Run(root, catalog, Check);
         ActionChecks.Run(catalog, Check);
         await PolicyProfileChecks.Run(root, catalog, Check);
+        await EditionLimitedChecks.Run(root, catalog, Check);
         IconChecks.Run(catalogRepo, catalog, Check);
         if (catalog.Presets.SingleOrDefault(preset => preset.Id == WindowsTweaksViewModel.FpsPresetId) is { } fpsPreset)
         {
