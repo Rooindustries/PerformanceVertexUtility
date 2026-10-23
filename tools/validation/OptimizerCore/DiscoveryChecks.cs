@@ -67,6 +67,7 @@ static class DiscoveryChecks
         JunctionAlias(check);
         AliasOwnershipChecks.Run(check);
         PublishedPathChecks.Run(check, []);
+        PathSpellingChecks.Run(check);
     }
 
     private static void JunctionAlias(Action<bool, string> check)

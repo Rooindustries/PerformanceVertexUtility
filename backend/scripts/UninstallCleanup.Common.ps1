@@ -64,6 +64,28 @@ public static extern uint GetFinalPathNameByHandleW(Microsoft.Win32.SafeHandles.
     }
 }
 
+function Get-RooIndustriesLongPath {
+    param([string]$Path)
+    $long = Get-RooIndustriesFinalPath $Path
+    try {
+        if ($null -eq $long -and $Path -match '^(?:[A-Za-z]:[\\/]|[\\/]{2}[^\\/]+[\\/][^\\/]+(?:[\\/]|$))') {
+            $current = [System.IO.Path]::GetFullPath($Path)
+            if ($current.Length -gt 3) { $current = $current.TrimEnd('\') }
+            $tail = ''
+            while ($null -eq $long) {
+                $parent = [System.IO.Path]::GetDirectoryName($current)
+                if ([string]::IsNullOrEmpty($parent)) { break }
+                $tail = '\' + [System.IO.Path]::GetFileName($current) + $tail
+                $current = $parent
+                $final = Get-RooIndustriesFinalPath $current
+                if ($final) { $long = $final + $tail }
+            }
+        }
+    } catch { }
+    if ($long -match '^[A-Za-z]:$') { $long += '\' }
+    return $long
+}
+
 function Read-RooIndustriesUninstallJsonFile {
     param([string]$Path)
     if (-not (Test-Path -LiteralPath $Path)) {
@@ -666,9 +688,10 @@ function Test-RooIndustriesProtectedPath {
     )
     if ([string]::IsNullOrWhiteSpace($Path)) { return $true }
     $expandedPath = Resolve-RooIndustriesEnvironmentPath $Path
+    $longPath = Get-RooIndustriesLongPath $expandedPath
     foreach ($item in @(Get-RooIndustriesUninstallPropertyArray $Rules 'protectedPaths')) {
         $pattern = Resolve-RooIndustriesEnvironmentPath ([string](Get-RooIndustriesUninstallPropertyValue $item 'pathPattern' ''))
-        if (-not [string]::IsNullOrWhiteSpace($pattern) -and $expandedPath -like $pattern) { return $true }
+        if (-not [string]::IsNullOrWhiteSpace($pattern) -and ($expandedPath -like $pattern -or ($longPath -and $longPath -like $pattern))) { return $true }
     }
     return $false
 }
