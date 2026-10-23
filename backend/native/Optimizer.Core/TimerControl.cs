@@ -6,6 +6,7 @@ using System.Security.Principal;
 using System.ComponentModel;
 using System.Text;
 using System.Text.Json;
+using Microsoft.Win32.SafeHandles;
 
 namespace RooIndustries.Optimizer;
 
@@ -15,6 +16,10 @@ public sealed record TimerWorkerState(TimerLaunch Launch, int ProcessId, long Cr
 public static class TimerControl
 {
     internal sealed record Roots(string Control, string State);
+
+#if GOVERNOR_TEST_HOOKS
+    private static Func<SafeProcessHandle, int, int>? WorkerStartedForTest { get; set; }
+#endif
 
     internal static bool AllowElevatedWorker
     {
@@ -152,12 +157,13 @@ public static class TimerControl
         ProcessInfo created;
         try { created = LaunchWorker(executable, command, userToken); }
         catch { File.Delete(path); throw; }
-        Process worker;
-        try { worker = Process.GetProcessById(created.ProcessId); }
-        finally { CloseHandle(created.Thread); CloseHandle(created.Process); }
-        using var workerLifetime = worker;
+        using var worker = new SafeProcessHandle(created.Process, ownsHandle: true);
+        CloseHandle(created.Thread);
         try
         {
+#if GOVERNOR_TEST_HOOKS
+            if (WorkerStartedForTest is { } started) created.ProcessId = started(worker, created.ProcessId);
+#endif
             var deadline = Stopwatch.StartNew();
             while (deadline.Elapsed < TimeSpan.FromSeconds(15))
             {
@@ -165,9 +171,13 @@ public static class TimerControl
                 if (state?.Launch.SessionId == launch.SessionId)
                 {
                     if (state.Error is not null) throw new IOException(state.Error);
-                    if (state.ProcessId == worker.Id && state.Acquired && !state.Released) return;
+                    if (state.ProcessId == created.ProcessId && state.Acquired && !state.Released) return;
                 }
-                if (worker.HasExited) throw new IOException("Timer worker exited before acquisition: " + worker.ExitCode);
+                if (WaitForWorker(worker, 0))
+                {
+                    if (!GetExitCodeProcess(worker, out var code)) throw new Win32Exception(Marshal.GetLastWin32Error(), "GetExitCodeProcess(timer worker) failed.");
+                    throw new IOException("Timer worker exited before acquisition: " + unchecked((int)code));
+                }
                 Thread.Sleep(50);
             }
             throw new TimeoutException("Timer worker did not confirm acquisition.");
@@ -175,10 +185,25 @@ public static class TimerControl
         catch
         {
             if (!autostart) OperationFiles.Write(Path.Combine(roots.Control, "stop.json"), launch);
-            if (!worker.WaitForExit(autostart ? 0 : 5000)) { worker.Kill(); worker.WaitForExit(); }
+            if (!WaitForWorker(worker, autostart ? 0u : 5000u))
+            {
+                if (!TerminateProcess(worker, uint.MaxValue))
+                {
+                    var error = Marshal.GetLastWin32Error();
+                    if (error != 5 || !WaitForWorker(worker, 0)) throw new Win32Exception(error, "TerminateProcess(timer worker) failed.");
+                }
+                WaitForWorker(worker, uint.MaxValue);
+            }
             throw;
         }
     }
+    private static bool WaitForWorker(SafeProcessHandle worker, uint milliseconds)
+        => WaitForSingleObject(worker, milliseconds) switch
+        {
+            0 => true,
+            0x102 => false,
+            _ => throw new Win32Exception(Marshal.GetLastWin32Error(), "WaitForSingleObject(timer worker) failed.")
+        };
     private static void Stop(Roots roots)
     {
         var state = State(roots);
@@ -391,6 +416,9 @@ public static class TimerControl
     [DllImport("kernel32.dll", EntryPoint = "CreateProcessW", CharSet = CharSet.Unicode, SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)] private static extern bool CreateProcess(string application, StringBuilder command, IntPtr processSecurity, IntPtr threadSecurity, [MarshalAs(UnmanagedType.Bool)] bool inheritHandles, uint flags, IntPtr environment, string? directory, ref StartupInfo startup, out ProcessInfo process);
     [DllImport("kernel32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool CloseHandle(IntPtr handle);
+    [DllImport("kernel32.dll", SetLastError = true)] private static extern uint WaitForSingleObject(SafeProcessHandle process, uint milliseconds);
+    [DllImport("kernel32.dll", SetLastError = true)] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool GetExitCodeProcess(SafeProcessHandle process, out uint code);
+    [DllImport("kernel32.dll", SetLastError = true)] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool TerminateProcess(SafeProcessHandle process, uint code);
     [DllImport("shell32.dll", CharSet = CharSet.Unicode)] private static extern IntPtr CommandLineToArgvW(string line, out int count);
     [DllImport("kernel32.dll")] private static extern IntPtr LocalFree(IntPtr memory);
     [DllImport("ntdll.dll")] private static extern int NtQueryInformationProcess(IntPtr process, int kind, IntPtr information, uint length, out uint returned);

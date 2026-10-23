@@ -73,8 +73,12 @@ try
     if (args is [_, "--hosts-fixture"]) { HostsChecks.Native(Check, Reject); Console.WriteLine($"Completed {count} native hosts checks."); return; }
     if (args is [_, "--timer-fixture"]) { TimerChecks.Native(Check); TimerChecks.Job(Check); Console.WriteLine($"Completed {count} native timer checks."); return; }
     if (args is [_, "--power-plan-fixture"]) { PowerPlanChecks.Native(Check, Reject); Console.WriteLine($"Completed {count} native power-plan checks."); return; }
-    if (args is [_, "--timer-startup-fixture"]) { TimerStartupChecks.Native(Check); Console.WriteLine($"Completed {count} native startup checks."); return; }
-    if (args is [_, "--timer-startup-fixture", var startupEvidence]) { TimerStartupChecks.Native(Check, startupEvidence); Console.WriteLine($"Completed {count} native startup checks."); return; }
+    if (args is [_, "--timer-startup-fixture"] or [_, "--timer-startup-fixture", _])
+    {
+        try { TimerStartupChecks.Native(Check, args.Length == 3 ? args[2] : null); Console.WriteLine($"Completed {count} native startup checks."); }
+        catch (Exception error) { Console.Error.WriteLine(error); Environment.ExitCode = 1; }
+        return;
+    }
     if (args is [_, "--download-blocker-fixture"]) { DownloadBlockerChecks.Native(Check); Console.WriteLine($"Completed {count} native download blocker checks."); return; }
     if (args is [_, "--catalog-integration"]) { CatalogIntegrationChecks.Run(root, catalog, Check, Reject); Console.WriteLine($"Completed {count} catalog integration checks."); return; }
     if (args is [_, "--recover-controls-fixture"]) { NativeControlChecks.RecoverFixture(); return; }
