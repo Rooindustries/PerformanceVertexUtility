@@ -17,11 +17,21 @@ $finishing='The last apply is still finishing. Try again in a moment.'
 
 function Save($name,$value){[IO.File]::WriteAllText((Join-Path $directory ($name+'.json')),($value|ConvertTo-Json -Depth 45),$utf8)}
 function Own($p){$r=New-OwnedProcess $p;if($r){$owned.Add($r)};$r}
-function Fixtures($case,[int]$count=$Probes){
+function Fixtures($case,[int]$count=$Probes,[switch]$Gpu){
  $folder=Join-Path $directory $case;[IO.Directory]::CreateDirectory($folder)|Out-Null
+ $image="$env:SystemRoot\System32\PING.EXE"
+ if($Gpu){
+  $image=Join-Path $directory 'gpu-fixture.exe'
+  if(-not(Test-Path -LiteralPath $image)){
+   & "$env:SystemRoot\Microsoft.NET\Framework64\v4.0.30319\csc.exe" /nologo /out:$image (Join-Path $Source 'tools\validation\Background\LauncherFixture.cs') *> (Join-Path $directory 'gpu-fixture-build.log')
+   if($LASTEXITCODE){throw 'GPU fixture compile failed'}
+  }
+ }
  @(for($i=0;$i -lt $count;$i++){
-  $path=Join-Path $folder ('RooIndustriesCut'+$tag+$case.Substring(0,2)+$i.ToString('00')+'.exe');Copy-Item "$env:SystemRoot\System32\PING.EXE" $path
-  $p=Start-Process $path -ArgumentList '-t 127.0.0.1' -WindowStyle Hidden -PassThru;$null=Own $p
+  $path=Join-Path $folder ('RooIndustriesCut'+$tag+$case.Substring(0,2)+$i.ToString('00')+'.exe');Copy-Item $image $path
+  $signal=$path+'.signal';$arguments=if($Gpu){'"'+$signal+'" "'+$env:SystemRoot+'\System32\PING.EXE" --gpu'}else{'-t 127.0.0.1'}
+  $p=Start-Process $path -ArgumentList $arguments -WindowStyle Hidden -PassThru;$null=Own $p
+  if($Gpu){$deadline=[DateTime]::UtcNow.AddSeconds(30);while(-not(Test-Path -LiteralPath ($signal+'.gpu-ready'))){if($p.HasExited -or [DateTime]::UtcNow -gt $deadline){throw 'The fixture did not create its Direct3D device'};Start-Sleep -Milliseconds 50}}
   $p.PriorityClass='Normal';[RooIndustriesBackgroundOracle]::SetIo($p,2);[RooIndustriesBackgroundOracle]::SetMemory($p,5);$p
  })
 }
@@ -100,7 +110,7 @@ try {
   try {
    $points=@('backup-before','backup-flushed','backup-after','backup-replacing','backup-replaced','output')+@('priorityClass','affinityMask','ioPriority','memoryPriority','gpuPriority'|ForEach-Object {$_+'-before';$_+'-written';$_+'-after'})
    foreach($point in $points){
-    $name='boundary-'+$point;$fixtures=Fixtures $name 1;Profile $fixtures;$before=Before $fixtures;$settings=Settings $name
+    $name='boundary-'+$point;$fixtures=Fixtures $name 1 -Gpu;Profile $fixtures;$before=Before $fixtures;$settings=Settings $name
     try {
      $profilePath=Join-Path $root 'backend\profiles\game-session.profile.json';$profile=Get-Content -Raw $profilePath|ConvertFrom-Json
      $mask=[long]$fixtures[0].ProcessorAffinity.ToInt64();$profile.rules[0].action|Add-Member affinityMask ($mask -band (-$mask));$profile.rules[0].action|Add-Member ioPriority 'VeryLow';$profile.rules[0].action|Add-Member gpuPriority 'BelowNormal'
