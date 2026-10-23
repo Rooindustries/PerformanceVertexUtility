@@ -46,6 +46,9 @@ public sealed class ThemeService
         {
             Repaint(option);
         }
+#if ROO_INDUSTRIES_TEST_HOOKS
+        RecordThemeKeys("start");
+#endif
     }
 
     public void SetSimpleMode(bool simple)
@@ -87,22 +90,39 @@ public sealed class ThemeService
 
         Repaint(option);
         CurrentThemeId = option.Id;
+#if ROO_INDUSTRIES_TEST_HOOKS
+        RecordThemeKeys("switch");
+#endif
         _settings.Set(ThemeKey, option.Id);
         ThemeChanged?.Invoke();
     }
 
+    private static ResourceDictionary LiveTheme()
+        => Application.Current.Resources.MergedDictionaries.First(dictionary => dictionary.ContainsKey(ProbeBrushKey));
+
+#if ROO_INDUSTRIES_TEST_HOOKS
+    private void RecordThemeKeys(string when)
+    {
+        if (Environment.GetEnvironmentVariable("ROO_INDUSTRIES_TEST_THEME_KEYS") is not { Length: > 0 } path) return;
+        var keys = LiveTheme().Keys.Select(key => key.ToString()).Order(StringComparer.Ordinal);
+        System.IO.File.AppendAllText(path, when + "\t" + CurrentThemeId + "\t" + string.Join(",", keys) + Environment.NewLine);
+    }
+#endif
+
     private static void Repaint(ThemeOption option)
     {
-        var live = Application.Current.Resources.MergedDictionaries.First(dictionary => dictionary.ContainsKey(ProbeBrushKey));
+        var live = LiveTheme();
         var next = new ResourceDictionary { Source = new Uri(option.ResourceUri) };
-        foreach (var key in live.Keys.Where(key => !next.ContainsKey(key)).ToArray())
+        var liveKeys = live.Keys.ToHashSet();
+        var nextKeys = next.Keys.ToHashSet();
+        foreach (var key in liveKeys.Where(key => !nextKeys.Contains(key)))
         {
             live.Remove(key);
         }
 
         foreach (var (key, value) in next.ToArray())
         {
-            if (live.TryGetValue(key, out var current) && Copy(value, current))
+            if (liveKeys.Contains(key) && Copy(value, live[key]))
             {
                 continue;
             }

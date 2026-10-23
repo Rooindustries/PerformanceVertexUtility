@@ -20,8 +20,9 @@ The script builds the app and its helper from the staged source with test hooks,
 | A running change is hidden | The switch happens while a process change is paused in the helper; Games then shows its result with Undo, and Undo restores the fixture |
 | Switching back loses work | The same checks after Blackout Gold to Blue |
 | Stale colors | Every page is captured after each switch and compared with a fresh launch in the same theme: no accent pixels of the other theme may remain |
+| Blue keeps Blackout Gold's Windows accent colors (checked boxes and other standard controls stay gold) | With test hooks the app writes its theme dictionary's own keys to `evidence/theme-keys.tsv` at startup and after every switch. Under Blue no `SystemAccentColor*` key may remain, both after Blackout Gold to Blue and after a restart with Blue saved; under Blackout Gold all seven must be there |
 | The theme isn't kept | `settings.json` holds the last choice and a restart opens in it |
 
 Screenshots and video frames black out any text that contains the Windows account name, PC name or profile path. Settings shows the log folder, so the video masks it on the frames where Settings is visible.
 
-Evidence: `evidence/summary-*.json` (checks, screenshots with accent pixel counts), `evidence/*.png` (`fresh-blue`, `switched-gold`, `switched-blue`, `fresh-gold`, and the open process review), `theme-switch.mp4` and `result.json`.
+Evidence: `evidence/summary-*.json` (checks, screenshots with accent pixel counts), `evidence/theme-keys.tsv` (when, theme and keys of each repaint), `evidence/*.png` (`fresh-blue`, `switched-gold`, `switched-blue`, `fresh-gold`, and the open process review), `theme-switch.mp4` and `result.json`.

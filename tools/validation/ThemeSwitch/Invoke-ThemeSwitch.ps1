@@ -24,6 +24,8 @@ $checks=[Collections.Generic.List[object]]::new();$shots=[Collections.Generic.Li
 $private=@($env:USERPROFILE,$env:USERNAME,$env:COMPUTERNAME)|Where-Object {$_}
 $accents=[int[][]]@(@(0xE8B94A,0xFFD76E,0xFFE9A8,0xC9962E,0xE8C97A),@(0x22D3EE,0x67D9EE,0x38BDF8,0x67E8F9,0x0284C7))
 $pages='Home','Games','Remove apps','Graphics drivers','Memory','Windows tweaks','Tools','Undo changes','Report a bug','Settings'
+$goldKeys='SystemAccentColor','SystemAccentColorLight1','SystemAccentColorLight2','SystemAccentColorLight3','SystemAccentColorDark1','SystemAccentColorDark2','SystemAccentColorDark3'
+$keysFile=Join-Path $evidence 'theme-keys.tsv';$script:keysSeen=0
 $script:app=$null;$script:window=$null;$fixture=$null;$recorder=$null;$frames=$null;$failure=$null;$settingsPath=$null;$settingsBytes=$null;$settingsTouched=$false;$pickId=$null
 
 function Say([string]$text){[Console]::Out.WriteLine($text)}
@@ -93,6 +95,12 @@ function Tweaks{Nav 'Windows tweaks';$search=WaitFor {ById 'WindowsTweaksSearch'
 function ProcessState{Nav 'Games';[ordered]@{status=Text 'ProcessStatus';review=Text 'ProcessReview';restore=$(if($e=ById 'ProcessRestore'){$e.Current.IsEnabled}else{$false})}}
 function Priority{[string](Get-Process -Id $fixture.Identity.pid).PriorityClass}
 function Same($before,$after){($before|ConvertTo-Json -Depth 5 -Compress) -ceq ($after|ConvertTo-Json -Depth 5 -Compress)}
+function AccentKeys([string]$label,[string]$when,[string]$theme){
+ $path=Get-HarnessLongPath $keysFile;$lines=@(if([IO.File]::Exists($path)){[IO.File]::ReadAllLines($path)})
+ $last=if($lines.Count -gt $script:keysSeen){$lines[-1] -split "`t"}else{@('none','none','')};$script:keysSeen=$lines.Count
+ $found=@($last[2] -split ','|Where-Object {$_ -like 'SystemAccentColor*'}|Sort-Object);$want=@($(if($theme -eq 'black-gold'){$goldKeys})|Sort-Object)
+ Check $label ($last[0] -eq $when -and $last[1] -eq $theme -and ($found -join ',') -ceq ($want -join ',')) @{when=$last[0];theme=$last[1];accentKeys=$found}
+}
 function Kept([string]$when,$removal,$tweaks){
  if(-not(Alive)){Check ('The app is still running '+$when) $false;return}
  $now=Removal;Check ('Remove apps keeps both picks and the open review '+$when) ((Same $removal $now) -and $now.picked.Count -eq 2) @{before=$removal;after=$now}
@@ -121,8 +129,9 @@ try{
 
  $values=[ordered]@{};if($settingsBytes){([Text.Encoding]::UTF8.GetString($settingsBytes)|ConvertFrom-Json).PSObject.Properties|ForEach-Object {$values[$_.Name]=[string]$_.Value}}
  $values['themeId']='roo-industries-blue';$settingsTouched=$true;[IO.File]::WriteAllText((Get-HarnessLongPath $settingsPath),($values|ConvertTo-Json -Compress),[Text.UTF8Encoding]::new($false))
- $env:DOTNET_ROOT=Join-Path $env:USERPROFILE '.dotnet';$env:ROO_INDUSTRIES_DOTNET_EXE=$dotnet;$env:ROO_INDUSTRIES_TEST_APPLY_PAUSE_MS=[string]$PauseMs
+ $env:DOTNET_ROOT=Join-Path $env:USERPROFILE '.dotnet';$env:ROO_INDUSTRIES_DOTNET_EXE=$dotnet;$env:ROO_INDUSTRIES_TEST_APPLY_PAUSE_MS=[string]$PauseMs;$env:ROO_INDUSTRIES_TEST_THEME_KEYS=$keysFile
  $first=Launch
+ AccentKeys 'A restart with Blue saved keeps none of the Blackout Gold accent colors' 'start' 'roo-industries-blue'
  Pass 'fresh-blue'
 
  Nav 'Remove apps';Tab 'RemovalTab'
@@ -147,6 +156,7 @@ try{
  Press 'ProcessApply';$applied=[DateTime]::UtcNow;Start-Sleep -Milliseconds 1200
  $start=$recorder.Count;Theme 'Blackout Gold';$switched=[DateTime]::UtcNow;$during=Priority
  Check 'The theme changed while the process change was still running' ($during -eq 'Normal' -and ($switched-$applied).TotalMilliseconds -lt $PauseMs) @{priorityAtSwitch=$during;secondsAfterApply=($switched-$applied).TotalSeconds}
+ AccentKeys 'Switching Blue to Blackout Gold adds all seven Gold accent colors' 'switch' 'black-gold'
  $second=if(Alive){Attach}else{0};$rects=if(Alive){Private}else{@()}
  Check 'The window stays the same window after the theme change' ($second -eq $first) @{before=$first;after=$second}
  if(Alive){
@@ -161,6 +171,7 @@ try{
 
  if(Alive){
   Theme 'Blue';$third=Attach
+  AccentKeys 'Switching Blackout Gold to Blue removes all seven Gold accent colors' 'switch' 'roo-industries-blue'
   Check 'The window stays the same after switching back to Blue' ($third -eq $first) @{before=$first;after=$third}
   Kept 'after switching back to Blue' $removal $tweaks
   $process=ProcessState;Check 'Games still shows the finished change after switching back' ($process.status -like 'Done.*' -and $process.restore) $process
@@ -173,7 +184,7 @@ try{
  Theme 'Blackout Gold';Close
  $saved=([IO.File]::ReadAllText((Get-HarnessLongPath $settingsPath))|ConvertFrom-Json).themeId
  Check 'The chosen theme is saved' ($saved -eq 'black-gold') $saved
- Launch|Out-Null;Nav 'Settings';$picked=(Pattern (WaitFor {ById 'ThemePicker'} 30 'theme picker') ([Windows.Automation.SelectionPattern])).Current.GetSelection()[0].Current.Name
+ Launch|Out-Null;AccentKeys 'A restart with Blackout Gold saved keeps all seven Gold accent colors' 'start' 'black-gold';Nav 'Settings';$picked=(Pattern (WaitFor {ById 'ThemePicker'} 30 'theme picker') ([Windows.Automation.SelectionPattern])).Current.GetSelection()[0].Current.Name
  Check 'A restart opens in the chosen theme' ($picked -eq 'Blackout Gold') $picked
  Pass 'fresh-gold'
  Close
