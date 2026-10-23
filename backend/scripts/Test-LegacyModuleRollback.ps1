@@ -1299,6 +1299,45 @@ try {
             return (Join-Path $tempRoot ('dependents-'+[guid]::NewGuid().ToString('N')))
         }
         function Get-FakeStatus { (@('Probe','ProbeDep','ProbeDepChild','ProbeIdle')|ForEach-Object {$_+'='+$script:fakeServices[$_].startup+'/'+$script:fakeServices[$_].status}) -join ' ' }
+        $processScript=Join-Path $tempRoot 'dependent-process.ps1'
+        $processBody=@'
+param($Harness,$FixtureManifest,$Root,$Backup,$State,$Result,[switch]$Interrupt)
+$ErrorActionPreference='Stop'
+. $Harness -Action ListModules -ManifestPath $FixtureManifest -DataRoot $Root -ModuleId fixture | Out-Null
+$script:fakeServices=Import-Clixml -LiteralPath $State
+$script:serviceCalls=New-Object System.Collections.Generic.List[string]
+$script:failStart=$null
+'@
+        foreach ($name in 'Get-FakeDependents','Get-Service','Get-CimInstance','Set-Service','Stop-Service','Start-Service') {
+            $processBody+="`nfunction $name {`n"+(Get-Item ('function:'+ $name)).Definition+"`n}`n"
+        }
+        $processBody+=@'
+$start=${function:Start-Service}
+function Start-Service {
+    [CmdletBinding()]param($Name)
+    if ($Interrupt -and $Name -ceq 'ProbeDepChild') { exit 91 }
+    & $start -Name $Name
+    $script:fakeServices | Export-Clixml -LiteralPath $State
+}
+$ModuleId='fixture';$ManifestPath=$FixtureManifest;$DataRoot=$Root;$BackupPath=$Backup;$ConfirmApply=$true
+$restored=Invoke-RollbackModule
+@{result=$restored;calls=@($script:serviceCalls)} | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $Result -Encoding UTF8
+if (-not $restored.success) { exit 1 }
+'@
+        Set-Content -LiteralPath $processScript -Value $processBody -Encoding UTF8
+        function Invoke-DependentProcess([switch]$Interrupt) {
+            $state=Join-Path $DataRoot 'service-state.xml'
+            $result=Join-Path $DataRoot 'process-result.json'
+            $script:fakeServices | Export-Clixml -LiteralPath $state
+            $exe=Join-Path $PSHOME $(if ($env:OS -eq 'Windows_NT') {'powershell.exe'} else {'pwsh'})
+            $arguments='-NoProfile -File "'+$processScript+'" -Harness "'+$HarnessPath+'" -FixtureManifest "'+$ManifestPath+'" -Root "'+$DataRoot+'" -Backup "'+$BackupPath+'" -State "'+$state+'" -Result "'+$result+'"'
+            if ($Interrupt) { $arguments+=' -Interrupt' }
+            $process=Start-Process -FilePath $exe -ArgumentList $arguments -Wait -PassThru -NoNewWindow
+            $script:fakeServices=Import-Clixml -LiteralPath $state
+            if ($Interrupt) { return $process.ExitCode }
+            Assert ($process.ExitCode -eq 0) 'The restarted Undo process completes'
+            Get-Content -LiteralPath $result -Raw | ConvertFrom-Json
+        }
         $restoredState='Probe=Automatic/Running ProbeDep=Manual/Running ProbeDepChild=Manual/Running ProbeIdle=Manual/Stopped'
 
         $DataRoot=Reset-DependentFixture
@@ -1317,6 +1356,67 @@ try {
         Test-DependentCase ($restored.success -and $restored.restoredServices -eq 3 -and (Get-FakeStatus) -ceq $restoredState) ('Undo restarts the dependents that were running and leaves the idle one stopped ('+(Get-FakeStatus)+')')
         $again=Invoke-RollbackModule
         Test-DependentCase ($again.success -and $again.restoredServices -eq 0 -and @($again.alreadyAtOriginal|Where-Object {$_.type -eq 'dependent'}).Count -eq 2) 'A repeated undo reports the dependents as already running'
+
+        Stop-Service -Name ProbeDep -Force
+        $ConfirmApply=$false
+        $hash=(Get-FileHash -LiteralPath $BackupPath).Hash
+        $preview=Invoke-RollbackModule
+        Test-DependentCase ($preview.success -and $preview.restoredServices -eq 0 -and @($preview.leftAsChanged|Where-Object {$_.type -eq 'dependent'}).Count -eq 2 -and (Get-FileHash -LiteralPath $BackupPath).Hash -ceq $hash) 'Undo preview preserves external stops after successful restoration without rewriting ownership'
+        $ConfirmApply=$true
+        $replayed=Invoke-DependentProcess
+        Test-DependentCase ($replayed.result.restoredServices -eq 0 -and @($replayed.result.leftAsChanged|Where-Object {$_.type -eq 'dependent'}).Count -eq 2 -and @($replayed.calls).Count -eq 0 -and $script:fakeServices.ProbeDep.status -ceq 'Stopped' -and $script:fakeServices.ProbeDepChild.status -ceq 'Stopped') 'A fresh Undo process leaves both externally stopped dependents unchanged after a successful Undo'
+
+        foreach ($externalStop in $false,$true) {
+            $DataRoot=Reset-DependentFixture
+            $applied=Invoke-ReviewedApply
+            $BackupPath=$applied.backupPath
+            $exit=Invoke-DependentProcess -Interrupt
+            $saved=Get-Content -LiteralPath $BackupPath -Raw|ConvertFrom-Json
+            Test-DependentCase ($exit -eq 91 -and $script:fakeServices.ProbeDep.status -ceq 'Running' -and $script:fakeServices.ProbeDepChild.status -ceq 'Stopped' -and @($saved.services[0].dependents|Where-Object {$_.name -ceq 'ProbeDep' -and $_.restoreComplete -eq $true}).Count -eq 1 -and @($saved.services[0].dependents|Where-Object {$_.name -ceq 'ProbeDepChild' -and $_.restoreComplete -eq $true}).Count -eq 0) 'A process exit between dependent restores retains completion only for the finished dependent'
+            if ($externalStop) { Stop-Service -Name ProbeDep -Force }
+            $replayed=Invoke-DependentProcess
+            if ($externalStop) {
+                Test-DependentCase ($replayed.result.restoredServices -eq 0 -and @($replayed.calls).Count -eq 0 -and @($replayed.result.leftAsChanged|Where-Object {$_.type -eq 'dependent'}).Count -eq 2 -and $script:fakeServices.ProbeDep.status -ceq 'Stopped' -and $script:fakeServices.ProbeDepChild.status -ceq 'Stopped') 'After a crash, an external stop of the completed dependent keeps its unfinished child stopped too'
+            } else {
+                Test-DependentCase ($replayed.result.restoredServices -eq 1 -and (@($replayed.calls) -join ',') -ceq 'start ProbeDepChild' -and (Get-FakeStatus) -ceq $restoredState) 'A fresh Undo process after a crash starts only the unfinished dependent'
+            }
+        }
+
+        $DataRoot=Reset-DependentFixture
+        $applied=Invoke-ReviewedApply
+        $BackupPath=$applied.backupPath
+        $script:fakeServices.ProbeDep.status='Running';$script:fakeServices.ProbeDepChild.status='Running'
+        $ConfirmApply=$false
+        $hash=(Get-FileHash -LiteralPath $BackupPath).Hash
+        $null=Invoke-RollbackModule
+        Test-DependentCase ((Get-FileHash -LiteralPath $BackupPath).Hash -ceq $hash) 'Observing original dependents in a preview leaves the backup untouched'
+        $ConfirmApply=$true
+        $restored=Invoke-RollbackModule
+        Stop-Service -Name ProbeDep -Force
+        $replayed=Invoke-DependentProcess
+        Test-DependentCase ($restored.success -and $replayed.result.restoredServices -eq 0 -and @($replayed.calls).Count -eq 0 -and @($replayed.result.leftAsChanged|Where-Object {$_.type -eq 'dependent'}).Count -eq 2) 'Confirmed Undo releases ownership when it observes dependents already at their original state'
+
+        & {
+            $DataRoot=Reset-DependentFixture
+            $applied=Invoke-ReviewedApply
+            $BackupPath=$applied.backupPath
+            $hash=(Get-FileHash -LiteralPath $BackupPath).Hash
+            $write=${function:Write-JsonFile}
+            function Write-JsonFile { param($Object,$Path) if ($Path -ceq $BackupPath) { throw 'Fixture completion write failure' }; & $write $Object $Path }
+            $failed=Invoke-RollbackModule
+            Test-DependentCase (-not $failed.success -and $failed.partial -and $failed.failures[0].name -ceq 'ProbeDep' -and $failed.failures[0].error -like '*completion write failure*' -and (Get-FileHash -LiteralPath $BackupPath).Hash -ceq $hash -and $script:fakeServices.ProbeDep.status -ceq 'Running' -and $script:fakeServices.ProbeDepChild.status -ceq 'Stopped') 'A failed completion write retains the backup and stops subsequent dependent restores'
+            $replayed=Invoke-DependentProcess
+            Test-DependentCase ($replayed.result.restoredServices -eq 1 -and (@($replayed.calls) -join ',') -ceq 'start ProbeDepChild' -and (Get-FakeStatus) -ceq $restoredState) 'A retry records the observed original state after a failed completion write and finishes only the child'
+        }
+
+        $DataRoot=Reset-DependentFixture
+        $applied=Invoke-ReviewedApply
+        $BackupPath=$applied.backupPath
+        $saved=Get-Content -LiteralPath $BackupPath -Raw|ConvertFrom-Json
+        $saved.services[0].dependents|Where-Object name -CEQ ProbeDep|Add-Member NoteProperty restoreComplete 'true' -Force
+        Write-JsonFile $saved $BackupPath
+        $restored=Invoke-RollbackModule
+        Test-DependentCase ($restored.success -and $restored.restoredServices -eq 1 -and @($restored.leftAsChanged|Where-Object {$_.type -eq 'dependent'}).Count -eq 2 -and $script:fakeServices.ProbeDep.status -ceq 'Stopped') 'Invalid dependent completion evidence cannot claim runtime ownership'
 
         $DataRoot=Reset-DependentFixture
         $applied=Invoke-ReviewedApply
@@ -1479,6 +1579,11 @@ try {
             $restored=Invoke-RollbackModule
             Write-Output ('REAL_SERVICE_UNDO_JSON '+(ConvertTo-Json -InputObject @{state=(Get-ProbeState);success=$restored.success;restoredServices=$restored.restoredServices;actions=@($restored.actions)} -Depth 5 -Compress))
             Assert ($restored.success -and $restored.restoredServices -eq 3 -and (Get-ProbeState) -ceq 'Automatic/Running Manual/Running Manual/Running') 'Undo restores the real probe service and restarts both dependents'
+            $again=Invoke-RollbackModule
+            Assert ($again.success -and $again.restoredServices -eq 0 -and @($again.alreadyAtOriginal|Where-Object {$_.type -eq 'dependent'}).Count -eq 2) 'Repeated real-service Undo leaves both running dependents at their original state'
+            Stop-Service -Name $dependent -Force
+            $replayed=& $HarnessPath -Action RollbackModule -ModuleId fixture -ManifestPath $servicesManifest -DataRoot $DataRoot -BackupPath $BackupPath -ConfirmApply
+            Assert ($replayed.success -and $replayed.restoredServices -eq 0 -and @($replayed.leftAsChanged|Where-Object {$_.type -eq 'dependent'}).Count -eq 2 -and (Get-ProbeState) -ceq 'Automatic/Running Manual/Stopped Manual/Stopped') 'Repeated Undo preserves both real dependents stopped externally after restoration'
         } finally {
             foreach ($name in @($child,$dependent,$probe)) {
                 if (Get-Service -Name $name -ErrorAction SilentlyContinue) {

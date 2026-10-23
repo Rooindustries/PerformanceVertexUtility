@@ -448,7 +448,9 @@ function Test-DependentRestore {
     $current = @(Get-ServiceSnapshot $name | Where-Object { $_.exists -and $_.name -ieq $name })
     if ($current.Count -ne 1) { return [pscustomobject]@{ state='leftAsChanged'; reason='dependent service missing' } }
     if ($current[0].startType -ne $Dependent.startType) { return [pscustomobject]@{ state='leftAsChanged'; reason='dependent startup or state changed' } }
+    if ($Dependent.PSObject.Properties['restoreComplete'] -and $Dependent.restoreComplete -isnot [bool]) { return [pscustomobject]@{ state='leftAsChanged'; reason='dependent restore completion evidence is invalid' } }
     if ($current[0].status -eq 'Running') { return [pscustomobject]@{ state='alreadyAtOriginal'; reason=$null } }
+    if ($Dependent.restoreComplete -eq $true) { return [pscustomobject]@{ state='leftAsChanged'; reason='dependent was already restored; runtime ownership released' } }
     if ($current[0].status -ne 'Stopped') { return [pscustomobject]@{ state='leftAsChanged'; reason='dependent startup or state changed' } }
     foreach ($required in @($current[0].dependsOn)) {
         if (-not $required) { continue }
@@ -459,6 +461,13 @@ function Test-DependentRestore {
         }
     }
     return [pscustomobject]@{ state='stopped'; reason=$null }
+}
+
+function Save-DependentRestoreComplete {
+    param([object]$Dependent, [object]$Backup, [string]$Path)
+    if ($Dependent.restoreComplete -eq $true) { return }
+    $Dependent | Add-Member -MemberType NoteProperty -Name restoreComplete -Value $true -Force
+    Write-JsonFile $Backup $Path
 }
 
 function Get-ToolInventory {
@@ -893,6 +902,7 @@ function Invoke-RollbackModule {
             try {
                 $check = Test-DependentRestore $dependent $serviceStates $manifest -Planning
                 if ($check.state -eq 'alreadyAtOriginal') {
+                    if ($ConfirmApply) { Save-DependentRestoreComplete $dependent $backup $backupPath }
                     $alreadyAtOriginal.Add([pscustomobject]$target) | Out-Null
                     $serviceStates[$target.name] = [pscustomobject]@{ status='alreadyAtOriginal' }
                 } elseif ($check.state -eq 'leftAsChanged') {
@@ -947,6 +957,7 @@ function Invoke-RollbackModule {
             } elseif ($item.target.type -eq 'dependent') {
                 $check = Test-DependentRestore $item.snapshot $serviceStates $manifest
                 if ($check.state -eq 'alreadyAtOriginal') {
+                    Save-DependentRestoreComplete $item.snapshot $backup $backupPath
                     $alreadyAtOriginal.Add([pscustomobject]$item.target) | Out-Null
                     $item.action.status = 'alreadyAtOriginal'
                     continue
@@ -962,6 +973,7 @@ function Invoke-RollbackModule {
                 Start-Service -Name $item.target.name -ErrorAction Stop
                 $verified = @(Get-ServiceSnapshot $item.target.name | Where-Object { $_.exists -and $_.name -ieq $item.target.name -and $_.status -eq 'Running' -and $_.startType -eq $item.snapshot.startType })
                 if ($verified.Count -ne 1) { throw "Dependent service start verification failed: $($item.target.name)" }
+                Save-DependentRestoreComplete $item.snapshot $backup $backupPath
                 $serviceCount++
             } else {
                 $svc = $item.snapshot
