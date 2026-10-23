@@ -75,6 +75,30 @@ def name_numbers(settings):
                 option['name'] = ('On (1)' if number else 'Off (0)') if switch else field + ': ' + str(number)
 
 
+def apply_windows_defaults(settings, coverage):
+    values = json.loads((ROOT / 'backend/catalogs/windows-default-values.json').read_text())['values']
+    rewritten = set()
+    for value in values:
+        found = 0
+        for setting in settings:
+            for option in setting['options']:
+                removes = [change for change in option['changes'] if all(change['address'].get(field, '').casefold() == value[field].casefold() for field in ('hive', 'keyPath', 'valueName'))
+                           and not any(change.get(key) is not None for key in ('dword', 'value', 'token', 'bits', 'formula'))]
+                if not removes:
+                    continue
+                if len(option['changes']) != 1 or option.get('controls'):
+                    raise ValueError('A choice removes a value Windows keeps together with other changes: ' + setting['id'] + '/' + option['id'])
+                removes[0]['dword'] = value['dword']
+                option['name'] = 'Windows default'
+                rewritten.add((setting['id'], option['id']))
+                found += 1
+        if not found:
+            raise ValueError('A value Windows keeps names no choice that removes it: ' + value['keyPath'] + '\\' + value['valueName'])
+    for record in coverage:
+        if any((selection['settingId'], selection['optionId']) in rewritten for option in record['options'] for selection in option['selections']):
+            record['compatibility'] = ' '.join(filter(None, [record.get('compatibility'), 'Windows default writes the value Windows keeps instead of deleting it.']))
+
+
 def apply_availability(settings):
     alternatives = json.loads((ROOT / 'backend/catalogs/windows-setting-alternatives.json').read_text())
     ids = {setting['id'] for setting in settings}
@@ -703,6 +727,7 @@ def compile_catalog():
                     option['name'] += ' (' + hint + ')'
     apply_labels(settings)
     name_numbers(settings)
+    apply_windows_defaults(settings, coverage + extra_coverage)
     apply_availability(settings)
     mark_protected_services(settings)
     settings.sort(key=lambda setting: (setting['category'], setting['name'], setting['id']))

@@ -110,6 +110,7 @@ Linux is the development host. These four Baseline jobs run for same-repository 
 python -m pip install -r tools/validation/requirements.txt
 python tools/validation/check_baseline.py   # needs the .NET 8 SDK for the Windows Tweaks read walk
 python -m unittest discover -s tools/validation -p 'test_*.py'
+python -I tools/validation/Update/check_publish_guard.py --local-only --out "${TMPDIR:-/tmp}/publish-guard.json"
 pwsh tools/validation/check_powershell.ps1   # needs PSScriptAnalyzer 1.25.0
 python tools/validation/build_dotnet.py      # needs the .NET 8 SDK
 ```

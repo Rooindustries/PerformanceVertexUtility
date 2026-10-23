@@ -32,7 +32,6 @@ NATIVE_NETWORK = {
 }
 WINDOWS_DEFAULTS = {
     ('SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters\\Interfaces', 'NameServer'): '',
-    ('SOFTWARE\\Microsoft\\PolicyManager\\default\\Update\\ExcludeWUDriversInQualityUpdate', 'value'): 0,
     ('SYSTEM\\CurrentControlSet\\Control', 'SvcHostSplitThresholdInKB'): 0x380000,
     ('.Default\\Control Panel\\Keyboard', 'InitialKeyboardIndicators'): '2147483648',
 }

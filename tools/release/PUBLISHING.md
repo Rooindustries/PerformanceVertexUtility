@@ -22,7 +22,7 @@ Testers' apps read the signed feed in `update-feed.txt`. They only offer a versi
 
 ## Rolling back
 
-Point the feed back at the saved manifest. If the live version isn't in `released-versions.txt` yet, add it first. `set-feed` refuses to roll back a live version newer than everything in that list, so a rebuilt copy of the bad version can't be published again. If it can't read the live feed (a server error, timeout or dropped connection), it refuses before uploading; run it again. A missing feed or one that doesn't verify can still be replaced. The tool also checks that the saved installer still downloads with the signed bytes:
+Point the feed back at the saved manifest. If the live version isn't in `released-versions.txt` yet, add it first. `set-feed` refuses to roll back a live version newer than everything in that list, so a rebuilt copy of the bad version can't be published again. If it can't read the live feed (a server error, timeout, dropped connection or a feed cut short), it refuses before uploading; run it again. A missing feed, one over 64 KiB, a success answer other than 200 OK or one that doesn't verify can still be replaced. The tool also checks that the saved installer still downloads with the signed bytes:
 
 ```sh
 python3 tools/release/publish_update.py set-feed --manifest <version>-feed.previous-live.json --feed-path <feed path>

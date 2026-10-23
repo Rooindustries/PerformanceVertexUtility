@@ -108,6 +108,7 @@ try
     if (args is [_, "--seed-feature-restart", var seedKey, var seedStates]) { FeatureRestartChecks.Seed(catalog, root, seedKey, seedStates); return; }
     if (args is [_, "--feature-restart-fixture"]) { FeatureRestartChecks.Run(root, Check); Console.WriteLine($"Completed {count} feature restart checks."); return; }
     if (args is [_, "--registry-fixture"]) { RegistryTweakChecks.Run(root, Check, Reject); Console.WriteLine($"Completed {count} native registry checks."); return; }
+    if (args is [_, "--windows-default-fixture"]) { RegistryTweakChecks.WindowsDefaults(root, repo, catalog, Check, Reject); Console.WriteLine($"Completed {count} Windows default checks."); return; }
     catalog.Validate();
     Check(catalog.Settings.Select(item => item.Id).Distinct().Count() == catalog.Settings.Length, "Catalog setting identities are unique");
     var store = Fresh("shared"); var engine = new TweakEngine(catalog, store);
