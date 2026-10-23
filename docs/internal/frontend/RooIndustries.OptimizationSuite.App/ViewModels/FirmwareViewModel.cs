@@ -17,7 +17,14 @@ namespace RooIndustries.OptimizationSuite.ViewModels;
 public partial class FirmwareViewModel : ObservableObject
 {
     public static string? WriteTestsPath { get; set; }
+#if ROO_INDUSTRIES_TEST_HOOKS
+    public static string Root => Environment.GetEnvironmentVariable("ROO_INDUSTRIES_TEST_FIRMWARE_ROOT") is { Length: > 0 } fixture ? fixture : Path.Combine(RooIndustries.Optimizer.BrandCompatibility.LocalDataRoot, "firmware");
+#else
     public static string Root => Path.Combine(RooIndustries.Optimizer.BrandCompatibility.LocalDataRoot, "firmware");
+#endif
+    private static FirmwareViewModel? _page;
+    public static FirmwareViewModel ForPage() => _page ??= new();
+    private bool _initialized;
     private string? _packageDirectory;
     private string? _sessionDirectory;
     private string? _reviewHash;
@@ -51,6 +58,8 @@ public partial class FirmwareViewModel : ObservableObject
     public bool CanRestart => !Busy && ResultStatus == "restartRequired";
     public bool CanVerify => !Busy && IsResult;
     public bool CanOpenFiles => !Busy && _sessionDirectory is not null;
+    public bool CanStartOver => !Busy && !IsSetup;
+    public bool HasUnsavedPicks => (IsEditing && ChangedCount > 0) || IsReview;
     public string? SessionDirectory => _sessionDirectory;
     public string ResultHeadline => Busy ? "Checking BIOS settings…" : ResultStatus switch
     {
@@ -83,12 +92,13 @@ public partial class FirmwareViewModel : ObservableObject
     partial void OnChangedOnlyChanged(bool value) => Filter();
     private void RefreshActions()
     {
-        foreach (var name in new[] { nameof(CanLoad), nameof(CanCancelSetup), nameof(LoadLabel), nameof(CanReview), nameof(CanApply), nameof(CanRestart), nameof(CanVerify), nameof(CanOpenFiles), nameof(ApplyLabel) }) OnPropertyChanged(name);
+        foreach (var name in new[] { nameof(CanLoad), nameof(CanCancelSetup), nameof(LoadLabel), nameof(CanReview), nameof(CanApply), nameof(CanRestart), nameof(CanVerify), nameof(CanOpenFiles), nameof(CanStartOver), nameof(HasUnsavedPicks), nameof(ApplyLabel) }) OnPropertyChanged(name);
     }
     private FirmwareWorkflow Workflow() => new(new ScewinProvider(_packageDirectory ?? throw new InvalidOperationException("Load settings to set up SCEWIN first.")), Path.Combine(Root, "sessions"));
 
     public async Task InitializeAsync() => await RunAsync(async () =>
     {
+        if (_initialized) return;
         var identity = await Task.Run(ScewinProvider.CurrentIdentity);
         Board = identity.Board;
         var stamp = Regex.Match(identity.Bios, @" (?<date>\d{4}-\d{2}-\d{2})T[^ ]+$");
@@ -109,6 +119,7 @@ public partial class FirmwareViewModel : ObservableObject
             RefreshActions();
         }
         await LoadHistoryAsync();
+        _initialized = true;
     });
 
     public async Task SetUpAsync(string directory, FirmwarePackage reviewed) => await RunAsync(async () =>
@@ -267,13 +278,27 @@ public partial class FirmwareViewModel : ObservableObject
         RefreshActions();
     }
     public void EditAgain() { if (Busy) return; Stage = "edit"; _reviewHash = null; Message = "Adjust your selections, then review them again."; RefreshActions(); }
+    public async Task StartOverAsync() => await RunAsync(async () =>
+    {
+        foreach (var row in _all) row.PropertyChanged -= SettingChanged;
+        _all.Clear();
+        _verificationMatches.Clear();
+        Changes.Clear();
+        _sessionDirectory = null; _reviewHash = null;
+        AllowExperimentalEdits = false;
+        ChangedCount = 0; ResultStatus = ""; Search = ""; ChangedOnly = false; Filter();
+        Stage = "setup";
+        Message = "";
+        await LoadHistoryAsync();
+    });
     public async Task ApplyAsync() => await RunAsync(async () =>
     {
         if (!IsReview || _sessionDirectory is null || _reviewHash is null) return;
         using (RunningChanges.Begin())
         {
-            Message = "Applying the reviewed changes. Keep the app open until verification finishes.";
-            ShowResult(await Task.Run(() => Workflow().Apply(_sessionDirectory, _reviewHash)));
+            Message = "Writing the reviewed changes to the BIOS. Keep the app open until it's done. You can use other pages while it runs.";
+            var journal = await Task.Run(() => Workflow().Apply(_sessionDirectory, _reviewHash));
+            ShowResult(journal);
         }
         await LoadHistoryAsync();
     });
