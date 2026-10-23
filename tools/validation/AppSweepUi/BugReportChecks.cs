@@ -999,7 +999,7 @@ static class BugReportChecks
     {
         var relaxed = new JsonSerializerOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
         var own = new BugRedactor(@"C:\Users\Alice", "Alice", "GAMER-PC");
-        var moved = new BugRedactor(@"D:\Profiles\Alice", "Alice", "GAMER-PC", [@"D:\Profiles\Bob", @"\\fs01\profiles$\Carol.V6", @"E:\Client", @"\\nas\Fixture", @"D:\Profiles\Public", @"D:\Profiles\Default"]);
+        var moved = new BugRedactor(@"D:\Profiles\Alice", "Alice", "GAMER-PC", [@"D:\Profiles\Bob", @"\\fs01\profiles$\Carol.V6", @"E:\Client", @"\\nas\Fixture", @"D:\Profiles\Public", @"D:\Profiles\Default", @"\\fs02.corp.example\roam$\Dave", @"\\192.0.2.5\roam$\Erin"]);
         var single = new BugRedactor(@"C:\Users\A", "A", "X");
         var direct = new BugRedactor(@"E:\Client", "Alice", "GAMER-PC", [@"\\nas\Fixture"]);
         var nested = new BugRedactor(@"C:\Users\Alice", "Alice", "GAMER-PC", [@"D:\Work\Users\Bob", @"\\fs01\Users\Carol", @"D:\Work\Documents and Settings\Bob"]);
@@ -1088,6 +1088,44 @@ static class BugReportChecks
             cases.Add(("Separator form", own, @"C:\\Users\\\" + letter + "Zqxname" + @"\\x", @"C:\\Users\\<user>\\x", ["Zqxname"]));
             cases.Add(("Separator form", own, @"C:\Users\\\" + letter + "Zqxname" + @"\x", @"C:\Users\\<user>\x", ["Zqxname"]));
         }
+        cases.Add(("dot-before-registered-root", moved, @"D:\.\Profiles\Bob\AppData\x.log", @"D:\.\Profiles\<user>\AppData\x.log", ["Bob"]));
+        cases.Add(("dotdot-inside-registered-root", moved, @"D:\Profiles\..\Profiles\Bob\AppData\x.log", @"D:\Profiles\..\Profiles\<user>\AppData\x.log", ["Bob"]));
+        cases.Add(("Registered root dot segments", moved, @"D:/Work/../Profiles/Bob/x, D:\Profiles\.\.\Zqxdots\y and \\fs01\.\profiles$\Carol.V6\z",
+            @"D:/Work/../Profiles/<user>/x, D:\Profiles\.\.\<user>\y and \\fs01\.\profiles$\<user>\z", ["Bob", "Zqxdots", "Carol"]));
+        cases.Add(("Registered root dot segments", moved, @"\u0044:/./Pro\u0066iles/Bob/x, E:\.\Client\y and D:\Profiles\Zqxfirst\..\Zqxsecond\z",
+            @"\u0044:/./Pro\u0066iles/<user>/x, E:\.\<user>\y and D:\Profiles\<user>\..\<user>\z", ["Bob", "Client", "Zqxfirst", "Zqxsecond"]));
+        cases.Add(("Registered root dot segments", moved, @"D:\.\Profiles\Alice\x and D:\Profiles\..\Games\y, D:\Profiles\x\..\..\Games\z and D:\.\ProfilesOld\w",
+            @"%USERPROFILE%\x and D:\Profiles\..\Games\y, D:\Profiles\<user>\..\..\Games\z and D:\.\ProfilesOld\w", []));
+        cases.Add(("registered-native-device", moved, @"\Device\HarddiskVolume3\Profiles\Bob\AppData\x.log", @"\Device\HarddiskVolume3\Profiles\<user>\AppData\x.log", ["Bob"]));
+        cases.Add(("registered-admin-share", moved, @"\\GAMER-PC\D$\Profiles\Bob\AppData\x.log", @"\\<pc-name>\D$\Profiles\<user>\AppData\x.log", ["Bob"]));
+        cases.Add(("Registered root alias", moved, @"\\.\HarddiskVolume3\Profiles\Bob\x, \\?\GLOBALROOT\Device\HarddiskVolume3\Profiles\Zqxglobal\y and \\?\Volume{0a1b2c3d-0000-0000-0000-000000000000}\Profiles\Zqxvolume\z",
+            @"\\.\HarddiskVolume3\Profiles\<user>\x, \\?\GLOBALROOT\Device\HarddiskVolume3\Profiles\<user>\y and \\?\Volume{0a1b2c3d-0000-0000-0000-000000000000}\Profiles\<user>\z", ["Bob", "Zqxglobal", "Zqxvolume"]));
+        cases.Add(("Registered root alias", moved, @"\\localhost\D$\Profiles\Bob\x, \\?\UNC\127.0.0.1\D$\Profiles\Zqxshare\y, \Device\HarddiskVolume3\Client\z and \Device\Mup\fs01\profiles$\Carol.V6\w",
+            @"\\localhost\D$\Profiles\<user>\x, \\?\UNC\127.0.0.1\D$\Profiles\<user>\y, \Device\HarddiskVolume3\<user>\z and \Device\Mup\fs01\profiles$\<user>\w", ["Bob", "Zqxshare", "Client", "Carol"]));
+        cases.Add(("Registered root alias", moved, @"\Device\HarddiskVolume3\ProfilesOld\x, \\GAMER-PC\D$\Games\y, \\GAMER-PC\E$\ClientGames\z and https://host/D$/Profiles/PublicPage/w",
+            @"\Device\HarddiskVolume3\ProfilesOld\x, \\<pc-name>\D$\Games\y, \\<pc-name>\E$\ClientGames\z and https://host/D$/Profiles/PublicPage/w", []));
+        cases.Add(("Registered root alias", moved, @"\\.\UNC\fs01\.\profiles$\Zqxdevice\x, ""\\.\HarddiskVolume3\.\Profiles\Zqxquoted\y"" and \\?\GLOBALROOT\Device\HarddiskVolumeShadowCopy2\Profiles\Zqxshadow\z",
+            @"\\.\UNC\fs01\.\profiles$\<user>\x, ""\\.\HarddiskVolume3\.\Profiles\<user>\y"" and \\?\GLOBALROOT\Device\HarddiskVolumeShadowCopy2\Profiles\<user>\z", ["Zqxdevice", "Zqxquoted", "Zqxshadow"]));
+        cases.Add(("Registered root alias", moved, @"\\fs02\roam$\Zqxshort\x, \\FS02.corp.example\roam$\Zqxlong\y, \\fs01.corp.example\profiles$\Zqxfqdn\z and \\192.0.2.5\roam$\Zqxip\w",
+            @"\\fs02\roam$\<user>\x, \\FS02.corp.example\roam$\<user>\y, \\fs01.corp.example\profiles$\<user>\z and \\192.0.2.5\roam$\<user>\w", ["Zqxshort", "Zqxlong", "Zqxfqdn", "Zqxip"]));
+        cases.Add(("Registered root alias", moved, @"\\fs01backup\profiles$\x, \\fs02x.corp.example\roam$\y and \\192.0.2.50\roam$\z", @"\\fs01backup\profiles$\x, \\fs02x.corp.example\roam$\y and \\192.0.2.50\roam$\z", []));
+        cases.Add(("encoded-macro", own, @"{""path"":""%USERPRO\u0046ILE%.Bob\\AppData\\x.log""}", @"{""path"":""<user>\\AppData\\x.log""}", ["Bob"]));
+        cases.Add(("encoded-macro-percent", own, @"{""path"":""\u0025USERPROFILE\u0025.Bob\\AppData\\x.log""}", @"{""path"":""<user>\\AppData\\x.log""}", ["Bob"]));
+        cases.Add(("Encoded macro", own, @"%userpro\u0066ile%Zqxglued\x and \u0025USERPROFILE\u0025%USERPROFILE%-Zqxold\y", @"<user>\x and <user>\y", ["Zqxglued", "Zqxold"]));
+        cases.Add(("Encoded macro", own, @"Saved to %USERPRO\u0046ILE% then restarted. \u0025USERPROFILE\u0025: denied", @"Saved to %USERPRO\u0046ILE% then restarted. \u0025USERPROFILE\u0025: denied", []));
+        cases.Add(("unc-url-error", own, "https://support.invalid/?file=//fs01/Users/Bob&error=0x80070005", "https://support.invalid/?file=//fs01/Users/<user>&error=0x80070005", ["Bob"]));
+        cases.Add(("unc-url-next-link", own, "https://support.invalid/?file=//fs01/Users/Bob&next=https://help.invalid/guide", "https://support.invalid/?file=//fs01/Users/<user>&next=https://help.invalid/guide", ["Bob"]));
+        cases.Add(("URL value end", own, @"https://host/?file=//fs01/Users/Bob#trace=abc123 and https://host/?file=//fs01/Users/Zqxescaped\u0026other=//fs01/Users/Carol/x",
+            @"https://host/?file=//fs01/Users/<user>#trace=abc123 and https://host/?file=//fs01/Users/<user>\u0026other=//fs01/Users/<user>/x", ["Bob", "Zqxescaped", "Carol"]));
+        cases.Add(("URL value end", own, "https://host/?file=C:/Users/Bob&error=0x80070005;x=1 and https://host/?a=1;file=//fs01/Users/Zqxsemi;b=2",
+            "https://host/?file=C:/Users/<user>&error=0x80070005;x=1 and https://host/?a=1;file=//fs01/Users/<user>;b=2", ["Bob", "Zqxsemi"]));
+        cases.Add(("URL value end", own, @"\\fs01\Users\Tom&Jerry\x and C:\Users\Carol#1;Zqxtail\y", @"\\fs01\Users\<user>\x and C:\Users\<user>\y", ["Tom", "Jerry", "Carol", "Zqxtail"]));
+        cases.Add(("URL value end", own, "https://host/?file=//fs01/Users/Tom&Jerry/x and https://host/?file=//fs01/Users/Zqx;semi&b=2",
+            "https://host/?file=//fs01/Users/<user>/x and https://host/?file=//fs01/Users/<user>&b=2", ["Tom", "Jerry", "Zqx", "semi"]));
+        cases.Add(("URL value end", own, "<a href=\"https://host/?file=//fs01/Users/Bob&amp;error=1\">", "<a href=\"https://host/?file=//fs01/Users/<user>&amp;error=1\">", ["Bob"]));
+        cases.Add(("URL value end", own, @"https://host/?file=C:\Users\Bob&error=1 and https://host/?file=\\fs01\Users\Zqxunc#line=2",
+            @"https://host/?file=C:\Users\<user>&error=1 and https://host/?file=\\fs01\Users\<user>#line=2", ["Bob", "Zqxunc"]));
+        cases.Add(("URL value end", own, @"C:\Users\Bob&Jerry=1\x and https://host/?a=1 C:\Users\Carol&Smith=2\y", @"C:\Users\<user>\x and https://host/?a=1 C:\Users\<user>\y", ["Bob", "Jerry", "Carol", "Smith"]));
         foreach (var (issue, redactor, raw, expected, secrets) in cases)
         {
             var name = issue + " " + JsonSerializer.Serialize(raw);
@@ -1115,6 +1153,7 @@ static class BugReportChecks
             var logs = Directory.CreateDirectory(Path.Combine(fixture, "logs")).FullName;
             try
             {
+                File.WriteAllText(Path.Combine(logs, "app.log"), raw + Environment.NewLine);
                 File.WriteAllText(Path.Combine(logs, "app.log.old"), raw + Environment.NewLine);
                 var sender = new FakeSender { Result = new(false, 404) };
                 var service = new BugReportService(Webhook, sender, Path.Combine(fixture, "reports"), logs, redactor);
@@ -1138,11 +1177,11 @@ static class BugReportChecks
                     {
                         using var values = JsonDocument.Parse(Read(zip, "specs.json"));
                         using var summary = JsonDocument.Parse(Read(zip, "tweak-state.json"));
-                        var log = Read(zip, "logs/app.log.old");
+                        var log = Read(zip, "logs/app.log") + Read(zip, "logs/app.log.old");
                         check(values.RootElement.GetProperty("specs").GetProperty("cpu").GetString() == expected
-                            && summary.RootElement.GetProperty("lastErrors")[0].GetString() == expected && log == expected + Environment.NewLine
+                            && summary.RootElement.GetProperty("lastErrors")[0].GetString() == expected && log == expected + Environment.NewLine + expected + Environment.NewLine
                             && !secrets.Any(secret => log.Contains(secret, StringComparison.OrdinalIgnoreCase)),
-                            "The " + kind + " zip redacts specs, last errors and old log lines for " + name);
+                            "The " + kind + " zip redacts specs, last errors and current and old log lines for " + name);
                     }
                     catch (JsonException error)
                     {
@@ -1221,12 +1260,20 @@ static class BugReportChecks
         while (encoded.Length < 7 * 1024 * 1024) encoded.Append(@"C:/\u0055sers/Zqxother/x D:/Pro\u0066iles/Zqxmoved/y \u0053-1-12-1-111-222-333-444 ");
         var urls = new StringBuilder();
         while (urls.Length < 7 * 1024 * 1024) urls.Append("https://host/Users/PublicPage/x?file=//fs01/Users/Zqxquery/x&next=https://mirror/Users/PublicPage/x ");
+        var canonical = new StringBuilder();
+        while (canonical.Length < 7 * 1024 * 1024)
+            canonical.Append(@"2026-10-23 [backend] Copy D:\.\Profiles\Zqxdot\x to D:\Work\..\Profiles\Zqxup\y failed").Append('\n')
+                .Append(@"2026-10-23 [backend] Share \\GAMER-PC\D$\Profiles\Zqxshare\z, old %USERPRO\u0046ILE%.Zqxmacro\w, see https://host/?file=//fs01/Users/Zqxvalue&error=1").Append('\n');
         var inputs = new (string Name, string Input, Func<string, bool> Expected)[]
         {
             ("repeated new account forms", mixed.ToString(), output => !output.Contains("Zqx", StringComparison.Ordinal) && !output.Contains("111-222", StringComparison.Ordinal)),
             ("macros followed by prose", spaced.ToString(), output => output == spaced.ToString()),
             ("encoded profile roots and account SIDs", encoded.ToString(), output => !output.Contains("Zqx", StringComparison.Ordinal) && !output.Contains("111-222", StringComparison.Ordinal)),
             ("UNC query values beside ordinary URLs", urls.ToString(), output => !output.Contains("Zqxquery", StringComparison.Ordinal) && output.Contains("https://host/Users/PublicPage/x", StringComparison.Ordinal) && output.Contains("https://mirror/Users/PublicPage/x", StringComparison.Ordinal)),
+            ("dot segments, volume aliases, encoded macros and URL value ends", canonical.ToString(), output => !output.Contains("Zqx", StringComparison.Ordinal) && output.Contains("<user>&error=1\n", StringComparison.Ordinal)),
+            ("nested parent segments", @"D:\Profiles" + string.Concat(Enumerable.Repeat(@"\a", 1024 * 1024)) + string.Concat(Enumerable.Repeat(@"\..", 1024 * 1024)) + @"\Zqxdeep\x",
+                output => output.EndsWith(@"\..\<user>\x", StringComparison.Ordinal)),
+            ("parent segments without parents", @"D:" + string.Concat(Enumerable.Repeat(@"\..", 2 * 1024 * 1024)) + @"\Profiles\Zqxroot\x", output => output.EndsWith(@"\Profiles\<user>\x", StringComparison.Ordinal)),
             ("query delimiters without a UNC value", "https://host/" + new string('?', 7 * 1024 * 1024), output => output == "https://host/" + new string('?', 7 * 1024 * 1024)),
             ("a mixed separator run", @"C:\Users" + string.Concat(Enumerable.Repeat(@"\/", 3 * 1024 * 1024)) + "Fixture", output => output.EndsWith(@"\/<user>", StringComparison.Ordinal) && !output.Contains("Fixture", StringComparison.Ordinal)),
             ("a backslash run before a Users word", "x" + new string('\\', 7 * 1024 * 1024) + "Usersy", output => output.EndsWith("Usersy", StringComparison.Ordinal)),

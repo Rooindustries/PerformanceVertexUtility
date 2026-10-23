@@ -107,16 +107,16 @@ public sealed class BugRedactor
     {
         text = text.Replace(User, @"\u0001").Replace(PcName, @"\u0002").Replace(Sid, @"\u0003");
         text = text.Replace("<user>", User, StringComparison.OrdinalIgnoreCase).Replace("<pc-name>", PcName, StringComparison.OrdinalIgnoreCase).Replace("<sid>", Sid, StringComparison.OrdinalIgnoreCase);
-        text = EncodedPaths(text);
+        text = CanonicalPaths(text);
         var changes = new List<(int Start, int End, string Value)>();
         string? previousSeparator = null;
         var previousBoundary = -1;
         var previousPrivate = false;
         var covered = new List<(int Start, int End)>();
-        foreach (var (match, _) in Profiles(text))
+        foreach (var (match, _, end) in Profiles(text))
         {
-            covered.Add((match.Groups["root"].Index, match.Groups["run"].Index + match.Groups["run"].Length));
-            var found = Profile(match, text, out var boundary, out var root, out var placeholder);
+            covered.Add((match.Groups["root"].Index, end));
+            var found = Profile(match, text, end, out var boundary, out var root, out var placeholder);
             if (found is null && !placeholder) continue;
             var separator = root[(match.Groups["sep"].Index - match.Groups["root"].Index)..];
             if (found is { } change && change.Value == "%USERPROFILE%" && previousPrivate && previousBoundary == change.Start && previousSeparator != separator)
@@ -126,29 +126,24 @@ public sealed class BugRedactor
             previousSeparator = separator;
             previousBoundary = boundary;
         }
-        var next = 0;
-        var coveredEnd = -1;
-        foreach (Match macro in Macro.Matches(text))
-        {
-            while (next < covered.Count && covered[next].Start <= macro.Index) coveredEnd = Math.Max(coveredEnd, covered[next++].End);
-            if (macro.Index < coveredEnd) continue;
-            var suffix = macro.Index + macro.Length;
-            if (MacroSuffix(text, suffix) is { } end) changes.Add((macro.Index, end, User));
-        }
+        foreach (var (macro, end) in Macros(text, covered)) changes.Add((macro.Index, end, User));
         text = Replace(text, changes);
         foreach (var (pattern, replacement) in _rules) text = pattern.Replace(text, replacement);
         return text.Replace(User, "<user>").Replace(PcName, "<pc-name>").Replace(Sid, "<sid>");
     }
 
-    private string EncodedPaths(string text)
+    private string CanonicalPaths(string text)
     {
-        if (!EncodedRootCharacter.IsMatch(text)) return text;
-        var decoded = new StringBuilder(text.Length);
-        var ends = new List<int>(text.Length);
-        void Add(char value, int end)
+        if (!EncodedRootCharacter.IsMatch(text) && !DotSegment.IsMatch(text)) return text;
+        var decoded = new char[text.Length];
+        var starts = new int[text.Length];
+        var ends = new int[text.Length];
+        var length = 0;
+        void Add(char value, int start, int end)
         {
-            decoded.Append(value);
-            ends.Add(end);
+            decoded[length] = value;
+            starts[length] = start;
+            ends[length++] = end;
         }
         for (var index = 0; index < text.Length;)
         {
@@ -157,7 +152,7 @@ public sealed class BugRedactor
             if (slashes > 0 && Escaped(text, hex))
             {
                 var unit = slashes & -slashes;
-                for (var prefix = 0; prefix < slashes - unit; prefix++, index++) Add('\\', index + 1);
+                for (var prefix = 0; prefix < slashes - unit; prefix++, index++) Add('\\', index, index + 1);
                 var end = hex + 5;
                 var value = (char)Convert.ToInt32(text.Substring(hex + 1, 4), 16);
                 if (value == '<' && EncodedMarker(text, index, end, out var kind) is var markerEnd and >= 0)
@@ -166,55 +161,120 @@ public sealed class BugRedactor
                     end = markerEnd;
                 }
                 if (value >= ' ' || value is '\u0001' or '\u0002' or '\u0003' && end > hex + 5)
-                    Add(value, end);
+                    Add(value, index, end);
                 else
-                    for (var cursor = index; cursor < end; cursor++) Add(text[cursor], cursor + 1);
+                    for (var cursor = index; cursor < end; cursor++) Add(text[cursor], cursor, cursor + 1);
                 index = end;
             }
             else
             {
                 var end = index + Math.Max(1, slashes);
-                for (; index < end; index++) Add(text[index], index + 1);
+                for (; index < end; index++) Add(text[index], index, index + 1);
             }
         }
-        var view = decoded.ToString();
+        length = DotSegments(decoded, starts, ends, length);
+        var view = new string(decoded, 0, length);
+        int Span(int index, int count) => ends[index + count - 1] - starts[index];
         var changes = new List<(int Start, int End, string Value)>();
-        foreach (var (match, urlValue) in Profiles(view))
+        var covered = new List<(int Start, int End)>();
+        foreach (var (match, urlValue, end) in Profiles(view))
         {
             var root = match.Groups["root"];
-            var start = root.Index == 0 ? 0 : ends[root.Index - 1];
-            if (!urlValue && ends[root.Index + root.Length - 1] - start == root.Length) continue;
-            if (Profile(match, view, out _, out _, out _) is { } change && change.End > change.Start)
-                changes.Add((change.Start == 0 ? 0 : ends[change.Start - 1], ends[change.End - 1], change.Value));
+            covered.Add((root.Index, end));
+            if (!urlValue && Span(root.Index, root.Length) == root.Length) continue;
+            if (Profile(match, view, end, out _, out _, out _) is { } change && change.End > change.Start)
+                changes.Add((starts[change.Start], ends[change.End - 1], change.Value));
         }
+        foreach (var (macro, end) in Macros(view, covered))
+            if (Span(macro.Index, macro.Length) != macro.Length) changes.Add((starts[macro.Index], ends[end - 1], User));
         foreach (Match match in AccountSid.Matches(view))
-        {
-            var start = match.Index == 0 ? 0 : ends[match.Index - 1];
-            var end = ends[match.Index + match.Length - 1];
-            if (end - start > match.Length) changes.Add((start, end, Sid));
-        }
+            if (Span(match.Index, match.Length) > match.Length) changes.Add((starts[match.Index], ends[match.Index + match.Length - 1], Sid));
         return Replace(text, changes);
     }
 
-    private IEnumerable<(Match Match, bool UrlValue)> Profiles(string text)
+    private static int DotSegments(char[] view, int[] starts, int[] ends, int length)
+    {
+        var write = 0;
+        var parents = new List<int>();
+        void Keep(int from)
+        {
+            view[write] = view[from];
+            starts[write] = starts[from];
+            ends[write++] = ends[from];
+        }
+        for (var read = 0; read < length;)
+        {
+            if (view[read] is not ('\\' or '/'))
+            {
+                if (view[read] is ':' or '"' or '<' or '>' or '|' or '?' or '*' or < ' ') parents.Clear();
+                Keep(read++);
+                continue;
+            }
+            var separator = read;
+            while (read < length && view[read] is '\\' or '/') read++;
+            var dots = 0;
+            while (dots < 3 && read + dots < length && view[read + dots] == '.') dots++;
+            if (dots is 1 or 2 && read + dots < length && view[read + dots] is '\\' or '/'
+                && write > 0 && !char.IsWhiteSpace(view[write - 1]) && view[write - 1] is not ('"' or '\'' or '(' or '[' or '{' or '<' or '>' or '|' or '=' or ',' or < ' '))
+            {
+                if (dots == 2 && parents.Count > 0)
+                {
+                    write = parents[^1];
+                    parents.RemoveAt(parents.Count - 1);
+                }
+                read += dots;
+                continue;
+            }
+            parents.Add(write);
+            while (separator < read) Keep(separator++);
+        }
+        return write;
+    }
+
+    private static IEnumerable<(Match Macro, int End)> Macros(string text, List<(int Start, int End)> covered)
+    {
+        var next = 0;
+        var coveredEnd = -1;
+        foreach (Match macro in Macro.Matches(text))
+        {
+            while (next < covered.Count && covered[next].Start <= macro.Index) coveredEnd = Math.Max(coveredEnd, covered[next++].End);
+            if (macro.Index < coveredEnd) continue;
+            if (MacroSuffix(text, macro.Index + macro.Length) is { } end) yield return (macro, end);
+        }
+    }
+
+    private IEnumerable<(Match Match, bool UrlValue, int End)> Profiles(string text)
     {
         using var urls = HttpUrls.Matches(text).Cast<Match>().GetEnumerator();
         using var values = UrlNetworkValues.Matches(text).Cast<Match>().GetEnumerator();
         var hasUrl = urls.MoveNext();
         var hasValue = values.MoveNext();
         var previousAccount = -1;
+        var query = (Start: -1, End: -1);
         foreach (Match match in _segment.Matches(text))
         {
-            if (match.Groups["run"].Index == previousAccount) continue;
-            while (hasUrl && urls.Current.Index + urls.Current.Length <= match.Index) hasUrl = urls.MoveNext();
+            var run = match.Groups["run"];
+            if (run.Index == previousAccount) continue;
+            while (hasUrl && urls.Current.Index <= match.Index)
+            {
+                var found = urls.Current.Groups["parameters"];
+                if (found.Success && found.Index >= query.End)
+                    query = (found.Index, QueryEnd.Match(text, found.Index) is { Success: true } stop ? stop.Index : text.Length);
+                if (urls.Current.Index + urls.Current.Length > match.Index) break;
+                hasUrl = urls.MoveNext();
+            }
             while (hasValue && values.Current.Index + values.Current.Length <= match.Index) hasValue = values.MoveNext();
-            var embedded = hasUrl && hasValue && urls.Current.Groups["parameters"].Success
-                && values.Current.Index >= urls.Current.Groups["parameters"].Index
+            var parameters = hasUrl ? urls.Current.Groups["parameters"] : null;
+            var embedded = hasValue && parameters is { Success: true }
+                && values.Current.Index >= parameters.Index
                 && values.Current.Groups["path"].Index <= match.Index;
             if (!match.Groups["network"].Success || !hasUrl || match.Index < urls.Current.Index || embedded)
             {
-                previousAccount = match.Groups["run"].Index;
-                yield return (match, embedded);
+                previousAccount = run.Index;
+                var end = run.Index + run.Length;
+                if (run.Index >= query.Start && run.Index < query.End && UrlParameter.Match(text, run.Index, run.Length) is { Success: true } next)
+                    end = next.Index;
+                yield return (match, embedded, end);
             }
         }
     }
@@ -245,12 +305,12 @@ public sealed class BugRedactor
         return text;
     }
 
-    private (int Start, int End, string Value)? Profile(Match match, string input, out int boundaryEnd, out string root, out bool placeholderOnly)
+    private (int Start, int End, string Value)? Profile(Match match, string input, int limit, out int boundaryEnd, out string root, out bool placeholderOnly)
     {
         root = match.Groups["root"].Value;
         placeholderOnly = false;
-        var run = match.Groups["run"].Value;
         var runStart = match.Groups["run"].Index;
+        var run = input[runStart..limit];
         var matchEnd = runStart + run.Length;
         boundaryEnd = matchEnd;
         var joinedDrive = matchEnd + 2 < input.Length && char.IsAsciiLetter(input[matchEnd]) && input[matchEnd + 1] == ':' && input[matchEnd + 2] is '\\' or '/';
@@ -438,10 +498,12 @@ public sealed class BugRedactor
             var named = parts.Where(part => part.Length > 0).ToArray();
             string head;
             var drive = parts.Length > 1 && parts[0].Length == 2 && char.IsAsciiLetter(parts[0][0]) && parts[0][1] == ':';
-            if (drive) head = Regex.Escape(parts[0]);
+            if (drive) head = "(?:" + Regex.Escape(parts[0]) + @"|(?<network>(?<=[\\/])(?:HarddiskVolume(?:ShadowCopy)?\d+|Volume\{[0-9A-Fa-f-]+\}|" + Regex.Escape(parts[0][..1]) + @"\$)))";
             else if (trimmed.StartsWith(@"\\", StringComparison.Ordinal) && named.Length > 0 && named[0] is not ("?" or "."))
             {
-                head = @"(?<network>(?<![\\/:])(?:\\{2,}(?:[?.]\\+UNC[\\/]+)?|\\+\?\?\\+UNC[\\/]+|/{2,}|(?:\\+/){2,}))" + Regex.Escape(named[0]);
+                var host = named[0].Split('.')[0];
+                head = @"(?<network>(?<![\\/:])(?:\\{2,}(?:[?.]\\+UNC[\\/]+)?|\\+\?\?\\+UNC[\\/]+|/{2,}|(?:\\+/){2,})|(?<=[\\/]Device[\\/]+Mup)[\\/]+)"
+                    + (host.Length == 0 || named[0].All(c => char.IsAsciiDigit(c) || c == '.') ? Regex.Escape(named[0]) : Regex.Escape(host) + @"(?:\.[A-Za-z0-9-]+)*");
             }
             else continue;
             if (named.Length < 2 || named.Skip(1).Any(part => part is "." or "..")) continue;
@@ -454,7 +516,7 @@ public sealed class BugRedactor
         }
         if (roots.Count == 0 && exact.Count == 0) return ProfileSegment;
         var alternatives = roots.OrderByDescending(root => root.Length).Append(StandardRoots);
-        return new("(?=(?:(?<root>(?:" + string.Join("|", alternatives) + ")" + SegmentSeparator + ")" + string.Concat(exact.Select(item => "|" + item)) + ")" + SegmentRun + ")", Options);
+        return new(RootStart + "(?=(?:(?<root>(?:" + string.Join("|", alternatives) + ")" + SegmentSeparator + ")" + string.Concat(exact.Select(item => "|" + item)) + ")" + SegmentRun + ")", Options | RegexOptions.Compiled);
     }
 
     private static string NormalizeRoot(string path)
@@ -464,6 +526,7 @@ public sealed class BugRedactor
     private const RegexOptions Options = RegexOptions.IgnoreCase | RegexOptions.CultureInvariant;
     private const string ComponentEnd = @"(?=[\\/""\x00-\x1F:<>|?*]|$)";
     private const string UrlEscape = @"\\+u(?!(?:00[01][0-9a-f]|002[027]|003[ce]|0085|00a0|1680|200[0-a]|202[89f]|205f|3000))[0-9a-f]{4}";
+    private const string RootStart = @"(?=[A-Za-z]:|(?<![\\/])[\\/]|(?<=[\\/])[A-Za-z])";
     private const string StandardRoots = @"[A-Za-z]:(?>[\\/]+)(?:Users|Documents and Settings)|(?<network>(?<![\\/]|[A-Za-z]:)(?>[\\/]+)(?:Users|Documents and Settings))";
     private const string SegmentSeparator = @"(?>(?:\\+(?=/)|/+(?=(?>\\+)(?!u[0-9A-Fa-f]{4}))|[\\/]+\.(?=[\\/]))*)(?<sep>(?>\\+|/+))";
     private const string SegmentRun = @"(?<run>(?>(?:(?!\k<sep>)\\+u[0-9A-Fa-f]{4}|(?![A-Za-z]:[\\/])[^\\/""\x00-\x1F:<>|?*])*)(?>[\u0001-\u0003](?:(?!\k<sep>)\\+u[0-9A-Fa-f]{4}|(?![A-Za-z]:[\\/])[^\\/""\x00-\x1F:<>|?*])*)*)";
@@ -472,11 +535,14 @@ public sealed class BugRedactor
     private static readonly Regex AccountProfile = new(@"\AS-1-(?:5-21|12-1)(?:-\d+)+(?:\.bak)?\z", Options);
     private static readonly Regex AccountSid = new(@"S-1-(?:5-21(?:-\d+){3,4}|12-1(?:-\d+){1,4})", Options);
     private static readonly Regex EncodedRootCharacter = new(@"\\u(?!003[ce]|0022)[0-9A-Fa-f]{4}", Options);
+    private static readonly Regex DotSegment = new(@"[\\/]\.\.?[\\/]", Options);
+    private static readonly Regex QueryEnd = new(@"[\s""'<>]", Options);
+    private static readonly Regex UrlParameter = new(@"(?:(?:&|\\+u0026)(?:amp;)?|[#;]|\\+u00(?:23|3b))[^?&#;=\s\\""'<>]*(?:=|\\+u003d)", Options);
     private static readonly Regex HttpUrls = new(UrlLiteral("http") + UrlLiteral("s") + "?" + UrlLiteral(":")
         + @"(?:\\*/|(?<!\\)\\+u002f){2}(?:\\+/|" + UrlEscape + @"|[^\s\\""'<>?#])*(?<parameters>[?#](?:\\+/|" + UrlEscape + @"|[^\s\\""'<>])*)?", Options);
     private static readonly Regex UrlNetworkValues = new(@"[?&#;][^?&#;=\s\\""'<>]*=(?<path>(?:\\*/){2}(?:\\+/|[^:&;#\s\\""'<>])*)", Options);
     private static readonly Regex Macro = new("(?:%USERPROFILE%)+", Options);
-    private static readonly Regex ProfileSegment = new("(?=(?<root>(?:" + StandardRoots + ")" + SegmentSeparator + ")" + SegmentRun + ")", Options);
+    private static readonly Regex ProfileSegment = new(RootStart + "(?=(?<root>(?:" + StandardRoots + ")" + SegmentSeparator + ")" + SegmentRun + ")", Options);
 
     private static string UrlLiteral(string text)
         => string.Concat(text.Select(c => "(?:" + Regex.Escape(c.ToString()) + "|" + string.Join("|",
