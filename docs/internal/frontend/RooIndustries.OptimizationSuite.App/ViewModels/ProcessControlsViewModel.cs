@@ -5,6 +5,7 @@ using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -664,7 +665,7 @@ public partial class ProcessControlsViewModel : ObservableObject
         GovernorRules.Clear();
     }
 
-    public async Task ObserveAsync()
+    public async Task ObserveAsync(CancellationToken cancel = default)
     {
         if (Busy || _observing) return;
         _observing = true;
@@ -678,7 +679,7 @@ public partial class ProcessControlsViewModel : ObservableObject
             if (Busy || version != _selectionVersion) return;
             if (governor is not null) ShowGovernor(governor);
             else ShowGovernorError(unreadable!);
-            if (_snapshot is null) return;
+            if (_snapshot is null || cancel.IsCancellationRequested) return;
             var fresh = await App.Operations.ReadProcessControlsAsync(_snapshot.Identity.ProcessId);
             if (Busy || version != _selectionVersion) return;
             _snapshot.Identity.Verify(fresh.Identity);
