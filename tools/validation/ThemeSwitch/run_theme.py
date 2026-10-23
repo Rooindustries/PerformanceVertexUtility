@@ -73,6 +73,7 @@ def main():
     parser.add_argument('--expected-machine', required=True)
     parser.add_argument('--out-dir', type=Path, required=True)
     parser.add_argument('--lease-minutes', type=float, default=60)
+    parser.add_argument('--fail-before-undo', action='store_true')
     args = parser.parse_args()
     out = args.out_dir
     out.mkdir(parents=True)
@@ -84,7 +85,7 @@ def main():
         lease(args, frame)
         windows.verify_local_source(args.host, args.expected_machine, frame)
         run = windows.interactive_frame(args.host, args.expected_machine, frame, 'tools/validation/ThemeSwitch/Invoke-ThemeSwitch.ps1',
-                                        {'Source': frame['stagingPath'], 'OutRoot': frame['runRoot'] + '\\theme'}, 40)
+                                        {'Source': frame['stagingPath'], 'OutRoot': frame['runRoot'] + '\\theme', **({'FailBeforeUndo': True} if args.fail_before_undo else {})}, 40)
         (out / 'run.log').write_text(run.stdout)
         completion = windows.completion(run.stdout)
         receipt = windows.read_result(args.host, args.expected_machine, frame, 'receipt.json', completion['nonce'])
