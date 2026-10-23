@@ -1002,6 +1002,7 @@ static class BugReportChecks
         var moved = new BugRedactor(@"D:\Profiles\Alice", "Alice", "GAMER-PC", [@"D:\Profiles\Bob", @"\\fs01\profiles$\Carol.V6", @"E:\Client", @"\\nas\Fixture", @"D:\Profiles\Public", @"D:\Profiles\Default"]);
         var single = new BugRedactor(@"C:\Users\A", "A", "X");
         var direct = new BugRedactor(@"E:\Client", "Alice", "GAMER-PC", [@"\\nas\Fixture"]);
+        var nested = new BugRedactor(@"C:\Users\Alice", "Alice", "GAMER-PC", [@"D:\Work\Users\Bob", @"\\fs01\Users\Carol", @"D:\Work\Documents and Settings\Bob"]);
         var escapeLetter = new BugRedactor(@"C:\Users\n", "n", "GAMER-PC");
         var cases = new List<(string Issue, BugRedactor Redactor, string Input, string Expected, string[] Private)>
         {
@@ -1015,6 +1016,9 @@ static class BugReportChecks
             ("Relocated profile", moved, @"E:\ClientGames\x and \\nas\FixtureBackup\y", @"E:\ClientGames\x and \\nas\FixtureBackup\y", []),
             ("Relocated profile", direct, @"E:\ClientGames\x and \\nas\FixtureBackup\y", @"E:\ClientGames\x and \\nas\FixtureBackup\y", []),
             ("Relocated profile", direct, @"E:\Client\x", @"%USERPROFILE%\x", []),
+            ("Nested profile root", nested, "D:/Work/Users/Bob/AppData/x and d:/work/USERS/Carol/y", "D:/Work/Users/<user>/AppData/x and d:/work/USERS/<user>/y", ["Bob", "Carol"]),
+            ("Nested profile root", nested, @"D:\Work\Users\Bob\x and //fs01/Users/Carol/y and \/\/fs01\/Users\/Zqxnew\/z", @"D:\Work\Users\<user>\x and //fs01/Users/<user>/y and \/\/fs01\/Users\/<user>\/z", ["Bob", "Carol", "Zqxnew"]),
+            ("Nested profile root", nested, "D:/Work/Documents and Settings/Bob/x", "D:/Work/Documents and Settings/<user>/x", ["Bob"]),
             ("Old log suffix", own, @"%USERPROFILE%.Zqxsmith\AppData\x and %USERPROFILE% Zqxsmith\AppData\y", @"<user>\AppData\x and <user>\AppData\y", ["Zqxsmith"]),
             ("Old log suffix", own, @"%userprofile%Zqxsmith", "<user>", ["Zqxsmith"]),
             ("Old log suffix", own, @"Moved %USERPROFILE%%USERPROFILE%-Zqxold\x", @"Moved <user>\x", ["Zqxold"]),
@@ -1227,6 +1231,11 @@ static class BugReportChecks
                 list.SetValue("Public", @"%SystemDrive%\Users\Public", Microsoft.Win32.RegistryValueKind.ExpandString);
                 using (var account = list.CreateSubKey("S-1-5-21-111111111-222222222-333333333-1001")) account.SetValue("ProfileImagePath", @"D:\Profiles\Bob", Microsoft.Win32.RegistryValueKind.ExpandString);
                 using (var account = list.CreateSubKey("S-1-5-21-111111111-222222222-333333333-1002.bak")) account.SetValue("ProfileImagePath", @"E:\Client");
+                using (var account = list.CreateSubKey("S-1-5-21-111111111-222222222-333333333-1006"))
+                {
+                    account.SetValue("ProfileImagePath", @"D:\Work\Users\Bob");
+                    account.SetValue("CentralProfile", @"\\fs01\Users\Carol");
+                }
                 using (var account = list.CreateSubKey("S-1-12-1-111-222-333-444"))
                 {
                     account.SetValue("ProfileImagePath", @"%SystemDrive%\Users\Fixture", Microsoft.Win32.RegistryValueKind.ExpandString);
@@ -1250,12 +1259,12 @@ static class BugReportChecks
             }
             using var read = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(name + @"\ProfileList");
             var paths = BugRedactor.RegisteredProfiles(read);
-            var expected = new[] { @"D:\Profiles\Default", drive + @"\Users\Public", @"D:\Profiles\Bob", @"E:\Client", drive + @"\Users\Fixture", @"\\fs01\profiles$\Carol.V6" };
+            var expected = new[] { @"D:\Profiles\Default", drive + @"\Users\Public", @"D:\Profiles\Bob", @"E:\Client", drive + @"\Users\Fixture", @"\\fs01\profiles$\Carol.V6", @"D:\Work\Users\Bob", @"\\fs01\Users\Carol" };
             check(paths.Count == expected.Length && expected.All(path => paths.Contains(path, StringComparer.Ordinal)),
                 "The profile list reader returns expanded account, backup, roaming, Default and Public paths and skips system, mistyped, empty and unreadable entries: " + paths.Count);
             var redactor = new BugRedactor(@"C:\Users\Alice", "Alice", "GAMER-PC", paths);
-            var output = redactor.Redact(@"D:\Profiles\Bob\x D:\Profiles\Zqxnew\y D:\Profiles\Default\d E:\Client\z E:\Games\g \\fs01\profiles$\Carol.V6\c C:\Windows\system32\config\SAM %SystemRoot%\system32\config\systemprofile\s");
-            check(output == @"D:\Profiles\<user>\x D:\Profiles\<user>\y D:\Profiles\Default\d E:\<user>\z E:\Games\g \\fs01\profiles$\<user>\c C:\Windows\system32\config\SAM %SystemRoot%\system32\config\systemprofile\s",
+            var output = redactor.Redact(@"D:\Profiles\Bob\x D:\Profiles\Zqxnew\y D:\Profiles\Default\d E:\Client\z E:\Games\g \\fs01\profiles$\Carol.V6\c C:\Windows\system32\config\SAM %SystemRoot%\system32\config\systemprofile\s D:/Work/Users/Bob/x //fs01/Users/Carol/y");
+            check(output == @"D:\Profiles\<user>\x D:\Profiles\<user>\y D:\Profiles\Default\d E:\<user>\z E:\Games\g \\fs01\profiles$\<user>\c C:\Windows\system32\config\SAM %SystemRoot%\system32\config\systemprofile\s D:/Work/Users/<user>/x //fs01/Users/<user>/y",
                 "Profiles read from a disposable profile list are redacted while system and shared folders stay readable");
             check(BugRedactor.RegisteredProfiles(null).Count == 0 && new BugRedactor(@"C:\Users\Alice", "Alice", "GAMER-PC", BugRedactor.RegisteredProfiles(null)).Redact(@"C:\Users\Bob\x") == @"C:\Users\<user>\x",
                 "A missing profile list falls back to the Users folder rules");

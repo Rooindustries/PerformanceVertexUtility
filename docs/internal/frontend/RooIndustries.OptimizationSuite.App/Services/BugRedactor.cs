@@ -430,7 +430,8 @@ public sealed class BugRedactor
             var parts = trimmed.Split('\\', '/');
             var named = parts.Where(part => part.Length > 0).ToArray();
             string head;
-            if (parts.Length > 1 && parts[0].Length == 2 && char.IsAsciiLetter(parts[0][0]) && parts[0][1] == ':') head = Regex.Escape(parts[0]);
+            var drive = parts.Length > 1 && parts[0].Length == 2 && char.IsAsciiLetter(parts[0][0]) && parts[0][1] == ':';
+            if (drive) head = Regex.Escape(parts[0]);
             else if (trimmed.StartsWith(@"\\", StringComparison.Ordinal) && named.Length > 0 && named[0] is not ("?" or "."))
             {
                 head = @"(?<network>(?<![\\/:])(?:\\{2,}(?:[?.]\\+UNC[\\/]+)?|\\+\?\?\\+UNC[\\/]+|/{2,}|(?:\\+/){2,}))" + Regex.Escape(named[0]);
@@ -439,7 +440,7 @@ public sealed class BugRedactor
             if (named.Length < 2 || named.Skip(1).Any(part => part is "." or "..")) continue;
             var parent = named[1..^1];
             var pattern = head + string.Concat(parent.Select(part => @"(?>[\\/]+)" + Regex.Escape(part)));
-            if (parent.Length > 0 && ProfileFolders.IsMatch(parent[^1])) continue;
+            if (drive && parent.Length == 1 && ProfileFolders.IsMatch(parent[0])) continue;
             if (parent.Length == 0)
                 exact.Add("(?<root>" + pattern + SegmentSeparator + ")(?=" + Regex.Escape(named[^1]) + ComponentEnd + ")");
             else roots.Add(pattern);
