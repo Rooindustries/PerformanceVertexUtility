@@ -1,25 +1,29 @@
 param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutRoot,[Parameter(Mandatory)][ValidatePattern('^[a-z0-9-]{1,40}$')][string]$Label)
 $ErrorActionPreference='Stop';$ProgressPreference='SilentlyContinue'
+. (Get-HarnessToolPath (Join-Path $Source 'tools\validation\Update\Harness.Common.ps1'))
+$nonce=Initialize-HarnessInvocation 'update-banner' $OutRoot
+Ensure-HarnessOutputDirectory $OutRoot
 Add-Type -AssemblyName UIAutomationClient,UIAutomationTypes,System.Drawing
 Add-Type -TypeDefinition @'
 using System;
 using System.Runtime.InteropServices;
-public static class RooUpdateBannerUi
+public static class RooIndustriesUpdateBannerUi
 {
     [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
     [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr window, IntPtr after, int x, int y, int width, int height, uint flags);
     [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr window, int command);
 }
 '@
-[RooUpdateBannerUi]::SetProcessDPIAware()|Out-Null
+[RooIndustriesUpdateBannerUi]::SetProcessDPIAware()|Out-Null
 $A=[Windows.Automation.AutomationElement];$TS=[Windows.Automation.TreeScope];$CT=[Windows.Automation.ControlType]
 $version='9.9.9-beta'
 $ready="Version $version is ready to install"
 $changeRunning='A change is still running. You can install the update once it finishes.'
 $appName='RooIndustries.OptimizationSuite.App'
 $out=Join-Path $OutRoot $Label
-if(Test-Path -LiteralPath $out){throw 'The output folder already exists; use a new label.'}
-New-Item -ItemType Directory -Path $out|Out-Null
+if(Test-HarnessPath $out){throw 'The output folder already exists; use a new label.'}
+Enter-HarnessHostLease
+New-HarnessDirectory $out 'evidence'|Out-Null
 $flag=Join-Path $out 'hold-change.flag'
 $checks=[Collections.Generic.List[object]]::new()
 $script:app=$null;$script:window=$null;$script:frames=$null
@@ -55,8 +59,8 @@ function OpenSettings{Nav 'Settings';if(-not(Poll {Find 'id' 'UpdateStatusText'}
 function OpenTools{Nav 'Tools';Start-Sleep -Milliseconds 500}
 function Raise([bool]$on){
  $handle=[IntPtr]::new($script:window.Current.NativeWindowHandle)
- [RooUpdateBannerUi]::ShowWindow($handle,9)|Out-Null
- [RooUpdateBannerUi]::SetWindowPos($handle,[IntPtr]::new($(if($on){-1}else{-2})),0,0,0,0,0x53)|Out-Null
+ [RooIndustriesUpdateBannerUi]::ShowWindow($handle,9)|Out-Null
+ [RooIndustriesUpdateBannerUi]::SetWindowPos($handle,[IntPtr]::new($(if($on){-1}else{-2})),0,0,0,0,0x53)|Out-Null
 }
 function Area{
  $r=$script:window.Current.BoundingRectangle
@@ -132,10 +136,13 @@ try{
  $dotnet=Join-Path $env:USERPROFILE '.dotnet\dotnet.exe'
  $env:DOTNET_CLI_TELEMETRY_OPTOUT='1';$env:DOTNET_ROOT=Split-Path $dotnet -Parent;$env:ROO_INDUSTRIES_DOTNET_EXE=$dotnet;$env:RooIndustriesTestHooks='true'
  $project=Join-Path $Source 'docs\internal\frontend\RooIndustries.OptimizationSuite.App\RooIndustries.OptimizationSuite.App.csproj'
+ $helper=Join-Path $Source 'backend\bin\optimizer'
  $builds=@(
-  @{name='helper';arguments=('publish "'+(Join-Path $Source 'backend\native\Optimizer.Host\Optimizer.Host.csproj')+'" -c Debug --self-contained false -p:UseSharedCompilation=false -o "'+(Join-Path $Source 'backend\bin\optimizer')+'"')},
-  @{name='app';arguments=('build "'+$project+'" -c Debug -p:Platform=x64 -p:WindowsAppSDKSelfContained=true -p:UseSharedCompilation=false --disable-build-servers')}
+  @{name='helper';arguments=('publish "'+(Join-Path $Source 'backend\native\Optimizer.Host\Optimizer.Host.csproj')+'" -c Debug --self-contained false -p:UseSharedCompilation=false -nodeReuse:false --disable-build-servers -o "'+$helper+'"')},
+  @{name='app';arguments=('build "'+$project+'" -c Debug -p:Platform=x64 -p:WindowsAppSDKSelfContained=true -p:UseSharedCompilation=false -nodeReuse:false --disable-build-servers')}
  )
+ Initialize-HarnessBuildFolders $Source
+ if(-not(Test-HarnessPath $helper)){New-HarnessDirectory $helper 'generated-build'|Out-Null}
  foreach($build in $builds){
   $process=Start-Process -FilePath $dotnet -ArgumentList $build.arguments -RedirectStandardOutput (Join-Path $out ($build.name+'-build.log')) -RedirectStandardError (Join-Path $out ($build.name+'-build-error.log')) -NoNewWindow -Wait -PassThru
   if($process.ExitCode){throw ($build.name+' build failed with code '+$process.ExitCode)}
@@ -222,5 +229,6 @@ try{
  [IO.File]::WriteAllText((Join-Path $out 'results.json'),(ConvertTo-Json @{label=$Label;checks=$checks;failed=$failed} -Depth 8),[Text.UTF8Encoding]::new($false))
  Compress-Archive -Path (Join-Path $out '*') -DestinationPath (Join-Path $OutRoot ($Label+'.zip'))
  Write-Output ('Completed '+$checks.Count+' checks, '+$failed+' failed.')
+ Complete-HarnessInvocation $(if($failed){'fail'}else{'pass'}) -Cleanup|Out-Null
 }
 if($failed){throw ([string]$failed+' update banner checks failed.')}
