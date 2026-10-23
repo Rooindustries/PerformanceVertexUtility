@@ -29,7 +29,16 @@ function Ensure-Dir {
 
 function Write-JsonFile {
     param([object]$Value, [string]$Path)
-    $Value | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $Path -Encoding UTF8
+    $Path = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Path)
+    $temp = $Path + '.' + [guid]::NewGuid().ToString('N').Substring(0, 8) + '.tmp'
+    try {
+        $Value | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $temp -Encoding UTF8
+        $stream = [IO.File]::Open($temp, [IO.FileMode]::Open, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None)
+        try { $stream.Flush($true) } finally { $stream.Dispose() }
+        if ([IO.File]::Exists($Path)) { [IO.File]::Replace($temp, $Path, [NullString]::Value) } else { [IO.File]::Move($temp, $Path) }
+    } finally {
+        if ([IO.File]::Exists($temp)) { [IO.File]::Delete($temp) }
+    }
 }
 
 function Read-Manifest {
@@ -350,6 +359,23 @@ function Resolve-ServiceTargets {
     return @(Get-Service -Name "$Name`_*" -ErrorAction SilentlyContinue)
 }
 
+function Get-DependentServiceStates {
+    param([object]$Service)
+    $seen = @{}
+    $states = New-Object System.Collections.Generic.List[object]
+    $visit = {
+        param([object]$Parent)
+        foreach ($dependent in @($Parent.DependentServices)) {
+            if (-not $dependent -or $seen.ContainsKey([string]$dependent.Name)) { continue }
+            $seen[[string]$dependent.Name] = $true
+            & $visit $dependent
+            $states.Add([pscustomobject]@{ name=[string]$dependent.Name; status=[string]$dependent.Status; startType=[string]$dependent.StartType }) | Out-Null
+        }
+    }
+    & $visit $Service
+    return ,$states.ToArray()
+}
+
 function Get-ServiceSnapshot {
     param([string]$Name)
     $targets = @(Resolve-ServiceTargets $Name)
@@ -370,6 +396,7 @@ function Get-ServiceSnapshot {
             processId = if ($cim) { $cim.ProcessId } else { 0 }
             pathName = if ($cim) { $cim.PathName } else { $null }
             dependsOn = $deps
+            dependents = Get-DependentServiceStates $svc
         }) | Out-Null
     }
     return @($result.ToArray())
@@ -412,6 +439,24 @@ function Restore-ServiceSnapshot {
     if ($Snapshot.status -eq 'Running') {
         Start-Service -Name $Snapshot.name -ErrorAction Stop
     }
+}
+
+function Test-DependentRestore {
+    param([object]$Dependent, [hashtable]$States, [switch]$Planning)
+    $name = [string]$Dependent.name
+    $current = @(Get-ServiceSnapshot $name | Where-Object { $_.exists -and $_.name -ieq $name })
+    if ($current.Count -ne 1) { return [pscustomobject]@{ state='leftAsChanged'; reason='dependent service missing' } }
+    if ($current[0].status -eq 'Running') { return [pscustomobject]@{ state='alreadyAtOriginal'; reason=$null } }
+    if ($current[0].status -ne 'Stopped' -or $current[0].startType -ne $Dependent.startType) { return [pscustomobject]@{ state='leftAsChanged'; reason='dependent startup or state changed' } }
+    foreach ($required in @($current[0].dependsOn)) {
+        if (-not $required) { continue }
+        $running = @(Get-ServiceSnapshot $required | Where-Object { $_.exists -and $_.name -ieq $required -and $_.status -eq 'Running' }).Count -eq 1
+        $state = $States[[string]$required]
+        if (-not $running -and -not ($Planning -and $state -and $state.status -in 'planned','alreadyAtOriginal')) {
+            return [pscustomobject]@{ state='leftAsChanged'; reason="a service it depends on is not running: $required" }
+        }
+    }
+    return [pscustomobject]@{ state='stopped'; reason=$null }
 }
 
 function Get-ToolInventory {
@@ -492,9 +537,11 @@ function Invoke-SmokeTest {
         Add-Result 'network-profile' ($profile.Count -gt 0) (($profile | Select-Object -First 1 -ExpandProperty Name) -join ',')
     } catch { Add-Result 'network-profile' $false $_.Exception.Message }
     try {
-        $dns = Resolve-DnsName 'www.microsoft.com' -ErrorAction Stop | Select-Object -First 1
-        Add-Result 'dns' ($null -ne $dns) 'www.microsoft.com resolves'
-    } catch { Add-Result 'dns' $false $_.Exception.Message }
+        $dnsInterfaces = @(Get-DnsClientServerAddress -ErrorAction Stop | Where-Object { @($_.ServerAddresses).Count -gt 0 })
+        $dnsClient = Get-Service -Name 'Dnscache' -ErrorAction SilentlyContinue
+        $dnsStatus = if ($dnsClient) { [string]$dnsClient.Status } else { 'missing' }
+        Add-Result 'dns-client' ($dnsStatus -eq 'Running' -and $dnsInterfaces.Count -gt 0) "Dnscache=$dnsStatus, interfaces with DNS servers=$($dnsInterfaces.Count)"
+    } catch { Add-Result 'dns-client' $false $_.Exception.Message }
     try { $bluetooth = @(Get-PnpDevice -Class Bluetooth -PresentOnly -ErrorAction SilentlyContinue).Count -gt 0 } catch { $bluetooth = $true }
     foreach ($svcName in @('WlanSvc','bthserv','WinDefend','BFE','mpssvc','WpnService')) {
         if ($svcName -eq 'bthserv' -and -not $bluetooth) { continue }
@@ -773,10 +820,12 @@ function Invoke-RollbackModule {
             $actions.Add([pscustomobject]($target + @{ action='restore'; status='failed' })) | Out-Null
         }
     }
+    $serviceStates = @{}
     foreach ($svc in @($backup.services)) {
         $target = @{ type='service'; name=$svc.name }
         if ($svc.exists -isnot [bool]) {
             $leftAsChanged.Add([pscustomobject]($target + @{ reason='missing original existence evidence' })) | Out-Null
+            $serviceStates[[string]$svc.name] = [pscustomobject]@{ status='leftAsChanged' }
             Write-Host "Left as changed: service $($svc.name) (missing original existence evidence)"
             continue
         }
@@ -786,26 +835,60 @@ function Invoke-RollbackModule {
             $current = @(if (-not $blocked) { Get-ServiceSnapshot $svc.name | Where-Object { $_.exists -and $_.name -ieq $svc.name } })
             if ($blocked -or $svc.appliedStartup -notin 'Disabled','Manual','Automatic' -or $current.Count -ne 1) {
                 $leftAsChanged.Add([pscustomobject]($target + @{ reason='protected, missing, or applied startup evidence unavailable' })) | Out-Null
+                $serviceStates[[string]$svc.name] = [pscustomobject]@{ status='leftAsChanged' }
                 Write-Host "Left as changed: service $($svc.name) (applied startup unavailable or changed)"
             } elseif (Test-ServiceRestoreComplete $svc $current[0]) {
                 $alreadyAtOriginal.Add([pscustomobject]$target) | Out-Null
+                $serviceStates[[string]$svc.name] = [pscustomobject]@{ status='alreadyAtOriginal' }
                 Write-Host "Already at original service settings: $($svc.name)"
             } elseif ($current[0].startType -eq $svc.startType) {
                 $reason = 'original startup matches; recorded Running state is unverified and runtime ownership is unavailable'
                 $leftAsChanged.Add([pscustomobject]($target + @{ reason=$reason })) | Out-Null
+                $serviceStates[[string]$svc.name] = [pscustomobject]@{ status='leftAsChanged' }
                 Write-Host "Left as changed: service $($svc.name) ($reason)"
             } elseif ($current[0].startType -eq $svc.appliedStartup) {
                 if ($svc.startType -notin 'Disabled','Manual','Automatic') { throw "Unsupported original service startup: $($svc.name)" }
                 $action = [pscustomobject]($target + @{ action='restore'; status='planned' })
                 $actions.Add($action) | Out-Null
                 $work.Add([pscustomobject]@{ target=$target; snapshot=$svc; action=$action }) | Out-Null
+                $serviceStates[[string]$svc.name] = $action
             } else {
                 $leftAsChanged.Add([pscustomobject]($target + @{ reason='current startup changed' })) | Out-Null
+                $serviceStates[[string]$svc.name] = [pscustomobject]@{ status='leftAsChanged' }
                 Write-Host "Left as changed: service $($svc.name)"
             }
         } catch {
             $failures.Add([pscustomobject]($target + @{ phase='preflight'; error=$_.Exception.Message; mayHaveChanged=$false })) | Out-Null
             $actions.Add([pscustomobject]($target + @{ action='restore'; status='failed' })) | Out-Null
+            $serviceStates[[string]$svc.name] = [pscustomobject]@{ status='failed' }
+        }
+    }
+    foreach ($svc in @($backup.services)) {
+        $dependents = @($svc.dependents)
+        for ($index = $dependents.Count - 1; $index -ge 0; $index--) {
+            $dependent = $dependents[$index]
+            if ($null -eq $dependent -or [string]$dependent.status -cne 'Running' -or $serviceStates.ContainsKey([string]$dependent.name)) { continue }
+            $target = @{ type='dependent'; name=[string]$dependent.name; of=[string]$svc.name }
+            try {
+                $check = Test-DependentRestore $dependent $serviceStates -Planning
+                if ($check.state -eq 'alreadyAtOriginal') {
+                    $alreadyAtOriginal.Add([pscustomobject]$target) | Out-Null
+                    $serviceStates[$target.name] = [pscustomobject]@{ status='alreadyAtOriginal' }
+                } elseif ($check.state -eq 'leftAsChanged') {
+                    $leftAsChanged.Add([pscustomobject]($target + @{ reason=$check.reason })) | Out-Null
+                    $serviceStates[$target.name] = [pscustomobject]@{ status='leftAsChanged' }
+                    Write-Host "Left as changed: dependent service $($target.name) of $($target.of) ($($check.reason))"
+                } else {
+                    $action = [pscustomobject]($target + @{ action='start'; status='planned' })
+                    $actions.Add($action) | Out-Null
+                    $work.Add([pscustomobject]@{ target=$target; snapshot=$dependent; action=$action }) | Out-Null
+                    $serviceStates[$target.name] = $action
+                }
+            } catch {
+                $failures.Add([pscustomobject]($target + @{ phase='preflight'; error=$_.Exception.Message; mayHaveChanged=$false })) | Out-Null
+                $actions.Add([pscustomobject]($target + @{ action='start'; status='failed' })) | Out-Null
+                $serviceStates[$target.name] = [pscustomobject]@{ status='failed' }
+            }
         }
     }
     $stopped = $failures.Count -gt 0
@@ -840,6 +923,25 @@ function Invoke-RollbackModule {
                 $writing = $true
                 Restore-RegistryValue $item.snapshot $item.original
                 $registryCount++
+            } elseif ($item.target.type -eq 'dependent') {
+                $check = Test-DependentRestore $item.snapshot $serviceStates
+                if ($check.state -eq 'alreadyAtOriginal') {
+                    $alreadyAtOriginal.Add([pscustomobject]$item.target) | Out-Null
+                    $item.action.status = 'alreadyAtOriginal'
+                    continue
+                }
+                if ($check.state -eq 'leftAsChanged') {
+                    $leftAsChanged.Add([pscustomobject]($item.target + @{ reason=$check.reason })) | Out-Null
+                    $item.action.status = 'leftAsChanged'
+                    Write-Host "Left as changed: dependent service $($item.target.name) of $($item.target.of) ($($check.reason))"
+                    continue
+                }
+                $attempted++
+                $writing = $true
+                Start-Service -Name $item.target.name -ErrorAction Stop
+                $verified = @(Get-ServiceSnapshot $item.target.name | Where-Object { $_.exists -and $_.name -ieq $item.target.name -and $_.status -eq 'Running' })
+                if ($verified.Count -ne 1) { throw "Dependent service start verification failed: $($item.target.name)" }
+                $serviceCount++
             } else {
                 $svc = $item.snapshot
                 $current = @(Get-ServiceSnapshot $svc.name | Where-Object { $_.exists -and $_.name -ieq $svc.name })

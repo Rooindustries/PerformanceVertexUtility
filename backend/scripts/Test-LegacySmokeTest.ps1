@@ -11,10 +11,15 @@ try {
     # Only operating-system reads are replaced; the real Invoke-SmokeTest decides which checks apply.
     $script:bluetooth = @()
     $script:apps = @()
-    $script:services = @{ WlanSvc = 'Running'; bthserv = 'Running'; WinDefend = 'Running'; BFE = 'Running'; mpssvc = 'Running'; WpnService = 'Running' }
+    $script:services = @{ WlanSvc = 'Running'; bthserv = 'Running'; WinDefend = 'Running'; BFE = 'Running'; mpssvc = 'Running'; WpnService = 'Running'; Dnscache = 'Running' }
     $script:processes = @()
+    $script:lookups = 0
+    $script:dnsServers = @('192.0.2.53')
     function Get-NetConnectionProfile { @([pscustomobject]@{ Name = 'Fixture network' }) }
-    function Resolve-DnsName { @([pscustomobject]@{ Name = 'www.microsoft.com' }) }
+    function Resolve-DnsName { $script:lookups++; @([pscustomobject]@{ Name = 'www.microsoft.com' }) }
+    function Test-Connection { $script:lookups++; $true }
+    function Invoke-WebRequest { $script:lookups++ }
+    function Get-DnsClientServerAddress { @([pscustomobject]@{ InterfaceAlias = 'Fixture'; ServerAddresses = $script:dnsServers }) }
     function Get-PnpDevice { if ($script:bluetooth -eq 'unavailable') { throw [Management.Automation.CommandNotFoundException]::new('Get-PnpDevice') }; @($script:bluetooth) }
     function Get-Service { param([string]$Name) if ($script:services.ContainsKey($Name)) { [pscustomobject]@{ Name = $Name; Status = $script:services[$Name]; StartType = 'Automatic' } } }
     function Get-ItemProperty { @($script:apps | ForEach-Object { [pscustomobject]@{ DisplayName = $_ } }) }
@@ -25,6 +30,14 @@ try {
     $healthy = Invoke-SmokeTest
     Assert ($healthy.pass -and (Names $healthy) -notcontains 'service:Tailscale' -and (Names $healthy) -notcontains 'process:Wispr Flow') 'A healthy PC without Tailscale or Wispr Flow passes the smoke test'
     Assert ((Names $healthy) -notcontains 'service:bthserv') 'A PC without a Bluetooth adapter skips the Bluetooth service check'
+    Assert ($script:lookups -eq 0 -and @($healthy.results | Where-Object { $_.name -eq 'dns-client' -and $_.pass }).Count -eq 1) 'The smoke test checks DNS locally without any network lookup'
+    $script:dnsServers = @()
+    $noServers = Invoke-SmokeTest
+    $script:dnsServers = @('192.0.2.53')
+    $script:services.Dnscache = 'Stopped'
+    $noClient = Invoke-SmokeTest
+    $script:services.Dnscache = 'Running'
+    Assert ($script:lookups -eq 0 -and -not $noServers.pass -and -not $noClient.pass -and @(@($noServers.results) + @($noClient.results) | Where-Object { $_.name -eq 'dns-client' -and -not $_.pass }).Count -eq 2) 'The local DNS check fails without a DNS server or a running DNS Client service'
 
     $script:bluetooth = @([pscustomobject]@{ Status = 'Error' })
     $script:services.bthserv = 'Stopped'

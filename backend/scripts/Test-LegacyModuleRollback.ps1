@@ -1,6 +1,6 @@
 param(
     [string]$HarnessPath = (Join-Path $PSScriptRoot '..\..\LeanClientOptimizer.ps1'),
-    [ValidateSet('All','Selection','Drift','PreviewBinding','Registry','Recovery','SnapshotSafety','ApplyComparison')][string]$Scenario = 'All',
+    [ValidateSet('All','Selection','Drift','PreviewBinding','Dependents','BackupWrite','Services','Registry','Recovery','SnapshotSafety','ApplyComparison')][string]$Scenario = 'All',
     [ValidateSet('All','Signed','LegacyEvidence','Preflight','RegistryFailure','ServiceFailure','ServiceRuntime','OriginalEvidence','ServiceExistence','SourceEvidence','JsonNumbers','LegacyNames')][string]$RecoveryCase = 'All',
     [string]$BaseHarnessPath = $env:ROO_INDUSTRIES_LEGACY_BASE_HARNESS,
     [string]$BaseHarnessSha256 = $env:ROO_INDUSTRIES_LEGACY_BASE_HARNESS_SHA256
@@ -1223,6 +1223,216 @@ try {
         $restored=Invoke-RollbackModule
         Test-BindingCase ($restored.success -and $restored.restoredRegistry -eq 2 -and $script:bindingValues.Second.kind -ceq 'String' -and $script:bindingValues.Second.value -ceq 'One' -and $script:bindingValues.First.kind -ceq 'DWord' -and $script:bindingValues.First.value -eq 1) 'Rollback still undoes an apply made before unsupported types were refused'
         Assert ($bindingFailures.Count -eq 0) ('Every preview-binding case holds ('+$bindingFailures.Count+' failed)')
+    } }
+    if ($Scenario -in 'All','Dependents') { & {
+        . $HarnessPath -Action ListModules -ManifestPath $fixtureManifest -DataRoot $tempRoot -ModuleId 'fixture' | Out-Null
+        $ManifestPath=Join-Path $tempRoot 'dependents-manifest.json'
+        $dependentFailures=New-Object System.Collections.Generic.List[string]
+        function Test-DependentCase([bool]$Condition,[string]$Message) {
+            if ($Condition) { Write-Host "PASS $Message" } else { Write-Host "FAIL $Message"; $dependentFailures.Add($Message) }
+        }
+        function Get-FakeDependents {
+            param([string]$Name)
+            foreach ($other in @($script:fakeServices.Keys | Sort-Object)) {
+                if ($script:fakeServices[$other].dependsOn -contains $Name) { Get-FakeDependents $other; $other }
+            }
+        }
+        function Get-Service {
+            [CmdletBinding()]param([string]$Name)
+            if ($Name.Contains('*') -or -not $script:fakeServices.ContainsKey($Name) -or -not $script:fakeServices[$Name].exists) { return }
+            $state=$script:fakeServices[$Name]
+            $controller=[pscustomobject]@{Name=$Name;DisplayName=$Name;StartType=$state.startup;Status=$state.status;ServicesDependedOn=@(foreach ($required in $state.dependsOn) {[pscustomobject]@{Name=$required}})}
+            $controller|Add-Member ScriptProperty DependentServices {@(Get-FakeDependents $this.Name|Select-Object -Unique|ForEach-Object {$s=$script:fakeServices[$_];[pscustomobject]@{Name=$_;Status=$s.status;StartType=$s.startup}})}
+            $controller
+        }
+        function Get-CimInstance { param($ClassName,$Filter) $null }
+        function Set-Service { [CmdletBinding()]param($Name,$StartupType) $script:serviceCalls.Add('set '+$Name+' '+$StartupType);$script:fakeServices[$Name].startup=[string]$StartupType }
+        function Stop-Service {
+            [CmdletBinding()]param($Name,[switch]$Force)
+            foreach ($dependent in @(Get-FakeDependents $Name|Select-Object -Unique)) {
+                if ($script:fakeServices[$dependent].status -eq 'Running') {
+                    if (-not $Force) { throw "Fixture service $Name has running dependents" }
+                    $script:serviceCalls.Add('stop '+$dependent);$script:fakeServices[$dependent].status='Stopped'
+                }
+            }
+            $script:serviceCalls.Add('stop '+$Name);$script:fakeServices[$Name].status='Stopped'
+        }
+        function Start-Service {
+            [CmdletBinding()]param($Name)
+            $state=$script:fakeServices[$Name]
+            if ($state.startup -eq 'Disabled') { throw "Fixture service $Name is disabled" }
+            if ($script:failStart -ceq $Name) { $script:failStart=$null; throw "Fixture start failure for $Name" }
+            foreach ($required in $state.dependsOn) { if ($script:fakeServices[$required].status -ne 'Running') { Start-Service -Name $required } }
+            $script:serviceCalls.Add('start '+$Name);$state.status='Running'
+        }
+        function Get-BenchmarkSnapshot { param($Label) @{label=$Label} }
+        function Invoke-SmokeTest { [pscustomobject]@{pass=$true} }
+        function Reset-DependentFixture {
+            param([object[]]$Services=@(@{name='Probe';startup='Disabled';targetState='Stopped'}))
+            $script:fakeServices=@{
+                Probe=@{startup='Automatic';status='Running';exists=$true;dependsOn=@()}
+                ProbeDep=@{startup='Manual';status='Running';exists=$true;dependsOn=@('Probe')}
+                ProbeDepChild=@{startup='Manual';status='Running';exists=$true;dependsOn=@('ProbeDep')}
+                ProbeIdle=@{startup='Manual';status='Stopped';exists=$true;dependsOn=@('Probe')}
+            }
+            $script:serviceCalls=New-Object System.Collections.Generic.List[string]
+            $script:failStart=$null
+            Write-JsonFile @{protected=@{services=@();registryPathPatterns=@()};modules=@(@{id='fixture';name='Fixture';registryValues=@();services=$Services})} $ManifestPath
+            return (Join-Path $tempRoot ('dependents-'+[guid]::NewGuid().ToString('N')))
+        }
+        function Get-FakeStatus { (@('Probe','ProbeDep','ProbeDepChild','ProbeIdle')|ForEach-Object {$_+'='+$script:fakeServices[$_].startup+'/'+$script:fakeServices[$_].status}) -join ' ' }
+        $restoredState='Probe=Automatic/Running ProbeDep=Manual/Running ProbeDepChild=Manual/Running ProbeIdle=Manual/Stopped'
+
+        $DataRoot=Reset-DependentFixture
+        $applied=Invoke-ReviewedApply
+        Test-DependentCase ((Get-FakeStatus) -ceq 'Probe=Disabled/Stopped ProbeDep=Manual/Stopped ProbeDepChild=Manual/Stopped ProbeIdle=Manual/Stopped') 'Apply stops the service and the dependents running on it'
+        $saved=Get-Content -LiteralPath $applied.backupPath -Raw|ConvertFrom-Json
+        $recorded=@($saved.services[0].dependents|ForEach-Object {$_.name+'='+$_.startType+'/'+$_.status}) -join ' '
+        Test-DependentCase ($recorded -ceq 'ProbeDepChild=Manual/Running ProbeDep=Manual/Running ProbeIdle=Manual/Stopped') ('The backup records each dependent''s state before the stop ('+$recorded+')')
+        $BackupPath=$applied.backupPath
+        $ConfirmApply=$false
+        $calls=$script:serviceCalls.Count
+        $preview=Invoke-RollbackModule
+        Test-DependentCase ($preview.success -and $preview.restoredServices -eq 3 -and @($preview.actions|Where-Object {$_.type -eq 'dependent'}).Count -eq 2 -and $script:serviceCalls.Count -eq $calls) 'Undo preview plans the dependent restarts without changing anything'
+        $ConfirmApply=$true
+        $restored=Invoke-RollbackModule
+        Test-DependentCase ($restored.success -and $restored.restoredServices -eq 3 -and (Get-FakeStatus) -ceq $restoredState) ('Undo restarts the dependents that were running and leaves the idle one stopped ('+(Get-FakeStatus)+')')
+        $again=Invoke-RollbackModule
+        Test-DependentCase ($again.success -and $again.restoredServices -eq 0 -and @($again.alreadyAtOriginal|Where-Object {$_.type -eq 'dependent'}).Count -eq 2) 'A repeated undo reports the dependents as already running'
+
+        $DataRoot=Reset-DependentFixture
+        $applied=Invoke-ReviewedApply
+        $BackupPath=$applied.backupPath
+        $script:failStart='ProbeDep'
+        $failed=Invoke-RollbackModule
+        $afterFailure=Get-FakeStatus
+        $retry=Invoke-RollbackModule
+        Test-DependentCase (-not $failed.success -and $failed.partial -and $failed.failures[0].name -ceq 'ProbeDep' -and $failed.failures[0].phase -ceq 'restore' -and @($failed.pending|Where-Object {$_.name -ceq 'ProbeDepChild'}).Count -eq 1 -and $afterFailure -ceq 'Probe=Automatic/Running ProbeDep=Manual/Stopped ProbeDepChild=Manual/Stopped ProbeIdle=Manual/Stopped' -and $retry.success -and (Get-FakeStatus) -ceq $restoredState) 'A failed dependent start stops undo safely and a retry finishes it'
+
+        $DataRoot=Reset-DependentFixture
+        $applied=Invoke-ReviewedApply
+        $BackupPath=$applied.backupPath
+        $script:fakeServices.ProbeDep.startup='Disabled'
+        $restored=Invoke-RollbackModule
+        $left=@($restored.leftAsChanged|Where-Object {$_.type -eq 'dependent'}|ForEach-Object {$_.name}) -join ','
+        Test-DependentCase ($restored.success -and $left -ceq 'ProbeDep,ProbeDepChild' -and (Get-FakeStatus) -ceq 'Probe=Automatic/Running ProbeDep=Disabled/Stopped ProbeDepChild=Manual/Stopped ProbeIdle=Manual/Stopped') ('A dependent another program changed is left alone, with what depends on it ('+$left+')')
+
+        $DataRoot=Reset-DependentFixture
+        $applied=Invoke-ReviewedApply
+        $BackupPath=$applied.backupPath
+        $script:fakeServices.Probe.startup='Manual'
+        $calls=$script:serviceCalls.Count
+        $restored=Invoke-RollbackModule
+        $left=@($restored.leftAsChanged|ForEach-Object {$_.name}) -join ','
+        Test-DependentCase ($restored.success -and $left -ceq 'Probe,ProbeDep,ProbeDepChild' -and $script:serviceCalls.Count -eq $calls) ('Dependents stay stopped when their service is left as another program set it ('+$left+')')
+
+        $DataRoot=Reset-DependentFixture @(@{name='Probe';startup='Disabled';targetState='Stopped'},@{name='ProbeDep';startup='Disabled';targetState='Stopped'})
+        $applied=Invoke-ReviewedApply
+        $BackupPath=$applied.backupPath
+        $calls=$script:serviceCalls.Count
+        $restored=Invoke-RollbackModule
+        $starts=@($script:serviceCalls|Select-Object -Skip $calls|Where-Object {$_ -like 'start *'}) -join ','
+        Test-DependentCase ($restored.success -and $starts -ceq 'start Probe,start ProbeDep,start ProbeDepChild' -and (Get-FakeStatus) -ceq $restoredState) ('A dependent the module also lists is restored once by its own entry ('+$starts+')')
+
+        $DataRoot=Reset-DependentFixture
+        $applied=Invoke-ReviewedApply
+        $BackupPath=$applied.backupPath
+        $legacy=Get-Content -LiteralPath $BackupPath -Raw|ConvertFrom-Json
+        $legacy.services[0].PSObject.Properties.Remove('dependents')
+        Write-JsonFile $legacy $BackupPath
+        $restored=Invoke-RollbackModule
+        Test-DependentCase ($restored.success -and $restored.restoredServices -eq 1 -and (Get-FakeStatus) -ceq 'Probe=Automatic/Running ProbeDep=Manual/Stopped ProbeDepChild=Manual/Stopped ProbeIdle=Manual/Stopped') 'A backup made before dependents were recorded still undoes its own service'
+        Assert ($dependentFailures.Count -eq 0) ('Every dependent-service case holds ('+$dependentFailures.Count+' failed)')
+    } }
+    if ($Scenario -in 'All','BackupWrite') { & {
+        . $HarnessPath -Action ListModules -ManifestPath $fixtureManifest -DataRoot $tempRoot -ModuleId 'fixture' | Out-Null
+        $writeFailures=New-Object System.Collections.Generic.List[string]
+        function Test-WriteCase([bool]$Condition,[string]$Message) {
+            if ($Condition) { Write-Host "PASS $Message" } else { Write-Host "FAIL $Message"; $writeFailures.Add($Message) }
+        }
+        $folder=Join-Path $tempRoot 'backup-write'
+        New-Item -ItemType Directory -Path $folder | Out-Null
+        $existing=Join-Path $folder 'backup.json'
+        Write-JsonFile @{moduleId='fixture';generation='old'} $existing
+        $oldBytes=[Convert]::ToBase64String([IO.File]::ReadAllBytes($existing))
+        & {
+            function Set-Content { param($LiteralPath,$Encoding) $text=@($input) -join "`n"; [IO.File]::WriteAllText($LiteralPath,$text.Substring(0,[int]($text.Length/2))); throw 'Simulated crash mid-write' }
+            $message=$null
+            try { Write-JsonFile @{moduleId='fixture';generation='new';padding=('x'*200)} $existing } catch { $message=$_.Exception.Message }
+            Test-WriteCase ($message -ceq 'Simulated crash mid-write' -and [Convert]::ToBase64String([IO.File]::ReadAllBytes($existing)) -ceq $oldBytes -and @(Get-ChildItem -LiteralPath $folder -Force).Count -eq 1) 'A crash while replacing a backup keeps the old backup intact'
+            $fresh=Join-Path $folder 'fresh.json'
+            try { Write-JsonFile @{moduleId='fixture';padding=('x'*200)} $fresh } catch {}
+            Test-WriteCase (-not (Test-Path -LiteralPath $fresh) -and @(Get-ChildItem -LiteralPath $folder -Force).Count -eq 1) 'A crash while writing a new backup leaves no backup rather than a torn one'
+        }
+        Write-JsonFile @{moduleId='fixture';generation='new'} $existing
+        $saved=Get-Content -LiteralPath $existing -Raw|ConvertFrom-Json
+        Test-WriteCase ($saved.generation -ceq 'new' -and @(Get-ChildItem -LiteralPath $folder -Force).Count -eq 1) 'A completed write replaces the backup and leaves no temporary file'
+        $DataRoot=Join-Path $tempRoot 'backup-write-apply'
+        function Get-RegistryValueSnapshot { param($Item,[switch]$AllowChangedLayout) [pscustomobject]@{path=$Item.path;name=$Item.name;type=$Item.type;desiredData=$Item.data;pathExists=$true;valueExists=$true;kind='DWord';oldValue=1} }
+        function Set-RegistryValueFromManifest { param($Item) $script:writeRegistryWrites++ }
+        function Get-BenchmarkSnapshot { param($Label) @{label=$Label} }
+        function Invoke-SmokeTest { @() }
+        $script:writeRegistryWrites=0
+        $ConfirmApply=$false
+        $PreviewPath=(Invoke-ApplyModule).previewPath
+        & {
+            function Set-Content { param($LiteralPath,$Encoding) $text=@($input) -join "`n"; [IO.File]::WriteAllText($LiteralPath,$text.Substring(0,[int]($text.Length/2))); throw 'Simulated crash mid-write' }
+            $ConfirmApply=$true
+            $message=$null
+            try { Invoke-ApplyModule|Out-Null } catch { $message=$_.Exception.Message }
+            $torn=@(Get-ChildItem -LiteralPath (Join-Path $DataRoot 'backups') -Recurse -Force -File -ErrorAction SilentlyContinue)
+            Test-WriteCase ($message -ceq 'Simulated crash mid-write' -and $script:writeRegistryWrites -eq 0 -and $torn.Count -eq 0) ('A crash while saving the backup changes nothing and leaves no torn backup ('+$torn.Count+' files)')
+        }
+        Assert ($writeFailures.Count -eq 0) ('Every backup-write case holds ('+$writeFailures.Count+' failed)')
+    } }
+    if ($Scenario -in 'All','Services') { & {
+        if ($env:OS -ne 'Windows_NT') { throw 'The real service regression requires Windows.' }
+        if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { Write-Output 'SKIP Real service checks need administrator rights to create disposable probe services'; return }
+        $suffix=[guid]::NewGuid().ToString('N').Substring(0,12)
+        $probe='RooIndustriesProbe'+$suffix
+        $dependent='RooIndustriesProbeDep'+$suffix
+        $child='RooIndustriesProbeKid'+$suffix
+        $exe=Join-Path $tempRoot 'probe-service.exe'
+        Add-Type -TypeDefinition 'using System.ServiceProcess; public class RooIndustriesProbeService : ServiceBase { public RooIndustriesProbeService() { ServiceName = "RooIndustriesProbe"; } public static void Main() { ServiceBase.Run(new RooIndustriesProbeService()); } }' -ReferencedAssemblies System.ServiceProcess -OutputAssembly $exe -OutputType ConsoleApplication
+        function Get-ProbeState {
+            (@($probe,$dependent,$child) | ForEach-Object { $s=Get-Service -Name $_; $s.Refresh(); [string]$s.StartType+'/'+[string]$s.Status }) -join ' '
+        }
+        try {
+            New-Service -Name $probe -BinaryPathName ('"'+$exe+'"') -StartupType Automatic -DisplayName 'Roo Industries test probe' | Out-Null
+            New-Service -Name $dependent -BinaryPathName ('"'+$exe+'"') -StartupType Manual -DependsOn $probe -DisplayName 'Roo Industries test probe dependent' | Out-Null
+            New-Service -Name $child -BinaryPathName ('"'+$exe+'"') -StartupType Manual -DependsOn $dependent -DisplayName 'Roo Industries test probe second dependent' | Out-Null
+            Start-Service -Name $child
+            Assert ((Get-ProbeState) -ceq 'Automatic/Running Manual/Running Manual/Running') 'The disposable probe service and its two-level dependents are running'
+            $servicesManifest=Join-Path $tempRoot 'services-manifest.json'
+            Write-JsonFile @{protected=@{services=@();registryPathPatterns=@()};modules=@(@{id='fixture';name='Fixture';registryValues=@();services=@(@{name=$probe;startup='Disabled';targetState='Stopped'})})} $servicesManifest
+            . $HarnessPath -Action ListModules -ManifestPath $servicesManifest -DataRoot (Join-Path $tempRoot 'services') -ModuleId 'fixture' | Out-Null
+            function Get-BenchmarkSnapshot { param($Label) @{label=$Label} }
+            function Invoke-SmokeTest { [pscustomobject]@{pass=$true} }
+            $applied=Invoke-ReviewedApply
+            Assert ((Get-ProbeState) -ceq 'Disabled/Stopped Manual/Stopped Manual/Stopped') 'Apply stops the real probe service and the dependents running on it'
+            $saved=Get-Content -LiteralPath $applied.backupPath -Raw | ConvertFrom-Json
+            $recorded=@($saved.services[0].dependents | ForEach-Object { $_.name+'='+$_.startType+'/'+$_.status }) -join ' '
+            Assert ($recorded -ceq ($child+'=Manual/Running '+$dependent+'=Manual/Running')) ('The backup records both real dependents as running, in stop order, before the stop ('+$recorded+')')
+            $BackupPath=$applied.backupPath
+            $ConfirmApply=$false
+            $preview=Invoke-RollbackModule
+            Assert ($preview.success -and $preview.restoredServices -eq 3 -and (Get-ProbeState) -ceq 'Disabled/Stopped Manual/Stopped Manual/Stopped') 'Undo preview plans the real service and dependent restarts without changing them'
+            $ConfirmApply=$true
+            $restored=Invoke-RollbackModule
+            Write-Output ('REAL_SERVICE_UNDO_JSON '+(ConvertTo-Json -InputObject @{state=(Get-ProbeState);success=$restored.success;restoredServices=$restored.restoredServices;actions=@($restored.actions)} -Depth 5 -Compress))
+            Assert ($restored.success -and $restored.restoredServices -eq 3 -and (Get-ProbeState) -ceq 'Automatic/Running Manual/Running Manual/Running') 'Undo restores the real probe service and restarts both dependents'
+        } finally {
+            foreach ($name in @($child,$dependent,$probe)) {
+                if (Get-Service -Name $name -ErrorAction SilentlyContinue) {
+                    Stop-Service -Name $name -Force -ErrorAction SilentlyContinue
+                    & sc.exe delete $name | Out-Null
+                }
+            }
+            [GC]::Collect()
+            [GC]::WaitForPendingFinalizers()
+            for ($wait=0; $wait -lt 40 -and @(Get-Service -Name $probe,$dependent,$child -ErrorAction SilentlyContinue).Count; $wait++) { Start-Sleep -Milliseconds 250 }
+        }
+        Assert (@(Get-Service -Name $probe,$dependent,$child -ErrorAction SilentlyContinue).Count -eq 0) 'The disposable probe services are removed'
     } }
     if ($Scenario -in 'All','Registry') { & {
         if ($env:OS -ne 'Windows_NT') { throw 'The real-registry regression requires Windows.' }
