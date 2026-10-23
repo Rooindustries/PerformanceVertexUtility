@@ -156,7 +156,7 @@ static class MitigationCommandChecks
             finally
             {
                 if (restored) { owned.Dispose(); folder.Delete(true); }
-                else Console.Error.WriteLine("Retained mitigation recovery at " + root + " and " + folder.FullName);
+                else Console.Error.WriteLine("Retained mitigation recovery at " + root + " and the Windows temp folder " + folder.Name);
             }
         }
     }
