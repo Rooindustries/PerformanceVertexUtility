@@ -113,7 +113,7 @@ public sealed class BugRedactor
         var previousBoundary = -1;
         var previousPrivate = false;
         var covered = new List<(int Start, int End)>();
-        foreach (var match in Profiles(text))
+        foreach (var (match, _) in Profiles(text))
         {
             covered.Add((match.Groups["root"].Index, match.Groups["run"].Index + match.Groups["run"].Length));
             var found = Profile(match, text, out var boundary, out var root, out var placeholder);
@@ -179,11 +179,11 @@ public sealed class BugRedactor
         }
         var view = decoded.ToString();
         var changes = new List<(int Start, int End, string Value)>();
-        foreach (var match in Profiles(view))
+        foreach (var (match, urlValue) in Profiles(view))
         {
             var root = match.Groups["root"];
             var start = root.Index == 0 ? 0 : ends[root.Index - 1];
-            if (ends[root.Index + root.Length - 1] - start == root.Length) continue;
+            if (!urlValue && ends[root.Index + root.Length - 1] - start == root.Length) continue;
             if (Profile(match, view, out _, out _, out _) is { } change && change.End > change.Start)
                 changes.Add((change.Start == 0 ? 0 : ends[change.Start - 1], ends[change.End - 1], change.Value));
         }
@@ -196,19 +196,25 @@ public sealed class BugRedactor
         return Replace(text, changes);
     }
 
-    private IEnumerable<Match> Profiles(string text)
+    private IEnumerable<(Match Match, bool UrlValue)> Profiles(string text)
     {
         using var urls = HttpUrls.Matches(text).Cast<Match>().GetEnumerator();
+        using var values = UrlNetworkValues.Matches(text).Cast<Match>().GetEnumerator();
         var hasUrl = urls.MoveNext();
+        var hasValue = values.MoveNext();
         var previousAccount = -1;
         foreach (Match match in _segment.Matches(text))
         {
             if (match.Groups["run"].Index == previousAccount) continue;
             while (hasUrl && urls.Current.Index + urls.Current.Length <= match.Index) hasUrl = urls.MoveNext();
-            if (!match.Groups["network"].Success || !hasUrl || match.Index < urls.Current.Index)
+            while (hasValue && values.Current.Index + values.Current.Length <= match.Index) hasValue = values.MoveNext();
+            var embedded = hasUrl && hasValue && urls.Current.Groups["parameters"].Success
+                && values.Current.Index >= urls.Current.Groups["parameters"].Index
+                && values.Current.Groups["path"].Index <= match.Index;
+            if (!match.Groups["network"].Success || !hasUrl || match.Index < urls.Current.Index || embedded)
             {
                 previousAccount = match.Groups["run"].Index;
-                yield return match;
+                yield return (match, embedded);
             }
         }
     }
@@ -457,6 +463,7 @@ public sealed class BugRedactor
     private const string User = "\u0001", PcName = "\u0002", Sid = "\u0003";
     private const RegexOptions Options = RegexOptions.IgnoreCase | RegexOptions.CultureInvariant;
     private const string ComponentEnd = @"(?=[\\/""\x00-\x1F:<>|?*]|$)";
+    private const string UrlEscape = @"\\+u(?!(?:00[01][0-9a-f]|002[027]|003[ce]|0085|00a0|1680|200[0-a]|202[89f]|205f|3000))[0-9a-f]{4}";
     private const string StandardRoots = @"[A-Za-z]:(?>[\\/]+)(?:Users|Documents and Settings)|(?<network>(?<![\\/]|[A-Za-z]:)(?>[\\/]+)(?:Users|Documents and Settings))";
     private const string SegmentSeparator = @"(?>(?:\\+(?=/)|/+(?=(?>\\+)(?!u[0-9A-Fa-f]{4}))|[\\/]+\.(?=[\\/]))*)(?<sep>(?>\\+|/+))";
     private const string SegmentRun = @"(?<run>(?>(?:(?!\k<sep>)\\+u[0-9A-Fa-f]{4}|(?![A-Za-z]:[\\/])[^\\/""\x00-\x1F:<>|?*])*)(?>[\u0001-\u0003](?:(?!\k<sep>)\\+u[0-9A-Fa-f]{4}|(?![A-Za-z]:[\\/])[^\\/""\x00-\x1F:<>|?*])*)*)";
@@ -465,9 +472,15 @@ public sealed class BugRedactor
     private static readonly Regex AccountProfile = new(@"\AS-1-(?:5-21|12-1)(?:-\d+)+(?:\.bak)?\z", Options);
     private static readonly Regex AccountSid = new(@"S-1-(?:5-21(?:-\d+){3,4}|12-1(?:-\d+){1,4})", Options);
     private static readonly Regex EncodedRootCharacter = new(@"\\u(?!003[ce]|0022)[0-9A-Fa-f]{4}", Options);
-    private static readonly Regex HttpUrls = new(@"https?:(?:\\*/){2}(?:\\+/|[^\s\\""'<>])*", Options);
+    private static readonly Regex HttpUrls = new(UrlLiteral("http") + UrlLiteral("s") + "?" + UrlLiteral(":")
+        + @"(?:\\*/|(?<!\\)\\+u002f){2}(?:\\+/|" + UrlEscape + @"|[^\s\\""'<>?#])*(?<parameters>[?#](?:\\+/|" + UrlEscape + @"|[^\s\\""'<>])*)?", Options);
+    private static readonly Regex UrlNetworkValues = new(@"[?&#;][^?&#;=\s\\""'<>]*=(?<path>(?:\\*/){2}(?:\\+/|[^:&;#\s\\""'<>])*)", Options);
     private static readonly Regex Macro = new("(?:%USERPROFILE%)+", Options);
     private static readonly Regex ProfileSegment = new("(?=(?<root>(?:" + StandardRoots + ")" + SegmentSeparator + ")" + SegmentRun + ")", Options);
+
+    private static string UrlLiteral(string text)
+        => string.Concat(text.Select(c => "(?:" + Regex.Escape(c.ToString()) + "|" + string.Join("|",
+            new[] { c, char.ToUpperInvariant(c) }.Distinct().Select(value => @"(?<!\\)\\+u" + ((int)value).ToString("x4"))) + ")"));
 
     private static Regex Word(string value)
         => new(@"(?<![\p{L}\p{N}_])" + Regex.Escape(value) + @"(?![\p{L}\p{N}_])", Options);

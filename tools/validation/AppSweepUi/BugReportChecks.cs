@@ -1063,6 +1063,25 @@ static class BugReportChecks
         cases.Add(("Relocated profile", moved, @"\\.\UNC\fs01\profiles$\Zqxroam\x and //fs01/profiles$/Zqxroam/y and \/\/fs01\/profiles$\/Zqxroam\/z",
             @"\\.\UNC\fs01\profiles$\<user>\x and //fs01/profiles$/<user>/y and \/\/fs01\/profiles$\/<user>\/z", ["Zqxroam"]));
         cases.Add(("Windows path in URL", own, "https://host/?file=C:/Users/Bob/x", "https://host/?file=C:/Users/<user>/x", ["Bob"]));
+        cases.Add(("UNC value in URL", own, "https://host/?file=//fs01/Users/Carol/x", "https://host/?file=//fs01/Users/<user>/x", ["Carol"]));
+        cases.Add(("UNC value in URL", moved, "https://host/?file=//fs01/profiles$/Zqxquery/x", "https://host/?file=//fs01/profiles$/<user>/x", ["Zqxquery"]));
+        cases.Add(("UNC value in URL", own, @"https:\/\/host\/?file=\/\/fs01\/Users\/Carol\/x", @"https:\/\/host\/?file=\/\/fs01\/Users\/<user>\/x", ["Carol"]));
+        cases.Add(("UNC value in URL", own, @"https://host/?file=//fs01/\u0055sers/Zqxquery/x", @"https://host/?file=//fs01/\u0055sers/<user>/x", ["Zqxquery"]));
+        cases.Add(("UNC value in URL", own, @"https://host/\u003Ffile\u003D//fs01/Users/Zqxquery/x\u0026next\u003Dhttps://mirror/Users/PublicPage/x",
+            @"https://host/\u003Ffile\u003D//fs01/Users/<user>/x\u0026next\u003Dhttps://mirror/Users/PublicPage/x", ["Zqxquery"]));
+        cases.Add(("UNC value in URL", own, @"\u0048\u0054\u0054\u0050\u0053\u003A\u002F\u002Fhost/?file=//fs01/Users/Zqxquery/x",
+            @"\u0048\u0054\u0054\u0050\u0053\u003A\u002F\u002Fhost/?file=//fs01/Users/<user>/x", ["Zqxquery"]));
+        cases.Add(("UNC value in URL", moved, "https://host/Users/PublicPage/x?file=//fs01/Users/Zqxquery/x&next=https://fs01/profiles$/PublicPage/x&other=//fs01/profiles$/Zqxother/y",
+            "https://host/Users/PublicPage/x?file=//fs01/Users/<user>/x&next=https://fs01/profiles$/PublicPage/x&other=//fs01/profiles$/<user>/y", ["Zqxquery", "Zqxother"]));
+        cases.Add(("UNC value in URL", own, "https://host/#file=//fs01/Users/Zqxquery/x", "https://host/#file=//fs01/Users/<user>/x", ["Zqxquery"]));
+        foreach (var input in new[] { "https://host/?next=https://fs01/Users/Carol/x", "https://host/?next=/Users/Carol/x",
+            "https://host/path&file=//fs01/Users/Carol/x", "https://host/path;file=//fs01/Users/Carol/x",
+            "note?file=//other/https://host/Users/Carol/x", "https://host/?file=//fs01/profiles$Old/Carol/x",
+            @"\u0068\u0074\u0074\u0070\u0073\u003a\u002f\u002fhost/Users/Carol/x" })
+            cases.Add(("Ordinary URL value", moved, input, input, []));
+        foreach (var boundary in new[] { "000a", "0009", "0020", "0022", "2028" })
+            cases.Add(("UNC after encoded URL boundary", own, @"https://host/x\u" + boundary + "//fs01/Users/Zqxafter/x",
+                @"https://host/x\u" + boundary + "//fs01/Users/<user>/x", ["Zqxafter"]));
         cases.Add(("UNC after URL", moved, "https://host/x\n" + @"\\fs01\profiles$\Zqxroam\x", "https://host/x\n" + @"\\fs01\profiles$\<user>\x", ["Zqxroam"]));
         foreach (var letter in new[] { "n", "r", "t", "b", "f" })
         {
@@ -1200,11 +1219,15 @@ static class BugReportChecks
         while (spaced.Length < 7 * 1024 * 1024) spaced.Append("%USERPROFILE% a");
         var encoded = new StringBuilder();
         while (encoded.Length < 7 * 1024 * 1024) encoded.Append(@"C:/\u0055sers/Zqxother/x D:/Pro\u0066iles/Zqxmoved/y \u0053-1-12-1-111-222-333-444 ");
+        var urls = new StringBuilder();
+        while (urls.Length < 7 * 1024 * 1024) urls.Append("https://host/Users/PublicPage/x?file=//fs01/Users/Zqxquery/x&next=https://mirror/Users/PublicPage/x ");
         var inputs = new (string Name, string Input, Func<string, bool> Expected)[]
         {
             ("repeated new account forms", mixed.ToString(), output => !output.Contains("Zqx", StringComparison.Ordinal) && !output.Contains("111-222", StringComparison.Ordinal)),
             ("macros followed by prose", spaced.ToString(), output => output == spaced.ToString()),
             ("encoded profile roots and account SIDs", encoded.ToString(), output => !output.Contains("Zqx", StringComparison.Ordinal) && !output.Contains("111-222", StringComparison.Ordinal)),
+            ("UNC query values beside ordinary URLs", urls.ToString(), output => !output.Contains("Zqxquery", StringComparison.Ordinal) && output.Contains("https://host/Users/PublicPage/x", StringComparison.Ordinal) && output.Contains("https://mirror/Users/PublicPage/x", StringComparison.Ordinal)),
+            ("query delimiters without a UNC value", "https://host/" + new string('?', 7 * 1024 * 1024), output => output == "https://host/" + new string('?', 7 * 1024 * 1024)),
             ("a mixed separator run", @"C:\Users" + string.Concat(Enumerable.Repeat(@"\/", 3 * 1024 * 1024)) + "Fixture", output => output.EndsWith(@"\/<user>", StringComparison.Ordinal) && !output.Contains("Fixture", StringComparison.Ordinal)),
             ("a backslash run before a Users word", "x" + new string('\\', 7 * 1024 * 1024) + "Usersy", output => output.EndsWith("Usersy", StringComparison.Ordinal)),
             ("a three-backslash control before a long run", @"C:\\Users\\\r" + "Zqxname" + new string('\\', 7 * 1024 * 1024) + "x", output => !output.Contains("Zqxname", StringComparison.Ordinal)),
