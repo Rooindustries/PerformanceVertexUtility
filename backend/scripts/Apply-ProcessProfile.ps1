@@ -4,6 +4,8 @@ param(
     [ValidateSet('lower', 'placement')][string]$Preset = 'lower',
     [string]$OutputPath = '',
     [string]$StateRoot = '',
+    [string]$RecoveryJournal = '',
+    [string]$RecoveryGeneration = '',
     [switch]$ConfirmApply
 )
 
@@ -72,6 +74,13 @@ function New-ApplySkippedItem {
     }
 }
 
+function Set-SnapshotOutcome {
+    param([object]$Snapshot, [string]$Outcome)
+    foreach ($change in @(Get-RooIndustriesPropertyArray $Snapshot 'controlChanges')) {
+        $change | Add-Member -NotePropertyName outcome -NotePropertyValue $Outcome -Force
+    }
+}
+
 function New-BackupMetadata {
     param(
         [object]$BackupManifest,
@@ -113,7 +122,23 @@ function New-BackupMetadata {
     }
 }
 
+$journalLock = $null
 try {
+    $journalBackupPath = $null
+    if ($ConfirmApply -and -not [string]::IsNullOrWhiteSpace($RecoveryJournal)) {
+        $journalLock = Lock-RooIndustriesOperation $RecoveryJournal
+        if (-not [IO.File]::Exists($RecoveryJournal)) { throw 'The app already closed this apply. Nothing was changed.' }
+        $journal = (Read-RooIndustriesOperationJson $RecoveryJournal).data
+        $generationId = [Guid]::Empty
+        if (-not [Guid]::TryParseExact($RecoveryGeneration, 'N', [ref]$generationId) -or [string](Get-RooIndustriesPropertyValue $journal 'generation' '') -cne $RecoveryGeneration) {
+            throw 'This process apply is no longer current. Nothing was changed.'
+        }
+        $journalBackupPath = [string](Get-RooIndustriesPropertyValue $journal 'path' '')
+        $expectedBackupPath = Join-Path ([IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($RecoveryJournal))) (Join-Path 'process-profile-backups' (Join-Path $RecoveryGeneration 'backup.json'))
+        if ([string]::IsNullOrWhiteSpace($journalBackupPath) -or -not [IO.Path]::IsPathRooted($journalBackupPath) -or -not [string]::Equals([IO.Path]::GetFullPath($journalBackupPath), $expectedBackupPath, [StringComparison]::OrdinalIgnoreCase) -or [IO.File]::Exists($journalBackupPath)) {
+            throw 'The apply journal does not name a new backup. Nothing was changed.'
+        }
+    }
     $defaultProfilePath = Join-Path $PSScriptRoot '..\profiles\game-session.profile.json'
     $resolvedProfilePath = Resolve-RooIndustriesPath $ProfilePath $defaultProfilePath
     $profile = Read-RooIndustriesJsonFile $resolvedProfilePath
@@ -236,13 +261,15 @@ try {
     $backupMetadata = $null
     $backupPath = $null
     if ($snapshots.Count -gt 0) {
-        $defaultStateRoot = Join-Path $PSScriptRoot '..\state'
-        $resolvedStateRoot = Resolve-RooIndustriesPath $StateRoot $defaultStateRoot
         $backupId = "process-profile-$([string](Get-RooIndustriesPropertyValue $profile 'profileId' 'profile'))-$(Get-RooIndustriesFileStamp)"
-        $backupDir = Join-Path $resolvedStateRoot (Join-Path 'process-profile-backups' $backupId)
-        Ensure-RooIndustriesDirectory $backupDir
-        $backupPath = Join-Path $backupDir 'backup.json'
-
+        if ($journalBackupPath) {
+            $backupPath = $journalBackupPath
+        } else {
+            $defaultStateRoot = Join-Path $PSScriptRoot '..\state'
+            $resolvedStateRoot = Resolve-RooIndustriesPath $StateRoot $defaultStateRoot
+            $backupPath = Join-Path (Join-Path $resolvedStateRoot (Join-Path 'process-profile-backups' $backupId)) 'backup.json'
+        }
+        Ensure-RooIndustriesDirectory (Split-Path $backupPath -Parent)
         $backupManifest = [pscustomobject]@{
             schemaVersion = 1
             productName = $script:RooIndustriesProcessProductName
@@ -262,11 +289,13 @@ try {
     foreach ($snapshot in @($snapshots.ToArray())) {
         $identity = Get-LiveProcessIdentity $snapshot
         if (-not $identity.exists -or -not $identity.matches) {
+            Set-SnapshotOutcome $snapshot 'pending'
             $skipped.Add((New-ApplySkippedItem $snapshot $identity.reason @(Get-RooIndustriesPropertyArray $snapshot 'controlChanges') @() 'identity-mismatch')) | Out-Null
             continue
         }
         $live = $identity.process
         if ($Preset -eq 'placement' -and @(Get-RooIndustriesGovernorProcessControls $live).Count -gt 0) {
+            Set-SnapshotOutcome $snapshot 'pending'
             $skipped.Add((New-ApplySkippedItem $snapshot $script:RooIndustriesGovernorManaged @(Get-RooIndustriesPropertyArray $snapshot 'controlChanges') @() 'managed')) | Out-Null
             continue
         }
@@ -311,6 +340,7 @@ try {
             $skipped.Add((New-ApplySkippedItem $snapshot $_.Exception.Message $controlChanges @() 'apply-failed')) | Out-Null
         }
     }
+    if ($backupPath) { Write-RooIndustriesOperationJson $backupManifest $backupPath }
 
     $status = 'success'
     $nonNoopSkipped = @($skipped.ToArray() | Where-Object { [string](Get-RooIndustriesPropertyValue $_ 'category' '') -ne 'no-change' })
@@ -354,4 +384,6 @@ try {
         -Logs @((New-RooIndustriesLog 'Apply failed.' 'error'))
     Write-RooIndustriesJsonOutput $envelope $OutputPath
     exit 1
+} finally {
+    if ($journalLock) { $journalLock.Dispose() }
 }
