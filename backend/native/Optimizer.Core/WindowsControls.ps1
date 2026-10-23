@@ -239,7 +239,6 @@ function Read-Control($address){
     return [ordered]@{address=$address;identity=($address.kind+':'+$address.target+':'+$address.property);binding=$binding;value=$value;displayName=$displayName}
 }
 function Write-Control($address,$value){
-    Assert-Commands $address.kind
     switch($address.kind){
         'firewall-profile' {
             if($address.property -ne 'enabled' -or $address.target -notin @('Domain','Private','Public') -or $value -notin @('True','False','NotConfigured')){throw 'Unknown firewall profile choice.'}
