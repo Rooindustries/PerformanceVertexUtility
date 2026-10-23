@@ -14,7 +14,7 @@ def check(root):
     timeout = int(os.environ.get('TWEAK_READS_TIMEOUT', '600'))
     marker = os.urandom(16).hex()
     try:
-        process = subprocess.Popen(command, cwd=root, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, start_new_session=True, env=dict(os.environ, ROO_TWEAK_READS_RUN=marker))
+        process = subprocess.Popen(command, cwd=root, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, start_new_session=True, env=dict(os.environ, ROO_INDUSTRIES_TWEAK_READS_RUN=marker))
     except FileNotFoundError:
         return ['The Windows Tweaks read walk needs the .NET 8 SDK (dotnet).']
     try:
@@ -73,7 +73,7 @@ def negative_controls(root):
 
 
 def marked(marker):
-    needle = ('ROO_TWEAK_READS_RUN=' + marker).encode()
+    needle = ('ROO_INDUSTRIES_TWEAK_READS_RUN=' + marker).encode()
     pids = []
     for entry in Path('/proc').iterdir():
         if entry.name.isdigit() and int(entry.name) != os.getpid():
