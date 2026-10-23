@@ -44,7 +44,7 @@ try {
  $profile=[Text.Encoding]::UTF8.GetString($profileBytes).TrimStart([char]0xfeff)|ConvertFrom-Json
  $profile.foregroundGame.processNames=@('Overwatch.exe');$profile.rules=@();$profile.safeCandidates=@()
  [IO.File]::WriteAllText($profilePath,($profile|ConvertTo-Json -Depth 20),$utf8)
- $a=Probe 'probe-a'
+ $gameA=Probe 'probe-a'
  $app=Start-Process $AppExe -PassThru;$receipt=New-OwnedProcess $app;Save 'owned-app.json' $receipt.Identity
  $window=WaitFor {$A::RootElement.FindFirst($TS::Children,[Windows.Automation.PropertyCondition]::new($A::ProcessIdProperty,$app.Id))} 120 'app window'
  $handle=[IntPtr]::new($window.Current.NativeWindowHandle)
@@ -69,27 +69,27 @@ try {
  $reviewed=WaitFor {$c=Card;if($c -and $c.status -in 'Game priorities checked','Game priority check not confirmed'){$c}} 90 'review result'
  Start-Sleep -Seconds 1
  Shot '02-reviewed'
- $aAtReview=Read $a
- Stop-OwnedProcess ($owned|Where-Object {$_.Identity.pid -eq $a.Id}|Select-Object -First 1)
- $b=Probe 'probe-b'
- [RooIndustriesGameTuneUi]::SetForegroundWindow($b.MainWindowHandle)|Out-Null
+ $aAtReview=Read $gameA
+ Stop-OwnedProcess ($owned|Where-Object {$_.Identity.pid -eq $gameA.Id}|Select-Object -First 1)
+ $gameB=Probe 'probe-b'
+ [RooIndustriesGameTuneUi]::SetForegroundWindow($gameB.MainWindowHandle)|Out-Null
  Start-Sleep -Seconds 1
  [int]$foregroundId=0
  [RooIndustriesGameTuneUi]::GetWindowThreadProcessId([RooIndustriesGameTuneUi]::GetForegroundWindow(),[ref]$foregroundId)|Out-Null
- if($foregroundId -ne $b.Id){throw 'The second probe did not become the foreground game'}
+ if($foregroundId -ne $gameB.Id){throw 'The second probe did not become the foreground game'}
  [RooIndustriesGameTuneUi]::SetForegroundWindow($handle)|Out-Null
  Activate (WaitFor {$e=Button 'Start game priority';if($e -and $e.Current.IsEnabled){$e}} 30 'Start enabled')
  $started=WaitFor {$c=Card;if($c -and $c.status -notin $reviewed.status,'Starting game priorities' -and (Button 'Review game priority').Current.IsEnabled){$c}} 120 'Start result'
  Start-Sleep -Seconds 8
  Shot '03-after-start'
- $after=Card;$bAfter=Read $b
+ $after=Card;$bAfter=Read $gameB
  Start-Sleep -Seconds 2
  [IO.File]::WriteAllText($stopFile,'stop');[void]$recorder.EndInvoke($recording)
  $restored=$null
  if($bAfter.priorityClass -ne 'Normal'){
   Activate (WaitFor {$e=Button 'Restore game priority';if($e -and $e.Current.IsEnabled){$e}} 30 'Restore enabled')
   WaitFor {$c=Card;$c -and $c.status -in 'Game priorities restored','Game restore needs attention','Game restore not confirmed'} 90 'restore result'|Out-Null
-  Start-Sleep -Seconds 2;Shot '04-restored';$restored=Read $b
+  Start-Sleep -Seconds 2;Shot '04-restored';$restored=Read $gameB
  }
  $bound=$bAfter.priorityClass -eq 'Normal' -and $after.status -eq 'Not started' -and $after.detail -like 'Overwatch.exe closed or restarted after you reviewed it*'
  Save 'result.json' @{machine=$env:COMPUTERNAME;startEnabledBeforeReview=$beforeReview.start;reviewed=$reviewed;gameAAtReview=$aAtReview;foregroundAtStart=$foregroundId;startResult=$started;afterReload=$after;gameBAfterStart=$bAfter;gameBAfterRestore=$restored;bound=$bound;frames=@(Get-ChildItem $frames -Filter '*.jpg').Count}
