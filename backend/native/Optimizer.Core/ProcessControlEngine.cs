@@ -292,6 +292,9 @@ public sealed class ProcessControlEngine
                     if (!overwrite && !ProcessTarget.Equivalent(change.Name, current, change.Desired)) throw new InvalidOperationException("Another writer changed this field; restoration will not overwrite it.");
                     change.Status = "restoreIntent";
                     Save(journalPath, journal);
+#if GOVERNOR_TEST_HOOKS
+                    if (int.TryParse(Environment.GetEnvironmentVariable("ROO_INDUSTRIES_TEST_RESTORE_INTENT_PAUSE_MS"), out var intentPause) && intentPause > 0) Thread.Sleep(Math.Min(intentPause, 10000));
+#endif
                     if (!overwrite)
                     {
                         var beforeWrite = target.Read(change.Name).Require();

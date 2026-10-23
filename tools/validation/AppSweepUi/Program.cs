@@ -51,6 +51,13 @@ if (args is ["poll-guard"])
     return;
 }
 
+if (args is ["process-undo"])
+{
+    await ProcessUndoChecks.RunAsync(Check);
+    Console.WriteLine($"Completed {count} Processes page Undo checks.");
+    return;
+}
+
 if (args is ["firmware-fixture", var uiFixture, var uiRoot]) { Console.WriteLine(FirmwarePageChecks.Prepare(uiFixture, uiRoot)); return; }
 
 if (args is ["firmware", var firmwareFixture])
@@ -1685,5 +1692,6 @@ await BugReportChecks.RunAsync(Check);
 await UpdateInstallChecks.RunAsync(Check);
 await PollGuardChecks.RunAsync(Check);
 await GameSessionPresetChecks.RunAsync(Check);
+await ProcessUndoChecks.RunAsync(Check);
 
 Console.WriteLine($"Completed {count} app sweep UI checks.");

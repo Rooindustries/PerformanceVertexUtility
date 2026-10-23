@@ -195,6 +195,42 @@ function Test-ScenarioClaimsApplyOnceFirst {
     Assert $true 'After undo the same rule saves'
 }
 
+function Get-ClaimsChange($Journal,[string]$Name){return @($Journal.changes|Where-Object name -eq $Name)}
+
+function Test-ScenarioClaimsApplyOnceUndoKeepsOtherValue {
+    $path=Copy-Probe 'ClaimsUndoKept.exe'
+    $probe=Start-Probe $path
+    $memoryBefore=Read-Field $probe 'memoryPriority'
+    $applied=Invoke-ClaimsApplyOnce $probe @{cpuPriority='BelowNormal';memoryPriority=3}
+    Assert ($applied.status -eq 'applied' -and (Read-Field $probe 'cpuPriority') -eq 'BelowNormal' -and (Read-Field $probe 'memoryPriority') -eq 3) 'Apply once lowered the probe CPU and memory priority'
+    Set-Field $probe 'cpuPriority' 'Idle'
+    $undo=Core 'process-restore' @{journalPath=$applied.journal}
+    $kept=Get-ClaimsChange $undo 'cpuPriority'
+    Note 'undo' ([ordered]@{status=$undo.status;changes=@($undo.changes|ForEach-Object {[ordered]@{name=$_.name;status=$_.status;observed=$_.observed;error=$_.error}})})
+    Assert ($undo.status -eq 'restored' -and $kept.Count -eq 1 -and $kept[0].status -eq 'leftAsSet' -and $kept[0].error -ceq 'Left as another program set it.' -and [string]$kept[0].observed -eq 'Idle') 'Undo finishes and names the CPU priority another program set after Apply once'
+    Assert ((Read-Field $probe 'cpuPriority') -eq 'Idle' -and (Read-Field $probe 'memoryPriority') -eq $memoryBefore) 'Undo keeps the other program''s CPU priority and restores the memory priority it changed'
+    $again=Core 'process-restore' @{journalPath=$applied.journal}
+    Assert ($again.status -eq 'restored' -and (Read-Field $probe 'cpuPriority') -eq 'Idle' -and (Read-Field $probe 'memoryPriority') -eq $memoryBefore) 'Pressing Undo again changes nothing'
+    Save-ClaimsRule (New-Rule $path @{cpuPriority='High'})|Out-Null
+    Assert $true 'After that Undo a rule for the same CPU priority saves'
+}
+
+function Test-ScenarioClaimsApplyOnceUndoRace {
+    $path=Copy-Probe 'ClaimsUndoRace.exe'
+    $probe=Start-Probe $path
+    $applied=Invoke-ClaimsApplyOnce $probe @{cpuPriority='BelowNormal'}
+    Assert ($applied.status -eq 'applied' -and (Read-Field $probe 'cpuPriority') -eq 'BelowNormal') 'Apply once lowered the probe CPU priority'
+    $call=Invoke-HostLater 'process-restore' @{journalPath=$applied.journal} @{ROO_INDUSTRIES_TEST_RESTORE_INTENT_PAUSE_MS='4000'}
+    $paused=Wait-Until {(Get-ClaimsChange (Read-RooIndustriesOperationJson $applied.journal).data 'cpuPriority')[0].status -eq 'restoreIntent'} 20
+    Assert ($null -ne $paused -and (Read-Field $probe 'cpuPriority') -eq 'BelowNormal') 'Undo saved its intent and paused before writing'
+    Set-Field $probe 'cpuPriority' 'Idle'
+    $undo=Read-HostLater $call
+    $kept=Get-ClaimsChange $undo.data 'cpuPriority'
+    Note 'undo' ([ordered]@{status=$undo.status;error=$undo.error.message;journal=$undo.data.status;changes=@($undo.data.changes|ForEach-Object {[ordered]@{name=$_.name;status=$_.status;observed=$_.observed;error=$_.error}})})
+    Assert ($undo.status -eq 'completed' -and $undo.data.status -eq 'restored' -and $kept.Count -eq 1 -and $kept[0].status -eq 'leftAsSet' -and [string]$kept[0].observed -eq 'Idle') 'A value another program sets just before Undo writes is named and Undo finishes'
+    Assert ((Read-Field $probe 'cpuPriority') -eq 'Idle') 'Undo does not overwrite it'
+}
+
 function Test-ScenarioClaimsExitedProcessIgnored {
     $path=Copy-Probe 'ClaimsExited.exe'
     $probe=Start-Probe $path
