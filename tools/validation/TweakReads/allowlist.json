@@ -2,24 +2,9 @@
   "schemaVersion": 1,
   "rows": [
     {
-      "settingId": "windows.12a2f7d075db4a7a",
-      "state": "device-defaults",
-      "cause": "USB drivers set this on some devices and leave it unset on others; a per-device mix reads as Custom value."
-    },
-    {
-      "settingId": "windows.16775bf1b44a5304",
-      "state": "device-defaults",
-      "cause": "Power saving is on for most devices and off for a few by default; a per-device mix reads as Custom value."
-    },
-    {
       "settingId": "windows.7f3f80851197aecc",
       "state": "device-defaults",
       "cause": "The adapter keeps large send offload version 1 off and IPv4 and IPv6 on by default; the choices set all three alike."
-    },
-    {
-      "settingId": "windows.83d4b1b8f7a55f84",
-      "state": "device-defaults",
-      "cause": "USB drivers set this on some devices and leave it unset on others; a per-device mix reads as Custom value."
     },
     {
       "settingId": "windows.b048256362718da0",
@@ -30,16 +15,6 @@
       "settingId": "windows.c7158276464d2b3b",
       "state": "choice-88665aca77848447",
       "cause": "The recorded PC has SysMain disabled, and the app refuses memory compression without SysMain, so this choice has no written state to read here."
-    },
-    {
-      "settingId": "windows.c858b5629e74495c",
-      "state": "device-defaults",
-      "cause": "USB drivers set this on some devices and leave it unset on others; a per-device mix reads as Custom value."
-    },
-    {
-      "settingId": "windows.f5b1784349813d36",
-      "state": "device-defaults",
-      "cause": "USB drivers set this on some devices and leave it unset on others; a per-device mix reads as Custom value."
     }
   ]
 }
