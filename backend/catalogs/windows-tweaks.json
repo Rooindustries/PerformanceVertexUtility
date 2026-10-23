@@ -73586,6 +73586,7 @@
               "dword": 1
             }
           ],
+          "replaces": "choice-95a6ed84299d0109",
           "availability": [
             {
               "minimumBuild": 10240,
@@ -74315,6 +74316,7 @@
               "dword": 1
             }
           ],
+          "replaces": "choice-95a6ed84299d0109",
           "availability": [
             {
               "minimumBuild": 10240,

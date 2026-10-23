@@ -141,7 +141,7 @@ def apply_policy_editions(catalog):
         replacement = {'address': change['address'], 'dword': equivalent['dword']}
         if any(option['changes'] == [replacement] for option in setting['options']):
             continue
-        setting['options'].insert(setting['options'].index(limited) + 1, {'id': 'choice-' + digest(desired(replacement)), 'name': equivalent['name'], 'changes': [replacement],
+        setting['options'].insert(setting['options'].index(limited) + 1, {'id': 'choice-' + digest(desired(replacement)), 'name': equivalent['name'], 'changes': [replacement], 'replaces': limited['id'],
                                    'availability': [{'minimumBuild': setting['minimumBuild'], 'maximumBuild': setting['maximumBuild'], 'editions': ['*']}]})
     for preset in catalog['presets']:
         optional = [item for item in preset['selections'] if (item['settingId'], item['optionId']) in constrained]
