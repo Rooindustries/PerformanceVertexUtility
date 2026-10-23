@@ -130,7 +130,9 @@ public sealed partial class MainWindow : Window
         App.Updates.Changed -= OnUpdateChanged;
         AppWindow.Closing -= OnClosing;
         RunningChanges.Finished -= OnChangesFinished;
-        if (ReferenceEquals(App.MainWindow, this)) App.Updates.Stop();
+        if (!ReferenceEquals(App.MainWindow, this)) return;
+        App.Updates.Stop();
+        App.Closing.Cancel();
     }
 
     private void OnDataSettled() => DispatcherQueue.TryEnqueue(async () =>

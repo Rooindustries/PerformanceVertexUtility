@@ -19,6 +19,7 @@ public partial class App : Application
     public static OptimizerService Operations { get; } = new(Locator);
     public static ThemeService Theme { get; } = new ThemeService(new SettingsStore());
     public static UpdateService Updates { get; } = new();
+    public static System.Threading.CancellationTokenSource Closing { get; } = new();
     public static BugReportService BugReports { get; } = new(BugReportService.ReadWebhook(typeof(App).Assembly), new DiscordWebhookSender(),
         System.IO.Path.Combine(RooIndustries.Optimizer.BrandCompatibility.LocalDataRoot, "bug-reports"), AppLog.Folder, BugRedactor.Current());
 
@@ -138,6 +139,7 @@ public partial class App : Application
         lock (RedirectGate) { _windowReady = true; waiting = PendingRedirects.ToArray(); PendingRedirects.Clear(); }
         foreach (var path in waiting) ShowRedirect(path);
         Updates.Start(MainWindow.DispatcherQueue);
+        Operations.WatchGameSessions(Closing.Token);
     }
 
 #if ROO_INDUSTRIES_TEST_HOOKS

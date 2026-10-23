@@ -11,6 +11,31 @@
                 <Button Content="Refresh" Command="{x:Bind ViewModel.RefreshCommand}" IsEnabled="{x:Bind ViewModel.CanChooseSession, Mode=OneWay}" AutomationProperties.AutomationId="GameSessionRefresh" />
             </StackPanel>
         </Grid>
+        <Border Style="{StaticResource PanelBorderStyle}" Visibility="{x:Bind ViewModel.Profiles.Count, Mode=OneWay, Converter={StaticResource CountToVisibility}}" AutomationProperties.AutomationId="GameSessionProfiles">
+            <StackPanel Spacing="12">
+                <StackPanel Spacing="4">
+                    <TextBlock Text="Saved launch settings" Style="{StaticResource SectionHeaderTextBlockStyle}" />
+                    <TextBlock Text="These turn back on by themselves whenever the launcher opens, as long as this app is open." TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                </StackPanel>
+                <ItemsControl ItemsSource="{x:Bind ViewModel.Profiles}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:LaunchProfileRow">
+                            <Grid Padding="0,4" ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Spacing="2">
+                                    <TextBlock Text="{x:Bind Title}" TextWrapping="Wrap" FontWeight="SemiBold" />
+                                    <TextBlock Text="{x:Bind Status}" TextWrapping="Wrap" FontSize="12" Foreground="{StaticResource RooIndustriesTextMutedBrush}" AutomationProperties.AutomationId="GameSessionProfileStatus" />
+                                </StackPanel>
+                                <Button Grid.Column="1" Content="Turn off and restore" VerticalAlignment="Center" Click="TurnOff_Click" AutomationProperties.AutomationId="GameSessionProfileOff" />
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </Border>
         <Border Style="{StaticResource PanelBorderStyle}">
             <StackPanel Spacing="16">
                 <StackPanel Spacing="4">
@@ -72,6 +97,9 @@
                     <TextBlock Text="3. Review and start" Style="{StaticResource SectionHeaderTextBlockStyle}" />
                     <CheckBox IsChecked="{x:Bind ViewModel.AcceptLauncherScope, Mode=TwoWay}" IsEnabled="{x:Bind ViewModel.CanEdit, Mode=OneWay}" AutomationProperties.AutomationId="GameSessionScope">
                         <TextBlock Text="I understand that core limits and I/O or memory defaults also affect other apps started by this launcher." TextWrapping="Wrap" />
+                    </CheckBox>
+                    <CheckBox IsChecked="{x:Bind ViewModel.KeepArmed, Mode=TwoWay}" IsEnabled="{x:Bind ViewModel.CanEdit, Mode=OneWay}" AutomationProperties.AutomationId="GameSessionKeep">
+                        <TextBlock Text="Save for next time: turn these settings back on whenever this launcher opens while the app is open." TextWrapping="Wrap" />
                     </CheckBox>
                     <Border Padding="12" CornerRadius="6" Background="{StaticResource RooIndustriesSurfaceInputBrush}" Visibility="{x:Bind ViewModel.HasReview, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
                         <TextBlock Text="{x:Bind ViewModel.ReviewSummary, Mode=OneWay}" TextWrapping="Wrap" AutomationProperties.AutomationId="GameSessionReview" />

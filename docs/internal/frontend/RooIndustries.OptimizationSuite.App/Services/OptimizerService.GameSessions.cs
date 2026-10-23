@@ -5,17 +5,18 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using RooIndustries.OptimizationSuite.Models;
 using RooIndustries.Optimizer;
 
 namespace RooIndustries.OptimizationSuite.Services;
 
 public sealed record GameSessionReview(ProtectedSessionPreview Plan, string PreviewPath, string Hash, string SessionRoot);
 public sealed record GameSessionOperation(string SessionRoot, string TaskName, ProtectedSessionStatus Worker);
-public sealed record GameSessionEntry(string SessionRoot, ProtectedSessionStatus Worker)
+public sealed record GameSessionEntry(string SessionRoot, ProtectedSessionStatus Worker, string? ProfileId = null)
 {
-    public override string ToString() => Worker.State is { } state
+    public override string ToString() => (Worker.State is { } state
         ? Path.GetFileNameWithoutExtension(state.Preview.GamePath) + " · " + state.UpdatedAtUtc.ToLocalTime().ToString("g")
-        : Path.GetFileName(Path.GetDirectoryName(SessionRoot)) + " · state unavailable";
+        : Path.GetFileName(Path.GetDirectoryName(SessionRoot)) + " · state unavailable") + (ProfileId is null ? "" : " · saved settings");
 }
 
 public sealed partial class OptimizerService
@@ -24,12 +25,16 @@ public sealed partial class OptimizerService
     {
         var directory = await NewOperationDirectoryAsync("game-session");
         var path = Path.Combine(directory, "preview.json");
-        var plan = await RunCoreAsync<ProtectedSessionPreview>("protected-session-preview", new()
+        try
         {
-            ["processId"] = launcherId, ["gamePath"] = gamePath, ["controls"] = controls,
-            ["acceptLauncherScope"] = acceptLauncherScope, ["outputPath"] = path,
-        });
-        return new(plan, path, Hash(path), Path.Combine(directory, "session"));
+            var plan = await RunCoreAsync<ProtectedSessionPreview>("protected-session-preview", new()
+            {
+                ["processId"] = launcherId, ["gamePath"] = gamePath, ["controls"] = controls,
+                ["acceptLauncherScope"] = acceptLauncherScope, ["outputPath"] = path,
+            });
+            return new(plan, path, Hash(path), Path.Combine(directory, "session"));
+        }
+        catch { Directory.Delete(directory, true); throw; }
     }
 
     public async Task<ProtectedSessionStatus> StartGameSessionAsync(GameSessionReview review)
@@ -57,10 +62,33 @@ public sealed partial class OptimizerService
         return await Task.WhenAll(roots.Select(async root =>
         {
             await slots.WaitAsync().ConfigureAwait(false);
-            try { return new GameSessionEntry(root, await ReadGameSessionAsync(root).ConfigureAwait(false)); }
-            catch (Exception error) { return new GameSessionEntry(root, new(null, null, error.Message)); }
+            try { return new GameSessionEntry(root, await ReadGameSessionAsync(root).ConfigureAwait(false), ProfileOf(root)); }
+            catch (Exception error) { return new GameSessionEntry(root, new(null, null, error.Message), ProfileOf(root)); }
             finally { slots.Release(); }
         }));
+    }
+
+    public async Task<bool> RecoverStaleGameSessionsAsync()
+    {
+        var stale = await Task.Run(() => Directory.Exists(_storage) ? Directory.EnumerateDirectories(_storage, "game-session-*").Select(directory => Path.Combine(directory, "session")).Where(root =>
+        {
+            try { return File.Exists(Path.Combine(root, "session.json")) && new ProtectedSessions(_ => false).Status(root) is { HostRunning: false, State: not null } status && !GameSessionDisplay.Restored(status) && !PolicyRootSecurity.SavedBeforeProtection(Path.Combine(root, "session.json")); }
+            catch (Exception) { return false; }
+        }).ToArray() : []).ConfigureAwait(false);
+        foreach (var root in stale)
+            try { await RecoverGameSessionAsync(root).ConfigureAwait(false); }
+            catch (Exception error) { AppLog.Write("games", "A game session that stopped unexpectedly couldn't be restored automatically: " + error.Message); }
+        return stale.Length != 0;
+    }
+
+    public async Task<bool> GameSessionsBlockUpdateAsync()
+    {
+        await RecoverStaleGameSessionsAsync().ConfigureAwait(false);
+        var sessions = await ReadGameSessionsAsync().ConfigureAwait(false);
+        if (sessions.Any(entry => entry.Worker.HostRunning == true)) return true;
+        if (sessions.Any(entry => entry.Worker.HostRunning is null || entry.Worker.Error is not null))
+            throw new InvalidDataException("Couldn't confirm that all game sessions have stopped. Check Games and Undo changes first.");
+        return false;
     }
 
     public Task<ProtectedSessionStatus> StopGameSessionAsync(string sessionRoot)
