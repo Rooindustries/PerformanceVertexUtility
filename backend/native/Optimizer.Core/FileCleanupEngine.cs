@@ -320,10 +320,13 @@ public sealed class FileCleanupEngine(Func<CleanupAuthority> currentAuthority)
             Environment.SpecialFolder.CommonPrograms, Environment.SpecialFolder.CommonStartup }
             .Select(Environment.GetFolderPath).Where(root => !string.IsNullOrWhiteSpace(root)).ToList();
         var local = RuntimeEnvironment.LocalAppData;
-        protectedRoots.AddRange([Path.GetTempPath().TrimEnd('\\'), RuntimeEnvironment.UserTemp, local, RuntimeEnvironment.RoamingAppData, Path.GetDirectoryName(local)!, Path.Combine(local, "Packages")]);
-        if (protectedRoots.Contains(path, StringComparer.OrdinalIgnoreCase) || Within(path, Environment.GetFolderPath(Environment.SpecialFolder.Windows))) return true;
-        var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
-        return Within(path, Path.Combine(programFiles, "WindowsApps")) || Within(path, Path.Combine(Path.GetPathRoot(path)!, "WindowsApps"));
+        protectedRoots.AddRange([Path.GetTempPath().TrimEnd('\\'), RuntimeEnvironment.UserTemp, local, RuntimeEnvironment.RoamingAppData, Path.GetDirectoryName(local)!, Path.Combine(local, "Packages"),
+            Path.Combine(RuntimeEnvironment.Profile, "AppData", "LocalLow")]);
+        var roots = protectedRoots.SelectMany(root => new CleanupPath(root).Forms).ToArray();
+        var windows = new CleanupPath(Environment.GetFolderPath(Environment.SpecialFolder.Windows)).Forms;
+        var packages = new CleanupPath(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "WindowsApps")).Forms;
+        return new CleanupPath(path).Forms.Any(form => roots.Any(root => CleanupPath.Within(root, form)) || windows.Concat(packages).Any(root => CleanupPath.Within(form, root)) ||
+            CleanupPath.Within(form, Path.Combine(Path.GetPathRoot(form)!, "WindowsApps")));
     }
 
     private static bool Within(string path, string root) => string.Equals(path, root, StringComparison.OrdinalIgnoreCase) || path.StartsWith(root.TrimEnd('\\') + "\\", StringComparison.OrdinalIgnoreCase);
