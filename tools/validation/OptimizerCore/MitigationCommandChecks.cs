@@ -7,6 +7,7 @@ using RooIndustries.Optimizer;
 static class MitigationCommandChecks
 {
     const string Parent = @"Software\RooIndustriesTweakTests";
+    const string Kernel = @"SYSTEM\ControlSet001\Control\Session Manager\kernel";
     const string LiveKernel = @"SYSTEM\CurrentControlSet\Control\Session Manager\kernel";
     static readonly string[] Names = ["MitigationOptions", "MitigationAuditOptions", "EAFModules"];
     static readonly ControlAddress Address = new("mitigations", "system", "policy");
@@ -37,7 +38,8 @@ static class MitigationCommandChecks
         var root = Parent + "\\" + Guid.NewGuid().ToString("N");
         using var owned = OwnedRegistryKey.Create(Registry.CurrentUser, root);
         using var machine = Registry.CurrentUser.CreateSubKey(root + @"\Machine");
-        using var kernel = machine.CreateSubKey(LiveKernel);
+        using (var select = machine.CreateSubKey(@"SYSTEM\Select")) select.SetValue("Current", 1, RegistryValueKind.DWord);
+        using var kernel = machine.CreateSubKey(Kernel);
         var desired = ControlValues.From(new Dictionary<string, object> { ["Aslr.BottomUp"] = "ON", ["Aslr.OverrideBottomUp"] = false });
         var setting = new TweakDefinition("mitigations", "Exploit protection", "Security", "Fixture", 10240, int.MaxValue, ["*"], "none",
             [new("set", "Set", [], Controls: [new(Address, desired, true)])], [new("Roo Industries", "fixture", "mitigation store")]);
