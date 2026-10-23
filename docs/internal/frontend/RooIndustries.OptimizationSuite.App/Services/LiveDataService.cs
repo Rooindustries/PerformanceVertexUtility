@@ -29,16 +29,29 @@ public sealed class LiveDataService
     private string ProcessRecoveryPath => Path.Combine(_recoveryDirectory, "process-profile-recovery.json");
     private string ProcessOperationPath => Path.Combine(_recoveryDirectory, "process-profile-operation");
     private string ProcessGenerationPath => Path.Combine(_recoveryDirectory, "process-profile-operation-generation.json");
+    private string ProcessApplyPath => Path.Combine(_recoveryDirectory, "process-profile-apply.json");
+    private string ProcessBackupPath(string generation) => Path.Combine(_recoveryDirectory, "process-profile-backups", generation, "backup.json");
     private string NvidiaOperationPath => Path.Combine(_recoveryDirectory, "nvidia-profile-operation");
     private string NvidiaGenerationPath => Path.Combine(_recoveryDirectory, "nvidia-profile-operation-generation.json");
+    private int _processApplyRecovered;
     public bool TakeProcessRecoverySetAsideNotice() => Interlocked.Exchange(ref _processRecoverySetAside, 0) != 0;
-    public bool ProcessProfileRestorePending => File.Exists(ProcessRecoveryPath) || VolatileProcessRecovery.ContainsKey(_recoveryKey);
+    public bool TakeProcessApplyRecoveredNotice() => Interlocked.Exchange(ref _processApplyRecovered, 0) != 0;
+    public bool ProcessProfileRestorePending => File.Exists(ProcessRecoveryPath) || File.Exists(ProcessApplyPath) || VolatileProcessRecovery.ContainsKey(_recoveryKey);
+    public bool ProcessProfileApplyFinishing => File.Exists(ProcessApplyPath) && !File.Exists(ProcessRecoveryPath) && !VolatileProcessRecovery.ContainsKey(_recoveryKey);
     public ProcessProfileRecovery? ProcessProfileRecovery
     {
         get
         {
             using var operation = TryOperationLease(ProcessOperationPath, "process profile", out _);
-            try { return ReadProcessRecovery(discardInvalid: operation is not null); }
+            try
+            {
+                var recovery = ReadProcessRecovery(discardInvalid: operation is not null);
+                if (recovery is not null || operation is null || !File.Exists(ProcessApplyPath)) return recovery;
+                var settled = SettleProcessApply(TimeSpan.Zero);
+                if (settled.Error is not null) AppLog.Write("backend", settled.Error);
+                if (settled.Recovery is not null) Interlocked.Exchange(ref _processApplyRecovered, 1);
+                return settled.Recovery;
+            }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException)
             {
                 AppLog.Write("backend", "The process recovery could not be read: " + error.Message);
@@ -209,6 +222,11 @@ public sealed class LiveDataService
         {
             if (ReadProcessRecovery(discardInvalid: true) is not null || File.Exists(ProcessRecoveryPath))
                 return new(null, "Restore the last change first");
+            if (File.Exists(ProcessApplyPath))
+            {
+                if (SettleProcessApply(TimeSpan.Zero).Recovery is not null) return new(null, "Restore the last change first");
+                if (File.Exists(ProcessApplyPath)) return new(null, "The last apply is still finishing. Try again in a moment.");
+            }
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {
@@ -222,10 +240,25 @@ public sealed class LiveDataService
         var generation = Guid.NewGuid().ToString("N");
         if (!TryWriteGeneration(ProcessGenerationPath, generation, "process profile", out var generationError))
             return new(null, generationError);
-        var result = await RunBackendScriptResultAsync("Apply-ProcessProfile.ps1", ct, "-ConfirmApply -Preset " + preset).ConfigureAwait(false);
-        var recovery = ProcessProfileRecovery.FromApply(result.Value, generation);
-        if (recovery is null)
+        try { RooIndustries.Optimizer.OperationFiles.Write(ProcessApplyPath, new ProcessProfileApplyJournal(ProcessBackupPath(generation), generation)); }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {
+            return new(null, "The process apply journal could not be saved before dispatch: " + error.Message);
+        }
+        var result = await RunBackendScriptResultAsync(
+            "Apply-ProcessProfile.ps1",
+            ct,
+            "-ConfirmApply -Preset " + preset + " -RecoveryJournal " + QuotePowerShell(ProcessApplyPath)).ConfigureAwait(false);
+        (ProcessProfileRecovery? Recovery, string? Error) settled;
+        try { settled = SettleProcessApply(TimeSpan.FromSeconds(15)); }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            settled = (null, "The process apply could not be checked for a restore point: " + error.Message);
+        }
+        if (settled.Recovery is null)
+        {
+            if (settled.Error is null && File.Exists(ProcessApplyPath)) settled.Error = "The apply is still finishing. Restore will be offered once it's done.";
+            if (settled.Error is not null) return result with { Error = AppendError(result.Error, settled.Error) };
             if (result.Error is null && ProcessApplyNoChange(result.Value))
             {
                 try { RestoreGeneration(ProcessGenerationPath, previousGeneration); }
@@ -236,21 +269,12 @@ public sealed class LiveDataService
             }
             return result;
         }
-        VolatileProcessRecovery[_recoveryKey] = recovery;
-        try
+        return result with
         {
-            RooIndustries.Optimizer.OperationFiles.Write(ProcessRecoveryPath, recovery);
-            return result with { RecoveryPath = recovery.Path, RecoveryGeneration = recovery.Generation };
-        }
-        catch (Exception error)
-        {
-            return result with
-            {
-                Error = AppendError(result.Error, "The process backup exists, but its recovery reference could not be saved: " + error.Message),
-                RecoveryPath = recovery.Path,
-                RecoveryGeneration = recovery.Generation,
-            };
-        }
+            Error = settled.Error is null ? result.Error : AppendError(result.Error, settled.Error),
+            RecoveryPath = settled.Recovery.Path,
+            RecoveryGeneration = settled.Recovery.Generation,
+        };
     }
 
     public async Task<LiveDataResult<string>> RestoreProcessProfileResultAsync(ProcessProfileRecovery recovery, CancellationToken ct = default)
@@ -930,10 +954,82 @@ public sealed class LiveDataService
     private void ClearProcessRecovery(ProcessProfileRecovery recovery)
     {
         if (ReadProcessRecovery(discardInvalid: false) == recovery && File.Exists(ProcessRecoveryPath)) File.Delete(ProcessRecoveryPath);
+        if (File.Exists(ProcessApplyPath))
+        {
+            try { if (PathsEqual(RooIndustries.Optimizer.OperationFiles.Read<ProcessProfileApplyJournal>(ProcessApplyPath).Path, recovery.Path)) File.Delete(ProcessApplyPath); }
+            catch (Exception error) when (error is JsonException or InvalidDataException or InvalidOperationException) { }
+        }
         if (File.Exists(ProcessGenerationPath)) File.Delete(ProcessGenerationPath);
         if (VolatileProcessRecovery.TryGetValue(_recoveryKey, out var current) && current == recovery)
             VolatileProcessRecovery.TryRemove(_recoveryKey, out _);
     }
+
+    private (ProcessProfileRecovery? Recovery, string? Error) SettleProcessApply(TimeSpan wait)
+    {
+        if (!File.Exists(ProcessApplyPath)) return (null, null);
+        using var journalLock = TryProcessApplyLock(wait);
+        if (journalLock is null) return (null, null);
+        ProcessProfileApplyJournal journal;
+        try { journal = RooIndustries.Optimizer.OperationFiles.Read<ProcessProfileApplyJournal>(ProcessApplyPath); }
+        catch (Exception error) when (error is FileNotFoundException or DirectoryNotFoundException) { return (null, null); }
+        catch (Exception error) when (error is JsonException or InvalidDataException or InvalidOperationException)
+        {
+            return SetProcessApplyAside("The process apply journal is invalid: " + error.Message);
+        }
+        if (!Guid.TryParseExact(journal.Generation, "N", out _) || !PathsEqual(journal.Path, ProcessBackupPath(journal.Generation)))
+            return SetProcessApplyAside("The process apply journal names a backup outside its folder.");
+        if (!File.Exists(journal.Path))
+        {
+            var folder = Path.GetDirectoryName(journal.Path)!;
+            if (Directory.Exists(folder)) Directory.Delete(folder, recursive: true);
+            File.Delete(ProcessApplyPath);
+            return (null, null);
+        }
+        ProcessProfileRecovery recovery;
+        try { recovery = ProcessProfileRecovery.FromBackup(journal.Path, journal.Generation); }
+        catch (JsonException error) { return SetProcessApplyAside("The process backup contains invalid JSON: " + error.Message); }
+        if (recovery.ValidationError() is { } invalid) return SetProcessApplyAside(invalid);
+        if (File.Exists(ProcessRecoveryPath))
+        {
+            ProcessProfileRecovery? saved = null;
+            try { saved = RooIndustries.Optimizer.OperationFiles.Read<ProcessProfileRecovery>(ProcessRecoveryPath); }
+            catch (Exception error) when (error is JsonException or InvalidDataException or InvalidOperationException) { }
+            if (PathsEqual(saved?.Path, journal.Path)) File.Delete(ProcessApplyPath);
+            return (null, null);
+        }
+        if (!TryWriteGeneration(ProcessGenerationPath, journal.Generation, "process profile", out var generationError)) return (null, generationError);
+        VolatileProcessRecovery[_recoveryKey] = recovery;
+        try { RooIndustries.Optimizer.OperationFiles.Write(ProcessRecoveryPath, recovery); }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            return (recovery, "The process backup exists, but its recovery reference could not be saved: " + error.Message);
+        }
+        File.Delete(ProcessApplyPath);
+        return (recovery, null);
+    }
+
+    private (ProcessProfileRecovery? Recovery, string? Error) SetProcessApplyAside(string reason)
+    {
+        var archive = ProcessApplyPath + ".invalid-" + DateTime.UtcNow.ToString("yyyyMMddTHHmmssfffffffZ") + "-" + Guid.NewGuid().ToString("N");
+        File.Move(ProcessApplyPath, archive);
+        Interlocked.Exchange(ref _processRecoverySetAside, 1);
+        AppLog.Write("backend", reason + " Kept the old journal at " + archive);
+        return (null, null);
+    }
+
+    private FileStream? TryProcessApplyLock(TimeSpan wait)
+    {
+        var clock = Stopwatch.StartNew();
+        while (true)
+        {
+            try { return RooIndustries.Optimizer.OperationFiles.Lock(ProcessApplyPath); }
+            catch (Exception error) when (ProcessApplyRunning(error) && clock.Elapsed < wait) { Thread.Sleep(100); }
+            catch (Exception error) when (ProcessApplyRunning(error)) { return null; }
+        }
+    }
+
+    private static bool ProcessApplyRunning(Exception error)
+        => error is UnauthorizedAccessException || error is IOException && (error.HResult & 0xffff) is 32 or 33;
 
     private static NvidiaProfileRecovery? ReadNvidiaRecoveryFromApply(string profileId, string rollbackManifestPath, string exportPath, string generation)
     {

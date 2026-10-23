@@ -138,7 +138,14 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
         RestoreAvailable = _lastBackupPath is not null;
         OnPropertyChanged(nameof(CanApplyProcessProfile));
         if (!App.Live.ProcessProfileRestorePending && App.Live.TakeProcessRecoverySetAsideNotice()) RecoverySetAside = true;
-        if (!Quiet || wasAvailable != RestoreAvailable) RestoreHint = App.Live.ProcessProfileRestorePending ? "Restore the last change first" : "Apply creates a restore point";
+        if (App.Live.TakeProcessApplyRecoveredNotice() && RestoreAvailable && !ActionBusy)
+        {
+            ActionTitle = "Last apply didn't finish";
+            ActionDetail = "Some apps may still have the changes it made. Restore puts them back.";
+        }
+        if (!Quiet || wasAvailable != RestoreAvailable)
+            RestoreHint = App.Live.ProcessProfileApplyFinishing ? "The last apply is still finishing"
+                : App.Live.ProcessProfileRestorePending ? "Restore the last change first" : "Apply creates a restore point";
         await RefreshSessionStatusesAsync();
 
         ApplyFilter();
@@ -211,10 +218,21 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
         try
         {
             var response = await App.Live.ApplyProcessProfileResultAsync(preset: ProcessPreset);
+            var recovery = response.RecoveryPath is null ? null : App.Live.ProcessProfileRecovery;
+            if (recovery is not null && PathsEqual(response.RecoveryPath, recovery.Path))
+            {
+                _lastBackupPath = recovery.Path;
+                _lastBackupId = recovery.Id;
+                _lastBackupGeneration = recovery.Generation;
+                RestoreAvailable = true;
+                RestoreHint = "Restore the last change first";
+            }
+            else recovery = null;
             if (response.Value is null)
             {
                 ActionTitle = "Process priorities not confirmed";
-                ActionDetail = response.Error ?? "The process apply returned no result.";
+                ActionDetail = (response.Error ?? "The process apply returned no result.")
+                    + (recovery is null ? string.Empty : "\nRestore puts back the apps it already changed.");
                 return;
             }
             if (!TryProcessAction(response.Value, "performance.applyProfile", out var result, out var error))
@@ -225,15 +243,6 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
             }
             var changed = CountArray(result, "result", "changedItems");
             var status = ExtractString(result, "status") ?? "unknown";
-            var recovery = ProcessProfileRecovery.FromApply(response.Value);
-            if (recovery is not null && PathsEqual(response.RecoveryPath, recovery.Path))
-            {
-                _lastBackupPath = recovery.Path;
-                _lastBackupId = recovery.Id;
-                _lastBackupGeneration = response.RecoveryGeneration;
-                RestoreAvailable = true;
-                RestoreHint = "Restore the last change first";
-            }
             if (response.Error is not null || changed is null || ProcessOutcomeBlocked(result))
             {
                 ActionTitle = "Process priorities not confirmed";

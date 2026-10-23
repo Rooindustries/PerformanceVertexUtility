@@ -20,6 +20,38 @@ internal static class RecoverySlotChecks
         File.WriteAllText(output, JsonSerializer.Serialize(new { result, recovery = current, pending = service.ProcessProfileRestorePending }));
     }
 
+    public static async Task Cut(string output, string repo, string recoveryDirectory, string pidsFile)
+    {
+        Environment.SetEnvironmentVariable("ROO_INDUSTRIES_BACKEND_ROOT", repo);
+        var watched = File.ReadAllLines(pidsFile).Where(line => line.Length > 0).Select(line => System.Diagnostics.Process.GetProcessById(int.Parse(line))).ToArray();
+        var original = watched.Select(process => process.PriorityClass).ToArray();
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        double? cutAtMs = null;
+        using var cut = new CancellationTokenSource();
+        var watcher = Task.Run(async () =>
+        {
+            while (!cut.IsCancellationRequested)
+            {
+                for (var i = 0; i < watched.Length; i++)
+                {
+                    watched[i].Refresh();
+                    if (watched[i].PriorityClass == original[i]) continue;
+                    cutAtMs = clock.Elapsed.TotalMilliseconds;
+                    cut.Cancel();
+                    return;
+                }
+                await Task.Delay(2);
+            }
+        });
+        var service = new LiveDataService(new BackendLocator(), recoveryDirectory);
+        var result = await service.ApplyProcessProfileResultAsync(cut.Token);
+        var elapsedMs = clock.Elapsed.TotalMilliseconds;
+        cut.Cancel();
+        await watcher;
+        var changedAtReturn = watched.Where((process, i) => { process.Refresh(); return process.PriorityClass != original[i]; }).Select(process => process.Id).ToArray();
+        File.WriteAllText(output, JsonSerializer.Serialize(new { result, recovery = service.ProcessProfileRecovery, pending = service.ProcessProfileRestorePending, cutAtMs, elapsedMs, changedAtReturn }));
+    }
+
     public static void Settings(string output)
     {
         var path = Path.Combine(RooIndustries.Optimizer.BrandCompatibility.LocalDataRoot, "settings.json");
