@@ -141,7 +141,7 @@ try {
     Check ($exited -and $before.restorable -and (Priority $run.Game) -eq 'AboveNormal') 'A completed session keeps its Restore while its app is still open'
     Stop-RooIndustriesValidationProcess $run.App
     $recovered = Status $run -Recover
-    Check ($recovered.completed -and -not $recovered.restorable -and (Priority $run.Game) -eq 'Normal') 'Reopening the app also recovers a session that finished just before the app crashed'
+    Check ($recovered.completed -and $recovered.recoveryPerformed -and -not $recovered.restorable -and (Priority $run.Game) -eq 'Normal') 'Reopening the app also recovers a session that finished just before the app crashed and reports changed readings'
     Finish $run
 
     $run = Interrupted 'unreadable-identity'
