@@ -12,10 +12,20 @@ New-Item -ItemType Directory -Path $engine -Force | Out-Null
 foreach ($name in @('GameTuneSession.Common.ps1', 'ProcessProfile.Common.ps1', 'GovernorOwnership.Common.ps1', 'BrandCompatibility.Common.ps1', 'OperationState.Common.ps1', 'Stop-GameTuneSession.ps1', 'Get-GameTuneSessionStatus.ps1')) {
     Copy-Item -LiteralPath (Join-Path $Source "backend/scripts/$name") -Destination (Join-Path $engine $name)
 }
+Add-Type -TypeDefinition @'
+using System;
+public static class RooIndustriesNativeProcessControl {
+    public static long Created;
+    public static bool GetProcessTimes(IntPtr handle, out long created, out long exited, out long kernel, out long user) { created = Created; exited = 0; kernel = 0; user = 0; return true; }
+    public static bool CloseHandle(IntPtr handle) { return true; }
+}
+'@
 @'
-function Enter-RooIndustriesGovernorGate { return $true }
+function Enter-RooIndustriesGovernorGate { param([double]$Seconds = 30) return [Threading.Mutex]::new($true) }
 function Exit-RooIndustriesGovernorGate { param($Gate) }
 function Test-RooIndustriesGovernorOwnsControl { param($Process, $Control) return $false }
+function Get-RooIndustriesProcessOperationControls { param($Process, [switch]$ForPreview) return @() }
+function Open-RooIndustriesProcessControlHandle { param($Process, $Access) return [IntPtr]1 }
 function Get-Process {
     [CmdletBinding()]
     param([int]$Id)
@@ -66,8 +76,8 @@ function Invoke-RestoreCase {
     $directory = Join-Path $Out $Name
     $sessionPath = Join-Path $directory 'session.json'
     $backupPath = Join-Path $directory 'backup.json'
-    $state = [pscustomobject]@{ priorityClass = 'Normal'; affinityMask = 15; ioPriority = 'Normal'; memoryPriority = 5; gpuPriority = 'Normal'; gpuPriorityAvailable = $true; memoryPriorityAvailable = $true }
-    $snapshot = [pscustomobject]@{ processId = $PID; processName = 'FixtureGame.exe'; executablePath = 'C:\Games\FixtureGame.exe'; processStartTimeUtc = '2026-10-23T00:00:00Z'; controlChanges = @() }
+    $state = [pscustomobject]@{ priorityClass = 'Normal'; affinityMask = 15; ioPriority = 'Normal'; memoryPriority = 5; gpuPriority = 'Normal'; gpuPriorityAvailable = $true; memoryPriorityAvailable = $true; ioPriorityAvailable = $true; exists = $true }
+    $snapshot = [pscustomobject]@{ processId = $PID; processName = ([Diagnostics.Process]::GetCurrentProcess().ProcessName + '.exe'); executablePath = 'C:\Games\FixtureGame.exe'; processStartTimeUtc = '2026-10-23T00:00:00Z'; controlChanges = @() }
     foreach ($control in $Controls) {
         $state.($control.name) = if ($Original) { $control.original } else { $control.applied }
         $snapshot | Add-Member -NotePropertyName $control.field -NotePropertyValue $(if ($MissingOriginal) { $null } else { $control.original })
@@ -80,6 +90,9 @@ function Invoke-RestoreCase {
     Write-RooIndustriesGameTuneJsonFile $session $sessionPath
     Write-RooIndustriesGameTuneJsonFile $backup $backupPath
     $backupHash = (Get-FileHash -LiteralPath $backupPath).Hash
+    $birth = [DateTime]::MinValue
+    [void][DateTime]::TryParse([string](Get-RooIndustriesPropertyValue (Read-RooIndustriesJsonFile $backupPath).snapshots[0] 'processStartTimeUtc' ''), [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::RoundtripKind, [ref]$birth)
+    [RooIndustriesNativeProcessControl]::Created = $birth.ToUniversalTime().ToFileTimeUtc()
     if ($Mode -eq 'Recovery') {
         $result = Repair-RooIndustriesInterruptedGameTuneSession (Read-RooIndustriesJsonFile $sessionPath) $sessionPath
     } elseif ($Mode -eq 'Preview') {
@@ -92,24 +105,32 @@ function Invoke-RestoreCase {
     $results.Add([pscustomobject]@{ name = $Name; state = $state; writes = $writes; result = $result; saved = $saved }) | Out-Null
     if ($Conflict) {
         Check ((Test-RooIndustriesControlValueEqual $Conflict $state.$Conflict $foreign) -and @($writes | Where-Object control -eq $Conflict).Count -eq 0) "$Name preserves the foreign $Conflict without a write"
-        Check ($saved.restorable -and $saved.sessionStatus -ne 'completed' -and ($saved.skippedItems | ConvertTo-Json -Depth 10) -match 'Left as another program set it') "$Name reports the control left as another program set it and retains recovery"
+        if ($Outcome -eq 'applied') {
+            Check (-not $saved.restorable -and $saved.sessionStatus -eq 'completed' -and @($saved.leftAsSetItems | Where-Object { $_.control -eq $Conflict -and (Test-RooIndustriesControlValueEqual $Conflict $_.currentValue $foreign) }).Count -eq 1) "$Name lists the control left as another program set it and finishes the restore"
+        } else {
+            Check ($saved.restorable -and $saved.sessionStatus -eq 'failed' -and @($saved.leftAsSetItems).Count -eq 0 -and ($saved.skippedItems | ConvertTo-Json -Depth 10) -match "couldn't confirm another program still holds it") "$Name keeps the unconfirmed control and its recovery"
+        }
         if ($Mode -eq 'Recovery') {
             $before = [IO.File]::ReadAllText($sessionPath)
             $again = Repair-RooIndustriesInterruptedGameTuneSession $saved $sessionPath
-            Check ($again.sessionStatus -eq 'failed' -and [IO.File]::ReadAllText($sessionPath) -ceq $before -and @($again.errors | Where-Object code -eq 'GAME_TUNE_RECOVERY_NEEDS_ATTENTION').Count -eq 1) "$Name does not automatically retry the conflict"
+            Check ($again.sessionStatus -eq $saved.sessionStatus -and [IO.File]::ReadAllText($sessionPath) -ceq $before -and (Test-RooIndustriesControlValueEqual $Conflict $state.$Conflict $foreign)) "$Name does not automatically retry or rewrite the session"
         } elseif ($Controls.Count -gt 1) {
             $again = & (Join-Path $engine 'Stop-GameTuneSession.ps1') -SessionPath $sessionPath -ConfirmApply | ConvertFrom-Json
-            Check ($again.restorable -and $again.sessionStatus -ne 'completed' -and (Test-RooIndustriesControlValueEqual $Conflict $state.$Conflict $foreign) -and $global:RooIndustriesTuneFixture.writes.Count -eq $writes.Count) "$Name keeps the conflict on repeated Stop without rewriting restored controls"
+            Check ($again.restorable -eq $saved.restorable -and (Test-RooIndustriesControlValueEqual $Conflict $state.$Conflict $foreign) -and $global:RooIndustriesTuneFixture.writes.Count -eq $writes.Count) "$Name keeps the conflict on repeated Stop without rewriting restored controls"
         }
     } elseif ($Mode -eq 'Preview' -or $Original) {
         Check ($writes.Count -eq 0) "$Name writes no controls"
         if ($Mode -eq 'Preview') { Check ($saved.sessionStatus -eq 'completed' -and $saved.restorable -and $result.dryRun) "$Name preserves the session during preview" }
         else { Check (-not $saved.restorable) "$Name needs no further restore" }
-    } elseif ($MissingApplied -or $MissingOriginal) {
-        Check ($writes.Count -eq 0 -and $saved.restorable -and $saved.sessionStatus -ne 'completed') "$Name keeps values and evidence when saved control evidence is missing"
+    } elseif ($MissingApplied -or $MissingOriginal -or $Outcome -ne 'applied') {
+        Check ($writes.Count -eq 0 -and $saved.restorable -and $saved.sessionStatus -ne 'completed') "$Name keeps values and evidence when saved control evidence is missing or unconfirmed"
     }
     foreach ($control in $Controls) {
         if ($Mode -eq 'Preview' -or $MissingApplied -or $MissingOriginal -or $control.name -eq $Conflict) { continue }
+        if ($Outcome -ne 'applied' -and -not $Original) {
+            Check ((Test-RooIndustriesControlValueEqual $control.name $state.($control.name) $control.applied) -and @($writes | Where-Object control -eq $control.name).Count -eq 0) "$Name keeps unconfirmed $($control.name) at its current value"
+            continue
+        }
         Check ((Test-RooIndustriesControlValueEqual $control.name $state.($control.name) $control.original) -and @($writes | Where-Object { $_.control -eq $control.name -and -not (Test-RooIndustriesControlValueEqual $control.name $_.expected $control.applied) }).Count -eq 0) "$Name restores $($control.name) only from its saved applied value"
     }
     Check ((Test-Path -LiteralPath $backupPath) -and (Get-FileHash -LiteralPath $backupPath).Hash -ceq $backupHash) "$Name keeps the original backup intact"

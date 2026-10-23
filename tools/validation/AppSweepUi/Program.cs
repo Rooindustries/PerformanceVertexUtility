@@ -188,6 +188,7 @@ if (args.Length == 0 || (args.Length <= 2 && args[0] is "restore-summary" or "re
         var game = new PerformanceProfilesViewModel { HasGameRunning = true };
         App.Live.GameTuneText = JsonSerializer.Serialize(new { actionId = "performance.gameTune.startSession", dryRun = true, status = "preview", preview,
             result = new { summary = "Game restore preview." } });
+        App.Live.GameTuneReviewModel = new GameTuneReview(Path.Combine(fixtures, "game-review.json"), new string('A', 64));
         await game.CheckMatchTuneCommand.ExecuteAsync(null);
         Capture("game-preview", App.Live.GameTuneText, game);
         Verify(game.MatchTuneDetail.Contains("CPU BelowNormal (left as another program set it)", StringComparison.Ordinal), "Game preview names the proposed kept value");
@@ -195,6 +196,7 @@ if (args.Length == 0 || (args.Length <= 2 && args[0] is "restore-summary" or "re
             sessionId = "summary-session", profileId = "summary-game", sessionPath, backupManifestPath = sessionBackup, restorable = true,
             summary = new { changedItemCount = 1 }, changedItems = applied });
         await game.StartMatchTuneCommand.ExecuteAsync(null);
+        App.Live.GameTuneReviewModel = null;
         Verify(game.MatchTuneRestoreAvailable, "Summary game start binds the exact session recovery artifact");
         App.Live.GameTuneRestoreText = JsonSerializer.Serialize(new { actionId = "performance.gameTune.stopSession", dryRun = false, status = "completed",
             sessionId = "summary-session", profileId = "summary-game", sessionPath, backupManifestPath = sessionBackup, restorable = true, preview,
