@@ -313,7 +313,7 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
             if (response.Value is null || response.Error is not null)
             {
                 ActionTitle = "Restore not confirmed";
-                ActionDetail = response.Error ?? "The restore returned no result.";
+                ActionDetail = PageWords(response.Error ?? "The restore returned no result.", profile: true);
                 return;
             }
             if (!TryProcessAction(response.Value, "performance.rollbackProfile", out var result, out var error))
@@ -455,7 +455,7 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
             if (response.Value is null)
             {
                 MatchTuneStatus = "Game restore not confirmed";
-                MatchTuneDetail = response.Error ?? "The game restore returned no result.";
+                MatchTuneDetail = PageWords(response.Error ?? "The game restore returned no result.", profile: false);
                 SetMatchTuneRestore(ValidateSessionRestoreEvidence(evidence) ? evidence : null);
                 return;
             }
@@ -562,7 +562,7 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
             if (response.Value is null)
             {
                 GovernorStatus = "Background restore not confirmed";
-                GovernorDetail = response.Error ?? "The background restore returned no result.";
+                GovernorDetail = PageWords(response.Error ?? "The background restore returned no result.", profile: false);
                 SetGovernorRestore(ValidateSessionRestoreEvidence(evidence) ? evidence : null);
                 return;
             }
@@ -727,7 +727,17 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
             (errors.ValueKind != JsonValueKind.Array || errors.EnumerateArray().Any(issue => ExtractBool(issue, "blocking")));
     }
 
-    private static string SummarizeProcessAction(string? json, string fallback)
+    private static string SummarizeProcessAction(string? json, string fallback) => PageWords(ProcessSummary(json, fallback), profile: true);
+
+    private static string SummarizeSessionAction(string? json, string fallback) => PageWords(SessionSummary(json, fallback), profile: false);
+
+    private static string PageWords(string text, bool profile) => text
+        .Replace("Undo couldn't confirm", "Restore couldn't confirm", StringComparison.Ordinal)
+        .Replace("Run Undo again..", "Run Undo again.", StringComparison.Ordinal)
+        .Replace("Run Undo again.", profile ? "Restore again once that app closes; Apply unlocks when Restore finishes." : "Restore again once that app closes.", StringComparison.Ordinal)
+        .Replace("Undo that change first", "Restore that change first", StringComparison.Ordinal);
+
+    private static string ProcessSummary(string? json, string fallback)
     {
         if (string.IsNullOrWhiteSpace(json)) return fallback;
         try
@@ -891,7 +901,7 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
         }
     }
 
-    private static string SummarizeSessionAction(string? json, string fallback)
+    private static string SessionSummary(string? json, string fallback)
     {
         if (string.IsNullOrWhiteSpace(json)) return fallback;
         try
