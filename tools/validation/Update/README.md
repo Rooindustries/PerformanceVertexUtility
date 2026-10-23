@@ -126,3 +126,5 @@ pwsh -NoProfile -File tools/validation/Update/Check-UpgradeRehearsal.ps1 -OutRoo
 ```
 
 This drives real file renames and hash checks with a fixture ledger. It covers populated/fresh roots, hidden files, empty folders, shortcut files, interrupted/repeated restoration, conflicting destinations and modified/missing archives. It does not exercise Task Scheduler, Windows permissions, registry restoration or the desktop upgrade. Those checks remain part of the exclusive Windows run.
+
+On Windows, the same file cases accept `Source` through `windows_ssh.py interactive-frame`, with a fresh `OutRoot` inside that frame. They use the real harness path functions and read Windows owner/group/access permissions, including files whose archived paths exceed 259 characters. Only disposable files under that output folder are moved; app data, tasks and registry values are not changed. The fixture ledger remains a stand-in, so full task/registry restoration is still an exclusive-release check.
