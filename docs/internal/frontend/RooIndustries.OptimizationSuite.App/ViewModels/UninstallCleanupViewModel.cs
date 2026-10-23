@@ -189,7 +189,7 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
         var rowIds = rows.Select(a => a.AppId).OfType<string>().ToHashSet(StringComparer.Ordinal);
         rows.AddRange(_keptResults.Values
             .Where(kept => !rowIds.Contains(kept.App.AppId!))
-            .Select(kept => new InstalledApp { AppId = kept.App.AppId, DisplayName = kept.App.DisplayName, Removed = true, RemovalUnconfirmed = !complete }));
+            .Select(kept => new InstalledApp { AppId = kept.App.AppId, DisplayName = kept.App.DisplayName, Removed = true, RemovalUnconfirmed = !complete, ResultWaiting = true }));
         _allApps.AddRange(rows.OrderBy(a => a.FriendlyName, StringComparer.OrdinalIgnoreCase));
         AppCount = _allApps.Count(a => !a.Removed);
         Sources = inventory?.Sources is { Count: > 0 } s ? string.Join(", ", s.Select(FriendlySource)) : null;

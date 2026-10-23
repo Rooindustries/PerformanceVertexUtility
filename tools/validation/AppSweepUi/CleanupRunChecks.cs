@@ -281,6 +281,7 @@ static class CleanupRunChecks
                 model.SelectedApp = null;
                 var row = model.Apps.SingleOrDefault(app => app.AppId == appA.AppId);
                 if (row is null || ReferenceEquals(row, saved)) return (row is null ? "after reload: " : "list did not reload: ") + Listed(model);
+                if (row.SecondaryLabel != "Finished while you were away. Pick it to see the result.") return "result-only row subtitle: " + row.SecondaryLabel;
                 model.SelectedApp = row;
                 var failure = Idle(model) ?? (model.CleanupExecutionState == "Restore complete: 1 item put back." && !model.CleanupRestoreAvailable
                     ? null : "own app: " + model.CleanupExecutionState + " restore=" + model.CleanupRestoreAvailable);
@@ -306,6 +307,7 @@ static class CleanupRunChecks
                 model.SelectedApp = null;
                 var row = model.Apps.SingleOrDefault(app => app.AppId == appA.AppId);
                 if (row is not { Removed: true }) return (row is null ? "after reload: " : "list did not reload: ") + Listed(model);
+                if (row.SecondaryLabel != "Finished while you were away. Pick it to see the result.") return "result-only row subtitle: " + row.SecondaryLabel;
                 model.SelectedApp = row;
                 var failure = Idle(model) ?? (model.CleanupExecutionState == "App removal completed. Leftover cleanup needs a new review."
                     && model.CleanupExecutionDetail == "The old deletion list was not applied. Leftover files require a fresh scan and separate approval."
