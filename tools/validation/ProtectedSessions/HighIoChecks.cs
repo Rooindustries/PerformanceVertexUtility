@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
+using System.Security.Principal;
 using System.Text.Json;
 using Microsoft.Win32;
 using RooIndustries.Optimizer;
@@ -63,7 +65,7 @@ static class HighIoChecks
             var first = groups.Length > 1 ? groups[0] : lower.Take(Math.Max(1, lower.Length / 2)).Aggregate(0UL, (mask, bit) => mask | (1UL << bit));
             Console.WriteLine("MEASURE launcher CPUs 0x" + original.ToString("X") + ", cache groups " + string.Join(", ", groups.Select(mask => "0x" + mask.ToString("X"))) + ", game limited to 0x" + first.ToString("X"));
             if (first == original) throw new InvalidOperationException("At least two allowed logical processors are required.");
-            if (groups.Length > 1) Check(first == groups[0], "On a CPU with two cache groups, like the 9950X3D's two CCDs, the game is limited to the first one");
+            if (groups.Length > 1) Check(first == groups[0], "On a CPU with more than one last-level cache group, the game is limited to the first group");
 
             Process ReadGame(string gameRoot, string sessionRoot)
             {
@@ -193,6 +195,8 @@ static class HighIoChecks
             Until(() => File.Exists(Path.Combine(session, "recovery-result.json")), "The self-restart recovery watcher did not finish.");
             Check(State(session).Status == "stopped" && Oracle.Io(replacement) == replacementOriginalIo && Oracle.Affinity(replacement) == original,
                 "Stop restores the replacement's own captured I/O original, including an inherited High value, and clears the session CPU limit");
+            Check(Io(session, replacement).Status == (replacementOriginalIo == 3 ? "leftAsIs" : "restored"),
+                "A replacement that already had High I/O when it started is reported as left as is, not as restored");
             Snapshot("self-restarted game restored", session, replacement);
             Close(replacement);
 
@@ -223,6 +227,37 @@ static class HighIoChecks
             Check(ProtectedSessions.IsRestored(reconciled) && Oracle.Io(game) == baselineIo, "Once the value is back to High, recovery restores the saved original");
             Snapshot("manual reconciliation restored", session, game);
             Close(game);
+
+            session = Arm("session-refusing");
+            var refusingRoot = Path.Combine(root, "game-" + ++games); Directory.CreateDirectory(refusingRoot);
+            OperationFiles.Write(Path.Combine(root, "launch.json"), new { root = refusingRoot, refuse = true });
+            Until(() => File.Exists(Path.Combine(refusingRoot, "stub-exited")) && File.Exists(Path.Combine(refusingRoot, "ready.json")), "The refusing game did not start.");
+            var refusingId = OperationFiles.Read<JsonElement>(Path.Combine(refusingRoot, "ready.json")).GetProperty("pid").GetInt32();
+            var refusing = FixtureProcess.Ready(Path.Combine(refusingRoot, "ready.json"), GamePath, ["--high-io-game", refusingRoot], true, evidence);
+            identities.Add(Process.GetProcessById(refusingId), refusing);
+            var refused = false;
+            try { using var fresh = new ProcessTarget(refusingId, ["ioPriority"]); }
+            catch (RooIndustries.Optimization.CpuSets.NativeFailure failure) when (failure.NativeErrorCode == 5) { refused = true; }
+            Check(refused, "The disposable game refuses I/O setter handles from the moment it starts");
+            ProtectedFieldState Field(string name) => State(session).Games.Single(item => item.Identity.ProcessId == refusingId).Fields.Single(field => field.Name == name);
+            Until(() => State(session).Games.Any(item => item.Identity.ProcessId == refusingId) && Field("ioPriority").Status == "unavailable" && Field("affinity").Status == "applied", "The session did not settle the refusing game.");
+            var refusal = captureAvailable ? "The game didn't let other apps change this when it started, so it was left as is." : ProcessTarget.WriteBlocked;
+            Check(Field("ioPriority").Error == refusal && Field("ioPriority").JournalPath is null && Oracle.Io(refusingId) == baselineIo,
+                "When the game refuses, only I/O priority shows Unavailable with the reason, and nothing is written to it");
+            var keep = Stopwatch.StartNew();
+            while (keep.Elapsed.TotalSeconds < 6)
+            {
+                if (workers.Last().HasExited || State(session).Errors.Count != 0 || Oracle.Affinity(refusingId) != first) throw new InvalidOperationException("The refusing game ended the session or lost its CPU limit.");
+                Thread.Sleep(500);
+            }
+            Check(State(session).Status == "partial", "The session keeps running and the game keeps only the chosen CPUs");
+            proof.Add(new { phase = "game refused handles", refusingId, io = Oracle.Io(refusingId), affinity = "0x" + Oracle.Affinity(refusingId).ToString("X"), state = State(session) });
+            engine.Command(session, "stop");
+            Check(workers.Last().WaitForExit(20000), "The session with the refusing game stops");
+            Until(() => File.Exists(Path.Combine(session, "recovery-result.json")), "The refusing-game recovery watcher did not finish.");
+            Check(State(session).Status == "stopped" && Oracle.Affinity(refusingId) == original && Oracle.Io(refusingId) == baselineIo, "Stop clears the CPU limit and leaves the refused I/O priority untouched");
+            File.WriteAllText(Path.Combine(refusingRoot, "stop"), "");
+            Check(refusing.Wait(15000), "The refusing game fixture exits");
         }
         finally
         {
@@ -255,7 +290,9 @@ static class HighIoChecks
                 if (File.Exists(path))
                 {
                     var request = OperationFiles.Read<JsonElement>(path); File.Delete(path);
-                    var stub = Start(StubPath, "--high-io-stub", request.GetProperty("root").GetString()!); _ = stub.Handle; children.Add(stub);
+                    var refuse = request.TryGetProperty("refuse", out var flag) && flag.GetBoolean();
+                    var stub = refuse ? Start(StubPath, "--high-io-stub", request.GetProperty("root").GetString()!, "refuse") : Start(StubPath, "--high-io-stub", request.GetProperty("root").GetString()!);
+                    _ = stub.Handle; children.Add(stub);
                     if (stub.WaitForExit(15000)) File.WriteAllText(Path.Combine(request.GetProperty("root").GetString()!, "stub-exited"), "");
                 }
                 Thread.Sleep(20);
@@ -264,15 +301,19 @@ static class HighIoChecks
         finally { foreach (var child in children) { if (!child.HasExited) { using var owned = FixtureProcess.Started(child, Path.Combine(root, "process-receipts")); owned.Stop(); child.WaitForExit(10000); } child.Dispose(); } }
     }
 
-    internal static void Stub(string root)
+    internal static void Stub(string root, bool refuse = false)
     {
-        using var game = Start(GamePath, "--high-io-game", root);
+        if (!refuse) { using var game = Start(GamePath, "--high-io-game", root); return; }
+        using var user = WindowsIdentity.GetCurrent();
+        var sid = user.User!.Value;
+        using var refusing = FixtureProcess.Create(GamePath, ["--high-io-game", root], "D:(D;;0x200;;;" + sid + ")(A;;0x1FFFFF;;;" + sid + ")(A;;0x1FFFFF;;;BA)(A;;0x1FFFFF;;;SY)", Path.Combine(root, "process-receipts"));
     }
 
     internal static void Game(string root)
     {
-        using var self = Process.GetCurrentProcess(); _ = self.Handle;
-        OperationFiles.Write(Path.Combine(root, "ready.json"), new { pid = self.Id, creationTimeFileTimeUtc = FixtureProcess.Created(self).ToString(), administrator = true });
+        using var self = Process.GetCurrentProcess();
+        if (!GetProcessTimes(GetCurrentProcess(), out var created, out _, out _, out _)) throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
+        OperationFiles.Write(Path.Combine(root, "ready.json"), new { pid = self.Id, creationTimeFileTimeUtc = created.ToString(), administrator = true });
         var until = DateTime.UtcNow.AddMinutes(8);
         while (!File.Exists(Path.Combine(root, "stop")) && DateTime.UtcNow < until)
         {
@@ -298,4 +339,7 @@ static class HighIoChecks
             Thread.Sleep(10);
         }
     }
+
+    [DllImport("kernel32.dll")] static extern IntPtr GetCurrentProcess();
+    [DllImport("kernel32.dll", SetLastError = true)] static extern bool GetProcessTimes(IntPtr process, out long created, out long exit, out long kernel, out long user);
 }

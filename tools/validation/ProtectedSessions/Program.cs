@@ -16,6 +16,7 @@ if(args is [var retainedRepo,var retainedDotnet,"--retained-gpu"]) { RetainedGpu
 if(args is [var pairedRepo,var pairedDotnet,"--retained-gpu-high-io"]) { RetainedGpuChecks.Run(pairedRepo,pairedDotnet,true); return; }
 if(args is ["--high-io-launcher",var highIoRoot]) { HighIoChecks.Launcher(highIoRoot); return; }
 if(args is ["--high-io-stub",var stubRoot]) { HighIoChecks.Stub(stubRoot); return; }
+if(args is ["--high-io-stub",var refusingStubRoot,"refuse"]) { HighIoChecks.Stub(refusingStubRoot,true); return; }
 if(args is ["--high-io-game",var highIoGameRoot]) { HighIoChecks.Game(highIoGameRoot); return; }
 if(args is [var highIoRepo,var highIoDotnet,"--high-io",var inspectSeconds]) { HighIoChecks.Run(highIoRepo,highIoDotnet,int.Parse(inspectSeconds,System.Globalization.CultureInfo.InvariantCulture)); return; }
 if(args is ["--launcher",var launcherRoot]) { Fixtures.Launcher(launcherRoot); return; }
@@ -66,7 +67,8 @@ try{
  Check(!worker.HasExited&&State(target).JobStatus=="applied"&&worker.MainWindowHandle==IntPtr.Zero,"Worker is armed without an automatic expiry or visible window");
  File.Delete(preview);Check(State(target).Status=="armed","The session retains reviewed bytes independently of the caller preview file");
  using var capture=new CaptureThread(worker);var waiting=capture.Measure(()=>Thread.Sleep(5000));Console.WriteLine("MEASURE armed, no game: "+waiting);
- if(OperatingSystem.IsWindowsVersionAtLeast(10,0,26100,4770))Check(Directory.Exists(Path.Combine(target,"gpu-handles")),"GPU launch capture watches for the game");else Console.WriteLine("SKIP GPU launch capture needs Windows 11 build 26100.4770 or later");
+ var captureAvailable=Oracle.BasicProcessesAvailable();Console.WriteLine("MEASURE native launch capture available: "+captureAvailable);
+ Check(Directory.Exists(Path.Combine(target,"gpu-handles"))==captureAvailable,captureAvailable?"GPU launch capture watches for the game":"Without Windows' basic process list the session keeps the fresh-handle route");
  var otherBin=Directory.CreateDirectory(Path.Combine(root,"same-name")).FullName;var otherGame=Path.Combine(otherBin,Path.GetFileName(gamePath));
  foreach(var file in Directory.GetFiles(bin,"*.dll").Concat(Directory.GetFiles(bin,"*.json")))File.Copy(file,Path.Combine(otherBin,Path.GetFileName(file)));File.Copy(gamePath,otherGame);
  Environment.SetEnvironmentVariable("DOTNET_ROOT_X64",Path.GetDirectoryName(dotnet));var sid=System.Security.Principal.WindowsIdentity.GetCurrent().User!.Value;
@@ -166,7 +168,10 @@ static class Fixtures{
  public static void Game(string root,bool hardware){using var self=Process.GetCurrentProcess();using var gpu=hardware?new GpuWorkload(0x1002,0x7550,16384,256):null;File.WriteAllText(Path.Combine(root,"ready.json"),JsonSerializer.Serialize(new{pid=self.Id,creationTimeFileTimeUtc=FixtureProcess.Created(self).ToString(),administrator=true,adapter=gpu?.Adapter}));var until=DateTime.UtcNow.AddMinutes(8);while(!File.Exists(Path.Combine(root,"stop"))&&DateTime.UtcNow<until){gpu?.Run(1);Thread.Sleep(10);}if(gpu is not null)File.WriteAllText(Path.Combine(root,"gpu-result.json"),JsonSerializer.Serialize(new{gpu.Adapter,gpu.Dispatches,verified=gpu.VerifyOutput()}));}
 }
 static class Oracle{
- public static bool BasicProcessesAvailable(){int status=NtQuerySystemInformation(252,IntPtr.Zero,0,out _);if(status==0||status==unchecked((int)0xC0000004))return true;if(status==unchecked((int)0xC0000002)||status==unchecked((int)0xC0000003))return false;throw new Exception("Basic process capability query "+status.ToString("X8"));}
+ public static bool BasicProcessesAvailable(){const int size=8*1024*1024;var buffer=Marshal.AllocHGlobal(size);try{int status=NtQuerySystemInformation(252,buffer,size,out var needed);if(status==unchecked((int)0xC0000002)||status==unchecked((int)0xC0000003))return false;if(status!=0||needed>size)throw new Exception("Basic process list "+status.ToString("X8"));for(var offset=0;;){if(Marshal.ReadIntPtr(buffer,offset+8).ToInt64()==Environment.ProcessId)return true;var next=Marshal.ReadInt32(buffer,offset);if(next==0)throw new Exception("Basic process list did not include this process");offset=checked(offset+next);}}finally{Marshal.FreeHGlobal(buffer);}}
+ public static int Io(int pid){using var p=Limited(pid);int value=0;var status=NtQueryInformationProcess(p.DangerousGetHandle(),33,ref value,4,IntPtr.Zero);if(status<0)throw new Exception("IO query "+status.ToString("X8"));return value;}
+ public static ulong Affinity(int pid){using var p=Limited(pid);if(!GetProcessAffinityMask(p.DangerousGetHandle(),out var value,out _))throw new System.ComponentModel.Win32Exception();return value.ToUInt64();}
+ static Microsoft.Win32.SafeHandles.SafeProcessHandle Limited(int pid){var p=OpenProcess(0x1000,false,pid);if(p.IsInvalid)throw new System.ComponentModel.Win32Exception();return p;}
  public static ulong Affinity(Process p){if(!GetProcessAffinityMask(p.Handle,out var value,out _))throw new System.ComponentModel.Win32Exception();return value.ToUInt64();}
  public static int Gpu(Process p){int status=D3DKMTGetProcessSchedulingPriorityClass(p.Handle,out int value);if(status<0)throw new Exception("GPU query "+status.ToString("X8"));return value;}
  public static void SetGpu(Process p,int value){int status=D3DKMTSetProcessSchedulingPriorityClass(p.Handle,value);if(status<0)throw new Exception("GPU set "+status.ToString("X8"));}
@@ -175,6 +180,7 @@ static class Oracle{
  public static uint Memory(Process p){if(!GetProcessInformation(p.Handle,0,out uint value,4))throw new System.ComponentModel.Win32Exception();return value;}
  public static void SetMemory(Process p,uint value){if(!SetProcessInformation(p.Handle,0,ref value,4))throw new System.ComponentModel.Win32Exception();}
  [DllImport("kernel32.dll",SetLastError=true)]static extern bool GetProcessAffinityMask(IntPtr p,out UIntPtr value,out UIntPtr system);
+ [DllImport("kernel32.dll",SetLastError=true)]static extern Microsoft.Win32.SafeHandles.SafeProcessHandle OpenProcess(uint access,bool inherit,int pid);
  [DllImport("kernel32.dll",SetLastError=true)]static extern bool GetProcessInformation(IntPtr p,int c,out uint v,uint n);
  [DllImport("kernel32.dll",SetLastError=true)]static extern bool SetProcessInformation(IntPtr p,int c,ref uint v,uint n);
  [DllImport("ntdll.dll")]static extern int NtQueryInformationProcess(IntPtr p,int c,ref int v,int n,IntPtr ret);

@@ -61,6 +61,8 @@ static class GameSessionChecks
         Check(GameSessionDisplay.Restored(history) && GameSessionDisplay.Title(history) == "Stopped · original settings restored", "A session recovered after an earlier error counts as restored, so a new session can start");
         Check(!GameSessionDisplay.Restored(Ended("recoveryRequired", "restored", "Native restoration needs reconciliation: gpuPriority")), "A session that still needs recovery stays outstanding");
         Check(!GameSessionDisplay.Restored(Ended("stoppedWithErrors", "conflict", "Native restoration needs reconciliation: gpuPriority")), "A field that was not put back keeps the session outstanding");
+        var inherited = Ended("stopped", "leftAsIs");
+        Check(GameSessionDisplay.Restored(inherited) && ProtectedSessions.IsRestored(inherited.State!), "A field the game already had when it started, left as is, doesn't keep the session outstanding");
         Console.WriteLine("Game session display assertions: " + passed);
     }
 
