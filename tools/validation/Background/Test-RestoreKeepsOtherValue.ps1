@@ -32,6 +32,10 @@ function Test-LeftItem($result,[int]$processId,[string]$control,[string]$value){
  $items=@($result.result.leftAsSetItems|Where-Object {$_.processId -eq $processId -and $_.control -eq $control -and [string]$_.currentValue -eq $value})
  return $items.Count -eq 1 -and [string]$result.result.summary -like '*Left as another program set it*'
 }
+function Assert-UnprovenReason($result,[string]$kind){
+ $text=$result|ConvertTo-Json -Depth 40 -Compress
+ if($text -notlike '*It resets when that app restarts.*' -or $text -like '*Run Undo again*' -or [string]$result.result.summary -like '*..*'){throw ($kind+' Undo of a value it can''t prove it set must say the value resets when that app restarts, not Run Undo again, and end the summary with one period: '+$text)}
+}
 function Set-ChangeBreakpoint($p,[string]$Command,[string]$Value){
  $race=@{done=$false;process=$p;value=$Value}
  return Set-PSBreakpoint -Command $Command -Action ({if(-not$race.done){$race.done=$true;$race.process.PriorityClass=$race.value}}.GetNewClosure())
@@ -41,7 +45,7 @@ function Set-ConfirmationChangeBreakpoint($p,[string]$Value){
  return Set-PSBreakpoint -Command Confirm-RooIndustriesRestoreControl -Action ({if(-not$race.done){$race.done=$true;$race.process.PriorityClass=$race.value}}.GetNewClosure())
 }
 
-function Invoke-GameScenario([string]$name,[ValidateSet('before','race','back','original','pending')][string]$Mode){
+function Invoke-GameScenario([string]$name,[ValidateSet('before','race','back','original','pending','damaged')][string]$Mode){
  $directory=Join-Path $OutRoot $name;[IO.Directory]::CreateDirectory($directory)|Out-Null
  $game=$null;$breakpoint=$null
  try{
@@ -61,6 +65,20 @@ function Invoke-GameScenario([string]$name,[ValidateSet('before','race','back','
   if($applied.priorityClass -ne 'AboveNormal' -or $applied.affinityMask -ne $affinity){throw ('Game Tune did not apply priority and affinity to the fixture: '+$applied.priorityClass+' '+$applied.affinityMask)}
   $statusBefore=& (Join-Path $Source 'backend\scripts\Get-GameTuneSessionStatus.ps1') -SessionPath $start.sessionPath|ConvertFrom-Json;Save $directory 'status-before' $statusBefore
   if($statusBefore.restoreAttempted -isnot [bool] -or $statusBefore.restoreAttempted){throw 'Game Tune status did not identify the pre-Undo phase'}
+  if($Mode -eq 'damaged'){
+   $damaged=[IO.Directory]::CreateDirectory((Join-Path $OutRoot ('owned-data\operations\game-session-roo711-'+[guid]::NewGuid().ToString('N')+'\session'))).Parent.FullName
+   try{
+    [IO.File]::WriteAllText((Join-Path $damaged 'session\launcher-journal.json'),'{',$utf8)
+    $undo=Invoke-E2EBackend 'Stop-GameTuneSession.ps1' -SessionPath $start.sessionPath -ConfirmApply|ConvertFrom-Json;Save $directory 'undo-first' $undo
+   }finally{[IO.Directory]::Delete($damaged,$true)}
+   $text=$undo|ConvertTo-Json -Depth 40 -Compress;$held=Read-Fixture $p
+   if($held.priorityClass -ne 'AboveNormal' -or $held.affinityMask -ne $affinity -or -not $undo.restorable -or $text -notlike '*A saved change file is damaged: operations\\game-session-roo711-*' -or $text -like '*Run Undo again*'){throw ('A Game Tune Stop refused by a damaged saved change must change nothing and name the file: '+$text)}
+   $undo=Invoke-E2EBackend 'Stop-GameTuneSession.ps1' -SessionPath $start.sessionPath -ConfirmApply|ConvertFrom-Json;Save $directory 'undo' $undo
+   $after=Read-Fixture $p
+   if($after.priorityClass -ne 'Normal' -or $after.affinityMask -ne $before.affinityMask -or $undo.restorable -or $undo.status -ne 'completed'){throw ('The next Game Tune Stop did not restore: '+$after.priorityClass+' '+$after.affinityMask+' '+$undo.status+' restorable '+$undo.restorable)}
+   Save $directory 'done' @{passed=$true;mode=$Mode;refused='A saved change file is damaged: operations\game-session-roo711-...';restored='priorityClass Normal and affinityMask'}
+   return
+  }
   if($Mode -eq 'pending'){
    $backup=Get-Content -LiteralPath $start.backupManifestPath -Raw|ConvertFrom-Json
    $pendingControls=0
@@ -102,6 +120,7 @@ function Invoke-GameScenario([string]$name,[ValidateSet('before','race','back','
   }
   if($Mode -eq 'pending'){
    if($after.priorityClass -ne 'BelowNormal' -or -not $undo.restorable -or -not $status.restorable -or @($undo.result.leftAsSetItems).Count){throw 'Unverified Game Tune drift must remain pending without kept attribution'}
+   Assert-UnprovenReason $undo 'Game Tune'
    if($after.affinityMask -ne $before.affinityMask){throw 'Independent affinity did not restore'}
    $repeat=Invoke-E2EBackend 'Stop-GameTuneSession.ps1' -SessionPath $start.sessionPath -ConfirmApply|ConvertFrom-Json;Save $directory 'repeat' $repeat
    if(-not $repeat.restorable -or (Read-Fixture $p).priorityClass -ne 'BelowNormal' -or @($repeat.result.leftAsSetItems).Count){throw 'Repeated unverified Undo incorrectly closed recovery'}
@@ -122,7 +141,7 @@ function Invoke-GameScenario([string]$name,[ValidateSet('before','race','back','
  finally{if($breakpoint){Remove-PSBreakpoint $breakpoint};if($game){Stop-OwnedProcess $game.owned}}
 }
 
-function Invoke-ProfileScenario([string]$name,[ValidateSet('before','race','back','original','pending')][string]$Mode){
+function Invoke-ProfileScenario([string]$name,[ValidateSet('before','race','back','original','pending','damaged','busy')][string]$Mode){
  $directory=Join-Path $OutRoot $name;[IO.Directory]::CreateDirectory($directory)|Out-Null
  $kept=$null;$untouched=$null;$breakpoint=$null
  try{
@@ -146,6 +165,34 @@ function Invoke-ProfileScenario([string]$name,[ValidateSet('before','race','back
    if($pendingControls -ne 1){throw 'Expected one profile priority journal for the pending fixture'}
    [IO.File]::WriteAllText($apply.backup.location,($backup|ConvertTo-Json -Depth 40),$utf8)
    Save $directory 'pending-input' $backup
+  }
+  if($Mode -in @('damaged','busy')){
+   $damaged=$null;$holder=$null;$release=Join-Path $directory 'gate-release.txt'
+   try{
+    if($Mode -eq 'damaged'){
+     $damaged=[IO.Directory]::CreateDirectory((Join-Path $OutRoot ('owned-data\operations\process-roo711-'+[guid]::NewGuid().ToString('N')))).FullName
+     [IO.File]::WriteAllText((Join-Path $damaged 'journal.json'),'{',$utf8)
+    }else{
+     $ready=Join-Path $directory 'gate-held.txt'
+     $hold="`$m=[Threading.Mutex]::new(`$false,'Global\RooIndustriesGovernorGate-"+[Security.Principal.WindowsIdentity]::GetCurrent().User.Value+"');if(`$m.WaitOne(10000)){[IO.File]::WriteAllText('"+$ready+"','held');while(-not[IO.File]::Exists('"+$release+"')){Start-Sleep -Milliseconds 50};`$m.ReleaseMutex()};`$m.Dispose()"
+     $p=Start-Process (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe') -ArgumentList @('-NoProfile','-NonInteractive','-EncodedCommand',[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($hold))) -WindowStyle Hidden -PassThru
+     $holder=[pscustomobject]@{process=$p;owned=(New-OwnedProcess $p)}
+     $deadline=[DateTime]::UtcNow.AddSeconds(15);while(-not[IO.File]::Exists($ready)){if([DateTime]::UtcNow -gt $deadline){throw 'The fixture could not hold the governor gate'};Start-Sleep -Milliseconds 50}
+    }
+    $undo=Invoke-E2EBackend 'Restore-ProcessProfileBackup.ps1' -BackupPath $apply.backup.location -ConfirmApply|ConvertFrom-Json;Save $directory 'undo-first' $undo
+   }finally{
+    if($damaged){[IO.Directory]::Delete($damaged,$true)}
+    if($holder){[IO.File]::WriteAllText($release,'release',$utf8);if(-not$holder.process.WaitForExit(15000)){Stop-OwnedProcess $holder.owned}}
+   }
+   $text=$undo|ConvertTo-Json -Depth 40 -Compress
+   $expected=if($Mode -eq 'damaged'){'A saved change file is damaged: operations\\process-roo711-'}else{'Background limits were busy, so this setting was left alone. Try again in a moment.'}
+   foreach($fixture in $kept,$untouched){if((Read-Fixture $fixture.process).priorityClass -ne 'AboveNormal'){throw ('A refused profile Undo changed fixture '+$fixture.process.Id)}}
+   if($undo.result.restorePendingCount -lt 1 -or $text -notlike ('*'+$expected+'*') -or $text -like '*Run Undo again*' -or [string]$undo.result.summary -like '*..*'){throw ('A profile Undo refused by '+$(if($Mode -eq 'damaged'){'a damaged saved change'}else{'busy background limits'})+' must say so: '+$text)}
+   $undo=Invoke-E2EBackend 'Restore-ProcessProfileBackup.ps1' -BackupPath $apply.backup.location -ConfirmApply|ConvertFrom-Json;Save $directory 'undo' $undo
+   foreach($fixture in $kept,$untouched){if((Read-Fixture $fixture.process).priorityClass -ne 'Normal'){throw ('The next profile Undo did not restore fixture '+$fixture.process.Id)}}
+   if($undo.status -ne 'success' -or $undo.result.restorePendingCount -ne 0){throw ('The next profile Undo did not finish: '+$undo.status+' pending '+$undo.result.restorePendingCount)}
+   Save $directory 'done' @{passed=$true;mode=$Mode;refused=$expected;restored='priorityClass Normal'}
+   return
   }
   if($Mode -eq 'race'){$breakpoint=Set-ChangeBreakpoint $kept.process 'Invoke-RooIndustriesProcessControlChange' 'BelowNormal'}else{
    $kept.process.PriorityClass=if($Mode -eq 'original'){'Normal'}else{'BelowNormal'}
@@ -171,6 +218,7 @@ function Invoke-ProfileScenario([string]$name,[ValidateSet('before','race','back
   }
   if($Mode -eq 'pending'){
    if($keptAfter.priorityClass -ne 'BelowNormal' -or $untouchedAfter.priorityClass -ne 'Normal' -or $undo.result.restorePendingCount -ne 1 -or @($undo.result.leftAsSetItems).Count){throw 'Unverified profile drift must remain pending while its peer restores'}
+   Assert-UnprovenReason $undo 'Profile'
    $repeat=Invoke-E2EBackend 'Restore-ProcessProfileBackup.ps1' -BackupPath $apply.backup.location -ConfirmApply|ConvertFrom-Json;Save $directory 'repeat' $repeat
    if($repeat.result.restorePendingCount -ne 1 -or (Read-Fixture $kept.process).priorityClass -ne 'BelowNormal' -or @($repeat.result.leftAsSetItems).Count){throw 'Repeated unverified profile drift incorrectly closed recovery'}
    $kept.process.PriorityClass='Normal'
@@ -197,8 +245,11 @@ Invoke-ProfileScenario 'profile-race' 'race'
 Invoke-ProfileScenario 'profile-back' 'back'
 Invoke-GameScenario 'game-original' 'original'
 Invoke-GameScenario 'game-pending' 'pending'
+Invoke-GameScenario 'game-damaged-saved-change' 'damaged'
 Invoke-ProfileScenario 'profile-original' 'original'
 Invoke-ProfileScenario 'profile-pending' 'pending'
+Invoke-ProfileScenario 'profile-damaged-saved-change' 'damaged'
+Invoke-ProfileScenario 'profile-governor-busy' 'busy'
 if($failures.Count){throw ($failures -join '; ')}
-[IO.File]::WriteAllText((Join-Path $OutRoot 'summary.json'),(@{passed=$true;cases=10;engine=$PSVersionTable.PSVersion.ToString()}|ConvertTo-Json))
+[IO.File]::WriteAllText((Join-Path $OutRoot 'summary.json'),(@{passed=$true;cases=13;engine=$PSVersionTable.PSVersion.ToString()}|ConvertTo-Json))
 'ROO_INDUSTRIES_RESTORE_KEEPS_VALUE_E2E_COMPLETE'

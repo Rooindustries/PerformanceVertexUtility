@@ -114,6 +114,7 @@ if (args.Length == 0 || (args.Length <= 2 && args[0] is "restore-summary" or "re
     const string reason = "priorityClass: Undo couldn't confirm another program still holds it, so it was left alone. Run Undo again.";
     const string profileShown = "priorityClass: Restore couldn't confirm another program still holds it, so it was left alone. Restore again once that app closes; Apply unlocks when Restore finishes.";
     const string sessionShown = "priorityClass: Restore couldn't confirm another program still holds it, so it was left alone. Restore again once that app closes.";
+    const string unproven = "priorityClass: Undo couldn't confirm it set this value, so it was left alone. It resets when that app restarts.";
     var skipped = new[] { new { processName = "Target", reason } };
     try
     {
@@ -185,6 +186,15 @@ if (args.Length == 0 || (args.Length <= 2 && args[0] is "restore-summary" or "re
         Capture("profile-partial-managed", App.Live.ProcessRestoreText, profile);
         Verify(profile.ActionDetail.Contains("Target: affinityMask: Another saved change still uses this control. Restore that change first, then try again.", StringComparison.Ordinal),
             "A profile Restore blocked by another saved change says Restore that change first");
+        App.Live.ProcessRestoreText = JsonSerializer.Serialize(new { actionId = "performance.rollbackProfile", dryRun = false, status = "partial", preview,
+            backup = new { backupId = "summary-backup", location = backup },
+            result = new { status = "partial", summary = "Restore finished for 1 app(s). 1 app(s) still need attention: Target (PID 123): " + unproven, changedItems = restored,
+                leftAsSetItems = Array.Empty<object>(), restorePendingCount = 1, skippedItems = new[] { new { processName = "Target", processId = 123, reason = unproven } } } });
+        await profile.RestoreProfileCommand.ExecuteAsync(null);
+        Capture("profile-partial-unproven", App.Live.ProcessRestoreText, profile);
+        Verify(profile.ActionDetail.Contains("Target (PID 123): priorityClass: Restore couldn't confirm it set this value, so it was left alone. It resets when that app restarts; then Restore again to unlock Apply.", StringComparison.Ordinal)
+            && !profile.ActionDetail.Contains("Undo", StringComparison.Ordinal) && !profile.ActionDetail.Contains("..", StringComparison.Ordinal),
+            "A profile Restore that can't confirm it set a value says it resets when that app restarts, then Restore again to unlock Apply");
         foreach (var completeList in new[] { true, false })
         {
             object[] actualKept = completeList ? kept : [kept[0], new { processName = "Other", control = "priorityClass", currentValue = "Idle" }];
@@ -240,6 +250,15 @@ if (args.Length == 0 || (args.Length <= 2 && args[0] is "restore-summary" or "re
         Verify(game.MatchTuneDetail.StartsWith("Partial game restore.", StringComparison.Ordinal) && game.MatchTuneDetail.Contains(sessionShown, StringComparison.Ordinal)
             && !game.MatchTuneDetail.Contains("BelowNormal", StringComparison.Ordinal), "Partial game details report the failed confirmation without a stale kept value");
         Verify(game.MatchTuneDetail.Contains("Peer: CPU AboveNormal → Normal", StringComparison.Ordinal), "Confirmed game details use restored-item evidence when changed items are absent");
+        App.Live.GameTuneRestoreText = JsonSerializer.Serialize(new { actionId = "performance.gameTune.stopSession", dryRun = false, status = "completed",
+            sessionId = "summary-session", profileId = "summary-game", sessionPath, backupManifestPath = sessionBackup, restorable = true, preview,
+            result = new { status = "partial", summary = "Partial game restore.", restoredItems = restored, leftAsSetItems = Array.Empty<object>(),
+                skippedItems = new[] { new { processName = "Target", reason = unproven } } } });
+        await game.RestoreMatchTuneCommand.ExecuteAsync(null);
+        Capture("game-partial-unproven", App.Live.GameTuneRestoreText, game);
+        Verify(game.MatchTuneDetail.Contains("Target: priorityClass: Restore couldn't confirm it set this value, so it was left alone. It resets when that app restarts; then Restore again.", StringComparison.Ordinal)
+            && !game.MatchTuneDetail.Contains("Undo", StringComparison.Ordinal) && game.MatchTuneRestoreAvailable,
+            "A Game Tune Restore that can't confirm it set a value says it resets when that app restarts, then Restore again");
         var mixed = new object?[] { null, new { processName = "Peer", controlChanges = new object?[] { null,
             new { control = "priorityClass", currentValue = "AboveNormal", proposedValue = "Normal", outcome = "applied" },
             new { control = "gpuPriority", currentValue = "Normal", proposedValue = "Realtime", outcome = "failed" } } } };
