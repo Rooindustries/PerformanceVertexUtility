@@ -122,7 +122,7 @@ function Invoke-CimMethod {
  $applied=Change 1 2;$afterApply=Saved
  $providers=$broken+[Environment]::NewLine+$cim
  $undone=Change 2 1;$afterUndo=Saved
- if($null -ne $applied.error -or $applied.value -ne 2 -or $afterApply.consent -ne 2 -or $afterApply.calls -cne ($set+'2:Byte;') -or $null -ne $undone.error -or $undone.value -ne 1 -or $afterUndo.consent -ne 1 -or $afterUndo.calls -cne ($set+'1:Byte;')){throw ('Without Defender''s PowerShell commands, the Defender row must apply and undo through MSFT_MpPreference.Set and read back the result: '+($applied|ConvertTo-Json -Compress)+' '+($afterApply|ConvertTo-Json -Compress)+' | '+($undone|ConvertTo-Json -Compress)+' '+($afterUndo|ConvertTo-Json -Compress))}
+ if($null -ne $applied.error -or $applied.value -ne 2 -or $afterApply.consent -ne 2 -or $afterApply.calls -cne ($set+'2:Byte;') -or $null -ne $undone.error -or $undone.value -ne 1 -or $afterUndo.consent -ne 1 -or $afterUndo.calls -cne ($set+'2:Byte;'+$set+'1:Byte;')){throw ('Without Defender''s PowerShell commands, the Defender row must apply and undo through MSFT_MpPreference.Set and read back the result: '+($applied|ConvertTo-Json -Compress)+' '+($afterApply|ConvertTo-Json -Compress)+' | '+($undone|ConvertTo-Json -Compress)+' '+($afterUndo|ConvertTo-Json -Compress))}
  Write-Host 'PASS without Defender''s PowerShell commands the Defender row applies and undoes through MSFT_MpPreference.Set, one byte value each, and reads back the result'
  Defender $null 'Running' 1 2
  $refused=Change 1 2;$afterRefusal=Saved

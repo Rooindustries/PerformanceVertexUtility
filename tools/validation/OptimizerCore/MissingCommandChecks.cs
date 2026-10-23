@@ -198,10 +198,13 @@ function Invoke-CimMethod {
         try
         {
             check(rows.Length > 0, "The catalog has Defender rows to apply and undo");
+            var broken = BrokenModule(folder.FullName, "BrokenDefender", LoadFailure, "Get-MpPreference", "Set-MpPreference");
+            var import = WindowsPowerShell("$env:PSModulePath='" + broken.Replace("'", "''") + "'; try { Import-Module BrokenDefender; 'loaded' } catch { $_.Exception.Message }");
+            check(import.Contains(LoadFailure, StringComparison.Ordinal), "The failing-to-load fixture's Defender commands really fail to import: " + import);
             (string Commands, Func<object, Process> Launcher)[] states =
             [
                 ("missing", Launcher("", "", Path.Combine(folder.FullName, "no-modules"))),
-                ("failing to load", Launcher("", "", BrokenModule(folder.FullName, "BrokenDefender", LoadFailure, "Get-MpPreference", "Set-MpPreference"))),
+                ("failing to load", Launcher("", "", broken)),
             ];
             foreach (var (commands, launcher) in states)
             foreach (var row in rows)
@@ -232,15 +235,21 @@ function Invoke-CimMethod {
         finally
         {
             PowerShellControls.Launcher = original;
-            var last = Consent();
-            if (last != first) WindowsPowerShell("Set-MpPreference -SubmitSamplesConsent " + first);
-            log.Add(new { first, last, final = Consent() });
-            File.WriteAllText(evidence, JsonSerializer.Serialize(log, new JsonSerializerOptions { WriteIndented = true }));
-            Registry.CurrentUser.DeleteSubKeyTree(root, false);
-            if (!parentExisted)
-                try { Registry.CurrentUser.DeleteSubKey(Parent, false); }
-                catch (InvalidOperationException) { }
-            folder.Delete(true);
+            try
+            {
+                var last = Consent();
+                if (last != first) WindowsPowerShell("Set-MpPreference -SubmitSamplesConsent " + first);
+                log.Add(new { first, last, final = Consent() });
+                File.WriteAllText(evidence, JsonSerializer.Serialize(log, new JsonSerializerOptions { WriteIndented = true }));
+            }
+            finally
+            {
+                Registry.CurrentUser.DeleteSubKeyTree(root, false);
+                if (!parentExisted)
+                    try { Registry.CurrentUser.DeleteSubKey(Parent, false); }
+                    catch (InvalidOperationException) { }
+                folder.Delete(true);
+            }
         }
         check(log.Count == 2 * rows.Length + 1, "Every Defender row applied and undid with its commands missing and failing to load, and the PC's own value is back: " + evidence);
     }
