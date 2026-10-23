@@ -1,5 +1,6 @@
-param([string]$Script=(Join-Path $PSScriptRoot 'Test-GovernorOtherUser.ps1'),[Parameter(Mandatory=$true)][string]$OutDir)
+param([string]$Script,[Parameter(Mandatory=$true)][string]$OutDir)
 $ErrorActionPreference='Stop'
+if(-not $Script){$Script=Join-Path $PSScriptRoot 'Test-GovernorOtherUser.ps1'}
 [IO.Directory]::CreateDirectory($OutDir)|Out-Null
 $tokens=$null;$errors=$null
 $ast=[Management.Automation.Language.Parser]::ParseFile($Script,[ref]$tokens,[ref]$errors)
