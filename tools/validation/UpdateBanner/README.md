@@ -2,13 +2,15 @@
 
 `Invoke-UpdateBannerUi.ps1` drives a test-hooks Debug build of the desktop app on a Windows test PC and checks what the update banner and Settings show when an install can't start. It never contacts an update feed, never downloads or runs setup, and never changes a PC setting.
 
-Stage tracked source with `--include-frontend`, then run it through the existing interactive route on a signed-in, unlocked desktop with no other app window open:
+Stage a fresh frame with `--include-frontend` under `C:\RooBuild`, then run it through the existing interactive route on a signed-in, unlocked desktop with no other app window open:
 
 ```sh
-python3 -I tools/validation/windows_ssh.py --host <test-pc> --expected-machine <COMPUTERNAME> upload --include-frontend --parent <protected-parent> --directory roo-industries-update-banner > receipt.json
-arguments=$(jq -c '{Source:.stagingPath,OutRoot:(.runRoot+"\\banner-results"),Label:"after"}' receipt.json)
-python3 -I tools/validation/windows_ssh.py --host <test-pc> --expected-machine <COMPUTERNAME> interactive --receipt receipt.json --script tools/validation/UpdateBanner/Invoke-UpdateBannerUi.ps1 --arguments "$arguments" --minutes 30
+python3 -I tools/validation/windows_ssh.py --host <test-pc> --expected-machine <COMPUTERNAME> upload-frame --include-frontend --parent 'C:\RooBuild' --directory roo-industries-ub > receipt.json
+arguments=$(jq -c '{Source:.stagingPath,OutRoot:(.runRoot+"\\results"),Label:"after"}' receipt.json)
+python3 -I tools/validation/windows_ssh.py --host <test-pc> --expected-machine <COMPUTERNAME> interactive-frame --receipt receipt.json --script tools/validation/UpdateBanner/Invoke-UpdateBannerUi.ps1 --arguments "$arguments" --minutes 30
 ```
+
+The script takes the frame's host lease first and fails if another frame holds it; wait and retry. After copying `<OutRoot>\<Label>.zip`, release the lease and remove the frame with `tools/validation/Update/Clear-UpdateFrame.ps1 -Frame <runRoot> -ExpectedMachine <COMPUTERNAME>` through `windows_ssh.py run`.
 
 The script builds the helper and the app with `RooIndustriesTestHooks=true` inside the staged copy. Three hooks exist only in that build:
 
@@ -25,4 +27,4 @@ Cases, each read back through UI Automation:
 - Later still hides the banner.
 - Closing the window while a change runs asks instead of closing; Keep open leaves the app running, and with nothing running the window closes at once.
 
-Results, screenshots and frames for the video land in `<OutRoot>\<Label>` and `<OutRoot>\<Label>.zip`. Screenshots are cropped to the app window, and Settings shots stop below the Updates panel so the log folder path isn't captured. The script stops only the app process it started. Remove the staging folder after copying the zip.
+Results, screenshots and frames for the video land in `<OutRoot>\<Label>` and `<OutRoot>\<Label>.zip`. Screenshots are cropped to the app window, and Settings shots stop below the Updates panel so the log folder path isn't captured. The script stops only the app process it started, and every folder it builds into is recorded in the frame ledger so frame cleanup removes it.
