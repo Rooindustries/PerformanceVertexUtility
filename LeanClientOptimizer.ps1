@@ -449,8 +449,10 @@ function Test-DependentRestore {
     if ($current.Count -ne 1) { return [pscustomobject]@{ state='leftAsChanged'; reason='dependent service missing' } }
     if ($current[0].startType -ne $Dependent.startType) { return [pscustomobject]@{ state='leftAsChanged'; reason='dependent startup or state changed' } }
     if ($Dependent.PSObject.Properties['restoreComplete'] -and $Dependent.restoreComplete -isnot [bool]) { return [pscustomobject]@{ state='leftAsChanged'; reason='dependent restore completion evidence is invalid' } }
+    if ($Dependent.PSObject.Properties['restoreAttempted'] -and $Dependent.restoreAttempted -isnot [bool]) { return [pscustomobject]@{ state='leftAsChanged'; reason='dependent restore attempt evidence is invalid' } }
     if ($current[0].status -eq 'Running') { return [pscustomobject]@{ state='alreadyAtOriginal'; reason=$null } }
     if ($Dependent.restoreComplete -eq $true) { return [pscustomobject]@{ state='leftAsChanged'; reason='dependent was already restored; runtime ownership released' } }
+    if ($Dependent.restoreAttempted -eq $true) { return [pscustomobject]@{ state='leftAsChanged'; reason='a previous Undo was interrupted after starting it; another program may have stopped it' } }
     if ($current[0].status -ne 'Stopped') { return [pscustomobject]@{ state='leftAsChanged'; reason='dependent startup or state changed' } }
     foreach ($required in @($current[0].dependsOn)) {
         if (-not $required) { continue }
@@ -968,6 +970,8 @@ function Invoke-RollbackModule {
                     Write-Host "Left as changed: dependent service $($item.target.name) of $($item.target.of) ($($check.reason))"
                     continue
                 }
+                $item.snapshot | Add-Member -MemberType NoteProperty -Name restoreAttempted -Value $true -Force
+                Write-JsonFile $backup $backupPath
                 $attempted++
                 $writing = $true
                 Start-Service -Name $item.target.name -ErrorAction Stop
