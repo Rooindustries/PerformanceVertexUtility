@@ -31,14 +31,14 @@ namespace RooIndustries.OptimizationSuite.Services
         public Func<Task>? BeforePreview { get; set; }
         public Action? AfterApply { get; set; }
         private readonly string _root;
-        public Fixture(string root, TweakCatalog? catalog = null, int build = 26200)
+        public Fixture(string root, TweakCatalog? catalog = null, int build = 26200, string edition = "Professional")
         {
             _root = root; Directory.CreateDirectory(root);
             var address = new RegistryAddress("CurrentUser", "Registry64", @"Software\RooIndustriesUiModelFixture", "value", "Enabled");
             var setting = new TweakDefinition("setting", "Office setting", "Apps", "Fixture", 10240, 26200, ["*"], "none",
                 [new("on", "On", [new(address, 1)]), new("off", "Off", [new(address, 0)])], [new("Fixture", "fixture", "isolated UI validation")]);
             Catalog = catalog ?? new(1, "fixture", [setting], [new("fixture-preset", "Fixture preset", [new("setting", "off")])]);
-            Choices = new(Path.Combine(root, "choices.json")); Windows = FileTweakStore.Create(Path.Combine(root, "windows.json"), build);
+            Choices = new(Path.Combine(root, "choices.json")); Windows = FileTweakStore.Create(Path.Combine(root, "windows.json"), build, edition);
             if (catalog is not null)
             {
                 var path = Path.Combine(root, "windows.json");

@@ -210,6 +210,7 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
         ActionDetail = "Applying reversible process controls to this session.";
         try
         {
+            using var running = RunningChanges.Begin();
             var response = await App.Live.ApplyProcessProfileResultAsync(preset: ProcessPreset);
             if (response.Value is null)
             {
@@ -255,6 +256,11 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
             ActionTitle = "Process priorities need attention";
             ActionDetail = SummarizeProcessAction(response.Value, "The process apply was not fully confirmed.");
         }
+        catch (InvalidOperationException error) when (error.Message == RunningChanges.Installing)
+        {
+            ActionTitle = "Process priorities not confirmed";
+            ActionDetail = error.Message;
+        }
         finally
         {
             ActionBusy = false;
@@ -283,6 +289,7 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
         ActionDetail = "Putting changed process controls back to their previous state.";
         try
         {
+            using var running = RunningChanges.Begin();
             var response = await App.Live.RestoreProcessProfileResultAsync(recovery);
             if (PathsEqual(response.RecoveryPath, recovery.Path) && !string.IsNullOrWhiteSpace(response.RecoveryGeneration))
             {
@@ -317,6 +324,11 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
                 RestoreAvailable = true;
                 RestoreHint = "The reviewed backup remains available";
             }
+        }
+        catch (InvalidOperationException error) when (error.Message == RunningChanges.Installing)
+        {
+            ActionTitle = "Restore not confirmed";
+            ActionDetail = error.Message;
         }
         finally
         {

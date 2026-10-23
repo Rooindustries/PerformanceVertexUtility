@@ -5,6 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <DefineConstants>$(DefineConstants);ROO_INDUSTRIES_TEST_HOOKS</DefineConstants>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.2" />
@@ -13,6 +14,7 @@
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/ViewModels/BugReportViewModel.cs" Link="BugReportViewModel.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/ViewModels/BulkRemovalViewModel.cs" Link="BulkRemovalViewModel.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/ViewModels/DriversProfilesViewModel.cs" Link="DriversProfilesViewModel.cs" />
+    <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/ViewModels/FirmwareViewModel.cs" Link="FirmwareViewModel.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/ViewModels/MonitoringViewModel.cs" Link="MonitoringViewModel.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/ViewModels/PerformanceProfilesViewModel.cs" Link="PerformanceProfilesViewModel.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/ViewModels/ProcessControlsViewModel.cs" Link="ProcessControlsViewModel.cs" />
@@ -20,17 +22,25 @@
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/ViewModels/StartupServicesViewModel.cs" Link="StartupServicesViewModel.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/ViewModels/UninstallCleanupViewModel.cs" Link="UninstallCleanupViewModel.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/ViewModels/UiModels.cs" Link="UiModels.cs" />
+    <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/ViewModels/WindowsTweaksViewModel.cs" Link="WindowsTweaksViewModel.cs" />
+    <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/ViewModels/WindowsTweakPresentation.cs" Link="WindowsTweakPresentation.cs" />
+    <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/ViewModels/CpuSetsViewModel.cs" Link="CpuSetsViewModel.cs" />
+    <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Views/ChangeWatch.cs" Link="ChangeWatch.cs" />
+    <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/HostOutput.cs" Link="HostOutput.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Models/*.cs" Link="Models/%(Filename)%(Extension)" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/JsonTolerance.cs" Link="JsonTolerance.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/GovernorProbe.cs" Link="GovernorProbe.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/AppLog.cs" Link="AppLog.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/BugRedactor.cs" Link="BugRedactor.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/DataGeneration.cs" Link="DataGeneration.cs" />
+    <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/InstallGate.cs" Link="InstallGate.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/BugReportService.cs" Link="BugReportService.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/BackendScriptPolicy.cs" Link="BackendScriptPolicy.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Helpers/Format.cs" Link="Format.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Helpers/LocalDisplayFilter.cs" Link="LocalDisplayFilter.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Helpers/Naming.cs" Link="Naming.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Helpers/CollectionHelpers.cs" Link="CollectionHelpers.cs" />
+    <EmbeddedResource Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Assets/Tweaks/presentation.json" LogicalName="RooIndustries.TweakPresentation.json" />
+    <EmbeddedResource Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Assets/Tweaks/icons.json" LogicalName="RooIndustries.TweakIcons.json" />
   </ItemGroup>
 </Project>

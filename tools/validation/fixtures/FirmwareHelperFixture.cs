@@ -30,6 +30,10 @@ class FirmwareHelperFixture
             File.WriteAllText(args[2], "HIICrc32 = A1B2C3D4\r\r\n\r\nSetup Question = Fixture option\r\nHelp String = File fixture only\r\nToken =10\r\nOffset =20\r\nWidth =01\r\nOptions =" + (value == "00" ? "*" : "") + "[00]Off\r\n         " + (value == "01" ? "*" : "") + "[01]On\r\n\r\nSetup Question = Fixture delay\r\nHelp String = File-only numeric setting\r\nToken =11\r\nOffset =21\r\nWidth =01\r\nValue =<" + delay + ">\r\n", Encoding.ASCII);
             return 0;
         }
+        var hold = Path.Combine(root, "fixture-import-hold.txt");
+        for (var waited = 0; File.Exists(hold) && waited < 60000; waited += 50) System.Threading.Thread.Sleep(50);
+        var refusal = Path.Combine(root, "fixture-import-exit.txt");
+        if (File.Exists(refusal)) return int.Parse(File.ReadAllText(refusal).Trim());
         var script = File.ReadAllText(args[2]);
         if (!script.Contains("HIICrc32 = A1B2C3D4")) return 23;
         var selected = Regex.Match(script, @"\*\[(00|01)\]");
