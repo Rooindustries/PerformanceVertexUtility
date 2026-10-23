@@ -8,6 +8,8 @@ using System;using System.Runtime.InteropServices;
 public static class RooIndustriesGameTuneUi {
  [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
+ [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+ [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h,out int pid);
  [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr h,IntPtr after,int x,int y,int width,int height,uint flags);
 }
 '@
@@ -71,6 +73,9 @@ try {
  $b=Probe 'probe-b'
  [RooIndustriesGameTuneUi]::SetForegroundWindow($b.MainWindowHandle)|Out-Null
  Start-Sleep -Seconds 1
+ [int]$foregroundId=0
+ [RooIndustriesGameTuneUi]::GetWindowThreadProcessId([RooIndustriesGameTuneUi]::GetForegroundWindow(),[ref]$foregroundId)|Out-Null
+ if($foregroundId -ne $b.Id){throw 'The second probe did not become the foreground game'}
  [RooIndustriesGameTuneUi]::SetForegroundWindow($handle)|Out-Null
  Activate (WaitFor {$e=Button 'Start game priority';if($e -and $e.Current.IsEnabled){$e}} 30 'Start enabled')
  $started=WaitFor {$c=Card;if($c -and $c.status -notin $reviewed.status,'Starting game priorities' -and (Button 'Review game priority').Current.IsEnabled){$c}} 120 'Start result'
@@ -86,7 +91,7 @@ try {
   Start-Sleep -Seconds 2;Shot '04-restored';$restored=Read $b
  }
  $bound=$bAfter.priorityClass -eq 'Normal' -and $after.status -eq 'Not started' -and $after.detail -like 'Overwatch.exe closed or restarted after you reviewed it*'
- Save 'result.json' @{machine=$env:COMPUTERNAME;startEnabledBeforeReview=$beforeReview.start;reviewed=$reviewed;gameAAtReview=$aAtReview;startResult=$started;afterReload=$after;gameBAfterStart=$bAfter;gameBAfterRestore=$restored;bound=$bound;frames=@(Get-ChildItem $frames -Filter '*.jpg').Count}
+ Save 'result.json' @{machine=$env:COMPUTERNAME;startEnabledBeforeReview=$beforeReview.start;reviewed=$reviewed;gameAAtReview=$aAtReview;foregroundAtStart=$foregroundId;startResult=$started;afterReload=$after;gameBAfterStart=$bAfter;gameBAfterRestore=$restored;bound=$bound;frames=@(Get-ChildItem $frames -Filter '*.jpg').Count}
  if(-not$bound){throw ('Start did not stay bound to the reviewed game: B '+$bAfter.priorityClass+', status '+$after.status)}
 } catch {
  Save 'failure.json' @{error=$_.Exception.Message;stack=$_.ScriptStackTrace}
