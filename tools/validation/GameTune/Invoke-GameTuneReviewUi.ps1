@@ -35,14 +35,14 @@ function Activate($e){if(-not$e){throw 'Missing UI element'};try{$e.GetCurrentPa
 function Nav([string]$name){Activate (WaitFor {@(All|Where-Object {$_.Current.Name -eq $name -and $_.Current.ControlType -eq $CT::ListItem})|Select-Object -First 1} 45 $name)}
 function Card{$texts=@(Texts);$i=[Array]::IndexOf($texts,'Game priority');if($i -lt 0 -or $i+2 -ge $texts.Count){return $null};[pscustomobject]@{status=$texts[$i+1];detail=$texts[$i+2];start=(Button 'Start game priority').Current.IsEnabled}}
 function Shot([string]$name){$r=$window.Current.BoundingRectangle;$b=[Drawing.Bitmap]::new([int]$r.Width,[int]$r.Height);$g=[Drawing.Graphics]::FromImage($b);try{$g.CopyFromScreen([int]$r.X,[int]$r.Y,0,0,$b.Size);$b.Save((Join-Path $OutRoot ($name+'.png')),[Drawing.Imaging.ImageFormat]::Png)}finally{$g.Dispose();$b.Dispose()};Save ($name+'-card.json') (Card)}
-function Probe([string]$folder){$directory=Join-Path $OutRoot $folder;[IO.Directory]::CreateDirectory($directory)|Out-Null;$exe=Join-Path $directory 'ReviewProbe.exe';if(-not(Test-Path $exe)){Copy-Item "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" $exe};$command="Add-Type -AssemblyName System.Windows.Forms;`$w=New-Object Windows.Forms.Form;`$w.Text='Disposable game $folder';`$w.Width=400;`$w.Height=200;`$w.Show();`$w.Hide();`$w.ShowDialog()|Out-Null";$encoded=[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command));$p=Start-Process $exe -ArgumentList '-NoProfile','-EncodedCommand',$encoded -WindowStyle Hidden -PassThru;$owned.Add((New-OwnedProcess $p));WaitFor {$p.Refresh();$p.MainWindowHandle -ne [IntPtr]::Zero} 30 'probe window'|Out-Null;$p.PriorityClass='Normal';return $p}
+function Probe([string]$folder){$directory=Join-Path $OutRoot $folder;[IO.Directory]::CreateDirectory($directory)|Out-Null;$exe=Join-Path $directory 'Overwatch.exe';if(-not(Test-Path $exe)){Copy-Item "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" $exe};$command="Add-Type -AssemblyName System.Windows.Forms;`$w=New-Object Windows.Forms.Form;`$w.Text='Disposable game $folder';`$w.Width=400;`$w.Height=200;`$w.Show();`$w.Hide();`$w.ShowDialog()|Out-Null";$encoded=[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command));$p=Start-Process $exe -ArgumentList '-NoProfile','-EncodedCommand',$encoded -WindowStyle Hidden -PassThru;$owned.Add((New-OwnedProcess $p));WaitFor {$p.Refresh();$p.MainWindowHandle -ne [IntPtr]::Zero} 30 'probe window'|Out-Null;$p.PriorityClass='Normal';return $p}
 function Read($p){$p.Refresh();[pscustomobject]@{pid=$p.Id;path=$p.Path;priorityClass=[string]$p.PriorityClass}}
 try {
  Assert-NoUnownedAppProcess
  if(@(Get-ChildItem -LiteralPath $stateRoot -Recurse -File -ErrorAction SilentlyContinue).Count){throw 'The staged backend state is not empty; refusing to share it'}
- if(@(Get-Process ReviewProbe -ErrorAction SilentlyContinue).Count){throw 'A process named ReviewProbe is already running; refusing to share the fixture name'}
+ if(@(Get-Process Overwatch -ErrorAction SilentlyContinue).Count){throw 'A process named Overwatch is already running; refusing to share the fixture name'}
  $profile=[Text.Encoding]::UTF8.GetString($profileBytes).TrimStart([char]0xfeff)|ConvertFrom-Json
- $profile.foregroundGame.processNames=@('ReviewProbe.exe');$profile.targetGames=@();$profile.rules=@();$profile.safeCandidates=@()
+ $profile.foregroundGame.processNames=@('Overwatch.exe');$profile.rules=@();$profile.safeCandidates=@()
  [IO.File]::WriteAllText($profilePath,($profile|ConvertTo-Json -Depth 20),$utf8)
  $gameA=Probe 'probe-a'
  $app=Start-Process $AppExe -PassThru;$receipt=New-OwnedProcess $app;Save 'owned-app.json' $receipt.Identity
@@ -93,7 +93,7 @@ try {
   WaitFor {$c=Card;$c -and $c.status -in 'Game priorities restored','Game restore needs attention','Game restore not confirmed'} 90 'restore result'|Out-Null
   Start-Sleep -Seconds 2;Shot '04-restored';$restored=Read $gameB
  }
- $bound=$bAfter.priorityClass -eq 'Normal' -and $after.status -eq 'Not started' -and $after.detail -like 'ReviewProbe.exe closed or restarted after you reviewed it*'
+ $bound=$bAfter.priorityClass -eq 'Normal' -and $after.status -eq 'Not started' -and $after.detail -like 'Overwatch.exe closed or restarted after you reviewed it*'
  Save 'result.json' @{machine=$env:COMPUTERNAME;startEnabledBeforeReview=$beforeReview.start;reviewed=$reviewed;gameAAtReview=$aAtReview;foregroundAtStart=$foregroundId;startResult=$started;afterReload=$after;gameBBeforeStart=$bBeforeStart;gameBAfterStart=$bAfter;gameBAfterRestore=$restored;bound=$bound;frames=@(Get-ChildItem $frames -Filter '*.jpg').Count}
  if(-not$bound){throw ('Start did not stay bound to the reviewed game: B '+$bAfter.priorityClass+', status '+$after.status)}
 } catch {
