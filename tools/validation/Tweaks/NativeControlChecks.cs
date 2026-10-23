@@ -2,29 +2,113 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using Microsoft.Win32;
+using Microsoft.Win32.SafeHandles;
 using RooIndustries.Optimizer;
 
 static class NativeControlChecks
 {
     private const string TaskName = "RooIndustriesTweakProbe_ec3d917cb672498785218eb3d0aa790f";
     private const string RuleName = "RooIndustries-Block-ec3d917cb67249878";
+    private const string FixtureOwner = "NativeControlChecks-v1";
     public static void RecoverFixture()
     {
+        using var users = RegistryKey.OpenBaseKey(RegistryHive.Users, RegistryView.Registry64);
+        using var user = users.OpenSubKey(OperationOwner.Current().UserSid, true) ?? throw new InvalidDataException("The current user hive is unavailable.");
+        RequireFixtureOwner(user);
         var store = new RegistryTweakStore(new("CurrentUser", "Registry64", RegistryTweakChecks.Root + @"\Recovery", "value", "State"));
         var recovery = store.Recovery();
         if (recovery.Pending is not null) store.Recover(recovery.PendingHash!);
         if (store.Recovery().State?.Profiles.Length > 0) throw new InvalidDataException("Fixture profiles still require restoration.");
         if (Command("sc.exe", "query", ServiceProbe.Name).Exit != 1060) throw new InvalidDataException("The fixture service still exists.");
         if (new WindowsControlStore().Read(new("firewall-blocklist", RuleName, "rule")).Value.ValueKind != JsonValueKind.Null) throw new InvalidDataException("The fixture firewall rule still exists.");
-        using var users = RegistryKey.OpenBaseKey(RegistryHive.Users, RegistryView.Registry64);
-        using var user = users.OpenSubKey(OperationOwner.Current().UserSid, true)!;
+        RequireFixtureOwner(user);
         user.DeleteSubKeyTree(RegistryTweakChecks.Root, false);
         using var remaining = user.OpenSubKey(RegistryTweakChecks.Root);
         if (remaining is not null) throw new InvalidDataException("Fixture recovery data remains.");
         Console.WriteLine("Recovered interrupted fixture and removed its rule and receipt.");
     }
+    public static void RecoveryChecks(Action<bool, string> check)
+    {
+        using var users = RegistryKey.OpenBaseKey(RegistryHive.Users, RegistryView.Registry64);
+        using var hive = users.OpenSubKey(OperationOwner.Current().UserSid, true) ?? throw new InvalidDataException("The current user hive is unavailable.");
+        using (var existing = hive.OpenSubKey(RegistryTweakChecks.Root)) if (existing is not null) throw new InvalidDataException("The test registry root already exists.");
+        var native = new WindowsControlStore();
+        var firewall = new ControlAddress("firewall-blocklist", RuleName, "rule");
+        if (Command("sc.exe", "query", ServiceProbe.Name).Exit != 1060 || native.Read(firewall).Value.ValueKind != JsonValueKind.Null)
+            throw new InvalidDataException("The recovery test needs an absent fixture service and firewall rule.");
+        bool parentExisted;
+        using (var parent = hive.OpenSubKey(@"Software\RooIndustriesTweakTests")) parentExisted = parent is not null;
+        var owned = false;
+        var createdRule = false;
+        try
+        {
+            using (var key = CreateFixtureRoot(hive)) { owned = true; key.SetValue("Sentinel", "unrelated", RegistryValueKind.String); }
+            void Refuses(string name)
+            {
+                var message = "";
+                try { RecoverFixture(); } catch (InvalidDataException error) { message = error.Message; }
+                using var key = hive.OpenSubKey(RegistryTweakChecks.Root);
+                using var recovery = key?.OpenSubKey("Recovery");
+                check(message.Contains("ownership receipt", StringComparison.Ordinal) && Equals(key?.GetValue("Sentinel"), "unrelated") &&
+                    recovery?.GetValue("State") is null && recovery?.GetValue("Pending") is null, name);
+            }
+            Refuses("Recovery keeps an unrelated sentinel tree with no ownership receipt, State or Pending and reports the refusal");
+            var refused = false;
+            try { using var existing = CreateFixtureRoot(hive); } catch (InvalidDataException) { refused = true; }
+            using (var key = hive.OpenSubKey(RegistryTweakChecks.Root))
+                check(refused && Equals(key?.GetValue("Sentinel"), "unrelated") && key?.GetValue("FixtureOwner") is null, "Atomic fixture creation refuses an existing tree without adding a receipt");
+            using (var key = hive.OpenSubKey(RegistryTweakChecks.Root, true)!) key.SetValue("FixtureOwner", "another-fixture", RegistryValueKind.String);
+            Refuses("Recovery keeps a tree with another fixture's ownership receipt");
+            using (var key = hive.OpenSubKey(RegistryTweakChecks.Root, true)!) key.SetValue("FixtureOwner", FixtureOwner, RegistryValueKind.ExpandString);
+            Refuses("Recovery keeps a tree whose ownership receipt has the wrong registry kind");
+            using (var key = hive.OpenSubKey(RegistryTweakChecks.Root, true)!) { key.SetValue("FixtureOwner", FixtureOwner, RegistryValueKind.String); key.Flush(); }
+            var address = new RegistryAddress("CurrentUser", "Registry64", RegistryTweakChecks.Root + @"\Recovery", "value", "State");
+            var store = new RegistryTweakStore(address);
+            var blocked = ControlValues.From(new { enabled = true, addresses = new[] { "203.0.113.254" } });
+            var catalog = new TweakCatalog(1, "native-recovery", [new("block", "Block", "Fixture", "Disposable firewall rule", 10240, 26200, ["*"], "none",
+                [new("set", "Set", [], Controls: [new(firewall, blocked)])], [new("Roo Industries", "native fixture", "isolated Windows execution")])], []);
+            var plan = new TweakEngine(catalog, store).Preview("interrupted", [new("block", "set")]);
+            using (var key = hive.CreateSubKey(address.KeyPath))
+            {
+                key.SetValue("Pending", JsonSerializer.SerializeToUtf8Bytes(new ControlJournal(plan, "fixture-interruption", 1), OperationFiles.Json), RegistryValueKind.Binary);
+                key.Flush();
+            }
+            native.Write(plan.Controls!.Changes.Single().Before, blocked);
+            createdRule = true;
+            check(store.Recovery().Pending is not null && ControlValues.Equal(native.Read(firewall).Value, blocked), "The recorded interrupted fixture has a pending journal and its own firewall rule");
+            RecoverFixture();
+            owned = false;
+            using (var key = hive.OpenSubKey(RegistryTweakChecks.Root))
+                check(key is null && native.Read(firewall).Value.ValueKind == JsonValueKind.Null, "Recovery restores a recorded interrupted fixture's firewall absence and removes its owned tree");
+            var missing = "";
+            try { RecoverFixture(); } catch (InvalidDataException error) { missing = error.Message; }
+            using (var key = hive.OpenSubKey(RegistryTweakChecks.Root))
+                check(missing.Contains("ownership receipt", StringComparison.Ordinal) && key is null, "Recovery refuses a missing receipt without creating a registry tree");
+        }
+        finally
+        {
+            if (owned)
+            {
+                var rule = native.Read(firewall);
+                if (rule.Value.ValueKind != JsonValueKind.Null)
+                {
+                    if (!createdRule) throw new InvalidDataException("The recovery test did not create this firewall rule; the registry receipt was kept.");
+                    RequireFixtureOwner(hive);
+                    if (!ControlValues.Equal(rule.Value, ControlValues.From(new { enabled = true, addresses = new[] { "203.0.113.254" } }))) throw new InvalidDataException("The test rule was changed externally.");
+                    native.Write(rule, ControlValues.From<object?>(null));
+                }
+                hive.DeleteSubKeyTree(RegistryTweakChecks.Root, false);
+            }
+            if (!parentExisted)
+            {
+                using var parent = hive.OpenSubKey(@"Software\RooIndustriesTweakTests");
+                if (parent is { SubKeyCount: 0, ValueCount: 0 }) { parent.Dispose(); hive.DeleteSubKey(@"Software\RooIndustriesTweakTests", false); }
+            }
+        }
+    }
     public static void Run(string files, Action<bool, string> check, Action<Action, string> reject)
     {
+        RecoveryChecks(check);
         using var users = RegistryKey.OpenBaseKey(RegistryHive.Users, RegistryView.Registry64);
         using var hive = users.OpenSubKey(OperationOwner.Current().UserSid, true) ?? throw new InvalidDataException("The current user hive is unavailable.");
         using (var existing = hive.OpenSubKey(RegistryTweakChecks.Root)) if (existing is not null) throw new InvalidDataException("The test registry root already exists.");
@@ -42,6 +126,7 @@ static class NativeControlChecks
         if (native.Read(firewall).Value.ValueKind != JsonValueKind.Null) throw new InvalidDataException("The test firewall rule already exists.");
         using var machine = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
         using (var existing = machine.OpenSubKey(RegistryTweakChecks.Root)) if (existing is not null) throw new InvalidDataException("The machine test registry root already exists.");
+        using (var key = CreateFixtureRoot(hive)) { key.SetValue("FixtureOwner", FixtureOwner, RegistryValueKind.String); key.Flush(); }
         var createdService = false; var createdTask = false;
         try
         {
@@ -153,6 +238,7 @@ static class NativeControlChecks
             if (errors.Count > 0) throw new IOException("Fixture cleanup needs recovery; registry receipts were retained: " + string.Join("; ", errors));
             using (var remainingMachine = machine.OpenSubKey(RegistryTweakChecks.Root))
                 if (remainingMachine is not null) throw new InvalidDataException("The machine fixture needs restoration; its recovery record was retained.");
+            RequireFixtureOwner(hive);
             hive.DeleteSubKeyTree(RegistryTweakChecks.Root, false);
             if (!parentExisted)
             {
@@ -162,6 +248,20 @@ static class NativeControlChecks
             using var remaining = hive.OpenSubKey(RegistryTweakChecks.Root);
             check(remaining is null && native.Read(firewall).Value.ValueKind == JsonValueKind.Null, "Disposable native recovery keys and firewall rule are removed");
         }
+    }
+    [DllImport("advapi32.dll", CharSet = CharSet.Unicode)] static extern int RegCreateKeyEx(SafeRegistryHandle key, string subKey, int reserved, string? className, int options, int access, IntPtr security, out SafeRegistryHandle result, out int disposition);
+    private static RegistryKey CreateFixtureRoot(RegistryKey hive)
+    {
+        var status = RegCreateKeyEx(hive.Handle, RegistryTweakChecks.Root, 0, null, 0, 0x2001f | (int)hive.View, IntPtr.Zero, out var handle, out var disposition);
+        if (status != 0) { handle.Dispose(); throw new System.ComponentModel.Win32Exception(status); }
+        if (disposition != 1) { handle.Dispose(); throw new InvalidDataException("The test registry root already exists; it will not be reused."); }
+        return RegistryKey.FromHandle(handle, hive.View);
+    }
+    private static void RequireFixtureOwner(RegistryKey hive)
+    {
+        using var key = hive.OpenSubKey(RegistryTweakChecks.Root);
+        if (key?.GetValue("FixtureOwner", null, RegistryValueOptions.DoNotExpandEnvironmentNames) is not string owner || owner != FixtureOwner || key.GetValueKind("FixtureOwner") != RegistryValueKind.String)
+            throw new InvalidDataException("The fixture ownership receipt is missing or does not match; the registry tree was kept.");
     }
     private static string Quote(string value) => "\"" + value.Replace("\"", "\\\"") + "\"";
     private static (int Exit, string Output) Command(string name, params string[] arguments)
