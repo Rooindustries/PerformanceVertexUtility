@@ -31,7 +31,7 @@ function Fixtures($case,[int]$count=$Probes,[switch]$Gpu){
   $path=Join-Path $folder ('RooIndustriesCut'+$tag+$case.Substring(0,2)+$i.ToString('00')+'.exe');Copy-Item $image $path
   $signal=$path+'.signal';$arguments=if($Gpu){'"'+$signal+'" "'+$env:SystemRoot+'\System32\PING.EXE" --gpu'}else{'-t 127.0.0.1'}
   $p=Start-Process $path -ArgumentList $arguments -WindowStyle Hidden -PassThru;$null=Own $p
-  if($Gpu){$deadline=[DateTime]::UtcNow.AddSeconds(30);while(-not(Test-Path -LiteralPath ($signal+'.gpu-ready'))){if($p.HasExited -or [DateTime]::UtcNow -gt $deadline){throw 'The fixture did not create its Direct3D device'};Start-Sleep -Milliseconds 50}}
+  if($Gpu){$deadline=[DateTime]::UtcNow.AddSeconds(30);while(-not(Test-Path -LiteralPath ($signal+'.gpu-ready'))){if($p.HasExited -or [DateTime]::UtcNow -gt $deadline){throw 'The fixture did not create its Direct3D device'};Start-Sleep -Milliseconds 50};$null=[RooIndustriesBackgroundOracle]::Gpu($p)}
   $p.PriorityClass='Normal';[RooIndustriesBackgroundOracle]::SetIo($p,2);[RooIndustriesBackgroundOracle]::SetMemory($p,5);$p
  })
 }
@@ -107,6 +107,8 @@ try {
  if($Cases -contains 'boundaries'){
   $applyPath=Join-Path $root 'backend\scripts\Apply-ProcessProfile.ps1';$commonPath=Join-Path $root 'backend\scripts\ProcessProfile.Common.ps1';$statePath=Join-Path $root 'backend\scripts\OperationState.Common.ps1'
   $applyText=[IO.File]::ReadAllText($applyPath);$commonText=[IO.File]::ReadAllText($commonPath);$stateText=[IO.File]::ReadAllText($statePath);$boundaryFailures=@()
+  $outputCall='Write-RooIndustriesJsonOutput $applyEnvelope $OutputPath'
+  if(-not$applyText.Contains($outputCall)){throw 'The real successful apply output call was not found'}
   try {
    $points=@('backup-before','backup-flushed','backup-after','backup-replacing','backup-replaced','output')+@('priorityClass','affinityMask','ioPriority','memoryPriority','gpuPriority'|ForEach-Object {$_+'-before';$_+'-written';$_+'-after'})
    foreach($point in $points){
@@ -119,7 +121,7 @@ try {
      $checkpoint="function Wait-RooIndustriesInterruptedBoundary([string]`$point){if(`$point -ceq '$point'){[IO.File]::WriteAllText('$($marker.Replace("'","''"))',`$point);while(`$true){Start-Sleep -Milliseconds 100}}}"
      $instrumented=$applyText.Replace(". (Join-Path `$PSScriptRoot 'ProcessProfile.Common.ps1')",". (Join-Path `$PSScriptRoot 'ProcessProfile.Common.ps1')`r`n"+$checkpoint)
      $instrumented=$instrumented.Replace('Write-RooIndustriesOperationJson $backupManifest $backupPath',"Wait-RooIndustriesInterruptedBoundary 'backup-before'; Write-RooIndustriesOperationJson `$backupManifest `$backupPath; Wait-RooIndustriesInterruptedBoundary 'backup-after'")
-     $instrumented=$instrumented.Replace('Write-RooIndustriesJsonOutput $envelope $OutputPath',"Wait-RooIndustriesInterruptedBoundary 'output'; Write-RooIndustriesJsonOutput `$envelope `$OutputPath")
+     $instrumented=$instrumented.Replace($outputCall,("Wait-RooIndustriesInterruptedBoundary 'output'; "+$outputCall))
      [IO.File]::WriteAllText($applyPath,$instrumented,$utf8)
      $start=$commonText.IndexOf('function Invoke-RooIndustriesProcessControlChange {');if($start -lt 0){throw 'The real process writer was not found'}
      $tail=$commonText.Substring($start).Replace('switch ($control) {',"Wait-RooIndustriesInterruptedBoundary (`$control+'-before'); switch (`$control) {")
