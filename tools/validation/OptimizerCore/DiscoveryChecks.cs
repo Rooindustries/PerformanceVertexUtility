@@ -26,8 +26,10 @@ static class DiscoveryChecks
         Directory.CreateDirectory(other);
         Directory.CreateDirectory(Path.Combine(local, "Roo Industries Example"));
         Directory.CreateDirectory(Path.Combine(local, "Roo Industries Example Backup"));
+        OwnedRegistryKey? owned = null;
         try
         {
+            owned = OwnedRegistryKey.Create(hive, registryRoot);
             using (var app = hive.CreateSubKey(registryRoot + "\\Roo Industries Example"))
             {
                 app.SetValue("InstallPath", install);
@@ -56,9 +58,7 @@ static class DiscoveryChecks
         }
         finally
         {
-            hive.DeleteSubKeyTree(registryRoot, false);
-            using (var parent = hive.OpenSubKey("Software\\RooIndustriesDiscoveryTests"))
-                if (parent is not null && parent.SubKeyCount == 0 && parent.ValueCount == 0) hive.DeleteSubKey("Software\\RooIndustriesDiscoveryTests", false);
+            owned?.Dispose();
             Directory.Delete(root, true);
         }
         check(!Directory.Exists(root) && hive.OpenSubKey(registryRoot) is null, "Discovery validation leaves no file or registry fixtures");
@@ -165,8 +165,10 @@ static class DiscoveryChecks
         var registryRoot = "Software\\RooIndustriesDiscoveryTests\\" + Guid.NewGuid().ToString("N");
         using var hive = RegistryKey.OpenBaseKey(RegistryHive.CurrentUser, RegistryView.Registry64);
         foreach (var name in new[] { "Notepad++", "Notepad", "7Zip", "ATT Connect" }) Directory.CreateDirectory(Path.Combine(root, name));
+        OwnedRegistryKey? fixtureKey = null;
         try
         {
+            fixtureKey = OwnedRegistryKey.Create(hive, registryRoot);
             foreach (var path in new[] { "Notepad++", "Notepad", "Microsoft\\Notepad", "Microsoft\\Edge", "Policies\\Notepad++", "Edge", "Tools\\Microsoft", "7-Zip", "ATT Connect", "Policies\\Notepad", "Classes\\Folder", "Folder" })
                 hive.CreateSubKey(registryRoot + "\\" + path).Dispose();
             RegistryAddress[] scopes = [new("CurrentUser", "Registry64", registryRoot, "key", null), new("CurrentUser", "Registry32", registryRoot, "key", null)];
@@ -217,9 +219,7 @@ static class DiscoveryChecks
         }
         finally
         {
-            hive.DeleteSubKeyTree(registryRoot, false);
-            using (var parent = hive.OpenSubKey("Software\\RooIndustriesDiscoveryTests"))
-                if (parent is not null && parent.SubKeyCount == 0 && parent.ValueCount == 0) hive.DeleteSubKey("Software\\RooIndustriesDiscoveryTests", false);
+            fixtureKey?.Dispose();
             Directory.Delete(root, true);
         }
         check(!Directory.Exists(root) && hive.OpenSubKey(registryRoot) is null, "Product-boundary validation leaves no file or registry fixtures");
