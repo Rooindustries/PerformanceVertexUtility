@@ -1,6 +1,5 @@
-using System.ComponentModel;
 using System.Diagnostics;
-using System.Runtime.InteropServices;
+using System.Text;
 using System.Text.Json;
 using Microsoft.Win32;
 using RooIndustries.Optimizer;
@@ -8,11 +7,14 @@ using RooIndustries.Optimizer;
 static class MitigationCommandChecks
 {
     const string Parent = @"Software\RooIndustriesTweakTests";
-    const string Kernel = @"SYSTEM\ControlSet001\Control\Session Manager\kernel";
     const string LiveKernel = @"SYSTEM\CurrentControlSet\Control\Session Manager\kernel";
     static readonly string[] Names = ["MitigationOptions", "MitigationAuditOptions", "EAFModules"];
     static readonly ControlAddress Address = new("mitigations", "system", "policy");
-    [DllImport("advapi32.dll")] static extern int RegOverridePredefKey(IntPtr key, IntPtr replacement);
+    static string Live()
+    {
+        using var key = Registry.LocalMachine.OpenSubKey(LiveKernel);
+        return string.Join("|", Names.Select(name => key?.GetValue(name, null, RegistryValueOptions.DoNotExpandEnvironmentNames) switch { null => "absent", byte[] bytes => key.GetValueKind(name) + ":" + Convert.ToHexString(bytes), var other => key.GetValueKind(name) + ":" + other }));
+    }
 
     static (string Name, Func<object, Process> Launcher)[] Modules(string folder) =>
     [
@@ -35,17 +37,24 @@ static class MitigationCommandChecks
         var root = Parent + "\\" + Guid.NewGuid().ToString("N");
         using var owned = OwnedRegistryKey.Create(Registry.CurrentUser, root);
         using var machine = Registry.CurrentUser.CreateSubKey(root + @"\Machine");
-        using (var select = machine.CreateSubKey(@"SYSTEM\Select")) select.SetValue("Current", 1, RegistryValueKind.DWord);
-        using var kernel = machine.CreateSubKey(Kernel);
+        using var kernel = machine.CreateSubKey(LiveKernel);
         var desired = ControlValues.From(new Dictionary<string, object> { ["Aslr.BottomUp"] = "ON", ["Aslr.OverrideBottomUp"] = false });
         var setting = new TweakDefinition("mitigations", "Exploit protection", "Security", "Fixture", 10240, int.MaxValue, ["*"], "none",
             [new("set", "Set", [], Controls: [new(Address, desired, true)])], [new("Roo Industries", "fixture", "mitigation store")]);
         var store = new RegistryTweakStore(new("CurrentUser", "Registry64", root + @"\Recovery", "value", "State"));
         var engine = new TweakEngine(new TweakCatalog(1, "mitigation-commands", [setting], []), store);
         var originalLauncher = PowerShellControls.Launcher;
-        var overrideKey = new IntPtr(unchecked((int)0x80000002));
-        var status = RegOverridePredefKey(overrideKey, machine.Handle.DangerousGetHandle());
-        if (status != 0) throw new Win32Exception(status);
+        var live = Live();
+        RegistryNative.MachineRoot = () => Registry.CurrentUser.OpenSubKey(root + @"\Machine", true)!.Handle;
+        var marker = "isolation-" + Guid.NewGuid().ToString("N");
+        kernel.SetValue(Names[2], marker, RegistryValueKind.String);
+        var seen = RegistryNative.ReadTweak(new("LocalMachine", "Registry64", LiveKernel, "value", Names[2])).Value;
+        if (seen is not { Type: 1 } text || Encoding.Unicode.GetString(text.Bytes).TrimEnd('\0') != marker || Live() != live)
+        {
+            RegistryNative.MachineRoot = null;
+            throw new InvalidOperationException("The mitigation fixture does not isolate this PC's own policy, so it refuses to write.");
+        }
+        kernel.DeleteValue(Names[2]);
         try
         {
             foreach (var (modules, launcher) in Modules(folder))
@@ -88,9 +97,9 @@ static class MitigationCommandChecks
         finally
         {
             PowerShellControls.Launcher = originalLauncher;
-            status = RegOverridePredefKey(overrideKey, IntPtr.Zero);
-            if (status != 0) throw new Win32Exception(status);
+            RegistryNative.MachineRoot = null;
         }
+        check(Live() == live, "The mitigation fixture leaves this PC's own exploit protection policy exactly as it was");
     }
 
     static JsonElement Independent() => JsonDocument.Parse(MissingCommandChecks.WindowsPowerShell("$policy=Get-ProcessMitigation -System -WarningAction Stop; $values=@{}; foreach($group in $policy.PSObject.Properties){foreach($field in $group.Value.PSObject.Properties){if($field.Value -is [bool]){$values[$group.Name+'.'+$field.Name]=[bool]$field.Value}elseif([string]$field.Value -cin @('ON','OFF','NOTSET')){$values[$group.Name+'.'+$field.Name]=[string]$field.Value}}}; $values|ConvertTo-Json -Compress")).RootElement;
