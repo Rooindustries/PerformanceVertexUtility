@@ -71,6 +71,7 @@ static class LaunchProfileChecks
         await child.WaitForExitAsync();
         var stdout = await output; var stderr = await error;
         Console.WriteLine(stdout);
+        if (!stderr.Contains("Deliberate profile assertion failure", StringComparison.Ordinal)) Console.WriteLine(stderr);
         Check(child.ExitCode != 0 && stderr.Contains("Deliberate profile assertion failure", StringComparison.Ordinal), "A cleanup error preserves the original failing assertion");
         var receipt = stdout.Split('\n').Single(line => line.StartsWith("Cleanup receipt: ", StringComparison.Ordinal))["Cleanup receipt: ".Length..];
         using var document = JsonDocument.Parse(receipt);
