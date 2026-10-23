@@ -243,11 +243,11 @@ public sealed class ProcessControlEngine
     public ProcessControlJournal Restore(string journalPath, bool overwrite = false) => Restore(journalPath, overwrite, false, false, null);
 
     public ProcessControlJournal RestoreApplyOnce(string journalPath, string dataRoot, string? repoRoot) =>
-        Restore(journalPath, false, false, false, (identity, name) => !GovernorClaims.HeldElsewhere(identity, name, dataRoot, repoRoot, journalPath));
+        Restore(journalPath, false, false, false, (identity, name, current) => GovernorClaims.OwnChange(identity, name, current, dataRoot, repoRoot, journalPath));
 
     internal ProcessControlJournal RestoreGovernor(string journalPath, bool relinquished) => Restore(journalPath, false, true, relinquished, null);
 
-    private ProcessControlJournal Restore(string journalPath, bool overwrite, bool governor, bool relinquished, Func<RunningProcess, string, bool>? keepChanged)
+    private ProcessControlJournal Restore(string journalPath, bool overwrite, bool governor, bool relinquished, Func<RunningProcess, string, JsonElement, string[]?>? owned, string? only = null)
     {
         using var lease = OperationFiles.Lock(journalPath);
         var journal = OperationFiles.Read<ProcessControlJournal>(journalPath);
@@ -280,20 +280,27 @@ public sealed class ProcessControlEngine
             journal.Preview.Identity.Verify(identity);
             target.RequireUnprotected();
             var conflicts = false;
-            foreach (var change in journal.Changes.Where(IsAttempted).Reverse())
+            JsonElement Release(string name, string[] holders)
+            {
+                foreach (var held in holders) Restore(held, false, false, false, null, name);
+                return target.Read(name).Require();
+            }
+            foreach (var change in journal.Changes.Where(change => IsAttempted(change) && (only is null || change.Name == only)).Reverse())
             {
                 try
                 {
                     var current = target.Read(change.Name).Require();
                     if (ProcessTarget.Equivalent(change.Name, current, change.Original)) { change.Status = "restored"; change.Observed = current; change.Error = null; change.ErrorKind = null; Save(journalPath, journal); continue; }
+                    var holders = owned is null || ProcessTarget.Equivalent(change.Name, current, change.Desired) ? null : owned(journal.Preview.Identity, change.Name, current);
                     if (governor && (relinquished || !ProcessTarget.Equivalent(change.Name, current, change.Desired)) ||
-                        keepChanged is not null && change.Status == "applied" && !ProcessTarget.Equivalent(change.Name, current, change.Desired) && keepChanged(journal.Preview.Identity, change.Name))
+                        owned is not null && holders is null && change.Status == "applied" && !ProcessTarget.Equivalent(change.Name, current, change.Desired))
                     {
                         LeaveAsSet(change, current);
                         Save(journalPath, journal);
                         continue;
                     }
-                    if (!overwrite && !ProcessTarget.Equivalent(change.Name, current, change.Desired)) throw new InvalidOperationException("Another writer changed this field; restoration will not overwrite it.");
+                    if (holders is not null) current = Release(change.Name, holders);
+                    if (!overwrite && holders is null && !ProcessTarget.Equivalent(change.Name, current, change.Desired)) throw new InvalidOperationException("Another writer changed this field; restoration will not overwrite it.");
                     change.Status = "restoreIntent";
                     Save(journalPath, journal);
 #if GOVERNOR_TEST_HOOKS
@@ -302,12 +309,17 @@ public sealed class ProcessControlEngine
                     if (!overwrite)
                     {
                         var beforeWrite = target.Read(change.Name).Require();
-                        if (!ProcessTarget.Equivalent(change.Name, beforeWrite, change.Desired))
+                        if (!ProcessTarget.Equivalent(change.Name, beforeWrite, current) && !ProcessTarget.Equivalent(change.Name, beforeWrite, change.Desired))
                         {
-                            if (!governor && keepChanged?.Invoke(journal.Preview.Identity, change.Name) != true) throw new InvalidOperationException("The field changed before restoration.");
-                            LeaveAsSet(change, beforeWrite);
-                            Save(journalPath, journal);
-                            continue;
+                            var late = owned?.Invoke(journal.Preview.Identity, change.Name, beforeWrite);
+                            if (late is null)
+                            {
+                                if (!governor && owned is null) throw new InvalidOperationException("The field changed before restoration.");
+                                LeaveAsSet(change, beforeWrite);
+                                Save(journalPath, journal);
+                                continue;
+                            }
+                            Release(change.Name, late);
                         }
                     }
                     target.Write(change.Name, change.Original);
@@ -323,7 +335,7 @@ public sealed class ProcessControlEngine
                 if (int.TryParse(Environment.GetEnvironmentVariable("ROO_INDUSTRIES_TEST_RESTORE_PAUSE_MS"), out var pause) && pause > 0) Thread.Sleep(Math.Min(pause, 10000));
 #endif
             }
-            journal.Status = conflicts ? "needsReconciliation" : "restored";
+            journal.Status = conflicts ? "needsReconciliation" : journal.Changes.Any(IsAttempted) ? journal.Status : "restored";
             Save(journalPath, journal);
         }
         return journal;

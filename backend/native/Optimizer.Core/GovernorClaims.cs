@@ -8,7 +8,7 @@ namespace RooIndustries.Optimizer;
 internal static class GovernorClaims
 {
     private sealed record Check(string Field, JsonElement? Original, JsonElement? Proposed);
-    private sealed record Claim(string Feature, int ProcessId, long? Created, string? ExecutablePath, string? ImageName, string[] Fields, Check[]? Checks = null);
+    private sealed record Claim(string Feature, int ProcessId, long? Created, string? ExecutablePath, string? ImageName, string[] Fields, Check[]? Checks = null, string? Journal = null);
     private sealed record Doubt(string Feature, string Path, string Reason, string[] Fields);
 
     private sealed class Evidence(string dataRoot, HashSet<string> wanted)
@@ -58,15 +58,22 @@ internal static class GovernorClaims
         }
     }
 
-    public static bool HeldElsewhere(RunningProcess identity, string field, string dataRoot, string? repoRoot, string journalPath)
+    public static string[]? OwnChange(RunningProcess identity, string field, JsonElement current, string dataRoot, string? repoRoot, string journalPath)
     {
         var self = Path.GetFullPath(journalPath);
         var journals = Journals(dataRoot, "process-*").Concat(SessionJournals(dataRoot)).Where(path => !string.Equals(Path.GetFullPath(path), self, StringComparison.OrdinalIgnoreCase));
         var evidence = Collect(new Evidence(dataRoot, ProcessTarget.ControlNames.ToHashSet(StringComparer.Ordinal)), journals, repoRoot);
-        if (evidence.Doubts.Any(doubt => doubt.Fields.Contains(field))) return true;
-        var fields = new HashSet<string>(StringComparer.Ordinal) { field };
-        return evidence.Claims.Any(claim => claim.Fields.Contains(field) && SameInstance(claim, identity) && Held(claim, fields).Count > 0);
+        var claims = evidence.Claims.Where(claim => claim.Fields.Contains(field) && SameInstance(claim, identity)).ToArray();
+        var holders = claims.Where(claim => claim.Journal is { } path && Sets(path, field, current)).Select(claim => claim.Journal!).ToArray();
+        if (holders.Length > 0 || evidence.Doubts.Any(doubt => doubt.Fields.Contains(field)) || claims.Any(claim => claim.Journal is null && Sets(claim, field, current))) return holders;
+        return null;
     }
+
+    private static bool Sets(Claim claim, string field, JsonElement current) =>
+        claim.Checks?.FirstOrDefault(check => check.Field == field)?.Proposed is not { } proposed || Same(field, current, proposed) != false;
+
+    private static bool Sets(string journal, string field, JsonElement current) => OperationFiles.Read<ProcessControlJournal>(journal).Changes
+        .Any(change => change.Name == field && change.Status is "applyIntent" or "applied" or "restoreIntent" && ProcessTarget.Equivalent(field, current, change.Desired));
 
     private static Evidence Collect(Evidence evidence, IEnumerable<string> journals, string? repoRoot)
     {
@@ -234,7 +241,7 @@ internal static class GovernorClaims
             }
             var changed = fields.Distinct().ToArray();
             if (changed.Length == 0) continue;
-            if (Identity(Child(Child(root, "preview"), "identity"), "Apply once", changed) is { } claim) evidence.Claims.Add(claim);
+            if (Identity(Child(Child(root, "preview"), "identity"), "Apply once", changed) is { } claim) evidence.Claims.Add(claim with { Journal = path });
             else evidence.Doubts.Add(new("Apply once", path, "it does not say which process it changed", changed));
         }
     }
