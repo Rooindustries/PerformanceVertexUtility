@@ -32,8 +32,6 @@ args = parser.parse_args()
 if not args.local_only and not args.published_installer:
     parser.error('--published-installer is required unless --local-only is set')
 feed = (root / 'tools/release/update-feed.txt').read_text().strip()
-feed_path = urlparse(feed).path[1:]
-host = urlparse(feed).hostname
 work = Path(tempfile.mkdtemp(prefix='publish-guard-', dir=os.environ.get('TMPDIR')))
 rows = []
 server = None
@@ -46,8 +44,7 @@ try:
     fake.mkdir()
     (fake / 'vercel').write_text('#!/bin/sh\necho "$@" >> "' + str(work / 'vercel-calls.txt') + '"\nexit 1\n')
     (fake / 'vercel').chmod(0o755)
-    env = {name: value for name, value in os.environ.items() if name != 'BLOB_READ_WRITE_TOKEN'}
-    env['PATH'] = str(fake) + os.pathsep + env.get('PATH', '')
+    env = dict(os.environ, BLOB_READ_WRITE_TOKEN='publish-guard-fixture', PATH=str(fake) + os.pathsep + os.environ.get('PATH', ''))
     dummy = work / 'dummy-setup.exe'
     dummy.write_bytes(secrets.token_bytes(1048576))
     dummy_identity = {'size': dummy.stat().st_size, 'sha256': hashlib.sha256(dummy.read_bytes()).hexdigest()}
@@ -70,7 +67,7 @@ try:
         path.write_text(json.dumps({'schemaVersion': 1, 'keyId': key_id, 'payload': base64.b64encode(data).decode(), 'signature': base64.b64encode(key.sign(data, ec.ECDSA(hashes.SHA256()))).decode()}, separators=(',', ':')) + '\n')
         return path
 
-    def fixture_url(version, origin='https://' + host):
+    def fixture_url(version, origin):
         return origin + '/b/' + secrets.token_urlsafe(24) + '/RooIndustries-OptimizationSuite-' + version + '-setup.exe'
 
     def run(name, tool, arguments, code, text, after=lambda: None, run_env=env, uploads=False):
@@ -78,11 +75,13 @@ try:
         output = result.stdout + result.stderr
         problem = None if result.returncode == code and text in output else 'unexpected exit code or output'
         problem = problem or ('a refused command printed an upload command' if code and not uploads and 'vercel blob put' in output else None)
+        problem = problem or ('the tool stopped with a traceback' if 'Traceback (most recent call last)' in output else None)
         problem = problem or after()
         rows.append({'case': name, 'passed': problem is None, 'problem': problem, 'exitCode': result.returncode, 'expectedExitCode': code, 'expectedText': text, 'output': output})
         print(('PASS ' if problem is None else 'FAIL ') + name + ('' if problem is None else ': ' + problem))
+        return result
 
-    def publish_case(name, tool, version, code, text, live, path, origin='https://' + host, run_env=env, extra=()):
+    def publish_case(name, tool, version, code, text, live, path, origin, run_env, extra=(), after=lambda: None):
         url = fixture_url(version, origin)
         manifest = signed(name, version, {'url': url, **dummy_identity})
         rollback = manifest.with_name(manifest.stem + '.previous-live.json')
@@ -91,28 +90,50 @@ try:
                 return 'rollback copy differs from the live manifest'
             if code != 0 and rollback.exists():
                 return 'a refused publish wrote a rollback copy'
+            return after()
         run(name, tool, ['publish', '--installer', str(dummy), '--manifest', str(manifest), '--installer-path', urlparse(url).path[1:], '--feed-path', path] + list(extra), code, text, kept, run_env)
+
+    def precedence(version):
+        core, _, prerelease = version.split('+')[0].partition('-')
+        parts = prerelease.split('.') if prerelease else []
+        return [int(n) for n in core.split('.')], not parts, [(0, int(p), '') if p.isdecimal() else (1, 0, p) for p in parts]
+
+    def live_cases(prefix, tool, live, installer, live_feed, run_env):
+        path = urlparse(live_feed).path[1:]
+        origin = 'https://' + urlparse(live_feed).netloc
+        (work / (prefix + 'live.json')).write_bytes(live)
+        verified = run(prefix + 'live-feed-verified', tool, ['verify', '--manifest', str(work / (prefix + 'live.json')), '--feed-url', live_feed], 0, '"verified": true', run_env=run_env)
+        if verified.returncode:
+            return
+        live_payload = json.loads(verified.stdout)
+        live_version = live_payload['version']
+        lines = [line.strip() for line in (tool.parent / 'released-versions.txt').read_text(encoding='utf-8-sig').splitlines()]
+        floor = max([live_version] + [line for line in lines if line and not line.startswith('#')], key=precedence)
+        newest = ('the live beta ' if floor == live_version else 'the released version ') + floor
+        core, _, prerelease = floor.split('+')[0].partition('-')
+        suffix = '-' + prerelease if prerelease else ''
+        numbers = [int(n) for n in core.split('.')]
+        older = numbers[:]
+        older[max(i for i, n in enumerate(older) if n)] -= 1
+        cases = [
+            ('older-version-refused', '.'.join(map(str, older)) + suffix, 1, 'is not newer than ' + newest),
+            ('lower-prerelease-refused', core + '-alpha', 1, 'is not newer than ' + newest),
+            ('next-patch-accepted', '.'.join(map(str, numbers[:2] + [numbers[2] + 1])) + suffix, 0, 'Dry run: nothing uploaded.'),
+        ]
+        if prerelease:
+            cases += [('longer-prerelease-accepted', core + suffix + '.1', 0, 'Dry run: nothing uploaded.'), ('release-over-prerelease-accepted', core, 0, 'Dry run: nothing uploaded.')]
+        run(prefix + 'equal-live-version-refused', tool, ['publish', '--installer', str(installer), '--manifest', str(work / (prefix + 'live.json')), '--installer-path', urlparse(live_payload['installer']['url']).path[1:], '--feed-path', path], 1, 'is not newer than ' + newest, run_env=run_env)
+        for name, version, code, text in cases:
+            publish_case(prefix + name, tool, version, code, text, live, path, origin, run_env)
+        run(prefix + 'set-feed-same-as-live-refused', tool, ['set-feed', '--manifest', str(work / (prefix + 'live.json')), '--feed-path', path], 1, 'The live feed already serves this manifest', run_env=run_env)
+        run(prefix + 'set-feed-missing-installer-refused', tool, ['set-feed', '--manifest', str(signed(prefix + 'missing', live_version, {'url': fixture_url(live_version, origin), **dummy_identity})), '--feed-path', path], 1, 'HTTP Error 404', run_env=run_env)
+        run(prefix + 'set-feed-wrong-path-refused', tool, ['set-feed', '--manifest', str(work / (prefix + 'live.json')), '--feed-path', 'u/' + secrets.token_urlsafe(24) + '/beta.json'], 1, 'Feed path differs from the committed feed', run_env=run_env)
+        run(prefix + 'set-feed-rollback-dry-run', tool, ['set-feed', '--manifest', str(signed(prefix + 'rollback', live_version, live_payload['installer'])), '--feed-path', path], 0, 'Replacing the live ' + live_version + ' manifest with version ' + live_version + '.', run_env=run_env)
 
     if not args.local_only:
         with urlopen(Request(feed + '?t=' + str(int(datetime.now(timezone.utc).timestamp())), headers={'Cache-Control': 'no-cache'}), timeout=20) as response:
             live = response.read(65537)
-        (work / 'live.json').write_bytes(live)
-        live_payload = json.loads(base64.b64decode(json.loads(live)['payload']))
-        live_installer = live_payload['installer']
-        tool = tool_tree('tree', (root / 'tools/release/update-feed.txt').read_text(), (root / 'tools/release/released-versions.txt').read_bytes())
-        run('equal-live-version-refused', tool, ['publish', '--installer', str(args.published_installer), '--manifest', str(work / 'live.json'), '--installer-path', urlparse(live_installer['url']).path[1:], '--feed-path', feed_path], 1, 'is not newer than the live beta ' + live_payload['version'])
-        for name, version, code, text in [
-            ('older-version-refused', '0.10.9-beta', 1, 'is not newer than the live beta'),
-            ('lower-prerelease-refused', '0.11.0-alpha', 1, 'is not newer than the live beta'),
-            ('longer-prerelease-accepted', '0.11.0-beta.1', 0, 'Dry run: nothing uploaded.'),
-            ('release-over-prerelease-accepted', '0.11.0', 0, 'Dry run: nothing uploaded.'),
-            ('next-patch-accepted', '0.11.1-beta', 0, 'Dry run: nothing uploaded.'),
-        ]:
-            publish_case(name, tool, version, code, text, live, feed_path)
-        run('set-feed-same-as-live-refused', tool, ['set-feed', '--manifest', str(work / 'live.json'), '--feed-path', feed_path], 1, 'The live feed already serves this manifest')
-        run('set-feed-missing-installer-refused', tool, ['set-feed', '--manifest', str(signed('missing', '0.11.1-beta', {'url': fixture_url('0.11.1-beta'), **dummy_identity})), '--feed-path', feed_path], 1, 'HTTP Error 404')
-        run('set-feed-wrong-path-refused', tool, ['set-feed', '--manifest', str(work / 'live.json'), '--feed-path', 'u/' + secrets.token_urlsafe(24) + '/beta.json'], 1, 'Feed path differs from the committed feed')
-        run('set-feed-rollback-dry-run', tool, ['set-feed', '--manifest', str(signed('rollback', live_payload['version'], live_installer)), '--feed-path', feed_path], 0, 'Replacing the live ' + live_payload['version'] + ' manifest with version ' + live_payload['version'] + '.')
+        live_cases('', tool_tree('tree', (root / 'tools/release/update-feed.txt').read_text(), (root / 'tools/release/released-versions.txt').read_bytes()), live, args.published_installer, feed, env)
 
     tls = ec.generate_private_key(ec.SECP256R1())
     subject = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, 'publish-guard-fixture')])
@@ -135,12 +156,12 @@ try:
             path = urlparse(self.path).path
             if failures.get(path):
                 status = failures[path].pop(0)
-                if status == 'truncated':
-                    body = (work / 'blob' / path[1:]).read_bytes()
+                if status in ('truncated', 'oversize'):
+                    body = (work / 'blob' / path[1:]).read_bytes() + (b' ' * 65536 if status == 'oversize' else b'')
                     self.send_response(200)
                     self.send_header('Content-Length', str(len(body)))
                     self.end_headers()
-                    self.wfile.write(body[:len(body) // 2])
+                    self.wfile.write(body[:len(body) // 2] if status == 'truncated' else body)
                 elif status:
                     self.send_error(status)
                 return
@@ -162,6 +183,18 @@ try:
     origin = 'https://127.0.0.1:' + str(server.server_address[1])
     local_env = {name: value for name, value in env.items() if not name.lower().endswith('_proxy')}
     local_env['SSL_CERT_FILE'] = str(work / 'fixture-cert.pem')
+    for state, live_version, listed in [
+        ('live-0.11.0-beta-', '0.11.0-beta', b'0.9.0-beta\n0.10.0-beta\n0.11.0-beta\n'),
+        ('live-0.11.1-beta-unlisted-', '0.11.1-beta', b'0.9.0-beta\n0.10.0-beta\n0.11.0-beta\n'),
+        ('live-0.11.1-beta-listed-', '0.11.1-beta', b'0.9.0-beta\n0.10.0-beta\n0.11.0-beta\n0.11.1-beta\n'),
+        ('live-0.11.0-beta-after-rollback-', '0.11.0-beta', b'0.9.0-beta\n0.10.0-beta\n0.11.0-beta\n0.11.1-beta\n'),
+    ]:
+        state_feed = origin + '/u/' + secrets.token_urlsafe(12) + '/beta.json'
+        live_url = fixture_url(live_version, origin)
+        live = signed(state + 'feed', live_version, {'url': live_url, **dummy_identity}).read_bytes()
+        served[urlparse(live_url).path] = dummy.read_bytes()
+        served[urlparse(state_feed).path] = live
+        live_cases(state, tool_tree(state + 'tree', state_feed + '\n', listed), live, dummy, state_feed, local_env)
     local_feed_path = 'u/fixture/beta.json'
     released = '\ufeff0.9.0-beta\n0.11.0-beta \n\n# The feed was rolled back to 0.10.0-beta\n0.10.0-beta\n'.encode('utf-8')
     tool = tool_tree('rolled-back-tree', origin + '/' + local_feed_path + '\n', released)
@@ -186,8 +219,7 @@ try:
     blob_bin.mkdir()
     (blob_bin / 'vercel').write_text('#!/bin/sh\nfile=$3\nwhile [ $# -gt 1 ]; do\n  [ "$1" = --pathname ] && target="' + str(work / 'blob') + '/$2"\n  shift\ndone\nmkdir -p "$(dirname "$target")" && cp "$file" "$target"\n')
     (blob_bin / 'vercel').chmod(0o755)
-    armed_env = dict(local_env, BLOB_READ_WRITE_TOKEN='publish-guard-fixture')
-    upload_env = dict(armed_env, PATH=str(blob_bin) + os.pathsep + local_env['PATH'])
+    upload_env = dict(local_env, PATH=str(blob_bin) + os.pathsep + local_env['PATH'])
     for flow, listed_first in [('listed-then-rolled-back', True), ('rolled-back-before-listed', False)]:
         flow_path = 'u/' + flow + '/beta.json'
         tool = tool_tree(flow + '-tree', origin + '/' + flow_path + '\n', b'0.9.0-beta\n0.10.0-beta\n0.11.0-beta')
@@ -207,19 +239,27 @@ try:
         rollback = ['set-feed', '--manifest', str(bad.with_name(bad.stem + '.previous-live.json')), '--feed-path', flow_path, '--yes-publish']
         if not listed_first:
             released_list.write_bytes(before)
+            previous_installer = urlparse(previous_url).path
+            failures[previous_installer] = [503]
             def still_live():
+                if failures[previous_installer] != [503]:
+                    return 'the installer was downloaded before the refusal'
                 if (work / 'blob' / flow_path).read_bytes() != bad.read_bytes():
                     return 'the refused rollback changed the feed'
             for failure, status, reason in [('503', 503, ''), ('dropped', 0, ''), ('truncated', 'truncated', 'Published response ended early')]:
                 failures['/' + flow_path] = [status]
                 run(flow + '-feed-' + failure + '-rollback-refused', tool, rollback, 1, "Couldn't read the live feed (" + reason, lambda: 'the feed failure was not served' if failures['/' + flow_path] else still_live(), upload_env)
-            run(flow + '-unlisted-rollback-refused', tool, rollback, 1, 'The live beta 0.11.1-beta is not in released-versions.txt. Add it there before rolling back', still_live, armed_env)
+            run(flow + '-unlisted-rollback-refused', tool, rollback, 1, 'The live beta 0.11.1-beta is not in released-versions.txt. Add it there before rolling back', still_live, upload_env)
+            for failure, status in [('503', 503), ('dropped', 0), ('truncated', 'truncated'), ('oversize', 'oversize'), ('no-content', 204)]:
+                failures['/' + flow_path] = [status]
+                publish_case(flow + '-feed-' + failure + '-publish-refused', tool, '0.11.2-beta', 1, 'Update release refused: ', bad.read_bytes(), flow_path, origin, upload_env, ['--yes-publish'], lambda: 'the feed failure was not served' if failures['/' + flow_path] else still_live())
+            failures[previous_installer] = []
             for version in ['0.11.1-beta', '0.11.1-alpha']:
-                publish_case(flow + '-live-' + version + '-refused', tool, version, 1, 'is not newer than the live beta 0.11.1-beta', bad.read_bytes(), flow_path, origin, armed_env, ['--yes-publish'])
+                publish_case(flow + '-live-' + version + '-refused', tool, version, 1, 'is not newer than the live beta 0.11.1-beta', bad.read_bytes(), flow_path, origin, local_env, ['--yes-publish'])
             released_list.write_bytes(before + b'\n0.11.1-beta\n')
         run(flow + '-rollback', tool, rollback, 0, 'The feed now serves version 0.11.0-beta, verified over HTTPS.', run_env=upload_env)
         for version in ['0.11.1-beta', '0.11.1-alpha']:
-            publish_case(flow + '-republish-' + version + '-refused', tool, version, 1, 'is not newer than the released version 0.11.1-beta, so testers who already have 0.11.1-beta would not be offered it', previous.read_bytes(), flow_path, origin, armed_env, ['--yes-publish'])
+            publish_case(flow + '-republish-' + version + '-refused', tool, version, 1, 'is not newer than the released version 0.11.1-beta, so testers who already have 0.11.1-beta would not be offered it', previous.read_bytes(), flow_path, origin, local_env, ['--yes-publish'])
         publish_case(flow + '-newer-accepted', tool, '0.11.2-beta', 0, 'Dry run: nothing uploaded.', previous.read_bytes(), flow_path, origin, local_env)
     repair_path = 'u/repair/beta.json'
     tool = tool_tree('repair-tree', origin + '/' + repair_path + '\n', b'0.11.0-beta\n')
@@ -235,6 +275,10 @@ try:
     envelope['signature'] = json.loads(signed('repair-other', '0.11.1-beta', {'url': repair_url, **dummy_identity}).read_bytes())['signature']
     (work / 'blob' / repair_path).write_text(json.dumps(envelope))
     run('set-feed-bad-signature-feed-repaired', tool, set_repair, 0, 'does not verify (Invalid signature)', serves(repair), upload_env)
+    for failure, status, reason in [('oversize', 'oversize', 'Published response exceeds its bound'), ('no-content', 204, 'Published URL did not return HTTPS HTTP 200')]:
+        replacement = signed('repair-' + failure, '0.11.0-beta', {'url': repair_url, **dummy_identity})
+        failures['/' + repair_path] = [status]
+        run('set-feed-' + failure + '-feed-repaired', tool, ['set-feed', '--manifest', str(replacement), '--feed-path', repair_path, '--yes-publish'], 0, 'does not verify (' + reason + ')', lambda: 'the feed failure was not served' if failures['/' + repair_path] else serves(replacement)(), upload_env)
     late_url = fixture_url('0.11.1-beta', origin)
     late = signed('late', '0.11.1-beta', {'url': late_url, **dummy_identity})
     released_list.chmod(0o444)
