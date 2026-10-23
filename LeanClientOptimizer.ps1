@@ -488,7 +488,7 @@ function Test-DependentRestore {
     if ($Dependent.PSObject.Properties['restoreComplete'] -and $Dependent.restoreComplete -isnot [bool]) { return [pscustomobject]@{ state='leftAsChanged'; reason='dependent restore completion evidence is invalid' } }
     if ($Dependent.PSObject.Properties['restoreAttempted'] -and $Dependent.restoreAttempted -isnot [bool]) { return [pscustomobject]@{ state='leftAsChanged'; reason='dependent restore attempt evidence is invalid' } }
     if ($current[0].status -eq 'Running') { return [pscustomobject]@{ state='alreadyAtOriginal'; reason=$null } }
-    if ($Dependent.stoppedByApply -isnot [bool] -or -not $Dependent.stoppedByApply) { return [pscustomobject]@{ state='leftAsChanged'; reason='apply did not confirm that its stop stopped this service; another program may have stopped it' } }
+    if ($Dependent.stoppedByApply -isnot [bool] -or -not $Dependent.stoppedByApply) { return [pscustomobject]@{ state='leftAsChanged'; reason='apply did not confirm that it stopped this service; another program may have stopped it' } }
     if ($Dependent.restoreComplete -eq $true) { return [pscustomobject]@{ state='leftAsChanged'; reason='dependent was already restored; runtime ownership released' } }
     if ($Dependent.restoreAttempted -eq $true) { return [pscustomobject]@{ state='leftAsChanged'; reason='a previous Undo tried to start it without a confirmed result; another program may have stopped it' } }
     if ($current[0].status -ne 'Stopped') { return [pscustomobject]@{ state='leftAsChanged'; reason='dependent startup or state changed' } }
