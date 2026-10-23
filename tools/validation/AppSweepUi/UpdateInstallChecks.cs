@@ -1,5 +1,7 @@
 using System.Reflection;
+using System.Text.Json;
 using RooIndustries.OptimizationSuite;
+using RooIndustries.OptimizationSuite.Models;
 using RooIndustries.OptimizationSuite.Services;
 using RooIndustries.OptimizationSuite.ViewModels;
 using RooIndustries.Optimizer;
@@ -103,17 +105,26 @@ static class UpdateInstallChecks
 
     static void Set(object target, string name, object? value) => target.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(target, value);
 
+    sealed record Command(string Name, string[] Helpers, string Saved, Func<Task> Run, Func<bool> Kept, Func<bool> Refused, Func<bool> Unchanged);
+
     static async Task OperationsAsync(Action<bool, string> check)
     {
         var steps = new List<string>();
         var entered = new Dictionary<string, TaskCompletionSource>();
         var release = new Dictionary<string, TaskCompletionSource>();
-        var closed = new List<string>();
-        void CloseWhenDone() { if (!RunningChanges.Any) closed.Add(string.Join(" then ", steps)); }
-        void Pause(params string[] names)
+        var order = new List<string>();
+        var closed = new List<bool>();
+        Func<bool> kept = () => false;
+        void CloseWhenDone() { if (!RunningChanges.Any) closed.Add(kept()); }
+        void Pause(params string[] helpers)
         {
-            steps.Clear(); closed.Clear(); entered.Clear(); release.Clear();
-            foreach (var name in names) { entered[name] = new(TaskCreationOptions.RunContinuationsAsynchronously); release[name] = new(TaskCreationOptions.RunContinuationsAsynchronously); }
+            steps.Clear(); closed.Clear(); entered.Clear(); release.Clear(); order.Clear(); ServiceSteps.Written.Clear();
+            foreach (var name in helpers.SelectMany(helper => new[] { helper, helper + " returned" }))
+            {
+                order.Add(name);
+                entered[name] = new(TaskCreationOptions.RunContinuationsAsynchronously);
+                release[name] = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            }
         }
         WindowsTweaksViewModel Reviewed(bool restoring)
         {
@@ -130,71 +141,166 @@ static class UpdateInstallChecks
             return model;
         }
 
-        var unexpected = App.Operations.WindowsStep;
-        App.Operations.WindowsStep = async step => { steps.Add(step); entered[step].SetResult(); await release[step].Task; };
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "roo-industries-close-when-done-" + Guid.NewGuid().ToString("N"))).FullName;
+        var backup = Path.Combine(root, "process-backup.json");
+        File.WriteAllText(backup, JsonSerializer.Serialize(new { actionId = "performance.applyProfile", backupId = "close-when-done", profileId = "fixture-profile", dryRun = false, snapshots = new[] { new { processId = 123, processStartTimeUtc = "2026-09-20T00:00:00Z" } } }));
+        App.Live.ProcessApplyText = JsonSerializer.Serialize(new
+        {
+            actionId = "performance.applyProfile", dryRun = false, status = "success",
+            backup = new { backupId = "close-when-done", location = backup, rollbackSupported = true },
+            result = new { status = "success", summary = "One change applied.", changedItems = new[] { new { name = "fixture" } } },
+        });
+        App.Live.ProcessRestoreText = JsonSerializer.Serialize(new { actionId = "performance.rollbackProfile", dryRun = false, status = "success", backup = new { location = backup, backupId = "close-when-done" }, result = new { status = "success", changedItems = Array.Empty<object>() } });
+        App.Live.ProcessProfileRecovery = null; App.Live.OperationError = null; App.Live.LastError = null; App.Live.NvidiaApplyError = null; App.Live.NvidiaRestoreError = null;
+        var profiles = new PerformanceProfilesViewModel();
+        var drivers = new DriversProfilesViewModel { HasNvidia = true, HasNvidiaProfiles = true, NvidiaExportReviewed = true, NvidiaProfileApproved = true, NvidiaBenchmarkReady = true };
+        App.Live.NvidiaRecovery = null;
+        App.Live.NvidiaApplyRecovery = new(drivers.NvidiaProfileId, Path.Combine(root, "rollback.json"), Path.Combine(root, "before.nip"));
+        App.Live.ClearNvidiaRecoveryOnRestore = true;
+        var files = (RemovalCleanupReview)System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(typeof(RemovalCleanupReview));
+        var removal = new BulkRemovalViewModel();
+        var cpu = new CpuSetsViewModel();
+        var cpuJournal = Path.Combine(root, "cpu-journal.json");
+        var rule = GovernorChecks.Rule("0123456789abcdef0123456789abcdef", "Fixture rule", @"C:\fixture\game.exe", true);
+        App.Operations.Governor = new(new PolicySummary(false, "missing", false, 0, 0, null), new PolicyWorkerStatus(null, false, null), [rule], new());
+        App.Operations.RuleSaved = null; App.Operations.RuleDeleted = null; App.Operations.PolicyWorkerError = null;
+        var controls = new ProcessControlsViewModel();
+        var controlsJournal = Path.Combine(root, "controls-journal.json");
+        var governor = new ProcessControlsViewModel();
+        var damaged = new ProcessControlsViewModel();
+        WindowsTweaksViewModel? windows = null;
+        bool Refused(string? detail) => detail == RunningChanges.Installing;
+
+        Command[] commands =
+        [
+            new("Background priorities apply", ["background priorities"], "its recovery reference", () => profiles.ApplyProfileCommand.ExecuteAsync(null),
+                () => App.Live.ProcessProfileRecovery is not null, () => Refused(profiles.ActionDetail), () => App.Live.ProcessProfileRecovery is null),
+            new("Background priorities restore", ["background restore"], "the cleared recovery reference", () => profiles.RestoreProfileCommand.ExecuteAsync(null),
+                () => App.Live.ProcessProfileRecovery is null, () => Refused(profiles.ActionDetail), () => App.Live.ProcessProfileRecovery is not null),
+            new("NVIDIA profile apply", ["NVIDIA profile"], "its recovery reference", () => drivers.ApplyNvidiaProfileCommand.ExecuteAsync(null),
+                () => App.Live.NvidiaRecovery is not null, () => Refused(drivers.NvidiaActionDetail), () => App.Live.NvidiaRecovery is null),
+            new("NVIDIA profile restore", ["NVIDIA restore"], "the cleared recovery reference", () => drivers.RestoreNvidiaProfileCommand.ExecuteAsync(null),
+                () => App.Live.NvidiaRecovery is null, () => Refused(drivers.NvidiaActionDetail), () => App.Live.NvidiaRecovery is not null),
+            new("Earlier file backup restore", ["earlier files restore"], "the removed restore pointer", () => removal.RestoreLegacyFilesCommand.ExecuteAsync(null),
+                () => App.Operations.FileRestore is null, () => Refused(removal.FileSummary), () => App.Operations.FileRestore == files),
+            new("CPU selection apply", ["CPU selection"], "its restore pointer", () => cpu.ApplyCommand.ExecuteAsync(null),
+                () => App.Operations.CpuPointer == cpuJournal, () => Refused(cpu.Detail), () => App.Operations.CpuPointer is null),
+            new("CPU selection restore", ["CPU restore"], "the removed restore pointer", () => cpu.RestoreCommand.ExecuteAsync(null),
+                () => App.Operations.CpuPointer is null, () => Refused(cpu.Detail), () => App.Operations.CpuPointer == cpuJournal),
+            new("Process controls apply", ["process controls"], "its restore pointer", () => controls.ApplyCommand.ExecuteAsync(null),
+                () => App.Operations.ProcessPointer == controlsJournal, () => Refused(controls.Detail), () => App.Operations.ProcessPointer is null),
+            new("Process controls restore", ["process controls restore"], "the removed restore pointer", () => controls.RestoreCommand.ExecuteAsync(null),
+                () => App.Operations.ProcessPointer is null, () => Refused(controls.Detail), () => App.Operations.ProcessPointer == controlsJournal),
+            new("Governor rule turn off", ["rule save", "governor Sync"], "the governor sync", () => governor.ToggleRuleCommand.ExecuteAsync(null),
+                () => true, () => Refused(governor.Detail), () => true),
+            new("Governor rule delete", ["rule delete", "governor Sync"], "the governor sync", () => governor.DeleteRuleCommand.ExecuteAsync(null),
+                () => App.Operations.DeletedRules.SequenceEqual([rule.RuleId]), () => Refused(governor.Detail), () => App.Operations.DeletedRules.Count == 0),
+            new("Damaged rule removal", ["rule delete", "governor Sync"], "the governor sync", () => damaged.RemoveDamagedRuleCommand.ExecuteAsync(null),
+                () => App.Operations.DeletedRules.SequenceEqual([rule.RuleId]), () => Refused(damaged.Detail), () => App.Operations.DeletedRules.Count == 0),
+            new("Saved Windows settings restore", ["Windows helper", "remove saved choices"], "the removed saved choices", () => (windows = Reviewed(restoring: true)).ApplyCommand.ExecuteAsync(null),
+                () => true, () => windows!.Status == "Settings were not confirmed" && Refused(windows.Detail), () => true),
+            new("Windows settings apply", ["save choices", "Windows helper"], "the Windows apply", () => (windows = Reviewed(restoring: false)).ApplyCommand.ExecuteAsync(null),
+                () => true, () => windows!.Status == "Settings were not confirmed" && Refused(windows.Detail), () => true),
+        ];
+
+        ServiceSteps.Pause = async step =>
+        {
+            steps.Add(step);
+            if (!entered.TryGetValue(step, out var reached)) throw new InvalidOperationException("Unexpected step: " + step);
+            reached.SetResult();
+            await release[step].Task;
+        };
         RunningChanges.Finished += CloseWhenDone;
         try
         {
-            Pause("Windows helper", "remove saved choices");
-            var restore = Reviewed(restoring: true);
-            var run = restore.ApplyCommand.ExecuteAsync(null);
-            await entered["Windows helper"].Task;
-            check(RunningChanges.Any, "Restoring a saved Windows settings profile counts as a running change while its helper works");
-            release["Windows helper"].SetResult();
-            await entered["remove saved choices"].Task;
-            check(RunningChanges.Any && closed.Count == 0, "After the restore helper returns, Close when done keeps waiting until the profile's saved choices are removed");
-            release["remove saved choices"].SetResult();
-            await run;
-            check(!RunningChanges.Any && closed.SequenceEqual(["Windows helper then remove saved choices"]) && restore.Status == "Settings saved; current values could not be reloaded.",
-                "Close when done closes once, only after the restore and the saved-choice removal both finished");
+            foreach (var command in commands)
+            {
+                switch (command.Name)
+                {
+                    case "Earlier file backup restore":
+                        App.Operations.FileRestore = files;
+                        Set(removal, "_restoreReview", files);
+                        removal.FileRestoreAvailable = true;
+                        break;
+                    case "CPU selection apply":
+                        Set(cpu, "_review", new CpuSetReview(new CpuSetPlan(), Path.Combine(root, "cpu-preview.json"), "fixture-hash", cpuJournal));
+                        cpu.HasReview = true;
+                        break;
+                    case "Process controls apply":
+                        App.Operations.ControlsJournal = GovernorChecks.Journal(GovernorChecks.Process(123, @"C:\fixture\game.exe"), GovernorChecks.Owner);
+                        Set(controls, "_review", new ProcessControlReview(App.Operations.ControlsJournal.Preview, Path.Combine(root, "controls-preview.json"), "fixture-hash", controlsJournal));
+                        break;
+                    case "Governor rule turn off":
+                        await governor.RefreshRulesCommand.ExecuteAsync(null);
+                        governor.SelectedRule = governor.Rules.Single();
+                        break;
+                    case "Governor rule delete":
+                        App.Operations.DeletedRules.Clear();
+                        governor.SelectedRule = governor.Rules.Single();
+                        break;
+                    case "Damaged rule removal":
+                        App.Operations.DeletedRules.Clear();
+                        damaged.SelectedDamagedRule = new DamagedRuleChoice(rule.RuleId, "The JSON is incomplete.");
+                        break;
+                }
 
-            Pause("save choices", "Windows helper");
-            var apply = Reviewed(restoring: false);
-            run = apply.ApplyCommand.ExecuteAsync(null);
-            await entered["save choices"].Task;
-            release["save choices"].SetResult();
-            await entered["Windows helper"].Task;
-            check(RunningChanges.Any && closed.Count == 0, "Saving choices and applying them to Windows is one running change, with no gap between the two steps");
-            release["Windows helper"].SetResult();
-            await run;
-            check(!RunningChanges.Any && closed.SequenceEqual(["save choices then Windows helper"]), "Close when done closes once, after the Windows apply finishes");
+                Pause();
+                var hold = RunningChanges.TryHold();
+                try { await command.Run(); }
+                catch (Exception error) { steps.Add("threw: " + error.Message); }
+                finally { hold?.Dispose(); }
+                check(hold is not null && steps.Count == 0 && ServiceSteps.Written.Count == 0 && closed.Count == 0 && !RunningChanges.Any && command.Refused() && command.Unchanged(),
+                    command.Name + " that starts while setup launches is refused with its reason before anything is written" + (steps.Count > 0 ? " | " + string.Join(", ", steps) : ""));
 
-            Pause();
-            var refused = Reviewed(restoring: false);
-            var hold = RunningChanges.TryHold();
-            try { await refused.ApplyCommand.ExecuteAsync(null); }
-            finally { hold?.Dispose(); }
-            check(hold is not null && steps.Count == 0 && closed.Count == 0 && refused.Status == "Settings were not confirmed" && refused.Detail == RunningChanges.Installing && !RunningChanges.Any,
-                "A Windows settings apply that starts while setup launches is refused before any step and says why");
+                Pause(command.Helpers);
+                kept = () => command.Kept() && ServiceSteps.Written.SequenceEqual(command.Helpers);
+                var run = command.Run();
+                var counted = new List<string>();
+                foreach (var step in order)
+                {
+                    if (await Task.WhenAny(entered[step].Task, run) != entered[step].Task) { counted.Add(step + " never ran"); break; }
+                    if (!RunningChanges.Any || closed.Count > 0) counted.Add(step);
+                    release[step].SetResult();
+                }
+                try { await run; }
+                catch (Exception error) { counted.Add("threw: " + error.Message); }
+                check(counted.Count == 0, command.Name + " counts as running at every step, also after each helper returns and before its result is saved"
+                    + (counted.Count > 0 ? " | not counted at: " + string.Join(", ", counted) : ""));
+                check(!RunningChanges.Any && closed.SequenceEqual([true]),
+                    command.Name + ": Close when done fires once, only after " + command.Saved + " is saved" + (closed.Count != 1 ? " | fired " + closed.Count + " times" : closed[0] ? "" : " | fired before it was saved"));
+            }
 
             Pause();
             var firmware = new FirmwareViewModel { Stage = "review" };
             Set(firmware, "_sessionDirectory", Path.Combine(Path.GetTempPath(), "roo-industries-firmware-fixture-not-created"));
             Set(firmware, "_reviewHash", "fixture-review-hash");
+            kept = () => true;
             var gate = typeof(RunningChanges).GetField("Gate", BindingFlags.NonPublic | BindingFlags.Static)!.GetValue(null)!;
             Task write;
-            bool counted;
+            bool queued;
             lock (gate)
             {
                 write = firmware.ApplyAsync();
-                counted = RunningChanges.Any;
+                queued = RunningChanges.Any;
             }
-            check(counted, "A confirmed BIOS write counts as running before its worker starts, so the window X and Install both wait for it");
+            check(queued, "A confirmed BIOS write counts as running before its worker starts, so the window X and Install both wait for it");
             await write;
-            check(!RunningChanges.Any && closed.Count == 1 && firmware.Message == "Load settings to set up SCEWIN first." && !firmware.Busy,
+            check(!RunningChanges.Any && closed.SequenceEqual([true]) && firmware.Message == "Load settings to set up SCEWIN first." && !firmware.Busy,
                 "The fixture BIOS write has no SCEWIN package, so nothing is written, and Close when done fires once when it ends");
 
             Pause();
-            hold = RunningChanges.TryHold();
+            var biosHold = RunningChanges.TryHold();
             try { await firmware.ApplyAsync(); }
-            finally { hold?.Dispose(); }
-            check(hold is not null && closed.Count == 0 && firmware.Message == RunningChanges.Installing && firmware.CanApply && !RunningChanges.Any,
+            finally { biosHold?.Dispose(); }
+            check(biosHold is not null && closed.Count == 0 && firmware.Message == RunningChanges.Installing && firmware.CanApply && !RunningChanges.Any,
                 "A BIOS write that starts while setup launches is refused with its reason, and the review stays ready to retry");
         }
         finally
         {
             RunningChanges.Finished -= CloseWhenDone;
-            App.Operations.WindowsStep = unexpected;
+            ServiceSteps.Pause = null;
+            ServiceSteps.Written.Clear();
+            Directory.Delete(root, recursive: true);
         }
     }
 }

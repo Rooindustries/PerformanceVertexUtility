@@ -9,7 +9,7 @@ using RooIndustries.Optimizer;
 
 static class GovernorChecks
 {
-    private static readonly OperationOwner Owner = new("FIXTURE", "S-1-5-21-1-2-3-1001");
+    internal static readonly OperationOwner Owner = new("FIXTURE", "S-1-5-21-1-2-3-1001");
     private static readonly string Chrome = OperatingSystem.IsWindows() ? @"C:\Fixture\chrome.exe" : "/fixture/chrome.exe";
     private static readonly string Game = OperatingSystem.IsWindows() ? @"C:\Fixture\game.exe" : "/fixture/game.exe";
     private static readonly string Legacy = OperatingSystem.IsWindows() ? @"C:\Fixture\legacy.exe" : "/fixture/legacy.exe";
@@ -34,14 +34,14 @@ static class GovernorChecks
 
     private static JsonElement Value<T>(T value) => JsonSerializer.SerializeToElement(value, OperationFiles.Json);
 
-    private static SavedProcessRule Rule(string id, string name, string path, bool enabled, OperationOwner? owner = null) => new()
+    internal static SavedProcessRule Rule(string id, string name, string path, bool enabled, OperationOwner? owner = null) => new()
     {
         SchemaVersion = 1, RuleId = id, Revision = id, Owner = owner ?? Owner, Name = name, Enabled = enabled, MatchMode = "filename", ExecutablePath = path, ExecutableHash = null,
         Controls = new() { ["cpuPriority"] = Value("High"), ["ioPriority"] = Value(2), ["gpuPriority"] = Value(4), ["memoryPriority"] = Value(5), ["priorityBoost"] = Value(false) },
         CpuSelection = null,
     };
 
-    private static RunningProcess Process(int id, string path) => new(id, "13300000000000000" + id, path);
+    internal static RunningProcess Process(int id, string path) => new(id, "13300000000000000" + id, path);
 
     private static PolicyInstance Instance(RunningProcess process, string? field, string status, string? errorKind = null, string? error = null, string? root = null) => new()
     {
@@ -49,7 +49,7 @@ static class GovernorChecks
         JournalPath = Path.Combine(root ?? "fixture", "operations", process.ProcessId + field, "journal.json"), Status = status, Field = field, ErrorKind = errorKind, Error = error,
     };
 
-    private static ProcessControlJournal Journal(RunningProcess process, OperationOwner owner, params (string Field, JsonElement Observed)[] changes) => new()
+    internal static ProcessControlJournal Journal(RunningProcess process, OperationOwner owner, params (string Field, JsonElement Observed)[] changes) => new()
     {
         SchemaVersion = 1, ReviewHash = "review", PreviewPath = "preview.json", Status = "applied", UpdatedAtUtc = DateTime.UtcNow,
         Preview = new() { SchemaVersion = 1, OperationId = "op", Owner = owner, Identity = process, Original = new(), Desired = changes.ToDictionary(change => change.Field, change => change.Observed), TopologyHash = "topology" },

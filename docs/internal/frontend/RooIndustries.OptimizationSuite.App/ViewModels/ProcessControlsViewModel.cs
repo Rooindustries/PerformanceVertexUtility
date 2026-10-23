@@ -516,7 +516,7 @@ public partial class ProcessControlsViewModel : ObservableObject
     {
         if (!CanApply || _review is null) return;
         Busy = true;
-        try { _journal = _review.JournalPath; var result = await App.Operations.ApplyControlsAsync(_review); Invalidate(); ShowResult(result, restoring: false); }
+        try { using var running = RunningChanges.Begin(); _journal = _review.JournalPath; var result = await App.Operations.ApplyControlsAsync(_review); Invalidate(); ShowResult(result, restoring: false); }
         catch (Exception error) { Status = "The change was not confirmed."; Detail = error.Message; RestoreAvailable = _journal is not null && File.Exists(_journal); }
         finally { Busy = false; }
     }
@@ -526,7 +526,7 @@ public partial class ProcessControlsViewModel : ObservableObject
     {
         if (!CanRestore || _journal is null) return;
         Busy = true;
-        try { var result = await App.Operations.RestoreControlsAsync(_journal); Invalidate(); ShowResult(result, restoring: true); }
+        try { using var running = RunningChanges.Begin(); var result = await App.Operations.RestoreControlsAsync(_journal); Invalidate(); ShowResult(result, restoring: true); }
         catch (Exception error) { Status = "Recovery needs attention."; Detail = error.Message; }
         finally { Busy = false; }
     }
@@ -794,9 +794,12 @@ public partial class ProcessControlsViewModel : ObservableObject
         Busy = true;
         try
         {
-            if ((await App.Operations.ReadGovernorAsync()).Summary.SecurityProblem is not (null or "missing")) await App.Operations.PolicyWorkerAsync("Sync");
-            await App.Operations.DeleteRuleAsync(SelectedDamagedRule!.RuleId);
-            await App.Operations.PolicyWorkerAsync("Sync");
+            using (RunningChanges.Begin())
+            {
+                if ((await App.Operations.ReadGovernorAsync()).Summary.SecurityProblem is not (null or "missing")) await App.Operations.PolicyWorkerAsync("Sync");
+                await App.Operations.DeleteRuleAsync(SelectedDamagedRule!.RuleId);
+                await App.Operations.PolicyWorkerAsync("Sync");
+            }
             await RefreshRulesAsync();
             Status = "Damaged rule removed.";
             Detail = "Deleted the damaged rule file. Your other rules are unchanged.";

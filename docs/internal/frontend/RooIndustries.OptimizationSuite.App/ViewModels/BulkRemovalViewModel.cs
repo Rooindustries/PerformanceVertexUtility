@@ -516,6 +516,7 @@ public partial class BulkRemovalViewModel : ObservableObject
         Busy = true;
         try
         {
+            using var running = RunningChanges.Begin();
             var result = await App.Operations.RestoreRemovedFilesAsync(_restoreReview);
             FileStatus = result.Status == "success" ? "Earlier file backup restored." : "Some earlier files could not be restored.";
             FileSummary = "File recovery does not reinstall the application.";
