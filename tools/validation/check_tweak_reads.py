@@ -45,7 +45,7 @@ def stop(process, marker):
 
 
 def negative_controls(root):
-    if os.name == 'nt':
+    if os.name == 'nt' or not Path('/proc').is_dir():
         return {}
     saved = {name: os.environ.get(name) for name in ('DOTNET', 'TWEAK_READS_TIMEOUT')}
     results = {}
@@ -75,6 +75,8 @@ def negative_controls(root):
 def marked(marker):
     needle = ('ROO_INDUSTRIES_TWEAK_READS_RUN=' + marker).encode()
     pids = []
+    if not Path('/proc').is_dir():
+        return pids
     for entry in Path('/proc').iterdir():
         if entry.name.isdigit() and int(entry.name) != os.getpid():
             with contextlib.suppress(OSError):
