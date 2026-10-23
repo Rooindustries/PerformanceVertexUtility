@@ -153,7 +153,8 @@
       "text": "Local\\RooProcessControls-",
       "files": [
         "backend/scripts/ProcessProfile.Common.ps1",
-        "tools/validation/Background/NativeRestoreContention/Program.cs"
+        "tools/validation/Background/NativeRestoreContention/Program.cs",
+        "tools/validation/Background/Test-RestoreProcessOperationOwnership.ps1"
       ],
       "reason": "Existing native process-instance mutex prefix; restore and contention controls must share the exact namespace and PID/native creation identity."
     },
