@@ -49,15 +49,15 @@ try{
  & $dotnet publish (Join-Path $Source 'backend\native\Optimizer.Host\Optimizer.Host.csproj') --configuration Debug --self-contained false -o (Join-Path $Source 'backend\bin\optimizer') --disable-build-servers -p:RooIndustriesTestHooks=true -p:UseSharedCompilation=false *> $build
  if($LASTEXITCODE -ne 0){throw 'The helper test build failed; see build.log.'}
  $project=Join-Path $Source 'docs\internal\frontend\RooIndustries.OptimizationSuite.App\RooIndustries.OptimizationSuite.App.csproj'
- & $dotnet build $project --configuration Debug -p:Platform=x64 --disable-build-servers -p:RooIndustriesTestHooks=true -p:UseSharedCompilation=false *>> $build
+ & $dotnet build $project --configuration Debug -p:Platform=x64 -p:WindowsAppSDKSelfContained=true --disable-build-servers -p:RooIndustriesTestHooks=true -p:UseSharedCompilation=false *>> $build
  if($LASTEXITCODE -ne 0){throw 'The app test build failed; see build.log.'}
  $exe=@(Get-ChildItem -LiteralPath (Join-Path $Source 'docs\internal\frontend\RooIndustries.OptimizationSuite.App\bin\x64\Debug') -Recurse -Filter 'RooIndustries.OptimizationSuite.App.exe'|Sort-Object LastWriteTimeUtc -Descending)
  if(-not$exe.Count){throw 'The app test build produced no executable.'}
- $env:ROO_INDUSTRIES_INITIAL_NAV='windows';$env:ROO_INDUSTRIES_DOTNET_EXE=$dotnet
+ $env:DOTNET_ROOT=Split-Path $dotnet -Parent;$env:ROO_INDUSTRIES_DOTNET_EXE=$dotnet;$env:ROO_INDUSTRIES_INITIAL_NAV='windows'
  $app=Start-OwnedProcess -FilePath $exe[0].FullName -WindowStyle Normal -Purpose 'suite-test-build' -Lifetime invocation
- $window=WaitFor {$A::RootElement.FindFirst($TS::Children,[Windows.Automation.PropertyCondition]::new($A::ProcessIdProperty,[int]$app.Identity.pid))} 120 'the Suite window'
+ $window=WaitFor {$w=$A::RootElement.FindFirst($TS::Children,[Windows.Automation.PropertyCondition]::new($A::ProcessIdProperty,[int]$app.Identity.pid));if($w -and (ById $w 'WindowsTweaksSearch')){$w}} 180 'the Windows tweaks page'
  $hwnd=[IntPtr]::new([long]$window.Current.NativeWindowHandle)
- $search=WaitFor {ById $window 'WindowsTweaksSearch'} 120 'the Windows tweaks page'
+ $search=ById $window 'WindowsTweaksSearch'
  WaitFor {ById $window 'WindowsTweaksList'} 120 'the Windows tweaks list'|Out-Null
  $advanced=WaitFor {$window.FindFirst($TS::Descendants,[Windows.Automation.AndCondition]::new([Windows.Automation.PropertyCondition]::new($A::NameProperty,'Show advanced options'),[Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty,[Windows.Automation.ControlType]::CheckBox)))} 60 'the advanced options switch'
  $toggle=$advanced.GetCurrentPattern([Windows.Automation.TogglePattern]::Pattern)
