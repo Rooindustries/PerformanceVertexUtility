@@ -288,6 +288,10 @@ def publish(args):
     current, live = live_feed(feed)
     if precedence(payload["version"]) <= precedence(live["version"]):
         raise ValueError("Version " + payload["version"] + " is not newer than the live beta " + live["version"] + ", so testers would not be offered it")
+    released = [line.strip() for line in (ROOT / "tools/release/released-versions.txt").read_text(encoding="utf-8-sig").splitlines()]
+    floor = max((line for line in released if line and not line.startswith("#")), key=precedence, default=None)
+    if floor and precedence(payload["version"]) <= precedence(floor):
+        raise ValueError("Version " + payload["version"] + " is not newer than the released version " + floor + ", so testers who already have " + floor + " would not be offered it")
     rollback = Path(args.manifest).with_name(Path(args.manifest).stem + ".previous-live.json")
     rollback.write_bytes(current)
     print("Saved the live " + live["version"] + " manifest for rollback: " + str(rollback))

@@ -17,7 +17,7 @@ Testers' apps read the signed feed in `update-feed.txt`. They only offer a versi
    python3 tools/release/publish_update.py publish ... --yes-publish
    ```
 
-   Both runs stop if the version is not newer than the live beta, or if the live feed doesn't verify (repair it with `set-feed` first). They save the live manifest as `<version>-feed.previous-live.json`, which is the rollback copy. After uploading, the tool reads the feed and the installer back over HTTPS.
+   Both runs stop if the version is not newer than the live beta and every version in `released-versions.txt`, or if the live feed doesn't verify (repair it with `set-feed` first). A rollback lowers the live feed but not that list, so testers who kept a rolled-back version are still offered the next publish. They save the live manifest as `<version>-feed.previous-live.json`, which is the rollback copy. After uploading, the tool reads the feed and the installer back over HTTPS.
 4. Add the published version to `released-versions.txt` on `main`.
 
 ## Rolling back
