@@ -24,6 +24,7 @@ function Read-Ast([string]$Path){
  if($e.Count){throw ($e -join '; ')}
  return $a
 }
+. (Join-Path $Source 'tools/validation/Background/RestoreSimulation.Common.ps1')
 function New-HistoryJournal([int]$Id,[string]$Field,[string]$Path){
  $value=if($Field -eq 'cpuPriority'){'Normal'}elseif($Field -eq 'gpuPriority'){2}else{5}
  return [ordered]@{
@@ -66,13 +67,13 @@ try {
   $name=$caseKind+'-'+$caseMode
   $directory=Join-Path $OutRoot $name
   [IO.Directory]::CreateDirectory($directory)|Out-Null
-  $script:Held=$false;$script:Acquired=0;$script:Released=0;$script:PreviewLoads=0;$script:FreshLoads=0;$script:ReadOutsideGate=0
+  $script:Held=$false;$script:Acquired=0;$script:Released=0;$script:Disposed=0;$script:PreviewLoads=0;$script:FreshLoads=0;$script:ReadOutsideGate=0
   $script:Values=@{};$byId=@{}
   $script:Writes=New-Object System.Collections.Generic.List[object]
   $initial=switch($caseMode){'target'{'BelowNormal'};'original'{'Normal'};default{'High'}}
   $snapshots=@(foreach($probe in $probes){
    $byId[$probe.Id]=$probe;$script:Values[$probe.Id]=$initial
-   [pscustomobject]@{processId=$probe.Id;processName=('ScaleProbe'+$probe.Id);originalPriorityClass='Normal';controlChanges=@([pscustomobject]@{control='priorityClass';proposedValue='BelowNormal';outcome='applied'})}
+   New-FixtureSnapshot $probe @{originalPriorityClass='Normal';controlChanges=@([pscustomobject]@{control='priorityClass';proposedValue='BelowNormal';outcome='applied'})}
   })
   function Get-RooIndustriesLocalDataRoot {return $script:ScaleDataRoot}
   function Test-RooIndustriesGovernorOwnsControl {param($Process,$Control) return $false}
@@ -97,7 +98,7 @@ try {
   function Resolve-RooIndustriesPath {param($Path,$DefaultPath) return $Path}
   function Resolve-RooIndustriesGameTuneSessionFile {param($SessionId,$SessionPath,$StateRoot) return $sessionFile}
   function Resolve-RooIndustriesGameTuneStateRoot {param($StateRoot) return $directory}
-  function Get-FixtureState([int]$Id){return [pscustomobject]@{priorityClass=$script:Values[$Id];process=$byId[$Id]}}
+  function Get-FixtureState([int]$Id){return [pscustomobject]@{exists=$true;priorityClass=$script:Values[$Id];process=$byId[$Id]}}
   function Get-FixtureCandidate($Entry){
    $state=Get-FixtureState ([int]$Entry.processId)
    return [pscustomobject]@{exists=$true;matches=$true;instanceEnded=$false;process=$state.process;currentPriorityClass=$state.priorityClass;currentControlState=$state;blockedReason=$null;reason=$null}
@@ -105,8 +106,7 @@ try {
   function Get-RestoreCandidate {param($Snapshot) return Get-FixtureCandidate $Snapshot}
   function Get-RooIndustriesGameTuneLiveProcessIdentity {param($Entry) return Get-FixtureCandidate $Entry}
   function Get-RooIndustriesProcessControlState {param($ProcessId,$Unused,[switch]$ReadGpu) return Get-FixtureState $ProcessId}
-  function Enter-RooIndustriesGovernorGate {param($Seconds) $script:Held=$true;$script:Acquired++;return [pscustomobject]@{fixtureGate=$true}}
-  function Exit-RooIndustriesGovernorGate {param($Gate) if($null -ne $Gate){$script:Held=$false;$script:Released++}}
+  function Enter-RooIndustriesGovernorGate {param($Seconds) $script:Held=$true;$script:Acquired++;return New-FixtureGovernorGate}
   function Get-RooIndustriesProcessControlReadback {param($Process,$Control) if(-not$script:Held){$script:ReadOutsideGate++};return $script:Values[$Process.Id]}
   function Invoke-RooIndustriesProcessControlChange {param($Process,$Change) $script:Writes.Add(@{processId=$Process.Id;value=$Change.proposedValue})|Out-Null;$script:Values[$Process.Id]=$Change.proposedValue;$Change.outcome='applied'}
   function Write-RooIndustriesJsonOutput {param($Value,$OutputPath) return $Value}
@@ -117,17 +117,16 @@ try {
   $result=& ([scriptblock]::Create($body.Extent.Text))
   $clock.Stop()
   Save (Join-Path $directory 'result.json') $result
-  $expectedFresh=if($caseMode -eq 'target'){0}else{$Apps}
   $expectedWrites=if($caseMode -eq 'target'){$Apps}else{0}
   $expectedKept=if($caseMode -eq 'external'){$Apps}else{0}
   $kept=@(Get-RooIndustriesPropertyArray $result.result 'leftAsSetItems').Count
   $complete=if($caseKind -eq 'profile'){$result.status -eq 'success' -and $result.result.restorePendingCount -eq 0}else{$result.status -eq 'completed' -and -not$result.restorable}
   Check $complete "$name finishes its exact recovery"
   Check ($script:PreviewLoads -eq 1) "$name reads one preview snapshot across distinct processes and rebuild"
-  Check ($script:FreshLoads -eq $expectedFresh) "$name rereads under the gate for every closing decision"
+  Check ($script:FreshLoads -eq $Apps) "$name rereads under the gate for every closing decision"
   Check ($script:Writes.Count -eq $expectedWrites -and $kept -eq $expectedKept) "$name writes and kept reports match the input state"
   Check (@($script:Values.Values|Where-Object {$_ -ne $(if($caseMode -eq 'external'){'High'}else{'Normal'})}).Count -eq 0) "$name every process ends at its expected value"
-  Check ($script:Acquired -eq $script:Released -and -not$script:Held -and $script:ReadOutsideGate -eq 0) "$name releases gates and certifies only inside them"
+  Check ($script:Acquired -eq $script:Released -and $script:Released -eq $script:Disposed -and -not$script:Held -and $script:ReadOutsideGate -eq 0) "$name releases gates and certifies only inside them"
   Check ($clock.Elapsed.TotalSeconds -lt 45) "$name finishes within the app timeout on Linux"
   $metrics=[pscustomobject]@{name=$name;proof='Real Linux files, distinct owned process identities and restore bodies; simulated controls/gate, not Windows proof';apps=$Apps;distinctProcessIds=@($byId.Keys).Count;historyGameSessions=$History;historyProcessFolders=$History;terminalJournals=(2*$History+[int][math]::Ceiling($History/2.0));previewLoads=$script:PreviewLoads;freshLoads=$script:FreshLoads;elapsedMs=[math]::Round($clock.Elapsed.TotalMilliseconds);status=$result.status;writes=@($script:Writes.ToArray());kept=$kept;values=@($byId.Keys|ForEach-Object {[pscustomobject]@{processId=$_;value=$script:Values[$_]}})}
   Save (Join-Path $directory 'metrics.json') $metrics

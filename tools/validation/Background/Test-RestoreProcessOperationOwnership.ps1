@@ -7,6 +7,7 @@ $cases=New-Object System.Collections.Generic.List[object]
 function Save([string]$Directory,[string]$Name,$Value){[IO.File]::WriteAllText((Join-Path $Directory ($Name+'.json')),($Value|ConvertTo-Json -Depth 50),$utf8)}
 function Check([bool]$Condition,[string]$Message){if($Condition){"PASS $Message"}else{$failures.Add($Message)|Out-Null;"FAIL $Message"}}
 function Read-Ast([string]$Path){$e=$null;$t=$null;$a=[System.Management.Automation.Language.Parser]::ParseFile((Join-Path $Source $Path),[ref]$t,[ref]$e);if($e.Count){throw ($e -join '; ')};return $a}
+. (Join-Path $Source 'tools/validation/Background/RestoreSimulation.Common.ps1')
 $ownershipMeter={
  $script:PreviewLoads=0;$script:FreshLoads=0
  $raw=Get-Command Read-RooIndustriesProcessOperationOwnership -CommandType Function -ErrorAction SilentlyContinue
@@ -28,7 +29,7 @@ function Invoke-Scenario([string]$Kind,[string]$Mode,[string]$RootStatus='applie
   $dataRoot=Join-Path $directory 'data';[IO.Directory]::CreateDirectory($dataRoot)|Out-Null
   function Get-RooIndustriesLocalDataRoot {return $dataRoot}
   function Test-RooIndustriesGovernorOwnsControl {param($Process,$Control) return $false}
-  $live=[Diagnostics.Process]::GetCurrentProcess()
+  $live=$nativeProbe
   $identity=[pscustomobject]@{processId=$live.Id;creationTimeFileTimeUtc=[string]$live.StartTime.ToUniversalTime().ToFileTimeUtc();executablePath=$live.MainModule.FileName}
   $memory=$Mode -eq 'protected-launcher';$gpu=$Mode -eq 'protected-game'
   $control=if($memory){'memoryPriority'}elseif($gpu){'gpuPriority'}else{'priorityClass'}
@@ -36,8 +37,8 @@ function Invoke-Scenario([string]$Kind,[string]$Mode,[string]$RootStatus='applie
   $original=if($memory){5}else{'Normal'};$target=if($memory){2}elseif($gpu){'BelowNormal'}else{'AboveNormal'};$external=if($memory){1}else{'High'}
   $cpuPeer=$memory -or $gpu
   $peerControl=if($cpuPeer){'priorityClass'}else{'memoryPriority'};$peerOriginal=if($cpuPeer){'Normal'}else{5};$peerTarget=if($cpuPeer){'AboveNormal'}else{2}
-  $script:Values=@{};$script:Values[$control]=if($Mode -in @('original','arrival-original')){$original}elseif($Mode -eq 'writer-arrival'){$target}else{$external};$script:Values[$peerControl]=$peerTarget
-  $script:Retry=$false;$script:CandidateCalls=0;$script:Injected=0;$script:Held=$false;$script:Acquired=0;$script:Released=0;$script:OutsideReads=0
+  $script:TargetControl=$control;$script:InstanceLock='Local\RooProcessControls-'+$live.Id+'-'+$live.StartTime.ToUniversalTime().ToFileTimeUtc();$script:Values=@{};$script:Values[$control]=if($Mode -in @('original','arrival-original')){$original}elseif($Mode -eq 'writer-arrival'){$target}else{$external};$script:Values[$peerControl]=$peerTarget
+  $script:Retry=$false;$script:CandidateCalls=0;$script:Injected=0;$script:ArrivalRefused=$false;$script:Held=$false;$script:Acquired=0;$script:Released=0;$script:Disposed=0;$script:OutsideReads=0
   $script:Writes=New-Object System.Collections.Generic.List[object]
   $script:Attempts=New-Object System.Collections.Generic.List[object]
   $operationsRoot=Join-Path $dataRoot 'operations'
@@ -72,7 +73,7 @@ function Invoke-Scenario([string]$Kind,[string]$Mode,[string]$RootStatus='applie
    'array-root'{$journal=@($journal)}
   }
   $uncertain=$Mode -in @('unknown-schema','unknown-root','unknown-change','unknown-control','missing-identity','invalid-pid','invalid-creation','relative-path','scalar-changes','null-change','scalar-root','array-root','malformed-json','unreadable-journal','directory-error','enumeration-error','cached-error-repair')
-  $claim=if($Mode -eq 'table'){$RootStatus -in @('applying','applied','needsReconciliation') -and ($ChangeStatus -in @('applyIntent','applied','restoreIntent') -or ($RootStatus -eq 'applying' -and $ChangeStatus -eq 'pending'))}else{$Mode -notin @('different-pid','different-creation','different-creation-path','different-pid-path','cpuSets','missing-journal','missing-operations','unrelated-file')}
+  $claim=if($Mode -eq 'table'){$RootStatus -in @('applying','applied','needsReconciliation') -and ($ChangeStatus -in @('applyIntent','applied','restoreIntent') -or ($RootStatus -eq 'applying' -and $ChangeStatus -eq 'pending'))}else{$Mode -notin @('writer-arrival','different-pid','different-creation','different-creation-path','different-pid-path','cpuSets','missing-journal','missing-operations','unrelated-file')}
   $retained=$claim -or $uncertain
   if($Mode -notin @('arrival-left','arrival-original','writer-arrival','missing-operations','directory-error','enumeration-error','unrelated-file')){Write-Journal}
   if($Mode -eq 'missing-journal'){[IO.File]::Delete($journalPath)}
@@ -93,7 +94,7 @@ function Invoke-Scenario([string]$Kind,[string]$Mode,[string]$RootStatus='applie
   if([IO.File]::Exists($journalPath)){[IO.File]::Copy($journalPath,(Join-Path $directory 'journal-first.txt'),$true)}
   if($Mode -in @('cached-positive-release','cached-error-repair')){[IO.File]::Copy($journalPath,(Join-Path $directory 'journal-preview.txt'),$true)}
   $changes=@([pscustomobject]@{control=$control;proposedValue=$target;outcome='applied'},[pscustomobject]@{control=$peerControl;proposedValue=$peerTarget;outcome='applied'})
-  $snapshot=[pscustomobject]@{processId=$live.Id;processName='NativeTarget';originalPriorityClass='Normal';originalMemoryPriority=5;controlChanges=$changes}
+  $snapshot=New-FixtureSnapshot $live @{originalPriorityClass='Normal';originalMemoryPriority=5;controlChanges=$changes}
   if($gpu){$snapshot|Add-Member -NotePropertyName originalGpuPriority -NotePropertyValue 'Normal';$snapshot|Add-Member -NotePropertyName proposedGpuPriority -NotePropertyValue 'BelowNormal'}
   $backupFile=Join-Path $directory 'backup.json';$sessionFile=Join-Path $directory 'session.json'
   Save $directory 'backup' ([pscustomobject]@{actionId='performance.gameTune.startSession';dryRun=$false;sessionId='operation-session';profileId='operation-profile';backupId='operation-backup';createdAtUtc='2026-10-01T00:00:00Z';snapshots=@($snapshot)})
@@ -101,24 +102,23 @@ function Invoke-Scenario([string]$Kind,[string]$Mode,[string]$RootStatus='applie
   function Resolve-RooIndustriesPath {param($Path,$DefaultPath) return $Path}
   function Resolve-RooIndustriesGameTuneSessionFile {param($SessionId,$SessionPath,$StateRoot) return $sessionFile}
   function Resolve-RooIndustriesGameTuneStateRoot {param($StateRoot) return $directory}
-  function Get-FixtureState {return [pscustomobject]@{priorityClass=$script:Values['priorityClass'];memoryPriority=$script:Values['memoryPriority'];memoryPriorityAvailable=$true;gpuPriority=$script:Values['gpuPriority'];gpuPriorityAvailable=$gpu;gpuPriorityStatus=if($gpu){0}else{$null};process=$live}}
+  function Get-FixtureState {return [pscustomobject]@{exists=$true;priorityClass=$script:Values['priorityClass'];memoryPriority=$script:Values['memoryPriority'];memoryPriorityAvailable=$true;gpuPriority=$script:Values['gpuPriority'];gpuPriorityAvailable=$gpu;gpuPriorityStatus=if($gpu){0}else{$null};process=$live}}
   function Get-FixtureCandidate {
    $script:CandidateCalls++
    if($script:CandidateCalls -eq 2 -and $Mode -like 'arrival-*' -and -not$script:Retry){Write-Journal;$script:Injected++}
-   if($script:CandidateCalls -eq 2 -and $Mode -in @('cached-positive-release','cached-error-repair') -and -not$script:Retry){$journal=[pscustomobject]@{schemaVersion=1;status='restored'};Write-Journal;$script:Values[$control]=$target;$script:Injected++}
+   if($script:CandidateCalls -eq 2 -and $Mode -in @('cached-positive-release','cached-error-repair') -and -not$script:Retry){$journal=[pscustomobject]@{schemaVersion=1;status='restored'};Write-Journal;$script:Values[$script:TargetControl]=$target;$script:Injected++}
    $state=Get-FixtureState
    return [pscustomobject]@{exists=$true;matches=$true;instanceEnded=$false;process=$live;currentPriorityClass=$state.priorityClass;currentMemoryPriority=$state.memoryPriority;currentGpuPriority=$state.gpuPriority;currentControlState=$state;blockedReason=$null;reason=$null}
   }
   function Get-RestoreCandidate {param($Snapshot) return Get-FixtureCandidate}
   function Get-RooIndustriesGameTuneLiveProcessIdentity {param($Entry) return Get-FixtureCandidate}
   function Get-RooIndustriesProcessControlState {param($ProcessId,$Unused,[switch]$ReadGpu) return Get-FixtureState}
-  function Enter-RooIndustriesGovernorGate {param($Seconds) $script:Acquired++;$script:Held=$true;return [pscustomobject]@{fixtureGate=$true}}
-  function Exit-RooIndustriesGovernorGate {param($Gate) if($null -ne $Gate){$script:Released++;$script:Held=$false}}
+  function Enter-RooIndustriesGovernorGate {param($Seconds) $script:Acquired++;$script:Held=$true;return New-FixtureGovernorGate}
   function Get-RooIndustriesProcessControlReadback {param($Process,$Control) if(-not$script:Held){$script:OutsideReads++};return $script:Values[$Control]}
   function Invoke-RooIndustriesProcessControlChange {
    param($Process,$Change)
    $script:Attempts.Add($Change.control)|Out-Null
-   if(-not$script:Retry -and $Mode -eq 'writer-arrival' -and $Change.control -eq $control){Write-Journal;$script:Injected++;$script:Values[$control]=$external;throw $script:RooIndustriesChangedExternally}
+   if(-not$script:Retry -and $Mode -eq 'writer-arrival' -and $Change.control -eq $script:TargetControl){if([RooIndustriesRestoreFixture]::InstanceLeaseFree($script:InstanceLock)){Write-Journal}else{$script:ArrivalRefused=$true};$script:Injected++;$script:Values[$script:TargetControl]=$external;throw $script:RooIndustriesChangedExternally}
    $script:Writes.Add([pscustomobject]@{control=$Change.control;value=$Change.proposedValue})|Out-Null
    $script:Values[$Change.control]=$Change.proposedValue;$Change.outcome='applied'
   }
@@ -144,7 +144,7 @@ function Invoke-Scenario([string]$Kind,[string]$Mode,[string]$RootStatus='applie
   $script:PreviewLoads=0;$script:FreshLoads=0
   $first=Invoke-Undo;Save $directory 'first' $first
   if([IO.File]::Exists($journalPath)){[IO.File]::Copy($journalPath,(Join-Path $directory 'journal-first.txt'),$true)}
-  Save $directory 'first-observation' @{proof='Real saved journal files/reader, restore/persistence/status; simulated Linux process I/O and gate; enumeration-error alone injects directory denial; no native GPU proof';sessionRoot=$sessionRoot;journalPath=$journalPath;journalRelative=$journalRelative;readerControls=$readerControls;values=$script:Values;writes=@($script:Writes.ToArray());attempts=@($script:Attempts.ToArray());injectionReached=$script:Injected;previewLoads=$script:PreviewLoads;freshLoads=$script:FreshLoads;acquired=$script:Acquired;released=$script:Released;outsideCertificationReads=$script:OutsideReads;held=$script:Held;retained=$retained;uncertain=$uncertain}
+  Save $directory 'first-observation' @{proof='Real saved journal files/reader, restore/persistence/status; simulated Linux process I/O and gate; enumeration-error alone injects directory denial; no native GPU proof';sessionRoot=$sessionRoot;journalPath=$journalPath;journalRelative=$journalRelative;readerControls=$readerControls;values=$script:Values;writes=@($script:Writes.ToArray());attempts=@($script:Attempts.ToArray());injectionReached=$script:Injected;previewLoads=$script:PreviewLoads;freshLoads=$script:FreshLoads;acquired=$script:Acquired;released=$script:Released;disposed=$script:Disposed;outsideCertificationReads=$script:OutsideReads;held=$script:Held;retained=$retained;uncertain=$uncertain}
   Check ($script:PreviewLoads -eq 1) "$name shares one raw preview snapshot across controls and rebuild"
   Check ($script:FreshLoads -eq $script:Acquired) "$name reads fresh ownership inside every closing-decision gate"
   $pending=if($Kind -eq 'profile'){$first.result.restorePendingCount -eq 1}else{$first.restorable}
@@ -156,15 +156,16 @@ function Invoke-Scenario([string]$Kind,[string]$Mode,[string]$RootStatus='applie
   if(-not$retained){Check (@($first.result.leftAsSetItems|Where-Object {$_.control -eq $control -and $_.currentValue -eq $external -and $_.processName -eq 'NativeTarget'}).Count -eq 1) "$name names the actual unowned external readback"}
   Check (@($script:Writes|Where-Object control -eq $peerControl).Count -eq $(if($uncertain){0}else{1})) "$name independent peer restoration follows per-control evidence"
   if($retained){
-   $reason=if($uncertain){$script:RooIndustriesLeftAsSetChangedBack}else{$script:RooIndustriesProcessOperationManaged}
-   Check (@($first.result.skippedItems|Where-Object { ($_.reason -split '; ') -contains ($control+': '+$reason) }).Count -eq 1) "$name reports the exact retryable ownership reason"
+   $damage=switch($Mode){{$_ -in 'unknown-schema','unknown-root','scalar-root','array-root'}{'unknown schema or state).'};{$_ -in 'unknown-change','null-change'}{'unknown change state).'};'unknown-control'{'unknown control).'};{$_ -in 'missing-identity','scalar-changes'}{'no complete identity or change list).'};{$_ -in 'invalid-pid','invalid-creation','relative-path'}{'invalid process identity).'};{$_ -in 'malformed-json','unreadable-journal','cached-error-repair'}{'it could not be read: '}}
+   $reason=if($null -ne $damage){'A saved change file is damaged: '+$journalPath.Substring($dataRoot.Length+1)+' ('+$damage}elseif($Mode -eq 'directory-error'){'The saved operations path is not a directory.'}elseif($uncertain){$script:RooIndustriesLeftAsSetChangedBack}else{$script:RooIndustriesProcessOperationManaged}
+   $expected=$control+': '+$reason;$readError=$reason.EndsWith('read: ')
+   Check (@($first.result.skippedItems|Where-Object {@($_.reason -split '; '|Where-Object {if($readError){$_.StartsWith($expected,[StringComparison]::Ordinal)}else{$_ -ceq $expected}}).Count -eq 1}).Count -eq 1) "$name reports the exact retryable ownership reason"
   }
-  if($Mode -like 'arrival-*' -or $Mode -eq 'writer-arrival'){
-   Check ($script:Injected -eq 1 -and [IO.File]::ReadAllText($journalPath).Contains('"applied"')) "$name injects the actual journal at the old/new body boundary"
-   Check ($script:Acquired -gt 0) "$name reaches gated final certification"
-  }
+  if($Mode -like 'arrival-*'){Check ($script:Injected -eq 1 -and [IO.File]::ReadAllText($journalPath).Contains('"applied"')) "$name injects the actual journal at the old/new body boundary"}
+  if($Mode -eq 'writer-arrival'){Check ($script:Injected -eq 1 -and $script:ArrivalRefused -and -not[IO.File]::Exists($journalPath)) "$name holds the process instance lock through the write, so a saved change can't arrive"}
+  if($Mode -like 'arrival-*' -or $Mode -eq 'writer-arrival'){Check ($script:Acquired -gt 0) "$name reaches gated final certification"}
   if($Mode -in @('cached-positive-release','cached-error-repair')){Check ($script:Injected -eq 1 -and [IO.File]::ReadAllText($journalPath).Contains('"restored"')) "$name releases or repairs real evidence after preview without clearing the cached refusal"}
-  Check ($script:Acquired -eq $script:Released -and -not$script:Held -and $script:OutsideReads -eq 0) "$name releases acquired gates and certifies only inside them"
+  Check ($script:Acquired -eq $script:Released -and $script:Released -eq $script:Disposed -and -not$script:Held -and $script:OutsideReads -eq 0) "$name releases acquired gates and certifies only inside them"
   if($Kind -eq 'game'){$null=Read-Status 'status-first'}
   if($retained){
    if($Mode -eq 'enumeration-error'){if($null -ne $actualDirectoryBody){Set-Item Function:\Get-RooIndustriesProcessOperationDirectories -Value $actualDirectoryBody}else{Remove-Item Function:\Get-ChildItem}}
@@ -173,11 +174,11 @@ function Invoke-Scenario([string]$Kind,[string]$Mode,[string]$RootStatus='applie
    $journal=[pscustomobject]@{schemaVersion=1;status='restored'};Write-Journal
    $script:Retry=$true;$script:Values[$control]=$target;$script:CandidateCalls=0;$script:Writes.Clear();$script:PreviewLoads=0;$script:FreshLoads=0
    $retry=Invoke-Undo;Save $directory 'retry' $retry
-   Save $directory 'retry-observation' @{values=$script:Values;writes=@($script:Writes.ToArray());previewLoads=$script:PreviewLoads;freshLoads=$script:FreshLoads;acquired=$script:Acquired;released=$script:Released;held=$script:Held}
+   Save $directory 'retry-observation' @{values=$script:Values;writes=@($script:Writes.ToArray());previewLoads=$script:PreviewLoads;freshLoads=$script:FreshLoads;acquired=$script:Acquired;released=$script:Released;disposed=$script:Disposed;held=$script:Held}
    Check ($script:PreviewLoads -eq 1) "$name explicit retry resets positive, negative and failed preview snapshots"
    Check ($(if($Kind -eq 'profile'){$retry.status -eq 'success' -and $retry.result.restorePendingCount -eq 0}else{$retry.status -eq 'completed' -and -not$retry.restorable})) "$name explicit retry finishes after native ownership releases"
    Check ($script:Values[$control] -eq $original -and @($script:Writes|Where-Object {$_.control -eq $control -and $_.value -eq $original}).Count -eq 1 -and $script:Writes.Count -eq $(if($uncertain){2}else{1})) "$name retry restores saved original and does not repeat a restored peer"
-   Check ($script:Acquired -eq $script:Released -and -not$script:Held) "$name retry releases all gates"
+   Check ($script:Acquired -eq $script:Released -and $script:Released -eq $script:Disposed -and -not$script:Held) "$name retry releases all gates"
   }
   $cases.Add([pscustomobject]@{name=$name;retained=$retained;status=$first.result.status})|Out-Null
  }
@@ -196,11 +197,11 @@ function Invoke-TwoProcessScenario([string]$Kind){
    $firstProcess=[Diagnostics.Process]::GetCurrentProcess();$byId=@{};$byId[$firstProcess.Id]=$firstProcess;$byId[$probe.Id]=$probe
    $script:TwoValues=@{};$script:TwoValues[$firstProcess.Id]='AboveNormal';$script:TwoValues[$probe.Id]='High'
    $script:TwoWrites=New-Object System.Collections.Generic.List[object]
-   $script:Held=$false;$script:Acquired=0;$script:Released=0;$script:OutsideReads=0
+   $script:Held=$false;$script:Acquired=0;$script:Released=0;$script:Disposed=0;$script:OutsideReads=0
    $dataRoot=Join-Path $directory 'data';$operation=Join-Path $dataRoot 'operations/process-second';[IO.Directory]::CreateDirectory($operation)|Out-Null
    $journalPath=Join-Path $operation 'journal.json'
    [IO.File]::WriteAllText($journalPath,([pscustomobject]@{schemaVersion=1;status='applied';preview=@{identity=@{processId=$probe.Id;creationTimeFileTimeUtc=[string]$probe.StartTime.ToUniversalTime().ToFileTimeUtc();executablePath=$probe.MainModule.FileName}};changes=@(@{name='cpuPriority';status='applied';original='AboveNormal';desired='High';observed='High'})}|ConvertTo-Json -Depth 30),$utf8)
-   $snapshots=@(foreach($process in @($firstProcess,$probe)){[pscustomobject]@{processId=$process.Id;processName=if($process.Id -eq $firstProcess.Id){'First'}else{'Second'};originalPriorityClass='Normal';controlChanges=@([pscustomobject]@{control='priorityClass';proposedValue='AboveNormal';outcome='applied'})}})
+   $snapshots=@(foreach($process in @($firstProcess,$probe)){New-FixtureSnapshot $process @{originalPriorityClass='Normal';controlChanges=@([pscustomobject]@{control='priorityClass';proposedValue='AboveNormal';outcome='applied'})}})
    $backupFile=Join-Path $directory 'backup.json';$sessionFile=Join-Path $directory 'session.json'
    Save $directory 'backup' @{actionId='performance.gameTune.startSession';dryRun=$false;sessionId='two-session';profileId='two-profile';backupId='two-backup';snapshots=$snapshots}
    Save $directory 'session' @{sessionId='two-session';profileId='two-profile';dryRun=$false;status='completed';sessionStatus='completed';restorable=$true;backupManifestPath=$backupFile;restoredItems=@();changedItems=@();skippedItems=@();completedAtUtc=$null}
@@ -209,13 +210,12 @@ function Invoke-TwoProcessScenario([string]$Kind){
    function Resolve-RooIndustriesPath {param($Path,$DefaultPath) return $Path}
    function Resolve-RooIndustriesGameTuneSessionFile {param($SessionId,$SessionPath,$StateRoot) return $sessionFile}
    function Resolve-RooIndustriesGameTuneStateRoot {param($StateRoot) return $directory}
-   function Get-TwoState([int]$Id){return [pscustomobject]@{priorityClass=$script:TwoValues[$Id];process=$byId[$Id]}}
+   function Get-TwoState([int]$Id){return [pscustomobject]@{exists=$true;priorityClass=$script:TwoValues[$Id];process=$byId[$Id]}}
    function Get-TwoCandidate($Entry){$state=Get-TwoState $Entry.processId;return [pscustomobject]@{exists=$true;matches=$true;instanceEnded=$false;process=$state.process;currentPriorityClass=$state.priorityClass;currentControlState=$state;blockedReason=$null;reason=$null}}
    function Get-RestoreCandidate {param($Snapshot) return Get-TwoCandidate $Snapshot}
    function Get-RooIndustriesGameTuneLiveProcessIdentity {param($Entry) return Get-TwoCandidate $Entry}
    function Get-RooIndustriesProcessControlState {param($ProcessId,$Unused,[switch]$ReadGpu) return Get-TwoState $ProcessId}
-   function Enter-RooIndustriesGovernorGate {param($Seconds) $script:Held=$true;$script:Acquired++;return [pscustomobject]@{fixtureGate=$true}}
-   function Exit-RooIndustriesGovernorGate {param($Gate) if($null -ne $Gate){$script:Held=$false;$script:Released++}}
+   function Enter-RooIndustriesGovernorGate {param($Seconds) $script:Held=$true;$script:Acquired++;return New-FixtureGovernorGate}
    function Get-RooIndustriesProcessControlReadback {param($Process,$Control) if(-not$script:Held){$script:OutsideReads++};return $script:TwoValues[$Process.Id]}
    function Invoke-RooIndustriesProcessControlChange {param($Process,$Change) $script:TwoWrites.Add([pscustomobject]@{processId=$Process.Id;value=$Change.proposedValue})|Out-Null;$script:TwoValues[$Process.Id]=$Change.proposedValue;$Change.outcome='applied'}
    function Write-RooIndustriesJsonOutput {param($Value,$OutputPath) return $Value}
@@ -227,17 +227,17 @@ function Invoke-TwoProcessScenario([string]$Kind){
    }
    . $ownershipMeter
    $first=Invoke-TwoUndo;Save $directory 'first' $first
-   Save $directory 'first-observation' @{proof='Two distinct live Linux processes and real journal/reader/restore bodies; simulated process controls and gate';firstProcessId=$firstProcess.Id;secondProcessId=$probe.Id;values=@($byId.Keys|ForEach-Object {[pscustomobject]@{processId=$_;value=$script:TwoValues[$_]}});writes=@($script:TwoWrites.ToArray());previewLoads=$script:PreviewLoads;freshLoads=$script:FreshLoads;acquired=$script:Acquired;released=$script:Released;outsideCertificationReads=$script:OutsideReads;held=$script:Held}
+   Save $directory 'first-observation' @{proof='Two distinct live Linux processes and real journal/reader/restore bodies; simulated process controls and gate';firstProcessId=$firstProcess.Id;secondProcessId=$probe.Id;values=@($byId.Keys|ForEach-Object {[pscustomobject]@{processId=$_;value=$script:TwoValues[$_]}});writes=@($script:TwoWrites.ToArray());previewLoads=$script:PreviewLoads;freshLoads=$script:FreshLoads;acquired=$script:Acquired;released=$script:Released;disposed=$script:Disposed;outsideCertificationReads=$script:OutsideReads;held=$script:Held}
    Check ($firstProcess.Id -ne $probe.Id -and $script:PreviewLoads -eq 1) "$name loads all claims once before projecting two distinct process identities"
    Check ($(if($Kind -eq 'profile'){$first.result.restorePendingCount -eq 1}else{$first.restorable}) -and $first.result.status -eq 'partial') "$name retains only the second process recovery"
    Check ($script:TwoValues[$firstProcess.Id] -eq 'Normal' -and $script:TwoValues[$probe.Id] -eq 'High' -and $script:TwoWrites.Count -eq 1 -and $script:TwoWrites[0].processId -eq $firstProcess.Id -and @($first.result.leftAsSetItems).Count -eq 0) "$name restores the first process once and never certifies or writes the second owned field"
    [IO.File]::WriteAllText($journalPath,'{"schemaVersion":1,"status":"restored"}',$utf8)
-   $script:TwoValues[$probe.Id]='AboveNormal';$script:TwoWrites.Clear();$script:PreviewLoads=0;$script:FreshLoads=0
+   $script:TwoValues[$probe.Id]='AboveNormal';$script:TwoWrites.Clear();$script:PreviewLoads=0;$script:FreshLoads=0;$retryGates=$script:Acquired
    $retry=Invoke-TwoUndo;Save $directory 'retry' $retry
-   Save $directory 'retry-observation' @{values=@($byId.Keys|ForEach-Object {[pscustomobject]@{processId=$_;value=$script:TwoValues[$_]}});writes=@($script:TwoWrites.ToArray());previewLoads=$script:PreviewLoads;freshLoads=$script:FreshLoads;acquired=$script:Acquired;released=$script:Released;outsideCertificationReads=$script:OutsideReads;held=$script:Held}
+   Save $directory 'retry-observation' @{values=@($byId.Keys|ForEach-Object {[pscustomobject]@{processId=$_;value=$script:TwoValues[$_]}});writes=@($script:TwoWrites.ToArray());previewLoads=$script:PreviewLoads;freshLoads=$script:FreshLoads;acquired=$script:Acquired;released=$script:Released;disposed=$script:Disposed;outsideCertificationReads=$script:OutsideReads;held=$script:Held}
    Check ($(if($Kind -eq 'profile'){$retry.status -eq 'success' -and $retry.result.restorePendingCount -eq 0}else{$retry.status -eq 'completed' -and -not$retry.restorable}) -and $script:PreviewLoads -eq 1) "$name explicit retry resets the all-process snapshot and finishes"
    Check ($script:TwoValues[$firstProcess.Id] -eq 'Normal' -and $script:TwoValues[$probe.Id] -eq 'Normal' -and $script:TwoWrites.Count -eq 1 -and $script:TwoWrites[0].processId -eq $probe.Id) "$name retry restores only the second process original"
-   Check ($script:FreshLoads -eq 1 -and $script:Acquired -eq $script:Released -and -not$script:Held -and $script:OutsideReads -eq 0) "$name fresh verification for the first original remains inside the released gate"
+   Check ($script:Acquired-$retryGates -eq 2 -and $script:FreshLoads -eq 2 -and $script:Acquired -eq $script:Released -and $script:Released -eq $script:Disposed -and -not$script:Held -and $script:OutsideReads -eq 0) "$name retry verifies each process with fresh ownership inside its own released gate"
    $cases.Add([pscustomobject]@{name=$name;retained=$true;status=$first.result.status})|Out-Null
   }
  }finally{
@@ -245,10 +245,20 @@ function Invoke-TwoProcessScenario([string]$Kind){
   Save $directory 'cleanup' @{ownedProcessId=$probeId;exited=$exited}
  }
 }
-foreach($kind in 'profile','game'){
- if($Modes.Count -eq 0 -or 'second-process' -in $Modes){Invoke-TwoProcessScenario $kind}
- foreach($mode in 'apply-once','original','arrival-left','arrival-original','writer-arrival','protected-launcher','protected-game','alias','cpuSets','different-pid','different-creation','different-path','different-creation-path','different-pid-path','missing-journal','missing-operations','unrelated-file','unknown-schema','unknown-root','unknown-change','unknown-control','missing-identity','invalid-pid','invalid-creation','relative-path','scalar-changes','null-change','scalar-root','array-root','malformed-json','unreadable-journal','directory-error','enumeration-error','cached-positive-release','cached-error-repair'){if($Modes.Count -eq 0 -or $mode -in $Modes){Invoke-Scenario $kind $mode}}
- if($Modes.Count -eq 0 -or 'table' -in $Modes){foreach($root in 'applying','applied','needsReconciliation','restored','expired'){foreach($change in 'pending','unchanged','applyIntent','applied','restoreIntent','restored','leftAsSet'){Invoke-Scenario $kind 'table' $root $change}}}
+$probeRoot=Join-Path $OutRoot 'probes';[IO.Directory]::CreateDirectory($probeRoot)|Out-Null
+$nativeProbe=$null
+try {
+ $nativeProbe=Start-FixtureProbe $probeRoot 'NativeTarget'
+ Save $OutRoot 'owned-probes' @{processes=@(@{processId=$nativeProbe.Id;processName=$nativeProbe.ProcessName})}
+ foreach($kind in 'profile','game'){
+  if($Modes.Count -eq 0 -or 'second-process' -in $Modes){Invoke-TwoProcessScenario $kind}
+  foreach($mode in 'apply-once','original','arrival-left','arrival-original','writer-arrival','protected-launcher','protected-game','alias','cpuSets','different-pid','different-creation','different-path','different-creation-path','different-pid-path','missing-journal','missing-operations','unrelated-file','unknown-schema','unknown-root','unknown-change','unknown-control','missing-identity','invalid-pid','invalid-creation','relative-path','scalar-changes','null-change','scalar-root','array-root','malformed-json','unreadable-journal','directory-error','enumeration-error','cached-positive-release','cached-error-repair'){if($Modes.Count -eq 0 -or $mode -in $Modes){Invoke-Scenario $kind $mode}}
+  if($Modes.Count -eq 0 -or 'table' -in $Modes){foreach($root in 'applying','applied','needsReconciliation','restored','expired'){foreach($change in 'pending','unchanged','applyIntent','applied','restoreIntent','restored','leftAsSet'){Invoke-Scenario $kind 'table' $root $change}}}
+ }
+} finally {
+ $stopped=@(if($null -ne $nativeProbe){Stop-FixtureProbe $nativeProbe})
+ Save $OutRoot 'cleanup' @{processes=$stopped}
+ Check (@($stopped|Where-Object {-not$_.exited}).Count -eq 0) 'owned probe processes exited'
 }
 & {
  foreach($path in 'backend/scripts/OperationState.Common.ps1','backend/scripts/ProcessProfile.Common.ps1','backend/scripts/GameTuneSession.Common.ps1'){

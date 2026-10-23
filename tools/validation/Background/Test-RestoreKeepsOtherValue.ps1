@@ -174,7 +174,7 @@ function Invoke-ProfileScenario([string]$name,[ValidateSet('before','race','back
      [IO.File]::WriteAllText((Join-Path $damaged 'journal.json'),'{',$utf8)
     }else{
      $ready=Join-Path $directory 'gate-held.txt'
-     $hold="`$m=[Threading.Mutex]::new(`$false,'Global\RooIndustriesGovernorGate-"+[Security.Principal.WindowsIdentity]::GetCurrent().User.Value+"');if(`$m.WaitOne(10000)){[IO.File]::WriteAllText('"+$ready+"','held');while(-not[IO.File]::Exists('"+$release+"')){Start-Sleep -Milliseconds 50};`$m.ReleaseMutex()};`$m.Dispose()"
+     $hold="`$m=[Threading.Mutex]::new(`$false,'Global\RooIndustriesGovernorGate-"+[Security.Principal.WindowsIdentity]::GetCurrent().User.Value+"');if(`$m.WaitOne(10000)){[IO.File]::WriteAllText('"+$ready.Replace("'","''")+"','held');while(-not[IO.File]::Exists('"+$release.Replace("'","''")+"')){Start-Sleep -Milliseconds 50};`$m.ReleaseMutex()};`$m.Dispose()"
      $p=Start-Process (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe') -ArgumentList @('-NoProfile','-NonInteractive','-EncodedCommand',[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($hold))) -WindowStyle Hidden -PassThru
      $holder=[pscustomobject]@{process=$p;owned=(New-OwnedProcess $p)}
      $deadline=[DateTime]::UtcNow.AddSeconds(15);while(-not[IO.File]::Exists($ready)){if([DateTime]::UtcNow -gt $deadline){throw 'The fixture could not hold the governor gate'};Start-Sleep -Milliseconds 50}
