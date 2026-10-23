@@ -157,7 +157,7 @@ static class LaunchProfileChecks
         }
         void EndGame(Process game) { File.WriteAllText(Path.Combine(games.Single(item => item.Process == game).Root, "stop"), ""); Check(game.WaitForExit(15000), "The game fixture exits"); }
         async Task<bool> Restored(string sessionRoot) => GameSessionDisplay.Restored(await App().ReadGameSessionAsync(sessionRoot));
-        async Task<(int Exit, string Output)> RemoveAll(string? operationsRoot = null, bool failTaskDiscovery = false)
+        async Task<(int Exit, string Output, string Error)> RemoveAll(string? operationsRoot = null, bool failTaskDiscovery = false)
         {
             var start = new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe"))
             {
@@ -176,7 +176,7 @@ static class LaunchProfileChecks
             var output = uninstall.StandardOutput.ReadToEndAsync();
             var error = uninstall.StandardError.ReadToEndAsync();
             await uninstall.WaitForExitAsync();
-            return (uninstall.ExitCode, await output + await error);
+            return (uninstall.ExitCode, await output, await error);
         }
 
         Exception? scenarioError = null;
@@ -349,7 +349,7 @@ static class LaunchProfileChecks
                     }
                 }
                 Console.WriteLine(JsonSerializer.Serialize(new { discoveryFailed, signInSafe, updateBlocked }));
-                Check(discoveryFailed, "A task discovery error makes cleanup fail instead of reporting success");
+                Check(discoveryFailed, "A task discovery error makes cleanup fail instead of reporting success: " + discovery.Error);
                 Check(signInSafe, "Sign-in recovery keeps its task and fails while a native backup is missing");
                 Check(updateBlocked, "An older stoppedWithErrors session with an unresolved native field blocks an update");
                 Check(retryRestored,
@@ -413,7 +413,7 @@ static class LaunchProfileChecks
                 var live = await OpenLauncher();
                 await Arm(live, controls);
                 var uninstall = await RemoveAll();
-                Console.WriteLine(uninstall.Output.Trim());
+                Console.WriteLine((uninstall.Output + uninstall.Error).Trim());
                 var sessions = await Sessions();
                 Check(uninstall.Exit == 0 && sessions.Length == 6 && sessions.All(entry => GameSessionDisplay.Restored(entry.Worker) && !TaskExists(entry.SessionRoot)) && NoLaunchPolicy() && Affinity(live) == original && Io(live) == 1,
                     "Uninstall cleanup stops the running session, restores everything and removes every session task");
