@@ -41,7 +41,7 @@ switch($Phase){
         if(Get-LocalUser -Name $account -ErrorAction SilentlyContinue){throw 'The test account already exists and was not created by this test.'}
         foreach($name in $tasks){if(Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue){throw ('The test task already exists and was not created by this test: '+$name)}}
         [IO.Directory]::CreateDirectory($work,$acl)|Out-Null
-        Set-Content -LiteralPath $ownerPath -Value $account -Encoding ASCII
+        Set-Content -LiteralPath $ownerPath -Value 'pending' -Encoding ASCII
         Add-Type -TypeDefinition 'public static class RooIndustriesGovernorProbe { public static void Main(string[] args) { System.Threading.Thread.Sleep(System.TimeSpan.FromSeconds(args.Length > 0 ? int.Parse(args[0]) : 600)); } }' -OutputAssembly $probeExe -OutputType ConsoleApplication
         $password='Rg'+[Guid]::NewGuid().ToString('N').Substring(0,20)+'!7'
         & net.exe user $account $password /add /y|Out-Null
@@ -104,10 +104,10 @@ $sync=(@(& (Join-Path $app 'backend\scripts\Invoke-ProcessPolicyWorker.ps1') -Ac
     'cleanup' {
         $ErrorActionPreference='Continue'
         if(-not(Test-Path -LiteralPath $ownerPath)){Check $false 'Cleanup removes only what setup recorded, and found no setup record';break}
-        $owned=(Get-Content -Raw -LiteralPath $ownerPath).Trim()
+        $sid=(Get-Content -Raw -LiteralPath $ownerPath).Trim()
+        if($sid -notlike 'S-1-5-21-*'){Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue;Check (-not(Test-Path -LiteralPath $work)) 'Setup stopped before creating the account, so cleanup removed only the test folder';break}
         $current=try{[Security.Principal.NTAccount]::new($env:COMPUTERNAME+'\'+$account).Translate([Security.Principal.SecurityIdentifier]).Value}catch{$null}
-        if($owned -cne $account -and $current -and $current -cne $owned){Check $false 'The test account was replaced after setup, so cleanup kept it';break}
-        $sid=if($owned -cne $account){$owned}else{$current}
+        if($current -and $current -cne $sid){Check $false 'The test account was replaced after setup, so cleanup kept it';break}
         foreach($name in $tasks){try{if(Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue){Stop-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue;Unregister-ScheduledTask -TaskName $name -Confirm:$false}}catch{}}
         if($sid){foreach($task in Governor-Task $sid){try{Unregister-ScheduledTask -TaskName $task.TaskName -TaskPath $task.TaskPath -Confirm:$false}catch{}}}
         Get-CimInstance Win32_Process|Where-Object {$_.ExecutablePath -eq $probeExe -or ($sid -and (Invoke-CimMethod -InputObject $_ -MethodName GetOwnerSid).Sid -eq $sid)}|ForEach-Object {Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue}

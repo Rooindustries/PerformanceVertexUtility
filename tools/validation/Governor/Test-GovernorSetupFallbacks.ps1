@@ -14,7 +14,8 @@ function Stop-FixtureRow($Row){
     } finally {$process.Dispose()}
 }
 $watchdog='RooIndustriesOptimizationSuite.GovernorSetupWatchdog'
-if(@(Get-ScheduledTask -TaskName '*OptimizationSuite.ProcessRules.*' -ErrorAction SilentlyContinue).Count -gt 0 -or (Get-ScheduledTask -TaskName $watchdog -ErrorAction SilentlyContinue)){Check $false 'The setup fallback fixture has an isolated Task Scheduler' 'Existing governor or recovery tasks; refusing to touch them';$results|ConvertTo-Json -Depth 4|Set-Content -LiteralPath (Join-Path $OutDir 'setup-fallbacks.json') -Encoding UTF8;'RESULT failures=1';exit 1}
+$watchdogGate=[Threading.Mutex]::new($false,'Global\RooIndustriesGovernorSetupWatchdogFixture');$gateHeld=$false;try{$gateHeld=$watchdogGate.WaitOne(0)}catch [Threading.AbandonedMutexException]{$gateHeld=$true}
+if(-not $gateHeld -or @(Get-ScheduledTask -TaskName '*OptimizationSuite.ProcessRules.*' -ErrorAction SilentlyContinue).Count -gt 0 -or (Get-ScheduledTask -TaskName $watchdog -ErrorAction SilentlyContinue)){Check $false 'The setup fallback fixture has an isolated Task Scheduler' 'Existing governor or recovery tasks, or another run using them; refusing to touch them';$results|ConvertTo-Json -Depth 4|Set-Content -LiteralPath (Join-Path $OutDir 'setup-fallbacks.json') -Encoding UTF8;'RESULT failures=1';exit 1}
 $id=[Guid]::NewGuid().ToString('N').Substring(0,12)
 $started=Get-Date
 $me=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value

@@ -5,6 +5,8 @@ if(-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentit
 $others=@(Get-ScheduledTask -TaskName '*OptimizationSuite.ProcessRules.*' -ErrorAction SilentlyContinue)
 if($others.Count -gt 0){Write-Output ('SKIP This PC has '+$others.Count+' real governor tasks, which setup would suspend');return}
 $watchdog='RooIndustriesOptimizationSuite.GovernorSetupWatchdog'
+$watchdogGate=[Threading.Mutex]::new($false,'Global\RooIndustriesGovernorSetupWatchdogFixture');$gateHeld=$false;try{$gateHeld=$watchdogGate.WaitOne(0)}catch [Threading.AbandonedMutexException]{$gateHeld=$true}
+if(-not $gateHeld){Write-Output 'SKIP Another validation run is using the setup recovery task';return}
 if(Get-ScheduledTask -TaskName $watchdog -ErrorAction SilentlyContinue){Write-Output 'SKIP This PC has a pending setup recovery task, which setup would replace';return}
 $compiler=Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
 if(-not(Test-Path -LiteralPath $compiler)){throw 'The fake helper needs the Windows .NET Framework C# compiler'}
@@ -81,4 +83,5 @@ public static class FakeHost {
     if(Test-Path -LiteralPath $app){Remove-Item -LiteralPath $app -Recurse -Force}
 }
 Check (-not(Test-Path -LiteralPath $app) -and @(Get-ScheduledTask -TaskName ('*'+$id+'*') -ErrorAction SilentlyContinue).Count -eq 0 -and $null -eq (Get-ScheduledTask -TaskName $watchdog -ErrorAction SilentlyContinue)) 'The scenario removes its tasks, setup recovery task, helper and folders'
+$watchdogGate.ReleaseMutex()
 if($script:Failed -gt 0){throw ($script:Failed.ToString()+' governor setup checks failed')}

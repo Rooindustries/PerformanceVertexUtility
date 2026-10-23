@@ -17,12 +17,7 @@ static class ExclusionChecks
         var file = Path.Combine(source, "settings.txt");
         File.WriteAllText(file, "independent file sentinel");
         using var hive = RegistryKey.OpenBaseKey(RegistryHive.CurrentUser, RegistryView.Registry64);
-        var owned = OwnedRegistryKey.Create(hive, registryRoot);
-        using (var key = hive.CreateSubKey(keyPath))
-        {
-            key.SetValue("", "default sentinel");
-            key.SetValue("Named", "named sentinel");
-        }
+        OwnedRegistryKey? owned = null;
         ApplicationCleanupPreview? preview = null;
         void Reject(Action action, string message)
         {
@@ -32,6 +27,12 @@ static class ExclusionChecks
         }
         try
         {
+            owned = OwnedRegistryKey.Create(hive, registryRoot);
+            using (var key = hive.CreateSubKey(keyPath))
+            {
+                key.SetValue("", "default sentinel");
+                key.SetValue("Named", "named sentinel");
+            }
             var paths = new CleanupExclusions { Paths = [file], Registry = [] };
             var matcher = new CleanupExclusionMatcher(paths);
             check(matcher.Match(file.ToUpperInvariant(), false) is not null && matcher.Match(source, true) is not null,
@@ -148,7 +149,7 @@ static class ExclusionChecks
         finally
         {
             if (preview?.Registry is { } part) hive.DeleteSubKeyTree(OperationFiles.Read<RegistryCleanupPreview>(part.PreviewPath).Receipt.KeyPath, false);
-            owned.Dispose();
+            owned?.Dispose();
             if (Directory.Exists(root)) Directory.Delete(root, true);
         }
         check(!Directory.Exists(root), "Exclusion validation removes its owned files, registry data and receipts");
