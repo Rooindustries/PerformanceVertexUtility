@@ -6,6 +6,10 @@ if(-not $DotNetPath){$candidate=Join-Path $env:USERPROFILE '.dotnet/dotnet.exe';
 if($LASTEXITCODE -ne 0){throw 'Game-session display checks failed'}
 & (Join-Path $root 'backend/scripts/Build-OptimizerHost.ps1') -DotNetPath $DotNetPath
 if($LASTEXITCODE -ne 0){throw 'Session package build failed'}
+if($Mode -eq 'session-recovery'){
+    & $DotNetPath publish (Join-Path $root 'backend/native/Optimizer.Host/Optimizer.Host.csproj') -c Release -r win-x64 --self-contained true -o (Join-Path $root 'backend/bin/optimizer') -p:UseSharedCompilation=false
+    if($LASTEXITCODE -ne 0){throw 'Release helper build failed'}
+}
 & $DotNetPath publish (Join-Path $root 'tools/validation/ProtectedSessions/ProtectedSessions.csproj') -c Release -o (Join-Path $root 'tools/validation/ProtectedSessions/bin/publish') -p:UseSharedCompilation=false
 if($LASTEXITCODE -ne 0){throw 'GPU fixture build failed'}
 $suite=if($Mode){'--'+$Mode}else{'--game-sessions'}

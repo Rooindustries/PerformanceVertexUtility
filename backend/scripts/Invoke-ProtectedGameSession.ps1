@@ -5,6 +5,7 @@ param(
     [string]$HostDirectory='', [string]$DotNetPath='', [switch]$AcceptLauncherScope, [switch]$AcceptEarlierVersion, [switch]$ConfirmApply
 )
 $ErrorActionPreference='Stop'
+$dotNetOverride=$DotNetPath
 . (Join-Path $PSScriptRoot 'BrandCompatibility.Common.ps1')
 $repoRoot=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 if(-not $HostDirectory){$HostDirectory=Join-Path $repoRoot 'backend\bin\optimizer'}
@@ -53,7 +54,7 @@ if($Action -eq 'RemoveAll'){
         $root=Join-Path $directory.FullName 'session'
         if(-not(Test-Path -LiteralPath (Join-Path $root 'session.json'))){continue}
         try{
-            $result=(& $PSCommandPath -Action Stop -SessionRoot $root -HostDirectory $HostDirectory -DotNetPath $DotNetPath -ConfirmApply)|ConvertFrom-Json
+            $result=(& $PSCommandPath -Action Stop -SessionRoot $root -HostDirectory $HostDirectory -DotNetPath $dotNetOverride -ConfirmApply)|ConvertFrom-Json
             if(-not(Test-Restored $result.data.worker)){throw 'The session still needs recovery; its saved state and task were kept.'}
             $results+=@{sessionRoot=$root;status='restored'}
         }
