@@ -1114,7 +1114,7 @@ $script:RooIndustriesLeftAsSet = 'Left as another program set it.'
 $script:RooIndustriesChangedExternally = 'The control changed externally; its current value was preserved.'
 $script:RooIndustriesLeftAsSetChangedBack = 'Undo couldn''t confirm another program still holds it, so it was left alone. Run Undo again.'
 $script:RooIndustriesProcessOperationManaged = 'Another saved change still uses this control. Undo that change first, then try again.'
-$script:RooIndustriesUnprovenWrite = 'The app can''t tell whether it set this value, so it was left alone. It resets when that app restarts.'
+$script:RooIndustriesUnprovenWrite = 'Undo couldn''t confirm it set this value, so it was left alone. It resets when that app restarts.'
 $script:RooIndustriesGovernorBusy = 'Background limits were busy, so this setting was left alone. Try again in a moment.'
 
 function Get-RooIndustriesRestoreControlOwnershipReason {
