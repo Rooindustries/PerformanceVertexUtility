@@ -192,6 +192,7 @@ static class BugReportChecks
             check(plain == "<user> signed in and <user> left on <pc-name> with <pc-name> and <sid>", "An account named like a placeholder never turns a redacted name into <<user>>");
             RedactorBoundaries(check, root, logs, specs);
             await RedactorComponentsAsync(check, root, logs);
+            await AccountFormsAsync(check, root);
 
             var longText = "@everyone " + new string('x', 10_000);
             var payload = BugReportService.BuildPayload(Report(longText, "<@123> me@example.com",
@@ -991,6 +992,388 @@ static class BugReportChecks
             }
             finally { Directory.Delete(fixture, true); }
             check(!Directory.Exists(fixture), "Legacy boundary fixture is removed for " + JsonSerializer.Serialize(raw));
+        }
+    }
+
+    public static async Task AccountFormsAsync(Action<bool, string> check, string root)
+    {
+        var relaxed = new JsonSerializerOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
+        var own = new BugRedactor(@"C:\Users\Alice", "Alice", "GAMER-PC");
+        var moved = new BugRedactor(@"D:\Profiles\Alice", "Alice", "GAMER-PC", [@"D:\Profiles\Bob", @"\\fs01\profiles$\Carol.V6", @"E:\Client", @"\\nas\Fixture", @"D:\Profiles\Public", @"D:\Profiles\Default", @"\\fs02.corp.example\roam$\Dave", @"\\192.0.2.5\roam$\Erin"]);
+        var single = new BugRedactor(@"C:\Users\A", "A", "X");
+        var direct = new BugRedactor(@"E:\Client", "Alice", "GAMER-PC", [@"\\nas\Fixture"]);
+        var nested = new BugRedactor(@"C:\Users\Alice", "Alice", "GAMER-PC", [@"D:\Work\Users\Bob", @"\\fs01\Users\Carol", @"D:\Work\Documents and Settings\Bob"]);
+        var ownNested = new BugRedactor(@"D:\Work\Users\Alice", "Alice", "GAMER-PC");
+        var escapeLetter = new BugRedactor(@"C:\Users\n", "n", "GAMER-PC");
+        var cases = new List<(string Issue, BugRedactor Redactor, string Input, string Expected, string[] Private)>
+        {
+            ("Unregistered UNC Users", own, "//fs01/share/Users/Bob/x and \\/\\/fs01\\/share\\/Users\\/Carol\\/y", "//fs01/share/Users/<user>/x and \\/\\/fs01\\/share\\/Users\\/<user>\\/y", ["Bob", "Carol"]),
+            ("Users URL", own, "https://host/Users/Bob/x and https:\\/\\/host\\/Users\\/Carol\\/y", "https://host/Users/Bob/x and https:\\/\\/host\\/Users\\/Carol\\/y", []),
+            ("Own nested profile", ownNested, @"D:\Work\Users\Alice\x and d:/work/users/Alice/y", @"%USERPROFILE%\x and %USERPROFILE%/y", []),
+            ("Entra SID", own, @"Signed in as S-1-12-1-111-222-333-444 under HKEY_USERS\s-1-12-1-111-222-333-444\Software", @"Signed in as <sid> under HKEY_USERS\<sid>\Software", ["111-222-333-444"]),
+            ("Entra SID", own, "System S-1-5-18, Administrators S-1-5-32-544, Everyone S-1-1-0 and S-1-12-1 stay", "System S-1-5-18, Administrators S-1-5-32-544, Everyone S-1-1-0 and S-1-12-1 stay", []),
+            ("Relocated profile", moved, @"D:\Profiles\Bob\AppData\x.log and D:\Profiles\Zqxnew\y", @"D:\Profiles\<user>\AppData\x.log and D:\Profiles\<user>\y", ["Bob", "Zqxnew"]),
+            ("Relocated profile", moved, @"D:\Profiles\Alice\AppData\x.log, D:\Profiles\Public\p and D:\ProfilesOld\q", @"%USERPROFILE%\AppData\x.log, D:\Profiles\Public\p and D:\ProfilesOld\q", []),
+            ("Relocated profile", moved, @"D:\Profiles\Alice Smith\x and d:/PROFILES/bobby/y", @"D:\Profiles\<user>\x and d:/PROFILES/<user>/y", ["Smith", "bobby"]),
+            ("Relocated profile", moved, @"\\fs01\profiles$\Carol.V6\x and \\?\UNC\fs01\profiles$\Zqxroam.V6\y", @"\\fs01\profiles$\<user>\x and \\?\UNC\fs01\profiles$\<user>\y", ["Carol", "Zqxroam"]),
+            ("Relocated profile", moved, @"E:\Client\x, \\nas\Fixture\y, E:\Games\z and \\nas\share\w", @"E:\<user>\x, \\nas\<user>\y, E:\Games\z and \\nas\share\w", ["Client", "Fixture"]),
+            ("Relocated profile", moved, @"E:\ClientGames\x and \\nas\FixtureBackup\y", @"E:\ClientGames\x and \\nas\FixtureBackup\y", []),
+            ("Relocated profile", direct, @"E:\ClientGames\x and \\nas\FixtureBackup\y", @"E:\ClientGames\x and \\nas\FixtureBackup\y", []),
+            ("Relocated profile", direct, @"E:\Client\x", @"%USERPROFILE%\x", []),
+            ("Nested profile root", nested, "D:/Work/Users/Bob/AppData/x and d:/work/USERS/Carol/y", "D:/Work/Users/<user>/AppData/x and d:/work/USERS/<user>/y", ["Bob", "Carol"]),
+            ("Nested profile root", nested, @"D:\Work\Users\Bob\x and //fs01/Users/Carol/y and \/\/fs01\/Users\/Zqxnew\/z", @"D:\Work\Users\<user>\x and //fs01/Users/<user>/y and \/\/fs01\/Users\/<user>\/z", ["Bob", "Carol", "Zqxnew"]),
+            ("Nested profile root", nested, "D:/Work/Documents and Settings/Bob/x", "D:/Work/Documents and Settings/<user>/x", ["Bob"]),
+            ("Old log suffix", own, @"%USERPROFILE%.Zqxsmith\AppData\x and %USERPROFILE% Zqxsmith\AppData\y", @"<user>\AppData\x and <user>\AppData\y", ["Zqxsmith"]),
+            ("Old log suffix", own, @"%userprofile%Zqxsmith", "<user>", ["Zqxsmith"]),
+            ("Old log suffix", own, @"Moved %USERPROFILE%%USERPROFILE%-Zqxold\x", @"Moved <user>\x", ["Zqxold"]),
+            ("Old log suffix", own, @"{""p"":""%USERPROFILE%\u00E9mile\\x"",""q"":""%USERPROFILE% Zqxsmith\\y""}", @"{""p"":""<user>\\x"",""q"":""<user>\\y""}", ["mile", "Zqxsmith"]),
+            ("Old log suffix", own, @"Saved to %USERPROFILE% then restarted. %USERPROFILE%. %USERPROFILE%: denied (%USERPROFILE%) %USERPROFILE%\x", @"Saved to %USERPROFILE% then restarted. %USERPROFILE%. %USERPROFILE%: denied (%USERPROFILE%) %USERPROFILE%\x", []),
+            ("Separator form", own, @"C:\\Users\\/Bob\\x and C:\Users\/Carol\x and C:/\Users/\Client/x", @"C:\\Users\\/<user>\\x and C:\Users\/<user>\x and C:/\Users/\<user>/x", ["Bob", "Carol", "Client"]),
+            ("Separator form", own, @"C:\Users\.\Bob\x and C:\\Users\\.\\Carol\\x and C:\Users\" + @"..\Users\Client\x and C:\Users\" + @"..\Program Files\x", @"C:\Users\.\<user>\x and C:\\Users\\.\\<user>\\x and C:\Users\" + @"..\Users\<user>\x and C:\Users\" + @"..\Program Files\x", ["Bob", "Carol", "Client"]),
+            ("Separator form", own, @"Scanning C:\\Users\\\" + @"nFound 3 profiles\nDone and Source : C:\\Users\\\r\nDest : D:\\Backup\\", @"Scanning C:\\Users\\\" + @"nFound 3 profiles\nDone and Source : C:\\Users\\\r\nDest : D:\\Backup\\", []),
+            ("JSON spelling", own, @"C:/Users/<user>\u003C\u0075ser\u003EZqxbob/x and C:/Users/<user>\u003C\u0070c-\u006Eame\u003EZqxcarol/y", "C:/Users/<user>/x and C:/Users/<user>/y", ["Zqxbob", "Zqxcarol"]),
+            ("JSON spelling", own, @"{""p"":""C:\/Users\/Bob\/x"",""q"":""C:\/Users\/Alice\/y""}", @"{""p"":""C:\/Users\/<user>\/x"",""q"":""%USERPROFILE%\/y""}", ["Bob"]),
+            ("JSON spelling", own, @"{""p"":""C:\\\u0055sers\\Zqxother\\x"",""q"":""C:\\Us\u0065rs\\Alice\\y""}", @"{""p"":""C:\\\u0055sers\\<user>\\x"",""q"":""%USERPROFILE%\\y""}", ["Zqxother"]),
+            ("JSON spelling", moved, @"{""p"":""D:\\Pro\u0066iles\\Zqxmoved\\x"",""q"":""\\\\fs01\\pro\u0066iles$\\Zqxroam\\y""}", @"{""p"":""D:\\Pro\u0066iles\\<user>\\x"",""q"":""\\\\fs01\\pro\u0066iles$\\<user>\\y""}", ["Zqxmoved", "Zqxroam"]),
+            ("JSON spelling", own, @"C:/\u0055sers/Zqxother/x and C:/\u0055sersBackup/Games/y", @"C:/\u0055sers/<user>/x and C:/\u0055sersBackup/Games/y", ["Zqxother"]),
+            ("JSON spelling", own, @"{""p"":""\u0043:\u005cUsers\u005cZqxother\u005cx"",""q"":""\u0043:\u005cUsers\u005cAlice\u005cy""}", @"{""p"":""\u0043:\u005cUsers\u005c<user>\u005cx"",""q"":""%USERPROFILE%\u005cy""}", ["Zqxother"]),
+            ("JSON spelling", own, @"C:/\u0055sers/\u003Cuser\u003EZqxother/x and C:/\u0055sers/Public/y", @"C:/\u0055sers/<user>/x and C:/\u0055sers/Public/y", ["Zqxother"]),
+            ("Entra SID", own, @"\u0053-1-12-1-111-222-333-444 and \u0053-1-5-21-111-222-333-1001; system \u0053-1-5-18", @"<sid> and <sid>; system \u0053-1-5-18", ["111-222-333"]),
+            ("Device path", own, @"\Device\HarddiskVolume3\Users\Bob\x and \\?\GLOBALROOT\Device\HarddiskVolume3\Users\Carol\y", @"\Device\HarddiskVolume3\Users\<user>\x and \\?\GLOBALROOT\Device\HarddiskVolume3\Users\<user>\y", ["Bob", "Carol"]),
+            ("Device path", own, @"\\.\HarddiskVolume3\Users\Bob\x, \\?\Volume{0a1b2c3d-0000-0000-0000-000000000000}\Users\Carol\y and \\GAMER-PC\C$\Users\Client\z", @"\\.\HarddiskVolume3\Users\<user>\x, \\?\Volume{0a1b2c3d-0000-0000-0000-000000000000}\Users\<user>\y and \\<pc-name>\C$\Users\<user>\z", ["Bob", "Carol", "Client"]),
+            ("Device path", own, @"\??\C:\Users\Bob\x, \\?\C:\Users\Carol\y and \\.\C:\Users\Alice\z", @"\??\C:\Users\<user>\x, \\?\C:\Users\<user>\y and \\.\%USERPROFILE%\z", ["Bob", "Carol"]),
+            ("Device path", own, @"%SystemDrive%\Users\Bob\x and C:\Documents and Settings\Carol\y", @"%SystemDrive%\Users\<user>\x and C:\Documents and Settings\<user>\y", ["Bob", "Carol"]),
+            ("Device path", own, @"https://example.com/users/fixture, HKEY_USERS\.DEFAULT and Users\Groups stay", @"https://example.com/users/fixture, HKEY_USERS\.DEFAULT and Users\Groups stay", []),
+            ("One-letter name", single, @"A setting failed on X. X\A signed in, AzureAD\A synced, \\X\share\x and C:\Users\A\y. Drive A: ok", @"A setting failed on X. <pc-name>\<user> signed in, AzureAD\<user> synced, \\<pc-name>\share\x and %USERPROFILE%\y. Drive A: ok", []),
+        };
+        check(escapeLetter.Redact(@"{""m"":""on GAMER-PC\n""} and GAMER-PC\\n") == @"{""m"":""on <pc-name>\n""} and <pc-name>\\<user>",
+            "A one-letter account named like a JSON escape keeps JSON newlines valid and is redacted after an escaped backslash");
+        foreach (var suffix in new[] { "Data", ".Backup", "-cache", " Games" })
+        {
+            var input = @"E:\Client" + suffix + @"\x and \\nas\Fixture" + suffix + @"\y";
+            cases.Add(("Relocated profile", moved, input, input, []));
+            cases.Add(("Relocated profile", direct, input, input, []));
+        }
+        check(moved.Redact(@"\nas\Fixture\x") == @"\nas\Fixture\x", "An unquoted single-rooted local path is not a UNC profile");
+        cases.Add(("Ambiguous UNC JSON", moved, @"""\\nas\\Fixture\\x""", @"""\\nas\\<user>\\x""", ["Fixture"]));
+        foreach (var input in new[] { @"C:\nas\Fixture\x", "C:/nas/Fixture/x", @"nas\Fixture\x",
+            "https://host/nas/Fixture/x", "https://nas/Fixture/x", "https://fs01/profiles$/Bob/x", "https://host/fs01/profiles$/Bob/x",
+            "https://host//nas/Fixture/x", @"https:\/\/fs01\/profiles$\/Bob\/x" })
+            cases.Add(("Relocated profile", moved, input, input, []));
+        cases.Add(("Relocated profile", moved, @"\\.\UNC\fs01\profiles$\Zqxroam\x and //fs01/profiles$/Zqxroam/y and \/\/fs01\/profiles$\/Zqxroam\/z",
+            @"\\.\UNC\fs01\profiles$\<user>\x and //fs01/profiles$/<user>/y and \/\/fs01\/profiles$\/<user>\/z", ["Zqxroam"]));
+        cases.Add(("Windows path in URL", own, "https://host/?file=C:/Users/Bob/x", "https://host/?file=C:/Users/<user>/x", ["Bob"]));
+        cases.Add(("UNC value in URL", own, "https://host/?file=//fs01/Users/Carol/x", "https://host/?file=//fs01/Users/<user>/x", ["Carol"]));
+        cases.Add(("UNC value in URL", moved, "https://host/?file=//fs01/profiles$/Zqxquery/x", "https://host/?file=//fs01/profiles$/<user>/x", ["Zqxquery"]));
+        cases.Add(("UNC value in URL", own, @"https:\/\/host\/?file=\/\/fs01\/Users\/Carol\/x", @"https:\/\/host\/?file=\/\/fs01\/Users\/<user>\/x", ["Carol"]));
+        cases.Add(("UNC value in URL", own, @"https://host/?file=//fs01/\u0055sers/Zqxquery/x", @"https://host/?file=//fs01/\u0055sers/<user>/x", ["Zqxquery"]));
+        cases.Add(("UNC value in URL", own, @"https://host/\u003Ffile\u003D//fs01/Users/Zqxquery/x\u0026next\u003Dhttps://mirror/Users/PublicPage/x",
+            @"https://host/\u003Ffile\u003D//fs01/Users/<user>/x\u0026next\u003Dhttps://mirror/Users/PublicPage/x", ["Zqxquery"]));
+        cases.Add(("UNC value in URL", own, @"\u0048\u0054\u0054\u0050\u0053\u003A\u002F\u002Fhost/?file=//fs01/Users/Zqxquery/x",
+            @"\u0048\u0054\u0054\u0050\u0053\u003A\u002F\u002Fhost/?file=//fs01/Users/<user>/x", ["Zqxquery"]));
+        cases.Add(("UNC value in URL", moved, "https://host/Users/PublicPage/x?file=//fs01/Users/Zqxquery/x&next=https://fs01/profiles$/PublicPage/x&other=//fs01/profiles$/Zqxother/y",
+            "https://host/Users/PublicPage/x?file=//fs01/Users/<user>/x&next=https://fs01/profiles$/PublicPage/x&other=//fs01/profiles$/<user>/y", ["Zqxquery", "Zqxother"]));
+        cases.Add(("UNC value in URL", own, "https://host/#file=//fs01/Users/Zqxquery/x", "https://host/#file=//fs01/Users/<user>/x", ["Zqxquery"]));
+        foreach (var input in new[] { "https://host/?next=https://fs01/Users/Carol/x", "https://host/?next=/Users/Carol/x",
+            "https://host/path&file=//fs01/Users/Carol/x", "https://host/path;file=//fs01/Users/Carol/x",
+            "note?file=//other/https://host/Users/Carol/x", "https://host/?file=//fs01/profiles$Old/Carol/x",
+            @"\u0068\u0074\u0074\u0070\u0073\u003a\u002f\u002fhost/Users/Carol/x" })
+            cases.Add(("Ordinary URL value", moved, input, input, []));
+        foreach (var boundary in new[] { "000a", "0009", "0020", "0022", "2028" })
+            cases.Add(("UNC after encoded URL boundary", own, @"https://host/x\u" + boundary + "//fs01/Users/Zqxafter/x",
+                @"https://host/x\u" + boundary + "//fs01/Users/<user>/x", ["Zqxafter"]));
+        cases.Add(("UNC after URL", moved, "https://host/x\n" + @"\\fs01\profiles$\Zqxroam\x", "https://host/x\n" + @"\\fs01\profiles$\<user>\x", ["Zqxroam"]));
+        foreach (var letter in new[] { "n", "r", "t", "b", "f" })
+        {
+            cases.Add(("Separator form", own, @"C:\\Users\\\" + letter + "Zqxname" + @"\\x", @"C:\\Users\\<user>\\x", ["Zqxname"]));
+            cases.Add(("Separator form", own, @"C:\Users\\\" + letter + "Zqxname" + @"\x", @"C:\Users\\<user>\x", ["Zqxname"]));
+        }
+        cases.Add(("dot-before-registered-root", moved, @"D:\.\Profiles\Bob\AppData\x.log", @"D:\.\Profiles\<user>\AppData\x.log", ["Bob"]));
+        cases.Add(("dotdot-inside-registered-root", moved, @"D:\Profiles\..\Profiles\Bob\AppData\x.log", @"D:\Profiles\..\Profiles\<user>\AppData\x.log", ["Bob"]));
+        cases.Add(("Registered root dot segments", moved, @"D:/Work/../Profiles/Bob/x, D:\Profiles\.\.\Zqxdots\y and \\fs01\.\profiles$\Carol.V6\z",
+            @"D:/Work/../Profiles/<user>/x, D:\Profiles\.\.\<user>\y and \\fs01\.\profiles$\<user>\z", ["Bob", "Zqxdots", "Carol"]));
+        cases.Add(("Registered root dot segments", moved, @"\u0044:/./Pro\u0066iles/Bob/x, E:\.\Client\y and D:\Profiles\Zqxfirst\..\Zqxsecond\z",
+            @"\u0044:/./Pro\u0066iles/<user>/x, E:\.\<user>\y and D:\Profiles\<user>\..\<user>\z", ["Bob", "Client", "Zqxfirst", "Zqxsecond"]));
+        cases.Add(("Registered root dot segments", moved, @"D:\.\Profiles\Alice\x and D:\Profiles\..\Games\y, D:\Profiles\x\..\..\Games\z and D:\.\ProfilesOld\w",
+            @"%USERPROFILE%\x and D:\Profiles\..\Games\y, D:\Profiles\<user>\..\..\Games\z and D:\.\ProfilesOld\w", []));
+        cases.Add(("registered-native-device", moved, @"\Device\HarddiskVolume3\Profiles\Bob\AppData\x.log", @"\Device\HarddiskVolume3\Profiles\<user>\AppData\x.log", ["Bob"]));
+        cases.Add(("registered-admin-share", moved, @"\\GAMER-PC\D$\Profiles\Bob\AppData\x.log", @"\\<pc-name>\D$\Profiles\<user>\AppData\x.log", ["Bob"]));
+        cases.Add(("Registered root alias", moved, @"\\.\HarddiskVolume3\Profiles\Bob\x, \\?\GLOBALROOT\Device\HarddiskVolume3\Profiles\Zqxglobal\y and \\?\Volume{0a1b2c3d-0000-0000-0000-000000000000}\Profiles\Zqxvolume\z",
+            @"\\.\HarddiskVolume3\Profiles\<user>\x, \\?\GLOBALROOT\Device\HarddiskVolume3\Profiles\<user>\y and \\?\Volume{0a1b2c3d-0000-0000-0000-000000000000}\Profiles\<user>\z", ["Bob", "Zqxglobal", "Zqxvolume"]));
+        cases.Add(("Registered root alias", moved, @"\\localhost\D$\Profiles\Bob\x, \\?\UNC\127.0.0.1\D$\Profiles\Zqxshare\y, \Device\HarddiskVolume3\Client\z and \Device\Mup\fs01\profiles$\Carol.V6\w",
+            @"\\localhost\D$\Profiles\<user>\x, \\?\UNC\127.0.0.1\D$\Profiles\<user>\y, \Device\HarddiskVolume3\<user>\z and \Device\Mup\fs01\profiles$\<user>\w", ["Bob", "Zqxshare", "Client", "Carol"]));
+        cases.Add(("Registered root alias", moved, @"\Device\HarddiskVolume3\ProfilesOld\x, \\GAMER-PC\D$\Games\y, \\GAMER-PC\E$\ClientGames\z and https://host/D$/Profiles/PublicPage/w",
+            @"\Device\HarddiskVolume3\ProfilesOld\x, \\<pc-name>\D$\Games\y, \\<pc-name>\E$\ClientGames\z and https://host/D$/Profiles/PublicPage/w", []));
+        cases.Add(("Registered root alias", moved, @"\\.\UNC\fs01\.\profiles$\Zqxdevice\x, ""\\.\HarddiskVolume3\.\Profiles\Zqxquoted\y"" and \\?\GLOBALROOT\Device\HarddiskVolumeShadowCopy2\Profiles\Zqxshadow\z",
+            @"\\.\UNC\fs01\.\profiles$\<user>\x, ""\\.\HarddiskVolume3\.\Profiles\<user>\y"" and \\?\GLOBALROOT\Device\HarddiskVolumeShadowCopy2\Profiles\<user>\z", ["Zqxdevice", "Zqxquoted", "Zqxshadow"]));
+        cases.Add(("Registered root alias", moved, @"\\fs02\roam$\Zqxshort\x, \\FS02.corp.example\roam$\Zqxlong\y, \\fs01.corp.example\profiles$\Zqxfqdn\z and \\192.0.2.5\roam$\Zqxip\w",
+            @"\\fs02\roam$\<user>\x, \\FS02.corp.example\roam$\<user>\y, \\fs01.corp.example\profiles$\<user>\z and \\192.0.2.5\roam$\<user>\w", ["Zqxshort", "Zqxlong", "Zqxfqdn", "Zqxip"]));
+        cases.Add(("Registered root alias", moved, @"\\fs01backup\profiles$\x, \\fs02x.corp.example\roam$\y and \\192.0.2.50\roam$\z", @"\\fs01backup\profiles$\x, \\fs02x.corp.example\roam$\y and \\192.0.2.50\roam$\z", []));
+        cases.Add(("encoded-macro", own, @"{""path"":""%USERPRO\u0046ILE%.Bob\\AppData\\x.log""}", @"{""path"":""<user>\\AppData\\x.log""}", ["Bob"]));
+        cases.Add(("encoded-macro-percent", own, @"{""path"":""\u0025USERPROFILE\u0025.Bob\\AppData\\x.log""}", @"{""path"":""<user>\\AppData\\x.log""}", ["Bob"]));
+        cases.Add(("Encoded macro", own, @"%userpro\u0066ile%Zqxglued\x and \u0025USERPROFILE\u0025%USERPROFILE%-Zqxold\y", @"<user>\x and <user>\y", ["Zqxglued", "Zqxold"]));
+        cases.Add(("Encoded macro", own, @"Saved to %USERPRO\u0046ILE% then restarted. \u0025USERPROFILE\u0025: denied", @"Saved to %USERPRO\u0046ILE% then restarted. \u0025USERPROFILE\u0025: denied", []));
+        cases.Add(("unc-url-error", own, "https://support.invalid/?file=//fs01/Users/Bob&error=0x80070005", "https://support.invalid/?file=//fs01/Users/<user>&error=0x80070005", ["Bob"]));
+        cases.Add(("unc-url-next-link", own, "https://support.invalid/?file=//fs01/Users/Bob&next=https://help.invalid/guide", "https://support.invalid/?file=//fs01/Users/<user>&next=https://help.invalid/guide", ["Bob"]));
+        cases.Add(("URL value end", own, @"https://host/?file=//fs01/Users/Bob#trace=abc123 and https://host/?file=//fs01/Users/Zqxescaped\u0026other=//fs01/Users/Carol/x",
+            @"https://host/?file=//fs01/Users/<user>#trace=abc123 and https://host/?file=//fs01/Users/<user>\u0026other=//fs01/Users/<user>/x", ["Bob", "Zqxescaped", "Carol"]));
+        cases.Add(("URL value end", own, "https://host/?file=C:/Users/Bob&error=0x80070005;x=1 and https://host/?a=1;file=//fs01/Users/Zqxsemi;b=2",
+            "https://host/?file=C:/Users/<user>&error=0x80070005;x=1 and https://host/?a=1;file=//fs01/Users/<user>;b=2", ["Bob", "Zqxsemi"]));
+        cases.Add(("URL value end", own, @"\\fs01\Users\Tom&Jerry\x and C:\Users\Carol#1;Zqxtail\y", @"\\fs01\Users\<user>\x and C:\Users\<user>\y", ["Tom", "Jerry", "Carol", "Zqxtail"]));
+        cases.Add(("URL value end", own, "https://host/?file=//fs01/Users/Tom&Jerry/x and https://host/?file=//fs01/Users/Zqx;semi&b=2",
+            "https://host/?file=//fs01/Users/<user>/x and https://host/?file=//fs01/Users/<user>&b=2", ["Tom", "Jerry", "Zqx", "semi"]));
+        cases.Add(("URL value end", own, "<a href=\"https://host/?file=//fs01/Users/Bob&amp;error=1\">", "<a href=\"https://host/?file=//fs01/Users/<user>&amp;error=1\">", ["Bob"]));
+        cases.Add(("URL value end", own, @"https://host/?file=C:\Users\Bob&error=1 and https://host/?file=\\fs01\Users\Zqxunc#line=2",
+            @"https://host/?file=C:\Users\<user>&error=1 and https://host/?file=\\fs01\Users\<user>#line=2", ["Bob", "Zqxunc"]));
+        cases.Add(("URL value end", own, @"C:\Users\Bob&Jerry=1\x and https://host/?a=1 C:\Users\Carol&Smith=2\y", @"C:\Users\<user>\x and https://host/?a=1 C:\Users\<user>\y", ["Bob", "Jerry", "Carol", "Smith"]));
+        foreach (var (issue, redactor, raw, expected, secrets) in cases)
+        {
+            var name = issue + " " + JsonSerializer.Serialize(raw);
+            foreach (var options in new JsonSerializerOptions?[] { null, relaxed })
+            {
+                var input = raw;
+                for (var depth = 0; depth <= 3; depth++)
+                {
+                    var actual = redactor.Redact(input);
+                    try
+                    {
+                        var decoded = actual;
+                        for (var level = 0; level < depth; level++) decoded = JsonSerializer.Deserialize<string>(decoded)!;
+                        check(decoded == expected && redactor.Redact(actual) == actual && !secrets.Any(secret => decoded.Contains(secret, StringComparison.OrdinalIgnoreCase)),
+                            "Account form " + (options is null ? "default" : "relaxed") + " depth " + depth + " " + name + " => " + JsonSerializer.Serialize(decoded));
+                    }
+                    catch (JsonException error)
+                    {
+                        check(false, "Account form JSON is invalid at depth " + depth + " for " + name + ": " + error.Message);
+                    }
+                    input = JsonSerializer.Serialize(input, options);
+                }
+            }
+            var fixture = Path.Combine(root, "account-form-" + Guid.NewGuid().ToString("N"));
+            var logs = Directory.CreateDirectory(Path.Combine(fixture, "logs")).FullName;
+            try
+            {
+                File.WriteAllText(Path.Combine(logs, "app.log"), raw + Environment.NewLine);
+                File.WriteAllText(Path.Combine(logs, "app.log.old"), raw + Environment.NewLine);
+                var sender = new FakeSender { Result = new(false, 404) };
+                var service = new BugReportService(Webhook, sender, Path.Combine(fixture, "reports"), logs, redactor);
+                BugSpec[] specs = [new("cpu", "Processor", raw)];
+                var attachment = service.CreateAttachment(specs, BugReportService.TweakSummaryJson([], false, null, [raw]));
+                var report = new BugReport("fixture", specs, "alice#1 alice@example.com", raw);
+                var outcome = await service.SendAsync(report, attachment);
+                using (var payload = JsonDocument.Parse(sender.Calls.Single().Payload))
+                {
+                    var embed = payload.RootElement.GetProperty("embeds")[0];
+                    var fields = embed.GetProperty("fields").EnumerateArray().ToArray();
+                    check(outcome.Status == BugSendStatus.Rejected && embed.GetProperty("description").GetString() == expected.Trim()
+                        && fields[0].GetProperty("value").GetString() == expected.Trim() && fields[1].GetProperty("value").GetString() == "alice#1 alice@example.com",
+                        "Sending redacts the typed description and specs and keeps the contact for " + name);
+                }
+                var saved = service.SaveReport(report, attachment);
+                foreach (var (path, kind) in new[] { (sender.Calls[0].ZipPath, "sent"), (saved, "saved") })
+                {
+                    using var zip = ZipFile.OpenRead(path);
+                    try
+                    {
+                        using var values = JsonDocument.Parse(Read(zip, "specs.json"));
+                        using var summary = JsonDocument.Parse(Read(zip, "tweak-state.json"));
+                        var log = Read(zip, "logs/app.log") + Read(zip, "logs/app.log.old");
+                        check(values.RootElement.GetProperty("specs").GetProperty("cpu").GetString() == expected
+                            && summary.RootElement.GetProperty("lastErrors")[0].GetString() == expected && log == expected + Environment.NewLine + expected + Environment.NewLine
+                            && !secrets.Any(secret => log.Contains(secret, StringComparison.OrdinalIgnoreCase)),
+                            "The " + kind + " zip redacts specs, last errors and current and old log lines for " + name);
+                    }
+                    catch (JsonException error)
+                    {
+                        check(false, "The " + kind + " zip JSON is invalid for " + name + ": " + error.Message);
+                    }
+                    if (kind == "saved")
+                        check(Read(zip, "report.txt").Contains("What went wrong:" + Environment.NewLine + expected.Trim() + Environment.NewLine, StringComparison.Ordinal)
+                            && Read(zip, "report.txt").Contains("Discord or email: alice#1 alice@example.com", StringComparison.Ordinal),
+                            "The saved report text redacts the description and keeps the contact for " + name);
+                }
+            }
+            finally { Directory.Delete(fixture, true); }
+            check(!Directory.Exists(fixture), "The account form fixture is removed for " + name);
+        }
+        await AccountFormsViewAsync(check, root, moved);
+        await AccountFormsLargeAsync(check, moved);
+        if (OperatingSystem.IsWindows()) RegisteredProfilesChecks(check);
+    }
+
+    private static async Task AccountFormsViewAsync(Action<bool, string> check, string root, BugRedactor redactor)
+    {
+        var fixture = Path.Combine(root, "account-form-view");
+        var logs = Directory.CreateDirectory(Path.Combine(fixture, "logs")).FullName;
+        var savedService = RooIndustries.OptimizationSuite.App.BugReports;
+        var savedError = RooIndustries.OptimizationSuite.App.Live.LastError;
+        var sender = new FakeSender { Result = new(false, 404) };
+        try
+        {
+            File.WriteAllText(Path.Combine(logs, "app.log.old"), @"2026-09-26 [backend] %USERPROFILE%.Zqxsmith\AppData failed for S-1-12-1-111-222-333-444" + Environment.NewLine);
+            RooIndustries.OptimizationSuite.App.BugReports = new(Webhook, sender, Path.Combine(fixture, "reports"), logs, redactor);
+            RooIndustries.OptimizationSuite.App.Live.LastError = @"Access denied: \\fs01\profiles$\Carol.V6\NTUSER.DAT";
+            var view = new RooIndustries.OptimizationSuite.ViewModels.BugReportViewModel
+            {
+                Description = @"Crash reading D:\Profiles\Bob\AppData and \Device\HarddiskVolume3\Users\Zqxdevice\x",
+                Contact = "alice#1",
+            };
+            await view.LoadAsync();
+            view.Specs[0].Value = @"Copied from E:\Client\specs.txt";
+            await view.AttachAsync();
+            await view.SendAsync();
+            await view.SaveAsync();
+            var secrets = new[] { "Zqxsmith", "111-222-333-444", "Carol", "Bob", "Zqxdevice", "Client" };
+            using (var payload = JsonDocument.Parse(sender.Calls.Single().Payload))
+            {
+                var embed = payload.RootElement.GetProperty("embeds")[0];
+                var fields = embed.GetProperty("fields").EnumerateArray().ToArray();
+                check(embed.GetProperty("description").GetString() == @"Crash reading D:\Profiles\<user>\AppData and \Device\HarddiskVolume3\Users\<user>\x"
+                    && fields[0].GetProperty("value").GetString() == @"Copied from E:\<user>\specs.txt" && fields[^1].GetProperty("value").GetString() == "alice#1",
+                    "The bug report screen sends the typed description and edited specs redacted, with the contact as typed");
+            }
+            foreach (var (path, kind) in new[] { (sender.Calls[0].ZipPath, "sent"), (view.SavedPath!, "saved") })
+            {
+                using var zip = ZipFile.OpenRead(path);
+                var all = string.Concat(zip.Entries.Select(entry => Read(zip, entry.FullName)));
+                check(!secrets.Any(secret => all.Contains(secret, StringComparison.OrdinalIgnoreCase)) && all.Contains(@"\\fs01\\profiles$\\<user>\\NTUSER.DAT", StringComparison.Ordinal)
+                    && all.Contains(@"<user>\AppData failed for <sid>", StringComparison.Ordinal),
+                    "The bug report screen's " + kind + " zip hides relocated, network, device and old-log account names");
+            }
+        }
+        finally
+        {
+            RooIndustries.OptimizationSuite.App.BugReports = savedService;
+            RooIndustries.OptimizationSuite.App.Live.LastError = savedError;
+            Directory.Delete(fixture, true);
+        }
+        check(!Directory.Exists(fixture), "The bug report screen fixture is removed");
+    }
+
+    private static async Task AccountFormsLargeAsync(Action<bool, string> check, BugRedactor redactor)
+    {
+        var mixed = new StringBuilder();
+        while (mixed.Length < 7 * 1024 * 1024) mixed.Append(@"\Device\HarddiskVolume3\Users\Zqxbob\x %USERPROFILE%.Zqxsmith\y D:\Profiles\Zqxmoved\z S-1-12-1-111-222-333-444 %USERPROFILE% a ");
+        var spaced = new StringBuilder();
+        while (spaced.Length < 7 * 1024 * 1024) spaced.Append("%USERPROFILE% a");
+        var encoded = new StringBuilder();
+        while (encoded.Length < 7 * 1024 * 1024) encoded.Append(@"C:/\u0055sers/Zqxother/x D:/Pro\u0066iles/Zqxmoved/y \u0053-1-12-1-111-222-333-444 ");
+        var urls = new StringBuilder();
+        while (urls.Length < 7 * 1024 * 1024) urls.Append("https://host/Users/PublicPage/x?file=//fs01/Users/Zqxquery/x&next=https://mirror/Users/PublicPage/x ");
+        var canonical = new StringBuilder();
+        while (canonical.Length < 7 * 1024 * 1024)
+            canonical.Append(@"2026-10-23 [backend] Copy D:\.\Profiles\Zqxdot\x to D:\Work\..\Profiles\Zqxup\y failed").Append('\n')
+                .Append(@"2026-10-23 [backend] Share \\GAMER-PC\D$\Profiles\Zqxshare\z, old %USERPRO\u0046ILE%.Zqxmacro\w, see https://host/?file=//fs01/Users/Zqxvalue&error=1").Append('\n');
+        var inputs = new (string Name, string Input, Func<string, bool> Expected)[]
+        {
+            ("repeated new account forms", mixed.ToString(), output => !output.Contains("Zqx", StringComparison.Ordinal) && !output.Contains("111-222", StringComparison.Ordinal)),
+            ("macros followed by prose", spaced.ToString(), output => output == spaced.ToString()),
+            ("encoded profile roots and account SIDs", encoded.ToString(), output => !output.Contains("Zqx", StringComparison.Ordinal) && !output.Contains("111-222", StringComparison.Ordinal)),
+            ("UNC query values beside ordinary URLs", urls.ToString(), output => !output.Contains("Zqxquery", StringComparison.Ordinal) && output.Contains("https://host/Users/PublicPage/x", StringComparison.Ordinal) && output.Contains("https://mirror/Users/PublicPage/x", StringComparison.Ordinal)),
+            ("dot segments, volume aliases, encoded macros and URL value ends", canonical.ToString(), output => !output.Contains("Zqx", StringComparison.Ordinal) && output.Contains("<user>&error=1\n", StringComparison.Ordinal)),
+            ("nested parent segments", @"D:\Profiles" + string.Concat(Enumerable.Repeat(@"\a", 1024 * 1024)) + string.Concat(Enumerable.Repeat(@"\..", 1024 * 1024)) + @"\Zqxdeep\x",
+                output => output.EndsWith(@"\..\<user>\x", StringComparison.Ordinal)),
+            ("parent segments without parents", @"D:" + string.Concat(Enumerable.Repeat(@"\..", 2 * 1024 * 1024)) + @"\Profiles\Zqxroot\x", output => output.EndsWith(@"\Profiles\<user>\x", StringComparison.Ordinal)),
+            ("query delimiters without a UNC value", "https://host/" + new string('?', 7 * 1024 * 1024), output => output == "https://host/" + new string('?', 7 * 1024 * 1024)),
+            ("a mixed separator run", @"C:\Users" + string.Concat(Enumerable.Repeat(@"\/", 3 * 1024 * 1024)) + "Fixture", output => output.EndsWith(@"\/<user>", StringComparison.Ordinal) && !output.Contains("Fixture", StringComparison.Ordinal)),
+            ("a backslash run before a Users word", "x" + new string('\\', 7 * 1024 * 1024) + "Usersy", output => output.EndsWith("Usersy", StringComparison.Ordinal)),
+            ("a three-backslash control before a long run", @"C:\\Users\\\r" + "Zqxname" + new string('\\', 7 * 1024 * 1024) + "x", output => !output.Contains("Zqxname", StringComparison.Ordinal)),
+        };
+        foreach (var (name, input, expected) in inputs)
+        {
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+            var redaction = Task.Run(() => redactor.Redact(input));
+            var completed = await Task.WhenAny(redaction, Task.Delay(TimeSpan.FromSeconds(5)));
+            check(completed == redaction && redaction.IsCompletedSuccessfully && expected(redaction.Result),
+                "A 7 MB log of " + name + " is redacted within five seconds: completed=" + (completed == redaction) + " elapsedMs=" + clock.Elapsed.TotalMilliseconds.ToString("F2"));
+        }
+    }
+
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    private static void RegisteredProfilesChecks(Action<bool, string> check)
+    {
+        var name = @"Software\RooIndustriesRedactionFixture-" + Guid.NewGuid().ToString("N");
+        var drive = Environment.GetEnvironmentVariable("SystemDrive") ?? "C:";
+        const string lockedName = "S-1-5-21-111111111-222222222-333333333-1005";
+        var deny = new System.Security.AccessControl.RegistryAccessRule(System.Security.Principal.WindowsIdentity.GetCurrent().User!,
+            System.Security.AccessControl.RegistryRights.QueryValues, System.Security.AccessControl.AccessControlType.Deny);
+        try
+        {
+            using (var list = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(name + @"\ProfileList"))
+            {
+                list.SetValue("Default", @"D:\Profiles\Default", Microsoft.Win32.RegistryValueKind.ExpandString);
+                list.SetValue("Public", @"%SystemDrive%\Users\Public", Microsoft.Win32.RegistryValueKind.ExpandString);
+                using (var account = list.CreateSubKey("S-1-5-21-111111111-222222222-333333333-1001")) account.SetValue("ProfileImagePath", @"D:\Profiles\Bob", Microsoft.Win32.RegistryValueKind.ExpandString);
+                using (var account = list.CreateSubKey("S-1-5-21-111111111-222222222-333333333-1002.bak")) account.SetValue("ProfileImagePath", @"E:\Client");
+                using (var account = list.CreateSubKey("S-1-5-21-111111111-222222222-333333333-1006"))
+                {
+                    account.SetValue("ProfileImagePath", @"D:\Work\Users\Bob");
+                    account.SetValue("CentralProfile", @"\\fs01\Users\Carol");
+                }
+                using (var account = list.CreateSubKey("S-1-12-1-111-222-333-444"))
+                {
+                    account.SetValue("ProfileImagePath", @"%SystemDrive%\Users\Fixture", Microsoft.Win32.RegistryValueKind.ExpandString);
+                    account.SetValue("CentralProfile", @"\\fs01\profiles$\Carol.V6");
+                }
+                using (var account = list.CreateSubKey("S-1-5-18")) account.SetValue("ProfileImagePath", @"%systemroot%\system32\config\systemprofile", Microsoft.Win32.RegistryValueKind.ExpandString);
+                using (var account = list.CreateSubKey("S-1-5-21-111111111-222222222-333333333-1003")) account.SetValue("ProfileImagePath", 7, Microsoft.Win32.RegistryValueKind.DWord);
+                list.CreateSubKey("S-1-5-21-111111111-222222222-333333333-1004").Dispose();
+                using var locked = list.CreateSubKey(lockedName);
+                locked.SetValue("ProfileImagePath", @"D:\Locked\Zqxlocked");
+                var security = locked.GetAccessControl();
+                security.AddAccessRule(deny);
+                locked.SetAccessControl(security);
+            }
+            using (var probe = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(name + @"\ProfileList"))
+            {
+                var refused = false;
+                try { probe!.OpenSubKey(lockedName)?.Dispose(); }
+                catch (System.Security.SecurityException) { refused = true; }
+                check(refused, "The disposable profile list has one entry this account cannot read");
+            }
+            using var read = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(name + @"\ProfileList");
+            var paths = BugRedactor.RegisteredProfiles(read);
+            var expected = new[] { @"D:\Profiles\Default", drive + @"\Users\Public", @"D:\Profiles\Bob", @"E:\Client", drive + @"\Users\Fixture", @"\\fs01\profiles$\Carol.V6", @"D:\Work\Users\Bob", @"\\fs01\Users\Carol" };
+            check(paths.Count == expected.Length && expected.All(path => paths.Contains(path, StringComparer.Ordinal)),
+                "The profile list reader returns expanded account, backup, roaming, Default and Public paths and skips system, mistyped, empty and unreadable entries: " + paths.Count);
+            var redactor = new BugRedactor(@"C:\Users\Alice", "Alice", "GAMER-PC", paths);
+            var output = redactor.Redact(@"D:\Profiles\Bob\x D:\Profiles\Zqxnew\y D:\Profiles\Default\d E:\Client\z E:\Games\g \\fs01\profiles$\Carol.V6\c C:\Windows\system32\config\SAM %SystemRoot%\system32\config\systemprofile\s D:/Work/Users/Bob/x //fs01/Users/Carol/y");
+            check(output == @"D:\Profiles\<user>\x D:\Profiles\<user>\y D:\Profiles\Default\d E:\<user>\z E:\Games\g \\fs01\profiles$\<user>\c C:\Windows\system32\config\SAM %SystemRoot%\system32\config\systemprofile\s D:/Work/Users/<user>/x //fs01/Users/<user>/y",
+                "Profiles read from a disposable profile list are redacted while system and shared folders stay readable");
+            check(BugRedactor.RegisteredProfiles(null).Count == 0 && new BugRedactor(@"C:\Users\Alice", "Alice", "GAMER-PC", BugRedactor.RegisteredProfiles(null)).Redact(@"C:\Users\Bob\x") == @"C:\Users\<user>\x",
+                "A missing profile list falls back to the Users folder rules");
+        }
+        finally
+        {
+            using (var locked = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(name + @"\ProfileList\" + lockedName, Microsoft.Win32.RegistryKeyPermissionCheck.ReadWriteSubTree,
+                System.Security.AccessControl.RegistryRights.ReadPermissions | System.Security.AccessControl.RegistryRights.ChangePermissions))
+            {
+                if (locked is not null)
+                {
+                    var security = locked.GetAccessControl();
+                    security.RemoveAccessRuleSpecific(deny);
+                    locked.SetAccessControl(security);
+                }
+            }
+            Microsoft.Win32.Registry.CurrentUser.DeleteSubKeyTree(name, false);
+        }
+        check(Microsoft.Win32.Registry.CurrentUser.OpenSubKey(name) is null, "The disposable profile list key is removed");
+        var real = BugRedactor.RegisteredProfiles();
+        var current = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile).TrimEnd('\\');
+        check(real.Any(path => string.Equals(path.TrimEnd('\\'), current, StringComparison.OrdinalIgnoreCase)), "The real profile list includes the signed-in account's profile");
+        var live = BugRedactor.Current();
+        var index = 0;
+        foreach (var path in real)
+        {
+            index++;
+            var folder = Path.GetFileName(path.TrimEnd('\\'));
+            if (folder is "Public" or "Default" || folder.Length == 0) continue;
+            var plain = live.Redact(path + @"\AppData\x.log");
+            var json = JsonSerializer.Deserialize<string>(live.Redact(JsonSerializer.Serialize(path + @"\AppData\x.log")))!;
+            var isOwn = string.Equals(path.TrimEnd('\\'), current, StringComparison.OrdinalIgnoreCase);
+            check(isOwn ? plain == @"%USERPROFILE%\AppData\x.log" && json == plain
+                : !plain.Split('\\', '/').Contains(folder, StringComparer.OrdinalIgnoreCase) && !json.Split('\\', '/').Contains(folder, StringComparer.OrdinalIgnoreCase),
+                "Registered profile " + index + " of " + real.Count + " on this PC is redacted in plain and JSON paths");
         }
     }
 
