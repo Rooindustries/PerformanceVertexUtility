@@ -47,18 +47,15 @@ static class MitigationCommandChecks
         var engine = new TweakEngine(new TweakCatalog(1, "mitigation-commands", [setting], []), store);
         var originalLauncher = PowerShellControls.Launcher;
         var live = Live();
-        RegistryNative.MachineRoot = () => Registry.CurrentUser.OpenSubKey(root + @"\Machine", true)!.Handle;
-        var marker = "isolation-" + Guid.NewGuid().ToString("N");
-        kernel.SetValue(Names[2], marker, RegistryValueKind.String);
-        var seen = RegistryNative.ReadTweak(new("LocalMachine", "Registry64", LiveKernel, "value", Names[2])).Value;
-        if (seen is not { Type: 1 } text || Encoding.Unicode.GetString(text.Bytes).TrimEnd('\0') != marker || Live() != live)
-        {
-            RegistryNative.MachineRoot = null;
-            throw new InvalidOperationException("The mitigation fixture does not isolate this PC's own policy, so it refuses to write.");
-        }
-        kernel.DeleteValue(Names[2]);
         try
         {
+            RegistryNative.MachineRoot = () => Registry.CurrentUser.OpenSubKey(root + @"\Machine", true)!.Handle;
+            var marker = "isolation-" + Guid.NewGuid().ToString("N");
+            kernel.SetValue(Names[2], marker, RegistryValueKind.String);
+            var seen = RegistryNative.ReadTweak(new("LocalMachine", "Registry64", LiveKernel, "value", Names[2])).Value;
+            if (seen is not { Type: 1 } text || Encoding.Unicode.GetString(text.Bytes).TrimEnd('\0') != marker || Live() != live)
+                throw new InvalidOperationException("The mitigation fixture does not isolate this PC's own policy, so it refuses to write.");
+            kernel.DeleteValue(Names[2]);
             foreach (var (modules, launcher) in Modules(folder))
             foreach (var seeded in new[] { false, true })
             {
@@ -100,8 +97,8 @@ static class MitigationCommandChecks
         {
             PowerShellControls.Launcher = originalLauncher;
             RegistryNative.MachineRoot = null;
+            check(Live() == live, "The mitigation fixture leaves this PC's own exploit protection policy exactly as it was");
         }
-        check(Live() == live, "The mitigation fixture leaves this PC's own exploit protection policy exactly as it was");
     }
 
     static JsonElement Independent() => JsonDocument.Parse(MissingCommandChecks.WindowsPowerShell("$policy=Get-ProcessMitigation -System -WarningAction Stop; $values=@{}; foreach($group in $policy.PSObject.Properties){foreach($field in $group.Value.PSObject.Properties){if($field.Value -is [bool]){$values[$group.Name+'.'+$field.Name]=[bool]$field.Value}elseif([string]$field.Value -cin @('ON','OFF','NOTSET')){$values[$group.Name+'.'+$field.Name]=[string]$field.Value}}}; $values|ConvertTo-Json -Compress")).RootElement;
@@ -111,16 +108,17 @@ static class MitigationCommandChecks
 
     public static void RunReal(Action<bool, string> check, string repo, string evidence)
     {
-        var folder = Directory.CreateTempSubdirectory("roo-industries-mitigation-rows-");
-        var root = Parent + "\\" + Guid.NewGuid().ToString("N");
-        var owned = OwnedRegistryKey.Create(Registry.CurrentUser, root);
         var originalLauncher = PowerShellControls.Launcher;
         var catalog = OperationFiles.Read<TweakCatalog>(Path.Combine(repo, "backend", "catalogs", "windows-tweaks.json"));
         var rows = catalog.Settings.Where(row => row.Options.Any(option => option.Controls?.Any(control => control.Address == Address) == true)).ToArray();
         var baseline = Snapshot(); var results = new List<object>(); var restored = false;
+        var root = Parent + "\\" + Guid.NewGuid().ToString("N");
+        var folder = Directory.CreateTempSubdirectory("roo-industries-mitigation-rows-");
+        OwnedRegistryKey? owned = null;
         RegistryTweakStore? activeStore = null;
         try
         {
+            owned = OwnedRegistryKey.Create(Registry.CurrentUser, root);
             check(rows.Length == 15, "The real mitigation gate includes all 15 catalog rows");
             foreach (var (modules, launcher) in Modules(folder.FullName))
             foreach (var row in rows)
@@ -166,7 +164,7 @@ static class MitigationCommandChecks
             }
             finally
             {
-                if (restored) { owned.Dispose(); folder.Delete(true); }
+                if (restored || activeStore is null) { owned?.Dispose(); folder.Delete(true); }
                 else Console.Error.WriteLine("Retained mitigation recovery at " + root + " and the Windows temp folder " + folder.Name);
             }
         }
