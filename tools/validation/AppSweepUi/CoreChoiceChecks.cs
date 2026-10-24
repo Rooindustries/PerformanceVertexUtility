@@ -86,6 +86,14 @@ static class CoreChoiceChecks
             check(Ticked(page).SequenceEqual(Enumerable.Range(0, 9)) && ProcessTarget.ParseMask(page.AffinityMask) == 0xF0 && page.CanPreview,
                 "With preferred logical CPUs, ticking a CPU leaves the Restrict mask alone and typing a mask leaves the ticks alone" + " | ticked " + string.Join(",", Ticked(page)) + " mask " + page.AffinityMask);
 
+            page = await Open();
+            page.SelectedCpuMode = page.CpuModes.Single(mode => mode.Kind == "logical");
+            foreach (var cpu in page.Cpus) cpu.Selected = cpu.Cpu.Index < 8;
+            page.SelectedCpuMode = page.CpuModes.Single(mode => mode.Kind == "unchanged");
+            page.SetHardAffinity = true;
+            check(Ticked(page).SequenceEqual(Enumerable.Range(0, 32)) && ProcessTarget.ParseMask(page.AffinityMask) == 0xFFFFFFFF,
+                "CPUs ticked in another CPU mode don't become the Restrict mask: turning on Restrict ticks the CPUs the app may use now" + " | ticked " + string.Join(",", Ticked(page)) + " mask " + page.AffinityMask);
+
             var rule = GovernorChecks.Rule("0123456789abcdef0123456789abcdef", "Game rule", identity.ExecutablePath, true) with
             {
                 Controls = new() { ["affinity"] = Value(new AffinityState(0, "0xFF00")) },
