@@ -127,7 +127,7 @@ try{
  InvokeId 'GameSessionNew'
  WaitFor {$e=ById 'GameSessionExecutable';$e -and $e.Current.IsEnabled} 90 'a new game session form'|Out-Null
  SetText 'GameSessionExecutable' $gamePath
- Choose (WaitFor {ById 'GameSessionLauncher'} 60 'the launcher list') ('*PID '+$launcher.Identity.pid)
+ Choose (WaitFor {ById 'GameSessionLauncher'} 60 'the launcher list') 'DemoLauncher'
  WaitFor {$e=ById 'GameSessionAllCores';if($e -and $e.Current.IsEnabled){$e}else{$c=Combo 'CPU cores';if($c -and (Shown $c)){$c}}} 90 'the launcher cores'|Out-Null
  $evidence.picker=[bool](ById 'GameSessionPreset')
  if(-not$evidence.picker){

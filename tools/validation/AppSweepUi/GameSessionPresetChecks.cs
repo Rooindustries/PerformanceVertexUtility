@@ -57,6 +57,34 @@ static class GameSessionPresetChecks
             await model.InitializeAsync();
             check(model.Presets.Select(preset => preset.Name).SequenceEqual(shipped.Select(preset => preset.Name)) && model.SelectedPreset is null && model.PresetPlaceholder == "Choose a preset",
                 "The Games tab offers the shipped launch presets, with none picked on a fresh form");
+            string Friendly(string name) => RooIndustries.OptimizationSuite.Helpers.Naming.FriendlyName(name);
+            check(model.Launchers.Single().ToString() == Friendly("launcher.exe") && !model.Launchers.Single().ToString().Contains("PID", StringComparison.Ordinal),
+                "The launcher list shows a launcher by name, without a process number");
+            var inventory = App.Live.Inventory;
+            var startedAt = GameSessionViewModel.LauncherStarted;
+            try
+            {
+                App.Live.Inventory = new ProcessInventory { Processes = [new ProcessItem { Pid = 5002, Name = "steam.exe", Category = "backgroundApp" }, new ProcessItem { Pid = 5001, Name = "steam.exe", Category = "backgroundApp" }, inventory!.Processes![0]] };
+                var opened = new DateTime(2026, 10, 24, 21, 41, 0, DateTimeKind.Local);
+                var steam = Friendly("steam.exe");
+                GameSessionViewModel.LauncherStarted = pid => pid == 5001 ? opened : pid == 5002 ? opened.AddMinutes(7) : null;
+                var copies = new GameSessionViewModel();
+                await copies.InitializeAsync();
+                check(copies.Launchers.Select(choice => choice.ToString()).SequenceEqual([Friendly("launcher.exe"), steam + " (opened " + opened.ToString("t") + ")", steam + " (opened " + opened.AddMinutes(7).ToString("t") + ")"])
+                    && copies.Launchers[1].Id == 5001 && copies.Launchers[2].Id == 5002,
+                    "Two open copies of one launcher are told apart by when each opened, oldest first, while a single launcher shows just its name");
+                GameSessionViewModel.LauncherStarted = pid => pid is 5001 or 5002 ? opened : null;
+                copies = new GameSessionViewModel();
+                await copies.InitializeAsync();
+                check(copies.Launchers.Skip(1).Select(choice => choice.ToString()).SequenceEqual([steam + " (copy 1)", steam + " (copy 2)"]),
+                    "Copies opened in the same minute are numbered instead of showing the same time");
+                GameSessionViewModel.LauncherStarted = _ => null;
+                copies = new GameSessionViewModel();
+                await copies.InitializeAsync();
+                check(copies.Launchers.Skip(1).Select(choice => choice.ToString()).SequenceEqual([steam + " (copy 1)", steam + " (copy 2)"]) && copies.Launchers[1].Id == 5001,
+                    "Copies whose open time can't be read are numbered in process order");
+            }
+            finally { App.Live.Inventory = inventory; GameSessionViewModel.LauncherStarted = startedAt; }
             check(model.Settings.All(setting => setting.Options.Skip(1).Select(option => option.Value!.Value.GetRawText())
                 .SequenceEqual(allowed[setting.Name]!["enum"]!.AsArray().Select(value => value!.ToJsonString()))), "Each session setting offers exactly the values a launch preset may use");
             check(model.Settings.Select(setting => setting.Label).SequenceEqual(["CPU priority", "Disk priority", "Memory priority", "GPU priority", "Power mode", "Priority boost"])
@@ -123,7 +151,7 @@ static class GameSessionPresetChecks
             model.SelectedPreset = picked;
             var first = model.SelectedLauncher;
             App.Operations.ProcessReads = _ => Snapshot("0x3F");
-            model.SelectedLauncher = new CpuProcessChoice(4200, "other.exe");
+            model.SelectedLauncher = new GameLauncherChoice(4200, "other.exe", "other");
             check(model.SelectedPreset == picked && model.PresetHint == picked.Description && model.AffinityMask == "0x3F" && model.AllCores && Boxes(model, box => box.Enabled) == "1,2,3,4,5,6",
                 "Switching launchers after picking " + picked.Name + " loads the new launcher's cores and keeps the preset");
             App.Operations.ProcessReads = null;

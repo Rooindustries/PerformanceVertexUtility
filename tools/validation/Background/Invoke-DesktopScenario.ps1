@@ -86,7 +86,7 @@ try {
   }
   'games' {
    Nav 'Games';InvokeId 'GamesTab';InvokeId 'GameSessionNew';SetValue 'GameSessionExecutable' $gamePath
-   ChooseId 'GameSessionLauncher' ('*RooFixtureLauncher*PID '+$launcher.Id)
+   ChooseId 'GameSessionLauncher' 'RooFixtureLauncher'
    $cpu=WaitFor {@(All|Where-Object {$_.Current.ControlType -eq $CT::ComboBox -and $_.Current.Name -eq 'CPU priority'})|Select-Object -First 1} 90 'launch CPU options'
    $io=WaitFor {@(All|Where-Object {$_.Current.ControlType -eq $CT::ComboBox -and $_.Current.Name -eq 'Disk priority'})|Select-Object -First 1} 90 'launch disk priority options'
    $cpuNames=@(Options $cpu|ForEach-Object {$_.Current.Name});$cpu.GetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern).Collapse()
