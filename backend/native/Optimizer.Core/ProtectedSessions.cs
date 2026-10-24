@@ -133,7 +133,7 @@ public sealed class ProtectedSessions
             throw new InvalidDataException("Select supported protected-session controls.");
         foreach (var pair in desired) ProcessControlEngine.ValidateValue(pair.Key, pair.Value);
         if (desired.TryGetValue("gpuPriority", out var gpu) && gpu.GetInt32() == 5) throw new InvalidDataException("Real-time GPU priority is not supported by this session.");
-        LaunchPriorities.Values(desired);
+        LaunchPriorities.Values(LaunchControls(desired));
     }
 
     public ProtectedSessionPreview Check(string path, string hash)
@@ -469,25 +469,46 @@ public sealed class ProtectedSessions
         int parentId;
         try { parentId = target.ParentProcessId(); }
         catch (ProcessTarget.NtFailure) { return null; }
-        var created = long.Parse(identity.CreationTimeFileTimeUtc, System.Globalization.CultureInfo.InvariantCulture);
-        foreach (var parent in state.Games.Where(game => game.Identity.ProcessId == parentId && game.Identity != identity &&
-            long.Parse(game.Identity.CreationTimeFileTimeUtc, System.Globalization.CultureInfo.InvariantCulture) < created))
+        var created = Created(identity);
+        var tuned = state.Games.Where(game => game.Identity != identity && Created(game.Identity) < created)
+            .Select(game => (Game: game, Original: SessionOriginal(game, desired))).Where(item => item.Original is not null).ToArray();
+        if (tuned.Length == 0) return null;
+        var parent = tuned.FirstOrDefault(item => item.Game.Identity.ProcessId == parentId && !Replaced(item.Game.Identity));
+        if (parent.Original is not null) return parent.Original;
+        return LauncherMayHave(state.Preview.Launcher, desired) ? null : tuned.MaxBy(item => Created(item.Game.Identity)).Original;
+    }
+
+    private static long Created(RunningProcess identity) => long.Parse(identity.CreationTimeFileTimeUtc, System.Globalization.CultureInfo.InvariantCulture);
+
+    private static ControlRead? SessionOriginal(ProtectedGameState game, JsonElement desired)
+    {
+        var field = game.Fields.SingleOrDefault(item => item.Name == "ioPriority");
+        if (field?.JournalPath is null || !File.Exists(field.JournalPath)) return null;
+        var journal = OperationFiles.Read<ProcessControlJournal>(field.JournalPath);
+        game.Identity.Verify(journal.Preview.Identity);
+        var change = journal.Changes.SingleOrDefault(item => item.Name == "ioPriority");
+        return change is { Status: "applied" } && ProcessTarget.Equivalent("ioPriority", change.Desired, desired) ? ControlRead.From(change.Original) : null;
+    }
+
+    private static bool Replaced(RunningProcess identity)
+    {
+        try { using var live = new ProcessTarget(identity.ProcessId); return ReadIdentity(live).CreationTimeFileTimeUtc != identity.CreationTimeFileTimeUtc; }
+        catch (ProcessEndedException) { return false; }
+        catch (RooIndustries.Optimization.CpuSets.NativeFailure error) when (error.Api == "OpenProcess" && error.NativeErrorCode == 87) { return false; }
+    }
+
+    private static bool LauncherMayHave(RunningProcess launcher, JsonElement desired)
+    {
+        try
         {
-            try
-            {
-                using var live = new ProcessTarget(parentId);
-                if (ReadIdentity(live).CreationTimeFileTimeUtc != parent.Identity.CreationTimeFileTimeUtc) continue;
-            }
-            catch (ProcessEndedException) { }
-            catch (RooIndustries.Optimization.CpuSets.NativeFailure error) when (error.Api == "OpenProcess" && error.NativeErrorCode == 87) { }
-            var field = parent.Fields.SingleOrDefault(item => item.Name == "ioPriority");
-            if (field?.JournalPath is null || !File.Exists(field.JournalPath)) continue;
-            var journal = OperationFiles.Read<ProcessControlJournal>(field.JournalPath);
-            parent.Identity.Verify(journal.Preview.Identity);
-            var change = journal.Changes.SingleOrDefault(item => item.Name == "ioPriority");
-            if (change is { Status: "applied" } && ProcessTarget.Equivalent("ioPriority", change.Desired, desired)) return ControlRead.From(change.Original);
+            using var live = new ProcessTarget(launcher.ProcessId, readControls: ["ioPriority"]);
+            if (ReadIdentity(live).CreationTimeFileTimeUtc != launcher.CreationTimeFileTimeUtc) return false;
+            var read = live.Read("ioPriority");
+            return !read.Known || ProcessTarget.Equivalent("ioPriority", read.Require(), desired);
         }
-        return null;
+        catch (ProcessEndedException) { return false; }
+        catch (RooIndustries.Optimization.CpuSets.NativeFailure error) when (error.Api == "OpenProcess" && error.NativeErrorCode == 87) { return false; }
+        catch (Exception error) when (ProcessFailures.Refused(error)) { return true; }
     }
 
     private void Release(string root, ProtectedSessionState state, ProcessJob? job, LaunchGpuHandles? gpuHandles)
