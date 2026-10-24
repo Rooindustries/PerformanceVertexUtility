@@ -58,13 +58,24 @@ function SetExpanded($Element,[bool]$Open){$p=$Element.GetCurrentPattern([Window
 function Loaded{(Visible (Guide $guideTitles[0])) -and -not (Visible (ById 'MemoryRetry'))}
 $scripts=Join-Path $Source 'backend\scripts'
 $inventory=Join-Path $scripts 'Get-ProcessInventory.ps1';$classification=Join-Path $scripts 'Get-ProcessClassification.ps1'
-$originals=@{}
+function Kept([string]$Path){$Path+'.roo-industries-test-off'}
+function Mend([string]$Path){
+ $kept=Kept $Path
+ if(-not [IO.File]::Exists($kept)){return}
+ if([IO.File]::Exists($Path)){
+  if([IO.File]::ReadAllText($Path) -cne $fault){throw ('An earlier run kept the original '+(Split-Path $Path -Leaf)+', but the script has changed since; both were left for review.')}
+  [IO.File]::Delete($Path)
+ }
+ [IO.File]::Move($kept,$Path)
+}
+function Fault([string]$Path){Mend $Path;[IO.File]::Move($Path,(Kept $Path));[IO.File]::WriteAllText($Path,$fault)}
 $dotnet=@((Join-Path $env:LOCALAPPDATA 'Microsoft\dotnet\dotnet.exe'),(Join-Path $env:USERPROFILE '.dotnet\dotnet.exe'),(Join-Path $env:ProgramFiles 'dotnet\dotnet.exe')|Where-Object {Test-Path -LiteralPath $_ -PathType Leaf}|Where-Object {@(& $_ --list-sdks 2>$null).Count}|Select-Object -First 1)
 if(-not$dotnet){throw 'No .NET SDK was found for the test build.'}
 $dotnet=$dotnet[0]
 $app=$null;$status='fail'
 try{
  if(@(Get-Process -Name 'RooIndustries.OptimizationSuite.App' -ErrorAction SilentlyContinue).Count){throw 'The Suite is already open; this check does not take over another window.'}
+ foreach($path in @($inventory,$classification)){Mend $path}
  Initialize-HarnessBuildFolders $Source
  Ensure-HarnessOutputDirectory (Join-Path $Source 'backend\bin')
  $env:MSBUILDDISABLENODEREUSE='1';$env:DOTNET_CLI_USE_MSBUILD_SERVER='0';$env:DOTNET_CLI_TELEMETRY_OPTOUT='1'
@@ -76,7 +87,7 @@ try{
  if($LASTEXITCODE -ne 0){throw 'The app test build failed; see build.log.'}
  $exe=@(Get-ChildItem -LiteralPath (Join-Path $Source 'docs\internal\frontend\RooIndustries.OptimizationSuite.App\bin\x64\Debug') -Recurse -Filter 'RooIndustries.OptimizationSuite.App.exe'|Sort-Object LastWriteTimeUtc -Descending)
  if(-not$exe.Count){throw 'The app test build produced no executable.'}
- foreach($path in @($inventory,$classification)){$originals[$path]=[IO.File]::ReadAllBytes($path);[IO.File]::WriteAllText($path,$fault)}
+ foreach($path in @($inventory,$classification)){Fault $path}
  $env:DOTNET_ROOT=Split-Path $dotnet -Parent;$env:ROO_INDUSTRIES_DOTNET_EXE=$dotnet;$env:ROO_INDUSTRIES_INITIAL_NAV='memory'
  $app=Start-OwnedProcess -FilePath $exe[0].FullName -WindowStyle Normal -Purpose 'suite-test-build' -Lifetime invocation
  $script:window=WaitFor {$w=$A::RootElement.FindFirst($TS::Children,[Windows.Automation.PropertyCondition]::new($A::ProcessIdProperty,[int]$app.Identity.pid));if($w -and $w.Current.NativeWindowHandle -ne 0){$w}} 180
@@ -93,7 +104,7 @@ try{
  Scan 'when both reads fail'
  Shot 'memory-error'
 
- [IO.File]::WriteAllBytes($inventory,$originals[$inventory]);$originals.Remove($inventory)
+ Mend $inventory
  if($retry){$retry.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()}
  $partial=WaitFor {if((Loaded) -and @(Shown|Where-Object {$_ -like "Couldn't see which apps*" -or $_ -like 'Memory by process is unavailable*'}).Count){$true}} 120
  Check ([bool]$partial) 'when only the app list fails the page loads and says so'
@@ -104,7 +115,7 @@ try{
  Scan 'when the app list fails'
  Shot 'memory-partial'
 
- [IO.File]::WriteAllBytes($classification,$originals[$classification]);$originals.Remove($classification)
+ Mend $classification
  if(Visible $again){$again.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()}
  else{
   foreach($name in @('Home','Memory')){$item=WaitFor {$script:window.FindFirst($TS::Descendants,[Windows.Automation.AndCondition]::new([Windows.Automation.PropertyCondition]::new($A::NameProperty,$name),[Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty,$CT::ListItem)))} 30;$item.GetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern).Select();Start-Sleep 2}
@@ -135,8 +146,7 @@ try{
  throw
 }finally{
  try{
-  foreach($path in @($originals.Keys)){[IO.File]::WriteAllBytes($path,$originals[$path])}
-  if($app){Stop-HarnessProcess $app}
+  try{if($app){Stop-HarnessProcess $app}}finally{foreach($path in @($inventory,$classification)){Mend $path}}
  }catch{
   $status='fail';$evidence.cleanupError=$_.Exception.Message
   throw
