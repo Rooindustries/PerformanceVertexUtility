@@ -344,8 +344,11 @@ namespace RooIndustries.OptimizationSuite.Services
             => Review is { } review ? Task.FromResult(review(controls)) : throw new InvalidOperationException("Unexpected preview call.");
         public string? ProcessPointer { get; set; }
         public ProcessControlJournal? ControlsJournal { get; set; }
+        public Func<ProcessControlReview, ProcessControlJournal>? Applies { get; set; }
+        public Func<string, ProcessControlJournal>? Restores { get; set; }
         public Task<ProcessControlJournal> ApplyControlsAsync(ProcessControlReview review)
         {
+            if (Applies is { } apply) { ProcessPointer = review.JournalPath; return ServiceSteps.Then("process controls", () => apply(review)); }
             if (ControlsJournal is not { } journal) throw new InvalidOperationException("Unexpected apply call.");
             ProcessPointer = review.JournalPath;
             return ServiceSteps.Then("process controls", () => journal);
@@ -353,6 +356,13 @@ namespace RooIndustries.OptimizationSuite.Services
         public Task<ProcessControlJournal> RestoreControlsAsync(string journalPath)
             => ServiceSteps.Then("process controls restore", () =>
             {
+                if (Restores is { } restore)
+                {
+                    if (ProcessPointer != journalPath) throw new InvalidOperationException("Unexpected restore call.");
+                    var result = restore(journalPath);
+                    if (result.Status is "restored" or "expired") ProcessPointer = null;
+                    return result;
+                }
                 if (ProcessPointer != journalPath || ControlsJournal is not { } journal) throw new InvalidOperationException("Unexpected restore call.");
                 ProcessPointer = null;
                 journal.Status = "restored";

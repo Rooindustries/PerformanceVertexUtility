@@ -297,6 +297,19 @@ static class BoundChecks
                 refused = conflict.Status == "needsReconciliation" && target.PriorityClass == ProcessPriorityClass.AboveNormal && service.FindLastJournal("process") == journal;
                 Console.WriteLine("restoreIntent foreign value AboveNormal: retained=" + refused);
                 if (!refused) return false;
+                Seed("applied", "applyIntent", "AboveNormal");
+                conflict = await service.RestoreControlsAsync(journal);
+                target.Refresh();
+                refused = conflict.Status == "needsReconciliation" && conflict.Changes.Single().Status == "applyIntent" && target.PriorityClass == ProcessPriorityClass.AboveNormal && service.FindLastJournal("process") == journal;
+                Console.WriteLine("unconfirmed applyIntent foreign value AboveNormal: retained=" + refused);
+                if (!refused) return false;
+                Seed("applied", "applied", "AboveNormal");
+                var kept = await service.RestoreControlsAsync(journal);
+                target.Refresh();
+                var left = kept.Status == "restored" && kept.Changes.Single() is { Status: "leftAsSet", Error: ProcessControlEngine.LeftAsSet } change && change.Observed?.GetString() == "AboveNormal"
+                    && target.PriorityClass == ProcessPriorityClass.AboveNormal && service.FindLastJournal("process") is null;
+                Console.WriteLine("confirmed apply foreign value AboveNormal: kept, named and finished=" + left);
+                if (!left) return false;
                 File.AppendAllText(preview, " ");
                 var (error, _, done) = await Call(() => service.ApplyControlsAsync(review));
                 Console.WriteLine("changed reviewed bytes: refused=" + (done && error is InvalidOperationException));

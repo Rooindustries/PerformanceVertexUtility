@@ -24,7 +24,7 @@ static class FakeHost
                     var journal = input.GetProperty("journalPath").GetString()!;
                     var result = action == "process-apply"
                         ? engine.Apply(input.GetProperty("previewPath").GetString()!, input.GetProperty("reviewHash").GetString()!, journal)
-                        : engine.Restore(journal);
+                        : engine.RestoreApplyOnce(journal, Path.GetDirectoryName(Path.GetFullPath(input.GetProperty("policyRoot").GetString()!))!, input.GetProperty("repoRoot").GetString());
                     data = JsonSerializer.Serialize(result, OperationFiles.Json);
                 }
                 break;

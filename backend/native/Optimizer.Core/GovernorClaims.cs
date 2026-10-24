@@ -8,7 +8,7 @@ namespace RooIndustries.Optimizer;
 internal static class GovernorClaims
 {
     private sealed record Check(string Field, JsonElement? Original, JsonElement? Proposed);
-    private sealed record Claim(string Feature, int ProcessId, long? Created, string? ExecutablePath, string? ImageName, string[] Fields, Check[]? Checks = null);
+    private sealed record Claim(string Feature, int ProcessId, long? Created, string? ExecutablePath, string? ImageName, string[] Fields, Check[]? Checks = null, string? Journal = null, string? Record = null, DateTime? Captured = null);
     private sealed record Doubt(string Feature, string Path, string Reason, string[] Fields);
 
     private sealed class Evidence(string dataRoot, HashSet<string> wanted)
@@ -20,7 +20,7 @@ internal static class GovernorClaims
     }
 
     private static readonly (string Field, string Key)[] Originals =
-        [("cpuPriority", "originalPriorityClass"), ("affinity", "originalAffinityMask"), ("ioPriority", "originalIoPriority"), ("gpuPriority", "originalGpuPriority")];
+        [("cpuPriority", "originalPriorityClass"), ("affinity", "originalAffinityMask"), ("ioPriority", "originalIoPriority"), ("gpuPriority", "originalGpuPriority"), ("memoryPriority", "originalMemoryPriority")];
 
     private static readonly string[] OriginalFields = Originals.Select(pair => pair.Field).ToArray();
     private static readonly string[] CpuFields = ["cpuSets"];
@@ -37,16 +37,7 @@ internal static class GovernorClaims
     {
         if (rules.Count == 0) return;
         var fieldsByRule = rules.Select(rule => ProcessPolicyStore.Fields(rule).ToHashSet(StringComparer.Ordinal)).ToArray();
-        var evidence = new Evidence(dataRoot, fieldsByRule.SelectMany(fields => fields).ToHashSet(StringComparer.Ordinal));
-        ApplyOnce(evidence);
-        CpuSelection(evidence);
-        BackgroundPriorities(evidence);
-        if (!string.IsNullOrWhiteSpace(repoRoot))
-        {
-            var state = Path.Combine(repoRoot, "backend", "state");
-            Sessions(Path.Combine(state, "game-tune-sessions"), "Game priority", evidence);
-            Sessions(Path.Combine(state, "process-governor-sessions"), "Background limits", evidence);
-        }
+        var evidence = Collect(new Evidence(dataRoot, fieldsByRule.SelectMany(fields => fields).ToHashSet(StringComparer.Ordinal)), Journals(dataRoot, "process-*"), repoRoot);
         Dictionary<int, SnapshotProcess>? running = null;
         var owners = new Dictionary<int, string?>();
         foreach (var (rule, fields) in rules.Zip(fieldsByRule))
@@ -66,6 +57,74 @@ internal static class GovernorClaims
             if (evidence.Doubts.FirstOrDefault(doubt => doubt.Fields.Any(fields.Contains)) is { } unread) throw Unreadable(unread, fields, dataRoot);
         }
     }
+
+    public sealed record Own(string[] Journals, string? Unsure = null);
+
+    public static Own? OwnChange(RunningProcess identity, string field, JsonElement current, string dataRoot, string? repoRoot, string journalPath)
+    {
+        var claims = Overlapping(identity, field, dataRoot, repoRoot, journalPath, out var doubts);
+        var holders = claims.Where(claim => claim.Journal is { } path && Sets(path, field, current)).Select(claim => claim.Journal!).ToArray();
+        if (holders.Length > 0 || claims.Any(claim => claim.Journal is null && Sets(claim, field, current) == true)) return new(holders);
+        if (doubts.FirstOrDefault() is { } doubt) return new([], "A saved change file is damaged: " + Shown(doubt.Path, dataRoot) + " (" + doubt.Reason.Trim() + "). Undo left this setting alone.");
+        if (claims.FirstOrDefault(claim => claim.Journal is null && Sets(claim, field, current) is null) is { } unsure)
+            return new([], "Undo couldn't tell whether a saved " + unsure.Feature + " change set this value, so it was left alone. It resets when that app restarts.");
+        return null;
+    }
+
+    private static string Shown(string path, string dataRoot)
+    {
+        var root = Path.GetFullPath(dataRoot).TrimEnd('\\', '/') + Path.DirectorySeparatorChar;
+        var full = Path.GetFullPath(path);
+        return full.StartsWith(root, StringComparison.OrdinalIgnoreCase) ? full[root.Length..] : full;
+    }
+
+    public static (string[] Journals, ReleasedClaim[] Released) SetBack(RunningProcess identity, string field, JsonElement current, JsonElement desired, DateTime appliedAt, string dataRoot, string? repoRoot, string journalPath)
+    {
+        var claims = Overlapping(identity, field, dataRoot, repoRoot, journalPath, out _);
+        var journals = claims.Where(claim => claim.Journal is { } path && StartsFrom(path, field, current, desired, appliedAt)).Select(claim => claim.Journal!).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        var released = claims.Where(claim => claim.Journal is null && claim.Checks is not null && claim.Record is not null && claim.Captured is { } captured && captured > appliedAt)
+            .SelectMany(claim => claim.Checks!.Where(check => check.Field == field && check.Original is { } original && Same(field, desired, original) == true &&
+                (check.Proposed is not { } proposed || Same(field, current, proposed) == true)).Select(check => new ReleasedClaim(claim.Feature, check.Original!.Value, claim.Record!)))
+            .DistinctBy(claim => claim.Feature + "\n" + claim.Original.GetRawText() + "\n" + claim.Record).ToArray();
+        return (journals, released);
+    }
+
+    private static Claim[] Overlapping(RunningProcess identity, string field, string dataRoot, string? repoRoot, string journalPath, out Doubt[] doubts)
+    {
+        var self = Path.GetFullPath(journalPath);
+        var journals = Journals(dataRoot, "process-*").Concat(SessionJournals(dataRoot)).Where(path => !string.Equals(Path.GetFullPath(path), self, StringComparison.OrdinalIgnoreCase));
+        var evidence = Collect(new Evidence(dataRoot, ProcessTarget.ControlNames.ToHashSet(StringComparer.Ordinal)), journals, repoRoot);
+        doubts = evidence.Doubts.Where(doubt => doubt.Fields.Contains(field)).ToArray();
+        return evidence.Claims.Where(claim => claim.Fields.Contains(field) && SameInstance(claim, identity)).ToArray();
+    }
+
+    private static bool? Sets(Claim claim, string field, JsonElement current) => claim.Checks is null ? true :
+        claim.Checks.FirstOrDefault(check => check.Field == field)?.Proposed is { } proposed ? Same(field, current, proposed) : null;
+
+    private static bool Sets(string journal, string field, JsonElement current) => OperationFiles.Read<ProcessControlJournal>(journal).Changes
+        .Any(change => change.Name == field && change.Status is "applyIntent" or "applied" or "restoreIntent" && ProcessTarget.Equivalent(field, current, change.Desired));
+
+    private static bool StartsFrom(string journal, string field, JsonElement current, JsonElement desired, DateTime appliedAt) => OperationFiles.Read<ProcessControlJournal>(journal).Changes
+        .Any(change => change.Name == field && change.Status is "applyIntent" or "applied" or "restoreIntent" && change.AppliedAtUtc is { } at && at > appliedAt &&
+            ProcessTarget.Equivalent(field, current, change.Desired) && ProcessTarget.Equivalent(field, desired, change.Original));
+
+    private static Evidence Collect(Evidence evidence, IEnumerable<string> journals, string? repoRoot)
+    {
+        ApplyOnce(evidence, journals);
+        CpuSelection(evidence);
+        BackgroundPriorities(evidence);
+        if (!string.IsNullOrWhiteSpace(repoRoot))
+        {
+            var state = Path.Combine(repoRoot, "backend", "state");
+            Sessions(Path.Combine(state, "game-tune-sessions"), "Game priority", evidence);
+            Sessions(Path.Combine(state, "process-governor-sessions"), "Background limits", evidence);
+        }
+        return evidence;
+    }
+
+    private static bool SameInstance(Claim claim, RunningProcess identity) => claim.ProcessId == identity.ProcessId && (claim.Created is { } created
+        ? created.ToString(CultureInfo.InvariantCulture) == identity.CreationTimeFileTimeUtc
+        : string.Equals(FileName(claim), Path.GetFileName(identity.ExecutablePath), StringComparison.OrdinalIgnoreCase));
 
     private static bool OtherAccount(Claim claim, string account, Dictionary<int, string?> owners)
     {
@@ -176,6 +235,8 @@ internal static class GovernorClaims
                 return Level(live, null) is { } io && Level(recorded, IoNames) is { } wantedIo ? io == wantedIo : null;
             case "gpuPriority":
                 return Level(live, null) is { } gpu && Level(recorded, GpuNames) is { } wantedGpu ? gpu == wantedGpu : null;
+            case "memoryPriority":
+                return Level(live, null) is { } memory && Level(recorded, null) is { } wantedMemory ? memory == wantedMemory : null;
             default:
                 return null;
         }
@@ -191,10 +252,10 @@ internal static class GovernorClaims
         return index >= 0 ? index : null;
     }
 
-    private static void ApplyOnce(Evidence evidence)
+    private static void ApplyOnce(Evidence evidence, IEnumerable<string> journals)
     {
         if (!evidence.Wants(ProcessTarget.ControlNames)) return;
-        foreach (var path in Journals(evidence.DataRoot, "process-*"))
+        foreach (var path in journals)
         {
             using var document = Open(path, "Apply once", ProcessTarget.ControlNames, evidence);
             if (document is null) continue;
@@ -215,7 +276,7 @@ internal static class GovernorClaims
             }
             var changed = fields.Distinct().ToArray();
             if (changed.Length == 0) continue;
-            if (Identity(Child(Child(root, "preview"), "identity"), "Apply once", changed) is { } claim) evidence.Claims.Add(claim);
+            if (Identity(Child(Child(root, "preview"), "identity"), "Apply once", changed) is { } claim) evidence.Claims.Add(claim with { Journal = path });
             else evidence.Doubts.Add(new("Apply once", path, "it does not say which process it changed", changed));
         }
     }
@@ -299,12 +360,12 @@ internal static class GovernorClaims
         if (Child(snapshot, "controlChanges") is { ValueKind: JsonValueKind.Array or JsonValueKind.Object })
         {
             foreach (var change in Items(snapshot, "controlChanges").Where(change => Child(change, "blocked")?.ValueKind != JsonValueKind.True))
-                if (Field(Text(change, "control")) is { } field) checks[field] = new(field, Original(snapshot, field), Present(Child(change, "proposedValue")));
+                if (Field(Text(change, "control")) is { } field) checks[field] = new(field, Original(snapshot, field), Present(Child(change, "proposedValue")) ?? Applied(snapshot, field));
         }
         else
         {
             foreach (var field in OriginalFields)
-                if (Original(snapshot, field) is { } original) checks[field] = new(field, original, null);
+                if (Original(snapshot, field) is { } original) checks[field] = new(field, original, Applied(snapshot, field));
         }
         if (checks.Count == 0) return;
         var executablePath = Text(snapshot, "executablePath");
@@ -316,7 +377,15 @@ internal static class GovernorClaims
         }
         var started = Time(Text(snapshot, "processStartTimeUtc"));
         if (!string.IsNullOrWhiteSpace(name) && !name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) name += ".exe";
-        evidence.Claims.Add(new(feature, processId, started?.ToFileTimeUtc(), executablePath, name, checks.Keys.ToArray(), checks.Values.ToArray()));
+        var stamp = Text(snapshot, "capturedAtUtc");
+        var record = string.IsNullOrWhiteSpace(stamp) ? null : (Text(snapshot, "sessionId") ?? "") + "|" + stamp;
+        evidence.Claims.Add(new(feature, processId, started?.ToFileTimeUtc(), executablePath, name, checks.Keys.ToArray(), checks.Values.ToArray(), Record: record, Captured: Time(stamp)));
+    }
+
+    private static JsonElement? Applied(JsonElement snapshot, string field)
+    {
+        var name = field switch { "cpuPriority" => "PriorityClass", "affinity" => "AffinityMask", "ioPriority" => "IoPriority", "gpuPriority" => "GpuPriority", "memoryPriority" => "MemoryPriority", _ => null };
+        return name is null ? null : Present(Child(snapshot, "applied" + name)) ?? Present(Child(snapshot, "proposed" + name));
     }
 
     private static JsonElement? Original(JsonElement snapshot, string field) =>
@@ -361,6 +430,21 @@ internal static class GovernorClaims
         var operations = Path.Combine(dataRoot, "operations");
         if (!Directory.Exists(operations)) return [];
         return Directory.EnumerateDirectories(operations, pattern).Select(directory => Path.Combine(directory, "journal.json")).Where(File.Exists).ToArray();
+    }
+
+    private static IEnumerable<string> SessionJournals(string dataRoot)
+    {
+        var operations = Path.Combine(dataRoot, "operations");
+        if (!Directory.Exists(operations)) return [];
+        var paths = new List<string>();
+        foreach (var directory in Directory.EnumerateDirectories(operations, "game-session-*"))
+        {
+            var session = Path.Combine(directory, "session");
+            paths.Add(Path.Combine(session, "launcher-journal.json"));
+            var games = Path.Combine(session, "games");
+            if (Directory.Exists(games)) paths.AddRange(Directory.EnumerateDirectories(games).SelectMany(Directory.EnumerateDirectories).Select(field => Path.Combine(field, "journal.json")));
+        }
+        return paths.Where(File.Exists).ToArray();
     }
 
     private static JsonDocument? Open(string path, string feature, string[] fields, Evidence evidence)
