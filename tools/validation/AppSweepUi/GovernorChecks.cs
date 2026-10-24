@@ -200,7 +200,7 @@ static class GovernorChecks
             "State: running", "Headline: " + SignedIn,
             "Detail: 2 rules are on.", "Buttons: pause=True start=False");
         Expect(check, view, "Per-field mix: the applied field stays visible, only failed fields say unavailable, the stepped-back field says it keeps changing back, a denial is recognised by its recorded kind, not by its wording (an NTSTATUS text without the word denied still says unavailable, and an error text that mentions 'denied' is not treated as a denial)",
-            "Rule Chrome rule: Now: chrome.exe (100) · CPU priority High | chrome.exe (100) · I/O priority unavailable · " + Denied
+            "Rule Chrome rule: Now: chrome.exe (100) · CPU priority High | chrome.exe (100) · Disk priority unavailable · " + Denied
             + " | chrome.exe (100) · GPU priority · This app keeps changing it back, so the Governor stepped back. | chrome.exe (100) · Memory priority unavailable · " + Denied
             + " | chrome.exe (100) · Priority boost stepped back · Fixture policy denied this change");
         Expect(check, view, "Other account: a matching process under another Windows account says so instead of 'not running'",
@@ -322,7 +322,7 @@ static class GovernorChecks
         view = await View(Snapshot(false, [rule], new(hung, true, "The worker heartbeat is stale; it may be busy or unresponsive."), journals, restart));
         Expect(check, view, "Not responding: a stale heartbeat says not answering, the row shows no stale observed values, the Undo page counts apps",
             "State: notResponding", "Headline: Not responding", "Detail: The governor is not answering. Press Start governor to restart it.", "Buttons: pause=True start=True",
-            "Rule Chrome rule: Now: Not checked right now because the governor needs attention. | chrome.exe (100) · CPU priority still set by this rule | chrome.exe (100) · I/O priority still set by this rule",
+            "Rule Chrome rule: Now: Not checked right now because the governor needs attention. | chrome.exe (100) · CPU priority still set by this rule | chrome.exe (100) · Disk priority still set by this rule",
             "Undo: Not responding · 1 app still has rule settings · open Games > Processes (medium)");
         view = await View(Snapshot(false, [rule], new(hung, null, "Access is denied."), journals, restart));
         Expect(check, view, "Not responding: an unverifiable worker never claims it stopped or restarts by itself",
@@ -357,10 +357,10 @@ static class GovernorChecks
             new(RuleId, 400, Chrome, "The process could not be opened.") { Kind = "error" },
         ]), true, null), journals));
         Expect(check, view, "Legacy multi-field records show every applied field, and app-level denied or failed checks mark only the fields that are not applied",
-            "Rule Chrome rule: Now: legacy.exe (300) · CPU priority High, I/O priority Normal"
+            "Rule Chrome rule: Now: legacy.exe (300) · CPU priority High, Disk priority Normal"
             + " | legacy.exe (300) · GPU priority unavailable · " + Denied + " | legacy.exe (300) · Memory priority unavailable · " + Denied
             + " | legacy.exe (300) · Priority boost unavailable · " + Denied
-            + " | chrome.exe (400) · CPU priority unavailable · The process could not be opened. | chrome.exe (400) · I/O priority unavailable · The process could not be opened."
+            + " | chrome.exe (400) · CPU priority unavailable · The process could not be opened. | chrome.exe (400) · Disk priority unavailable · The process could not be opened."
             + " | chrome.exe (400) · GPU priority unavailable · The process could not be opened. | chrome.exe (400) · Memory priority unavailable · The process could not be opened."
             + " | chrome.exe (400) · Priority boost unavailable · The process could not be opened.");
 

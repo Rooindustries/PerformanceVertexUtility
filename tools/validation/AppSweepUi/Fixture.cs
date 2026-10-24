@@ -334,8 +334,11 @@ namespace RooIndustries.OptimizationSuite.Services
         public TweakRecovery? WindowsRecovery { get; set; } = new(null, null, null);
         public string? FindLastJournal(string kind) => null;
         public Func<int, ProcessControlSnapshot>? ProcessReads { get; set; }
+        public TaskCompletionSource? ProcessReadGate { get; set; }
         public Task<ProcessControlSnapshot> ReadProcessControlsAsync(int processId)
-            => Task.FromResult(ProcessReads?.Invoke(processId) ?? ProcessSnapshot ?? throw new InvalidOperationException("Process snapshot fixture is missing."));
+            => ProcessReadGate is { } gate ? GatedRead(gate.Task, processId) : Task.FromResult(ProcessRead(processId));
+        private ProcessControlSnapshot ProcessRead(int processId) => ProcessReads?.Invoke(processId) ?? ProcessSnapshot ?? throw new InvalidOperationException("Process snapshot fixture is missing.");
+        private async Task<ProcessControlSnapshot> GatedRead(Task gate, int processId) { await gate; return ProcessRead(processId); }
         public Func<Dictionary<string, JsonElement>, ProcessControlReview>? Review { get; set; }
         public Task<ProcessControlReview> PreviewControlsAsync(int processId, Dictionary<string, JsonElement> controls, CpuSelection? selection)
             => Review is { } review ? Task.FromResult(review(controls)) : throw new InvalidOperationException("Unexpected preview call.");
@@ -374,8 +377,13 @@ namespace RooIndustries.OptimizationSuite.Services
         public Task<PolicyHostState> RetryGovernorRestoreAsync() { RetryCalls++; return RetryRestore(); }
         public Task<GameSessionEntry[]> ReadGameSessionsAsync() => Task.FromResult(GameSessions);
         public Func<Dictionary<string, JsonElement>, GameSessionReview>? GameReview { get; set; }
+        public bool? GameReviewScope { get; set; }
         public Task<GameSessionReview> PreviewGameSessionAsync(int launcherId, string gamePath, Dictionary<string, JsonElement> controls, bool acceptLauncherScope)
-            => GameReview is { } review ? Task.FromResult(review(controls)) : throw new InvalidOperationException("Unexpected game session preview.");
+        {
+            if (GameReview is not { } review) throw new InvalidOperationException("Unexpected game session preview.");
+            GameReviewScope = acceptLauncherScope;
+            return Task.FromResult(review(controls));
+        }
         public void RequireNoLaunchProfile(ProtectedSessionPreview plan) { }
         public List<GameSessionReview> StartedSessions { get; } = new();
         public Task<ProtectedSessionStatus> StartGameSessionAsync(GameSessionReview review)
@@ -396,7 +404,9 @@ namespace RooIndustries.OptimizationSuite.Services
         public Task<ProtectedSessionStatus> ReadGameSessionAsync(string sessionRoot) => Task.FromResult(GameSessions.FirstOrDefault(entry => entry.SessionRoot == sessionRoot)?.Worker ?? new ProtectedSessionStatus(null, null, "No fixture session."));
         public Task<ProtectedSessionStatus> StopGameSessionAsync(string sessionRoot) => throw new InvalidOperationException("Unexpected game session stop.");
         public Task<ProtectedSessionStatus> RecoverGameSessionAsync(string sessionRoot) => throw new InvalidOperationException("Unexpected game session recovery.");
-        public Task<ProtectedSessionStatus> SwitchGameCoresAsync(string sessionRoot, string affinityMask) => throw new InvalidOperationException("Unexpected core switch.");
+        public Func<string, string, ProtectedSessionStatus>? GameSwitch { get; set; }
+        public Task<ProtectedSessionStatus> SwitchGameCoresAsync(string sessionRoot, string affinityMask)
+            => GameSwitch is { } change ? Task.FromResult(change(sessionRoot, affinityMask)) : throw new InvalidOperationException("Unexpected core switch.");
         public Task<TweakRecovery> ReadWindowsRecoveryAsync(bool fresh = false) => Task.FromResult(WindowsRecovery ?? throw new IOException("Controlled Windows recovery failure"));
         public static readonly TweakContext WindowsContext = new(new("fixture-pc", "fixture-user"), "fixture-store", 26200, "Professional");
         public Task<TweakCatalogResult> ReadWindowsTweakCatalogAsync(bool fresh = false) => Task.FromException<TweakCatalogResult>(new IOException("Controlled Windows catalog read failure"));
