@@ -16,7 +16,7 @@ namespace RooIndustries.OptimizationSuite.ViewModels;
 public partial class RemovalRow : ObservableObject
 {
     public BulkRemovalEntry Entry { get; }
-    [ObservableProperty] private string _state = "Ready for review";
+    [ObservableProperty] private string _state = "Ready";
     public RemovalRow(BulkRemovalEntry entry) { Entry = entry; }
 }
 
@@ -26,9 +26,22 @@ public partial class LeftoverChoice : ObservableObject
     public RemovedAppChoice Application { get; }
     [ObservableProperty] private bool _selected;
     public bool CanSelect => !Item.Protected && Item.Exists == true && Item.OwnershipComplete && Item.SharedOwners.Count == 0 && Item.Error is null;
-    public string Evidence => Application.Name + " · " + Item.Kind + (Item.Registry is null ? "" : " · " + Item.Registry.View) + "\n" +
-        string.Join("; ", Item.Evidence) + (Item.SharedOwners.Count == 0 ? "" : "\nShared with: " + string.Join(", ", Item.SharedOwners)) +
-        (Item.OwnershipComplete ? "" : "\nSubtree ownership could not be fully inspected.") + (Item.Protected ? "\nProtected location." : "");
+    public string Evidence => Application.Name + " · " + KindLabel(Item.Kind) + (Item.Registry is null ? "" : Item.Registry.View == "Registry32" ? " · 32-bit" : " · 64-bit") + "\n" +
+        string.Join("; ", Item.Evidence.Select(Reason).Distinct()) + (Item.SharedOwners.Count == 0 ? "" : "\nAlso used by " + string.Join(", ", Item.SharedOwners)) +
+        (Item.OwnershipComplete ? "" : "\nCouldn't check everything inside it, so it stays.") + (Item.Error is null ? "" : "\nCouldn't check this one, so it stays.") + (Item.Protected ? "\nWindows needs this, so it stays." : "");
+    private const string UnprovedOwner = "Ownership could not be checked for installed app: ";
+    private static string KindLabel(string kind) => kind switch { "file" => "File", "folder" => "Folder", "registryKey" => "Registry key", "registryValue" => "Registry value", _ => "Leftover" };
+    private static string Reason(string evidence) => evidence switch
+    {
+        "Published installation location" => "The app's install folder",
+        "Exact package-family data directory" => "The app's data folder",
+        "Directory name matches the selected product" => "Folder name matches the app",
+        "Key name matches the selected product; review its subtree ownership" => "Key name matches the app",
+        "Value references the selected installation path" => "Points to the app's install folder",
+        _ when evidence.StartsWith(UnprovedOwner, StringComparison.Ordinal) => "Couldn't check whether " + evidence[UnprovedOwner.Length..] + " uses it",
+        _ when evidence.StartsWith("Excluded ", StringComparison.Ordinal) => "Windows or another app needs it",
+        _ => "Matches this app",
+    };
     public LeftoverChoice(LeftoverCandidate item, RemovedAppChoice application) { Item = item; Application = application; }
 }
 
@@ -44,7 +57,7 @@ public sealed record CleanupHistoryChoice(CleanupBatchSession Session)
     public static string StatusLabel(string status) => status switch
     {
         "applied" => "Cleaned", "restored" => "Restored", "pending" => "Not started", "running" or "applying" => "Cleaning",
-        "restoring" => "Restoring", "stopped" => "Stopped", "prepared" => "Reviewed", "needsReconciliation" => "Needs review", _ => "Unknown state",
+        "restoring" => "Restoring", "stopped" => "Stopped", "prepared" => "Ready", "needsReconciliation" => "Stopped partway", _ => "Unknown",
     };
 }
 
@@ -75,14 +88,12 @@ public partial class BulkRemovalViewModel : ObservableObject
     public ObservableCollection<CleanupHistoryChoice> CleanupHistory { get; } = new();
     [ObservableProperty] private CleanupHistoryChoice? _selectedCleanupHistory;
     [ObservableProperty] private bool _scanAllApps;
-    [ObservableProperty] private bool _acceptKeyRecreation;
-    [ObservableProperty] private string _cleanupApplyLabel = "Delete reviewed leftovers";
+    [ObservableProperty] private string _cleanupApplyLabel = "Delete leftovers";
     [ObservableProperty] private RemovedAppChoice? _selectedRemovedApp;
     [ObservableProperty] private bool _hasRemovedApps;
     [ObservableProperty] private bool _fileReviewReady;
-    [ObservableProperty] private bool _filesReviewed;
     [ObservableProperty] private bool _fileRestoreAvailable;
-    [ObservableProperty] private string _fileStatus = "Scan an app after its removal has completed.";
+    [ObservableProperty] private string _fileStatus = "Pick a removed app to find what it left behind.";
     [ObservableProperty] private string _fileSummary = "";
     [ObservableProperty] private string _searchText = "";
     [ObservableProperty] private int _installedAppCount;
@@ -90,10 +101,10 @@ public partial class BulkRemovalViewModel : ObservableObject
     [ObservableProperty] private bool _dependenciesReviewed;
     [ObservableProperty] private bool _requiresDependencyReview;
     [ObservableProperty] private bool _hasProtectedSelection;
-    [ObservableProperty] private string _selectionSummary = "Select applications to remove.";
+    [ObservableProperty] private string _selectionSummary = "Pick the apps to remove.";
     [ObservableProperty] private string _status = "Nothing selected.";
     [ObservableProperty] private bool _includeAllAppxUsers;
-    [ObservableProperty] private string _detail = "Preview the exact removal commands before running them.";
+    [ObservableProperty] private string _detail = "Pick apps, then preview what gets removed.";
     [ObservableProperty] private string _applyLabel = "Remove selected apps";
     public bool CanSelect => !Busy && _phase is not ("running" or "canceled" or "needs-reconciliation" or "reboot-required" or "ready");
     public bool NoMatches => !Busy && Apps.Count == 0;
@@ -103,8 +114,8 @@ public partial class BulkRemovalViewModel : ObservableObject
     public bool CanReconcile => !Busy && _review is not null && (_phase is "running" or "needs-reconciliation" or "reboot-required");
     public bool CanStartOver => !Busy && !_removalRunning && _review is not null && (_phase is "running" or "canceled" or "needs-reconciliation" or "reboot-required" or "ready");
     public bool CanScanFiles => !Busy && (ScanAllApps ? RemovedApps.Count > 0 : SelectedRemovedApp is not null);
-    public bool CanPreviewFiles => !Busy && Leftovers.Any(item => item.Selected && item.CanSelect) && (!HasSelectedKeys || AcceptKeyRecreation);
-    public bool CanApplyFiles => !Busy && FileReviewReady && FilesReviewed;
+    public bool CanPreviewFiles => !Busy && Leftovers.Any(item => item.Selected && item.CanSelect);
+    public bool CanApplyFiles => !Busy && FileReviewReady;
     public bool CanRestoreFiles => !Busy && SelectedCleanupHistory?.CanRestore == true;
     public bool CanRestoreLegacyFiles => !Busy && FileRestoreAvailable;
     public bool CanCancelCleanup => _cleanupRunning && _cleanupObserved;
@@ -115,19 +126,16 @@ public partial class BulkRemovalViewModel : ObservableObject
     partial void OnDependenciesReviewedChanged(bool value) => RefreshCommands();
     partial void OnSearchTextChanged(string value) { _suggestedGroup = null; Filter(); }
     partial void OnIncludeAllAppxUsersChanged(bool value) { if (!Busy) _ = RefreshAsync(); }
-    partial void OnSelectedRemovedAppChanged(RemovedAppChoice? value) { _fileSelectionVersion++; Leftovers.Clear(); _fileReview = null; FileReviewReady = false; FilesReviewed = false; FileStatus = "Scan this application's current leftovers."; FileSummary = ""; RefreshCommands(); }
-    partial void OnFilesReviewedChanged(bool value) => RefreshCommands();
+    partial void OnSelectedRemovedAppChanged(RemovedAppChoice? value) { _fileSelectionVersion++; Leftovers.Clear(); _fileReview = null; FileReviewReady = false; FileStatus = "Find this app's leftovers."; FileSummary = ""; RefreshCommands(); }
     partial void OnFileReviewReadyChanged(bool value) => RefreshCommands();
     partial void OnFileRestoreAvailableChanged(bool value) => RefreshCommands();
     partial void OnScanAllAppsChanged(bool value) { _fileSelectionVersion++; Leftovers.Clear(); InvalidateCleanup(); RefreshCommands(); }
-    partial void OnAcceptKeyRecreationChanged(bool value) { InvalidateCleanup(); RefreshCommands(); }
     partial void OnSelectedCleanupHistoryChanged(CleanupHistoryChoice? value)
     {
         if (value is not null && !_cleanupRunning)
         {
             _fileReview = value.Session.Review;
             UpdateCleanupProgress(value.Session.State);
-            FilesReviewed = false;
         }
         RefreshCommands();
     }
@@ -148,9 +156,9 @@ public partial class BulkRemovalViewModel : ObservableObject
             await RefreshCleanupHistoryAsync();
             _restoreReview = await App.Operations.ReadLastFileCleanupAsync();
             FileRestoreAvailable = _restoreReview is not null && System.IO.File.Exists(_restoreReview.Plan.RollbackPath);
-            if (FileRestoreAvailable && !HasCleanupHistory) { FileStatus = "File recovery is available for " + _restoreReview!.Plan.DisplayName; FileSummary = "Restore earlier file backup recovers the saved files; it does not reinstall the app."; }
+            if (FileRestoreAvailable && !HasCleanupHistory) { FileStatus = _restoreReview!.Plan.DisplayName + "'s earlier cleanup can be restored."; FileSummary = "Restore earlier cleanup puts its files back. It doesn't reinstall the app."; }
         }
-        catch (Exception error) { Status = "Couldn't read saved removal state."; Detail = error.Message; }
+        catch (Exception error) { Log(error); Status = "Couldn't load your last removal."; Detail = "Close and reopen the app to try again."; }
     }
 
     [RelayCommand]
@@ -160,7 +168,7 @@ public partial class BulkRemovalViewModel : ObservableObject
         if (CanSelect) SetSelection(Array.Empty<InstalledApp>());
         Busy = true;
         try { await LoadAppsAsync(); }
-        catch (Exception error) { Status = "Couldn't refresh installed apps."; Detail = error.Message; }
+        catch (Exception error) { Log(error); Status = "Couldn't refresh your apps."; Detail = "Press Refresh to try again."; }
         finally { Busy = false; }
     }
     public bool HasUserWork => _selected.Count > 0 || _review is not null;
@@ -174,7 +182,7 @@ public partial class BulkRemovalViewModel : ObservableObject
         if (Busy || _selected.Count > 0 || _review is not null || !CanSelect || !changed && Environment.TickCount64 - _appsLoadedTicks < 30000) return false;
         Busy = true;
         try { await LoadAppsAsync(); return true; }
-        catch (Exception error) { Status = "Couldn't refresh installed apps."; Detail = error.Message; return false; }
+        catch (Exception error) { Log(error); Status = "Couldn't refresh your apps."; Detail = "Press Refresh to try again."; return false; }
         finally { Busy = false; }
     }
     private bool _appsLoaded;
@@ -188,14 +196,14 @@ public partial class BulkRemovalViewModel : ObservableObject
         _all.AddRange(inventory.Apps.Where(app => app.IsListable || app.SourceType == "appx" && !app.Protected).OrderBy(app => app.FriendlyName, StringComparer.OrdinalIgnoreCase));
         InstalledAppCount = _all.Count;
         Filter();
-        if (inventory.Complete == false) { Status = "Some app registrations could not be read."; Detail = string.Join("\n", inventory.Errors ?? new()); }
+        if (inventory.Complete == false) { Log(string.Join("\n", inventory.Errors ?? new())); Status = "Some apps couldn't be read, so they may be missing from this list."; Detail = "Press Refresh to try again."; }
     }
 
     public void ShowGroup(string group)
     {
         SearchText = ""; _suggestedGroup = group; Filter();
         Status = group switch { "widgets" => "Windows Widgets packages", "copilot" => "Copilot and Office Hub apps", "edge" => "Microsoft Edge", "onedrive" => "Microsoft OneDrive", _ => "Choose installed apps" };
-        Detail = "Type in Search to show other apps. Review removal and leftover files separately. Protected Windows packages remain protected.";
+        Detail = "Search to see other apps. Anything Windows needs stays protected.";
     }
     private bool MatchesGroup(InstalledApp app)
     {
@@ -226,9 +234,9 @@ public partial class BulkRemovalViewModel : ObservableObject
         if (!CanSelect || _refreshingRemovedApps) return;
         _selected.Clear(); _selected.AddRange(selected);
         _review = null; _phase = "selection"; ReviewRows.Clear(); DependenciesReviewed = false; RequiresDependencyReview = false; HasProtectedSelection = false;
-        SelectionSummary = _selected.Count == 0 ? "Select applications to remove." : $"{_selected.Count} selected";
+        SelectionSummary = _selected.Count == 0 ? "Pick the apps to remove." : $"{_selected.Count} selected";
         Status = _selected.Count == 0 ? "Nothing selected." : "Ready to preview removal.";
-        Detail = "The app's own remover runs first. Leftover deletion requires a separate review.";
+        Detail = "Each app's own uninstaller runs. You can clean up what it leaves behind after.";
         RefreshCommands();
     }
 
@@ -241,10 +249,10 @@ public partial class BulkRemovalViewModel : ObservableObject
         {
             _review = await App.Operations.PreviewRemovalAsync(_selected.Select(app => app.AppId!).ToArray(), IncludeAllAppxUsers);
             SetReview(_review); _phase = "preview";
-            Status = HasProtectedSelection ? "A protected application is selected." : "Review the selected removals.";
-            Detail = HasProtectedSelection ? "Remove protected entries from the selection before continuing." : "Check each application and its command. Vendor removal cannot be undone by restoring leftover files.";
+            Status = HasProtectedSelection ? "One of these is part of Windows and can't be removed." : "Check the list, then remove.";
+            Detail = HasProtectedSelection ? "Unpick it to continue." : "Removing an app can't be undone. To get it back, install it again.";
         }
-        catch (Exception error) { Status = "Couldn't build the removal plan."; Detail = error.Message; _review = null; }
+        catch (Exception error) { Log(error); Status = "Couldn't get the removal ready."; Detail = "Press Preview removal to try again."; _review = null; }
         finally { Busy = false; }
     }
 
@@ -254,7 +262,7 @@ public partial class BulkRemovalViewModel : ObservableObject
         RequiresDependencyReview = review.Plan.Entries.Any(entry => entry.ReviewRequired);
         HasProtectedSelection = review.Plan.Entries.Any(entry => entry.Protected);
         var count = review.Plan.Entries.Count;
-        SelectionSummary = count + (count == 1 ? " application in this plan" : " applications in this plan");
+        SelectionSummary = count + (count == 1 ? " app to remove" : " apps to remove");
         ApplyLabel = "Remove " + count + (count == 1 ? " app" : " apps");
         RefreshCommands();
     }
@@ -273,7 +281,7 @@ public partial class BulkRemovalViewModel : ObservableObject
             if (result.Data is not null) UpdateProgress(result.Data);
         }
         catch (InvalidOperationException error) when (error.Message == RunningChanges.Installing) { Status = "Removal didn't start."; Detail = error.Message; }
-        catch (Exception error) { _phase = "needs-reconciliation"; Status = "Removal needs checking."; Detail = error.Message; }
+        catch (Exception error) { Log(error); _phase = "needs-reconciliation"; Status = "Removal needs checking."; Detail = "Press Check again to see where it got to."; }
         finally { _removalRunning = false; Busy = false; }
     }
 
@@ -285,10 +293,10 @@ public partial class BulkRemovalViewModel : ObservableObject
         {
             await App.Operations.CancelRemovalAsync(_review.JournalPath);
             _cancelRequested = true;
-            Status = "Stopping after the current app.";
-            Detail = "The active remover is allowed to finish. No further application will start.";
+            Status = "Stopping after this app.";
+            Detail = "Its uninstaller gets to finish. No other app starts.";
         }
-        catch (Exception error) { Status = "Couldn't request cancellation."; Detail = error.Message; }
+        catch (Exception error) { Log(error); Status = "Couldn't stop the list."; Detail = "Press Stop to try again."; }
     }
 
     [RelayCommand]
@@ -301,7 +309,7 @@ public partial class BulkRemovalViewModel : ObservableObject
             var result = await App.Operations.ReconcileRemovalAsync(_review.JournalPath);
             if (result.Data is not null) UpdateProgress(result.Data);
         }
-        catch (Exception error) { Status = "Couldn't check removal state."; Detail = error.Message; }
+        catch (Exception error) { Log(error); Status = "Couldn't check the list."; Detail = "Press Check again in a moment."; }
         finally { Busy = false; }
     }
 
@@ -316,15 +324,15 @@ public partial class BulkRemovalViewModel : ObservableObject
             var interrupted = dismissed.Data?.Entries.Any(entry => !entry.RegistrationAbsent && (entry.State == "dispatching" || entry.LaunchUnconfirmed)) == true;
             _review = null; _phase = "selection"; _journalObserved = false; _cancelRequested = false; _selected.Clear(); ReviewRows.Clear();
             DependenciesReviewed = false; RequiresDependencyReview = false; HasProtectedSelection = false;
-            SelectionSummary = "Select applications to remove."; ApplyLabel = "Remove selected apps";
+            SelectionSummary = "Pick the apps to remove."; ApplyLabel = "Remove selected apps";
             Status = "Pick the apps to remove.";
             Detail = interrupted
-                ? "The last list was cleared. One removal stopped while its remover was starting, so the app can't tell whether it ran. Check that app before removing it again."
-                : "The last list was cleared. Apps already removed stay removed. Pick any app again to try once more.";
+                ? "The list was cleared. One app's uninstaller was starting when it stopped, so the app can't tell whether it ran. Check that app before you remove it again."
+                : "The list was cleared. Apps already removed stay removed. Pick any app to try again.";
             await LoadAppsAsync();
         }
-        catch (Exception error) when (_review is not null) { Status = "Couldn't clear this list yet."; Detail = error.Message; }
-        catch (Exception error) { Status = "Couldn't refresh installed apps."; Detail = error.Message; }
+        catch (Exception error) when (_review is not null) { Log(error); Status = "Couldn't clear this list yet."; Detail = "An uninstaller may still be running, or Windows needs a restart. Let it finish or restart, then try again."; }
+        catch (Exception error) { Log(error); Status = "Couldn't refresh your apps."; Detail = "Press Refresh to try again."; }
         finally { Busy = false; }
     }
 
@@ -335,18 +343,20 @@ public partial class BulkRemovalViewModel : ObservableObject
         foreach (var row in ReviewRows)
         {
             var current = state.Entries.FirstOrDefault(entry => entry.AppId == row.Entry.AppId);
-            if (current is not null) row.State = StateLabel(current.State) + (string.IsNullOrWhiteSpace(current.Error) ? "" : ": " + current.Error);
+            if (current is null) continue;
+            row.State = StateLabel(current.State);
+            if (!string.IsNullOrWhiteSpace(current.Error)) Log(row.Entry.DisplayName + ": " + current.Error);
         }
         (Status, Detail) = state.Status switch
         {
-            "cleanup-review-required" => ("Selected removals completed.", "The selected registrations are gone. Review leftover files and registry data before cleanup."),
-            "canceled" => ("Queue stopped.", "Resume runs only applications that were never attempted. Start over clears this list."),
-            "needs-reconciliation" => ("Removal needs checking.", "An earlier result is uncertain. Check state to look again, or Start over to clear this list and pick apps again."),
-            "reboot-required" => ("Windows restart required.", "Restart Windows, then check this list again or start over."),
-            "ready" => ("Ready to resume.", "Confirmed removals stay completed. Only untouched entries will run. Start over clears this list."),
-            "running" when !_removalRunning => ("A previous removal is unfinished.", "Check state to look again, or Start over to clear this list. An attempted removal will not run again automatically."),
-            "running" when _cancelRequested => ("Stopping after the current app.", "The current remover is allowed to finish. No further application will start."),
-            _ => ("Removing selected apps.", "Applications run one at a time. You can stop the remaining queue."),
+            "cleanup-review-required" => ("Apps removed.", "Clean up what they left behind below."),
+            "canceled" => ("Stopped.", "Resume removes the apps that haven't started. Start over clears the list."),
+            "needs-reconciliation" => ("Removal needs checking.", "Couldn't tell whether the last uninstaller finished. Press Check again to look, or Start over to clear the list."),
+            "reboot-required" => ("Restart Windows to finish.", "Then press Check again, or Start over."),
+            "ready" => ("Ready to resume.", "Apps already removed stay removed. Resume removes the rest. Start over clears the list."),
+            "running" when !_removalRunning => ("The last removal didn't finish.", "Press Check again to look, or Start over to clear the list. An app that already started won't run again on its own."),
+            "running" when _cancelRequested => ("Stopping after this app.", "Its uninstaller gets to finish. No other app starts."),
+            _ => ("Removing apps…", "One at a time. Stop skips the ones that haven't started."),
         };
         if (state.Status is "canceled" or "ready") ApplyLabel = "Resume remaining";
         if (state.Status == "cleanup-review-required") { _selected.Clear(); ApplyLabel = "Removal completed"; }
@@ -388,29 +398,32 @@ public partial class BulkRemovalViewModel : ObservableObject
             var incomplete = new List<string>();
             foreach (var app in applications)
             {
-                FileStatus = "Scanning " + app.Name + "…";
+                FileStatus = "Checking " + app.Name + "…";
                 var scan = await App.Operations.DiscoverLeftoversAsync(app.JournalPath, app.Id, _scanCancellation.Token);
                 if (version != _fileSelectionVersion) return;
                 foreach (var item in scan.Candidates)
                 {
+                    if (item.Error is not null) Log(app.Name + ": " + item.Target + ": " + item.Error);
                     var choice = new LeftoverChoice(item, app);
                     choice.PropertyChanged += FileSelectionChanged;
                     Leftovers.Add(choice);
                 }
-                if (!scan.Complete) incomplete.Add(app.Name + ": " + string.Join("; ", scan.Errors.Take(3)) + (scan.Errors.Length > 3 ? " (additional scopes were also incomplete)" : ""));
+                if (!scan.Complete) incomplete.Add(app.Name + ": " + string.Join("; ", scan.Errors));
             }
-            FileStatus = Leftovers.Count == 0 ? "No leftovers found in the inspected locations." : "Select file, folder, registry-key or registry-value targets to review.";
-            FileSummary = incomplete.Count == 0 ? "Each item includes its matching evidence. Shared and protected items stay excluded." : "Some locations could not be completely inspected.\n" + string.Join("\n", incomplete);
+            Log(string.Join("\n", incomplete));
+            FileStatus = Leftovers.Count == 0 ? "No leftovers found." : "Pick the leftovers to delete.";
+            FileSummary = incomplete.Count > 0 ? "Some places couldn't be fully checked, so a few leftovers may be missing."
+                : Leftovers.Count == 0 ? "" : "Each one says why it belongs to the app. Anything Windows or another app needs can't be picked.";
         }
-        catch (OperationCanceledException) { FileStatus = "Scan stopped. Results from completed applications remain available."; }
-        catch (Exception error) { FileStatus = "Couldn't complete the leftover scan."; FileSummary = error.Message; }
+        catch (OperationCanceledException) { FileStatus = "Stopped. Leftovers found so far are still listed."; }
+        catch (Exception error) { Log(error); FileStatus = "Couldn't finish looking for leftovers."; FileSummary = "Press Find leftovers to try again."; }
         finally { _scanCancellation.Dispose(); _scanCancellation = null; Busy = false; }
     }
 
     [RelayCommand]
     private void CancelScan() => _scanCancellation?.Cancel();
 
-    private void InvalidateCleanup() { _fileReview = null; _batchState = null; FileReviewReady = false; FilesReviewed = false; CleanupApplyLabel = "Delete reviewed leftovers"; }
+    private void InvalidateCleanup() { _fileReview = null; _batchState = null; FileReviewReady = false; CleanupApplyLabel = "Delete leftovers"; }
     private void FileSelectionChanged(object? sender, PropertyChangedEventArgs args)
     {
         if (args.PropertyName != nameof(LeftoverChoice.Selected)) return;
@@ -426,13 +439,15 @@ public partial class BulkRemovalViewModel : ObservableObject
         {
             var reviews = new List<CleanupPart>();
             foreach (var group in Leftovers.Where(item => item.Selected && item.CanSelect).GroupBy(item => item.Application))
-                reviews.Add(await App.Operations.PreviewDeepCleanupAsync(group.Key.JournalPath, group.Key.Id, group.Select(item => item.Item.ItemId).ToArray(), AcceptKeyRecreation));
+                reviews.Add(await App.Operations.PreviewDeepCleanupAsync(group.Key.JournalPath, group.Key.Id, group.Select(item => item.Item.ItemId).ToArray(), true));
             _fileReview = await App.Operations.PreviewCleanupBatchAsync(reviews.ToArray());
             FileSummary = string.Join("\n\n", _fileReview.Plan.Parts.Select(part => part.Preview.DisplayName + "\n" + string.Join("\n", part.Preview.Selection.Select(item => item.Target))));
-            FileStatus = "Review " + _fileReview.Plan.Parts.Sum(part => part.Preview.Selection.Length) + " targets across " + _fileReview.Plan.Parts.Length + " applications.";
+            var targets = _fileReview.Plan.Parts.Sum(part => part.Preview.Selection.Length);
+            var apps = _fileReview.Plan.Parts.Length;
+            FileStatus = "Ready to delete " + targets + (targets == 1 ? " leftover" : " leftovers") + " from " + apps + (apps == 1 ? " app" : " apps") + ". Everything is backed up first.";
             FileReviewReady = true;
         }
-        catch (Exception error) { FileStatus = "Couldn't preview cleanup."; FileSummary = error.Message; }
+        catch (Exception error) { Log(error); FileStatus = "Couldn't get the cleanup ready."; FileSummary = "Pick the leftovers again, then press Preview cleanup."; }
         finally { Busy = false; }
     }
 
@@ -449,7 +464,7 @@ public partial class BulkRemovalViewModel : ObservableObject
             UpdateCleanupProgress(result);
             await RefreshCleanupHistoryAsync(_fileReview.JournalPath);
         }
-        catch (Exception error) { FileStatus = "Cleanup needs checking."; FileSummary = error.Message; }
+        catch (Exception error) { Log(error); FileStatus = "Couldn't confirm the cleanup."; FileSummary = "Close and reopen Remove apps to see where it got to."; }
         finally { _cleanupRunning = false; Busy = false; }
     }
 
@@ -460,9 +475,9 @@ public partial class BulkRemovalViewModel : ObservableObject
         try
         {
             await App.Operations.CancelCleanupBatchAsync(_fileReview.JournalPath);
-            FileStatus = "Stopping after the current application.";
+            FileStatus = "Stopping after this app.";
         }
-        catch (Exception error) { FileStatus = "Couldn't request a stop."; FileSummary = error.Message; }
+        catch (Exception error) { Log(error); FileStatus = "Couldn't stop the cleanup."; FileSummary = "Press Stop after this app to try again."; }
     }
 
     private void UpdateCleanupProgress(CleanupBatchJournal state)
@@ -470,19 +485,20 @@ public partial class BulkRemovalViewModel : ObservableObject
         _batchState = state;
         _cleanupObserved = true;
         FileReviewReady = !state.RestoreStarted && !_cleanupRunning && state.Status is "stopped" or "needsReconciliation" or "running" or "prepared";
-        CleanupApplyLabel = FileReviewReady ? "Resume reviewed cleanup" : "Delete reviewed leftovers";
+        CleanupApplyLabel = FileReviewReady ? "Resume cleanup" : "Delete leftovers";
         FileStatus = state.Status switch
         {
-            "applied" => "Reviewed cleanup completed.", "stopped" => "Cleanup stopped before the remaining applications.",
-            "restored" => "Cleanup recovery completed.", "restoring" => "Restoring cleanup backups…",
-            "prepared" => "Saved cleanup is ready to review.",
-            "running" when !_cleanupRunning => "Saved cleanup needs checking before resuming.",
-            "needsReconciliation" => "Cleanup needs recovery or a fresh review.", _ => "Cleaning reviewed leftovers…",
+            "applied" => "Cleanup done.", "stopped" => "Cleanup stopped before the other apps.",
+            "restored" => "Restore done.", "restoring" => "Restoring…",
+            "prepared" => "A saved cleanup is ready.",
+            "running" when !_cleanupRunning => "A saved cleanup stopped partway. Resume it, or restore it.",
+            "needsReconciliation" => "This cleanup stopped partway. Restore it, or find leftovers again.", _ => "Deleting leftovers…",
         };
-        FileSummary = string.Join("\n", state.Entries.Select(entry => state.Preview.Parts.Single(part => part.Preview.OperationId == entry.OperationId).Preview.DisplayName + ": " +
-            CleanupHistoryChoice.StatusLabel(entry.Status) + (entry.Error is null ? "" : " · " + entry.Error)));
+        string Name(CleanupBatchEntry entry) => state.Preview.Parts.Single(part => part.Preview.OperationId == entry.OperationId).Preview.DisplayName;
+        foreach (var entry in state.Entries.Where(entry => entry.Error is not null)) Log(Name(entry) + ": " + entry.Error);
+        FileSummary = string.Join("\n", state.Entries.Select(entry => Name(entry) + ": " + CleanupHistoryChoice.StatusLabel(entry.Status)));
         if (FileReviewReady)
-            FileSummary += "\n\nReviewed targets:\n" + string.Join("\n\n", state.Preview.Parts.Select(part => part.Preview.DisplayName + "\n" + string.Join("\n", part.Preview.Selection.Select(item => item.Target))));
+            FileSummary += "\n\nOn the list:\n" + string.Join("\n\n", state.Preview.Parts.Select(part => part.Preview.DisplayName + "\n" + string.Join("\n", part.Preview.Selection.Select(item => item.Target))));
         RefreshCommands();
     }
 
@@ -505,9 +521,8 @@ public partial class BulkRemovalViewModel : ObservableObject
             var path = SelectedCleanupHistory!.Session.Review.JournalPath;
             UpdateCleanupProgress(await App.Operations.RestoreCleanupBatchAsync(path));
             await RefreshCleanupHistoryAsync(path);
-            FilesReviewed = false;
         }
-        catch (Exception error) { FileStatus = "Couldn't restore cleanup data."; FileSummary = error.Message; }
+        catch (Exception error) { Log(error); FileStatus = "Couldn't restore this cleanup."; FileSummary = "Press Restore this cleanup to try again."; }
         finally { Busy = false; }
     }
 
@@ -520,20 +535,24 @@ public partial class BulkRemovalViewModel : ObservableObject
         {
             using var running = RunningChanges.Begin();
             var result = await App.Operations.RestoreRemovedFilesAsync(_restoreReview);
-            FileStatus = result.Status == "success" ? "Earlier file backup restored." : "Some earlier files could not be restored.";
-            FileSummary = "File recovery does not reinstall the application.";
+            FileStatus = result.Status == "success" ? "Earlier cleanup restored." : "Some files from the earlier cleanup couldn't be put back.";
+            FileSummary = "Restore doesn't reinstall the app.";
             FileRestoreAvailable = result.Status != "success";
         }
-        catch (Exception error) { FileStatus = "Couldn't restore earlier files."; FileSummary = error.Message; }
+        catch (Exception error) { Log(error); FileStatus = "Couldn't restore the earlier cleanup."; FileSummary = "Press Restore earlier cleanup to try again."; }
         finally { Busy = false; }
     }
 
     private static string StateLabel(string state) => state switch
     {
-        "pending" => "Waiting", "dispatching" or "running" => "Removing", "removed" => "Removed", "already-absent" => "Already absent",
-        "reboot-required" or "restart-initiated" => "Restart required", "needs-reconciliation" => "Needs checking", "installer-busy" => "Installer busy",
-        "canceled" => "Canceled", "failed-before-start" => "Not started", _ => "Removal failed",
+        "pending" => "Waiting", "dispatching" or "running" => "Removing…", "removed" => "Removed", "already-absent" => "Already gone",
+        "reboot-required" or "restart-initiated" => "Restart Windows to finish", "needs-reconciliation" => "Needs checking. Press Check again.",
+        "installer-busy" => "Another install is running. Try again when it's done.", "canceled" => "Stopped", "failed-before-start" => "Didn't start. Try again.",
+        _ => "Couldn't remove it. Try again, or uninstall it from Windows Settings.",
     };
+    private readonly HashSet<string> _logged = new(StringComparer.Ordinal);
+    private static void Log(Exception error) => AppLog.Write(nameof(BulkRemovalViewModel), error.ToString());
+    private void Log(string detail) { if (!string.IsNullOrWhiteSpace(detail) && _logged.Add(detail)) AppLog.Write(nameof(BulkRemovalViewModel), detail); }
     private void RefreshCommands()
     {
         foreach (var property in new[] { nameof(CanSelect), nameof(NoMatches), nameof(CanPreview), nameof(CanApply), nameof(CanCancel), nameof(CanReconcile), nameof(CanStartOver), nameof(CanScanFiles), nameof(CanPreviewFiles), nameof(CanApplyFiles), nameof(CanRestoreFiles), nameof(CanRestoreLegacyFiles), nameof(CanCancelCleanup), nameof(CanCancelScan), nameof(HasSelectedKeys), nameof(HasCleanupHistory) }) OnPropertyChanged(property);

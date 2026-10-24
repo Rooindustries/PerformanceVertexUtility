@@ -28,7 +28,7 @@
             </Grid.ColumnDefinitions>
             <Border Style="{StaticResource CardBorderStyle}" Padding="8" Background="{StaticResource RooIndustriesSurfaceCardBrush}" BorderBrush="{StaticResource RooIndustriesBorderBrush}">
                 <Grid>
-                    <TextBlock Text="No applications match this search." TextWrapping="Wrap" Margin="12" Foreground="{StaticResource RooIndustriesTextMutedBrush}" Visibility="{x:Bind ViewModel.NoMatches, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" AutomationProperties.AutomationId="RemovalEmpty" />
+                    <TextBlock Text="No apps match this search." TextWrapping="Wrap" Margin="12" Foreground="{StaticResource RooIndustriesTextMutedBrush}" Visibility="{x:Bind ViewModel.NoMatches, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" AutomationProperties.AutomationId="RemovalEmpty" />
                     <ListView x:Name="ApplicationList" ItemsSource="{x:Bind ViewModel.Apps}" SelectionMode="Multiple" SelectionChanged="SelectionChanged" IsEnabled="{x:Bind ViewModel.CanSelect, Mode=OneWay}" AutomationProperties.AutomationId="RemovalApps" ScrollViewer.VerticalScrollBarVisibility="Auto">
                         <ListView.ItemTemplate>
                             <DataTemplate x:DataType="models:InstalledApp">
@@ -51,7 +51,7 @@
                                     <StackPanel Spacing="5" Margin="0,0,0,14">
                                         <TextBlock Text="{x:Bind Entry.ReviewLabel}" FontWeight="SemiBold" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextPrimaryBrush}" />
                                         <TextBlock Text="{x:Bind State, Mode=OneWay}" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextSecondaryBrush}" />
-                                        <Expander Header="Removal command" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                                        <Expander Header="Uninstall command" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
                                             <TextBlock Text="{x:Bind Entry.Command}" FontSize="11" TextWrapping="Wrap" IsTextSelectionEnabled="True" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                                         </Expander>
                                     </StackPanel>
@@ -59,14 +59,14 @@
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
                         <CheckBox IsChecked="{x:Bind ViewModel.DependenciesReviewed, Mode=TwoWay}" Visibility="{x:Bind ViewModel.RequiresDependencyReview, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" IsEnabled="{x:Bind ViewModel.Busy, Mode=OneWay, Converter={StaticResource InverseBool}}" AutomationProperties.AutomationId="RemovalDependencyReview">
-                            <TextBlock Text="I reviewed shared components and dependencies in this selection." TextWrapping="Wrap" />
+                            <TextBlock Text="Some of these, like runtimes, drivers or anti-cheat, may be needed by Windows, your games or other apps. Remove them anyway." TextWrapping="Wrap" />
                         </CheckBox>
-                        <Expander Header="Review leftover files and registry data" IsExpanded="True" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Visibility="{x:Bind ViewModel.HasRemovedApps, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
+                        <Expander Header="Clean up leftovers" IsExpanded="True" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Visibility="{x:Bind ViewModel.HasRemovedApps, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
                             <StackPanel Spacing="10">
-                                <ComboBox ItemsSource="{x:Bind ViewModel.RemovedApps}" SelectedItem="{x:Bind ViewModel.SelectedRemovedApp, Mode=TwoWay}" PlaceholderText="Choose a removed application" IsEnabled="{x:Bind ViewModel.Busy, Mode=OneWay, Converter={StaticResource InverseBool}}" HorizontalAlignment="Stretch" AutomationProperties.AutomationId="RemovedAppPicker" />
-                                <CheckBox Content="Scan all completed removals" IsChecked="{x:Bind ViewModel.ScanAllApps, Mode=TwoWay}" IsEnabled="{x:Bind ViewModel.Busy, Mode=OneWay, Converter={StaticResource InverseBool}}" AutomationProperties.AutomationId="RemovedAppsScanAll" />
-                                <Button Content="Scan leftovers" Command="{x:Bind ViewModel.ScanFilesCommand}" IsEnabled="{x:Bind ViewModel.CanScanFiles, Mode=OneWay}" AutomationProperties.AutomationId="RemovedAppScan" />
-                                <Button Content="Stop scan" Command="{x:Bind ViewModel.CancelScanCommand}" Visibility="{x:Bind ViewModel.CanCancelScan, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" AutomationProperties.AutomationId="CleanupScanCancel" />
+                                <ComboBox ItemsSource="{x:Bind ViewModel.RemovedApps}" SelectedItem="{x:Bind ViewModel.SelectedRemovedApp, Mode=TwoWay}" PlaceholderText="Pick a removed app" IsEnabled="{x:Bind ViewModel.Busy, Mode=OneWay, Converter={StaticResource InverseBool}}" HorizontalAlignment="Stretch" AutomationProperties.AutomationId="RemovedAppPicker" />
+                                <CheckBox Content="All removed apps" IsChecked="{x:Bind ViewModel.ScanAllApps, Mode=TwoWay}" IsEnabled="{x:Bind ViewModel.Busy, Mode=OneWay, Converter={StaticResource InverseBool}}" AutomationProperties.AutomationId="RemovedAppsScanAll" />
+                                <Button Content="Find leftovers" Command="{x:Bind ViewModel.ScanFilesCommand}" IsEnabled="{x:Bind ViewModel.CanScanFiles, Mode=OneWay}" AutomationProperties.AutomationId="RemovedAppScan" />
+                                <Button Content="Stop" Command="{x:Bind ViewModel.CancelScanCommand}" Visibility="{x:Bind ViewModel.CanCancelScan, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" AutomationProperties.AutomationId="CleanupScanCancel" />
                                 <ItemsControl ItemsSource="{x:Bind ViewModel.Leftovers}" IsEnabled="{x:Bind ViewModel.Busy, Mode=OneWay, Converter={StaticResource InverseBool}}">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate x:DataType="vm:LeftoverChoice">
@@ -79,15 +79,10 @@
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
-                                <CheckBox IsChecked="{x:Bind ViewModel.AcceptKeyRecreation, Mode=TwoWay}" IsEnabled="{x:Bind ViewModel.Busy, Mode=OneWay, Converter={StaticResource InverseBool}}" Visibility="{x:Bind ViewModel.HasSelectedKeys, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" AutomationProperties.AutomationId="RegistryRecreationReview">
-                                    <TextBlock Text="I accept whole-key recovery: values and access permissions are saved; audit settings, timestamps and volatile-key status are not preserved. Recovered keys use normal persistent storage." TextWrapping="Wrap" />
-                                </CheckBox>
-                                <Button Content="Preview selected leftovers" Command="{x:Bind ViewModel.PreviewFilesCommand}" IsEnabled="{x:Bind ViewModel.CanPreviewFiles, Mode=OneWay}" AutomationProperties.AutomationId="RemovedFilesPreview" />
+                                <TextBlock Text="Restore brings back registry keys with their values and permissions." FontSize="12" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" Visibility="{x:Bind ViewModel.HasSelectedKeys, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" AutomationProperties.AutomationId="RegistryRestoreNote" />
+                                <Button Content="Preview cleanup" Command="{x:Bind ViewModel.PreviewFilesCommand}" IsEnabled="{x:Bind ViewModel.CanPreviewFiles, Mode=OneWay}" AutomationProperties.AutomationId="RemovedFilesPreview" />
                                 <TextBlock Text="{x:Bind ViewModel.FileStatus, Mode=OneWay}" FontWeight="SemiBold" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextPrimaryBrush}" AutomationProperties.AutomationId="RemovedFilesStatus" />
                                 <TextBlock Text="{x:Bind ViewModel.FileSummary, Mode=OneWay}" FontSize="12" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
-                                <CheckBox IsChecked="{x:Bind ViewModel.FilesReviewed, Mode=TwoWay}" Visibility="{x:Bind ViewModel.FileReviewReady, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" IsEnabled="{x:Bind ViewModel.Busy, Mode=OneWay, Converter={StaticResource InverseBool}}" AutomationProperties.AutomationId="RemovedFilesApproval">
-                                    <TextBlock Text="I reviewed these exact file and registry targets, their ownership, and any personal data they contain." TextWrapping="Wrap" />
-                                </CheckBox>
                                 <Button Content="{x:Bind ViewModel.CleanupApplyLabel, Mode=OneWay}" Command="{x:Bind ViewModel.ApplyFilesCommand}" IsEnabled="{x:Bind ViewModel.CanApplyFiles, Mode=OneWay}" AutomationProperties.AutomationId="RemovedFilesApply" />
                                 <Button Content="Stop after this app" Command="{x:Bind ViewModel.CancelCleanupCommand}" Visibility="{x:Bind ViewModel.CanCancelCleanup, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" AutomationProperties.AutomationId="CleanupBatchCancel" />
                             </StackPanel>
@@ -95,9 +90,9 @@
                         <StackPanel Spacing="8" Visibility="{x:Bind ViewModel.HasCleanupHistory, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
                             <ComboBox Header="Cleanup history" ItemsSource="{x:Bind ViewModel.CleanupHistory}" SelectedItem="{x:Bind ViewModel.SelectedCleanupHistory, Mode=TwoWay}" HorizontalAlignment="Stretch" IsEnabled="{x:Bind ViewModel.Busy, Mode=OneWay, Converter={StaticResource InverseBool}}" AutomationProperties.AutomationId="CleanupHistory" />
                             <Button Content="Restore this cleanup" Command="{x:Bind ViewModel.RestoreFilesCommand}" IsEnabled="{x:Bind ViewModel.CanRestoreFiles, Mode=OneWay}" AutomationProperties.AutomationId="RemovedFilesRestore" />
-                            <TextBlock Text="Recovery restores supported leftover data. It does not reinstall the application or overwrite changed destination data." FontSize="12" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                            <TextBlock Text="Restore puts back what this cleanup deleted. It doesn't reinstall the app or replace anything that changed since." FontSize="12" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                         </StackPanel>
-                        <Button Content="Restore earlier file backup" Command="{x:Bind ViewModel.RestoreLegacyFilesCommand}" IsEnabled="{x:Bind ViewModel.CanRestoreLegacyFiles, Mode=OneWay}" Visibility="{x:Bind ViewModel.FileRestoreAvailable, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" AutomationProperties.AutomationId="LegacyFilesRestore" />
+                        <Button Content="Restore earlier cleanup" Command="{x:Bind ViewModel.RestoreLegacyFilesCommand}" IsEnabled="{x:Bind ViewModel.CanRestoreLegacyFiles, Mode=OneWay}" Visibility="{x:Bind ViewModel.FileRestoreAvailable, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" AutomationProperties.AutomationId="LegacyFilesRestore" />
                     </StackPanel>
                 </ScrollViewer>
             </Border>
@@ -108,9 +103,9 @@
             <views:AdaptivePanel MinColumnWidth="220" MaxColumns="4" Compact="True">
                 <Button Content="Preview removal" Command="{x:Bind ViewModel.PreviewCommand}" IsEnabled="{x:Bind ViewModel.CanPreview, Mode=OneWay}" AutomationProperties.AutomationId="RemovalPreview" />
                 <Button Content="{x:Bind ViewModel.ApplyLabel, Mode=OneWay}" Click="Apply_Click" IsEnabled="{x:Bind ViewModel.CanApply, Mode=OneWay}" AutomationProperties.AutomationId="RemovalApply" Background="{StaticResource RooIndustriesNavCtaBrush}" Foreground="{StaticResource RooIndustriesOnCtaBrush}" />
-                <Button Content="Stop queue" Command="{x:Bind ViewModel.CancelCommand}" Visibility="{x:Bind ViewModel.CanCancel, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" AutomationProperties.AutomationId="RemovalCancel" />
-                <Button Content="Check state" Command="{x:Bind ViewModel.ReconcileCommand}" Visibility="{x:Bind ViewModel.CanReconcile, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" AutomationProperties.AutomationId="RemovalReconcile" />
-                <Button Content="Start over" Click="StartOver_Click" Visibility="{x:Bind ViewModel.CanStartOver, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" AutomationProperties.AutomationId="RemovalStartOver" />
+                <Button Content="Stop" Command="{x:Bind ViewModel.CancelCommand}" Visibility="{x:Bind ViewModel.CanCancel, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" AutomationProperties.AutomationId="RemovalCancel" />
+                <Button Content="Check again" Command="{x:Bind ViewModel.ReconcileCommand}" Visibility="{x:Bind ViewModel.CanReconcile, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" AutomationProperties.AutomationId="RemovalReconcile" />
+                <Button Content="Start over" Command="{x:Bind ViewModel.StartOverCommand}" Visibility="{x:Bind ViewModel.CanStartOver, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" AutomationProperties.AutomationId="RemovalStartOver" />
             </views:AdaptivePanel>
         </StackPanel>
     </Grid>

@@ -89,7 +89,7 @@ public sealed class BulkRemovalEntry
     public bool ReviewRequired { get; set; }
     public bool Protected { get; set; }
     public string ReviewLabel => Identity is { } identity && identity.TryGetProperty("kind", out var kind) && kind.GetString() == "appx" && identity.TryGetProperty("userSid", out var sid)
-        ? DisplayName + " · " + (sid.GetString() == RooIndustries.Optimizer.OperationOwner.Current().UserSid ? "this Windows user" : sid.GetString()) : DisplayName;
+        ? DisplayName + " · " + (sid.GetString() == RooIndustries.Optimizer.OperationOwner.Current().UserSid ? "Your account" : WindowsAccounts.Label(sid.GetString())) : DisplayName;
     public string Command => CommandLine;
 }
 

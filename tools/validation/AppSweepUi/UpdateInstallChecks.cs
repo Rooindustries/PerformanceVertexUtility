@@ -262,8 +262,8 @@ static class UpdateInstallChecks
                         await cleanup.InitializeAsync();
                         cleanup.SelectedApp = cleanup.Apps.Single();
                         cleanup.RemovalPathReviewed = true; cleanup.LeftoverScanCompleted = true; cleanup.CleanupPlanReady = true;
-                        cleanup.RemoverPathApproved = true; cleanup.CleanupListApproved = true;
-                        cleanup.FinalCheckPassed = true; cleanup.RealCleanupApproved = true;
+                        cleanup.RemovalApproved = true;
+                        cleanup.FinalCheckPassed = true;
                         App.Live.CleanupApply = (id, _, _, _) => ServiceSteps.Then<string?>("cleanup",
                             () => JsonSerializer.Serialize(new { actionId = "apps.invokeUninstallCleanupApplyPackage", appId = id, dryRun = false, status = "success", executionMode = "real", summary = new { deletedCount = 1 } }),
                             () => cleanupInputs = id);
@@ -325,8 +325,8 @@ static class UpdateInstallChecks
             ServiceSteps.Pause = null;
             Set(removing, "_phase", "preview");
             cleanup!.RemovalPathReviewed = true; cleanup.LeftoverScanCompleted = true; cleanup.CleanupPlanReady = true;
-            cleanup.RemoverPathApproved = true; cleanup.CleanupListApproved = true;
-            cleanup.FinalCheckPassed = true; cleanup.RealCleanupApproved = true;
+            cleanup.RemovalApproved = true;
+            cleanup.FinalCheckPassed = true;
             App.Live.CleanupApply = (_, _, _, _) => throw new IOException("Controlled cleanup input write failure");
             await removing.ApplyCommand.ExecuteAsync(null);
             await cleanup.ApplyCleanupCommand.ExecuteAsync(null);
