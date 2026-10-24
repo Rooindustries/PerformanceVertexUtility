@@ -379,7 +379,7 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
         {
             if (IsCurrent(app, generation))
             {
-                OfficialPreviewState = Plain(CheckFailed, error.ToString());
+                OfficialPreviewState = Plain(CheckFailed, error);
                 RemovalPathReviewed = false;
             }
         }
@@ -443,7 +443,7 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
         {
             if (IsCurrent(app, generation))
             {
-                LeftoverState = Plain(ScanFailed, error.ToString());
+                LeftoverState = Plain(ScanFailed, error);
                 LeftoverScanCompleted = false;
             }
         }
@@ -509,7 +509,7 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
             {
                 CleanupPlanState = "Couldn't make the removal list.";
                 RemovalPlanState = "Couldn't plan the removal.";
-                RemovalPlanDetail = Plain(PlanFailed, error.ToString());
+                RemovalPlanDetail = Plain(PlanFailed, error);
                 CleanupPlanReady = false;
             }
         }
@@ -543,7 +543,7 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
             if (IsCurrent(app, generation))
             {
                 CleanupExecutionState = "Final check failed.";
-                CleanupExecutionDetail = Plain(RetryFinalCheck, error.ToString());
+                CleanupExecutionDetail = Plain(RetryFinalCheck, error);
                 FinalCheckPassed = false;
             }
         }
@@ -577,7 +577,7 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
         }
         catch (Exception error)
         {
-            ShowResult(run, () => SummarizeCleanupExecution(null, run.AppId, error.ToString(), true));
+            ShowResult(run, () => SummarizeCleanupExecution(null, run.AppId, error.Message, true));
         }
         finally
         {
@@ -627,7 +627,7 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
             ShowResult(run, () =>
             {
                 CleanupExecutionState = "Restore failed.";
-                CleanupExecutionDetail = Plain(RestoreAgain, error.ToString());
+                CleanupExecutionDetail = Plain(RestoreAgain, error);
             });
         }
         finally
@@ -909,10 +909,13 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
 
     private static string Plain(string message, string? detail)
     {
-        if (detail is AppLog.MissingFiles or AppLog.TimedOut) return detail;
+        if (detail is AppLog.MissingFiles or AppLog.TimedOut or RunningChanges.Installing) return detail;
         AppLog.Write(nameof(UninstallCleanupViewModel), detail);
         return message;
     }
+
+    private static string Plain(string message, Exception error)
+        => error.Message is AppLog.MissingFiles or AppLog.TimedOut or RunningChanges.Installing ? error.Message : Plain(message, error.ToString());
 
     private static bool HasBlockingErrors(IEnumerable<IssueModel>? errors)
         => errors?.Any(error => error.Blocking) == true;

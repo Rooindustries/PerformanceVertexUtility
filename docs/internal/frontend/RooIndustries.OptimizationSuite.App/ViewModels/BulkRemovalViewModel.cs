@@ -158,7 +158,7 @@ public partial class BulkRemovalViewModel : ObservableObject
             FileRestoreAvailable = _restoreReview is not null && System.IO.File.Exists(_restoreReview.Plan.RollbackPath);
             if (FileRestoreAvailable && !HasCleanupHistory) { FileStatus = _restoreReview!.Plan.DisplayName + "'s earlier cleanup can be restored."; FileSummary = "Restore earlier cleanup puts its files back. It doesn't reinstall the app."; }
         }
-        catch (Exception error) { Log(error); Status = "Couldn't load your last removal."; Detail = "Close and reopen the app to try again."; }
+        catch (Exception error) { Status = "Couldn't load your last removal."; Detail = Plain("Close and reopen the app to try again.", error); }
     }
 
     [RelayCommand]
@@ -168,7 +168,7 @@ public partial class BulkRemovalViewModel : ObservableObject
         if (CanSelect) SetSelection(Array.Empty<InstalledApp>());
         Busy = true;
         try { await LoadAppsAsync(); }
-        catch (Exception error) { Log(error); Status = "Couldn't refresh your apps."; Detail = "Press Refresh to try again."; }
+        catch (Exception error) { Status = "Couldn't refresh your apps."; Detail = Plain("Press Refresh to try again.", error); }
         finally { Busy = false; }
     }
     public bool HasUserWork => _selected.Count > 0 || _review is not null;
@@ -182,7 +182,7 @@ public partial class BulkRemovalViewModel : ObservableObject
         if (Busy || _selected.Count > 0 || _review is not null || !CanSelect || !changed && Environment.TickCount64 - _appsLoadedTicks < 30000) return false;
         Busy = true;
         try { await LoadAppsAsync(); return true; }
-        catch (Exception error) { Log(error); Status = "Couldn't refresh your apps."; Detail = "Press Refresh to try again."; return false; }
+        catch (Exception error) { Status = "Couldn't refresh your apps."; Detail = Plain("Press Refresh to try again.", error); return false; }
         finally { Busy = false; }
     }
     private bool _appsLoaded;
@@ -252,7 +252,7 @@ public partial class BulkRemovalViewModel : ObservableObject
             Status = HasProtectedSelection ? "One of these is part of Windows and can't be removed." : "Check the list, then remove.";
             Detail = HasProtectedSelection ? "Unpick it to continue." : "Removing an app can't be undone. To get it back, install it again.";
         }
-        catch (Exception error) { Log(error); Status = "Couldn't get the removal ready."; Detail = "Press Preview removal to try again."; _review = null; }
+        catch (Exception error) { Status = "Couldn't get the removal ready."; Detail = Plain("Press Preview removal to try again.", error); _review = null; }
         finally { Busy = false; }
     }
 
@@ -281,7 +281,7 @@ public partial class BulkRemovalViewModel : ObservableObject
             if (result.Data is not null) UpdateProgress(result.Data);
         }
         catch (InvalidOperationException error) when (error.Message == RunningChanges.Installing) { Status = "Removal didn't start."; Detail = error.Message; }
-        catch (Exception error) { Log(error); _phase = "needs-reconciliation"; Status = "Removal needs checking."; Detail = "Press Check again to see where it got to."; }
+        catch (Exception error) { _phase = "needs-reconciliation"; Status = "Removal needs checking."; Detail = Plain("Press Check again to see where it got to.", error); }
         finally { _removalRunning = false; Busy = false; }
     }
 
@@ -296,7 +296,7 @@ public partial class BulkRemovalViewModel : ObservableObject
             Status = "Stopping after this app.";
             Detail = "Its uninstaller gets to finish. No other app starts.";
         }
-        catch (Exception error) { Log(error); Status = "Couldn't stop the list."; Detail = "Press Stop to try again."; }
+        catch (Exception error) { Status = "Couldn't stop the list."; Detail = Plain("Press Stop to try again.", error); }
     }
 
     [RelayCommand]
@@ -309,7 +309,7 @@ public partial class BulkRemovalViewModel : ObservableObject
             var result = await App.Operations.ReconcileRemovalAsync(_review.JournalPath);
             if (result.Data is not null) UpdateProgress(result.Data);
         }
-        catch (Exception error) { Log(error); Status = "Couldn't check the list."; Detail = "Press Check again in a moment."; }
+        catch (Exception error) { Status = "Couldn't check the list."; Detail = Plain("Press Check again in a moment.", error); }
         finally { Busy = false; }
     }
 
@@ -331,8 +331,8 @@ public partial class BulkRemovalViewModel : ObservableObject
                 : "The list was cleared. Apps already removed stay removed. Pick any app to try again.";
             await LoadAppsAsync();
         }
-        catch (Exception error) when (_review is not null) { Log(error); Status = "Couldn't clear this list yet."; Detail = "An uninstaller may still be running, or Windows needs a restart. Let it finish or restart, then try again."; }
-        catch (Exception error) { Log(error); Status = "Couldn't refresh your apps."; Detail = "Press Refresh to try again."; }
+        catch (Exception error) when (_review is not null) { Status = "Couldn't clear this list yet."; Detail = Plain("An uninstaller may still be running, or Windows needs a restart. Let it finish or restart, then try again.", error); }
+        catch (Exception error) { Status = "Couldn't refresh your apps."; Detail = Plain("Press Refresh to try again.", error); }
         finally { Busy = false; }
     }
 
@@ -416,7 +416,7 @@ public partial class BulkRemovalViewModel : ObservableObject
                 : Leftovers.Count == 0 ? "" : "Each one says why it belongs to the app. Anything Windows or another app needs can't be picked.";
         }
         catch (OperationCanceledException) { FileStatus = "Stopped. Leftovers found so far are still listed."; }
-        catch (Exception error) { Log(error); FileStatus = "Couldn't finish looking for leftovers."; FileSummary = "Press Find leftovers to try again."; }
+        catch (Exception error) { FileStatus = "Couldn't finish looking for leftovers."; FileSummary = Plain("Press Find leftovers to try again.", error); }
         finally { _scanCancellation.Dispose(); _scanCancellation = null; Busy = false; }
     }
 
@@ -447,7 +447,7 @@ public partial class BulkRemovalViewModel : ObservableObject
             FileStatus = "Ready to delete " + targets + (targets == 1 ? " leftover" : " leftovers") + " from " + apps + (apps == 1 ? " app" : " apps") + ". Everything is backed up first.";
             FileReviewReady = true;
         }
-        catch (Exception error) { Log(error); FileStatus = "Couldn't get the cleanup ready."; FileSummary = "Pick the leftovers again, then press Preview cleanup."; }
+        catch (Exception error) { FileStatus = "Couldn't get the cleanup ready."; FileSummary = Plain("Pick the leftovers again, then press Preview cleanup.", error); }
         finally { Busy = false; }
     }
 
@@ -464,7 +464,7 @@ public partial class BulkRemovalViewModel : ObservableObject
             UpdateCleanupProgress(result);
             await RefreshCleanupHistoryAsync(_fileReview.JournalPath);
         }
-        catch (Exception error) { Log(error); FileStatus = "Couldn't confirm the cleanup."; FileSummary = "Close and reopen Remove apps to see where it got to."; }
+        catch (Exception error) { FileStatus = "Couldn't confirm the cleanup."; FileSummary = Plain("Close and reopen Remove apps to see where it got to.", error); }
         finally { _cleanupRunning = false; Busy = false; }
     }
 
@@ -477,7 +477,7 @@ public partial class BulkRemovalViewModel : ObservableObject
             await App.Operations.CancelCleanupBatchAsync(_fileReview.JournalPath);
             FileStatus = "Stopping after this app.";
         }
-        catch (Exception error) { Log(error); FileStatus = "Couldn't stop the cleanup."; FileSummary = "Press Stop after this app to try again."; }
+        catch (Exception error) { FileStatus = "Couldn't stop the cleanup."; FileSummary = Plain("Press Stop after this app to try again.", error); }
     }
 
     private void UpdateCleanupProgress(CleanupBatchJournal state)
@@ -522,7 +522,7 @@ public partial class BulkRemovalViewModel : ObservableObject
             UpdateCleanupProgress(await App.Operations.RestoreCleanupBatchAsync(path));
             await RefreshCleanupHistoryAsync(path);
         }
-        catch (Exception error) { Log(error); FileStatus = "Couldn't restore this cleanup."; FileSummary = "Press Restore this cleanup to try again."; }
+        catch (Exception error) { FileStatus = "Couldn't restore this cleanup."; FileSummary = Plain("Press Restore this cleanup to try again.", error); }
         finally { Busy = false; }
     }
 
@@ -539,7 +539,7 @@ public partial class BulkRemovalViewModel : ObservableObject
             FileSummary = "Restore doesn't reinstall the app.";
             FileRestoreAvailable = result.Status != "success";
         }
-        catch (Exception error) { Log(error); FileStatus = "Couldn't restore the earlier cleanup."; FileSummary = "Press Restore earlier cleanup to try again."; }
+        catch (Exception error) { FileStatus = "Couldn't restore the earlier cleanup."; FileSummary = Plain("Press Restore earlier cleanup to try again.", error); }
         finally { Busy = false; }
     }
 
@@ -551,7 +551,12 @@ public partial class BulkRemovalViewModel : ObservableObject
         _ => "Couldn't remove it. Try again, or uninstall it from Windows Settings.",
     };
     private readonly HashSet<string> _logged = new(StringComparer.Ordinal);
-    private static void Log(Exception error) => AppLog.Write(nameof(BulkRemovalViewModel), error.ToString());
+    private static string Plain(string message, Exception error)
+    {
+        if (error.Message is RunningChanges.Installing or AppLog.TimedOut or AppLog.MissingFiles) return error.Message;
+        AppLog.Write(nameof(BulkRemovalViewModel), error.ToString());
+        return message;
+    }
     private void Log(string detail) { if (!string.IsNullOrWhiteSpace(detail) && _logged.Add(detail)) AppLog.Write(nameof(BulkRemovalViewModel), detail); }
     private void RefreshCommands()
     {
