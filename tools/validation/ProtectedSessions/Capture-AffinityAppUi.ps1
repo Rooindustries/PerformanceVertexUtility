@@ -216,7 +216,7 @@ try{
  if($preview){Invoke $preview;$gameReview=Soft {$t=Text 'GameSessionReview';if($t){$t}elseif((Text 'GameSessionStatus') -like "Couldn't*"){'(no review: '+(Text 'GameSessionStatus')+')'}} 120 'the session review'}
  ToBottom
  Step 'games-review' @{review=$gameReview;status=(Text 'GameSessionStatus');detail=(Text 'GameSessionDetail')}|Out-Null
- $start=if($preview -and $gameReview -notlike '(no review*'){Soft {Enabled 'GameSessionStart'} 60 'Start'}
+ $start=if($preview -and $gameReview -notlike '(no review*'){Soft {Enabled 'GameSessionStart'} 60 'Start'}else{$evidence.missed+=@('Start');$null}
  if($start){
   Invoke $start
   Soft {(Text 'GameSessionStatus') -like 'Ready*'} 120 'the session to be ready'|Out-Null
@@ -243,7 +243,8 @@ try{
  }
  Stop-Recorder $recorder;$recorder=$null
  [IO.File]::WriteAllText((Join-Path $launcherRoot 'stop-launcher'),'')
- $status='pass'
+ # Only a CPU with more than one cache group offers a cache-group choice; every other miss means a selected setting wasn't shown working.
+ $status=if(@($evidence.missed|Where-Object {$_ -ne 'the first cache group'}).Count){'fail'}else{'pass'}
 }catch{
  $evidence.error=$_.Exception.Message
  if($window){try{Step 'failure' @{}|Out-Null}catch{}}
