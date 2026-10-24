@@ -306,7 +306,8 @@ A choice imported from another tool is named in words, never by that tool's inte
 apply or source-default step, and the catalog compiler refuses one that would be.
 Defender sample submission reads as Windows default, Never send samples, Always ask
 before sending or Send all samples automatically. Defender and exploit protection rows
-are named for what they do, and each one's details give the name Windows Security uses.
+are named for what they do, and each exploit protection row's details say where Windows
+Security shows the same setting, if it does.
 Choose a value, then turn on the row's switch to select that action for review;
 turning it back off clears that selection. Before another choice is selected, a row
 reads on when Windows has its starting choice, or any of its choices if the row has

@@ -18,7 +18,7 @@ static class ReviewLabelChecks
         App.Operations = fixture; var model = new WindowsTweaksViewModel(); await model.RefreshCommand.ExecuteAsync(null);
         var picks = new Dictionary<string, string>
         {
-            [DynamicTicks] = "Disabled", [Hypervisor] = "Off", [Sehop] = "disabled", [Cfg] = "disabled", [Ipv6] = "Disabled", [DevicePower] = "Disabled", [Logitech] = "Enabled", [Defender] = NeverSend,
+            [DynamicTicks] = "Disabled", [Hypervisor] = "Off", [Sehop] = "Disabled", [Cfg] = "Disabled", [Ipv6] = "Disabled", [DevicePower] = "Disabled", [Logitech] = "Enabled", [Defender] = NeverSend,
         };
         var rows = picks.ToDictionary(pick => pick.Key, pick => model.Rows.Single(row => row.Id == pick.Key));
         foreach (var (id, option) in picks)

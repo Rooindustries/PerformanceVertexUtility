@@ -488,7 +488,11 @@ def choice_name(direction, change):
             return ('Running' if value else 'Stopped') if change['address']['property'] == 'running' else 'Enabled' if value else 'Disabled'
         if direction == 'source-default':
             return 'Windows default'
+        if direction in ('enabled', 'disabled'):
+            return direction.capitalize()
         if direction == 'apply' and change['address']['kind'] == 'defender':
+            if change['address']['property'] != 'SubmitSamplesConsent':
+                raise ValueError('No choice names for Defender ' + change['address']['property'])
             return SAMPLE_SUBMISSION[value]
         states = list(value.values()) if isinstance(value, dict) else [value]
         if direction == 'apply' and all(isinstance(state, str) for state in states) and len(set(states)) == 1:
@@ -764,7 +768,7 @@ def compile_catalog():
                     hint = str(value['dword']) if value.get('dword') is not None else 'value ' + option['id'][-4:]
                     option['name'] += ' (' + hint + ')'
     apply_labels(settings)
-    raw = [setting['id'] + ' ' + option['id'] for setting in settings for option in setting['options'] if option['name'] in ('apply', 'source-default')]
+    raw = [setting['id'] + ' ' + option['id'] for setting in settings for option in setting['options'] if re.match(r'(apply|source-default|enabled|disabled)( \(|$)', option['name'])]
     if raw:
         raise ValueError('Choices still named after their source direction: ' + ', '.join(raw))
     name_numbers(settings)
