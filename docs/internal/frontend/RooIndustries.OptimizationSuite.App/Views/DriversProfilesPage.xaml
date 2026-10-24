@@ -2,12 +2,13 @@
     <Grid Padding="{StaticResource RooIndustriesPageMargin}">
         <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="12" Visibility="{x:Bind ViewModel.IsLoading, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
             <ProgressRing IsActive="True" Width="40" Height="40" />
-            <TextBlock Text="Reading hardware and drivers" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+            <TextBlock Text="Reading your hardware and drivers" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
         </StackPanel>
         <Border MaxWidth="520" VerticalAlignment="Center" HorizontalAlignment="Center" Style="{StaticResource PanelBorderStyle}" Visibility="{x:Bind ViewModel.ErrorMessage, Mode=OneWay, Converter={StaticResource StringToVisibility}}">
             <StackPanel Spacing="8">
-                <TextBlock Text="Can't read your hardware yet" Style="{StaticResource SectionHeaderTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextPrimaryBrush}" />
+                <TextBlock Text="Couldn't read your hardware" Style="{StaticResource SectionHeaderTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextPrimaryBrush}" />
                 <TextBlock Text="{x:Bind ViewModel.ErrorMessage, Mode=OneWay}" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextSecondaryBrush}" />
+                <Button Content="Retry" Command="{x:Bind ViewModel.RetryCommand}" HorizontalAlignment="Left" AutomationProperties.AutomationId="DriversRetry" />
             </StackPanel>
         </Border>
         <ScrollViewer x:Name="DriversScroller" Visibility="{x:Bind ViewModel.IsReady, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" VerticalScrollBarVisibility="Auto" HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
@@ -27,8 +28,8 @@
                             </Grid.ColumnDefinitions>
                             <Image Grid.Column="0" Source="ms-appx:///Assets/Icons/gpu.svg" Style="{StaticResource PageHeaderIconStyle}" />
                             <StackPanel Grid.Column="1" Spacing="7">
-                                <TextBlock Text="Drivers &amp; GPU" FontSize="22" FontWeight="SemiBold" Foreground="{StaticResource RooIndustriesTextPrimaryBrush}" />
-                                <TextBlock Text="Hardware details and driver downloads." FontSize="13" LineHeight="19" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                                <TextBlock Text="Graphics drivers" FontSize="22" FontWeight="SemiBold" Foreground="{StaticResource RooIndustriesTextPrimaryBrush}" />
+                                <TextBlock Text="What's in your PC and where to get the newest graphics driver." FontSize="13" LineHeight="19" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                             </StackPanel>
                         </Grid>
                     </Grid>
@@ -74,7 +75,7 @@
                     </Border>
                     <Border Style="{StaticResource PanelBorderStyle}">
                         <StackPanel Spacing="12">
-                            <TextBlock Text="Network &amp; devices" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                            <TextBlock Text="Network" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                             <ItemsRepeater ItemsSource="{x:Bind ViewModel.NetworkAdapters}">
                                 <ItemsRepeater.ItemTemplate>
                                     <DataTemplate x:DataType="models:NetworkAdapterInfo">
@@ -82,11 +83,9 @@
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="*" />
                                                 <ColumnDefinition Width="Auto" />
-                                                <ColumnDefinition Width="Auto" />
                                             </Grid.ColumnDefinitions>
                                             <TextBlock Grid.Column="0" Text="{x:Bind Name}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Foreground="{StaticResource RooIndustriesTextPrimaryBrush}" />
-                                            <TextBlock Grid.Column="1" Text="{x:Bind DriverVersion}" VerticalAlignment="Center" Margin="0,0,8,0" FontSize="12" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
-                                            <TextBlock Grid.Column="2" Text="Manual" VerticalAlignment="Center" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource RooIndustriesTextMutedBrush}" Visibility="{x:Bind Protected, Converter={StaticResource BoolToVisibility}}" />
+                                            <TextBlock Grid.Column="1" Text="{x:Bind DriverVersion}" VerticalAlignment="Center" FontSize="12" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                                         </Grid>
                                     </DataTemplate>
                                 </ItemsRepeater.ItemTemplate>
@@ -104,8 +103,8 @@
                             </Grid.ColumnDefinitions>
                             <Image Grid.Column="0" VerticalAlignment="Top" Margin="0,2,0,0" Width="18" Height="18" Source="ms-appx:///Assets/Icons/check.svg" AutomationProperties.AccessibilityView="Raw" />
                             <StackPanel Grid.Column="1" Spacing="6">
-                                <TextBlock Text="No driver recommendations" FontSize="14" LineHeight="20" FontWeight="SemiBold" Foreground="{StaticResource RooIndustriesTextPrimaryBrush}" />
-                                <TextBlock Text="No matching driver recommendations are available. Use Tools to open the official driver downloads." FontSize="12" LineHeight="17" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                                <TextBlock Text="Get the newest driver" FontSize="14" LineHeight="20" FontWeight="SemiBold" Foreground="{StaticResource RooIndustriesTextPrimaryBrush}" />
+                                <TextBlock Text="{x:Bind ViewModel.DriverDownloadHint, Mode=OneWay}" FontSize="12" LineHeight="17" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                             </StackPanel>
                         </Grid>
                         <ItemsRepeater ItemsSource="{x:Bind ViewModel.Recommendations}">

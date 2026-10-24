@@ -179,6 +179,71 @@ static class RevisitChecks
             return after == "Tool check finished" && drivers.NvidiaActionTitle.EndsWith("is ready to review", StringComparison.Ordinal);
         });
 
+        async Task<bool> GraphicsDrivers(DriverHardwareSummary? hardware, Func<DriversProfilesViewModel, bool> shows)
+        {
+            var (savedHardware, savedProfiles) = (App.Live.DriverHardware, App.Data.NvidiaProfiles);
+            try
+            {
+                App.Live.LastError = null; App.Live.OperationError = null; App.Live.DriverHardware = hardware;
+                var drivers = new DriversProfilesViewModel();
+                await drivers.InitializeAsync();
+                return shows(drivers);
+            }
+            finally { (App.Live.DriverHardware, App.Data.NvidiaProfiles) = (savedHardware, savedProfiles); }
+        }
+        static string Released(int year, int month, int day) => new DateTime(year, month, day).ToString("d MMM yyyy", System.Globalization.CultureInfo.CurrentCulture);
+
+        await Scenario("Graphics drivers shows the NVIDIA driver number gamers know and leaves out placeholder and Windows names", () => GraphicsDrivers(new DriverHardwareSummary
+        {
+            Machine = new() { Manufacturer = "To Be Filled By O.E.M.", Model = "To Be Filled By O.E.M.", OsCaption = "Microsoft Windows 11 Pro" },
+            Cpu = new() { Name = "AMD Ryzen(TM) 9 9950X3D 16-Core Processor", Cores = 16, LogicalProcessors = 32 },
+            Gpus = [new() { Name = "NVIDIA GeForce RTX 5090", Vendor = "NVIDIA", DriverVersion = "32.0.15.6094", DriverDate = "2024-09-12" }],
+            NetworkAdapters = [new() { Name = "Intel(R) Wi-Fi 6E AX211 160MHz", Protected = true, Reason = "Network adapters and VPN interfaces require manual review by default" }],
+        }, drivers => drivers.IsReady && drivers.MachineModel == "Custom-built PC" && drivers.MachineOsCaption == "Windows 11 Pro"
+            && drivers.CpuName == "AMD Ryzen 9 9950X3D 16-Core Processor" && drivers.CpuCoreSummary == "16 cores, 32 threads"
+            && drivers.PrimaryGpuDriverSummary == "Driver 560.94 · " + Released(2024, 9, 12)
+            && drivers.DriverDownloadHint == "Open Tools and pick NVIDIA App & Driver."
+            && drivers.NetworkAdapters.Single().Name == "Intel Wi-Fi 6E AX211 160MHz"));
+
+        await Scenario("Graphics drivers picks the AMD card over onboard Intel graphics, keeps its driver number, drops an unreadable date and a placeholder model, and points to AMD's installer", () => GraphicsDrivers(new DriverHardwareSummary
+        {
+            Machine = new() { Manufacturer = "ASUS", Model = "System Product Name", OsCaption = "Microsoft Windows 10 Home" },
+            Cpu = new() { Name = "Intel(R) Core(TM) i7-14700K", Cores = 20, LogicalProcessors = 28 },
+            Gpus = [new() { Name = "Intel(R) UHD Graphics 770", Vendor = "Intel Corporation", DriverVersion = "31.0.101.5186", DriverDate = "2024-01-10" },
+                    new() { Name = "AMD Radeon RX 9070 XT", Vendor = "Advanced Micro Devices, Inc.", DriverVersion = "32.0.21013.1000", DriverDate = "20250312000000.000000-000" }],
+        }, drivers => drivers.IsReady && drivers.MachineModel == "ASUS" && drivers.MachineOsCaption == "Windows 10 Home"
+            && drivers.PrimaryGpuName == "AMD Radeon RX 9070 XT"
+            && drivers.PrimaryGpuDriverSummary == "Driver 32.0.21013.1000"
+            && drivers.DriverDownloadHint == "Open Tools and pick AMD Software: Adrenalin Edition."));
+
+        await Scenario("Graphics drivers says what to do when the hardware read comes back empty", () => GraphicsDrivers(null,
+            drivers => !drivers.IsReady && drivers.ErrorMessage == DriversProfilesViewModel.ReadFailed));
+
+        await Scenario("Graphics drivers shows a plain sentence, not the raw error, when reading the page fails", () =>
+        {
+            App.Data.NvidiaProfiles = null!;
+            return GraphicsDrivers(new DriverHardwareSummary
+            {
+                Machine = new() { Manufacturer = "Fixture", Model = "PC", OsCaption = "Windows" },
+                Gpus = [new() { Name = "NVIDIA Fixture GPU", DriverVersion = "1.0", DriverDate = "2026-01-01" }],
+            }, drivers => !drivers.IsReady && drivers.ErrorMessage == DriversProfilesViewModel.ReadFailed);
+        });
+
+        await Scenario("The Graphics drivers page shows no internal tags or confirmation boxes and offers Retry when the read fails", () =>
+        {
+            var folder = new DirectoryInfo(AppContext.BaseDirectory);
+            const string relative = "docs/internal/frontend/RooIndustries.OptimizationSuite.App/Views/DriversProfilesPage.xaml";
+            while (folder is not null && !File.Exists(Path.Combine(folder.FullName, relative))) folder = folder.Parent;
+            if (folder is null) return Task.FromResult(false);
+            var page = File.ReadAllText(Path.Combine(folder.FullName, relative));
+            var hidden = page.IndexOf("<Expander x:Name=\"NvidiaProfilesSection\" x:Load=\"False\"", StringComparison.Ordinal);
+            var shown = hidden < 0 ? page : page[..hidden] + page[page.IndexOf("</Expander>", hidden, StringComparison.Ordinal)..];
+            string[] internals = ["Text=\"Manual\"", "Drivers &amp; GPU", "No driver recommendations", "Close and reopen", "{x:Bind Protected", "{x:Bind Reason"];
+            return Task.FromResult(hidden > 0 && !internals.Any(text => page.Contains(text, StringComparison.Ordinal))
+                && !shown.Contains("<CheckBox", StringComparison.Ordinal) && !shown.Contains("<ContentDialog", StringComparison.Ordinal)
+                && shown.Contains("Command=\"{x:Bind ViewModel.RetryCommand}\"", StringComparison.Ordinal));
+        });
+
         await Scenario("After the page's own removal ran, clearing the picked app lists only the apps that are left", async () =>
         {
             App.Live.LastError = null; App.Live.BeforeInstalledApps = null; App.Live.AfterInstalledApps = null;
