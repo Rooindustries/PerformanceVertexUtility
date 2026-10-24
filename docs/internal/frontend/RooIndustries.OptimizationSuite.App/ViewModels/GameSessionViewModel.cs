@@ -2,12 +2,14 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using RooIndustries.OptimizationSuite.Helpers;
 using RooIndustries.OptimizationSuite.Models;
 using RooIndustries.OptimizationSuite.Services;
 using RooIndustries.Optimizer;
@@ -54,13 +56,18 @@ public sealed class GameCoreBox(byte index, string kind, bool enabled) : Observa
     public string AutomationId => "GameSessionCore" + (Index + 1);
     public bool IsChecked { get => _isChecked; set => SetProperty(ref _isChecked, value && Enabled); }
 }
+public sealed record GameLauncherChoice(int Id, string Name, string Label)
+{
+    public override string ToString() => Label;
+}
 public sealed record GameSessionField(string Label, string Requested, string Observed, string Result);
 public sealed record LaunchProfileRow(string Root, string Title, string Status);
 
 public partial class GameSessionViewModel : ObservableObject
 {
     public static string? PresetsPath { get; set; }
-    public ObservableCollection<CpuProcessChoice> Launchers { get; } = new();
+    public static Func<int, DateTime?> LauncherStarted { get; set; } = ProcessStarted;
+    public ObservableCollection<GameLauncherChoice> Launchers { get; } = new();
     public ObservableCollection<GameSessionEntry> Sessions { get; } = new();
     public ObservableCollection<GameCoreBox> Cores { get; } = new();
     public ObservableCollection<GameCoreChoice> CoreChoices { get; } = new();
@@ -69,7 +76,7 @@ public partial class GameSessionViewModel : ObservableObject
     public GameSessionSetting[] Settings { get; } = [new("cpuPriority"), new("ioPriority"), new("memoryPriority"), new("gpuPriority"), new("executionQoS"), new("priorityBoost")];
     public LaunchPreset[] Presets { get; private set; } = [];
     [ObservableProperty] private LaunchPreset? _selectedPreset;
-    [ObservableProperty] private CpuProcessChoice? _selectedLauncher;
+    [ObservableProperty] private GameLauncherChoice? _selectedLauncher;
     [ObservableProperty] private GameSessionEntry? _selectedSession;
     [ObservableProperty] private string _gamePath = "";
     [ObservableProperty] private bool _keepArmed;
@@ -199,7 +206,7 @@ public partial class GameSessionViewModel : ObservableObject
         Status = "Settings changed elsewhere";
         Detail = "Choose the launcher again, or clear it, to read its current values.";
     }
-    partial void OnSelectedLauncherChanged(CpuProcessChoice? value)
+    partial void OnSelectedLauncherChanged(GameLauncherChoice? value)
     {
         if (_sessionRoot is not null) return;
         Invalidate(); _launcher = null; ClearCores();
@@ -215,7 +222,8 @@ public partial class GameSessionViewModel : ObservableObject
             if (value.Worker.State is { } state)
             {
                 GamePath = state.Preview.GamePath;
-                var launcher = new CpuProcessChoice(state.Preview.Launcher.ProcessId, Path.GetFileName(state.Preview.Launcher.ExecutablePath));
+                var executable = Path.GetFileName(state.Preview.Launcher.ExecutablePath);
+                var launcher = Launchers.FirstOrDefault(choice => choice.Id == state.Preview.Launcher.ProcessId) ?? new(state.Preview.Launcher.ProcessId, executable, Naming.FriendlyName(executable));
                 if (!Launchers.Contains(launcher)) Launchers.Add(launcher);
                 SelectedLauncher = launcher;
                 foreach (var setting in Settings)
@@ -290,8 +298,8 @@ public partial class GameSessionViewModel : ObservableObject
                 var inventory = await App.Live.GetProcessInventoryAsync();
                 if (inventory?.Processes is null) throw new InvalidOperationException(App.Live.LastError ?? "The launcher list is unavailable.");
                 SelectedLauncher = null; Launchers.Clear();
-                foreach (var process in inventory.Processes.Where(process => process.Pid > 0 && process.Pid != Environment.ProcessId && !process.Protected && !process.Blocked && process.Category != "windowsCore").OrderBy(process => process.Name, StringComparer.OrdinalIgnoreCase))
-                    Launchers.Add(new(process.Pid, process.Name ?? "Application"));
+                foreach (var choice in LauncherChoices(inventory.Processes.Where(process => process.Pid > 0 && process.Pid != Environment.ProcessId && !process.Protected && !process.Blocked && process.Category != "windowsCore")))
+                    Launchers.Add(choice);
             }
             return true;
         }
@@ -316,7 +324,26 @@ public partial class GameSessionViewModel : ObservableObject
         await RefreshAsync(); NotifyState();
     }
 
-    private async Task ReadLauncherAsync(CpuProcessChoice? choice, int version)
+    private static IEnumerable<GameLauncherChoice> LauncherChoices(IEnumerable<ProcessItem> processes)
+    {
+        foreach (var group in processes.GroupBy(process => Naming.FriendlyName(process.Name ?? "Application"), StringComparer.OrdinalIgnoreCase).OrderBy(group => group.Key, StringComparer.OrdinalIgnoreCase))
+        {
+            var copies = group.Select(process => (process.Pid, Name: process.Name ?? "Application", Opened: group.Count() > 1 ? LauncherStarted(process.Pid) : null))
+                .OrderBy(copy => copy.Opened ?? DateTime.MaxValue).ThenBy(copy => copy.Pid).ToArray();
+            var times = copies.Select(copy => copy.Opened?.ToString("t", CultureInfo.CurrentCulture)).ToArray();
+            var timed = times.All(time => time is not null) && times.Distinct().Count() == times.Length;
+            for (var index = 0; index < copies.Length; index++)
+                yield return new(copies[index].Pid, copies[index].Name, copies.Length == 1 ? group.Key : group.Key + (timed ? " (opened " + times[index] + ")" : " (copy " + (index + 1) + ")"));
+        }
+    }
+
+    private static DateTime? ProcessStarted(int processId)
+    {
+        try { using var process = System.Diagnostics.Process.GetProcessById(processId); return process.StartTime; }
+        catch (Exception error) when (error is ArgumentException or InvalidOperationException or Win32Exception or NotSupportedException) { return null; }
+    }
+
+    private async Task ReadLauncherAsync(GameLauncherChoice? choice, int version)
     {
         if (choice is null) { NotifyState(); return; }
         try
