@@ -120,7 +120,7 @@ static class GameSessionChecks
             try { await service.RecoverGameSessionAsync(review.SessionRoot); }
             catch (Exception error) when (error is InvalidOperationException or JsonException) { activeRecoveryRejected = true; }
             Check(activeRecoveryRejected && Gpu(game) == 3, "Recovery cannot take over a live worker or change its game");
-            Check(!GameSessionDisplay.CoresMatch(active, "0x" + second.ToString("X")) && GameSessionDisplay.Title(active, "0x" + second.ToString("X")).StartsWith("Core switch pending"), "A queued core change cannot reuse the old active confirmation");
+            Check(!GameSessionDisplay.CoresMatch(active, "0x" + second.ToString("X")) && GameSessionDisplay.Title(active, "0x" + second.ToString("X")).StartsWith("Switching cores"), "A queued core change cannot reuse the old active confirmation");
             for (var i = 0; i < 8; i++) { var observed = Gpu(game); Check(observed == 3, "GPU class stays Above Normal between client polls (observed " + observed + ")"); await Task.Delay(300); }
             await service.SwitchGameCoresAsync(review.SessionRoot, "0x" + second.ToString("X"));
             await Until(() => Task.FromResult(Affinity(game) == second), "Live core switch was not applied.");

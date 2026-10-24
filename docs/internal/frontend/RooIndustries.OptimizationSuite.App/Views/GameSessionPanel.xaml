@@ -62,7 +62,11 @@
                 <StackPanel Spacing="16">
                     <StackPanel Spacing="4">
                         <TextBlock Text="2. Set priorities and CPU cores" Style="{StaticResource SectionHeaderTextBlockStyle}" />
-                        <TextBlock Text="Leave a setting on Keep current to preserve its value." TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                        <TextBlock Text="Pick a preset or set them yourself. Keep current leaves a setting alone." TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                    </StackPanel>
+                    <StackPanel Spacing="4">
+                        <ComboBox Header="Preset" ItemsSource="{x:Bind ViewModel.Presets, Mode=OneWay}" SelectedItem="{x:Bind ViewModel.SelectedPreset, Mode=TwoWay}" PlaceholderText="{x:Bind ViewModel.PresetPlaceholder, Mode=OneWay}" HorizontalAlignment="Stretch" IsEnabled="{x:Bind ViewModel.CanEdit, Mode=OneWay}" AutomationProperties.AutomationId="GameSessionPreset" />
+                        <TextBlock Text="{x:Bind ViewModel.PresetHint, Mode=OneWay}" TextWrapping="Wrap" FontSize="12" Foreground="{StaticResource RooIndustriesTextMutedBrush}" AutomationProperties.AutomationId="GameSessionPresetHint" />
                     </StackPanel>
                     <ItemsControl ItemsSource="{x:Bind ViewModel.Settings}" IsEnabled="{x:Bind ViewModel.CanEdit, Mode=OneWay}">
                         <ItemsControl.ItemsPanel>
@@ -76,28 +80,49 @@
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
-                    <Grid ColumnSpacing="12">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <ComboBox Header="CPU cores" ItemsSource="{x:Bind ViewModel.CoreChoices}" SelectedItem="{x:Bind ViewModel.SelectedCores, Mode=TwoWay}" PlaceholderText="Choose a launcher first" HorizontalAlignment="Stretch" IsEnabled="{x:Bind ViewModel.CanChooseCores, Mode=OneWay}" AutomationProperties.AutomationId="GameSessionCores" />
-                        <Button Grid.Column="1" Content="Change cores" Command="{x:Bind ViewModel.SwitchCoresCommand}" VerticalAlignment="Bottom" Visibility="{x:Bind ViewModel.HasSession, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" IsEnabled="{x:Bind ViewModel.CanSwitch, Mode=OneWay}" AutomationProperties.AutomationId="GameSessionSwitchCores" />
-                    </Grid>
-                    <Expander Header="Custom CPU mask" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" AutomationProperties.AutomationId="GameSessionAdvanced">
-                        <StackPanel Spacing="8">
-                            <TextBlock Text="For a custom core selection, enter a hexadecimal affinity mask." FontSize="12" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
-                            <TextBox Header="CPU mask" Text="{x:Bind ViewModel.AffinityMask, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{x:Bind ViewModel.CanChooseCores, Mode=OneWay}" AutomationProperties.AutomationId="GameSessionMask" />
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="CPU cores" />
+                        <TextBlock Text="{x:Bind ViewModel.CoresSummary, Mode=OneWay}" Visibility="{x:Bind ViewModel.ShowCoresSummary, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" TextWrapping="Wrap" AutomationProperties.AutomationId="GameSessionCoresText" />
+                        <StackPanel Spacing="8" Visibility="{x:Bind ViewModel.Cores.Count, Mode=OneWay, Converter={StaticResource CountToVisibility}}">
+                            <CheckBox Content="All cores" IsChecked="{x:Bind ViewModel.AllCores, Mode=TwoWay}" IsEnabled="{x:Bind ViewModel.CanChooseCores, Mode=OneWay}" AutomationProperties.AutomationId="GameSessionAllCores" />
+                            <ItemsControl ItemsSource="{x:Bind ViewModel.CoreChoices}" IsEnabled="{x:Bind ViewModel.CanChooseCores, Mode=OneWay}" Visibility="{x:Bind ViewModel.CoreChoices.Count, Mode=OneWay, Converter={StaticResource CountToVisibility}}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel Orientation="Horizontal" Spacing="8" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:GameCoreChoice">
+                                        <Button Content="{x:Bind Label}" Click="CoreChoice_Click" FontSize="12" Padding="10,3" AutomationProperties.Name="{x:Bind Label}" AutomationProperties.AutomationId="GameSessionCoreChoice" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <ItemsControl ItemsSource="{x:Bind ViewModel.Cores}" IsEnabled="{x:Bind ViewModel.CanChooseCores, Mode=OneWay}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <views:AdaptivePanel MinColumnWidth="104" MaxColumns="8" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:GameCoreBox">
+                                        <CheckBox IsChecked="{x:Bind IsChecked, Mode=TwoWay}" IsEnabled="{x:Bind Enabled}" MinWidth="0" AutomationProperties.Name="{x:Bind Label}" AutomationProperties.AutomationId="{x:Bind AutomationId}">
+                                            <StackPanel>
+                                                <TextBlock Text="{x:Bind Label}" />
+                                                <TextBlock Text="{x:Bind Kind}" FontSize="11" Foreground="{StaticResource RooIndustriesTextMutedBrush}" Visibility="{x:Bind Kind, Converter={StaticResource StringToVisibility}}" />
+                                            </StackPanel>
+                                        </CheckBox>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <TextBlock Text="{x:Bind ViewModel.CoreHint, Mode=OneWay}" Visibility="{x:Bind ViewModel.CoreHint, Mode=OneWay, Converter={StaticResource StringToVisibility}}" TextWrapping="Wrap" FontSize="12" Foreground="{StaticResource RooIndustriesTextMutedBrush}" AutomationProperties.AutomationId="GameSessionCoreHint" />
                         </StackPanel>
-                    </Expander>
+                        <Button Content="Change cores" Command="{x:Bind ViewModel.SwitchCoresCommand}" Visibility="{x:Bind ViewModel.HasSession, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" IsEnabled="{x:Bind ViewModel.CanSwitch, Mode=OneWay}" AutomationProperties.AutomationId="GameSessionSwitchCores" />
+                    </StackPanel>
                 </StackPanel>
             </Border>
             <Border Style="{StaticResource PanelBorderStyle}">
                 <StackPanel Spacing="12">
                     <TextBlock Text="3. Review and start" Style="{StaticResource SectionHeaderTextBlockStyle}" />
-                    <CheckBox IsChecked="{x:Bind ViewModel.AcceptLauncherScope, Mode=TwoWay}" IsEnabled="{x:Bind ViewModel.CanEdit, Mode=OneWay}" AutomationProperties.AutomationId="GameSessionScope">
-                        <TextBlock Text="I understand that core limits and I/O or memory defaults also affect other apps started by this launcher." TextWrapping="Wrap" />
-                    </CheckBox>
                     <CheckBox IsChecked="{x:Bind ViewModel.KeepArmed, Mode=TwoWay}" IsEnabled="{x:Bind ViewModel.CanEdit, Mode=OneWay}" AutomationProperties.AutomationId="GameSessionKeep">
                         <TextBlock Text="Save for next time: turn these settings back on whenever this launcher opens while the app is open." TextWrapping="Wrap" />
                     </CheckBox>

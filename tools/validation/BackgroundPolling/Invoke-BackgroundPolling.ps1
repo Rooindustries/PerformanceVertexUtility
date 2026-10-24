@@ -137,8 +137,7 @@ try {
         Start-Sleep -Seconds 2
         if ((ById 'GameSessionDetail').Current.Name -like 'Stop or recover the existing session*') { throw 'BUSY: another game session is still open on this PC; retry after it stops.' }
         SetValue 'GameSessionExecutable' $gamePath
-        ChooseId 'GameSessionLauncher' ('*PollingFixtureLauncher*PID ' + $launcherReceipt.Identity.pid)
-        Toggle 'GameSessionScope'
+        ChooseId 'GameSessionLauncher' 'PollingFixtureLauncher'
         InvokeId 'GameSessionPreview'
         WaitFor { (ById 'GameSessionStart').Current.IsEnabled } 60 'session review' | Out-Null
         InvokeId 'GameSessionStart'

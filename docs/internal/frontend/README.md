@@ -33,9 +33,19 @@ Third-party tools retain their official logo assets. Blue and gold accents use
 shared flat surfaces and spacing. The navigation collapses on smaller windows;
 `AdaptivePanel` reflows cards and controls to fit their available width.
 
-Game setup reveals its settings after a launcher is selected. Custom CPU masks
-and saved process rules are expandable. Each action keeps its existing backend
-command and review requirements. Changing a selection invalidates its review.
+Game setup reveals its settings after a launcher is selected. Its CPU cores are
+an All cores checkbox plus one checkbox per core, numbered from 1; cores the
+launcher can't use are disabled, and Review lists cores by number, never as a
+mask. Review then Start is the approval: the review says when other apps the
+launcher opens get the same cores, disk priority or memory priority. Saved
+process rules are expandable. Each action keeps its existing backend command
+and review requirements. Changing a selection invalidates its review.
+The Games tab offers Competitive, Balanced and Streaming launch presets. Picking
+one fills the priority settings, leaves omitted settings on Keep current, and
+keeps the chosen CPU cores. Any priority edit shows Custom. Any priority or core
+edit requires a new review. Review names the selected preset. Saved launch
+settings keep the reviewed values and show a preset name when those priorities
+match the catalog; their saved format and restore behavior stay the same.
 The Games and Processes tabs refresh live status every 2 seconds only while the
 app window is in front. Behind another window or minimized they start no reads,
 and a read already running when the window goes behind starts no follow-on
