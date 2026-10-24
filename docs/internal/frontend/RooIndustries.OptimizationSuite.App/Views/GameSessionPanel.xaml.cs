@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using RooIndustries.OptimizationSuite.ViewModels;
@@ -14,6 +15,7 @@ public sealed partial class GameSessionPanel : UserControl
     private readonly ForegroundPoll _poll;
     public GameSessionPanel()
     {
+        GameSessionViewModel.PresetsPath = App.CatalogsDirectory is { } catalogs ? Path.Combine(catalogs, "launch-presets.json") : null;
         InitializeComponent();
         _watch = new(work => DispatcherQueue.TryEnqueue(async () => await work()), CatchUpAsync);
         _poll = new(async cancel =>
@@ -50,6 +52,11 @@ public sealed partial class GameSessionPanel : UserControl
     private async void TurnOff_Click(object sender, RoutedEventArgs e)
     {
         if ((sender as FrameworkElement)?.DataContext is LaunchProfileRow row) await ViewModel.TurnOffProfileAsync(row);
+    }
+
+    private void CoreChoice_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is GameCoreChoice choice) ViewModel.UseCoreChoice(choice);
     }
 
     private async void Browse_Click(object sender, RoutedEventArgs e)

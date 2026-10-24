@@ -863,13 +863,13 @@ public partial class ProcessControlsViewModel : ObservableObject
         "gpuPriority" => [Option("Idle", 0), Option("Below normal", 1), Option("Normal", 2), Option("Above normal", 3), Option("High", 4), Option("Realtime · can freeze your PC", 5)],
         "memoryPriority" => [Option("Very low", 1), Option("Low", 2), Option("Medium", 3), Option("Below normal", 4), Option("Normal", 5)],
         "executionQoS" => [Option("Windows managed", "systemManaged"), Option("Eco", "eco"), Option("High performance", "high")],
-        "priorityBoost" => [Option("Allow dynamic boosts", true), Option("Disable dynamic boosts", false)],
+        "priorityBoost" => [Option("On", true), Option("Off", false)],
         _ => throw new ArgumentException("Unknown control.", nameof(name)),
     };
     public static string Label(string name) => name switch
     {
-        "cpuPriority" => "CPU priority", "ioPriority" => "I/O priority", "gpuPriority" => "GPU priority", "memoryPriority" => "Memory priority",
-        "executionQoS" => "Power mode", "priorityBoost" => "Priority boost", "cpuSets" => "Preferred CPUs", "affinity" => "CPU affinity", _ => name,
+        "cpuPriority" => "CPU priority", "ioPriority" => "Disk priority", "gpuPriority" => "GPU priority", "memoryPriority" => "Memory priority",
+        "executionQoS" => "Power mode", "priorityBoost" => "Priority boost", "cpuSets" => "Preferred CPUs", "affinity" => "CPU cores", _ => name,
     };
     private static bool Readable(ControlRead read) => read.Known && read.Error is null && read.Value is { ValueKind: not (JsonValueKind.Null or JsonValueKind.Undefined) };
     private static string DescribeRead(string name, ControlRead read)
@@ -880,11 +880,31 @@ public partial class ProcessControlsViewModel : ObservableObject
     public static string Describe(string name, JsonElement value) => name switch
     {
         "executionQoS" => value.Deserialize<PowerThrottling>(OperationFiles.Json)?.ExecutionMode switch { "systemManaged" => "Windows managed", "eco" => "Eco", "high" => "High performance", _ => "unknown" },
-        "affinity" => value.Deserialize<AffinityState>(OperationFiles.Json) is { } affinity ? "group " + affinity.Group + " · " + affinity.Mask : "unknown",
+        "affinity" => value.Deserialize<AffinityState>(OperationFiles.Json) is { } affinity ? CoreList(affinity.Mask) + (affinity.Group == 0 ? "" : " in group " + affinity.Group) : "unknown",
         "cpuSets" => value.GetArrayLength() == 0 ? "Windows default" : value.GetArrayLength() + " selected",
-        "priorityBoost" => value.GetBoolean() ? "allowed" : "disabled",
+        "priorityBoost" => value.GetBoolean() ? "On" : "Off",
         "cpuPriority" => value.GetString() switch { "BelowNormal" => "Below normal", "AboveNormal" => "Above normal", "RealTime" => "Realtime", var text => text ?? "unknown" },
         "ioPriority" or "gpuPriority" or "memoryPriority" => Options(name).SingleOrDefault(option => option.Value?.GetInt32() == value.GetInt32())?.Label.Split(" · ")[0] ?? value.ToString(),
         _ => value.ToString(),
     };
+    public static string CoreList(string mask)
+    {
+        ulong bits;
+        try { bits = ProcessTarget.ParseMask(mask); }
+        catch (Exception error) when (error is FormatException or OverflowException or ArgumentException) { return "unknown"; }
+        return bits == 0 ? "No cores" : (System.Numerics.BitOperations.PopCount(bits) == 1 ? "Core " : "Cores ") + CoreRanges(bits);
+    }
+    public static string CoreRanges(ulong mask)
+    {
+        var ranges = new List<string>();
+        for (var bit = 0; bit < 64; bit++)
+        {
+            if ((mask >> bit & 1) == 0) continue;
+            var end = bit;
+            while (end < 63 && (mask >> (end + 1) & 1) != 0) end++;
+            ranges.Add(end == bit ? $"{bit + 1}" : $"{bit + 1}–{end + 1}");
+            bit = end;
+        }
+        return string.Join(", ", ranges);
+    }
 }
