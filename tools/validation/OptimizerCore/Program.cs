@@ -33,6 +33,7 @@ if (args is ["--restart"]) { RestartChecks.Run(Check); return; }
 if (args is ["--child-env", var childScenario, var childMode]) { await ChildEnvironmentChecks.Run(Check, childScenario, childMode, null); return; }
 if (args is ["--child-env", var fixtureScenario, var fixtureMode, var fixtureDirectory]) { await ChildEnvironmentChecks.Run(Check, fixtureScenario, fixtureMode, fixtureDirectory); return; }
 if (args is ["--control-reads"]) { ControlReadFaultChecks.Run(Check); MissingCommandChecks.Run(Check); return; }
+if (args is ["--security-rows", var securityRepo, var securityEvidence]) { MissingCommandChecks.RunReal(Check, securityRepo, securityEvidence); return; }
 if (args is ["--operation-files"]) { OperationFileChecks.Run(Check); ReplaceRaceChecks.Run(Check); ReplaceFaultChecks.Run(Check); return; }
 if (args is ["--branding"]) { BrandCompatibilityChecks.Run(Check); return; }
 if (args is ["--marked-root-start", var markedParent, var markedHive, .. var markedOptions]) { DataFolderChecks.MarkedRootChild(markedParent, markedHive, markedOptions.Contains("acknowledge")); return; }

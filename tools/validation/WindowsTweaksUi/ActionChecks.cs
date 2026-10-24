@@ -123,5 +123,41 @@ static class ActionChecks
         check(stockMisread.Count == 0, "A setting without a Windows default shows only its starting choice as on: " + string.Join(", ", stockMisread.Take(10)));
         check(misread.Count == 0, "Every setting with a Windows default shows any applied choice on beside its switch, and turning it off queues the Windows default: "
             + misread.Count + " misread, " + string.Join(", ", misread.Take(10)));
+
+        var raw = new List<string>();
+        foreach (var definition in catalog.Settings)
+        {
+            foreach (var option in definition.Options)
+            {
+                var row = Row(definition.Id);
+                row.Observe(new(definition.Id, definition.Name, true, [option.Id], [], null, definition.Options.Select(item => item.Id).ToArray()));
+                row.ToggleOn = true;
+                var shown = row.Choices.Select(choice => choice.Name).Append(row.Current).Append(row.Action.Name).Append(row.Selected.Name).Append(row.SimpleState);
+                raw.AddRange(shown.Where(SourceDirection).Select(text => definition.Id + " " + option.Id + " \"" + text + "\""));
+            }
+        }
+        check(raw.Count == 0, "No row shows a source tool's internal choice name, like apply, source-default or lowercase enabled, as its current value, choices or pending change: "
+            + raw.Count + " shown, " + string.Join(", ", raw.Distinct().Take(10)));
+
+        const string defender = "windows.171a004ed11767da";
+        var consent = new ControlAddress("defender", "system", "SubmitSamplesConsent");
+        string Sampling(int value)
+        {
+            var row = Row(defender);
+            row.Observe(new(defender, definitions[defender].Name, true, [], [], null, definitions[defender].Options.Select(item => item.Id).ToArray(),
+                [new TweakControlRead(consent, consent.Key, "fixture", ControlValues.From(value))]));
+            return row.Current;
+        }
+        check(Sampling(0) == "Always ask before sending" && Sampling(3) == "Send all samples automatically",
+            "A Defender sample choice the app doesn't offer reads in words as the current value: " + Sampling(0) + " | " + Sampling(3));
+
+        var security = catalog.Settings.Where(definition => definition.Options.SelectMany(option => option.Controls ?? []).Any(control => control.Address.Kind is "defender" or "mitigations")).Select(definition => Row(definition.Id)).ToArray();
+        var imported = security.Where(row => row.Name == row.Definition.Name || row.Description.Length == 0 || row.Choices.Skip(1).Any(choice => !char.IsUpper(choice.Name[0])))
+            .Select(row => row.Id + " \"" + row.Name + "\" " + string.Join("/", row.Choices.Skip(1).Select(choice => choice.Name))).ToArray();
+        check(security.Length == 16 && imported.Length == 0, "Every Defender and exploit protection row says what it does in its own name, description and capitalized choices, not the imported catalog's: "
+            + security.Length + " rows, " + string.Join(", ", imported));
     }
+
+    public static bool SourceDirection(string text) => System.Text.RegularExpressions.Regex.IsMatch(text, @"(?<![\w-])(apply|source-default)(?![\w-])", System.Text.RegularExpressions.RegexOptions.IgnoreCase)
+        || System.Text.RegularExpressions.Regex.IsMatch(text, @"(?<![\w-])(enabled|disabled)(?![\w-])");
 }
