@@ -181,8 +181,9 @@ try
             RequireConfirmation(request);
             PolicyRootSecurity.RequireConfirmedEarlierVersion(Require(request.JournalPath, "journal path"), request.AcceptEarlierVersion == true);
             var recorded = OperationFiles.Read<ProcessControlJournal>(Require(request.JournalPath, "journal path"));
-            new ProcessPolicyStore(request.PolicyRoot ?? ProcessPolicyStore.DefaultRoot).RequireUnownedRestore(recorded.Preview.Identity, recorded.Changes.Select(change => change.Name));
-            data = engine.Restore(Require(request.JournalPath, "journal path"));
+            var restorePolicy = new ProcessPolicyStore(request.PolicyRoot ?? ProcessPolicyStore.DefaultRoot);
+            restorePolicy.RequireUnownedRestore(recorded.Preview.Identity, recorded.Changes.Select(change => change.Name));
+            data = engine.RestoreApplyOnce(Require(request.JournalPath, "journal path"), Path.GetDirectoryName(restorePolicy.Root)!, request.RepoRoot);
             break;
         case "rules-list":
             data = new ProcessPolicyStore(Require(request.PolicyRoot, "policy root")).ReadRules().Select(pair => pair.Rule).ToArray();

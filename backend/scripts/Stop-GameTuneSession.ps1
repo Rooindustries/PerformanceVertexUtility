@@ -71,7 +71,7 @@ function New-GameTuneRestorePreview {
             }
         }
         $missingOriginal = @($savedControls | Where-Object { $_.control -notin @($controlChanges | ForEach-Object { $_.control }) }).Count -gt 0
-        $split = Split-RooIndustriesLeftAsSetRestoreChanges $Snapshot @($controlChanges.ToArray()) (Get-RooIndustriesPropertyValue $Candidate 'currentControlState' $null)
+        $split = Split-RooIndustriesLeftAsSetRestoreChanges $Snapshot @($controlChanges.ToArray()) (Get-RooIndustriesPropertyValue $Candidate 'currentControlState' $null) -Feature 'Game priority'
         $leftAsSet = @($split.leftAsSet)
         $alreadyOriginal = @($split.alreadyOriginal)
         $controlChanges = New-Object System.Collections.Generic.List[object]
@@ -284,7 +284,7 @@ try {
                 }
                 foreach ($work in @($workItems.ToArray())) {
                     try {
-                        $verification = Confirm-RooIndustriesRestoreControl $live $work.check $pair.snapshot $entry $work.change
+                        $verification = Confirm-RooIndustriesRestoreControl $live $work.check $pair.snapshot $entry $work.change -Feature 'Game priority'
                         if ($null -eq $verification) { throw 'Restore confirmation returned no result.' }
                         foreach ($flag in @('confirmed', 'restored', 'instanceEnded', 'cleanupFailed')) {
                             $property = $verification.PSObject.Properties[$flag]

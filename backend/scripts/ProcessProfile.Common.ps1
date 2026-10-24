@@ -1130,6 +1130,31 @@ function Get-RooIndustriesRestoreControlOwnershipReason {
     return $null
 }
 
+function Get-RooIndustriesSnapshotRecord {
+    param($Snapshot)
+    $stamp = [string](Get-RooIndustriesPropertyValue $Snapshot 'capturedAtUtc' '')
+    if ([string]::IsNullOrWhiteSpace($stamp)) { return '' }
+    return [string](Get-RooIndustriesPropertyValue $Snapshot 'sessionId' '') + '|' + $stamp
+}
+
+function Test-RooIndustriesSnapshotReleased {
+    param($Snapshot, [string]$Control, [string]$Feature)
+    $record = Get-RooIndustriesSnapshotRecord $Snapshot
+    $field = switch ($Control) { 'priorityClass' { 'originalPriorityClass' } 'affinityMask' { 'originalAffinityMask' } 'ioPriority' { 'originalIoPriority' } 'memoryPriority' { 'originalMemoryPriority' } 'gpuPriority' { 'originalGpuPriority' } default { $null } }
+    $started = [DateTime]::MinValue
+    $processId = Get-RooIndustriesPropertyValue $Snapshot 'processId' 0
+    if ([string]::IsNullOrWhiteSpace($Feature) -or [string]::IsNullOrWhiteSpace($record) -or $null -eq $field -or ($processId -isnot [int] -and $processId -isnot [long]) -or
+        -not [DateTime]::TryParse([string](Get-RooIndustriesPropertyValue $Snapshot 'processStartTimeUtc' ''), [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::RoundtripKind, [ref]$started)) { return $false }
+    $created = $started.ToUniversalTime().ToFileTimeUtc()
+    $original = Get-RooIndustriesPropertyValue $Snapshot $field $null
+    $native = switch ($Control) { 'priorityClass' { 'cpuPriority' } 'affinityMask' { 'affinity' } default { $Control } }
+    foreach ($release in @(Read-RooIndustriesProcessOperationReleases)) {
+        if ($release.processId -eq $processId -and $release.creationTimeFileTimeUtc -eq $created -and $release.control -ceq $native -and $release.feature -ceq $Feature -and $release.record -ceq $record -and
+            (Test-RooIndustriesControlValueEqual $Control $release.original $original)) { return $true }
+    }
+    return $false
+}
+
 function Get-RooIndustriesAppliedControlValue {
     param($Snapshot, [string]$Control)
     $recorded = @(Get-RooIndustriesPropertyArray $Snapshot 'controlChanges' | Where-Object { [string](Get-RooIndustriesPropertyValue $_ 'control' '') -eq $Control })
@@ -1148,7 +1173,7 @@ function Get-RooIndustriesAppliedControlValue {
 }
 
 function Split-RooIndustriesLeftAsSetRestoreChanges {
-    param($Snapshot, [object[]]$Changes, $CurrentState)
+    param($Snapshot, [object[]]$Changes, $CurrentState, [string]$Feature = '')
     $restore = New-Object System.Collections.Generic.List[object]
     $left = New-Object System.Collections.Generic.List[object]
     $original = New-Object System.Collections.Generic.List[object]
@@ -1237,6 +1262,10 @@ function Split-RooIndustriesLeftAsSetRestoreChanges {
             $original.Add([pscustomobject]@{ control = $control; originalValue = $savedOriginal; appliedValue = $applied.value; appliedKnown = $applied.known }) | Out-Null
             continue
         }
+        if ($readable -and $applied.known -and $applied.verified -and (Test-RooIndustriesControlValueEqual $control $current $applied.value) -and (Test-RooIndustriesSnapshotReleased $Snapshot $control $Feature)) {
+            $original.Add([pscustomobject]@{ control = $control; originalValue = $current; appliedValue = $applied.value; appliedKnown = $applied.known }) | Out-Null
+            continue
+        }
         if ($readable -and $applied.known -and $applied.verified -and -not (Test-RooIndustriesControlValueEqual $control $current $applied.value)) {
             $left.Add([pscustomobject]@{ control = $control; currentValue = $current; appliedValue = $applied.value; originalValue = $savedOriginal; outcome = 'leftAsSet'; reason = $script:RooIndustriesLeftAsSet }) | Out-Null
             continue
@@ -1306,7 +1335,7 @@ function Test-RooIndustriesRestoreInstanceEnded {
 }
 
 function Confirm-RooIndustriesRestoreControl {
-    param([System.Diagnostics.Process]$Process, $Check, $Snapshot, $Entry, $Change = $null)
+    param([System.Diagnostics.Process]$Process, $Check, $Snapshot, $Entry, $Change = $null, [string]$Feature = '')
     $control = [string](Get-RooIndustriesPropertyValue $Check 'control' '')
     $candidateConfirmed = $false
     $candidateRestored = $false
@@ -1384,6 +1413,9 @@ function Confirm-RooIndustriesRestoreControl {
                 $now = Get-RooIndustriesProcessControlReadback $Process $control
                 if ([string]::IsNullOrWhiteSpace([string]$now)) { throw $script:RooIndustriesLeftAsSetChangedBack }
                 if (Test-RooIndustriesControlValueEqual $control $now $original) {
+                    $candidateConfirmed = $true
+                } elseif ($Feature -and $applied.known -and $applied.verified -and (Test-RooIndustriesControlValueEqual $control $now $applied.value) -and
+                    (Test-RooIndustriesSnapshotReleased $Snapshot $control $Feature)) {
                     $candidateConfirmed = $true
                 } elseif (-not $applied.known -or -not $applied.verified) {
                     throw $script:RooIndustriesUnprovenWrite

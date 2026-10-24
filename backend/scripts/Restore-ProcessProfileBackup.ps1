@@ -125,7 +125,7 @@ function New-RollbackPreviewEntry {
                 $controlChanges.Add((New-RooIndustriesControlChange 'gpuPriority' $currentGpuPriority $originalGpuPriority 'restoreGpuPriority' 'GPU scheduling priority is unavailable for this restore target.' $true $gpuReason)) | Out-Null
             }
         }
-        $split = Split-RooIndustriesLeftAsSetRestoreChanges $Snapshot @($controlChanges.ToArray()) $currentState
+        $split = Split-RooIndustriesLeftAsSetRestoreChanges $Snapshot @($controlChanges.ToArray()) $currentState -Feature 'Background priorities'
         $leftAsSet = @($split.leftAsSet)
         $alreadyOriginal = @($split.alreadyOriginal)
         $controlChanges = New-Object System.Collections.Generic.List[object]
@@ -328,7 +328,7 @@ try {
                 }
                 foreach ($work in @($workItems.ToArray())) {
                     try {
-                        $verification = Confirm-RooIndustriesRestoreControl $live $work.check $pair.snapshot $entry $work.change
+                        $verification = Confirm-RooIndustriesRestoreControl $live $work.check $pair.snapshot $entry $work.change -Feature 'Background priorities'
                         if ($null -eq $verification) { throw 'Restore confirmation returned no result.' }
                         foreach ($flag in @('confirmed', 'restored', 'instanceEnded', 'cleanupFailed')) {
                             $property = $verification.PSObject.Properties[$flag]
