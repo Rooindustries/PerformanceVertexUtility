@@ -300,14 +300,45 @@ function Test-ScenarioClaimsApplyOnceUndoOwnChange {
     Assert ($undo.status -eq 'restored' -and $kept.Count -eq 1 -and $kept[0].status -eq 'leftAsSet' -and [string]$kept[0].observed -eq 'Idle' -and (Read-Field $probe 'cpuPriority') -eq 'Idle') 'A value another program set over Background priorities is still kept and named'
     Invoke-ClaimsFeature 'Restore-ProcessProfileBackup.ps1' @{BackupPath=[string]$profile.backup.location;ConfirmApply=$true}|Out-Null
     Assert ((Read-Field $probe 'cpuPriority') -eq 'Idle') 'Background priorities Undo keeps it too'
+}
 
+function Test-ScenarioClaimsUndoUnsureKeepsPending {
+    Initialize-ClaimsRedirect
+    $repo=New-ClaimsRepo
     $probe=Start-Probe (Copy-Probe 'ClaimsUndoUnread.exe')
     $applied=Invoke-ClaimsApplyOnce $probe @{cpuPriority='BelowNormal'} $script:claimsRules $script:claimsData
     $damaged=Join-Path $script:claimsData ('operations\process-'+[Guid]::NewGuid().ToString('N'))
     [IO.Directory]::CreateDirectory($damaged)|Out-Null
     [IO.File]::WriteAllText((Join-Path $damaged 'journal.json'),'{"schemaVersion":1,"status":"unknown"}',[Text.UTF8Encoding]::new($false))
     Set-Field $probe 'cpuPriority' 'Idle'
-    Assert-ClaimsUndoRestored $applied.journal $repo $probe 'When one of the app''s own records can''t be read, Undo puts the original back'
+    $undo=Core 'process-restore' @{journalPath=$applied.journal;repoRoot=$repo} $script:claimsRules
+    Show-ClaimsJournal 'unreadUndo' $undo
+    $change=(Get-ClaimsChange $undo 'cpuPriority')[0]
+    Assert ($undo.status -eq 'needsReconciliation' -and $change.status -eq 'applied' -and [string]$change.error -like 'A saved change file is damaged:*' -and (Read-Field $probe 'cpuPriority') -eq 'Idle') 'When one of the app''s own records can''t be read, Undo keeps recovery pending, says which file is damaged and keeps the value'
+    Remove-Item -LiteralPath $damaged -Recurse -Force
+    $undo=Core 'process-restore' @{journalPath=$applied.journal;repoRoot=$repo} $script:claimsRules
+    $change=(Get-ClaimsChange $undo 'cpuPriority')[0]
+    Assert ($undo.status -eq 'restored' -and $change.status -eq 'leftAsSet' -and [string]$change.observed -eq 'Idle' -and (Read-Field $probe 'cpuPriority') -eq 'Idle') 'Once that file is gone, Undo keeps and names the other program''s value and finishes'
+
+    $name='ClaimsUndoLegacy.exe'
+    $path=Copy-Probe $name
+    $probe=Start-Probe $path
+    $applied=Invoke-ClaimsApplyOnce $probe @{cpuPriority='BelowNormal'} $script:claimsRules $script:claimsData
+    Set-Field $probe 'cpuPriority' 'Idle'
+    $id='process-governor-claims-legacy'
+    $directory=Join-Path $repo ('backend\state\process-governor-sessions\'+$id)
+    [IO.Directory]::CreateDirectory($directory)|Out-Null
+    $snapshot=[ordered]@{processId=$probe.Id;processName=$name;executablePath=$path;originalPriorityClass='BelowNormal';processStartTimeUtc=$probe.StartTime.ToUniversalTime().ToString('o');capturedAtUtc=[DateTime]::UtcNow.ToString('o');sessionId=$id}
+    ([ordered]@{sessionId=$id;snapshots=@($snapshot)}|ConvertTo-Json -Depth 12)|Set-Content -LiteralPath (Join-Path $directory 'backup.json') -Encoding UTF8
+    ([ordered]@{sessionId=$id;status='completed';restorable=$true;activeRestraints=@();restoredItems=@()}|ConvertTo-Json -Depth 12)|Set-Content -LiteralPath (Join-Path $directory 'session.json') -Encoding UTF8
+    $undo=Core 'process-restore' @{journalPath=$applied.journal;repoRoot=$repo} $script:claimsRules
+    Show-ClaimsJournal 'legacyUndo' $undo
+    $change=(Get-ClaimsChange $undo 'cpuPriority')[0]
+    Assert ($undo.status -eq 'needsReconciliation' -and $change.status -eq 'applied' -and [string]$change.error -ne '' -and (Read-Field $probe 'cpuPriority') -eq 'Idle') 'A Background limits record that doesn''t say what value it set keeps Undo pending instead of overwriting the value (fabricated older record)'
+    $snapshot.proposedPriorityClass='Idle'
+    ([ordered]@{sessionId=$id;snapshots=@($snapshot)}|ConvertTo-Json -Depth 12)|Set-Content -LiteralPath (Join-Path $directory 'backup.json') -Encoding UTF8
+    $undo=Core 'process-restore' @{journalPath=$applied.journal;repoRoot=$repo} $script:claimsRules
+    Assert ($undo.status -eq 'restored' -and (Get-ClaimsChange $undo 'cpuPriority')[0].status -eq 'restored' -and (Read-Field $probe 'cpuPriority') -eq 'Normal') 'When the older record says it set that value, Undo puts the original back'
 }
 
 function Test-ScenarioClaimsApplyOnceUndoOwnRace {
