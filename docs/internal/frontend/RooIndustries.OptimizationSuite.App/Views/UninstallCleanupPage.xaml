@@ -289,11 +289,13 @@
                                     <TextBlock Text="{x:Bind ViewModel.RemovalPathHelp, Mode=OneWay}" FontSize="12" LineHeight="17" TextWrapping="Wrap"
                                                Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                                 </StackPanel>
-                                <Border CornerRadius="8" Background="{StaticResource RooIndustriesSurfaceInputBrush}" BorderBrush="{StaticResource RooIndustriesBorderBrush}" BorderThickness="1" Padding="14,12">
-                                    <TextBlock Text="{x:Bind ViewModel.OfficialCommand, Mode=OneWay}" FontSize="12" FontFamily="Consolas, monospace"
-                                               TextWrapping="Wrap" MaxLines="4" LineHeight="19" LineStackingStrategy="BlockLineHeight"
-                                               TextTrimming="CharacterEllipsis" Foreground="{StaticResource RooIndustriesTextSecondaryBrush}" />
-                                </Border>
+                                <Expander Header="Details" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" AutomationProperties.AutomationId="AppsCleanupCommandDetails">
+                                    <Border CornerRadius="8" Background="{StaticResource RooIndustriesSurfaceInputBrush}" BorderBrush="{StaticResource RooIndustriesBorderBrush}" BorderThickness="1" Padding="14,12">
+                                        <TextBlock Text="{x:Bind ViewModel.OfficialCommand, Mode=OneWay}" FontSize="12" FontFamily="Consolas, monospace"
+                                                   TextWrapping="Wrap" MaxLines="4" LineHeight="19" LineStackingStrategy="BlockLineHeight"
+                                                   TextTrimming="CharacterEllipsis" Foreground="{StaticResource RooIndustriesTextSecondaryBrush}" IsTextSelectionEnabled="True" />
+                                    </Border>
+                                </Expander>
                                 <StackPanel Spacing="6">
                                     <TextBlock Text="Installed at" FontSize="11" LineHeight="16" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                                     <TextBlock Text="{x:Bind ViewModel.InstallLocation, Mode=OneWay}" FontSize="12" LineHeight="19" FontFamily="Consolas, monospace"

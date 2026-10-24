@@ -202,6 +202,11 @@ static class BulkRemovalChecks
                 && Regex.IsMatch(panel, "AutomationId=\"RegistryRestoreNote\"") && panel.Contains("audit settings and last-changed time aren't saved", StringComparison.Ordinal)
                 && panel.Contains("comes back as a normal key", StringComparison.Ordinal),
                 "Leftover deletion has no review boxes but still says what Restore can't bring back for registry keys, and the Leftover cleanup tab asks once before it runs an uninstaller");
+            var commands = Regex.Matches(panel + page, "<Expander (?<tag>[^>]*)>(?<body>(?:(?!<Expander ).)*?)</Expander>", RegexOptions.Singleline)
+                .Where(match => match.Groups["body"].Value.Contains("Entry.Command", StringComparison.Ordinal) || match.Groups["body"].Value.Contains("ViewModel.OfficialCommand", StringComparison.Ordinal)).ToArray();
+            check(commands.Length == 2 && commands.All(match => !match.Groups["tag"].Value.Contains("IsExpanded", StringComparison.Ordinal))
+                && Count(panel + page, "Entry.Command") + Count(panel + page, "ViewModel.OfficialCommand") == 2,
+                "Both tabs keep the raw uninstall command in a collapsed section, out of sight until someone opens it");
             var labels = Regex.Matches(panel + page, "(?:Text|Content|Header|PlaceholderText|AutomationProperties\\.Name)=\"([^\"{][^\"]*)\"").Select(match => match.Groups[1].Value).ToArray();
             var jargon = labels.FirstOrDefault(label => Jargon(label) is not null);
             check(labels.Length > 40 && jargon is null, "Remove apps labels use plain words: " + (jargon ?? labels.Length + " labels"));

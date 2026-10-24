@@ -13,6 +13,8 @@ public static class RooIndustriesRemoveAppsCapture {
  [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
  [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr h,IntPtr after,int x,int y,int w,int hgt,uint flags);
+ [DllImport("user32.dll")] public static extern bool SetCursorPos(int x,int y);
+ [DllImport("user32.dll")] public static extern int GetSystemMetrics(int index);
 }
 '@
 [RooIndustriesRemoveAppsCapture]::SetProcessDPIAware()|Out-Null
@@ -41,7 +43,8 @@ function Invoke([string]$Id){
  WaitFor {-not (Busy)} 180 ($Id+' to finish')|Out-Null;Start-Sleep -Seconds 1
 }
 function Shot([string]$Name){
- [RooIndustriesRemoveAppsCapture]::SetForegroundWindow($script:hwnd)|Out-Null;Start-Sleep -Milliseconds 800
+ [RooIndustriesRemoveAppsCapture]::SetForegroundWindow($script:hwnd)|Out-Null
+ [RooIndustriesRemoveAppsCapture]::SetCursorPos([RooIndustriesRemoveAppsCapture]::GetSystemMetrics(0)-8,8)|Out-Null;Start-Sleep -Milliseconds 1200
  $r=$script:window.Current.BoundingRectangle;$path=Join-Path $directory ($Label+'-'+$Name+'.png')
  $bitmap=[Drawing.Bitmap]::new([int]$r.Width,[int]$r.Height);$graphics=[Drawing.Graphics]::FromImage($bitmap)
  try{$graphics.CopyFromScreen([int]$r.X,[int]$r.Y,0,0,$bitmap.Size);$bitmap.Save($path,[Drawing.Imaging.ImageFormat]::Png)}finally{$graphics.Dispose();$bitmap.Dispose()}
