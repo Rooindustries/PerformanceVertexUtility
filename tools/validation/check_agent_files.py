@@ -5,9 +5,11 @@ import re
 import subprocess
 import tempfile
 
-AGENT_FILES = re.compile(r'\b(?:' + '|'.join(('AGENTS', 'CLA' + 'UDE', 'GEMINI')) + r')\.md\b', re.IGNORECASE)
-CODE = {'.cs', '.csproj', '.props', '.targets', '.ps1', '.psm1', '.psd1', '.py', '.sh', '.cmd', '.json', '.yml', '.yaml', '.xaml'}
+AGENT_FILES = re.compile(r'\b(?:AGENTS|CL[A]UDE|GEMINI)(?:\.md\b|["\']\s*\+\s*["\']\.md\b)', re.IGNORECASE)
+DOCS = {'.md', '.txt'}
+IGNORED = {'.gitignore'}
 SKIP = {'bin', 'obj', '.git', '__pycache__'}
+SELF = 'tools/validation/check_agent_files.py'
 
 
 def files(root: Path) -> list[Path]:
@@ -21,11 +23,15 @@ def check(root: Path | str) -> list[str]:
     root = Path(root)
     failures = []
     for path in files(root):
-        if path.suffix.lower() not in CODE or not path.is_file():
+        relative = path.relative_to(root).as_posix()
+        if relative == SELF or path.suffix.lower() in DOCS or path.name in IGNORED or not path.is_file():
             continue
-        for number, line in enumerate(path.read_text(encoding='utf-8-sig', errors='replace').splitlines(), 1):
+        data = path.read_bytes()
+        if b'\0' in data[:8192]:
+            continue
+        for number, line in enumerate(data.decode('utf-8-sig', errors='replace').splitlines(), 1):
             if AGENT_FILES.search(line):
-                failures.append(f"{path.relative_to(root).as_posix()}:{number}: code depends on an agent instruction file, which isn't part of the product; find the files it needs by their own paths")
+                failures.append(f"{relative}:{number}: code depends on an agent instruction file, which isn't part of the product; find the files it needs by their own paths")
     return failures
 
 
@@ -35,7 +41,13 @@ def negative_controls() -> dict[str, bool]:
         'a check that finds the repository by an agent file': ({'tools/validation/X/Checks.cs': 'while (!File.Exists(Path.Combine(dir, "' + marker + '"))) dir = dir.Parent;'}, True),
         'a script that reads an agent file': ({'tools/x.ps1': "Get-Content (Join-Path $root 'GEMINI" + ".md')"}, True),
         'a check that finds the files it reads': ({'tools/validation/X/Checks.cs': 'while (!File.Exists(Path.Combine(dir, "docs", "Views", "Panel.xaml"))) dir = dir.Parent;'}, False),
+        'a check that builds an agent file name in two parts': ({'tools/validation/X/Checks.cs': 'File.Exists(Path.Combine(dir, "AGENTS" + ".md"))'}, True),
+        'an installer script that names an agent file': ({'tools/release/Setup.iss': 'Source: "' + marker + '"'}, True),
+        'a file type no one listed': ({'tools/x.nsi': 'File ' + marker}, True),
         'prose that names an agent file': ({'docs/notes.md': marker}, False),
+        'the ignore list': ({'.gitignore': marker}, False),
+        'a binary file': ({'assets/x.bin': '\0' + marker}, False),
+        'the agent file check itself': ({SELF: marker}, False),
         'build output': ({'tools/validation/X/bin/Debug/x.json': marker}, False),
     }
     results = {}
