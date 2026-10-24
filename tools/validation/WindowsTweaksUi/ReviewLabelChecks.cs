@@ -74,7 +74,7 @@ static class ReviewLabelChecks
         check(model.Changes.All(change => Readable(change.Name) && Readable(change.Before) && Readable(change.After) && Readable(change.Target)
             && !ActionChecks.SourceDirection(change.Before) && !ActionChecks.SourceDirection(change.After)), "Every undo review line is plain text");
         string Undo(string id) { var found = model.Changes.SingleOrDefault(change => change.Name == rows[id].Name); return found is null ? "missing" : found.Before + " → " + found.After; }
-        check(Undo(DynamicTicks) == "Disabled → No override" && Undo(Hypervisor) == "Off → Automatic" && Undo(Ipv6) == "Disabled → Enabled" && Undo(Sehop) == "Disabled → Not set" && Undo(DevicePower) == "Disabled → Enabled"
+        check(Undo(DynamicTicks) == "Disabled → No override" && Undo(Hypervisor) == "Off → Automatic" && Undo(Ipv6) == "Disabled → Enabled" && Undo(Sehop) == "Off → Windows default" && Undo(DevicePower) == "Disabled → Enabled"
             && Undo(Defender) == "Never send samples → Windows default",
             "Undo lines show the applied choice going back to the original value: " + string.Join(" | ", new[] { DynamicTicks, Hypervisor, Ipv6, Sehop, DevicePower, Defender }.Select(Undo)));
 

@@ -150,6 +150,12 @@ static class ActionChecks
         }
         check(Sampling(0) == "Always ask before sending" && Sampling(3) == "Send all samples automatically",
             "A Defender sample choice the app doesn't offer reads in words as the current value: " + Sampling(0) + " | " + Sampling(3));
+
+        var security = catalog.Settings.Where(definition => definition.Options.SelectMany(option => option.Controls ?? []).Any(control => control.Address.Kind is "defender" or "mitigations")).Select(definition => Row(definition.Id)).ToArray();
+        var imported = security.Where(row => row.Name == row.Definition.Name || row.Description.Length == 0 || row.Choices.Skip(1).Any(choice => !char.IsUpper(choice.Name[0])))
+            .Select(row => row.Id + " \"" + row.Name + "\" " + string.Join("/", row.Choices.Skip(1).Select(choice => choice.Name))).ToArray();
+        check(security.Length == 16 && imported.Length == 0, "Every Defender and exploit protection row says what it does in its own name, description and capitalized choices, not the imported catalog's: "
+            + security.Length + " rows, " + string.Join(", ", imported));
     }
 
     public static bool SourceDirection(string text) => System.Text.RegularExpressions.Regex.IsMatch(text, @"(?<![\w-])(apply|source-default)(?![\w-])", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
