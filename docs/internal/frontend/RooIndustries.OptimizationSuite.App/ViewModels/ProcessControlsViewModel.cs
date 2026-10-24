@@ -354,11 +354,7 @@ public partial class ProcessControlsViewModel : ObservableObject
     private bool SyncCpus => !_syncingCpus && SelectedCpuMode.Kind != "logical";
     partial void OnSetHardAffinityChanged(bool value)
     {
-        if (value && SyncCpus)
-        {
-            if (Cpus.Any(cpu => cpu.Selected)) AffinityFromCpus();
-            else CpusFromAffinity();
-        }
+        if (value && SyncCpus) CpusFromAffinity();
         Invalidate();
     }
     partial void OnAffinityMaskChanged(string value)
