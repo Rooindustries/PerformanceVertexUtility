@@ -12,17 +12,17 @@
                         <TextBlock Text="Memory" FontSize="22" FontWeight="SemiBold" Foreground="{StaticResource RooIndustriesTextPrimaryBrush}" />
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <ProgressRing IsActive="True" Width="14" Height="14" />
-                            <TextBlock Text="Reading memory and latency" FontSize="13" VerticalAlignment="Center" Foreground="{StaticResource RooIndustriesTextSecondaryBrush}" />
+                            <TextBlock Text="Checking your RAM" FontSize="13" VerticalAlignment="Center" Foreground="{StaticResource RooIndustriesTextSecondaryBrush}" />
                         </StackPanel>
-                        <TextBlock Text="Memory use by app and available diagnostics." FontSize="13" LineHeight="19" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                        <TextBlock Text="See what's using your RAM and how to free it up for games." FontSize="13" LineHeight="19" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                     </StackPanel>
                 </Grid>
             </Border>
         </StackPanel>
         <Border MaxWidth="520" VerticalAlignment="Center" HorizontalAlignment="Center" Style="{StaticResource PanelBorderStyle}" Visibility="{x:Bind ViewModel.ErrorMessage, Mode=OneWay, Converter={StaticResource StringToVisibility}}">
             <StackPanel Spacing="10">
-                <TextBlock Text="Memory information is unavailable" Style="{StaticResource SectionHeaderTextBlockStyle}" />
-                <TextBlock Text="{x:Bind ViewModel.ErrorMessage, Mode=OneWay}" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextSecondaryBrush}" />
+                <TextBlock Text="Couldn't check your memory" Style="{StaticResource SectionHeaderTextBlockStyle}" />
+                <TextBlock Text="{x:Bind ViewModel.ErrorMessage, Mode=OneWay}" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextSecondaryBrush}" AutomationProperties.AutomationId="MemoryError" />
                 <Button Content="Retry" Command="{x:Bind ViewModel.RetryCommand}" HorizontalAlignment="Left" AutomationProperties.AutomationId="MemoryRetry" />
             </StackPanel>
         </Border>
@@ -46,7 +46,7 @@
                                 <Ellipse Grid.Column="0" Width="8" Height="8" VerticalAlignment="Center" Fill="{x:Bind ViewModel.PressureState, Mode=OneWay, Converter={StaticResource RiskToBrush}}" />
                                 <TextBlock Grid.Column="1" Text="{x:Bind ViewModel.MemoryHeadline, Mode=OneWay}" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextSecondaryBrush}" />
                             </Grid>
-                            <TextBlock Text="Memory use by app and available diagnostics." FontSize="13" LineHeight="19" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                            <TextBlock Text="See what's using your RAM and how to free it up for games." FontSize="13" LineHeight="19" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                         </StackPanel>
                     </Grid>
                 </Border>
@@ -61,8 +61,15 @@
                 <views:AdaptivePanel MinColumnWidth="380" MaxColumns="2">
                     <Border Style="{StaticResource PanelBorderStyle}">
                         <StackPanel Spacing="10">
-                            <TextBlock Text="Memory by process" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
-                            <TextBlock Text="{x:Bind ViewModel.TopMemoryNote, Mode=OneWay}" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextSecondaryBrush}" Visibility="{x:Bind ViewModel.TopMemoryNote, Mode=OneWay, Converter={StaticResource StringToVisibility}}" />
+                            <TextBlock Text="Apps using the most RAM" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                            <Grid ColumnSpacing="12" Visibility="{x:Bind ViewModel.TopMemoryNote, Mode=OneWay, Converter={StaticResource StringToVisibility}}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="{x:Bind ViewModel.TopMemoryNote, Mode=OneWay}" TextWrapping="Wrap" VerticalAlignment="Center" Foreground="{StaticResource RooIndustriesTextSecondaryBrush}" AutomationProperties.AutomationId="MemoryTopNote" />
+                                <Button Grid.Column="1" Content="Try again" Command="{x:Bind ViewModel.RetryCommand}" VerticalAlignment="Center" AutomationProperties.AutomationId="MemoryTopRetry" />
+                            </Grid>
                             <ListView SelectionMode="None" IsItemClickEnabled="False" Background="Transparent" Padding="0" ScrollViewer.VerticalScrollMode="Disabled" ScrollViewer.HorizontalScrollMode="Disabled" ItemsSource="{x:Bind ViewModel.TopMemoryRows}">
                                 <ListView.ItemTemplate>
                                     <DataTemplate x:DataType="vm:BackgroundRow">
@@ -73,7 +80,7 @@
                                                 <ColumnDefinition Width="110" />
                                             </Grid.ColumnDefinitions>
                                             <StackPanel Grid.Column="0" Spacing="2">
-                                                <TextBlock Text="{x:Bind Name}" FontSize="14" FontWeight="SemiBold" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextPrimaryBrush}" />
+                                                <TextBlock Text="{x:Bind Name}" FontSize="14" FontWeight="SemiBold" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextPrimaryBrush}" AutomationProperties.AutomationId="MemoryAppName" />
                                                 <TextBlock Text="{x:Bind Role}" FontSize="12" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                                             </StackPanel>
                                             <TextBlock Grid.Column="1" Text="{x:Bind Ram}" FontSize="13" VerticalAlignment="Center" Foreground="{StaticResource RooIndustriesTextDisplayBrush}" />
@@ -86,7 +93,7 @@
                     </Border>
                     <Border Style="{StaticResource PanelBorderStyle}">
                         <StackPanel Spacing="10">
-                            <TextBlock Text="Diagnostics" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                            <TextBlock Text="Tools to check your PC" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                             <ListView SelectionMode="None" IsItemClickEnabled="False" Background="Transparent" Padding="0" ScrollViewer.VerticalScrollMode="Disabled" ScrollViewer.HorizontalScrollMode="Disabled" ItemsSource="{x:Bind ViewModel.DiagnosticRows}">
                                 <ListView.ItemTemplate>
                                     <DataTemplate x:DataType="vm:DiagnosticRow">
@@ -99,7 +106,7 @@
                                                 <TextBlock Text="{x:Bind Title}" FontSize="14" FontWeight="SemiBold" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextPrimaryBrush}" />
                                                 <TextBlock Text="{x:Bind Detail}" FontSize="12" LineHeight="17" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                                             </StackPanel>
-                                            <Button Grid.Column="1" Content="Open tools" Click="OpenTools" Tag="{x:Bind Title}" AutomationProperties.Name="{x:Bind Title}" VerticalAlignment="Center" />
+                                            <Button Grid.Column="1" Content="{x:Bind StateText}" Click="OpenTools" Tag="{x:Bind Title}" AutomationProperties.Name="{x:Bind ToolsButtonName}" VerticalAlignment="Center" />
                                         </Grid>
                                     </DataTemplate>
                                 </ListView.ItemTemplate>

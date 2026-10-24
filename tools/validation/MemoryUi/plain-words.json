@@ -1,0 +1,27 @@
+{
+  "screen": "Memory",
+  "banned": [
+    { "pattern": "\\bprocess(es)?\\b", "why": "the developer word for apps" },
+    { "pattern": "\\bdiagnostics?\\b", "why": "a developer word" },
+    { "pattern": "\\bphysical (memory|RAM)\\b", "why": "a developer phrase for RAM" },
+    { "pattern": "\\bmemory pressure\\b", "why": "a developer phrase" },
+    { "pattern": "\\blatency\\b", "why": "a developer word" },
+    { "pattern": "\\btelemetry\\b", "why": "a developer word" },
+    { "pattern": "\\bchild process", "why": "a developer phrase" },
+    { "pattern": "\\bdynamic boost", "why": "a developer phrase" },
+    { "pattern": "\\bQoS\\b", "why": "a developer word" },
+    { "pattern": "\\bvirtualization-based\\b", "why": "a developer phrase" },
+    { "pattern": "\\bsingle channel\\b", "why": "a developer phrase" },
+    { "pattern": "\\bcore parking\\b", "why": "a developer phrase" },
+    { "pattern": "\\bexcluded\\b", "why": "an internal plan name" },
+    { "pattern": "\\bleft alone\\b", "why": "a state that doesn't say what it means" },
+    { "pattern": "\\bpowershell\\b", "why": "raw script error text" },
+    { "pattern": "\\.ps1\\b", "why": "a raw script name" },
+    { "pattern": "\\bregistry\\b", "why": "raw system error text" },
+    { "pattern": "\\bexit(ed)? with code\\b|\\(code -?\\d+\\)", "why": "a raw exit code" },
+    { "pattern": "\\bexception\\b|\\bHRESULT\\b|\\bnot recognized as the name\\b", "why": "raw error text" },
+    { "pattern": "\\b0x[0-9a-f]+\\b", "why": "a hex mask" },
+    { "pattern": "\\b[a-z]+[A-Z][A-Za-z]*\\b", "caseSensitive": true, "why": "a raw internal value" },
+    { "pattern": "—", "why": "an em dash" }
+  ]
+}

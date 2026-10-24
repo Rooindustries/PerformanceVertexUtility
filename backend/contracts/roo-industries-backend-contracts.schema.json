@@ -1005,6 +1005,12 @@
             "null"
           ]
         },
+        "fileDescription": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "executablePath": {
           "type": [
             "string",
