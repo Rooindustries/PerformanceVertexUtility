@@ -195,12 +195,10 @@ try{
  Close-Game $controlRoot $control
  (ById 'GamesTab').GetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern).Select();Start-Sleep -Seconds 1
  $recorder=Start-Recorder 'games'
- # A session from an earlier run opens selected and locks the setup fields, so start a new one the way a player would.
  Invoke (WaitFor {Enabled 'GameSessionNew'} 60 'New on Games');Start-Sleep -Milliseconds 500
  $path=WaitFor {Enabled 'GameSessionExecutable'} 60 'the game file box'
  $path.GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern).SetValue($gamePath);Start-Sleep -Milliseconds 500
  Invoke (WaitFor {Enabled 'GameSessionRefresh'} 30 'Refresh on Games')
- # The Games tab names a launcher by its file name, so a second copy of the fixture would show as "(copy 2)" and fail the exact match.
  $launcherChoice=Choose (WaitFor {Enabled 'GameSessionLauncher'} 60 'the launcher list') {param($n) $n -eq [IO.Path]::GetFileNameWithoutExtension($launcherPath)} 'the launcher fixture'
  $gameIo=WaitFor {@($window.FindAll($TS::Descendants,[Windows.Automation.AndCondition]::new([Windows.Automation.PropertyCondition]::new($A::NameProperty,'Disk priority'),[Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty,$CT::ComboBox)))|Where-Object {$_.Current.AutomationId -ne 'ioPriority' -and $_.Current.IsEnabled})[0]} 30 'the game disk priority choice'
  $ioOffered=Offered $gameIo 'games-io-choices'
