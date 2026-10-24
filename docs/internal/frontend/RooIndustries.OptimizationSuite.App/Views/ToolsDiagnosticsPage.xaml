@@ -10,7 +10,7 @@
                 <Image Source="ms-appx:///Assets/Icons/tools.svg" Style="{StaticResource PageHeaderIconStyle}"/>
                 <StackPanel Grid.Column="1" Spacing="5">
                     <TextBlock Text="Tools" FontSize="22" FontWeight="SemiBold"/>
-                    <TextBlock Text="Open a tool, or install it if it is not on this PC yet." FontSize="13" Foreground="{StaticResource RooIndustriesTextMutedBrush}" TextWrapping="Wrap"/>
+                    <TextBlock Text="Open a tool, or install it if your PC doesn't have it yet." FontSize="13" Foreground="{StaticResource RooIndustriesTextMutedBrush}" TextWrapping="Wrap"/>
                 </StackPanel>
             </Grid>
         </Border>

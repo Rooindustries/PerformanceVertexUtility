@@ -8,6 +8,8 @@ namespace RooIndustries.Optimizer;
 
 public static class RuntimeEnvironment
 {
+    public const string ExplorerNotRunning = "Windows Explorer is not running. Sign in to Windows, then try again.";
+
     public static readonly string[] ClearPrefixes = ["DOTNET_", "COMPlus_", "CORECLR_", "COR_", "COREHOST_"];
 
     public static readonly string[] DevelopmentCodeLoading =
@@ -249,7 +251,7 @@ public static class RuntimeEnvironment
 
     public static void OpenInExplorer(string target, bool select = false)
     {
-        if (GetShellWindow() == IntPtr.Zero) throw new InvalidOperationException("Windows Explorer is not running. Sign in to Windows, then try again.");
+        if (GetShellWindow() == IntPtr.Zero) throw new InvalidOperationException(ExplorerNotRunning);
         if (select)
         {
             if (!Path.IsPathFullyQualified(target)) throw new InvalidOperationException("The selected file needs a full path.");
