@@ -79,7 +79,7 @@
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
-                                <TextBlock Text="Restore brings back registry keys with their values and permissions." FontSize="12" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" Visibility="{x:Bind ViewModel.HasSelectedKeys, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" AutomationProperties.AutomationId="RegistryRestoreNote" />
+                                <TextBlock Text="Restore brings back each registry key with its values and permissions. Its audit settings and last-changed time aren't saved, and a key Windows clears at restart comes back as a normal key." FontSize="12" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" Visibility="{x:Bind ViewModel.HasSelectedKeys, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" AutomationProperties.AutomationId="RegistryRestoreNote" />
                                 <Button Content="Preview cleanup" Command="{x:Bind ViewModel.PreviewFilesCommand}" IsEnabled="{x:Bind ViewModel.CanPreviewFiles, Mode=OneWay}" AutomationProperties.AutomationId="RemovedFilesPreview" />
                                 <TextBlock Text="{x:Bind ViewModel.FileStatus, Mode=OneWay}" FontWeight="SemiBold" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextPrimaryBrush}" AutomationProperties.AutomationId="RemovedFilesStatus" />
                                 <TextBlock Text="{x:Bind ViewModel.FileSummary, Mode=OneWay}" FontSize="12" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />

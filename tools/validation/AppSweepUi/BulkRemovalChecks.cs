@@ -198,8 +198,10 @@ static class BulkRemovalChecks
                 && panel.Contains("Command=\"{x:Bind ViewModel.StartOverCommand}\"", StringComparison.Ordinal),
                 "Only app removal, which can't be undone, asks before it runs; Start over changes nothing on the PC and runs straight away");
             check(!panel.Contains("RemovedFilesApproval", StringComparison.Ordinal) && !panel.Contains("RegistryRecreationReview", StringComparison.Ordinal)
-                && Count(page, "<CheckBox") == 1 && page.Contains("ViewModel.RemovalApproved", StringComparison.Ordinal),
-                "Leftover deletion has no review boxes, and the Leftover cleanup tab asks once before it runs an uninstaller");
+                && Count(page, "<CheckBox") == 1 && page.Contains("ViewModel.RemovalApproved", StringComparison.Ordinal)
+                && Regex.IsMatch(panel, "AutomationId=\"RegistryRestoreNote\"") && panel.Contains("audit settings and last-changed time aren't saved", StringComparison.Ordinal)
+                && panel.Contains("comes back as a normal key", StringComparison.Ordinal),
+                "Leftover deletion has no review boxes but still says what Restore can't bring back for registry keys, and the Leftover cleanup tab asks once before it runs an uninstaller");
             var labels = Regex.Matches(panel + page, "(?:Text|Content|Header|PlaceholderText|AutomationProperties\\.Name)=\"([^\"{][^\"]*)\"").Select(match => match.Groups[1].Value).ToArray();
             var jargon = labels.FirstOrDefault(label => Jargon(label) is not null);
             check(labels.Length > 40 && jargon is null, "Remove apps labels use plain words: " + (jargon ?? labels.Length + " labels"));
