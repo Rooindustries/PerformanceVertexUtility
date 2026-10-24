@@ -136,7 +136,7 @@ static class ActionChecks
                 raw.AddRange(shown.Where(SourceDirection).Select(text => definition.Id + " " + option.Id + " \"" + text + "\""));
             }
         }
-        check(raw.Count == 0, "No row shows a source tool's internal choice name, like apply or source-default, as its current value, choices or pending change: "
+        check(raw.Count == 0, "No row shows a source tool's internal choice name, like apply, source-default or lowercase enabled, as its current value, choices or pending change: "
             + raw.Count + " shown, " + string.Join(", ", raw.Distinct().Take(10)));
 
         const string defender = "windows.171a004ed11767da";
@@ -158,5 +158,6 @@ static class ActionChecks
             + security.Length + " rows, " + string.Join(", ", imported));
     }
 
-    public static bool SourceDirection(string text) => System.Text.RegularExpressions.Regex.IsMatch(text, @"(?<![\w-])(apply|source-default)(?![\w-])", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+    public static bool SourceDirection(string text) => System.Text.RegularExpressions.Regex.IsMatch(text, @"(?<![\w-])(apply|source-default)(?![\w-])", System.Text.RegularExpressions.RegexOptions.IgnoreCase)
+        || System.Text.RegularExpressions.Regex.IsMatch(text, @"(?<![\w-])(enabled|disabled)(?![\w-])");
 }
