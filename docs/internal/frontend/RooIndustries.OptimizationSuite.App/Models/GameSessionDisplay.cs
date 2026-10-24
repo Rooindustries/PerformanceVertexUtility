@@ -35,7 +35,7 @@ public static class GameSessionDisplay
             state.RegistryStatus != "applied" || state.JobStatus != "applied") return "Session needs attention";
         var games = state.Games.Where(game => !game.Exited).ToArray();
         if (pendingAffinity is not null && !CoresMatch(status, pendingAffinity))
-            return games.Length == 0 ? "Core selection pending · launch the game normally" : "Core switch pending · waiting for readback";
+            return games.Length == 0 ? "New cores are set · launch the game normally" : "Switching cores · checking the game";
         if (games.Length == 0) return state.Status == "armed" ? "Ready · launch the game normally" : "Preparing the session";
         var applied = state.Preview.Controls.All(control => games.All(game =>
         {
@@ -44,6 +44,6 @@ public static class GameSessionDisplay
             var desired = control.Key == "affinity" ? System.Text.Json.JsonSerializer.SerializeToElement(state.DesiredAffinity, OperationFiles.Json) : control.Value;
             return ProcessTarget.Equivalent(control.Key, observed.Require(), desired);
         }));
-        return state.Status == "active" && applied ? "Active · requested controls verified" : "Partially applied · check each control";
+        return state.Status == "active" && applied ? "Active · all settings confirmed" : "Partly applied · check each setting below";
     }
 }

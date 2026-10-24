@@ -54,6 +54,11 @@ public sealed partial class GameSessionPanel : UserControl
         if ((sender as FrameworkElement)?.DataContext is LaunchProfileRow row) await ViewModel.TurnOffProfileAsync(row);
     }
 
+    private void CoreChoice_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is GameCoreChoice choice) ViewModel.UseCoreChoice(choice);
+    }
+
     private async void Browse_Click(object sender, RoutedEventArgs e)
     {
         if (!ViewModel.CanEdit || App.MainWindow is null) return;
