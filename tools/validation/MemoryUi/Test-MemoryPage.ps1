@@ -53,7 +53,7 @@ public static class RooIndustriesMemoryUser {
    bool present, defaulted; IntPtr dacl; if (!GetSecurityDescriptorDacl(descriptor, out present, out dacl, out defaulted)) throw new Win32Exception();
    if (!SetTokenInformation(user, 6, ref dacl, IntPtr.Size)) throw new Win32Exception();
    StartupInfo startup = new StartupInfo { cb = Marshal.SizeOf(typeof(StartupInfo)) };
-   if (!CreateProcessAsUser(user, null, new StringBuilder(command), IntPtr.Zero, IntPtr.Zero, false, 0x08000000, IntPtr.Zero, null, ref startup, out info)) throw new Win32Exception();
+   if (!CreateProcessAsUser(user, null, new StringBuilder(command), IntPtr.Zero, IntPtr.Zero, false, 0x08000000 | 0x01000000, IntPtr.Zero, null, ref startup, out info)) throw new Win32Exception();
    if (WaitForSingleObject(info.hProcess, milliseconds) != 0) return -2;
    uint code; GetExitCodeProcess(info.hProcess, out code); return (int)code;
   } finally {
