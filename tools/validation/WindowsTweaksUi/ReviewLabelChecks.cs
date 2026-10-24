@@ -100,6 +100,7 @@ static class ReviewLabelChecks
         OperationFiles.Write(samplePath, sampleState);
         App.Operations = sampleFixture; var sampleModel = new WindowsTweaksViewModel(); await sampleModel.RefreshCommand.ExecuteAsync(null);
         var sampling = sampleModel.Rows.Single(row => row.Id == Defender);
+        check(sampling.Current == "Send all samples automatically", "The Defender row reads a sample choice the app doesn't offer in words: " + sampling.Current);
         sampling.Selected = sampling.Choices.Single(choice => choice.Id == NeverSend);
         await sampleModel.ReviewCommand.ExecuteAsync(null);
         Print(sampleModel);

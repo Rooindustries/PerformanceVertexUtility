@@ -138,6 +138,18 @@ static class ActionChecks
         }
         check(raw.Count == 0, "No row shows a source tool's internal choice name, like apply or source-default, as its current value, choices or pending change: "
             + raw.Count + " shown, " + string.Join(", ", raw.Distinct().Take(10)));
+
+        const string defender = "windows.171a004ed11767da";
+        var consent = new ControlAddress("defender", "system", "SubmitSamplesConsent");
+        string Sampling(int value)
+        {
+            var row = Row(defender);
+            row.Observe(new(defender, definitions[defender].Name, true, [], [], null, definitions[defender].Options.Select(item => item.Id).ToArray(),
+                [new TweakControlRead(consent, consent.Key, "fixture", ControlValues.From(value))]));
+            return row.Current;
+        }
+        check(Sampling(0) == "Always ask before sending" && Sampling(3) == "Send all samples automatically",
+            "A Defender sample choice the app doesn't offer reads in words as the current value: " + Sampling(0) + " | " + Sampling(3));
     }
 
     public static bool SourceDirection(string text) => System.Text.RegularExpressions.Regex.IsMatch(text, @"(?<![\w-])(apply|source-default)(?![\w-])", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
