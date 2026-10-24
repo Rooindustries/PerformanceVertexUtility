@@ -71,7 +71,7 @@ function New-GameTuneRestorePreview {
             }
         }
         $missingOriginal = @($savedControls | Where-Object { $_.control -notin @($controlChanges | ForEach-Object { $_.control }) }).Count -gt 0
-        $split = Split-RooIndustriesLeftAsSetRestoreChanges $Snapshot @($controlChanges.ToArray()) (Get-RooIndustriesPropertyValue $Candidate 'currentControlState' $null)
+        $split = Split-RooIndustriesLeftAsSetRestoreChanges $Snapshot @($controlChanges.ToArray()) (Get-RooIndustriesPropertyValue $Candidate 'currentControlState' $null) -Feature 'Game priority'
         $leftAsSet = @($split.leftAsSet)
         $alreadyOriginal = @($split.alreadyOriginal)
         $controlChanges = New-Object System.Collections.Generic.List[object]

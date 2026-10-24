@@ -104,6 +104,7 @@ public sealed class ControlChange
     public JsonElement? Observed { get; set; }
     public string? Error { get; set; }
     public string? ErrorKind { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public DateTime? AppliedAtUtc { get; set; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public List<ReleasedClaim>? Released { get; set; }
 }
 

@@ -69,10 +69,7 @@ function New-RooIndustriesDamagedOperation([string]$Path, [string]$Reason) {
     return [IO.InvalidDataException]::new('A saved change file is damaged: ' + $shown + ' (' + $Reason + ').')
 }
 
-function Read-RooIndustriesProcessOperationOwnership {
-    $clock = [Diagnostics.Stopwatch]::StartNew()
-    $claims = New-Object System.Collections.Generic.List[object]
-    $releases = New-Object System.Collections.Generic.List[object]
+function Get-RooIndustriesProcessOperationJournals {
     $journals = New-Object System.Collections.Generic.List[string]
     $root = Join-Path (Get-RooIndustriesLocalDataRoot) 'operations'
     foreach ($operation in @(Get-RooIndustriesProcessOperationDirectories $root)) {
@@ -88,7 +85,39 @@ function Read-RooIndustriesProcessOperationOwnership {
             }
         }
     }
+    return @($journals.ToArray())
+}
+
+function Read-RooIndustriesProcessOperationReleases {
+    $clock = [Diagnostics.Stopwatch]::StartNew()
+    $releases = New-Object System.Collections.Generic.List[object]
+    try { $journals = @(Get-RooIndustriesProcessOperationJournals) } catch { return @() }
     foreach ($path in $journals) {
+        try {
+            $read = Read-RooIndustriesGovernorJson $path 800 $clock $true
+            if ($read.state -ne 'read' -or -not $read.objectRoot -or $read.data -isnot [pscustomobject]) { continue }
+            $journal = $read.data
+            $identity = if ($journal.preview -is [pscustomobject]) { $journal.preview.identity } else { $null }
+            $created = 0L
+            if ($identity -isnot [pscustomobject] -or ($identity.processId -isnot [int] -and $identity.processId -isnot [long]) -or
+                $identity.creationTimeFileTimeUtc -isnot [string] -or -not [long]::TryParse($identity.creationTimeFileTimeUtc, [ref]$created)) { continue }
+            foreach ($change in @(@($journal.changes) | Where-Object { $_ -is [pscustomobject] -and $_.status -ceq 'restored' -and $_.name -is [string] -and $null -ne $_.PSObject.Properties['released'] })) {
+                $control = switch -CaseSensitive ($change.name) { 'priorityClass' { 'cpuPriority' } 'affinityMask' { 'affinity' } default { $change.name } }
+                foreach ($claim in @($change.released)) {
+                    if ($claim -is [pscustomobject] -and $claim.feature -is [string] -and $claim.record -is [string] -and $claim.record) {
+                        $releases.Add([pscustomobject]@{ processId = [long]$identity.processId; creationTimeFileTimeUtc = $created; control = $control; feature = $claim.feature; original = $claim.original; record = $claim.record }) | Out-Null
+                    }
+                }
+            }
+        } catch { continue }
+    }
+    return @($releases.ToArray())
+}
+
+function Read-RooIndustriesProcessOperationOwnership {
+    $clock = [Diagnostics.Stopwatch]::StartNew()
+    $claims = New-Object System.Collections.Generic.List[object]
+    foreach ($path in @(Get-RooIndustriesProcessOperationJournals)) {
         $read = Read-RooIndustriesGovernorJson $path 800 $clock $true
         if ($read.state -eq 'missing') { continue }
         if ($read.state -ne 'read') { throw (New-RooIndustriesDamagedOperation $path ('it could not be read: ' + $read.message)) }
@@ -96,20 +125,6 @@ function Read-RooIndustriesProcessOperationOwnership {
         if (-not $read.objectRoot -or $journal -isnot [pscustomobject] -or ($journal.schemaVersion -isnot [int] -and $journal.schemaVersion -isnot [long]) -or $journal.schemaVersion -ne 1 -or
             $journal.status -isnot [string] -or $journal.status -cnotin @('applying','applied','needsReconciliation','restored','expired')) {
             throw (New-RooIndustriesDamagedOperation $path 'unknown schema or state')
-        }
-        $released = @(@($journal.changes) | Where-Object { $_ -is [pscustomobject] -and $_.status -ceq 'restored' -and $_.name -is [string] -and $null -ne $_.PSObject.Properties['released'] })
-        $releasedBy = if ($journal.preview -is [pscustomobject]) { $journal.preview.identity } else { $null }
-        $releasedAt = 0L
-        if ($released.Count -gt 0 -and $releasedBy -is [pscustomobject] -and ($releasedBy.processId -is [int] -or $releasedBy.processId -is [long]) -and
-            $releasedBy.creationTimeFileTimeUtc -is [string] -and [long]::TryParse($releasedBy.creationTimeFileTimeUtc, [ref]$releasedAt)) {
-            foreach ($change in $released) {
-                foreach ($claim in @($change.released)) {
-                    if ($claim -is [pscustomobject] -and $claim.feature -is [string] -and $claim.record -is [string] -and $claim.record) {
-                        $control = switch -CaseSensitive ($change.name) { 'priorityClass' { 'cpuPriority' } 'affinityMask' { 'affinity' } default { $change.name } }
-                        $releases.Add([pscustomobject]@{ processId = [long]$releasedBy.processId; creationTimeFileTimeUtc = $releasedAt; control = $control; feature = $claim.feature; original = $claim.original; record = $claim.record }) | Out-Null
-                    }
-                }
-            }
         }
         if ($journal.status -cin @('restored','expired')) { continue }
         if ($journal.changes -isnot [array] -or $journal.preview -isnot [pscustomobject] -or $journal.preview.identity -isnot [pscustomobject]) {
@@ -139,7 +154,7 @@ function Read-RooIndustriesProcessOperationOwnership {
         }
         $claims.Add([pscustomobject]@{ processId = [int]$processId; creationTimeFileTimeUtc = $creation; controls = @($attempted) }) | Out-Null
     }
-    return [pscustomobject]@{ claims = @($claims.ToArray()); releases = @($releases.ToArray()); failure = $null }
+    return [pscustomobject]@{ claims = @($claims.ToArray()); failure = $null }
 }
 
 function Get-RooIndustriesProcessOperationControls {
@@ -148,7 +163,7 @@ function Get-RooIndustriesProcessOperationControls {
     if ($ForPreview) {
         if ($null -eq $script:RooIndustriesProcessOperationPreview) {
             try { $script:RooIndustriesProcessOperationPreview = Read-RooIndustriesProcessOperationOwnership }
-            catch { $script:RooIndustriesProcessOperationPreview = [pscustomobject]@{ claims = @(); releases = @(); failure = $_.Exception } }
+            catch { $script:RooIndustriesProcessOperationPreview = [pscustomobject]@{ claims = @(); failure = $_.Exception } }
         }
         $snapshot = $script:RooIndustriesProcessOperationPreview
     } else {

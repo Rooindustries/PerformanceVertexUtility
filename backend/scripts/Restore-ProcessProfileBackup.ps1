@@ -125,7 +125,7 @@ function New-RollbackPreviewEntry {
                 $controlChanges.Add((New-RooIndustriesControlChange 'gpuPriority' $currentGpuPriority $originalGpuPriority 'restoreGpuPriority' 'GPU scheduling priority is unavailable for this restore target.' $true $gpuReason)) | Out-Null
             }
         }
-        $split = Split-RooIndustriesLeftAsSetRestoreChanges $Snapshot @($controlChanges.ToArray()) $currentState
+        $split = Split-RooIndustriesLeftAsSetRestoreChanges $Snapshot @($controlChanges.ToArray()) $currentState -Feature 'Background priorities'
         $leftAsSet = @($split.leftAsSet)
         $alreadyOriginal = @($split.alreadyOriginal)
         $controlChanges = New-Object System.Collections.Generic.List[object]

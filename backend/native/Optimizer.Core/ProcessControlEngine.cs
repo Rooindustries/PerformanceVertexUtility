@@ -182,6 +182,7 @@ public sealed class ProcessControlEngine
                 change.Observed = after;
                 if (!ProcessTarget.Equivalent(change.Name, after, change.Desired)) throw new InvalidOperationException("Windows readback differs from the requested value.");
                 Succeeded(change, "applied", after);
+                change.AppliedAtUtc ??= DateTime.UtcNow;
                 Save(journalPath, journal);
             }
             catch (Exception error)
@@ -218,7 +219,7 @@ public sealed class ProcessControlEngine
         {
             var current = target.Read(change.Name).Require();
             change.Observed = current;
-            if (ProcessTarget.Equivalent(change.Name, current, change.Desired)) { if (change.Status == "applyIntent") change.Status = "applied"; change.Error = null; change.ErrorKind = null; continue; }
+            if (ProcessTarget.Equivalent(change.Name, current, change.Desired)) { if (change.Status == "applyIntent") change.Status = "applied"; change.AppliedAtUtc ??= DateTime.UtcNow; change.Error = null; change.ErrorKind = null; continue; }
             change.Status = "applyIntent";
             Save(journalPath, journal);
             target.Write(change.Name, change.Desired);
@@ -233,6 +234,7 @@ public sealed class ProcessControlEngine
                 return journal;
             }
             change.Status = "applied";
+            change.AppliedAtUtc ??= DateTime.UtcNow;
             change.Error = null; change.ErrorKind = null;
         }
         journal.Status = "applied";
@@ -250,8 +252,8 @@ public sealed class ProcessControlEngine
     private sealed record Ownership(string DataRoot, string? RepoRoot, string JournalPath)
     {
         public GovernorClaims.Own? Holders(RunningProcess identity, string name, JsonElement current) => GovernorClaims.OwnChange(identity, name, current, DataRoot, RepoRoot, JournalPath);
-        public (string[] Journals, ReleasedClaim[] Released) SetBack(RunningProcess identity, string name, JsonElement current, JsonElement desired) =>
-            GovernorClaims.SetBack(identity, name, current, desired, DataRoot, RepoRoot, JournalPath);
+        public (string[] Journals, ReleasedClaim[] Released) SetBack(RunningProcess identity, string name, JsonElement current, JsonElement desired, DateTime appliedAt) =>
+            GovernorClaims.SetBack(identity, name, current, desired, appliedAt, DataRoot, RepoRoot, JournalPath);
     }
 
     private ProcessControlJournal Restore(string journalPath, bool overwrite, bool governor, bool relinquished, Ownership? owned, string? only = null)
@@ -299,7 +301,8 @@ public sealed class ProcessControlEngine
             }
             bool Settle(ControlChange change)
             {
-                var confirmed = change.Status == "applied";
+                var incoming = change.Status;
+                var confirmed = incoming == "applied";
                 var settled = false;
                 var current = target.Read(change.Name).Require();
                 for (var round = 0; ; round++)
@@ -307,10 +310,10 @@ public sealed class ProcessControlEngine
                     if (round > 4) throw new InvalidOperationException("This setting kept changing, so Undo left it for now. Try again in a moment.");
                     if (ProcessTarget.Equivalent(change.Name, current, change.Original))
                     {
-                        if (owned is not null && !settled)
+                        if (owned is not null && !settled && change.AppliedAtUtc is { } appliedAt)
                         {
                             settled = true;
-                            var (stacked, released) = owned.SetBack(journal.Preview.Identity, change.Name, current, change.Desired);
+                            var (stacked, released) = owned.SetBack(journal.Preview.Identity, change.Name, current, change.Desired, appliedAt);
                             if (released.Length > 0)
                             {
                                 change.Released = (change.Released ?? []).Concat(released).DistinctBy(claim => claim.Feature + "\n" + claim.Original.GetRawText() + "\n" + claim.Record).ToList();
@@ -356,6 +359,8 @@ public sealed class ProcessControlEngine
                                 return true;
                             }
                             current = beforeWrite;
+                            change.Status = incoming;
+                            Save(journalPath, journal);
                             continue;
                         }
                     }

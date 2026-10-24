@@ -8,7 +8,7 @@ namespace RooIndustries.Optimizer;
 internal static class GovernorClaims
 {
     private sealed record Check(string Field, JsonElement? Original, JsonElement? Proposed);
-    private sealed record Claim(string Feature, int ProcessId, long? Created, string? ExecutablePath, string? ImageName, string[] Fields, Check[]? Checks = null, string? Journal = null, string? Record = null);
+    private sealed record Claim(string Feature, int ProcessId, long? Created, string? ExecutablePath, string? ImageName, string[] Fields, Check[]? Checks = null, string? Journal = null, string? Record = null, DateTime? Captured = null);
     private sealed record Doubt(string Feature, string Path, string Reason, string[] Fields);
 
     private sealed class Evidence(string dataRoot, HashSet<string> wanted)
@@ -20,7 +20,7 @@ internal static class GovernorClaims
     }
 
     private static readonly (string Field, string Key)[] Originals =
-        [("cpuPriority", "originalPriorityClass"), ("affinity", "originalAffinityMask"), ("ioPriority", "originalIoPriority"), ("gpuPriority", "originalGpuPriority")];
+        [("cpuPriority", "originalPriorityClass"), ("affinity", "originalAffinityMask"), ("ioPriority", "originalIoPriority"), ("gpuPriority", "originalGpuPriority"), ("memoryPriority", "originalMemoryPriority")];
 
     private static readonly string[] OriginalFields = Originals.Select(pair => pair.Field).ToArray();
     private static readonly string[] CpuFields = ["cpuSets"];
@@ -78,11 +78,11 @@ internal static class GovernorClaims
         return full.StartsWith(root, StringComparison.OrdinalIgnoreCase) ? full[root.Length..] : full;
     }
 
-    public static (string[] Journals, ReleasedClaim[] Released) SetBack(RunningProcess identity, string field, JsonElement current, JsonElement desired, string dataRoot, string? repoRoot, string journalPath)
+    public static (string[] Journals, ReleasedClaim[] Released) SetBack(RunningProcess identity, string field, JsonElement current, JsonElement desired, DateTime appliedAt, string dataRoot, string? repoRoot, string journalPath)
     {
         var claims = Overlapping(identity, field, dataRoot, repoRoot, journalPath, out _);
-        var journals = claims.Where(claim => claim.Journal is { } path && StartsFrom(path, field, current, desired)).Select(claim => claim.Journal!).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
-        var released = claims.Where(claim => claim.Journal is null && claim.Checks is not null && claim.Record is not null)
+        var journals = claims.Where(claim => claim.Journal is { } path && StartsFrom(path, field, current, desired, appliedAt)).Select(claim => claim.Journal!).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        var released = claims.Where(claim => claim.Journal is null && claim.Checks is not null && claim.Record is not null && claim.Captured is { } captured && captured > appliedAt)
             .SelectMany(claim => claim.Checks!.Where(check => check.Field == field && check.Original is { } original && Same(field, desired, original) == true &&
                 (check.Proposed is not { } proposed || Same(field, current, proposed) == true)).Select(check => new ReleasedClaim(claim.Feature, check.Original!.Value, claim.Record!)))
             .DistinctBy(claim => claim.Feature + "\n" + claim.Original.GetRawText() + "\n" + claim.Record).ToArray();
@@ -104,8 +104,9 @@ internal static class GovernorClaims
     private static bool Sets(string journal, string field, JsonElement current) => OperationFiles.Read<ProcessControlJournal>(journal).Changes
         .Any(change => change.Name == field && change.Status is "applyIntent" or "applied" or "restoreIntent" && ProcessTarget.Equivalent(field, current, change.Desired));
 
-    private static bool StartsFrom(string journal, string field, JsonElement current, JsonElement desired) => OperationFiles.Read<ProcessControlJournal>(journal).Changes
-        .Any(change => change.Name == field && change.Status is "applyIntent" or "applied" or "restoreIntent" && ProcessTarget.Equivalent(field, current, change.Desired) && ProcessTarget.Equivalent(field, desired, change.Original));
+    private static bool StartsFrom(string journal, string field, JsonElement current, JsonElement desired, DateTime appliedAt) => OperationFiles.Read<ProcessControlJournal>(journal).Changes
+        .Any(change => change.Name == field && change.Status is "applyIntent" or "applied" or "restoreIntent" && change.AppliedAtUtc is { } at && at > appliedAt &&
+            ProcessTarget.Equivalent(field, current, change.Desired) && ProcessTarget.Equivalent(field, desired, change.Original));
 
     private static Evidence Collect(Evidence evidence, IEnumerable<string> journals, string? repoRoot)
     {
@@ -378,7 +379,7 @@ internal static class GovernorClaims
         if (!string.IsNullOrWhiteSpace(name) && !name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) name += ".exe";
         var stamp = Text(snapshot, "capturedAtUtc");
         var record = string.IsNullOrWhiteSpace(stamp) ? null : (Text(snapshot, "sessionId") ?? "") + "|" + stamp;
-        evidence.Claims.Add(new(feature, processId, started?.ToFileTimeUtc(), executablePath, name, checks.Keys.ToArray(), checks.Values.ToArray(), Record: record));
+        evidence.Claims.Add(new(feature, processId, started?.ToFileTimeUtc(), executablePath, name, checks.Keys.ToArray(), checks.Values.ToArray(), Record: record, Captured: Time(stamp)));
     }
 
     private static JsonElement? Applied(JsonElement snapshot, string field)
@@ -388,7 +389,7 @@ internal static class GovernorClaims
     }
 
     private static JsonElement? Original(JsonElement snapshot, string field) =>
-        (field == "memoryPriority" ? "originalMemoryPriority" : Originals.FirstOrDefault(pair => pair.Field == field).Key) is { } key ? Present(Child(snapshot, key)) : null;
+        Originals.FirstOrDefault(pair => pair.Field == field).Key is { } key ? Present(Child(snapshot, key)) : null;
 
     private static JsonElement? Present(JsonElement? value) =>
         value is { ValueKind: not (JsonValueKind.Null or JsonValueKind.Undefined) } present && !(present.ValueKind == JsonValueKind.String && string.IsNullOrWhiteSpace(present.GetString())) ? present.Clone() : null;
