@@ -1403,7 +1403,7 @@ function Confirm-RooIndustriesRestoreControl {
                 if ([string]::IsNullOrWhiteSpace([string]$now)) { throw $script:RooIndustriesLeftAsSetChangedBack }
                 if (Test-RooIndustriesControlValueEqual $control $now $original) {
                     $candidateConfirmed = $true
-                } elseif ($Feature -and $applied.known -and (Test-RooIndustriesControlValueEqual $control $now $applied.value) -and
+                } elseif ($Feature -and $applied.known -and $applied.verified -and (Test-RooIndustriesControlValueEqual $control $now $applied.value) -and
                     (Test-RooIndustriesReleasedControl $savedId $savedBirth $control $Feature $original (Get-RooIndustriesSnapshotRecord $Snapshot))) {
                     $candidateConfirmed = $true
                 } elseif (-not $applied.known -or -not $applied.verified) {

@@ -105,7 +105,8 @@ function Read-RooIndustriesProcessOperationOwnership {
             foreach ($change in $released) {
                 foreach ($claim in @($change.released)) {
                     if ($claim -is [pscustomobject] -and $claim.feature -is [string] -and $claim.record -is [string] -and $claim.record) {
-                        $releases.Add([pscustomobject]@{ processId = [long]$releasedBy.processId; creationTimeFileTimeUtc = $releasedAt; control = $change.name; feature = $claim.feature; original = $claim.original; record = $claim.record }) | Out-Null
+                        $control = switch -CaseSensitive ($change.name) { 'priorityClass' { 'cpuPriority' } 'affinityMask' { 'affinity' } default { $change.name } }
+                        $releases.Add([pscustomobject]@{ processId = [long]$releasedBy.processId; creationTimeFileTimeUtc = $releasedAt; control = $control; feature = $claim.feature; original = $claim.original; record = $claim.record }) | Out-Null
                     }
                 }
             }

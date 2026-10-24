@@ -249,7 +249,7 @@ public sealed class ProcessControlEngine
 
     private sealed record Ownership(string DataRoot, string? RepoRoot, string JournalPath)
     {
-        public string[]? Holders(RunningProcess identity, string name, JsonElement current) => GovernorClaims.OwnChange(identity, name, current, DataRoot, RepoRoot, JournalPath);
+        public GovernorClaims.Own? Holders(RunningProcess identity, string name, JsonElement current) => GovernorClaims.OwnChange(identity, name, current, DataRoot, RepoRoot, JournalPath);
         public (string[] Journals, ReleasedClaim[] Released) SetBack(RunningProcess identity, string name, JsonElement current, JsonElement desired) =>
             GovernorClaims.SetBack(identity, name, current, desired, DataRoot, RepoRoot, JournalPath);
     }
@@ -336,7 +336,8 @@ public sealed class ProcessControlEngine
                             LeaveAsSet(change, current);
                             return true;
                         }
-                        if (holders.Length > 0) { current = Release(change.Name, holders); continue; }
+                        if (holders.Unsure is { } unsure) throw new InvalidOperationException(unsure);
+                        if (holders.Journals.Length > 0) { current = Release(change.Name, holders.Journals); continue; }
                     }
                     change.Status = "restoreIntent";
                     Save(journalPath, journal);
