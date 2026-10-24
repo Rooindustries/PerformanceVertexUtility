@@ -324,6 +324,7 @@ def validate(root: Path, contracts_only: bool = False):
             if not passed:
                 failures.append(f'Negative control failed: {label} was not stopped at the read walk timeout')
         failures.extend(runpy.run_path(str(Path(__file__).with_name('check_launch_presets.py')))['check'](root))
+        failures.extend(runpy.run_path(str(Path(__file__).with_name('check_tool_words.py')))['check'](root))
         failures.extend(runpy.run_path(str(Path(__file__).with_name("check_branding.py")))["check"](root))
         for label, passed in branding_negative_controls().items():
             if not passed:

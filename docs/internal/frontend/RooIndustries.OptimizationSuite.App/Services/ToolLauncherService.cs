@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
@@ -15,6 +16,7 @@ public sealed record ToolTarget(string Action, string? Path, bool FromArchive);
 
 public sealed class ToolLauncherService
 {
+    public const string MissingFiles = "Some app files are missing. Reinstall the app.";
     private readonly string _root;
     private readonly string? _cacheRoot;
     private readonly Func<string>? _requireProtected;
@@ -59,15 +61,35 @@ public sealed class ToolLauncherService
         if (target.Action == "Get")
         {
             if (!Uri.TryCreate(tool.Website, UriKind.Absolute, out var uri) || uri.Scheme != "https")
-                throw new InvalidDataException("The official download address is invalid.");
+                throw new UriFormatException("The official download address is invalid.");
             RooIndustries.Optimizer.RuntimeEnvironment.OpenInExplorer(uri.AbsoluteUri);
             return "Opened the " + tool.Name + " download page.";
         }
         var path = target.FromArchive ? await Task.Run(() => Extract(tool)) : target.Path!;
         using var process = Start(path);
-        return target.Action == "Install" ? "Opened the " + tool.Name + " installer. Complete its setup, then refresh this list."
+        return target.Action == "Install" ? "Opened the " + tool.Name + " installer. Finish setup, then click Refresh."
             : "Opened " + tool.Name + ".";
     }
+
+    public static string Explain(ToolDefinition tool, Exception error) => error switch
+    {
+        Win32Exception { NativeErrorCode: 225 or 226 or 1260 or 4551 } => "Your antivirus or Windows Security blocked " + tool.Name + ". Allow it there, then try again.",
+        Win32Exception { NativeErrorCode: 5 or 740 } or UnauthorizedAccessException => tool.Name + " needs admin rights. Reopen the app as an administrator, then try again.",
+        Win32Exception { NativeErrorCode: 2 or 3 } => tool.Name + "'s files are missing. Your antivirus may have removed them. Allow " + tool.Name + " there, then try again.",
+        FileNotFoundException or DirectoryNotFoundException => tool.Name + " is missing from the app's files. Reinstall the app to get it back.",
+        Win32Exception { NativeErrorCode: 193 or 216 } or InvalidDataException => "The app's copy of " + tool.Name + " is damaged. Reinstall the app to fix it.",
+        UriFormatException => tool.Name + "'s download link is broken. Update the app to fix it.",
+        IOException => "Couldn't unpack " + tool.Name + ". Make sure your drive has free space, then try again.",
+        InvalidOperationException { Message: var text } when text.StartsWith("Windows Explorer", StringComparison.Ordinal) => "Windows Explorer isn't running. Sign in to Windows, then try again.",
+        _ => "Couldn't open " + tool.Name + ". Details are in the app log (Settings, Open logs folder)."
+    };
+
+    public static string ExplainList(Exception error) => error switch
+    {
+        FileNotFoundException or DirectoryNotFoundException => MissingFiles,
+        IOException or UnauthorizedAccessException => "Couldn't read the tool list. Click Refresh to try again.",
+        _ => "The tool list is damaged. Reinstall the app to fix it."
+    };
 
     private Process? Start(string path)
     {

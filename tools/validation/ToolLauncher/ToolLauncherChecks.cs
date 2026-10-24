@@ -71,7 +71,78 @@ static class ToolLauncherChecks
             markers?.DeleteValue(RooIndustries.Optimizer.PolicyRootSecurity.MarkerName(cacheRoot) + RooIndustries.Optimizer.PolicyRootSecurity.ProtectedAtSuffix, false);
         }
         check(!Directory.Exists(cacheRoot) && !Directory.Exists(root), "Tool launcher verification removes its executable, cache and package fixture");
+        PlainErrors(check);
         UtilitiesFallback(check, fixture);
+    }
+
+    private static void PlainErrors(Action<bool, string> check)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "roo-industries-tool-words-" + Guid.NewGuid().ToString("N"));
+        var cacheRoot = Path.Combine(root, "cache");
+        var oldRoot = Environment.GetEnvironmentVariable("ROO_INDUSTRIES_UTILITIES_ROOT");
+        var tool = new ToolDefinition("fixture-" + Guid.NewGuid().ToString("N"), "Fixture Tool", "Plain words fixture", "Diagnostics", "https://example.invalid/", "Utilities/Other/Fixture/Broken.exe", [], "open", null);
+        var archive = Path.Combine(root, "vendor", "Utilities.zip");
+        Exception Failure(Func<Task> action)
+        {
+            try { action().GetAwaiter().GetResult(); }
+            catch (Exception error) { return error; }
+            throw new InvalidOperationException("The fixture failure did not happen.");
+        }
+        void Plain(string shown, Exception error, string expected, string label)
+        {
+            var raw = error.Message.Length > 0 && shown.Contains(error.Message, StringComparison.Ordinal);
+            check(shown == expected && !raw && !shown.Contains("Exception", StringComparison.Ordinal) && !shown.Contains(":\\", StringComparison.Ordinal)
+                && !shown.Contains(tool.Id, StringComparison.Ordinal) && !shown.Contains("Utilities.zip", StringComparison.Ordinal),
+                label + " (" + error.GetType().Name + ") shows \"" + shown + "\" instead of the raw error");
+        }
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(root, "vendor"));
+            Directory.CreateDirectory(Path.Combine(root, "modules"));
+            Environment.SetEnvironmentVariable("ROO_INDUSTRIES_UTILITIES_ROOT", Path.Combine(root, "absent"));
+            var service = new ToolLauncherService(root, cacheRoot, () => RooIndustries.Optimizer.OperationsFolder.Ensure(cacheRoot));
+
+            var missing = Failure(() => service.ReadAsync());
+            Plain(ToolLauncherService.ExplainList(missing), missing, ToolLauncherService.MissingFiles, "A missing tool list");
+            File.WriteAllText(Path.Combine(root, "modules", "tool-launchers.json"), "{ \"tools\": [ { \"id\": ");
+            var damagedList = Failure(() => service.ReadAsync());
+            Plain(ToolLauncherService.ExplainList(damagedList), damagedList, "The tool list is damaged. Reinstall the app to fix it.", "A damaged tool list");
+
+            File.WriteAllText(archive, "not a zip archive");
+            var damagedPack = Failure(() => Task.Run(() => service.Resolve(tool)));
+            Plain(ToolLauncherService.ExplainList(damagedPack), damagedPack, "The tool list is damaged. Reinstall the app to fix it.", "A damaged tool pack while the list loads");
+            Plain(ToolLauncherService.Explain(tool, damagedPack), damagedPack, "The app's copy of Fixture Tool is damaged. Reinstall the app to fix it.", "A damaged tool pack when a tool opens");
+
+            File.Delete(archive);
+            var link = Failure(() => service.OpenAsync(tool with { Website = "http://example.invalid/" }));
+            Plain(ToolLauncherService.Explain(tool, link), link, "Fixture Tool's download link is broken. Update the app to fix it.", "A tool with a broken download link");
+
+            using (var zip = ZipFile.Open(archive, ZipArchiveMode.Create))
+            using (var writer = new StreamWriter(zip.CreateEntry(tool.ArchivePath).Open())) writer.Write("not a program");
+            var locked = new ToolLauncherService(root, cacheRoot, () => throw new UnauthorizedAccessException(RooIndustries.Optimizer.DataFolder.NotProtected + " (Access to the path 'C:\\ProgramData\\fixture' is denied.)"));
+            var admin = Failure(() => locked.OpenAsync(tool));
+            Plain(ToolLauncherService.Explain(tool, admin), admin, "Fixture Tool needs admin rights. Reopen the app as an administrator, then try again.", "A tool the app can't unpack without admin rights");
+
+            var broken = Failure(() => service.OpenAsync(tool));
+            check(broken is System.ComponentModel.Win32Exception, "A damaged tool file fails to start (" + broken.GetType().Name + ": " + broken.Message + ")");
+            Plain(ToolLauncherService.Explain(tool, broken), broken, "The app's copy of Fixture Tool is damaged. Reinstall the app to fix it.", "A damaged tool file");
+
+            var blocked = new System.ComponentModel.Win32Exception(225);
+            Plain(ToolLauncherService.Explain(tool, blocked), blocked, "Your antivirus or Windows Security blocked Fixture Tool. Allow it there, then try again.", "A tool blocked by antivirus");
+            var elevation = new System.ComponentModel.Win32Exception(740);
+            Plain(ToolLauncherService.Explain(tool, elevation), elevation, "Fixture Tool needs admin rights. Reopen the app as an administrator, then try again.", "A tool that needs admin rights");
+            var unknown = new NotSupportedException("Fixture raw failure text");
+            Plain(ToolLauncherService.Explain(tool, unknown), unknown, "Couldn't open Fixture Tool. Details are in the app log (Settings, Open logs folder).", "Any other tool failure");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("ROO_INDUSTRIES_UTILITIES_ROOT", oldRoot);
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+            using var markers = Registry.LocalMachine.OpenSubKey(RooIndustries.Optimizer.PolicyRootSecurity.MarkerKey, true);
+            markers?.DeleteValue(RooIndustries.Optimizer.PolicyRootSecurity.MarkerName(cacheRoot), false);
+            markers?.DeleteValue(RooIndustries.Optimizer.PolicyRootSecurity.MarkerName(cacheRoot) + RooIndustries.Optimizer.PolicyRootSecurity.ProtectedAtSuffix, false);
+        }
+        check(!Directory.Exists(root), "The plain error check removes its tool pack, cache and package fixture");
     }
 
     private static void UtilitiesFallback(Action<bool, string> check, string fixture)
