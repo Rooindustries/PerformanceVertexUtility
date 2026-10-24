@@ -28,13 +28,17 @@ public static class RooIndustriesMemoryUser {
  [DllImport("advapi32.dll")] static extern int GetLengthSid(IntPtr sid);
  [DllImport("advapi32.dll", SetLastError=true)] static extern bool SetTokenInformation(IntPtr token, int infoClass, ref SidAndAttributes info, int length);
  [DllImport("advapi32.dll", SetLastError=true, CharSet=CharSet.Unicode)] static extern bool CreateProcessAsUser(IntPtr token, string application, StringBuilder command, IntPtr processAttributes, IntPtr threadAttributes, bool inherit, uint flags, IntPtr environment, string directory, ref StartupInfo startup, out ProcessInformation info);
+ [DllImport("advapi32.dll", SetLastError=true)] static extern bool SetTokenInformation(IntPtr token, int infoClass, ref IntPtr info, int length);
+ [DllImport("advapi32.dll", SetLastError=true, CharSet=CharSet.Unicode)] static extern bool ConvertStringSecurityDescriptorToSecurityDescriptor(string text, uint revision, out IntPtr descriptor, IntPtr size);
+ [DllImport("advapi32.dll", SetLastError=true)] static extern bool GetSecurityDescriptorDacl(IntPtr descriptor, out bool present, out IntPtr dacl, out bool defaulted);
  [DllImport("kernel32.dll")] static extern uint WaitForSingleObject(IntPtr handle, uint milliseconds);
  [DllImport("kernel32.dll")] static extern bool GetExitCodeProcess(IntPtr process, out uint code);
  [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr handle);
  [DllImport("kernel32.dll")] static extern IntPtr LocalFree(IntPtr memory);
  static IntPtr Sid(string text) { IntPtr sid; if (!ConvertStringSidToSid(text, out sid)) throw new Win32Exception(); return sid; }
  public static int Run(string command, uint milliseconds) {
-  IntPtr own = IntPtr.Zero, user = IntPtr.Zero, admins = Sid("S-1-5-32-544"), localAdmin = Sid("S-1-5-114"), medium = Sid("S-1-16-8192");
+  string me = System.Security.Principal.WindowsIdentity.GetCurrent().User.Value;
+  IntPtr own = IntPtr.Zero, user = IntPtr.Zero, descriptor = IntPtr.Zero, owner = Sid(me), admins = Sid("S-1-5-32-544"), localAdmin = Sid("S-1-5-114"), medium = Sid("S-1-16-8192");
   ProcessInformation info = new ProcessInformation();
   try {
    if (!OpenProcessToken(GetCurrentProcess(), 0x0001 | 0x0002 | 0x0008 | 0x0080, out own)) throw new Win32Exception();
@@ -42,6 +46,10 @@ public static class RooIndustriesMemoryUser {
    if (!CreateRestrictedToken(own, 0x1 | 0x4, (uint)disable.Length, disable, 0, IntPtr.Zero, 0, IntPtr.Zero, out user)) throw new Win32Exception();
    SidAndAttributes label = new SidAndAttributes { Sid = medium, Attributes = 0x20 };
    if (!SetTokenInformation(user, 25, ref label, Marshal.SizeOf(typeof(SidAndAttributes)) + GetLengthSid(medium))) throw new Win32Exception();
+   if (!SetTokenInformation(user, 4, ref owner, IntPtr.Size)) throw new Win32Exception();
+   if (!ConvertStringSecurityDescriptorToSecurityDescriptor("D:(A;;GA;;;" + me + ")(A;;GA;;;SY)", 1, out descriptor, IntPtr.Zero)) throw new Win32Exception();
+   bool present, defaulted; IntPtr dacl; if (!GetSecurityDescriptorDacl(descriptor, out present, out dacl, out defaulted)) throw new Win32Exception();
+   if (!SetTokenInformation(user, 6, ref dacl, IntPtr.Size)) throw new Win32Exception();
    StartupInfo startup = new StartupInfo { cb = Marshal.SizeOf(typeof(StartupInfo)) };
    if (!CreateProcessAsUser(user, null, new StringBuilder(command), IntPtr.Zero, IntPtr.Zero, false, 0x08000000, IntPtr.Zero, null, ref startup, out info)) throw new Win32Exception();
    if (WaitForSingleObject(info.hProcess, milliseconds) != 0) return -2;
@@ -49,7 +57,7 @@ public static class RooIndustriesMemoryUser {
   } finally {
    if (info.hThread != IntPtr.Zero) CloseHandle(info.hThread); if (info.hProcess != IntPtr.Zero) CloseHandle(info.hProcess);
    if (user != IntPtr.Zero) CloseHandle(user); if (own != IntPtr.Zero) CloseHandle(own);
-   LocalFree(admins); LocalFree(localAdmin); LocalFree(medium);
+   if (descriptor != IntPtr.Zero) LocalFree(descriptor); LocalFree(owner); LocalFree(admins); LocalFree(localAdmin); LocalFree(medium);
   }
  }
 }
