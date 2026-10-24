@@ -67,8 +67,8 @@ function Open-TransparencyRegistry {
     if (-not $writable) { throw 'Transparency registry key unavailable; retained' }
     $writable
 }
-function Has-Profile([string[]]$texts) { for ($i = 0; $i -lt $texts.Count - 1; $i++) { if ($texts[$i] -ceq $CheckProfile -and $texts[$i + 1] -match 'selected settings') { return $true } }; return $false }
-function Undo-Profiles { Nav 'Undo changes'; WaitFor { $t = @(Texts); if (($t -contains 'Saved settings') -and ($t -notcontains 'Reading restore state')) { $t } } 60 'Undo page' }
+function Has-Profile([string[]]$texts) { for ($i = 0; $i -lt $texts.Count - 1; $i++) { if ($texts[$i] -ceq $CheckProfile -and $texts[$i + 1] -match 'settings? · undo (it|them) in Windows tweaks$') { return $true } }; return $false }
+function Undo-Profiles { Nav 'Undo changes'; WaitFor { $t = @(Texts); if (($t -contains 'What you can undo') -and ($t -notcontains 'Checking what you can undo')) { $t } } 60 'Undo page' }
 function Find-Row {
     $search = WaitFor { ById 'WindowsTweaksSearch' } 30 'search box'
     $search.GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern).SetValue('Transparency Effects'); Start-Sleep 1
@@ -112,7 +112,7 @@ function New-CacheGameSession {
 }
 function Governor-Row {
     Nav 'Undo changes'
-    WaitFor { $t = @(Texts); $i = [Array]::IndexOf($t, 'Governor'); if (($t -notcontains 'Reading restore state') -and $i -ge 0 -and $i -lt $t.Count - 1) { $t[$i + 1] } } 60 'Governor row on the Undo page'
+    WaitFor { $t = @(Texts); $i = [Array]::IndexOf($t, 'Governor'); if (($t -notcontains 'Checking what you can undo') -and $i -ge 0 -and $i -lt $t.Count - 1) { $t[$i + 1] } } 60 'Governor row on the Undo page'
 }
 function Find-PickItem($combo, [string]$like) {
     $item = @($combo.FindAll($TS::Descendants, [Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty, $CT::ListItem)) | Where-Object { $_.Current.Name -like $like })[0]

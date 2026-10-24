@@ -24,7 +24,7 @@ static class GovernorChecks
     private const string SignedIn = "The Governor is running. It keeps your rules active when this app is closed and starts when you sign in.";
     private const string NoSignIn = "The Governor is running and keeps your rules active when this app is closed, but it won't start when you sign in. Press Start governor to fix that.";
     private const string UnknownSignIn = "The Governor is running and keeps your rules active when this app is closed. The app couldn't confirm it starts when you sign in. Press Start governor to set that up again.";
-    private const string RepairNote = " · press Start governor in Games > Processes";
+    private const string RepairNote = " · press Start governor in Games > Processes to fix that";
     private const string Sid = "S-1-5-21-1-2-3-1001";
     private static readonly string Install = OperatingSystem.IsWindows() ? @"C:\Fixture\Install" : "/fixture/install";
     private static readonly string OtherInstall = OperatingSystem.IsWindows() ? @"C:\Fixture\Other" : "/fixture/other";
@@ -43,7 +43,7 @@ static class GovernorChecks
 
     internal static RunningProcess Process(int id, string path) => new(id, "13300000000000000" + id, path);
 
-    private static PolicyInstance Instance(RunningProcess process, string? field, string status, string? errorKind = null, string? error = null, string? root = null) => new()
+    internal static PolicyInstance Instance(RunningProcess process, string? field, string status, string? errorKind = null, string? error = null, string? root = null) => new()
     {
         RuleId = RuleId, RuleHash = "hash", Process = process, PreviewPath = Path.Combine(root ?? "fixture", "operations", process.ProcessId + field, "preview.json"), ReviewHash = "review",
         JournalPath = Path.Combine(root ?? "fixture", "operations", process.ProcessId + field, "journal.json"), Status = status, Field = field, ErrorKind = errorKind, Error = error,
@@ -56,13 +56,13 @@ static class GovernorChecks
         Changes = changes.Select(change => new ControlChange { Name = change.Field, Original = Value("Normal"), Desired = change.Observed, Observed = change.Observed, Status = "applied" }).ToList(),
     };
 
-    private static PolicyHostState Host(string status, PolicyInstance[] instances, PolicyIssue[]? issues = null, string[]? errors = null, OperationOwner? owner = null) => new()
+    internal static PolicyHostState Host(string status, PolicyInstance[] instances, PolicyIssue[]? issues = null, string[]? errors = null, OperationOwner? owner = null) => new()
     {
         SchemaVersion = 1, Owner = owner ?? Owner, Status = status, Host = status is "running" or "configurationError" ? new RunningProcess(4242, "133000000000000000", @"C:\Fixture\Optimizer.Host.exe") : null,
         Instances = instances.ToList(), Errors = (errors ?? []).ToList(), Issues = (issues ?? []).ToList(), UpdatedAtUtc = DateTime.UtcNow,
     };
 
-    private static GovernorSnapshot Snapshot(bool paused, SavedProcessRule[] rules, PolicyWorkerStatus worker, Dictionary<string, ProcessControlJournal>? journals = null,
+    internal static GovernorSnapshot Snapshot(bool paused, SavedProcessRule[] rules, PolicyWorkerStatus worker, Dictionary<string, ProcessControlJournal>? journals = null,
         GovernorTaskState? task = null, IReadOnlySet<string>? exited = null, IReadOnlySet<string>? unapplied = null, string? rulesError = null, string? securityProblem = null, string[]? unreadableRules = null,
         IReadOnlySet<string>? images = null)
         => new(new PolicySummary(securityProblem is null, securityProblem, paused, rules.Length, rules.Count(rule => rule.Enabled), rulesError, unreadableRules), worker, rules, journals ?? new(), task, exited, unapplied, images);
@@ -206,7 +206,7 @@ static class GovernorChecks
         Expect(check, view, "Other account: a matching process under another Windows account says so instead of 'not running'",
             "Rule Game rule: Now: game.exe (200) · Running under another Windows account, so this rule doesn't control it.");
         Expect(check, view, "Undo page while running counts apps, not per-field records, and history has one row per app",
-            "Undo: Running · 1 app changed · pause it in Games > Processes to put settings back (safe)", "History: chrome · Chrome rule · some settings stepped back");
+            "Undo: Running · 1 app changed · press Pause governor in Games > Processes to undo (safe)", "History: Google Chrome · Chrome rule · another app changed some of its settings, so the governor left those alone");
 
         view = await View(Snapshot(false, [rule], new(Host("running", []), true, null), task: signedIn, images: new HashSet<string>()));
         Expect(check, view, "Running with no matching process in the process list says the app is not running", "Rule Chrome rule: Now: The app is not running right now.");
@@ -246,20 +246,20 @@ static class GovernorChecks
             "State: paused", "Headline: Paused", "Rule Chrome rule: Now: Not applied right now because the governor is paused.", "Undo: Paused · settings put back (neutral)");
         view = await View(Snapshot(false, [rule], new(Host("running", starting.Instances.ToArray()), true, null), task: signedIn, unapplied: unapplied));
         Expect(check, view, "A running governor shows an applying record with no journal as starting, not as changed",
-            "Rule Chrome rule: Now: chrome.exe (100) · CPU priority starting", "Undo: Running · 0 apps changed · pause it in Games > Processes to put settings back (safe)");
+            "Rule Chrome rule: Now: chrome.exe (100) · CPU priority starting", "Undo: Running · 0 apps changed · press Pause governor in Games > Processes to undo (safe)");
 
         view = await View(Snapshot(false, [rule], new(stale, false, "The previous worker has exited."), task: restart));
         Expect(check, view, "Stopped with an enabled one-minute task: promises a restart within a minute, rule row says it is stopped",
             "State: stopped", "Headline: Stopped", "Detail: " + Restarts, "Buttons: pause=True start=True",
             "Rule Chrome rule: Now: Not applied right now because the governor is stopped. | chrome.exe (100) · CPU priority still set by this rule",
-            "Undo: Stopped · 1 app still has saved settings · starts again by itself within a minute (medium)");
+            "Undo: Stopped · 1 app still has rule settings · starts again by itself within a minute (medium)");
         foreach (var (task, label, detail) in new[] { ((GovernorTaskState?)null, "an unreadable", Unknown), (new GovernorTaskState("task", false, false, false), "no", Stays),
                      (new GovernorTaskState("task", true, false, true), "a disabled", Stays), (new GovernorTaskState("task", true, true, false), "a non-repeating", Stays) })
         {
             view = await View(Snapshot(false, [rule], new(Host("stopped", []), false, null), task: task));
             Expect(check, view, "Stopped with " + label + " task never promises a restart within a minute" + (task is null ? " and does not claim it never restarts" : ""),
                 "State: stopped", "Headline: Stopped", "Detail: " + detail, "Rule Chrome rule: Now: Not applied right now because the governor is stopped.",
-                "Undo: Stopped · open Games > Processes to start it (medium)");
+                "Undo: Stopped · press Start governor in Games > Processes (medium)");
         }
         view = await View(Snapshot(false, [rule], new(Host("stopped", [], errors: ["Saved rules could not be read: fixture"]), false, null), task: restart));
         Expect(check, view, "Stopped detail keeps the last worker error", "Detail: Saved rules could not be read: fixture " + Restarts);
@@ -268,7 +268,7 @@ static class GovernorChecks
         Expect(check, view, "Stopped with a one-minute task whose last start failed says so instead of promising a restart",
             "State: stopped", "Headline: Stopped",
             "Detail: The governor stopped and its last automatic start failed (error 0x00000001), so it may not start again by itself. Press Start governor to start it.",
-            "Undo: Stopped · open Games > Processes to start it (medium)");
+            "Undo: Stopped · press Start governor in Games > Processes (medium)");
         view = await View(Snapshot(false, [rule], new(Host("stopped", []), false, null), task: new GovernorTaskState("task", true, true, true, 0x41303)));
         Expect(check, view, "Stopped with a one-minute task that has not run yet still promises the restart", "Detail: " + Restarts);
         foreach (var (code, label) in new[] { (unchecked((int)0x800710E0), "had a launch ignored while it was running"), (unchecked((int)0x00041301), "was running"),
@@ -323,7 +323,7 @@ static class GovernorChecks
         Expect(check, view, "Not responding: a stale heartbeat says not answering, the row shows no stale observed values, the Undo page counts apps",
             "State: notResponding", "Headline: Not responding", "Detail: The governor is not answering. Press Start governor to restart it.", "Buttons: pause=True start=True",
             "Rule Chrome rule: Now: Not checked right now because the governor needs attention. | chrome.exe (100) · CPU priority still set by this rule | chrome.exe (100) · I/O priority still set by this rule",
-            "Undo: Not responding · 1 app with saved settings · open Games > Processes (medium)");
+            "Undo: Not responding · 1 app still has rule settings · open Games > Processes (medium)");
         view = await View(Snapshot(false, [rule], new(hung, null, "Access is denied."), journals, restart));
         Expect(check, view, "Not responding: an unverifiable worker never claims it stopped or restarts by itself",
             "State: notResponding", "Detail: The governor's status could not be read: Access is denied. Press Start governor to restart it.");
@@ -333,14 +333,14 @@ static class GovernorChecks
         Expect(check, view, "Off rule with a failed restore whose process exited no longer reports saved settings",
             "State: off", "Detail: ", "Rule Chrome rule: Now: Off", "Undo: Off · no rules are on (neutral)");
         view = await View(Snapshot(false, [off], new(failed, true, null)));
-        Expect(check, view, "Off rule with a failed restore on a running process says which setting could not be put back, and history says 'could not be put back'",
+        Expect(check, view, "Off rule with a failed restore on a running process says which setting could not be put back, and history says 'couldn't be put back'",
             "State: off", "Detail: 1 app still has a setting the app could not put back.",
-            "Rule Chrome rule: Now: Off | chrome.exe (100) · CPU priority could not be put back · " + Denied, "Undo: Off · 1 app still has saved settings (medium)",
-            "History: chrome · Chrome rule · a setting could not be put back");
+            "Rule Chrome rule: Now: Off | chrome.exe (100) · CPU priority could not be put back · " + Denied, "Undo: Off · 1 app still has rule settings (medium)",
+            "History: Google Chrome · Chrome rule · a setting couldn't be put back");
         view = await View(Snapshot(false, [off], new(null, null, "This operation belongs to another PC or Windows user.")));
         Expect(check, view, "No rules on with an unreadable governor state stays off but does not claim every app got its settings back",
             "State: off", "Detail: The app couldn't read the governor's last state, so it can't confirm every app got its old settings back: This operation belongs to another PC or Windows user.",
-            "Undo: Off · the governor's last state could not be read (medium)");
+            "Undo: Off · couldn't check that every app got its old settings back (medium)");
     }
 
     private static async Task Problems(Action<bool, string> check)
@@ -560,7 +560,7 @@ static class GovernorChecks
         var failed = Host("stoppedWithConflicts", [Instance(chrome, "cpuPriority", "conflict", "denied", "Access is denied.")]);
         var (view, panel) = await Show(Snapshot(false, [off], new(failed, false, null)));
         Expect(check, view, "Off with a failed restore and no worker running offers Put settings back",
-            "Detail: 1 app still has a setting the app could not put back." + Retry, "Undo: Off · 1 app still has saved settings · put them back in Games > Processes (medium)");
+            "Detail: 1 app still has a setting the app could not put back." + Retry, "Undo: Off · 1 app still has rule settings · press Put settings back in Games > Processes (medium)");
         check(panel.RetryAvailable && panel.CanRetryRestore, "The Put settings back button is shown and enabled");
         App.Operations.RetryRestore = () =>
         {
@@ -659,7 +659,7 @@ static class GovernorChecks
         var dotnet = Under(OperatingSystem.IsWindows() ? @"C:\Users\Fixture\.dotnet" : "/fixture/.dotnet", "dotnet.exe");
         var bundled = TaskXml(conhost, Launch(Install, hostExe, "policy-run", request), host);
         var development = TaskXml(conhost, Launch(Install, dotnet, hostDll, "policy-run", request), host);
-        var neutral = new[] { "State: stopped", "Headline: Stopped", "Detail: " + Unknown, "Undo: Stopped · open Games > Processes to start it (medium)" };
+        var neutral = new[] { "State: stopped", "Headline: Stopped", "Detail: " + Unknown, "Undo: Stopped · press Start governor in Games > Processes (medium)" };
         var promise = new[] { "State: stopped", "Headline: Stopped", "Detail: " + Restarts, "Undo: Stopped · starts again by itself within a minute (medium)" };
 
         async Task<string[]> Seen(string xml, int result = 0x00041303, bool enabled = true, GovernorTaskExpectation? want = null)
@@ -701,7 +701,7 @@ static class GovernorChecks
         var unknownInstall = await View(Snapshot(false, [rule], new(Host("stopped", []), false, null), task: GovernorProbe.State(new GovernorTaskFacts("task", bundled, true, 0x00041303), null, now)));
         Expect(check, unknownInstall, "A task is not confirmed when the install it should run is unknown", neutral);
         Expect(check, await Seen(TaskXml(notepad, "", host), enabled: false), "A disabled task with another action still says it won't start by itself",
-            "State: stopped", "Detail: " + Stays, "Undo: Stopped · open Games > Processes to start it (medium)");
+            "State: stopped", "Detail: " + Stays, "Undo: Stopped · press Start governor in Games > Processes (medium)");
 
         Expect(check, await Seen(bundled, unchecked((int)0x80041320)), "A task with the right action whose last start failed because the user was not signed in says the last start failed",
             "Detail: The governor stopped and its last automatic start failed (error 0x80041320), so it may not start again by itself. Press Start governor to start it.");
@@ -719,7 +719,7 @@ static class GovernorChecks
             Expect(check, await Seen(bundled, code), "Stopped with the right task whose last result says " + label + " (0x" + ((uint)code).ToString("X8") + ") never promises a restart and says it can't confirm", neutral);
 
         string[] Alive(string headline, string note, string risk) => ["State: running", "Headline: " + headline, "Detail: 1 rule is on.", "Buttons: pause=True start=" + (risk == "ok" ? "False" : "True"),
-            "Undo: Running · 0 apps changed · pause it in Games > Processes to put settings back" + note + " (" + (risk == "ok" ? "safe" : "medium") + ")"];
+            "Undo: Running · 0 apps changed · press Pause governor in Games > Processes to undo" + note + " (" + (risk == "ok" ? "safe" : "medium") + ")"];
         async Task<string[]> Live(GovernorTaskState? task) => await View(Snapshot(false, [rule], new(Host("running", []), true, null), task: task));
         GovernorTaskState? Judged(string xml, int result = 0x00041301, bool enabled = true) => GovernorProbe.State(new GovernorTaskFacts("task", xml, enabled, result), expected, now, true);
         var alive = Alive(SignedIn, "", "ok");
@@ -863,11 +863,11 @@ static class GovernorChecks
             var headline = history.RestoreHeadline;
             var rows = history.RestoreRows.ToArray();
             var governor = rows.Single(row => row.Label == "Governor").Value;
-            var nothing = headline == "No Windows or process settings to restore.";
+            var nothing = headline == "Nothing to undo.";
             var worker = snapshot?.Worker;
             var unreadable = windowValue is null || gameRecovery is null || governorRecovery is null || games.Any(game => game.Worker.State is null || game.Worker.HostRunning is null) || snapshot is null
                 || worker!.HostRunning is null || worker.HostRunning == true && worker.Error is not null || snapshot.Summary.RulesError is not null || snapshot.Summary.UnreadableRules is { Length: > 0 }
-                || snapshot.Summary.SecurityProblem is not (null or "missing") || governor.StartsWith("Not responding", StringComparison.Ordinal) || governor == "Status unavailable" || governor.Contains("could not be read", StringComparison.Ordinal);
+                || snapshot.Summary.SecurityProblem is not (null or "missing") || governor.StartsWith("Not responding", StringComparison.Ordinal) || governor == "Couldn't check" || governor.Contains("couldn't check", StringComparison.Ordinal);
             string Input() => governorName + " | windows " + windowName + " | games " + sessionName + " | game " + gameRecovery + " | governor session " + governorRecovery + " => " + headline + " || " + governor;
             Verify(governor.Split(" · ")[0], "Undo headline says there is nothing to restore while a source is unreadable or the governor is not responding", !(nothing && unreadable), Input);
             Verify(governor.Split(" · ")[0], "Undo page shows a safe status while a source is unreadable or the governor is not responding", history.RestoreState != "safe" || !unreadable, Input);

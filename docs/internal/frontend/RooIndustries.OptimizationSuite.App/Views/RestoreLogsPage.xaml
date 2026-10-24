@@ -11,7 +11,7 @@
         <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="12"
                     Visibility="{x:Bind ViewModel.IsLoading, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
             <ProgressRing IsActive="True" Width="40" Height="40" />
-            <TextBlock Text="Reading restore state" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+            <TextBlock Text="Checking what you can undo" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
         </StackPanel>
 
         <ScrollViewer Visibility="{x:Bind ViewModel.IsReady, Mode=OneWay, Converter={StaticResource BoolToVisibility}}"
@@ -39,7 +39,7 @@
                                 <TextBlock Grid.Column="1" Text="{x:Bind ViewModel.RestoreHeadline, Mode=OneWay}" FontSize="13" FontWeight="SemiBold"
                                            VerticalAlignment="Center" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextSecondaryBrush}" />
                             </Grid>
-                            <TextBlock Text="Review saved Windows settings, process settings, and their history."
+                            <TextBlock Text="See what this app changed on your PC and where to undo it."
                                        FontSize="13" LineHeight="19" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                         </StackPanel>
                     </Grid>
@@ -47,8 +47,8 @@
 
                 <Border Style="{StaticResource FocalPanelBorderStyle}">
                     <StackPanel Spacing="10">
-                        <StackPanel Orientation="Horizontal" Spacing="10"><Button Content="Open game settings" Click="OpenProcessControl"/><Button Content="Open Windows tweaks" Click="OpenWindowsSettings"/><Button Content="BIOS backups" Click="OpenBiosBackups" AutomationProperties.AutomationId="OpenBiosBackups"/></StackPanel>
-                        <TextBlock Text="Saved settings" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesAccentBrush}" />
+                        <StackPanel Orientation="Horizontal" Spacing="10"><Button Content="Open Games" Click="OpenProcessControl"/><Button Content="Open Windows tweaks" Click="OpenWindowsSettings"/><Button Content="Open BIOS backups" Click="OpenBiosBackups" AutomationProperties.AutomationId="OpenBiosBackups"/></StackPanel>
+                        <TextBlock Text="What you can undo" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesAccentBrush}" />
                         <ListView SelectionMode="None" IsItemClickEnabled="False" Background="Transparent" Padding="0"
                                   ScrollViewer.VerticalScrollMode="Disabled" ScrollViewer.HorizontalScrollMode="Disabled"
                                   ItemsSource="{x:Bind ViewModel.RestoreRows}">
@@ -67,15 +67,15 @@
                                 </DataTemplate>
                             </ListView.ItemTemplate>
                         </ListView>
-                        <TextBlock Text="Use Windows tweaks to restore a saved profile. Use Games to stop a session or restore process settings."
+                        <TextBlock Text="Undo Windows changes in Windows tweaks, and game or app changes in Games."
                                    FontSize="12" LineHeight="17" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                     </StackPanel>
                 </Border>
 
                 <Border Style="{StaticResource PanelBorderStyle}" Visibility="{x:Bind ViewModel.HasHistory, Mode=OneWay, Converter={StaticResource InverseBoolToVisibility}}">
                     <StackPanel Spacing="5">
-                        <TextBlock Text="No history to show" FontWeight="SemiBold" />
-                        <TextBlock Text="Windows and process changes appear here." FontSize="13" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                        <TextBlock Text="Nothing changed yet" FontWeight="SemiBold" />
+                        <TextBlock Text="Changes to Windows and your apps show up here." FontSize="13" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                     </StackPanel>
                 </Border>
                 <Border Style="{StaticResource PanelBorderStyle}" Padding="0" Visibility="{x:Bind ViewModel.HasHistory, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
@@ -86,13 +86,13 @@
                                 <ColumnDefinition Width="130" />
                                 <ColumnDefinition Width="1.5*" />
                                 <ColumnDefinition Width="1.8*" />
-                                <ColumnDefinition Width="110" />
+                                <ColumnDefinition Width="150" />
                             </Grid.ColumnDefinitions>
                             <TextBlock Grid.Column="0" Text="Time" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
-                            <TextBlock Grid.Column="1" Text="Action" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                            <TextBlock Grid.Column="1" Text="Changed by" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                             <TextBlock Grid.Column="2" Text="App" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                             <TextBlock Grid.Column="3" Text="Change" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
-                            <TextBlock Grid.Column="4" Text="Restore" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                            <TextBlock Grid.Column="4" Text="Undo" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                         </Grid>
                         <Rectangle Height="1" Fill="{StaticResource RooIndustriesBorderBrush}" />
                         <ListView SelectionMode="None" IsItemClickEnabled="False" Background="Transparent" Padding="0"
@@ -106,7 +106,7 @@
                                             <ColumnDefinition Width="130" />
                                             <ColumnDefinition Width="1.5*" />
                                             <ColumnDefinition Width="1.8*" />
-                                            <ColumnDefinition Width="110" />
+                                            <ColumnDefinition Width="150" />
                                         </Grid.ColumnDefinitions>
                                         <TextBlock Grid.Column="0" Text="{x:Bind Time}" FontSize="12" VerticalAlignment="Center"
                                                    Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
@@ -116,7 +116,7 @@
                                                    TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextSecondaryBrush}" />
                                         <TextBlock Grid.Column="3" Text="{x:Bind Change}" FontSize="12" VerticalAlignment="Center"
                                                    TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextSecondaryBrush}" />
-                                        <TextBlock Grid.Column="4" Text="{x:Bind RestoreText}" FontSize="12" FontWeight="Medium" VerticalAlignment="Center"
+                                        <TextBlock Grid.Column="4" Text="{x:Bind RestoreText}" FontSize="12" FontWeight="Medium" VerticalAlignment="Center" TextWrapping="Wrap"
                                                    Foreground="{x:Bind RestoreState, Converter={StaticResource RiskToBrush}}" />
                                     </Grid>
                                 </DataTemplate>
