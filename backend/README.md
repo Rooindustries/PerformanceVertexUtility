@@ -29,7 +29,7 @@ Supported CPU Sets, durable bulk removal, and the sourced settings inventory are
 
 ## Protected launch sessions
 
-`Invoke-ProtectedGameSession.ps1` exposes Preview, Start, Status, Affinity, Stop and Recover. Arm a reviewed session before opening the game through its normal launcher. The separate worker and recovery watcher bind every game instance to its executable path, creation time and launcher job. Launcher scope must be accepted explicitly.
+`Invoke-ProtectedGameSession.ps1` exposes Preview, Start, Status, Affinity, Stop and Recover. Arm a reviewed session before opening the game through its normal launcher. The separate worker and recovery watcher bind every game instance to its executable path, creation time and launcher job. Launcher scope must be accepted explicitly; the desktop accepts it with each Review, whose summary says when other apps the launcher opens get the same cores, disk priority or memory priority.
 
 On Windows 11 build 26100.4770 or later, GPU sessions retain a normal launch-time process handle and immediately copy it to the recovery watcher. Both handles must independently read the same original GPU class before applying the reviewed value. The session reads back the actual process class, reapplies only a reset to its captured original, and preserves other values. The watcher can restore through its retained handle after the controller exits. Earlier Windows builds keep the existing fresh-handle route. The capture uses Microsoft's documented [basic process enumeration](https://learn.microsoft.com/en-us/windows/win32/api/winternl/nf-winternl-ntquerysysteminformation) and [handle duplication](https://learn.microsoft.com/en-us/windows/win32/api/handleapi/nf-handleapi-duplicatehandle).
 
@@ -53,8 +53,10 @@ desktop side. Run it through `windows_ssh.py interactive-frame` on a frame
 staged with `--include-frontend` and a short `--directory` such as
 `roo-industries-a` (the app build's longest path must stay under 260
 characters), passing `Source`, `OutRoot` and a short `Label`. It builds the app from that frame, starts a disposable launcher, and
-drives the Games tab: each preset, a priority edit (Custom), a core edit (the
-preset stays), and Review. It saves window screenshots, the text each one
+drives the Games tab: each preset, a priority edit (Custom), a core pick of
+Cores 1 to 8 (the preset stays, and Review says `Cores: 1–8` with no mask), and
+Review. The launcher must be able to use at least 9 cores. It saves window
+screenshots, the text each one
 shows, and JPEG frames for a video. On a build without the picker it fills
 Competitive's values by hand and reviews them. It never selects Start, and it
 removes the Review files it created under the app's data folder.
