@@ -6,6 +6,7 @@
     { "pattern": "Network & devices", "why": "the old panel name" },
     { "pattern": "No driver recommendations", "why": "the old empty download card" },
     { "pattern": "Close and reopen", "why": "the old error advice" },
+    { "pattern": "Open Tools and pick|Use Tools to", "why": "a message sending people to Tools instead of a button" },
     { "pattern": "Microsoft Windows", "why": "the long Windows name" },
     { "pattern": "\\(R\\)", "why": "a trademark mark" },
     { "pattern": "\\(TM\\)", "why": "a trademark mark" },
@@ -18,8 +19,8 @@
   "driverLine": "^Driver (\\d|from )",
   "nvidiaDriverLine": "^Driver \\d{3}\\.\\d{2} \u00b7 \\d{1,2} \\p{L}{3,} \\d{4}$",
   "nvidiaUndatedDriverLine": "^Driver \\d{3}\\.\\d{2}$",
-  "nvidiaHint": "Open Tools and pick NVIDIA App & Driver.",
+  "nvidiaButton": "^(Get|Install|Open) NVIDIA App & Driver$",
   "amdDriverLine": "^Driver \\d+(\\.\\d+){3} \u00b7 \\d{1,2} \\p{L}{3,} \\d{4}$",
   "amdUndatedDriverLine": "^Driver \\d+(\\.\\d+){3}$",
-  "amdHint": "Open Tools and pick AMD Software: Adrenalin Edition."
+  "amdButton": "^(Get|Install|Open) AMD Software: Adrenalin Edition$"
 }

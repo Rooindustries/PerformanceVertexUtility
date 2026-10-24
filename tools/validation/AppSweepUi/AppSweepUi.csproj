@@ -31,6 +31,7 @@
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/JsonTolerance.cs" Link="JsonTolerance.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/GovernorProbe.cs" Link="GovernorProbe.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/AppLog.cs" Link="AppLog.cs" />
+    <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/ToolLauncherService.cs" Link="ToolLauncherService.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/BugRedactor.cs" Link="BugRedactor.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/DataGeneration.cs" Link="DataGeneration.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/InstallGate.cs" Link="InstallGate.cs" />

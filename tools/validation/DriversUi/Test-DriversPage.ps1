@@ -83,6 +83,7 @@ try{
  Check ($ready -eq 'ready') 'the Graphics drivers page loads its hardware panel' ([string]$ready)
  Start-Sleep 2
  $texts=@(Shown)
+ $get=ById 'DriversGetDriver';$evidence.button=if(Visible $get){[ordered]@{name=$get.Current.Name;enabled=$get.Current.IsEnabled}}else{$null}
  ScrollTo 0;Shot 'drivers-page'
  if(CanScroll){ScrollTo 100;$texts+=@(Shown);Shot 'drivers-page-bottom';ScrollTo 0}
  $texts=@($texts|Select-Object -Unique);$evidence.shown=$texts
@@ -90,11 +91,11 @@ try{
  $found=@(foreach($text in $texts){foreach($rule in $banned){if($rule.regex.IsMatch($text)){'"'+$text+'" shows '+$rule.why}}})
  Check ($found.Count -eq 0) 'the Graphics drivers page shows no old labels, trademark marks, raw driver versions or raw dates' (($found|Select-Object -First 12) -join ' | ')
  $lines=@($texts|Where-Object {$driverLine.IsMatch($_)});$evidence.driverLines=$lines
- if($evidence.nvidia){$expected=if($evidence.nvidiaDated){$nvidiaLine}else{$nvidiaUndatedLine};Check ($lines.Count -eq 1 -and $expected.IsMatch($lines[0])) 'with an NVIDIA card the driver line shows the NVIDIA driver number, and a readable date when Windows reports one' ($lines -join ' | ');Check ($texts -contains $words.nvidiaHint) 'with an NVIDIA card the download card points to NVIDIA App & Driver in Tools'}
+ if($evidence.nvidia){$expected=if($evidence.nvidiaDated){$nvidiaLine}else{$nvidiaUndatedLine};Check ($lines.Count -eq 1 -and $expected.IsMatch($lines[0])) 'with an NVIDIA card the driver line shows the NVIDIA driver number, and a readable date when Windows reports one' ($lines -join ' | ');Check ($evidence.button -and $evidence.button.enabled -and $evidence.button.name -match $words.nvidiaButton) 'with an NVIDIA card the page offers the Tools page''s NVIDIA App & Driver action as one enabled button' $(if($evidence.button){$evidence.button.name})}
  if($evidence.amd){
   Check ($texts -contains $evidence.amdName) 'with an AMD card and no NVIDIA card the page names the AMD card, not onboard graphics' $evidence.amdName
   $expected=if($evidence.amdDated){$amdLine}else{$amdUndatedLine};Check ($lines.Count -eq 1 -and $expected.IsMatch($lines[0])) 'with an AMD card the driver line shows its version, and a readable date when Windows reports one' ($lines -join ' | ')
-  Check ($texts -contains $words.amdHint) 'with an AMD card the download card points to AMD Software: Adrenalin Edition in Tools'
+  Check ($evidence.button -and $evidence.button.enabled -and $evidence.button.name -match $words.amdButton) 'with an AMD card the page offers the Tools page''s AMD Software: Adrenalin Edition action as one enabled button' $(if($evidence.button){$evidence.button.name})
  }
  [RooIndustriesDriversPage]::SetWindowPos($script:hwnd,[IntPtr]::new(-2),0,0,0,0,0x0003)|Out-Null
  $script:window.GetCurrentPattern([Windows.Automation.WindowPattern]::Pattern).Close()

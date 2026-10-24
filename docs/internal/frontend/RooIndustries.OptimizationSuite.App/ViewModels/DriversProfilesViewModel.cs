@@ -1,6 +1,7 @@
 using System;
 using System.Collections.ObjectModel;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -21,6 +22,16 @@ public partial class DriversProfilesViewModel : PageViewModelBase
     [ObservableProperty] private string? _primaryGpuDriverSummary;
     [ObservableProperty] private bool _hasRecommendations;
     [ObservableProperty] private string _driverDownloadHint = AnyMakerHint;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasDriverTool))]
+    [NotifyCanExecuteChangedFor(nameof(GetDriverCommand))]
+    private string? _driverToolAction;
+    [ObservableProperty] private string _driverToolStatus = "";
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(GetDriverCommand))]
+    private bool _driverToolBusy;
+    private ToolLauncherService? _tools;
+    private ToolDefinition? _driverTool;
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanCheckNvidiaAction))]
     [NotifyPropertyChangedFor(nameof(CanApproveNvidiaProfile))]
@@ -68,6 +79,8 @@ public partial class DriversProfilesViewModel : PageViewModelBase
     public ObservableCollection<DriverRecommendation> Recommendations { get; } = new();
     public ObservableCollection<string> ManualGateWarnings { get; } = new();
     public ObservableCollection<NvidiaProfileEntry> NvidiaProfiles { get; } = new();
+    public Func<ToolLauncherService>? Tools { get; init; }
+    public bool HasDriverTool => DriverToolAction is not null;
     public bool CanCheckNvidiaAction => HasNvidiaProfiles && !NvidiaBusy;
     public bool CanApproveNvidiaProfile => HasNvidia && HasNvidiaProfiles && !NvidiaBusy;
     public bool CanApplyNvidiaProfile => CanApproveNvidiaProfile && NvidiaExportReviewed && NvidiaProfileApproved && NvidiaBenchmarkReady;
@@ -82,6 +95,8 @@ public partial class DriversProfilesViewModel : PageViewModelBase
 
     public const string ReadFailed = "Hit Retry to try again. Still stuck? Let us know in Report a bug.";
     private const string AnyMakerHint = "Download it from your graphics card maker's website.";
+    public const string NvidiaDriverTool = "NVIDIA App & Driver";
+    public const string AmdDriverTool = "AMD Software: Adrenalin Edition";
     private static readonly string[] PlaceholderMachineNames =
     [
         "To Be Filled By O.E.M.", "System manufacturer", "System Product Name",
@@ -120,11 +135,11 @@ public partial class DriversProfilesViewModel : PageViewModelBase
         var primary = Gpus.FirstOrDefault(IsNvidia) ?? Gpus.FirstOrDefault(IsAmd) ?? Gpus.FirstOrDefault();
         PrimaryGpuName = Clean(primary?.Name);
         PrimaryGpuDriverSummary = primary is null ? null : DriverSummary(primary);
-        DriverDownloadHint = primary is null ? AnyMakerHint
-            : IsNvidia(primary) ? "Open Tools and pick NVIDIA App & Driver."
-            : IsAmd(primary) ? "Open Tools and pick AMD Software: Adrenalin Edition."
-            : IsMaker(primary, "Intel") ? "Download it from Intel's website."
+        var driverTool = primary is null ? null : IsNvidia(primary) ? NvidiaDriverTool : IsAmd(primary) ? AmdDriverTool : null;
+        DriverDownloadHint = driverTool is not null ? ""
+            : primary is not null && IsMaker(primary, "Intel") ? "Download it from Intel's website."
             : AnyMakerHint;
+        await FindDriverToolAsync(driverTool);
 
         NetworkAdapters.Clear();
         foreach (var n in hardware.NetworkAdapters ?? Enumerable.Empty<NetworkAdapterInfo>())
@@ -324,6 +339,57 @@ public partial class DriversProfilesViewModel : PageViewModelBase
         finally
         {
             NvidiaBusy = false; _nvidiaActionGeneration = DataGeneration.Snapshot();
+        }
+    }
+
+    private async Task FindDriverToolAsync(string? name)
+    {
+        if (_driverTool?.Name != name) DriverToolStatus = "";
+        _driverTool = null;
+        DriverToolAction = null;
+        if (name is null || Tools is null) return;
+        try
+        {
+            _tools ??= Tools();
+            _driverTool = (await _tools.ReadAsync()).FirstOrDefault(tool => tool.Name == name)
+                ?? throw new InvalidDataException("The tool list has no " + name + " entry.");
+            DriverToolAction = _tools.Resolve(_driverTool).Action + " " + _driverTool.Name;
+        }
+        catch (Exception error)
+        {
+            AppLog.Write(nameof(DriversProfilesViewModel), error.ToString());
+            _driverTool = null;
+            DriverToolStatus = AppLog.MissingFiles;
+        }
+    }
+
+    private bool CanGetDriver() => _driverTool is not null && !DriverToolBusy;
+
+    [RelayCommand(CanExecute = nameof(CanGetDriver))]
+    private async Task GetDriverAsync()
+    {
+        if (_tools is null || _driverTool is not { } tool) return;
+        DriverToolBusy = true;
+        try
+        {
+            var action = _tools.Resolve(tool).Action;
+            await _tools.OpenAsync(tool);
+            DriverToolStatus = action switch
+            {
+                "Get" => "Opened the " + tool.Name + " download page.",
+                "Install" => "The " + tool.Name + " installer is open. Finish its setup there.",
+                _ => "Opened " + tool.Name + ".",
+            };
+            DriverToolAction = _tools.Resolve(tool).Action + " " + tool.Name;
+        }
+        catch (Exception error)
+        {
+            AppLog.Write(nameof(DriversProfilesViewModel), error.ToString());
+            DriverToolStatus = "Couldn't open " + tool.Name + ". Try again, or let us know in Report a bug.";
+        }
+        finally
+        {
+            DriverToolBusy = false;
         }
     }
 
