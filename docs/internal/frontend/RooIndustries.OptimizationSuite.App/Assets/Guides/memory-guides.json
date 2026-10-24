@@ -18,7 +18,7 @@
     {
       "id": "dual-channel",
       "title": "Use two sticks in the right slots",
-      "summary": "One stick of RAM runs in single channel, which can cost real FPS in CPU-heavy games.",
+      "summary": "One stick of RAM is slower than two matching sticks, and that can cost real FPS in CPU-heavy games.",
       "steps": [
         "Open Task Manager > Performance > Memory and look at Slots used, for example 2 of 4.",
         "If you have one stick, a matching pair is the better setup for gaming.",
@@ -33,7 +33,7 @@
       "summary": "When RAM fills up, Windows moves data to disk and games stutter.",
       "steps": [
         "Start your game, then open Task Manager > Performance > Memory.",
-        "If In use is close to your total RAM, or Committed is close to its limit, you're running out.",
+        "If In use is close to your total RAM, or the first Committed number is close to the second, you're running out.",
         "Close apps you don't need while you play, or see the background apps guide below.",
         "16 GB is the minimum for current games. 32 GB is the comfortable amount if you stream, keep a browser open or play large open-world games.",
         "If memory use keeps climbing over days without a reason, restart the PC."
@@ -46,11 +46,11 @@
       "summary": "Browsers, launchers and chat apps keep using RAM and CPU while you play.",
       "steps": [
         "Close what you don't need before you start a game.",
-        "For apps you keep open, use Games & processes > Background apps. It can lower their priority and memory priority, so Windows keeps your game's memory first when RAM runs low.",
-        "On Intel CPUs with E-cores, or AMD Ryzen CPUs with two CCDs, the Background apps preset can keep background apps at Normal priority and move them to the E-cores or the second CCD. Your game can still use every core; only the background apps are limited.",
+        "For apps you keep open, go to Games > Background apps, pick Lower background apps and review the change. Windows then holds on to your game's memory first when RAM runs low.",
+        "On Intel CPUs with E-cores, or Ryzen CPUs with two core groups (CCDs) like the 9950X3D, the other choice there moves background apps onto the E-cores or the second CCD instead, without lowering them. Your game can still use every core; only the background apps are limited.",
         "In your browser, turn on Memory Saver (Chrome) or Sleeping tabs (Edge) so idle tabs give memory back."
       ],
-      "note": "Memory priority doesn't limit how much RAM an app can use. It decides whose memory Windows takes back first when RAM runs short."
+      "note": "Lowering an app doesn't limit how much RAM it can use. It just tells Windows to take memory back from it before your game."
     },
     {
       "id": "page-file",
@@ -79,7 +79,7 @@
     {
       "id": "memory-integrity",
       "title": "Know what Memory Integrity costs",
-      "summary": "Memory Integrity (Core isolation) and virtualization-based security protect your PC but can lower FPS in some games.",
+      "summary": "Memory Integrity (Core isolation) and the security features that go with it protect your PC but can lower FPS in some games.",
       "steps": [
         "Check it in Windows Security > Device security > Core isolation details.",
         "The FPS preset on the Windows tweaks page explains the trade-off and can turn these features off. Read its warnings before you use it.",

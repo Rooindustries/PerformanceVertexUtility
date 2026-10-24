@@ -6,12 +6,13 @@ using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using RooIndustries.OptimizationSuite.Helpers;
 using RooIndustries.OptimizationSuite.Models;
+using RooIndustries.OptimizationSuite.Services;
 
 namespace RooIndustries.OptimizationSuite.ViewModels;
 
 public partial class MemoryLatencyViewModel : PageViewModelBase
 {
-    [ObservableProperty] private string _memoryHeadline = "Reading memory pressure…";
+    [ObservableProperty] private string _memoryHeadline = "Checking your RAM";
     [ObservableProperty] private string _memoryDetail = string.Empty;
     [ObservableProperty] private double _memoryUsedPercent;
     [ObservableProperty] private bool _hasMemory;
@@ -24,6 +25,9 @@ public partial class MemoryLatencyViewModel : PageViewModelBase
     [ObservableProperty]
     private string _topMemoryNote = "";
 
+    private const string ReadFailed = "Click Retry. If it keeps failing, use Report a bug to send us the details.";
+    private const string TopUnavailable = "Couldn't see which apps use the most RAM right now.";
+
     protected override async Task LoadCoreAsync()
     {
         var inventoryRead = App.Live.GetProcessInventoryResultAsync();
@@ -34,9 +38,13 @@ public partial class MemoryLatencyViewModel : PageViewModelBase
         var classificationResult = await classificationRead;
         var classification = classificationResult.Value;
         if (inventory is null && classification is null)
-            throw new InvalidOperationException(inventoryResult.Error ?? classificationResult.Error ?? "Memory information could not be read.");
+        {
+            AppLog.Write(nameof(MemoryLatencyViewModel), "Memory read failed: " + (inventoryResult.Error ?? "no inventory") + " | " + (classificationResult.Error ?? "no classification"));
+            throw new InvalidOperationException(inventoryResult.Error == AppLog.MissingFiles || classificationResult.Error == AppLog.MissingFiles ? AppLog.MissingFiles : ReadFailed);
+        }
         if (classificationResult.Stale) RevalidateAfterLoad();
-        TopMemoryNote = classification is null ? "Memory by process is unavailable. " + (classificationResult.Error ?? "") : "";
+        if (classification is null) AppLog.Write(nameof(MemoryLatencyViewModel), "App memory list failed: " + (classificationResult.Error ?? "no classification"));
+        TopMemoryNote = classification is null ? TopUnavailable : "";
         var hardware = await hardwareRead;
         TelemetrySnapshot? telemetry = null;
 
@@ -53,8 +61,8 @@ public partial class MemoryLatencyViewModel : PageViewModelBase
         HasMemory = percent is not null;
         if (percent is null)
         {
-            MemoryHeadline = "Memory usage unavailable";
-            MemoryDetail = "Physical RAM capacity or available memory could not be read.";
+            MemoryHeadline = "Couldn't check your RAM use";
+            MemoryDetail = "Windows didn't say how much RAM you have free. Come back to this page in a moment to check again.";
             MemoryUsedPercent = 0;
             PressureState = "neutral";
             return;
@@ -62,9 +70,9 @@ public partial class MemoryLatencyViewModel : PageViewModelBase
 
         MemoryUsedPercent = percent.Value;
         PressureState = percent >= 85 ? "high" : percent >= 65 ? "medium" : "safe";
-        MemoryHeadline = percent + "% of physical memory in use";
+        MemoryHeadline = percent + "% of your RAM in use";
         MemoryDetail = Format.Bytes(summary!.AvailableMemoryBytes!.Value) + " free of " + Format.Bytes(totalBytes!.Value) + " · "
-            + summary.ProcessCount + " processes · "
+            + summary.ProcessCount + " programs running · "
             + summary.BackgroundProcessCount + " in the background";
     }
 
@@ -81,7 +89,7 @@ public partial class MemoryLatencyViewModel : PageViewModelBase
                 string.IsNullOrWhiteSpace(p.DisplayName) ? Naming.FriendlyName(p.Name) : p.DisplayName!,
                 Naming.CategoryLabel(p.Category),
                 Format.Bytes(p.WorkingSetBytes),
-                p.Protected ? "Excluded" : "Normal",
+                p.Protected ? "Left alone" : "",
                 p.Protected ? "low" : "neutral"));
         }
     }
@@ -99,9 +107,9 @@ public partial class MemoryLatencyViewModel : PageViewModelBase
     private void BuildDiagnostics()
     {
         DiagnosticRows.Clear();
-        DiagnosticRows.Add(new("LatencyMon", "Measure driver latency and audio dropouts.", "Open tools", "neutral"));
-        DiagnosticRows.Add(new("HWiNFO", "Inspect temperatures, clocks, and sensor readings.", "Open tools", "neutral"));
-        DiagnosticRows.Add(new("UnparkCPU", "View and change CPU core parking.", "Open tools", "neutral"));
+        DiagnosticRows.Add(new("LatencyMon", "Find drivers that cause stutter and crackling audio.", "Go to Tools", "neutral"));
+        DiagnosticRows.Add(new("HWiNFO", "See temperatures, clock speeds and fan speeds.", "Go to Tools", "neutral"));
+        DiagnosticRows.Add(new("UnparkCPU", "See which CPU cores Windows puts to sleep, and wake them up.", "Go to Tools", "neutral"));
     }
 
 }
