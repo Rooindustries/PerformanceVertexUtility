@@ -87,19 +87,21 @@ static class HighIoChecks
                 Until(() => File.Exists(Path.Combine(gameRoot, "stub-exited")), "The launcher's helper did not start the game and exit.");
                 return ReadGame(gameRoot, settled ? sessionRoot : "");
             }
-            Process Restart(Process predecessor, string sessionRoot)
+            Process Restart(Process predecessor, string sessionRoot, bool helper = false)
             {
                 var nextRoot = Path.Combine(root, "game-" + ++games); Directory.CreateDirectory(nextRoot);
                 var previousRoot = gameRoots[predecessor];
-                OperationFiles.Write(Path.Combine(previousRoot, "restart.json"), new { root = nextRoot });
+                OperationFiles.Write(Path.Combine(previousRoot, "restart.json"), new { root = nextRoot, helper });
+                if (helper) Check(predecessor.WaitForExit(15000) && predecessor.ExitCode == 0, "The original game starts a helper program and exits before its new copy starts");
                 var successor = ReadGame(nextRoot, sessionRoot);
                 Until(() => File.Exists(Path.Combine(previousRoot, "restart-started.json")), "The original game did not record its replacement.");
                 var receipt = OperationFiles.Read<JsonElement>(Path.Combine(previousRoot, "restart-started.json"));
-                Check(receipt.GetProperty("parent").GetInt32() == predecessor.Id && receipt.GetProperty("child").GetInt32() == successor.Id &&
+                var parent = helper ? OperationFiles.Read<JsonElement>(Path.Combine(previousRoot, "helper-started.json")).GetProperty("helper").GetInt32() : predecessor.Id;
+                Check(receipt.GetProperty("parent").GetInt32() == parent && receipt.GetProperty("child").GetInt32() == successor.Id &&
                     receipt.GetProperty("creation").GetString() == identities[successor].Creation.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                    "The running game itself starts its replacement before exiting");
+                    helper ? "The game's helper program starts the new copy after the game exits" : "The running game itself starts its replacement before exiting");
                 File.WriteAllText(Path.Combine(previousRoot, "restart-ack"), "");
-                Check(predecessor.WaitForExit(15000) && predecessor.ExitCode == 0, "The original game exits after its replacement is tracked");
+                if (!helper) Check(predecessor.WaitForExit(15000) && predecessor.ExitCode == 0, "The original game exits after its replacement is tracked");
                 Until(() => State(sessionRoot).Games.Single(item => item.Identity.ProcessId == predecessor.Id).Exited, "The session did not observe the original game's exit.");
                 return successor;
             }
@@ -206,6 +208,19 @@ static class HighIoChecks
             Check(State(session).Status == "stopped" && Io(session, replacement).Status == "restored" && Oracle.Io(replacement) == baselineIo && Oracle.Affinity(replacement) == original,
                 "Stop puts the restarted copy back to the first copy's original I/O priority and clears the session CPU limit");
             Snapshot("self-restarted game restored", session, replacement);
+            Close(replacement);
+
+            session = Arm("session-helper-restart");
+            game = Launch(session);
+            replacement = Restart(game, session, helper: true);
+            Check(Oracle.Io(replacement) == 3 && Oracle.Affinity(replacement) == first && JournalOriginal(session, replacement) == baselineIo,
+                "A game that restarts through a helper program gets High I/O and the selected CPUs on its new copy, saved with the first copy's original I/O priority");
+            engine.Command(session, "stop");
+            Check(workers.Last().WaitForExit(20000), "The helper-restart session stops");
+            Until(() => File.Exists(Path.Combine(session, "recovery-result.json")), "The helper-restart recovery watcher did not finish.");
+            Check(State(session).Status == "stopped" && Io(session, replacement).Status == "restored" && Oracle.Io(replacement) == baselineIo && Oracle.Affinity(replacement) == original,
+                "Stop puts a copy restarted through a helper program back to the first copy's original I/O priority and clears the session CPU limit");
+            Snapshot("helper-restarted game restored", session, replacement);
             Close(replacement);
 
             Oracle.SetIo(launcher, 3);
@@ -379,6 +394,21 @@ static class HighIoChecks
         using var refusing = FixtureProcess.Create(GamePath, ["--high-io-game", root], "D:(D;;" + denied + ";;;" + sid + ")(A;;0x1FFFFF;;;" + sid + ")(A;;0x1FFFFF;;;BA)(A;;0x1FFFFF;;;SY)", Path.Combine(root, "process-receipts"));
     }
 
+    internal static void Helper(string root, string nextRoot, int predecessor)
+    {
+        try { using var game = Process.GetProcessById(predecessor); game.WaitForExit(15000); }
+        catch (ArgumentException) { }
+        using var self = Process.GetCurrentProcess();
+        using var replacement = Start(GamePath, "--high-io-game", nextRoot);
+        using var owned = FixtureProcess.Started(replacement, Path.Combine(root, "process-receipts"));
+        try
+        {
+            OperationFiles.Write(Path.Combine(root, "restart-started.json"), new { parent = self.Id, child = replacement.Id, creation = owned.Creation.ToString(System.Globalization.CultureInfo.InvariantCulture) });
+            Until(() => File.Exists(Path.Combine(root, "restart-ack")), "The runner did not adopt the restarted game.");
+        }
+        catch { owned.Stop(); throw; }
+    }
+
     internal static void Game(string root)
     {
         using var self = Process.GetCurrentProcess();
@@ -390,7 +420,15 @@ static class HighIoChecks
             var restart = Path.Combine(root, "restart.json");
             if (File.Exists(restart))
             {
-                var nextRoot = OperationFiles.Read<JsonElement>(restart).GetProperty("root").GetString()!;
+                var request = OperationFiles.Read<JsonElement>(restart);
+                var nextRoot = request.GetProperty("root").GetString()!;
+                if (request.TryGetProperty("helper", out var viaHelper) && viaHelper.GetBoolean())
+                {
+                    using var helper = Start(StubPath, "--high-io-helper", root, nextRoot, self.Id.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                    using var ownedHelper = FixtureProcess.Started(helper, Path.Combine(root, "process-receipts"));
+                    OperationFiles.Write(Path.Combine(root, "helper-started.json"), new { helper = helper.Id });
+                    return;
+                }
                 using var replacement = Start(GamePath, "--high-io-game", nextRoot);
                 using var owned = FixtureProcess.Started(replacement, Path.Combine(root, "process-receipts"));
                 try

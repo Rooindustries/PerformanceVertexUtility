@@ -18,6 +18,7 @@ if(args is ["--high-io-launcher",var highIoRoot]) { HighIoChecks.Launcher(highIo
 if(args is ["--high-io-stub",var stubRoot]) { HighIoChecks.Stub(stubRoot); return; }
 if(args is ["--high-io-stub",var refusingStubRoot,"refuse-write" or "refuse-read"]) { HighIoChecks.Stub(refusingStubRoot,args[2]); return; }
 if(args is ["--high-io-game",var highIoGameRoot]) { HighIoChecks.Game(highIoGameRoot); return; }
+if(args is ["--high-io-helper",var helperRoot,var helperNextRoot,var helperPredecessor]) { HighIoChecks.Helper(helperRoot,helperNextRoot,int.Parse(helperPredecessor,System.Globalization.CultureInfo.InvariantCulture)); return; }
 if(args is [var highIoRepo,var highIoDotnet,"--high-io",var inspectSeconds]) { HighIoChecks.Run(highIoRepo,highIoDotnet,int.Parse(inspectSeconds,System.Globalization.CultureInfo.InvariantCulture)); return; }
 if(args is ["--launcher",var launcherRoot]) { Fixtures.Launcher(launcherRoot); return; }
 if(args is ["--hold-lock",var holdPath,var holdReady,var holdStop]) { Fixtures.Hold(holdPath,holdReady,holdStop); return; }
