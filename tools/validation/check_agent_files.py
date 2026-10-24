@@ -6,7 +6,7 @@ import subprocess
 import tempfile
 
 AGENT_FILES = re.compile(r'\b(?:AGENTS|CL[A]UDE|GEMINI)(?:\.md\b|["\']\s*\+\s*["\']\.md\b)', re.IGNORECASE)
-DOCS = {'.md', '.txt'}
+DOCS = {'.md'}
 IGNORED = {'.gitignore'}
 SKIP = {'bin', 'obj', '.git', '__pycache__'}
 SELF = 'tools/validation/check_agent_files.py'
@@ -44,6 +44,8 @@ def negative_controls() -> dict[str, bool]:
         'a check that builds an agent file name in two parts': ({'tools/validation/X/Checks.cs': 'File.Exists(Path.Combine(dir, "AGENTS" + ".md"))'}, True),
         'an installer script that names an agent file': ({'tools/release/Setup.iss': 'Source: "' + marker + '"'}, True),
         'a file type no one listed': ({'tools/x.nsi': 'File ' + marker}, True),
+        'a build file that names an agent file': ({'native/CMakeLists.txt': 'configure_file(' + marker + ' out)'}, True),
+        'a requirements file that names an agent file': ({'tools/requirements.txt': '-r ' + marker}, True),
         'prose that names an agent file': ({'docs/notes.md': marker}, False),
         'the ignore list': ({'.gitignore': marker}, False),
         'a binary file': ({'assets/x.bin': '\0' + marker}, False),
