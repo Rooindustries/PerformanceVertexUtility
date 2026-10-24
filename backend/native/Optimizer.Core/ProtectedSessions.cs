@@ -1,6 +1,7 @@
 #nullable enable
 using System.Diagnostics;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace RooIndustries.Optimizer;
 
@@ -53,6 +54,7 @@ public sealed class ProtectedSessionState
     public required string? LauncherJournal { get; set; }
     public required List<ProtectedGameState> Games { get; init; }
     public required List<string> Errors { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public List<int>? Refused { get; set; }
     public required DateTime UpdatedAtUtc { get; set; }
 }
 public sealed record ProtectedSessionStatus(ProtectedSessionState? State, bool? HostRunning, string? Error);
@@ -68,12 +70,19 @@ public sealed class ProtectedSessions
     public ProtectedSessions(Func<RunningProcess, bool> excluded) { _excluded = excluded; _controls = new(excluded); }
     public static bool IsRestored(ProtectedSessionState state) => state.Status is ("stopped" or "stoppedWithErrors") &&
         state.RegistryStatus == "restored" && state.JobStatus == "cleared" &&
-        state.Games.All(game => game.Fields.All(field => field.JournalPath is null || field.Status is "restored" or "expired"));
+        state.Games.All(game => game.Fields.All(field => field.JournalPath is null || field.Status is "restored" or "expired" or "leftAsIs"));
     private static string StatePath(string root) => Path.Combine(Path.GetFullPath(root), "session.json");
     private static string CommandPath(string root) => Path.Combine(Path.GetFullPath(root), "command.json");
     private static JsonElement Value<T>(T value) => JsonSerializer.SerializeToElement(value, OperationFiles.Json);
     private static readonly string[] StartupFields = ["cpuPriority", "ioPriority", "memoryPriority"];
     private static readonly string[] NativeFields = ["gpuPriority", "executionQoS", "priorityBoost"];
+    internal static bool RuntimeIo(string name, JsonElement value) => name == "ioPriority" && value.GetInt32() > LaunchPriorities.MaxIoPriority;
+    private static bool Launched(string name, JsonElement value) => name is "cpuPriority" or "memoryPriority" || name == "ioPriority" && !RuntimeIo(name, value);
+    private static string Route(string name, JsonElement value) => name == "affinity" ? "job" : Launched(name, value) ? "launch" : "native";
+    private static Dictionary<string, JsonElement> LaunchControls(Dictionary<string, JsonElement> controls) => controls.Where(pair => pair.Key != "ioPriority" || Launched(pair.Key, pair.Value)).ToDictionary(pair => pair.Key, pair => pair.Value);
+    private static Dictionary<string, JsonElement> LauncherDefaults(Dictionary<string, JsonElement> controls) => controls.Where(pair => pair.Key is "ioPriority" or "memoryPriority" && Launched(pair.Key, pair.Value)).ToDictionary(pair => pair.Key, pair => pair.Value);
+    private static bool RetainHandles(ProtectedSessionPreview plan) =>
+        (plan.Controls.ContainsKey("gpuPriority") || plan.Controls.TryGetValue("ioPriority", out var io) && !Launched("ioPriority", io)) && LaunchGpuHandles.Supported;
 
     public const string LauncherClosed = "The launcher you picked has closed. Open it again, press Refresh and choose it under Launcher.";
     public const string LauncherIsGame = "Choose the launcher that starts the game, such as Steam or Battle.net, not the game itself.";
@@ -107,8 +116,8 @@ public sealed class ProtectedSessions
         var affinity = desired.TryGetValue("affinity", out var mask) ? mask.Deserialize<AffinityState>(OperationFiles.Json)! : originalAffinity;
         ValidateAffinity(affinity, originalAffinity);
         if (Processes(gamePath).Length != 0) throw new InvalidOperationException(GameRunning(gamePath));
-        var launcherDesired = desired.Where(pair => pair.Key is "ioPriority" or "memoryPriority").ToDictionary(pair => pair.Key, pair => pair.Value);
-        var launch = new LaunchPriorities(gamePath, desired);
+        var launcherDesired = LauncherDefaults(desired);
+        var launch = new LaunchPriorities(gamePath, LaunchControls(desired));
         return new()
         {
             SchemaVersion = 1, OperationId = Guid.NewGuid().ToString("N"), Owner = OperationOwner.Current(), Launcher = identity,
@@ -124,7 +133,7 @@ public sealed class ProtectedSessions
             throw new InvalidDataException("Select supported protected-session controls.");
         foreach (var pair in desired) ProcessControlEngine.ValidateValue(pair.Key, pair.Value);
         if (desired.TryGetValue("gpuPriority", out var gpu) && gpu.GetInt32() == 5) throw new InvalidDataException("Real-time GPU priority is not supported by this session.");
-        LaunchPriorities.Values(desired);
+        LaunchPriorities.Values(LaunchControls(desired));
     }
 
     public ProtectedSessionPreview Check(string path, string hash)
@@ -221,13 +230,14 @@ public sealed class ProtectedSessions
             LaunchGpuHandles? gpuHandles = null;
             try
             {
+                var retainHandles = RetainHandles(plan);
                 startWatch(root, plan.OperationId);
                 AwaitWatch(root, state, false);
                 job = ProcessJob.Create(plan.OperationId);
                 state.JobStatus = "created"; Save(root, state);
                 AwaitWatch(root, state, true);
                 VerifyLaunch(plan);
-                if (plan.Controls.ContainsKey("gpuPriority") && LaunchGpuHandles.Supported)
+                if (retainHandles)
                 {
                     var watcher = OperationFiles.Read<ProtectedWatchReady>(Path.Combine(root, "watch.json"));
                     gpuHandles = new(root, state, watcher.Watcher);
@@ -244,7 +254,7 @@ public sealed class ProtectedSessions
                     if (result.Status != "applied") throw new InvalidOperationException("Launcher defaults were not applied: " + JsonSerializer.Serialize(result.Changes, OperationFiles.Json));
                 }
                 state.RegistryStatus = "applyIntent"; Save(root, state);
-                var launch = new LaunchPriorities(plan.GamePath, plan.Controls);
+                var launch = new LaunchPriorities(plan.GamePath, LaunchControls(plan.Controls));
                 launch.Apply(plan.OriginalLaunchSettings); state.RegistryStatus = "applied"; Save(root, state);
                 var clock = Stopwatch.StartNew();
                 while (!cancellation.IsCancellationRequested && (duration is null || clock.Elapsed < duration))
@@ -304,7 +314,7 @@ public sealed class ProtectedSessions
         using var imageReference = ImageMutex(state.Preview.GamePath);
         using var self = new ProcessTarget(Environment.ProcessId);
         var ready = new ProtectedWatchReady(OperationOwner.Current(), operationId, state.Host, self.Identity(), false);
-        using var gpuHandles = state.Preview.Controls.ContainsKey("gpuPriority") && LaunchGpuHandles.Supported ? new LaunchGpuHandles(root, state, ready.Watcher) : null;
+        using var gpuHandles = RetainHandles(state.Preview) ? new LaunchGpuHandles(root, state, ready.Watcher) : null;
         OperationFiles.Write(Path.Combine(root, "watch.json"), ready);
         ProcessJob? retained = null;
         try
@@ -348,11 +358,26 @@ public sealed class ProtectedSessions
     private void ObserveGames(string root, ProtectedSessionState state, ProcessJob job, LaunchGpuHandles? gpuHandles)
     {
         foreach (var old in state.Games.Where(game => !game.Exited)) if (!Alive(old.Identity)) old.Exited = true;
-        foreach (var processId in Processes(state.Preview.GamePath))
+        var running = Processes(state.Preview.GamePath);
+        foreach (var processId in running)
         {
             try { Observe(processId); }
             catch (ProcessEndedException) { }
             catch (RooIndustries.Optimization.CpuSets.NativeFailure error) when (error.Api == "OpenProcess" && error.NativeErrorCode == 87) { }
+            catch (RooIndustries.Optimization.CpuSets.NativeFailure error) when (error.Api == "OpenProcess" && error.NativeErrorCode == 5)
+            {
+                if (state.Refused?.Contains(processId) != true && InJob(processId)) { (state.Refused ??= []).Add(processId); Save(root, state); }
+            }
+        }
+        if (state.Refused is { } refused && refused.RemoveAll(id => !running.Contains(id)) > 0)
+        {
+            if (refused.Count == 0) state.Refused = null;
+            Save(root, state);
+        }
+        bool InJob(int processId)
+        {
+            try { return job.ProcessIds().Contains(processId); }
+            catch (System.ComponentModel.Win32Exception) { return false; }
         }
         void Observe(int processId)
         {
@@ -363,17 +388,22 @@ public sealed class ProtectedSessions
             if (game is null)
             {
                 if (OperationFiles.HashFile(state.Preview.GamePath) != state.Preview.GameHash) throw new InvalidDataException("The launched game binary differs from the reviewed executable.");
-                game = new() { Identity = identity, Fields = state.Preview.Controls.Keys.Select(name => new ProtectedFieldState { Name = name, Route = name == "affinity" ? "job" : StartupFields.Contains(name) ? "launch" : "native", Status = "pending" }).ToList() };
+                game = new() { Identity = identity, Fields = state.Preview.Controls.Select(pair => new ProtectedFieldState { Name = pair.Key, Route = Route(pair.Key, pair.Value), Status = "pending" }).ToList() };
                 state.Games.Add(game); Save(root, state);
             }
             foreach (var field in game.Fields)
             {
                 var desired = field.Name == "affinity" ? Value(state.DesiredAffinity) : state.Preview.Controls[field.Name];
                 if (field.Route == "native" && (field.Status is "unavailable" or "conflict")) continue;
-                var retained = field.Name == "gpuPriority" ? gpuHandles?.Find(identity) : null;
-                if (field.Name == "gpuPriority" && gpuHandles is not null && retained is null)
+                var retainedControl = field.Name == "gpuPriority" || field.Name == "ioPriority" && field.Route == "native";
+                if (retainedControl && field.JournalPath is null && gpuHandles?.Refusal(identity) is { } refusal)
                 {
-                    field.Status = "unavailable"; field.Error = "No launch handle was retained for this game instance."; continue;
+                    field.Status = "unavailable"; field.Error = refusal; continue;
+                }
+                var retained = retainedControl ? gpuHandles?.Find(identity) : null;
+                if (retainedControl && gpuHandles is not null && retained is null)
+                {
+                    field.Status = "capturing"; field.Error = null; continue;
                 }
                 var reader = retained ?? target;
                 var controls = retained is null ? _controls : _controls.WithTarget(retained);
@@ -389,15 +419,25 @@ public sealed class ProtectedSessions
                     if (!field.Observed.Known) { field.Status = "unavailable"; field.Error = field.Observed.Error?.Message ?? "Original value unavailable."; continue; }
                     if (field.JournalPath is null)
                     {
-                        if (retained is not null && !gpuHandles!.RecoveryMatches(identity, field.Observed)) { field.Status = "awaitingRecovery"; continue; }
+                        var recovery = retained is null ? "ready" : gpuHandles!.Recovery(identity, field.Observed, field.Name);
+                        if (recovery == "pending") { field.Status = "awaitingRecovery"; continue; }
+                        if (recovery == "unknown") { field.Status = "unavailable"; field.Error = LaunchGpuHandles.OriginalUnreadable; continue; }
+                        var inherited = field.Name == "ioPriority" && ProcessTarget.Equivalent(field.Name, field.Observed.Require(), desired) ? InheritedOriginal(state, identity, target, desired) : null;
+                        if (field.Name == "ioPriority" && inherited is null) using (new PrivilegeScope("High I/O priority", "SeIncreaseBasePriorityPrivilege")) { }
                         var folder = Path.Combine(root, "games", identity.ProcessId + "-" + identity.CreationTimeFileTimeUtc, field.Name);
                         var path = Path.Combine(folder, "preview.json");
                         var preview = controls.Preview(processId, new() { [field.Name] = desired });
+                        if (inherited is not null) preview = preview with { Original = new(preview.Original, StringComparer.Ordinal) { [field.Name] = inherited } };
                         identity.Verify(preview.Identity); OperationFiles.Write(path, preview);
                         var hash = OperationFiles.HashFile(path); field.PreviewHash = hash;
                         field.JournalPath = Path.Combine(folder, "journal.json"); Save(root, state);
-                        var result = controls.Apply(path, hash, field.JournalPath);
-                        if (result.Status != "applied") throw new InvalidOperationException(string.Join("; ", result.Changes.Select(change => change.Error)));
+                        var result = inherited is null ? controls.Apply(path, hash, field.JournalPath) : controls.Adopt(path, hash, field.JournalPath);
+                        if (result.Status != "applied")
+                        {
+                            var failed = result.Changes.Where(change => change.Error is not null).ToArray();
+                            var message = string.Join("; ", failed.Select(change => change.Error));
+                            throw failed.Length != 0 && failed.All(change => change.ErrorKind == "denied") ? new UnauthorizedAccessException(message) : new InvalidOperationException(message);
+                        }
                     }
                     else if (!ProcessTarget.Equivalent(field.Name, field.Observed.Require(), desired))
                     {
@@ -414,10 +454,61 @@ public sealed class ProtectedSessions
                     if (!ProcessTarget.Equivalent(field.Name, field.Observed.Require(), desired)) throw new InvalidOperationException("Native readback differs from requested priority.");
                     field.Status = "applied"; field.Error = null;
                 }
+                catch (Exception error) when (ProcessFailures.Refused(error))
+                {
+                    field.Status = "unavailable"; field.Error = error is ProcessControlBlockedException ? ProcessTarget.WriteBlocked : error.Message;
+                }
                 catch (Exception error) { field.Status = "conflict"; field.Error = error.Message; }
                 Save(root, state);
             }
         }
+    }
+
+    private static ControlRead? InheritedOriginal(ProtectedSessionState state, RunningProcess identity, ProcessTarget target, JsonElement desired)
+    {
+        int parentId;
+        try { parentId = target.ParentProcessId(); }
+        catch (ProcessTarget.NtFailure) { return null; }
+        var created = Created(identity);
+        var tuned = state.Games.Where(game => game.Identity != identity && Created(game.Identity) < created)
+            .Select(game => (Game: game, Original: SessionOriginal(game, desired))).Where(item => item.Original is not null).ToArray();
+        if (tuned.Length == 0) return null;
+        var parent = tuned.FirstOrDefault(item => item.Game.Identity.ProcessId == parentId && !Replaced(item.Game.Identity));
+        if (parent.Original is not null) return parent.Original;
+        return LauncherMayHave(state.Preview.Launcher, desired) ? null : tuned.MaxBy(item => Created(item.Game.Identity)).Original;
+    }
+
+    private static long Created(RunningProcess identity) => long.Parse(identity.CreationTimeFileTimeUtc, System.Globalization.CultureInfo.InvariantCulture);
+
+    private static ControlRead? SessionOriginal(ProtectedGameState game, JsonElement desired)
+    {
+        var field = game.Fields.SingleOrDefault(item => item.Name == "ioPriority");
+        if (field?.JournalPath is null || !File.Exists(field.JournalPath)) return null;
+        var journal = OperationFiles.Read<ProcessControlJournal>(field.JournalPath);
+        game.Identity.Verify(journal.Preview.Identity);
+        var change = journal.Changes.SingleOrDefault(item => item.Name == "ioPriority");
+        return change is { Status: "applied" } && ProcessTarget.Equivalent("ioPriority", change.Desired, desired) ? ControlRead.From(change.Original) : null;
+    }
+
+    private static bool Replaced(RunningProcess identity)
+    {
+        try { using var live = new ProcessTarget(identity.ProcessId); return ReadIdentity(live).CreationTimeFileTimeUtc != identity.CreationTimeFileTimeUtc; }
+        catch (ProcessEndedException) { return false; }
+        catch (RooIndustries.Optimization.CpuSets.NativeFailure error) when (error.Api == "OpenProcess" && error.NativeErrorCode == 87) { return false; }
+    }
+
+    private static bool LauncherMayHave(RunningProcess launcher, JsonElement desired)
+    {
+        try
+        {
+            using var live = new ProcessTarget(launcher.ProcessId, readControls: ["ioPriority"]);
+            if (ReadIdentity(live).CreationTimeFileTimeUtc != launcher.CreationTimeFileTimeUtc) return false;
+            var read = live.Read("ioPriority");
+            return !read.Known || ProcessTarget.Equivalent("ioPriority", read.Require(), desired);
+        }
+        catch (ProcessEndedException) { return false; }
+        catch (RooIndustries.Optimization.CpuSets.NativeFailure error) when (error.Api == "OpenProcess" && error.NativeErrorCode == 87) { return false; }
+        catch (Exception error) when (ProcessFailures.Refused(error)) { return true; }
     }
 
     private void Release(string root, ProtectedSessionState state, ProcessJob? job, LaunchGpuHandles? gpuHandles)
@@ -433,7 +524,7 @@ public sealed class ProtectedSessions
                     if (!File.Exists(field.JournalPath))
                     {
                         if (exited) { field.Status = "expired"; field.Error = null; }
-                        else if (field.Status is ("pending" or "conflict") && field.PreviewHash is { } hash)
+                        else if (field.Status is ("pending" or "conflict" or "unavailable") && field.PreviewHash is { } hash)
                         {
                             var preview = OperationFiles.Read<ProcessControlPreview>(Path.Combine(Path.GetDirectoryName(field.JournalPath!)!, "preview.json"), hash);
                             preview.Owner.Verify(); game.Identity.Verify(preview.Identity);
@@ -451,16 +542,17 @@ public sealed class ProtectedSessions
                     }
                     var saved = OperationFiles.Read<ProcessControlJournal>(field.JournalPath!); game.Identity.Verify(saved.Preview.Identity);
                     if (saved.Preview.Desired.Count != 1 || !saved.Preview.Desired.TryGetValue(field.Name, out var savedDesired) || !ProcessTarget.Equivalent(field.Name, savedDesired, state.Preview.Controls[field.Name])) throw new InvalidDataException("Native recovery belongs to another control.");
-                    var retained = field.Name == "gpuPriority" ? gpuHandles?.Find(game.Identity) : null;
+                    var retained = field.Name is "gpuPriority" or "ioPriority" ? gpuHandles?.Find(game.Identity) : null;
                     var result = (retained is null ? _controls : _controls.WithTarget(retained)).Restore(field.JournalPath!); field.Status = result.Status;
                     var last = result.Changes.Single(change => change.Name == field.Name);
+                    if (result.Status == "restored" && last.Status == "unchanged") field.Status = "leftAsIs";
                     field.Observed = last.Observed is { } observed ? ControlRead.From(observed) : null; field.Error = last.Error; if (result.Status is not ("restored" or "expired")) errors.Add("Native restoration needs reconciliation: " + field.Name); }
                 catch (Exception error) { errors.Add(error.Message); }
             foreach (var field in game.Fields.Where(field => field.Route == "launch")) field.Status = game.Exited ? "expired" : "restartRequired";
         }
         try
         {
-            if (state.RegistryStatus is not ("pending" or "restored")) new LaunchPriorities(state.Preview.GamePath, state.Preview.Controls).Restore(state.Preview.OriginalLaunchSettings);
+            if (state.RegistryStatus is not ("pending" or "restored")) new LaunchPriorities(state.Preview.GamePath, LaunchControls(state.Preview.Controls)).Restore(state.Preview.OriginalLaunchSettings);
             state.RegistryStatus = "restored";
         }
         catch (Exception error) { errors.Add(error.Message); }
@@ -518,7 +610,7 @@ public sealed class ProtectedSessions
         if (launcher.UserSid() != plan.Owner.UserSid || CpuSelection.Fingerprint(launcher.Topology()) != plan.TopologyHash || _excluded(plan.Launcher)) throw new InvalidDataException("Launcher ownership, topology or exclusion changed.");
         if (OperationFiles.HashFile(plan.GamePath) != plan.GameHash || OperationFiles.HashFile(plan.Launcher.ExecutablePath) != plan.LauncherHash) throw new InvalidDataException("An executable changed after review.");
         if (Processes(plan.GamePath).Length != 0) throw new InvalidOperationException("The game started before the session was armed.");
-        new LaunchPriorities(plan.GamePath, plan.Controls).VerifyOriginal(plan.OriginalLaunchSettings);
+        new LaunchPriorities(plan.GamePath, LaunchControls(plan.Controls)).VerifyOriginal(plan.OriginalLaunchSettings);
         if (!ProcessTarget.Equivalent("affinity", launcher.Read("affinity").Require(), Value(plan.OriginalAffinity))) throw new InvalidOperationException("The launcher affinity changed after review.");
     }
     private static void ValidatePlan(ProtectedSessionPreview plan)
@@ -536,7 +628,7 @@ public sealed class ProtectedSessions
         }
         if (plan.GameLength <= 0 || plan.GameModifiedAtUtc == default || plan.Controls.TryGetValue("gpuPriority", out var gpu) && gpu.GetInt32() == 5)
             throw new InvalidDataException("Unsupported game image or GPU priority.");
-        var launcherFields = plan.Controls.Where(pair => pair.Key is "ioPriority" or "memoryPriority").ToDictionary(pair => pair.Key, pair => pair.Value);
+        var launcherFields = LauncherDefaults(plan.Controls);
         if (launcherFields.Count == 0 && plan.LauncherChanges is not null || launcherFields.Count != 0 && plan.LauncherChanges is null)
             throw new InvalidDataException("Launcher defaults disagree with the reviewed game controls.");
         if (plan.LauncherChanges is { } launcher)
@@ -546,7 +638,7 @@ public sealed class ProtectedSessions
                 !launcher.Desired.TryGetValue(pair.Key, out var requested) || !ProcessTarget.Equivalent(pair.Key, pair.Value, requested)))
                 throw new InvalidDataException("Launcher defaults were changed independently of the reviewed game policy.");
         }
-        _ = new LaunchPriorities(plan.GamePath, plan.Controls);
+        _ = new LaunchPriorities(plan.GamePath, LaunchControls(plan.Controls));
         ValidateAffinity(plan.OriginalAffinity, plan.OriginalAffinity);
     }
     private static ProtectedSessionState ReadState(string root)
@@ -567,7 +659,7 @@ public sealed class ProtectedSessions
             foreach (var field in game.Fields)
             {
                 if (!plan.Controls.ContainsKey(field.Name)) throw new InvalidDataException("An unreviewed game control was added.");
-                var route = field.Name == "affinity" ? "job" : StartupFields.Contains(field.Name) ? "launch" : "native";
+                var route = Route(field.Name, plan.Controls[field.Name]);
                 var expectedPath = Path.Combine(Path.GetFullPath(root), "games", game.Identity.ProcessId + "-" + game.Identity.CreationTimeFileTimeUtc, field.Name, "journal.json");
                 if (field.Status == "applied")
                 {
@@ -633,7 +725,7 @@ public sealed class ProtectedSessions
         catch (ProcessEndedException) { return false; }
         catch (RooIndustries.Optimization.CpuSets.NativeFailure error) when (error.Api == "OpenProcess" && error.NativeErrorCode == 87) { return false; }
     }
-    private static RunningProcess ReadIdentity(ProcessTarget process)
+    internal static RunningProcess ReadIdentity(ProcessTarget process)
     {
         try { return process.Identity(); }
         catch (RooIndustries.Optimization.CpuSets.NativeFailure error)
