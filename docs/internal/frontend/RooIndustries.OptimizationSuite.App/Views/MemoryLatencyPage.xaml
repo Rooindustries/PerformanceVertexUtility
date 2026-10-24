@@ -106,7 +106,7 @@
                                                 <TextBlock Text="{x:Bind Title}" FontSize="14" FontWeight="SemiBold" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextPrimaryBrush}" />
                                                 <TextBlock Text="{x:Bind Detail}" FontSize="12" LineHeight="17" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                                             </StackPanel>
-                                            <Button Grid.Column="1" Content="Go to Tools" Click="OpenTools" Tag="{x:Bind Title}" AutomationProperties.Name="{x:Bind Title}" VerticalAlignment="Center" />
+                                            <Button Grid.Column="1" Content="{x:Bind StateText}" Click="OpenTools" Tag="{x:Bind Title}" AutomationProperties.Name="{x:Bind ToolsButtonName}" VerticalAlignment="Center" />
                                         </Grid>
                                     </DataTemplate>
                                 </ListView.ItemTemplate>

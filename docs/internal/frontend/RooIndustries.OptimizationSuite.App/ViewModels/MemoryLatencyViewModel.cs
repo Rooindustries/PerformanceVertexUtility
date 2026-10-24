@@ -114,4 +114,7 @@ public partial class MemoryLatencyViewModel : PageViewModelBase
 
 }
 
-public sealed record DiagnosticRow(string Title, string Detail, string StateText, string State);
+public sealed record DiagnosticRow(string Title, string Detail, string StateText, string State)
+{
+    public string ToolsButtonName => StateText + " for " + Title;
+}

@@ -22,7 +22,9 @@ $banned=@($words.banned|ForEach-Object {
  $options=if($_.caseSensitive){[Text.RegularExpressions.RegexOptions]::None}else{[Text.RegularExpressions.RegexOptions]::IgnoreCase}
  [pscustomobject]@{regex=[regex]::new($_.pattern,$options);why=$_.why}
 })
-$guideCount=@(([IO.File]::ReadAllText((Join-Path $Source 'docs\internal\frontend\RooIndustries.OptimizationSuite.App\Assets\Guides\memory-guides.json'))|ConvertFrom-Json).guides).Count
+$appSource=Join-Path $Source 'docs\internal\frontend\RooIndustries.OptimizationSuite.App'
+$guideTitles=@(([IO.File]::ReadAllText((Join-Path $appSource 'Assets\Guides\memory-guides.json'))|ConvertFrom-Json).guides|ForEach-Object {$_.title})
+$toolTitles=@([regex]::Matches([IO.File]::ReadAllText((Join-Path $appSource 'ViewModels\MemoryLatencyViewModel.cs')),'DiagnosticRows\.Add\(new\("([^"]+)"')|ForEach-Object {$_.Groups[1].Value})
 $fault="[Console]::Error.WriteLine('Get-CimInstance : Access denied (HRESULT 0x80070005)')`r`nexit 5`r`n"
 $rawParts=@('Access denied','HRESULT','0x80070005','(code 5)')
 $evidence=[ordered]@{label=$Label;checks=@();shots=@();shown=[ordered]@{}}
@@ -47,11 +49,13 @@ function Shot([string]$Name){
  try{$graphics.CopyFromScreen([int]$r.X,[int]$r.Y,0,0,$bitmap.Size);$bitmap.Save((Join-Path $directory ($Name+'.png')),[Drawing.Imaging.ImageFormat]::Png)}finally{$graphics.Dispose();$bitmap.Dispose()}
  $script:evidence.shots+=@($Name+'.png')
 }
-function Scroller{$e=ById 'MemoryGuides';$walker=[Windows.Automation.TreeWalker]::ControlViewWalker;while($e -and -not [bool]$e.GetCurrentPropertyValue($A::IsScrollPatternAvailableProperty)){$e=$walker.GetParent($e)};$e}
-function ScrollTo([double]$Percent){$s=Scroller;if($s){$p=$s.GetCurrentPattern([Windows.Automation.ScrollPattern]::Pattern);if($p.Current.VerticallyScrollable){$p.SetScrollPercent(-1,$Percent)}};Start-Sleep -Milliseconds 600}
-function Expanders{$panel=ById 'MemoryGuides';if(-not$panel){return @()};@($panel.FindAll($TS::Descendants,[Windows.Automation.PropertyCondition]::new($A::IsExpandCollapsePatternAvailableProperty,$true)))}
+function Guide([string]$Title){$script:window.FindFirst($TS::Descendants,[Windows.Automation.AndCondition]::new([Windows.Automation.PropertyCondition]::new($A::NameProperty,$Title),[Windows.Automation.PropertyCondition]::new($A::IsExpandCollapsePatternAvailableProperty,$true)))}
+function Scrolls($Element){[bool]$Element.GetCurrentPropertyValue($A::IsScrollPatternAvailableProperty) -and $Element.GetCurrentPattern([Windows.Automation.ScrollPattern]::Pattern).Current.VerticallyScrollable}
+function Scroller{$e=Guide $guideTitles[0];$walker=[Windows.Automation.TreeWalker]::ControlViewWalker;while($e -and -not (Scrolls $e)){$e=$walker.GetParent($e)};$e}
+function ScrollTo([double]$Percent){$s=Scroller;if(-not$s){return $null};$p=$s.GetCurrentPattern([Windows.Automation.ScrollPattern]::Pattern);$p.SetScrollPercent(-1,$Percent);Start-Sleep -Milliseconds 600;$p.Current.VerticalScrollPercent}
+function Expanders{@($guideTitles|ForEach-Object {Guide $_}|Where-Object {$_})}
 function SetExpanded($Element,[bool]$Open){$p=$Element.GetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern);if($Open -and $p.Current.ExpandCollapseState -ne [Windows.Automation.ExpandCollapseState]::Expanded){$p.Expand()};if(-not$Open -and $p.Current.ExpandCollapseState -ne [Windows.Automation.ExpandCollapseState]::Collapsed){$p.Collapse()}}
-function Loaded{(Visible (ById 'MemoryGuides')) -and -not (Visible (ById 'MemoryRetry'))}
+function Loaded{(Visible (Guide $guideTitles[0])) -and -not (Visible (ById 'MemoryRetry'))}
 $scripts=Join-Path $Source 'backend\scripts'
 $inventory=Join-Path $scripts 'Get-ProcessInventory.ps1';$classification=Join-Path $scripts 'Get-ProcessClassification.ps1'
 $originals=@{}
@@ -109,18 +113,19 @@ try{
  Check ([bool]$full) 'after the reads work again the full page loads'
  Start-Sleep 2
  Check (@(Shown|Where-Object {$_ -cmatch '^\d+% of your RAM in use$'}).Count -eq 1) 'the headline says how much RAM is in use in plain words'
- foreach($text in @("See what's using your RAM and how to free it up for games.",'Apps using the most RAM','Tools to check your PC','Go to Tools')){Check (HasText $text) ('the page shows "'+$text+'"')}
- ScrollTo 0;Shot 'memory-loaded-top'
- ScrollTo 100;Shot 'memory-loaded-bottom'
+ foreach($text in @("See what's using your RAM and how to free it up for games.",'Apps using the most RAM','Tools to check your PC')){Check (HasText $text) ('the page shows "'+$text+'"')}
+ Check ((ScrollTo 0) -eq 0) 'the Memory page scrolls to its top';Shot 'memory-loaded-top'
+ Check ((ScrollTo 100) -ge 99) 'the Memory page scrolls to its bottom';Shot 'memory-loaded-bottom'
+ Check ($toolTitles.Count -and -not @($toolTitles|Where-Object {-not (HasText ('Go to Tools for '+$_))}).Count) ('every tool has a "Go to Tools" button that names its tool ('+($toolTitles -join ', ')+')')
  $guides=@(Expanders)
- Check ($guides.Count -eq $guideCount) ('every memory guide can be opened ('+$guides.Count+' of '+$guideCount+')')
+ Check ($guides.Count -eq $guideTitles.Count) ('every memory guide can be opened ('+$guides.Count+' of '+$guideTitles.Count+')')
  foreach($guide in $guides){SetExpanded $guide $true}
  Start-Sleep 1
  Scan 'with every guide open'
  Check (HasText '1. Close what you don''t need before you start a game.') 'opened guides show their numbered steps'
  foreach($guide in $guides){SetExpanded $guide $false}
  $open=@($guides|Where-Object {$_.Current.Name -eq 'Calm background apps while you play'})
- if($open.Count){SetExpanded $open[0] $true;Start-Sleep -Milliseconds 800;ScrollTo 0;$top=$script:window.Current.BoundingRectangle.Top;$s=Scroller;if($s){$p=$s.GetCurrentPattern([Windows.Automation.ScrollPattern]::Pattern);for($i=0;$i -lt 40 -and $open[0].Current.BoundingRectangle.Top -gt $top+260;$i++){$p.ScrollVertical([Windows.Automation.ScrollAmount]::SmallIncrement);Start-Sleep -Milliseconds 120}};Shot 'memory-guide-open'}
+ if($open.Count){SetExpanded $open[0] $true;Start-Sleep -Milliseconds 800;$null=ScrollTo 0;$top=$script:window.Current.BoundingRectangle.Top;$s=Scroller;if($s){$p=$s.GetCurrentPattern([Windows.Automation.ScrollPattern]::Pattern);for($i=0;$i -lt 40 -and $open[0].Current.BoundingRectangle.Top -gt $top+260;$i++){$p.ScrollVertical([Windows.Automation.ScrollAmount]::SmallIncrement);Start-Sleep -Milliseconds 120}};Shot 'memory-guide-open'}
  [RooIndustriesMemoryPage]::SetWindowPos($script:hwnd,[IntPtr]::new(-2),0,0,0,0,0x0003)|Out-Null
  $script:window.GetCurrentPattern([Windows.Automation.WindowPattern]::Pattern).Close()
  if(-not$app.process.WaitForExit(20000)){Stop-HarnessProcess $app};$app=$null
