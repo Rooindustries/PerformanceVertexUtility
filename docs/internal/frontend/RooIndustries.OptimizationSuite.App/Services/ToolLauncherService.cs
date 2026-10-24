@@ -73,14 +73,16 @@ public sealed class ToolLauncherService
 
     public static string Explain(ToolDefinition tool, Exception error) => error switch
     {
-        Win32Exception { NativeErrorCode: 225 or 226 or 4551 } => "Your antivirus or Windows Security blocked " + tool.Name + ". Allow it there, then try again.",
+        Win32Exception { NativeErrorCode: 225 or 226 } => "Your antivirus or Windows Security blocked " + tool.Name + ". Allow it there, then try again.",
         Win32Exception { NativeErrorCode: 1260 } => "A Windows policy on this PC blocks " + tool.Name + ". Ask whoever manages this PC to allow it.",
+        Win32Exception { NativeErrorCode: 4551 } => "Windows app control blocked " + tool.Name + ". Check Smart App Control in Windows Security, or ask whoever manages this PC.",
         Win32Exception { NativeErrorCode: 5 or 740 } or UnauthorizedAccessException => tool.Name + " needs admin rights. Reopen the app as an administrator, then try again.",
         Win32Exception { NativeErrorCode: 2 or 3 } => tool.Name + "'s files are missing. Your antivirus may have removed them. Allow " + tool.Name + " there, then try again.",
         FileNotFoundException or DirectoryNotFoundException => tool.Name + " is missing from the app's files. Reinstall the app to get it back.",
         Win32Exception { NativeErrorCode: 193 or 216 } or InvalidDataException => "The app's copy of " + tool.Name + " is damaged. Reinstall the app to fix it.",
         UriFormatException => tool.Name + "'s download link is broken. Update the app to fix it.",
-        IOException => "Couldn't unpack " + tool.Name + ". Make sure your drive has free space, then try again.",
+        IOException { HResult: unchecked((int)0x80070070) or unchecked((int)0x80070027) } => "Couldn't unpack " + tool.Name + ". Your drive is full. Free up some space, then try again.",
+        IOException => "Couldn't unpack " + tool.Name + ". Details are in the app log (Settings, Open logs folder).",
         InvalidOperationException { Message: RooIndustries.Optimizer.RuntimeEnvironment.ExplorerNotRunning } => "Windows Explorer isn't running. Sign in to Windows, then try again.",
         _ => "Couldn't open " + tool.Name + ". Details are in the app log (Settings, Open logs folder)."
     };

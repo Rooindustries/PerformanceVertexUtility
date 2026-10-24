@@ -131,6 +131,12 @@ static class ToolLauncherChecks
             Plain(ToolLauncherService.Explain(tool, blocked), blocked, "Your antivirus or Windows Security blocked Fixture Tool. Allow it there, then try again.", "A tool blocked by antivirus");
             var policy = new System.ComponentModel.Win32Exception(1260);
             Plain(ToolLauncherService.Explain(tool, policy), policy, "A Windows policy on this PC blocks Fixture Tool. Ask whoever manages this PC to allow it.", "A tool blocked by a Windows policy");
+            var appControl = new System.ComponentModel.Win32Exception(4551);
+            Plain(ToolLauncherService.Explain(tool, appControl), appControl, "Windows app control blocked Fixture Tool. Check Smart App Control in Windows Security, or ask whoever manages this PC.", "A tool blocked by Smart App Control or an app control policy");
+            var full = new IOException("There is not enough space on the disk.", unchecked((int)0x80070070));
+            Plain(ToolLauncherService.Explain(tool, full), full, "Couldn't unpack Fixture Tool. Your drive is full. Free up some space, then try again.", "A tool unpacked onto a full drive");
+            var stuck = new IOException("Cannot create a file when that file already exists.", unchecked((int)0x800700B7));
+            Plain(ToolLauncherService.Explain(tool, stuck), stuck, "Couldn't unpack Fixture Tool. Details are in the app log (Settings, Open logs folder).", "A tool that can't replace its old unpacked copy");
             var elevation = new System.ComponentModel.Win32Exception(740);
             Plain(ToolLauncherService.Explain(tool, elevation), elevation, "Fixture Tool needs admin rights. Reopen the app as an administrator, then try again.", "A tool that needs admin rights");
             var noShell = new InvalidOperationException(RooIndustries.Optimizer.RuntimeEnvironment.ExplorerNotRunning);
