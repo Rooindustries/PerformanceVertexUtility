@@ -123,5 +123,22 @@ static class ActionChecks
         check(stockMisread.Count == 0, "A setting without a Windows default shows only its starting choice as on: " + string.Join(", ", stockMisread.Take(10)));
         check(misread.Count == 0, "Every setting with a Windows default shows any applied choice on beside its switch, and turning it off queues the Windows default: "
             + misread.Count + " misread, " + string.Join(", ", misread.Take(10)));
+
+        var raw = new List<string>();
+        foreach (var definition in catalog.Settings)
+        {
+            foreach (var option in definition.Options)
+            {
+                var row = Row(definition.Id);
+                row.Observe(new(definition.Id, definition.Name, true, [option.Id], [], null, definition.Options.Select(item => item.Id).ToArray()));
+                row.ToggleOn = true;
+                var shown = row.Choices.Select(choice => choice.Name).Append(row.Current).Append(row.Action.Name).Append(row.Selected.Name).Append(row.SimpleState);
+                raw.AddRange(shown.Where(SourceDirection).Select(text => definition.Id + " " + option.Id + " \"" + text + "\""));
+            }
+        }
+        check(raw.Count == 0, "No row shows a source tool's internal choice name, like apply or source-default, as its current value, choices or pending change: "
+            + raw.Count + " shown, " + string.Join(", ", raw.Distinct().Take(10)));
     }
+
+    public static bool SourceDirection(string text) => System.Text.RegularExpressions.Regex.IsMatch(text, @"(?<![\w-])(apply|source-default)(?![\w-])", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 }
