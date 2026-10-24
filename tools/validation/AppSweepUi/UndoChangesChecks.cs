@@ -89,8 +89,8 @@ static class UndoChangesChecks
         await page.InitializeAsync();
         var rows = page.RestoreRows.ToDictionary(row => row.Label, row => row.Value);
         check(page.RestoreHeadline == "You've got changes you can undo. Each row tells you where.", "Undo changes headline says there are changes to undo and that each row says where");
-        check(rows["Game priority"] == "Can undo · press Restore in Games > Background apps" && rows["Background limits"] == "Can undo · press Restore in Games > Background apps",
-            "Game priority and Background limits rows name the Restore button and the Games tab that undoes them");
+        check(rows["Game priority"] == "Can undo · press Restore under Game priority in Games > Background apps" && rows["Background limits"] == "Can undo · press Restore under Background limits in Games > Background apps",
+            "Game priority and Background limits rows name their own Restore button (RestoreMatchTune, RestoreGovernor) and the Games tab it is on");
         check(rows["Governor"] == "Running · 1 app changed · press Pause governor in Games > Processes to undo · " + ProcessControlEngine.LeftAsSet,
             "The Governor row names the Pause governor button that undoes it");
         check(rows["Windows tweaks"] == "3 profiles to undo" && rows["my-settings"] == "2 settings · undo them in Windows tweaks"

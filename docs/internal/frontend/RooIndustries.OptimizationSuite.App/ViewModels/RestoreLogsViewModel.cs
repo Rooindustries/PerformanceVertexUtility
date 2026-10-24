@@ -75,11 +75,11 @@ public partial class RestoreLogsViewModel : PageViewModelBase
 
         RestoreRows.Add(new StatusLine(
             "Game priority",
-            gameRecovery == true ? CanUndoInBackgroundApps : gameRecovery == false ? Nothing : CouldNotCheck,
+            gameRecovery == true ? "Can undo · press Restore under Game priority in Games > Background apps" : gameRecovery == false ? Nothing : CouldNotCheck,
             gameRecovery == true ? "safe" : gameRecovery == false ? "neutral" : "medium"));
         RestoreRows.Add(new StatusLine(
             "Background limits",
-            governorRecovery == true ? CanUndoInBackgroundApps : governorRecovery == false ? Nothing : CouldNotCheck,
+            governorRecovery == true ? "Can undo · press Restore under Background limits in Games > Background apps" : governorRecovery == false ? Nothing : CouldNotCheck,
             governorRecovery == true ? "safe" : governorRecovery == false ? "neutral" : "medium"));
         RestoreRows.Add(new StatusLine(
             "Governor",
@@ -173,7 +173,6 @@ public partial class RestoreLogsViewModel : PageViewModelBase
 
     private const string Nothing = "Nothing to undo";
     private const string CouldNotCheck = "Couldn't check";
-    private const string CanUndoInBackgroundApps = "Can undo · press Restore in Games > Background apps";
 
     private static string GameName(ProtectedSessionState state) => Naming.FriendlyName(Path.GetFileNameWithoutExtension(state.Preview.GamePath));
 
