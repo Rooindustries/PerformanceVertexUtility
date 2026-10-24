@@ -51,7 +51,7 @@ $app=$null;$status='fail'
 try{
  if(@(Get-Process -Name 'RooIndustries.OptimizationSuite.App' -ErrorAction SilentlyContinue).Count){throw 'The Suite is already open; this check does not take over another window.'}
  $evidence.gpus=@(Get-CimInstance Win32_VideoController|ForEach-Object {[string]$_.Name})
- $nvidiaGpu=@(Get-CimInstance Win32_VideoController|Where-Object {([string]$_.Name+' '+[string]$_.AdapterCompatibility) -match 'NVIDIA'}|Select-Object -First 1)
+ $nvidiaGpu=@(Get-CimInstance Win32_VideoController|Where-Object {([string]$_.Name+' '+[string]$_.PNPDeviceID) -match 'nvidia|ven_10de'}|Select-Object -First 1)
  $evidence.nvidia=[bool]$nvidiaGpu.Count
  $evidence.nvidiaDated=[bool]@($nvidiaGpu|Where-Object {$null -ne $_.DriverDate}).Count
  Initialize-HarnessBuildFolders $Source
