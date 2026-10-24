@@ -131,7 +131,7 @@ function LimitedRead([string]$Script){
   [pscustomobject]@{exit=[string]$code;who=$(if([IO.File]::Exists($who)){[IO.File]::ReadAllText($who)}else{''});json=$parsed}
  }finally{Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue}
 }
-function Named($Read){@($Read.json.processes|Where-Object {$_.fileDescription}|ForEach-Object {[int]$_.pid})}
+function Named($Read){@($Read.processes|Where-Object {$_.fileDescription}|ForEach-Object {[int]$_.pid})}
 $dotnet=@((Join-Path $env:LOCALAPPDATA 'Microsoft\dotnet\dotnet.exe'),(Join-Path $env:USERPROFILE '.dotnet\dotnet.exe'),(Join-Path $env:ProgramFiles 'dotnet\dotnet.exe')|Where-Object {Test-Path -LiteralPath $_ -PathType Leaf}|Where-Object {@(& $_ --list-sdks 2>$null).Count}|Select-Object -First 1)
 if(-not$dotnet){throw 'No .NET SDK was found for the test build.'}
 $dotnet=$dotnet[0]
@@ -156,7 +156,7 @@ try{
  $list=LimitedRead $classification
  Check ($list.exit -eq '0' -and @($list.json.processes).Count -gt 0 -and -not @($list.json.errors|Where-Object {$_}).Count) 'without admin rights the list of apps using the most RAM still reads' ('exit '+$list.exit+', '+@($list.json.processes).Count+' tasks, '+((@($list.json.errors)|ForEach-Object {$_.code+': '+$_.message}) -join ' | '))
  $named=$null;try{$named=& (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe') -NoProfile -ExecutionPolicy Bypass -File $classification 2>$null|Out-String|ConvertFrom-Json}catch{}
- $limitedNamed=@(Named $list);$limitedSeen=@($list.json.processes|ForEach-Object {[int]$_.pid})
+ $limitedNamed=@(Named $list.json);$limitedSeen=@($list.json.processes|ForEach-Object {[int]$_.pid})
  $unnamed=@($named.processes|Where-Object {$_.fileDescription -and $limitedNamed -notcontains [int]$_.pid -and $limitedSeen -contains [int]$_.pid}|ForEach-Object {$_.name})
  Check ($null -ne $named -and @(Named $named).Count -gt 0 -and -not $unnamed.Count) 'without admin rights every app keeps the name Windows has for it' ('admin read named '+@(Named $named).Count+', normal-user read named '+$limitedNamed.Count+' of '+$limitedSeen.Count+'; missing: '+(($unnamed|Select-Object -Unique -First 12) -join ', '))
  foreach($path in @($inventory,$classification)){Fault $path}
