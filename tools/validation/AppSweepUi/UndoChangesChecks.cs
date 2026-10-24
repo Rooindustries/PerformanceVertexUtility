@@ -110,8 +110,8 @@ static class UndoChangesChecks
             "Governor history names the app and its rule and points to Processes for undo\n    got: " + string.Join("\n      ", history.Select(Show)));
         check(history.Where(row => row.Action == "Game priority").Select(row => (row.Change, row.RestoreText)).SequenceEqual(new[]
             {
-                ("CPU priority Normal → Above normal", "Undo in Games"), ("CPU priority Below normal → Idle", "Undo in Games"), ("CPU priority back to Normal", "Done"),
-            }), "Game priority history says CPU priority in words and which row is the undo\n    got: " + string.Join("\n      ", history.Select(Show)));
+                ("CPU priority Normal → Above normal", "Done"), ("CPU priority Below normal → Idle", "Undo in Games"), ("CPU priority back to Normal", "Done"),
+            }), "Game priority history says CPU priority in words, which row is the undo, and never offers Undo for a change already put back\n    got: " + string.Join("\n      ", history.Select(Show)));
         check(history.Contains(("Background limits", "2 background apps", "Lower priority while your game runs", "Undo in Games")), "Background limits history says how many background apps it lowered and where to undo it");
         check(history.Where(row => row.Action == "Windows tweaks").Select(row => (row.Target, row.Change, row.RestoreText)).SequenceEqual(new[]
             {
@@ -130,7 +130,7 @@ static class UndoChangesChecks
         var finished = page.HistoryRows.Where(row => row.Action is "Game priority" or "Background limits").Select(row => (row.Change, row.RestoreText)).ToArray();
         check(finished.SequenceEqual(new[]
             {
-                ("CPU priority Normal → Above normal", "Nothing to undo"), ("CPU priority Below normal → Idle", "Nothing to undo"), ("CPU priority back to Normal", "Done"),
+                ("CPU priority Normal → Above normal", "Done"), ("CPU priority Below normal → Idle", "Nothing to undo"), ("CPU priority back to Normal", "Done"),
                 ("Lower priority while your game runs", "Nothing to undo"),
             }), "A finished Game priority or Background limits run with no backup left never offers Undo in Games for its old changes\n    got: " + string.Join(" | ", finished));
     }

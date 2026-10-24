@@ -130,11 +130,12 @@ public partial class RestoreLogsViewModel : PageViewModelBase
         }
 
         var tuneUndo = session is null ? CouldNotCheck : RecoveryAvailable(session.Status, session.Restorable) switch { true => "Undo in Games", false => Nothing, null => CouldNotCheck };
+        var restored = (session?.RestoredItems ?? []).Select(item => item.ProcessId).ToHashSet();
         foreach (var item in session is { DryRun: false } ? session.ChangedItems ?? [] : [])
         {
             HistoryRows.Add(new AuditRow("Recent", "Game priority", "low", DisplayName(item),
                 "CPU priority " + Priority(item.OriginalPriorityClass) + " → " + Priority(item.AppliedPriorityClass),
-                tuneUndo, "low"));
+                restored.Contains(item.ProcessId) ? "Done" : tuneUndo, "low"));
         }
 
         foreach (var item in session is { DryRun: false } ? session.RestoredItems ?? [] : [])

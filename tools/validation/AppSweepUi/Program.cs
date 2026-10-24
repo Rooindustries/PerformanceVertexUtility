@@ -985,7 +985,7 @@ if (args is [] or ["history"])
     App.Live.GovernorStatusModel.Status = "active";
     history = new RestoreLogsViewModel();
     await history.InitializeAsync();
-    Check(history.HistoryRows.Select(row => (row.Action, row.RestoreText)).SequenceEqual(new[] { ("Game priority", "Couldn't check"), ("Game priority", "Done"), ("Background limits", "Undo in Games") }),
+    Check(history.HistoryRows.Select(row => (row.Action, row.RestoreText)).SequenceEqual(new[] { ("Game priority", "Done"), ("Game priority", "Done"), ("Background limits", "Undo in Games") }),
         "Confirmed non-dry session evidence retains applied, restored, and restraint history");
 
     App.Live.GameStatusModel.DryRun = true;
