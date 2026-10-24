@@ -495,11 +495,12 @@ public partial class ProcessControlsViewModel : ObservableObject
     private void AffinityFromCpus()
     {
         var selected = Cpus.Where(cpu => cpu.Selected && cpu.Cpu.Available).Select(cpu => cpu.Cpu).ToArray();
+        var reserved = ValidAffinity() ? ProcessTarget.ParseMask(AffinityMask.Trim()) & Cpus.Where(cpu => !cpu.Cpu.Available && cpu.Cpu.Group == _affinityGroup).Aggregate(0UL, (mask, cpu) => mask | (1UL << cpu.Cpu.Index)) : 0UL;
         _syncingCpus = true;
         try
         {
             AffinityMask = selected.Length == 0 || selected.Any(cpu => cpu.Group != _affinityGroup) ? ""
-                : "0x" + selected.Aggregate(0UL, (mask, cpu) => mask | (1UL << cpu.Index)).ToString("X");
+                : "0x" + selected.Aggregate(reserved, (mask, cpu) => mask | (1UL << cpu.Index)).ToString("X");
         }
         finally { _syncingCpus = false; }
     }
