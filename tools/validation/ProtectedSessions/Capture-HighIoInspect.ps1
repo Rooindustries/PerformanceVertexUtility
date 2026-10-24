@@ -104,7 +104,7 @@ function TaskManager([int]$GamePid,[uint64]$Expected,[string]$Label){
  $search=WaitFor {$window.FindFirst($TS::Descendants,(Is $A::ControlTypeProperty $CT::Edit))} 15 'the Task Manager search box'
  $search.GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern).SetValue([string]$GamePid);Note 'searched';Start-Sleep -Milliseconds 1500
  $list={$window.FindFirst($TS::Descendants,(Is $A::AutomationIdProperty 'cpuList'))}
- WaitFor $list 10 'the Details list'|Out-Null
+ WaitFor $list 30 'the Details list'|Out-Null
  Front (Handle $window) $explorerWindow 3
  # The search leaves only the game's row, the first row under the column header.
  $grid=& $list;$g=$grid.Current.BoundingRectangle
