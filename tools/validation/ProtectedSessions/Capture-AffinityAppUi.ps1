@@ -258,8 +258,9 @@ try{
  $created=@(if([IO.Directory]::Exists($operations)){[IO.Directory]::GetDirectories($operations)|Where-Object {$before -notcontains $_ -and [IO.Path]::GetFileName($_) -match '^(game-session|process)-'}})
  $evidence.createdOperations=@($created|ForEach-Object {[IO.Path]::GetFileName($_)})
  $settled=$status -eq 'pass' -and -not$evidence.cleanupError
- foreach($folder in $created){if($settled){[IO.Directory]::Delete($folder,$true)}}
- $evidence.removedOperations=$settled
+ $removed=$settled
+ foreach($folder in $created){if($settled){try{[IO.Directory]::Delete($folder,$true)}catch{$removed=$false;$evidence.cleanupError+=@($_.Exception.Message)}}}
+ $evidence.removedOperations=$removed
  $evidence.status=$status
  Write-HarnessResult $directory 'capture.json' $evidence|Out-Null
  Write-Output ('ROO_INDUSTRIES_AFFINITY_APP '+$status+' '+$directory)
