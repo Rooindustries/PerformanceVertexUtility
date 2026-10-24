@@ -43,6 +43,7 @@ function Shot([string]$Name){
 }
 function Scroller{$e=ByText 'Processor';$walker=[Windows.Automation.TreeWalker]::ControlViewWalker;while($e -and -not [bool]$e.GetCurrentPropertyValue($A::IsScrollPatternAvailableProperty)){$e=$walker.GetParent($e)};$e}
 function ScrollTo([double]$Percent){$s=Scroller;if($s){$p=$s.GetCurrentPattern([Windows.Automation.ScrollPattern]::Pattern);if($p.Current.VerticallyScrollable){$p.SetScrollPercent(-1,$Percent)}};Start-Sleep -Milliseconds 600}
+function ButtonEvidence{$get=ById 'DriversGetDriver';if(Visible $get){[ordered]@{name=$get.Current.Name;enabled=$get.Current.IsEnabled}}else{$null}}
 function CanScroll{$s=Scroller;$s -and $s.GetCurrentPattern([Windows.Automation.ScrollPattern]::Pattern).Current.VerticallyScrollable}
 $dotnet=@((Join-Path $env:LOCALAPPDATA 'Microsoft\dotnet\dotnet.exe'),(Join-Path $env:USERPROFILE '.dotnet\dotnet.exe'),(Join-Path $env:ProgramFiles 'dotnet\dotnet.exe')|Where-Object {Test-Path -LiteralPath $_ -PathType Leaf}|Where-Object {@(& $_ --list-sdks 2>$null).Count}|Select-Object -First 1)
 if(-not$dotnet){throw 'No .NET SDK was found for the test build.'}
@@ -83,9 +84,9 @@ try{
  Check ($ready -eq 'ready') 'the Graphics drivers page loads its hardware panel' ([string]$ready)
  Start-Sleep 2
  $texts=@(Shown)
- $get=ById 'DriversGetDriver';$evidence.button=if(Visible $get){[ordered]@{name=$get.Current.Name;enabled=$get.Current.IsEnabled}}else{$null}
+ $evidence.button=ButtonEvidence
  ScrollTo 0;Shot 'drivers-page'
- if(CanScroll){ScrollTo 100;$texts+=@(Shown);Shot 'drivers-page-bottom';ScrollTo 0}
+ if(CanScroll){ScrollTo 100;$texts+=@(Shown);if(-not $evidence.button){$evidence.button=ButtonEvidence};Shot 'drivers-page-bottom';ScrollTo 0}
  $texts=@($texts|Select-Object -Unique);$evidence.shown=$texts
 
  $found=@(foreach($text in $texts){foreach($rule in $banned){if($rule.regex.IsMatch($text)){'"'+$text+'" shows '+$rule.why}}})
