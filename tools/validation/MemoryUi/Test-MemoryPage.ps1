@@ -42,11 +42,11 @@ public static class RooIndustriesMemoryUser {
   IntPtr own = IntPtr.Zero, user = IntPtr.Zero, descriptor = IntPtr.Zero, owner = Sid(me), admins = Sid("S-1-5-32-544"), localAdmin = Sid("S-1-5-114"), medium = Sid("S-1-16-8192");
   ProcessInformation info = new ProcessInformation();
   try {
-   if (!OpenProcessToken(GetCurrentProcess(), 0x0001 | 0x0002 | 0x0008 | 0x0080 | 0x00040000, out own)) throw new Win32Exception();
+   if (!OpenProcessToken(GetCurrentProcess(), 0x0001 | 0x0002 | 0x0008 | 0x0080 | 0x00040000 | 0x00080000, out own)) throw new Win32Exception();
    SidAndAttributes[] disable = { new SidAndAttributes { Sid = admins }, new SidAndAttributes { Sid = localAdmin } };
    if (!CreateRestrictedToken(own, 0x1 | 0x4, (uint)disable.Length, disable, 0, IntPtr.Zero, 0, IntPtr.Zero, out user)) throw new Win32Exception();
-   if (!ConvertStringSecurityDescriptorToSecurityDescriptor("D:(A;;GA;;;" + me + ")(A;;GA;;;SY)", 1, out descriptor, IntPtr.Zero)) throw new Win32Exception();
-   if (!SetKernelObjectSecurity(user, 0x4, descriptor)) throw new Win32Exception();
+   if (!ConvertStringSecurityDescriptorToSecurityDescriptor("D:(A;;GA;;;" + me + ")(A;;GA;;;SY)S:(ML;;NW;;;ME)", 1, out descriptor, IntPtr.Zero)) throw new Win32Exception();
+   if (!SetKernelObjectSecurity(user, 0x4 | 0x10, descriptor)) throw new Win32Exception();
    SidAndAttributes label = new SidAndAttributes { Sid = medium, Attributes = 0x20 };
    if (!SetTokenInformation(user, 25, ref label, Marshal.SizeOf(typeof(SidAndAttributes)) + GetLengthSid(medium))) throw new Win32Exception();
    if (!SetTokenInformation(user, 4, ref owner, IntPtr.Size)) throw new Win32Exception();
