@@ -151,7 +151,7 @@ $Pages = @(
 $Advanced = @(
     @{ Name = 'Remove apps/Leftovers'; Before = 'Remove apps'; Tab = 'LeftoversTab'; Usable = { HasName 'Pick an app to review' }; Complete = 'settle'; Timeout = 60; After = 'RemovalTab' },
     @{ Name = 'Startup & services'; Nav = 'Startup & services'; Usable = { HasName 'Running background apps' }; Complete = { (HasName 'Running background apps') -and -not (HasName 'Reading startup and services') }; Timeout = 60 },
-    @{ Name = 'Memory'; Nav = 'Memory'; Usable = { HasName 'Memory by process' }; Complete = { (HasName 'Memory by process') -and -not (HasName 'Reading memory and latency') }; Timeout = 60 },
+    @{ Name = 'Memory'; Nav = 'Memory'; Usable = { HasName 'Apps using the most RAM' }; Complete = { (HasName 'Apps using the most RAM') -and -not (HasName 'Checking your RAM') }; Timeout = 60 },
     @{ Name = 'Timer & cache'; Nav = 'Timer & cache'; Usable = { HasName 'Timer & shader cache' }; Complete = 'settle'; Timeout = 60 }
 )
 function Visit([hashtable]$page, [string]$tour, [string]$visit) {

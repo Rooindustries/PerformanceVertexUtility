@@ -591,6 +591,49 @@ public static class RooIndustriesNativeProcessControl {
     public static extern bool GetProcessAffinityMask(IntPtr process, out IntPtr processMask, out IntPtr systemMask);
     [DllImport("kernel32.dll")]
     public static extern ushort GetActiveProcessorGroupCount();
+    [StructLayout(LayoutKind.Sequential)]
+    private struct SystemProcessIdInformation { public IntPtr ProcessId; public ushort Length; public ushort MaximumLength; public IntPtr Buffer; }
+    [DllImport("ntdll.dll")]
+    private static extern int NtQuerySystemInformation(int informationClass, ref SystemProcessIdInformation information, int length, out int returned);
+    [StructLayout(LayoutKind.Sequential)]
+    private struct UnicodeString { public ushort Length; public ushort MaximumLength; public IntPtr Buffer; }
+    [StructLayout(LayoutKind.Sequential)]
+    private struct ObjectAttributes { public int Length; public IntPtr RootDirectory; public IntPtr ObjectName; public uint Attributes; public IntPtr SecurityDescriptor; public IntPtr SecurityQualityOfService; }
+    [DllImport("ntdll.dll")]
+    private static extern int NtOpenSymbolicLinkObject(out IntPtr link, uint access, ref ObjectAttributes attributes);
+    [DllImport("ntdll.dll")]
+    private static extern int NtQuerySymbolicLinkObject(IntPtr link, ref UnicodeString target, out int returned);
+    [DllImport("ntdll.dll")]
+    private static extern int NtClose(IntPtr handle);
+    private static string DriveDevice(string letter) {
+        string name = "\\GLOBAL??\\" + letter;
+        IntPtr text = Marshal.StringToHGlobalUni(name), objectName = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(UnicodeString))), target = Marshal.AllocHGlobal(0xFFFE);
+        try {
+            Marshal.StructureToPtr(new UnicodeString { Length = (ushort)(name.Length * 2), MaximumLength = (ushort)(name.Length * 2 + 2), Buffer = text }, objectName, false);
+            var attributes = new ObjectAttributes { Length = Marshal.SizeOf(typeof(ObjectAttributes)), ObjectName = objectName, Attributes = 0x40 };
+            IntPtr link;
+            if (NtOpenSymbolicLinkObject(out link, 1, ref attributes) != 0) return null;
+            try {
+                var value = new UnicodeString { MaximumLength = 0xFFFE, Buffer = target };
+                int returned;
+                return NtQuerySymbolicLinkObject(link, ref value, out returned) == 0 ? Marshal.PtrToStringUni(target, value.Length / 2) : null;
+            } finally { NtClose(link); }
+        } finally { Marshal.FreeHGlobal(text); Marshal.FreeHGlobal(objectName); Marshal.FreeHGlobal(target); }
+    }
+    public static string ImageFilePath(int processId) {
+        IntPtr buffer = Marshal.AllocHGlobal(0xFFFE);
+        try {
+            var information = new SystemProcessIdInformation { ProcessId = new IntPtr(processId), MaximumLength = 0xFFFE, Buffer = buffer };
+            int returned;
+            if (NtQuerySystemInformation(88, ref information, Marshal.SizeOf(typeof(SystemProcessIdInformation)), out returned) != 0 || information.Length == 0) return null;
+            string image = Marshal.PtrToStringUni(buffer, information.Length / 2);
+            for (char letter = 'A'; letter <= 'Z'; letter++) {
+                string device = DriveDevice(letter + ":");
+                if (device != null && image.StartsWith(device + "\\", StringComparison.OrdinalIgnoreCase)) return letter + ":" + image.Substring(device.Length);
+            }
+            return null;
+        } finally { Marshal.FreeHGlobal(buffer); }
+    }
 }
 public sealed class RooIndustriesIoPriorityPrivilege : IDisposable {
     private Microsoft.Win32.SafeHandles.SafeFileHandle token;
