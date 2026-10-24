@@ -12,7 +12,7 @@ static class UndoChangesChecks
     [
         "restorable", "Reversible", "restraint", "Restrained", "Status unavailable", "Backed up", "session backup", "recovery state", "needs recovery", "Interrupted change",
         "verification", "readback", "requested controls", "Partially applied", "Recovery required", "needs attention", "value changes", "selected settings", "No active profile",
-        "Review profile", "saved profiles", "Saved settings", "stepped back", "kept by the governor", "could not", "process settings", "file-permissions-", "restore-point-",
+        "Review profile", "saved profiles", "Saved settings", "stepped back", "overnor", "No rules", "could not", "process settings", "file-permissions-", "restore-point-",
         "AboveNormal", "BelowNormal", "RealTime", "restartRequired", "notFound", "leftAsSet", "steppedBack", "notPutBack", "awaiting-restart", "0x", "\u2014", "  ",
     ];
     private static readonly string[] UndoColumn = ["Undo in Games", "Undo in Background apps", "Undo in Processes", "Undo in Windows tweaks", "Done", "Nothing to undo", "Couldn't check"];
@@ -91,8 +91,8 @@ static class UndoChangesChecks
         check(page.RestoreHeadline == "You've got changes you can undo. Each row tells you where.", "Undo changes headline says there are changes to undo and that each row says where");
         check(rows["Game priority"] == "Can undo · press Restore under Game priority in Games > Background apps" && rows["Background limits"] == "Can undo · press Restore under Background limits in Games > Background apps",
             "Game priority and Background limits rows name their own Restore button (RestoreMatchTune, RestoreGovernor) and the Games tab it is on");
-        check(rows["Governor"] == "Running · 1 app changed · press Pause governor in Games > Processes to undo · " + ProcessControlEngine.LeftAsSet,
-            "The Governor row names the Pause governor button that undoes it");
+        check(rows["Automatic app rules"] == "Running · 1 app changed · pause them in Games > Processes to undo · " + ProcessControlEngine.LeftAsSet,
+            "The Automatic app rules row says where to pause the rules to undo them, without the engine's name");
         check(rows["Windows tweaks"] == "3 profiles to undo" && rows["my-settings"] == "2 settings · undo them in Windows tweaks"
                 && rows["File ownership: game.cfg"] == "1 setting · undo it in Windows tweaks" && rows["Restore point limit"] == "1 setting · undo it in Windows tweaks",
             "Windows tweak profiles show the name the user typed, the file whose ownership changed, or the restore point limit, never an internal profile id");
@@ -111,8 +111,8 @@ static class UndoChangesChecks
                 ("On · press Stop and restore in Games to undo", "Undo in Games"), ("Settings put back", "Done"), ("Settings put back · restart the game to clear its launch priorities", "Done"),
                 ("Didn't finish putting settings back · press Recover settings in Games", "Undo in Games"), ("Couldn't check this session · open Games", "Undo in Games"),
             }), "Game session history says Done once its settings are back and points to Games for every session that still needs Stop, Recover or a look\n    got: " + string.Join("\n      ", history.Select(Show)));
-        check(history.Contains(("Governor", "OBS Studio", ProcessControlEngine.LeftAsSet, "Nothing to undo")) && history.Contains(("Governor", "Google Chrome", "Chrome rule · on for this app", "Undo in Processes")),
-            "Governor history names the app and its rule and points to Processes for undo\n    got: " + string.Join("\n      ", history.Select(Show)));
+        check(history.Contains(("Automatic app rules", "OBS Studio", ProcessControlEngine.LeftAsSet, "Nothing to undo")) && history.Contains(("Automatic app rules", "Google Chrome", "Chrome rule · on for this app", "Undo in Processes")),
+            "Automatic app rules history names the app and its rule and points to Processes for undo\n    got: " + string.Join("\n      ", history.Select(Show)));
         check(history.Where(row => row.Action == "Game priority").Select(row => (row.Change, row.RestoreText)).SequenceEqual(new[]
             {
                 ("CPU priority Normal → Above normal", "Done"), ("CPU priority Below normal → Idle", "Undo in Background apps"), ("CPU priority back to Normal", "Done"),
@@ -160,7 +160,7 @@ static class UndoChangesChecks
         string Windows(RestoreLogsViewModel page) => page.RestoreRows.Single(row => row.Label == "Windows tweaks").Value;
 
         var page = await Read(new TweakRecovery(null, null, null));
-        check(page.RestoreHeadline == "Nothing to undo." && page.RestoreRows.All(row => row.Value is "Nothing to undo" or "No rules") && !page.HasHistory,
+        check(page.RestoreHeadline == "Nothing to undo." && page.RestoreRows.All(row => row.Value is "Nothing to undo" or "Nothing set up") && !page.HasHistory,
             "A PC with nothing changed says Nothing to undo on every row");
         page = await Read(null);
         check(page.RestoreHeadline == "Couldn't check everything. Open this page again to retry." && Windows(page) == "Couldn't check",

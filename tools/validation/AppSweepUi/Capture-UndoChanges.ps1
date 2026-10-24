@@ -19,8 +19,8 @@ public static class RooIndustriesUndoCapture {
 '@
 [RooIndustriesUndoCapture]::SetProcessDPIAware()|Out-Null
 $A=[Windows.Automation.AutomationElement];$TS=[Windows.Automation.TreeScope];$CT=[Windows.Automation.ControlType]
-$expected=@('Undo changes','See what this app changed on your PC and where to undo it.','Open Games','Open Windows tweaks','Open BIOS backups','What you can undo','Game priority','Background limits','Governor','Windows tweaks','Undo Windows changes in Windows tweaks, and game or app changes in Games.')
-$jargon=@('restorable','Reversible','restraint','Restrained','Status unavailable','Backed up','session backup','recovery state','needs recovery','Interrupted change','verification','readback','requested controls','Partially applied','Recovery required','needs attention','value changes','selected settings','No active profile','Review profile','saved profiles','Saved settings','stepped back','kept by the governor','could not','process settings','file-permissions-','restore-point-','AboveNormal','BelowNormal','RealTime','0x',[string][char]0x2014)
+$expected=@('Undo changes','See what this app changed on your PC and where to undo it.','Open Games','Open Windows tweaks','Open BIOS backups','What you can undo','Game priority','Background limits','Automatic app rules','Windows tweaks','Undo Windows changes in Windows tweaks, and game or app changes in Games.')
+$jargon=@('overnor','No rules','restorable','Reversible','restraint','Restrained','Status unavailable','Backed up','session backup','recovery state','needs recovery','Interrupted change','verification','readback','requested controls','Partially applied','Recovery required','needs attention','value changes','selected settings','No active profile','Review profile','saved profiles','Saved settings','stepped back','kept by the governor','could not','process settings','file-permissions-','restore-point-','AboveNormal','BelowNormal','RealTime','0x',[string][char]0x2014)
 $evidence=[ordered]@{label=$Label;expect=$Expect;texts=@();buttons=@();checkBoxes=@();missing=@();jargon=@()}
 function WaitFor([scriptblock]$Probe,[double]$Limit,[string]$What){$deadline=[DateTime]::UtcNow.AddSeconds($Limit);while([DateTime]::UtcNow -lt $deadline){try{$value=& $Probe}catch{$value=$null};if($value){return $value};Start-Sleep -Milliseconds 200};throw ('Timed out waiting for '+$What)}
 function Names($Root,$Type){@($Root.FindAll($TS::Descendants,[Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty,$Type))|ForEach-Object {$_.Current.Name}|Where-Object {$_})}
@@ -51,7 +51,7 @@ try{
  $env:DOTNET_ROOT=Split-Path $dotnet -Parent;$env:ROO_INDUSTRIES_DOTNET_EXE=$dotnet;$env:ROO_INDUSTRIES_INITIAL_NAV='restore'
  $app=Start-OwnedProcess -FilePath $exe[0].FullName -WindowStyle Normal -Purpose 'suite-test-build' -Lifetime invocation
  $window=WaitFor {$w=$A::RootElement.FindFirst($TS::Children,[Windows.Automation.PropertyCondition]::new($A::ProcessIdProperty,[int]$app.Identity.pid));if($w -and (Names $w $CT::Button) -contains 'Open Windows tweaks'){$w}} 180 'the Undo changes page'
- WaitFor {$t=Names $window $CT::Text;if(($t -contains 'What you can undo' -or $t -contains 'Saved settings') -and ($t -contains 'Governor') -and ($t -notcontains 'Checking what you can undo') -and ($t -notcontains 'Reading restore state')){$t}} 120 'the Undo changes rows to finish loading'|Out-Null
+ WaitFor {$t=Names $window $CT::Text;if(($t -contains 'What you can undo' -or $t -contains 'Saved settings') -and ($t -contains 'Automatic app rules' -or $t -contains 'Governor') -and ($t -notcontains 'Checking what you can undo') -and ($t -notcontains 'Reading restore state')){$t}} 120 'the Undo changes rows to finish loading'|Out-Null
  $hwnd=[IntPtr]::new([long]$window.Current.NativeWindowHandle)
  [RooIndustriesUndoCapture]::SetWindowPos($hwnd,[IntPtr]::new(-1),40,40,1280,960,0x0040)|Out-Null
  [RooIndustriesUndoCapture]::SetForegroundWindow($hwnd)|Out-Null

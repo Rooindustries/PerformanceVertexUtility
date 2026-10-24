@@ -62,7 +62,7 @@ public partial class RestoreLogsViewModel : PageViewModelBase
         var retry = rules is not null && GovernorDisplay.CanRetry(rules, rulesState) ? " · press Put settings back in Games > Processes" : "";
         var restorable = windows?.State?.Profiles.Length > 0 || gameRecovery == true || governorRecovery == true || leftoverApps > 0 || games.Any(game => game.Worker.State is not null && !GameSessionDisplay.Restored(game.Worker));
         var signIn = rules is not null && rulesState == "running" ? GovernorDisplay.SignIn(rules) : "yes";
-        var signInNote = signIn switch { "yes" => "", "no" => " · it won't start when you sign in · press Start governor in Games > Processes to fix that", _ => " · couldn't confirm it starts when you sign in · press Start governor in Games > Processes to fix that" };
+        var signInNote = signIn switch { "yes" => "", "no" => " · they won't start when you sign in · press Start in Games > Processes to fix that", _ => " · couldn't confirm they start when you sign in · press Start in Games > Processes to fix that" };
         var unavailable = windows is null || gameRecovery is null || governorRecovery is null || rules is null || rulesState == "notResponding" || rules.Worker.HostRunning is null || rules.Summary.UnreadableRules is { Length: > 0 } || rules.Summary.RulesError is not null || rules.Summary.SecurityProblem is not (null or "missing")
             || games.Any(game => game.Worker.State is null || game.Worker.HostRunning is null);
 
@@ -82,16 +82,16 @@ public partial class RestoreLogsViewModel : PageViewModelBase
             governorRecovery == true ? "Can undo · press Restore under Background limits in Games > Background apps" : governorRecovery == false ? Nothing : CouldNotCheck,
             governorRecovery == true ? "safe" : governorRecovery == false ? "neutral" : "medium"));
         RestoreRows.Add(new StatusLine(
-            "Governor",
+            AppRules,
             rulesState switch
             {
-                "running" => "Running · " + GovernorDisplay.Count(changedApps) + " changed · press Pause governor in Games > Processes to undo" + signInNote,
+                "running" => "Running · " + GovernorDisplay.Count(changedApps) + " changed · pause them in Games > Processes to undo" + signInNote,
                 "pausing" => "Pausing · " + GovernorDisplay.StillHave(changedApps) + " rule settings · open Games > Processes",
-                "paused" => keptApps > 0 ? "Paused · " + GovernorDisplay.Count(keptApps) + " kept a setting the governor couldn't put back" + retry : leftAsSet ? "Paused" : "Paused · settings put back",
-                "off" => rules!.Worker.HostRunning is null ? "Off · couldn't check that every app got its old settings back" : leftoverApps > 0 ? "Off · " + GovernorDisplay.StillHave(leftoverApps) + " rule settings" + retry : rules!.Summary.Rules > 0 ? "Off · no rules are on" : "No rules",
+                "paused" => keptApps > 0 ? "Paused · " + GovernorDisplay.Count(keptApps) + " kept a setting that couldn't be put back" + retry : leftAsSet ? "Paused" : "Paused · settings put back",
+                "off" => rules!.Worker.HostRunning is null ? "Off · couldn't check that every app got its old settings back" : leftoverApps > 0 ? "Off · " + GovernorDisplay.StillHave(leftoverApps) + " rule settings" + retry : rules!.Summary.Rules > 0 ? "Off · no rules are on" : "Nothing set up",
                 "stopped" => "Stopped · " + (leftoverApps > 0
-                    ? GovernorDisplay.StillHave(leftoverApps) + " rule settings · " + (rules!.ScheduledTask?.Restarts == true ? "starts again by itself within a minute · " : "") + "press Pause governor in Games > Processes to undo"
-                    : rules!.ScheduledTask?.Restarts == true ? "starts again by itself within a minute" : "press Start governor in Games > Processes"),
+                    ? GovernorDisplay.StillHave(leftoverApps) + " rule settings · " + (rules!.ScheduledTask?.Restarts == true ? "starts again by itself within a minute · " : "") + "pause them in Games > Processes to undo"
+                    : rules!.ScheduledTask?.Restarts == true ? "starts again by itself within a minute" : "press Start in Games > Processes"),
                 "notResponding" => "Not responding · " + (leftoverApps > 0 ? GovernorDisplay.StillHave(leftoverApps) + " rule settings · " : "") + "open Games > Processes",
                 _ => CouldNotCheck,
             } + (leftAsSet ? " · " + ProcessControlEngine.LeftAsSet : ""),
@@ -115,7 +115,7 @@ public partial class RestoreLogsViewModel : PageViewModelBase
         foreach (var group in (rules is null ? [] : GovernorDisplay.LeftAsSet(rules)).GroupBy(instance => (instance.RuleId, Key: GovernorDisplay.Key(instance.Process))))
         {
             var instance = group.First();
-            HistoryRows.Add(new AuditRow("Recent", "Governor", "neutral", Naming.FriendlyName(Path.GetFileNameWithoutExtension(instance.Process.ExecutablePath)),
+            HistoryRows.Add(new AuditRow("Recent", AppRules, "neutral", Naming.FriendlyName(Path.GetFileNameWithoutExtension(instance.Process.ExecutablePath)),
                 ProcessControlEngine.LeftAsSet, Nothing, "neutral"));
         }
 
@@ -125,9 +125,9 @@ public partial class RestoreLogsViewModel : PageViewModelBase
             var instance = group.First();
             var rule = rules!.Rules.FirstOrDefault(item => item.RuleId == instance.RuleId);
             var outcomes = group.Select(item => GovernorDisplay.Outcome(item, running && rule?.Enabled == true)).ToArray();
-            HistoryRows.Add(new AuditRow("Now", "Governor", "neutral", Naming.FriendlyName(Path.GetFileNameWithoutExtension(instance.Process.ExecutablePath)),
-                (rule?.Name ?? "Saved rule") + (outcomes.Contains("notPutBack") ? " · a setting couldn't be put back" : outcomes.All(item => item == "steppedBack") ? " · another app changed it, so the governor left it alone"
-                    : outcomes.Contains("steppedBack") ? " · another app changed some of its settings, so the governor left those alone" : " · on for this app"), "Undo in Processes", "low"));
+            HistoryRows.Add(new AuditRow("Now", AppRules, "neutral", Naming.FriendlyName(Path.GetFileNameWithoutExtension(instance.Process.ExecutablePath)),
+                (rule?.Name ?? "Saved rule") + (outcomes.Contains("notPutBack") ? " · a setting couldn't be put back" : outcomes.All(item => item == "steppedBack") ? " · another app changed it, so the rule left it alone"
+                    : outcomes.Contains("steppedBack") ? " · another app changed some of its settings, so the rule left those alone" : " · on for this app"), "Undo in Processes", "low"));
         }
 
         var tuneUndo = session is null ? CouldNotCheck : RecoveryAvailable(session.Status, session.Restorable) switch { true => "Undo in Background apps", false => Nothing, null => CouldNotCheck };
@@ -173,6 +173,7 @@ public partial class RestoreLogsViewModel : PageViewModelBase
     }
 
     private const string Nothing = "Nothing to undo";
+    private const string AppRules = "Automatic app rules";
     private const string CouldNotCheck = "Couldn't check";
 
     private static string GameName(ProtectedSessionState state) => Naming.FriendlyName(Path.GetFileNameWithoutExtension(state.Preview.GamePath));

@@ -24,7 +24,7 @@ static class GovernorChecks
     private const string SignedIn = "The Governor is running. It keeps your rules active when this app is closed and starts when you sign in.";
     private const string NoSignIn = "The Governor is running and keeps your rules active when this app is closed, but it won't start when you sign in. Press Start governor to fix that.";
     private const string UnknownSignIn = "The Governor is running and keeps your rules active when this app is closed. The app couldn't confirm it starts when you sign in. Press Start governor to set that up again.";
-    private const string RepairNote = " · press Start governor in Games > Processes to fix that";
+    private const string RepairNote = " · press Start in Games > Processes to fix that";
     private const string Sid = "S-1-5-21-1-2-3-1001";
     private static readonly string Install = OperatingSystem.IsWindows() ? @"C:\Fixture\Install" : "/fixture/install";
     private static readonly string OtherInstall = OperatingSystem.IsWindows() ? @"C:\Fixture\Other" : "/fixture/other";
@@ -74,7 +74,7 @@ static class GovernorChecks
         await panel.RefreshRulesCommand.ExecuteAsync(null);
         var history = new RestoreLogsViewModel();
         await history.InitializeAsync();
-        var undo = history.RestoreRows.Single(row => row.Label == "Governor");
+        var undo = history.RestoreRows.Single(row => row.Label == "Automatic app rules");
         var view = new[]
             {
                 "State: " + panel.GovernorState, "Headline: " + panel.GovernorHeadline, "Detail: " + panel.GovernorDetail,
@@ -82,7 +82,7 @@ static class GovernorChecks
             }
             .Concat(panel.GovernorRules.Select(row => "Rule " + row.Name + ": " + row.Observed.Replace("\n", " | ")))
             .Append("Undo: " + undo.Value + " (" + undo.State + ")")
-            .Concat(history.HistoryRows.Where(row => row.Action == "Governor").Select(row => "History: " + row.Target + " · " + row.Change))
+            .Concat(history.HistoryRows.Where(row => row.Action == "Automatic app rules").Select(row => "History: " + row.Target + " · " + row.Change))
             .ToArray();
         return (view, panel);
     }
@@ -206,7 +206,7 @@ static class GovernorChecks
         Expect(check, view, "Other account: a matching process under another Windows account says so instead of 'not running'",
             "Rule Game rule: Now: game.exe (200) · Running under another Windows account, so this rule doesn't control it.");
         Expect(check, view, "Undo page while running counts apps, not per-field records, and history has one row per app",
-            "Undo: Running · 1 app changed · press Pause governor in Games > Processes to undo (safe)", "History: Google Chrome · Chrome rule · another app changed some of its settings, so the governor left those alone");
+            "Undo: Running · 1 app changed · pause them in Games > Processes to undo (safe)", "History: Google Chrome · Chrome rule · another app changed some of its settings, so the rule left those alone");
 
         view = await View(Snapshot(false, [rule], new(Host("running", []), true, null), task: signedIn, images: new HashSet<string>()));
         Expect(check, view, "Running with no matching process in the process list says the app is not running", "Rule Chrome rule: Now: The app is not running right now.");
@@ -246,20 +246,20 @@ static class GovernorChecks
             "State: paused", "Headline: Paused", "Rule Chrome rule: Now: Not applied right now because the governor is paused.", "Undo: Paused · settings put back (neutral)");
         view = await View(Snapshot(false, [rule], new(Host("running", starting.Instances.ToArray()), true, null), task: signedIn, unapplied: unapplied));
         Expect(check, view, "A running governor shows an applying record with no journal as starting, not as changed",
-            "Rule Chrome rule: Now: chrome.exe (100) · CPU priority starting", "Undo: Running · 0 apps changed · press Pause governor in Games > Processes to undo (safe)");
+            "Rule Chrome rule: Now: chrome.exe (100) · CPU priority starting", "Undo: Running · 0 apps changed · pause them in Games > Processes to undo (safe)");
 
         view = await View(Snapshot(false, [rule], new(stale, false, "The previous worker has exited."), task: restart));
         Expect(check, view, "Stopped with an enabled one-minute task: promises a restart within a minute, rule row says it is stopped",
             "State: stopped", "Headline: Stopped", "Detail: " + Restarts, "Buttons: pause=True start=True",
             "Rule Chrome rule: Now: Not applied right now because the governor is stopped. | chrome.exe (100) · CPU priority still set by this rule",
-            "Undo: Stopped · 1 app still has rule settings · starts again by itself within a minute · press Pause governor in Games > Processes to undo (medium)");
+            "Undo: Stopped · 1 app still has rule settings · starts again by itself within a minute · pause them in Games > Processes to undo (medium)");
         foreach (var (task, label, detail) in new[] { ((GovernorTaskState?)null, "an unreadable", Unknown), (new GovernorTaskState("task", false, false, false), "no", Stays),
                      (new GovernorTaskState("task", true, false, true), "a disabled", Stays), (new GovernorTaskState("task", true, true, false), "a non-repeating", Stays) })
         {
             view = await View(Snapshot(false, [rule], new(Host("stopped", []), false, null), task: task));
             Expect(check, view, "Stopped with " + label + " task never promises a restart within a minute" + (task is null ? " and does not claim it never restarts" : ""),
                 "State: stopped", "Headline: Stopped", "Detail: " + detail, "Rule Chrome rule: Now: Not applied right now because the governor is stopped.",
-                "Undo: Stopped · press Start governor in Games > Processes (medium)");
+                "Undo: Stopped · press Start in Games > Processes (medium)");
         }
         view = await View(Snapshot(false, [rule], new(Host("stopped", [], errors: ["Saved rules could not be read: fixture"]), false, null), task: restart));
         Expect(check, view, "Stopped detail keeps the last worker error", "Detail: Saved rules could not be read: fixture " + Restarts);
@@ -268,7 +268,7 @@ static class GovernorChecks
         Expect(check, view, "Stopped with a one-minute task whose last start failed says so instead of promising a restart",
             "State: stopped", "Headline: Stopped",
             "Detail: The governor stopped and its last automatic start failed (error 0x00000001), so it may not start again by itself. Press Start governor to start it.",
-            "Undo: Stopped · press Start governor in Games > Processes (medium)");
+            "Undo: Stopped · press Start in Games > Processes (medium)");
         view = await View(Snapshot(false, [rule], new(Host("stopped", []), false, null), task: new GovernorTaskState("task", true, true, true, 0x41303)));
         Expect(check, view, "Stopped with a one-minute task that has not run yet still promises the restart", "Detail: " + Restarts);
         foreach (var (code, label) in new[] { (unchecked((int)0x800710E0), "had a launch ignored while it was running"), (unchecked((int)0x00041301), "was running"),
@@ -659,7 +659,7 @@ static class GovernorChecks
         var dotnet = Under(OperatingSystem.IsWindows() ? @"C:\Users\Fixture\.dotnet" : "/fixture/.dotnet", "dotnet.exe");
         var bundled = TaskXml(conhost, Launch(Install, hostExe, "policy-run", request), host);
         var development = TaskXml(conhost, Launch(Install, dotnet, hostDll, "policy-run", request), host);
-        var neutral = new[] { "State: stopped", "Headline: Stopped", "Detail: " + Unknown, "Undo: Stopped · press Start governor in Games > Processes (medium)" };
+        var neutral = new[] { "State: stopped", "Headline: Stopped", "Detail: " + Unknown, "Undo: Stopped · press Start in Games > Processes (medium)" };
         var promise = new[] { "State: stopped", "Headline: Stopped", "Detail: " + Restarts, "Undo: Stopped · starts again by itself within a minute (medium)" };
 
         async Task<string[]> Seen(string xml, int result = 0x00041303, bool enabled = true, GovernorTaskExpectation? want = null)
@@ -701,7 +701,7 @@ static class GovernorChecks
         var unknownInstall = await View(Snapshot(false, [rule], new(Host("stopped", []), false, null), task: GovernorProbe.State(new GovernorTaskFacts("task", bundled, true, 0x00041303), null, now)));
         Expect(check, unknownInstall, "A task is not confirmed when the install it should run is unknown", neutral);
         Expect(check, await Seen(TaskXml(notepad, "", host), enabled: false), "A disabled task with another action still says it won't start by itself",
-            "State: stopped", "Detail: " + Stays, "Undo: Stopped · press Start governor in Games > Processes (medium)");
+            "State: stopped", "Detail: " + Stays, "Undo: Stopped · press Start in Games > Processes (medium)");
 
         Expect(check, await Seen(bundled, unchecked((int)0x80041320)), "A task with the right action whose last start failed because the user was not signed in says the last start failed",
             "Detail: The governor stopped and its last automatic start failed (error 0x80041320), so it may not start again by itself. Press Start governor to start it.");
@@ -719,12 +719,12 @@ static class GovernorChecks
             Expect(check, await Seen(bundled, code), "Stopped with the right task whose last result says " + label + " (0x" + ((uint)code).ToString("X8") + ") never promises a restart and says it can't confirm", neutral);
 
         string[] Alive(string headline, string note, string risk) => ["State: running", "Headline: " + headline, "Detail: 1 rule is on.", "Buttons: pause=True start=" + (risk == "ok" ? "False" : "True"),
-            "Undo: Running · 0 apps changed · press Pause governor in Games > Processes to undo" + note + " (" + (risk == "ok" ? "safe" : "medium") + ")"];
+            "Undo: Running · 0 apps changed · pause them in Games > Processes to undo" + note + " (" + (risk == "ok" ? "safe" : "medium") + ")"];
         async Task<string[]> Live(GovernorTaskState? task) => await View(Snapshot(false, [rule], new(Host("running", []), true, null), task: task));
         GovernorTaskState? Judged(string xml, int result = 0x00041301, bool enabled = true) => GovernorProbe.State(new GovernorTaskFacts("task", xml, enabled, result), expected, now, true);
         var alive = Alive(SignedIn, "", "ok");
-        var noSignIn = Alive(NoSignIn, " · it won't start when you sign in" + RepairNote, "no");
-        var unknownSignIn = Alive(UnknownSignIn, " · couldn't confirm it starts when you sign in" + RepairNote, "unknown");
+        var noSignIn = Alive(NoSignIn, " · they won't start when you sign in" + RepairNote, "no");
+        var unknownSignIn = Alive(UnknownSignIn, " · couldn't confirm they start when you sign in" + RepairNote, "unknown");
         Expect(check, await Live(Judged(bundled)), "Running with the task this install registers still says it starts when you sign in, and offers no repair", alive);
         Expect(check, await Live(Judged(bundled, 0)), "Running with that task whose last result is 0 (a live worker makes 0 harmless) still says it starts when you sign in", alive);
         Expect(check, await Live(Judged(development)), "Running with the development-host task still says it starts when you sign in", alive);
@@ -862,7 +862,7 @@ static class GovernorChecks
             build.Invoke(history, [gameRecovery, governorRecovery, games, windowValue, snapshot]);
             var headline = history.RestoreHeadline;
             var rows = history.RestoreRows.ToArray();
-            var governor = rows.Single(row => row.Label == "Governor").Value;
+            var governor = rows.Single(row => row.Label == "Automatic app rules").Value;
             var nothing = headline == "Nothing to undo.";
             var worker = snapshot?.Worker;
             var unreadable = windowValue is null || gameRecovery is null || governorRecovery is null || games.Any(game => game.Worker.State is null || game.Worker.HostRunning is null) || snapshot is null

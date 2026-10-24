@@ -110,7 +110,7 @@
                                         </Grid.ColumnDefinitions>
                                         <TextBlock Grid.Column="0" Text="{x:Bind Time}" FontSize="12" VerticalAlignment="Center" TextWrapping="Wrap"
                                                    Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
-                                        <TextBlock Grid.Column="1" Text="{x:Bind Action}" FontSize="12" FontWeight="Medium" VerticalAlignment="Center"
+                                        <TextBlock Grid.Column="1" Text="{x:Bind Action}" FontSize="12" FontWeight="Medium" VerticalAlignment="Center" TextWrapping="Wrap"
                                                    Foreground="{x:Bind ActionState, Converter={StaticResource RiskToBrush}}" />
                                         <TextBlock Grid.Column="2" Text="{x:Bind Target}" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center"
                                                    TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextSecondaryBrush}" />
