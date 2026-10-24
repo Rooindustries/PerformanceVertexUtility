@@ -1,4 +1,4 @@
-param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutRoot,[Parameter(Mandatory)][ValidatePattern('^[a-z][a-z0-9-]{0,30}$')][string]$Label,[string]$SettingId='windows.171a004ed11767da',[string]$Search='Telemetry - Disable: system',[string]$HiddenModules='ConfigDefender,Defender,DefenderPerformance',[string]$HiddenCommand='Get-MpPreference',[switch]$BeforeFix,[switch]$BrokenModule,[switch]$Reads)
+param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutRoot,[Parameter(Mandatory)][ValidatePattern('^[a-z][a-z0-9-]{0,30}$')][string]$Label,[string]$SettingId='windows.171a004ed11767da',[string]$Search='Send suspicious files to Microsoft',[string]$HiddenModules='ConfigDefender,Defender,DefenderPerformance',[string]$HiddenCommand='Get-MpPreference',[switch]$BeforeFix,[switch]$BrokenModule,[switch]$Reads)
 $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
 . (Join-Path $Source 'tools\validation\Update\Harness.Common.ps1')

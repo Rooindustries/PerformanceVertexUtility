@@ -833,7 +833,7 @@ public partial class WindowsTweaksViewModel : ObservableObject
     private static string Capitalize(string text) => text.Length == 0 ? text : char.ToUpperInvariant(text[0]) + text[1..];
     private static string Humanize(System.Text.Json.JsonElement value) => value.ValueKind switch
     {
-        System.Text.Json.JsonValueKind.String => value.GetString() switch { "ON" => "On", "OFF" => "Off", "NOTSET" => "Not set", var text => text ?? "" },
+        System.Text.Json.JsonValueKind.String => value.GetString() switch { "ON" => "On", "OFF" => "Off", "NOTSET" => "Windows default", var text => text ?? "" },
         System.Text.Json.JsonValueKind.True => "On", System.Text.Json.JsonValueKind.False => "Off", System.Text.Json.JsonValueKind.Null => "Not set",
         _ => value.ToString(),
     };
