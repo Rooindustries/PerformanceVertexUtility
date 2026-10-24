@@ -75,6 +75,22 @@ public static class Naming
         return char.ToUpper(name[0], CultureInfo.InvariantCulture) + name[1..];
     }
 
+    public static string? KnownName(string? rawName)
+    {
+        if (string.IsNullOrWhiteSpace(rawName))
+        {
+            return null;
+        }
+
+        var name = rawName.Trim();
+        if (name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+        {
+            name = name[..^4];
+        }
+
+        return KnownApps.TryGetValue(name, out var known) ? known : null;
+    }
+
     public static bool IsNonActionable(string? rawName)
     {
         if (string.IsNullOrWhiteSpace(rawName))
