@@ -187,9 +187,10 @@ static class BulkRemovalChecks
             check(model.CanApplyFiles && typeof(BulkRemovalViewModel).GetProperties().All(property => property.Name is not ("FilesReviewed" or "AcceptKeyRecreation")),
                 "A previewed leftover cleanup, which is backed up and can be restored, deletes without an extra review box");
 
+            var viewsPath = Path.Combine("docs", "internal", "frontend", "RooIndustries.OptimizationSuite.App", "Views");
             var repo = new DirectoryInfo(AppContext.BaseDirectory);
-            while (!File.Exists(Path.Combine(repo.FullName, "AGENTS.md"))) repo = repo.Parent ?? throw new DirectoryNotFoundException("Repository root not found from " + AppContext.BaseDirectory);
-            var views = Path.Combine(repo.FullName, "docs", "internal", "frontend", "RooIndustries.OptimizationSuite.App", "Views");
+            while (!File.Exists(Path.Combine(repo.FullName, viewsPath, "BulkRemovalPanel.xaml"))) repo = repo.Parent ?? throw new DirectoryNotFoundException("Remove apps views not found above " + AppContext.BaseDirectory);
+            var views = Path.Combine(repo.FullName, viewsPath);
             var panel = File.ReadAllText(Path.Combine(views, "BulkRemovalPanel.xaml"));
             var panelCode = File.ReadAllText(Path.Combine(views, "BulkRemovalPanel.xaml.cs"));
             var page = File.ReadAllText(Path.Combine(views, "UninstallCleanupPage.xaml"));

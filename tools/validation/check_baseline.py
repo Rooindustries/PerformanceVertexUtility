@@ -340,6 +340,11 @@ def validate(root: Path, contracts_only: bool = False):
         for label, passed in product_name_negative_controls().items():
             if not passed:
                 failures.append(f'Negative control failed: {label} did not match the product name check result')
+        agent_files = runpy.run_path(str(Path(__file__).with_name('check_agent_files.py')))
+        failures.extend(agent_files['check'](root))
+        for label, passed in agent_files['negative_controls']().items():
+            if not passed:
+                failures.append(f'Negative control failed: {label} did not match the agent file check result')
         failures.extend(runpy.run_path(str(Path(__file__).with_name('check_fixture_cleanup.py')))['check'](root))
         for label, passed in fixture_cleanup_negative_controls().items():
             if not passed:
