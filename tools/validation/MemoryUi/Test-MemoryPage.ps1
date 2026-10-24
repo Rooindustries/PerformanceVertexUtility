@@ -69,13 +69,14 @@ function Mend([string]$Path){
  [IO.File]::Move($kept,$Path)
 }
 function Fault([string]$Path){Mend $Path;[IO.File]::Move($Path,(Kept $Path));[IO.File]::WriteAllText($Path,$fault)}
+function MendAll{$failed=@(foreach($path in @($inventory,$classification)){try{Mend $path}catch{$_.Exception.Message}});if($failed.Count){throw ($failed -join ' ')}}
 $dotnet=@((Join-Path $env:LOCALAPPDATA 'Microsoft\dotnet\dotnet.exe'),(Join-Path $env:USERPROFILE '.dotnet\dotnet.exe'),(Join-Path $env:ProgramFiles 'dotnet\dotnet.exe')|Where-Object {Test-Path -LiteralPath $_ -PathType Leaf}|Where-Object {@(& $_ --list-sdks 2>$null).Count}|Select-Object -First 1)
 if(-not$dotnet){throw 'No .NET SDK was found for the test build.'}
 $dotnet=$dotnet[0]
 $app=$null;$status='fail'
 try{
  if(@(Get-Process -Name 'RooIndustries.OptimizationSuite.App' -ErrorAction SilentlyContinue).Count){throw 'The Suite is already open; this check does not take over another window.'}
- foreach($path in @($inventory,$classification)){Mend $path}
+ MendAll
  Initialize-HarnessBuildFolders $Source
  Ensure-HarnessOutputDirectory (Join-Path $Source 'backend\bin')
  $env:MSBUILDDISABLENODEREUSE='1';$env:DOTNET_CLI_USE_MSBUILD_SERVER='0';$env:DOTNET_CLI_TELEMETRY_OPTOUT='1'
@@ -146,7 +147,7 @@ try{
  throw
 }finally{
  try{
-  try{if($app){Stop-HarnessProcess $app}}finally{foreach($path in @($inventory,$classification)){Mend $path}}
+  try{if($app){Stop-HarnessProcess $app}}finally{MendAll}
  }catch{
   $status='fail';$evidence.cleanupError=$_.Exception.Message
   throw
