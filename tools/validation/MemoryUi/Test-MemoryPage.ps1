@@ -154,7 +154,7 @@ try{
  Check ($total.who -ceq 'False Mandatory Label\Medium Mandatory Level') 'the normal-user reads run without admin rights, like an app opened normally' $total.who
  Check ($total.exit -eq '0' -and [long]$total.json.summary.processCount -gt 0 -and [long]$total.json.summary.availableMemoryBytes -gt 0) 'without admin rights the RAM totals still read' ('exit '+$total.exit+', '+$total.json.summary.processCount+' tasks, '+$total.json.summary.availableMemoryBytes+' bytes free')
  $list=LimitedRead $classification
- Check ($list.exit -eq '0' -and @($list.json.processes).Count -gt 0 -and -not @($list.json.errors).Count) 'without admin rights the list of apps using the most RAM still reads' ('exit '+$list.exit+', '+@($list.json.processes).Count+' tasks, '+((@($list.json.errors)|ForEach-Object {$_.code+': '+$_.message}) -join ' | '))
+ Check ($list.exit -eq '0' -and @($list.json.processes).Count -gt 0 -and -not @($list.json.errors|Where-Object {$_}).Count) 'without admin rights the list of apps using the most RAM still reads' ('exit '+$list.exit+', '+@($list.json.processes).Count+' tasks, '+((@($list.json.errors)|ForEach-Object {$_.code+': '+$_.message}) -join ' | '))
  $named=$null;try{$named=& (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe') -NoProfile -ExecutionPolicy Bypass -File $classification 2>$null|Out-String|ConvertFrom-Json}catch{}
  $limitedNamed=@(Named $list);$limitedSeen=@($list.json.processes|ForEach-Object {[int]$_.pid})
  $unnamed=@($named.processes|Where-Object {$_.fileDescription -and $limitedNamed -notcontains [int]$_.pid -and $limitedSeen -contains [int]$_.pid}|ForEach-Object {$_.name})
