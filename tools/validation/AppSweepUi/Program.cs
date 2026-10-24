@@ -975,7 +975,7 @@ if (args is [] or ["history"])
     };
     history = new RestoreLogsViewModel();
     await history.InitializeAsync();
-    Check(!history.HasHistory && history.RestoreRows.Take(2).All(row => row.Value == "Status unavailable"),
+    Check(!history.HasHistory && history.RestoreRows.Take(2).All(row => row.Value == "Couldn't check"),
         "Missing dry-run flags keep populated session history and recovery status unknown");
 
     App.Live.GameStatusModel.DryRun = false;
@@ -984,21 +984,22 @@ if (args is [] or ["history"])
     App.Live.GovernorStatusModel.Status = "active";
     history = new RestoreLogsViewModel();
     await history.InitializeAsync();
-    Check(history.HistoryRows.Select(row => row.Action).SequenceEqual(new[] { "Applied", "Restored", "Restrained" }),
+    Check(history.HistoryRows.Select(row => (row.Action, row.RestoreText)).SequenceEqual(new[] { ("Game priority", "Done"), ("Game priority", "Done"), ("Background limits", "Undo in Background apps") }),
         "Confirmed non-dry session evidence retains applied, restored, and restraint history");
 
     App.Live.GameStatusModel.DryRun = true;
     history = new RestoreLogsViewModel();
     await history.InitializeAsync();
-    Check(history.HistoryRows.Count == 1 && history.HistoryRows.Single().Action == "Restrained",
+    Check(history.HistoryRows.Count == 1 && history.HistoryRows.Single().Action == "Background limits",
         "Dry-run filtering is independent for game and governor session history");
 
     App.Live.GameStatusModel = new GameTuneSessionStatus { Status = "notFound", Restorable = false };
     App.Live.GovernorStatusModel = new ProcessGovernorSessionStatus { Status = "notFound", Restorable = false };
     history = new RestoreLogsViewModel();
     await history.InitializeAsync();
-    Check(history.RestoreRows.Take(2).Select(row => row.Value).SequenceEqual(new[] { "No session backup recorded", "No restraint backup recorded" }),
+    Check(history.RestoreRows.Take(2).Select(row => (row.Label, row.Value)).SequenceEqual(new[] { ("Game priority", "Nothing to undo"), ("Background limits", "Nothing to undo") }),
         "A PC that never ran a session shows no backup instead of unavailable recovery status");
+    await UndoChangesChecks.RunAsync(Check);
 }
 
 if (args is [] or ["responses"] or ["cleanup"] or ["race"])

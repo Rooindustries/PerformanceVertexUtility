@@ -192,8 +192,8 @@ function Read-MigrationTweakState {
     Log ('tweak State bytes=' + $bytes.Length + ' sha256=' + [BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash($bytes)).Replace('-', ''))
     return $saved
 }
-function Has-Profile([string[]]$texts) { for ($i = 0; $i -lt $texts.Count - 1; $i++) { if ($texts[$i] -ceq $Profile -and $texts[$i + 1] -match 'selected settings') { return $true } }; return $false }
-function Undo-Texts { Nav 'Undo changes'; WaitFor { $t = @(Texts); if (($t -contains 'Saved settings') -and ($t -notcontains 'Reading restore state')) { $t } } 60 'Undo page' }
+function Has-Profile([string[]]$texts) { for ($i = 0; $i -lt $texts.Count - 1; $i++) { if ($texts[$i] -ceq $Profile -and $texts[$i + 1] -match 'settings? · undo (it|them) in Windows tweaks$') { return $true } }; return $false }
+function Undo-Texts { Nav 'Undo changes'; WaitFor { $t = @(Texts); if (($t -contains 'What you can undo') -and ($t -notcontains 'Checking what you can undo')) { $t } } 60 'Undo page' }
 function Select-Tab([string]$id) { Invoke-Element (WaitFor { ById $id } 20 $id); Start-Sleep 1 }
 function Find-PickItem($combo, [string]$like) {
     $item = @($combo.FindAll($TS::Descendants, [Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty, $CT::ListItem)) | Where-Object { $_.Current.Name -like $like })[0]
