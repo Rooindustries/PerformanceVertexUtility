@@ -102,6 +102,9 @@ function TaskManager([int]$GamePid,[uint64]$Expected,[string]$Label){
  Note 'details page'
  # Search before looking for the list: a search left over from an earlier, closed game copy shows no list at all.
  $search=WaitFor {$window.FindFirst($TS::Descendants,(Is $A::ControlTypeProperty $CT::Edit))} 15 'the Task Manager search box'
+ # A PID search also lists every process whose PID or name contains those digits (6812 finds 16812), and the click below takes the first row.
+ $clash=@(Get-Process|Where-Object {$_.Id -ne $GamePid -and (([string]$_.Id).Contains([string]$GamePid) -or $_.ProcessName.Contains([string]$GamePid))}|ForEach-Object {$_.ProcessName+':'+$_.Id})
+ if($clash.Count){throw ('Task Manager search for PID '+$GamePid+' also lists '+($clash -join ', ')+', so the game row is not known.')}
  $search.GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern).SetValue([string]$GamePid);Note 'searched';Start-Sleep -Milliseconds 1500
  $list={$window.FindFirst($TS::Descendants,(Is $A::AutomationIdProperty 'cpuList'))}
  WaitFor $list 30 'the Details list'|Out-Null
