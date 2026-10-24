@@ -195,6 +195,8 @@ try{
  Close-Game $controlRoot $control
  (ById 'GamesTab').GetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern).Select();Start-Sleep -Seconds 1
  $recorder=Start-Recorder 'games'
+ # A session from an earlier run opens selected and locks the setup fields, so start a new one the way a player would.
+ Invoke (WaitFor {Enabled 'GameSessionNew'} 60 'New on Games');Start-Sleep -Milliseconds 500
  $path=WaitFor {Enabled 'GameSessionExecutable'} 60 'the game file box'
  $path.GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern).SetValue($gamePath);Start-Sleep -Milliseconds 500
  Invoke (WaitFor {Enabled 'GameSessionRefresh'} 30 'Refresh on Games')
