@@ -111,6 +111,17 @@ static class CoreChoiceChecks
                 "Ticking another preferred CPU on that rule leaves its separate affinity as saved" + " | mask " + page.AffinityMask + " ticked " + string.Join(",", Ticked(page)));
             page.AffinityMask = "0xF000";
             check(Ticked(page).SequenceEqual([0, 1, 2]) && page.CanPreview, "Typing a new affinity for that rule leaves its preferred CPUs as ticked" + " | ticked " + string.Join(",", Ticked(page)));
+
+            App.Operations.ProcessSnapshot = new(identity, Read(0xfffffffeu), TwoCcds().Select(cpu => cpu.Index == 15 ? cpu with { Allocated = true } : cpu).ToArray(), controls);
+            App.Operations.Governor = new(new PolicySummary(false, "missing", false, 1, 1, null), new PolicyWorkerStatus(null, false, null),
+                [GovernorChecks.Rule("fedcba9876543210fedcba9876543210", "Affinity rule", identity.ExecutablePath, true) with { Controls = new() { ["affinity"] = Value(new AffinityState(0, "0xFF00")) } }], new());
+            page = await Open();
+            await page.RefreshRulesCommand.ExecuteAsync(null);
+            page.SelectedRule = page.Rules.Single();
+            await page.EditRuleCommand.ExecuteAsync(null);
+            page.Cpus.Single(cpu => cpu.Cpu.Index == 7).Selected = true;
+            check(ProcessTarget.ParseMask(page.AffinityMask) == 0xFF80 && Ticked(page).SequenceEqual(Enumerable.Range(7, 8)),
+                "Ticking a CPU on a saved rule keeps the rule's CPU that another app reserved, which can't be ticked here" + " | mask " + page.AffinityMask + " ticked " + string.Join(",", Ticked(page)));
         }
         finally { (App.Operations.ProcessSnapshot, App.Live.Inventory, App.Operations.Governor) = (savedSnapshot, savedInventory, savedGovernor); App.Operations.Review = null; }
     }
