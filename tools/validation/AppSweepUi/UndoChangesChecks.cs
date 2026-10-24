@@ -15,7 +15,7 @@ static class UndoChangesChecks
         "Review profile", "saved profiles", "Saved settings", "stepped back", "kept by the governor", "could not", "process settings", "file-permissions-", "restore-point-",
         "AboveNormal", "BelowNormal", "RealTime", "restartRequired", "notFound", "leftAsSet", "steppedBack", "notPutBack", "awaiting-restart", "0x", "\u2014", "  ",
     ];
-    private static readonly string[] UndoColumn = ["Undo in Games", "Undo in Processes", "Undo in Windows tweaks", "Done", "Nothing to undo", "Couldn't check"];
+    private static readonly string[] UndoColumn = ["Undo in Games", "Undo in Background apps", "Undo in Processes", "Undo in Windows tweaks", "Done", "Nothing to undo", "Couldn't check"];
     private static readonly string Folder = OperatingSystem.IsWindows() ? @"C:\Fixture\" : "/fixture/";
 
     public static async Task RunAsync(Action<bool, string> check)
@@ -115,9 +115,9 @@ static class UndoChangesChecks
             "Governor history names the app and its rule and points to Processes for undo\n    got: " + string.Join("\n      ", history.Select(Show)));
         check(history.Where(row => row.Action == "Game priority").Select(row => (row.Change, row.RestoreText)).SequenceEqual(new[]
             {
-                ("CPU priority Normal → Above normal", "Done"), ("CPU priority Below normal → Idle", "Undo in Games"), ("CPU priority back to Normal", "Done"),
+                ("CPU priority Normal → Above normal", "Done"), ("CPU priority Below normal → Idle", "Undo in Background apps"), ("CPU priority back to Normal", "Done"),
             }), "Game priority history says CPU priority in words, which row is the undo, and never offers Undo for a change already put back\n    got: " + string.Join("\n      ", history.Select(Show)));
-        check(history.Contains(("Background limits", "2 background apps", "Lower priority while your game runs", "Undo in Games")), "Background limits history says how many background apps it lowered and where to undo it");
+        check(history.Contains(("Background limits", "2 background apps", "Lower priority while your game runs", "Undo in Background apps")), "Background limits history says how many background apps it lowered and where to undo it");
         check(history.Where(row => row.Action == "Windows tweaks").Select(row => (row.Target, row.Change, row.RestoreText)).SequenceEqual(new[]
             {
                 ("Windows", "Restore point limit · 1 change", "Undo in Windows tweaks"), ("Windows", "File ownership: game.cfg · 1 change", "Undo in Windows tweaks"),

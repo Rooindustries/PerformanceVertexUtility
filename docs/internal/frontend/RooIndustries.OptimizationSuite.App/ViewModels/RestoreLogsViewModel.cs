@@ -89,8 +89,9 @@ public partial class RestoreLogsViewModel : PageViewModelBase
                 "pausing" => "Pausing · " + GovernorDisplay.StillHave(changedApps) + " rule settings · open Games > Processes",
                 "paused" => keptApps > 0 ? "Paused · " + GovernorDisplay.Count(keptApps) + " kept a setting the governor couldn't put back" + retry : leftAsSet ? "Paused" : "Paused · settings put back",
                 "off" => rules!.Worker.HostRunning is null ? "Off · couldn't check that every app got its old settings back" : leftoverApps > 0 ? "Off · " + GovernorDisplay.StillHave(leftoverApps) + " rule settings" + retry : rules!.Summary.Rules > 0 ? "Off · no rules are on" : "No rules",
-                "stopped" => "Stopped · " + (leftoverApps > 0 ? GovernorDisplay.StillHave(leftoverApps) + " rule settings · " : "")
-                    + (rules!.ScheduledTask?.Restarts == true ? "starts again by itself within a minute" : "press Start governor in Games > Processes"),
+                "stopped" => "Stopped · " + (leftoverApps > 0
+                    ? GovernorDisplay.StillHave(leftoverApps) + " rule settings · " + (rules!.ScheduledTask?.Restarts == true ? "starts again by itself within a minute · " : "") + "press Pause governor in Games > Processes to undo"
+                    : rules!.ScheduledTask?.Restarts == true ? "starts again by itself within a minute" : "press Start governor in Games > Processes"),
                 "notResponding" => "Not responding · " + (leftoverApps > 0 ? GovernorDisplay.StillHave(leftoverApps) + " rule settings · " : "") + "open Games > Processes",
                 _ => CouldNotCheck,
             } + (leftAsSet ? " · " + ProcessControlEngine.LeftAsSet : ""),
@@ -129,7 +130,7 @@ public partial class RestoreLogsViewModel : PageViewModelBase
                     : outcomes.Contains("steppedBack") ? " · another app changed some of its settings, so the governor left those alone" : " · on for this app"), "Undo in Processes", "low"));
         }
 
-        var tuneUndo = session is null ? CouldNotCheck : RecoveryAvailable(session.Status, session.Restorable) switch { true => "Undo in Games", false => Nothing, null => CouldNotCheck };
+        var tuneUndo = session is null ? CouldNotCheck : RecoveryAvailable(session.Status, session.Restorable) switch { true => "Undo in Background apps", false => Nothing, null => CouldNotCheck };
         var restored = (session?.RestoredItems ?? []).Select(item => item.ProcessId).ToHashSet();
         foreach (var item in session is { DryRun: false } ? session.ChangedItems ?? [] : [])
         {
@@ -150,7 +151,7 @@ public partial class RestoreLogsViewModel : PageViewModelBase
         {
             HistoryRows.Add(new AuditRow("Recent", "Background limits", "medium",
                 restraints + (restraints == 1 ? " background app" : " background apps"),
-                "Lower priority while your game runs", RecoveryAvailable(governor!.Status, governor.Restorable) switch { true => "Undo in Games", false => Nothing, null => CouldNotCheck }, "low"));
+                "Lower priority while your game runs", RecoveryAvailable(governor!.Status, governor.Restorable) switch { true => "Undo in Background apps", false => Nothing, null => CouldNotCheck }, "low"));
         }
 
         foreach (var game in games.Where(game => game.Worker.State is not null))

@@ -252,7 +252,7 @@ static class GovernorChecks
         Expect(check, view, "Stopped with an enabled one-minute task: promises a restart within a minute, rule row says it is stopped",
             "State: stopped", "Headline: Stopped", "Detail: " + Restarts, "Buttons: pause=True start=True",
             "Rule Chrome rule: Now: Not applied right now because the governor is stopped. | chrome.exe (100) · CPU priority still set by this rule",
-            "Undo: Stopped · 1 app still has rule settings · starts again by itself within a minute (medium)");
+            "Undo: Stopped · 1 app still has rule settings · starts again by itself within a minute · press Pause governor in Games > Processes to undo (medium)");
         foreach (var (task, label, detail) in new[] { ((GovernorTaskState?)null, "an unreadable", Unknown), (new GovernorTaskState("task", false, false, false), "no", Stays),
                      (new GovernorTaskState("task", true, false, true), "a disabled", Stays), (new GovernorTaskState("task", true, true, false), "a non-repeating", Stays) })
         {
