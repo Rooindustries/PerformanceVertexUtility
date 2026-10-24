@@ -56,6 +56,8 @@ static class HighIoChecks
         try
         {
             using (var existing = Registry.LocalMachine.OpenSubKey(ImageKey)) { if (existing is not null) throw new InvalidOperationException("Fixture registry key already exists; do not overwrite it."); }
+            Until(() => { var running = Process.GetProcessesByName(Path.GetFileNameWithoutExtension(GamePath)); try { return running.Length == 0; } finally { foreach (var process in running) process.Dispose(); } },
+                "A probe game from an earlier suite is still running, so a session can't be reviewed for it.", 60);
             fixture.Secure(); launcherCopy.Create(); stubCopy.Create();
             launcher = Start(LauncherPath, "--high-io-launcher", root); identities.Add(launcher, FixtureProcess.Started(launcher, evidence));
             Until(() => File.Exists(Path.Combine(root, "launcher-ready")), "Fixture launcher not ready.");
