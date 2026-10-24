@@ -82,7 +82,7 @@
                     <StackPanel>
                         <Grid ColumnSpacing="12" Padding="18,16,18,12">
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="86" />
+                                <ColumnDefinition Width="120" />
                                 <ColumnDefinition Width="130" />
                                 <ColumnDefinition Width="1.5*" />
                                 <ColumnDefinition Width="1.8*" />
@@ -97,18 +97,18 @@
                         <Rectangle Height="1" Fill="{StaticResource RooIndustriesBorderBrush}" />
                         <ListView SelectionMode="None" IsItemClickEnabled="False" Background="Transparent" Padding="0"
                                   ScrollViewer.VerticalScrollMode="Disabled" ScrollViewer.HorizontalScrollMode="Disabled"
-                                  ItemsSource="{x:Bind ViewModel.HistoryRows}">
+                                  ItemContainerStyle="{StaticResource StretchListViewItemStyle}" ItemsSource="{x:Bind ViewModel.HistoryRows}">
                             <ListView.ItemTemplate>
                                 <DataTemplate x:DataType="vm:AuditRow">
                                     <Grid ColumnSpacing="12" Padding="18,11" VerticalAlignment="Center">
                                         <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="86" />
+                                            <ColumnDefinition Width="120" />
                                             <ColumnDefinition Width="130" />
                                             <ColumnDefinition Width="1.5*" />
                                             <ColumnDefinition Width="1.8*" />
                                             <ColumnDefinition Width="150" />
                                         </Grid.ColumnDefinitions>
-                                        <TextBlock Grid.Column="0" Text="{x:Bind Time}" FontSize="12" VerticalAlignment="Center"
+                                        <TextBlock Grid.Column="0" Text="{x:Bind Time}" FontSize="12" VerticalAlignment="Center" TextWrapping="Wrap"
                                                    Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                                         <TextBlock Grid.Column="1" Text="{x:Bind Action}" FontSize="12" FontWeight="Medium" VerticalAlignment="Center"
                                                    Foreground="{x:Bind ActionState, Converter={StaticResource RiskToBrush}}" />

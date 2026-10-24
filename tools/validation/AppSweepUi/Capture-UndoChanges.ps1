@@ -13,6 +13,8 @@ public static class RooIndustriesUndoCapture {
  [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
  [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr h,IntPtr after,int x,int y,int w,int hgt,uint flags);
+ [StructLayout(LayoutKind.Sequential)] public struct Rect { public int Left, Top, Right, Bottom; }
+ [DllImport("dwmapi.dll")] public static extern int DwmGetWindowAttribute(IntPtr h,int attribute,out Rect value,int size);
 }
 '@
 [RooIndustriesUndoCapture]::SetProcessDPIAware()|Out-Null
@@ -23,9 +25,11 @@ $evidence=[ordered]@{label=$Label;expect=$Expect;texts=@();buttons=@();checkBoxe
 function WaitFor([scriptblock]$Probe,[double]$Limit,[string]$What){$deadline=[DateTime]::UtcNow.AddSeconds($Limit);while([DateTime]::UtcNow -lt $deadline){try{$value=& $Probe}catch{$value=$null};if($value){return $value};Start-Sleep -Milliseconds 200};throw ('Timed out waiting for '+$What)}
 function Names($Root,$Type){@($Root.FindAll($TS::Descendants,[Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty,$Type))|ForEach-Object {$_.Current.Name}|Where-Object {$_})}
 function Shot($Window,[string]$Path){
- $r=$Window.Current.BoundingRectangle
- $bitmap=[Drawing.Bitmap]::new([int]$r.Width,[int]$r.Height);$graphics=[Drawing.Graphics]::FromImage($bitmap)
- try{$graphics.CopyFromScreen([int]$r.X,[int]$r.Y,0,0,$bitmap.Size);$bitmap.Save($Path,[Drawing.Imaging.ImageFormat]::Png)}finally{$graphics.Dispose();$bitmap.Dispose()}
+ $r=[RooIndustriesUndoCapture+Rect]::new()
+ $b=$Window.Current.BoundingRectangle
+ if([RooIndustriesUndoCapture]::DwmGetWindowAttribute([IntPtr]::new([long]$Window.Current.NativeWindowHandle),9,[ref]$r,16) -eq 0){$x=$r.Left;$y=$r.Top;$w=$r.Right-$r.Left;$h=$r.Bottom-$r.Top}else{$x=[int]$b.X;$y=[int]$b.Y;$w=[int]$b.Width;$h=[int]$b.Height}
+ $bitmap=[Drawing.Bitmap]::new($w,$h);$graphics=[Drawing.Graphics]::FromImage($bitmap)
+ try{$graphics.CopyFromScreen($x,$y,0,0,$bitmap.Size);$bitmap.Save($Path,[Drawing.Imaging.ImageFormat]::Png)}finally{$graphics.Dispose();$bitmap.Dispose()}
 }
 $dotnet=@((Join-Path $env:LOCALAPPDATA 'Microsoft\dotnet\dotnet.exe'),(Join-Path $env:USERPROFILE '.dotnet\dotnet.exe'),(Join-Path $env:ProgramFiles 'dotnet\dotnet.exe')|Where-Object {Test-Path -LiteralPath $_ -PathType Leaf}|Where-Object {@(& $_ --list-sdks 2>$null).Count}|Select-Object -First 1)
 if(-not$dotnet){throw 'No .NET SDK was found for the test build.'}
