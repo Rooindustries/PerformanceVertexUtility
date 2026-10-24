@@ -915,7 +915,10 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
     }
 
     private static string Plain(string message, Exception error)
-        => error.Message is AppLog.MissingFiles or AppLog.TimedOut or RunningChanges.Installing ? error.Message : Plain(message, error.ToString());
+    {
+        AppLog.Write(nameof(UninstallCleanupViewModel), error.ToString());
+        return error.Message is AppLog.MissingFiles or AppLog.TimedOut or RunningChanges.Installing ? error.Message : message;
+    }
 
     private static bool HasBlockingErrors(IEnumerable<IssueModel>? errors)
         => errors?.Any(error => error.Blocking) == true;

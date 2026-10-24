@@ -553,9 +553,8 @@ public partial class BulkRemovalViewModel : ObservableObject
     private readonly HashSet<string> _logged = new(StringComparer.Ordinal);
     private static string Plain(string message, Exception error)
     {
-        if (error.Message is RunningChanges.Installing or AppLog.TimedOut or AppLog.MissingFiles) return error.Message;
         AppLog.Write(nameof(BulkRemovalViewModel), error.ToString());
-        return message;
+        return error.Message is RunningChanges.Installing or AppLog.TimedOut or AppLog.MissingFiles ? error.Message : message;
     }
     private void Log(string detail) { if (!string.IsNullOrWhiteSpace(detail) && _logged.Add(detail)) AppLog.Write(nameof(BulkRemovalViewModel), detail); }
     private void RefreshCommands()
