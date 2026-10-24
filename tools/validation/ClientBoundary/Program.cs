@@ -13,6 +13,7 @@ if (args is [var hostDll, var hostAction, "-"] && Path.GetFileName(hostDll) == "
 if (Path.GetFileName(System.Reflection.Assembly.GetEntryAssembly()?.Location) == "Optimizer.Host.dll") { await HostFixture.Run(args); return; }
 if (args is [_, "--game-session-display"]) { GameSessionChecks.Display(); return; }
 if (args is [var presetRepo, "--launch-presets"]) { LaunchPresetChecks.Run(presetRepo); return; }
+if (args is [var presetSessionRepo, "--launch-preset-session"]) { await LaunchProfileChecks.Presets(presetSessionRepo); return; }
 if (args is [var gameRepo, "--game-sessions"]) { await GameSessionChecks.Run(gameRepo); return; }
 if (args is [var profileRepo, "--launch-profiles" or "--session-recovery"]) { await LaunchProfileChecks.Run(profileRepo, args[1] == "--session-recovery"); return; }
 if (args is [var cleanupRepo, "--cleanup-failure"]) { await LaunchProfileChecks.CleanupFailure(cleanupRepo); return; }
