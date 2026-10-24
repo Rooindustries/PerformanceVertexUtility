@@ -158,7 +158,7 @@ try{
  $named=$null;try{$named=& (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe') -NoProfile -ExecutionPolicy Bypass -File $classification 2>$null|Out-String|ConvertFrom-Json}catch{}
  $limitedNamed=@(Named $list);$limitedSeen=@($list.json.processes|ForEach-Object {[int]$_.pid})
  $unnamed=@($named.processes|Where-Object {$_.fileDescription -and $limitedNamed -notcontains [int]$_.pid -and $limitedSeen -contains [int]$_.pid}|ForEach-Object {$_.name})
- Check ($null -ne $named -and @(Named $named).Count -gt 0 -and -not $unnamed.Count) 'without admin rights every app keeps the name Windows has for it' (($unnamed|Select-Object -Unique -First 12) -join ', ')
+ Check ($null -ne $named -and @(Named $named).Count -gt 0 -and -not $unnamed.Count) 'without admin rights every app keeps the name Windows has for it' ('admin read named '+@(Named $named).Count+', normal-user read named '+$limitedNamed.Count+' of '+$limitedSeen.Count+'; missing: '+(($unnamed|Select-Object -Unique -First 12) -join ', '))
  foreach($path in @($inventory,$classification)){Fault $path}
  $env:DOTNET_ROOT=Split-Path $dotnet -Parent;$env:ROO_INDUSTRIES_DOTNET_EXE=$dotnet;$env:ROO_INDUSTRIES_INITIAL_NAV='memory'
  $app=Start-OwnedProcess -FilePath $exe[0].FullName -WindowStyle Normal -Purpose 'suite-test-build' -Lifetime invocation
