@@ -106,6 +106,11 @@ static class UndoChangesChecks
         var history = page.HistoryRows.Select(row => (row.Action, row.Target, row.Change, row.RestoreText)).ToArray();
         string Show((string Action, string Target, string Change, string RestoreText) row) => row.Action + " | " + row.Target + " | " + row.Change + " | " + row.RestoreText;
         check(history.All(row => UndoColumn.Contains(row.RestoreText)), "Every history row's Undo column says where to undo it, that it's done, or that there's nothing to undo\n    got: " + string.Join("\n      ", history.Select(Show)));
+        check(history.Where(row => row.Action == "Game session").Select(row => (row.Change, row.RestoreText)).SequenceEqual(new[]
+            {
+                ("On · press Stop and restore in Games to undo", "Undo in Games"), ("Settings put back", "Done"), ("Settings put back · restart the game to clear its launch priorities", "Done"),
+                ("Didn't finish putting settings back · press Recover settings in Games", "Undo in Games"), ("Couldn't check this session · open Games", "Undo in Games"),
+            }), "Game session history says Done once its settings are back and points to Games for every session that still needs Stop, Recover or a look\n    got: " + string.Join("\n      ", history.Select(Show)));
         check(history.Contains(("Governor", "OBS Studio", ProcessControlEngine.LeftAsSet, "Nothing to undo")) && history.Contains(("Governor", "Google Chrome", "Chrome rule · on for this app", "Undo in Processes")),
             "Governor history names the app and its rule and points to Processes for undo\n    got: " + string.Join("\n      ", history.Select(Show)));
         check(history.Where(row => row.Action == "Game priority").Select(row => (row.Change, row.RestoreText)).SequenceEqual(new[]
