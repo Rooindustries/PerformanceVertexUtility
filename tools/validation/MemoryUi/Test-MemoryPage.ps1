@@ -31,6 +31,7 @@ public static class RooIndustriesMemoryUser {
  [DllImport("advapi32.dll", SetLastError=true)] static extern bool SetTokenInformation(IntPtr token, int infoClass, ref IntPtr info, int length);
  [DllImport("advapi32.dll", SetLastError=true, CharSet=CharSet.Unicode)] static extern bool ConvertStringSecurityDescriptorToSecurityDescriptor(string text, uint revision, out IntPtr descriptor, IntPtr size);
  [DllImport("advapi32.dll", SetLastError=true)] static extern bool GetSecurityDescriptorDacl(IntPtr descriptor, out bool present, out IntPtr dacl, out bool defaulted);
+ [DllImport("advapi32.dll", SetLastError=true)] static extern bool SetKernelObjectSecurity(IntPtr handle, uint information, IntPtr descriptor);
  [DllImport("kernel32.dll")] static extern uint WaitForSingleObject(IntPtr handle, uint milliseconds);
  [DllImport("kernel32.dll")] static extern bool GetExitCodeProcess(IntPtr process, out uint code);
  [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr handle);
@@ -44,10 +45,11 @@ public static class RooIndustriesMemoryUser {
    if (!OpenProcessToken(GetCurrentProcess(), 0x0001 | 0x0002 | 0x0008 | 0x0080, out own)) throw new Win32Exception();
    SidAndAttributes[] disable = { new SidAndAttributes { Sid = admins }, new SidAndAttributes { Sid = localAdmin } };
    if (!CreateRestrictedToken(own, 0x1 | 0x4, (uint)disable.Length, disable, 0, IntPtr.Zero, 0, IntPtr.Zero, out user)) throw new Win32Exception();
+   if (!ConvertStringSecurityDescriptorToSecurityDescriptor("D:(A;;GA;;;" + me + ")(A;;GA;;;SY)", 1, out descriptor, IntPtr.Zero)) throw new Win32Exception();
+   if (!SetKernelObjectSecurity(user, 0x4, descriptor)) throw new Win32Exception();
    SidAndAttributes label = new SidAndAttributes { Sid = medium, Attributes = 0x20 };
    if (!SetTokenInformation(user, 25, ref label, Marshal.SizeOf(typeof(SidAndAttributes)) + GetLengthSid(medium))) throw new Win32Exception();
    if (!SetTokenInformation(user, 4, ref owner, IntPtr.Size)) throw new Win32Exception();
-   if (!ConvertStringSecurityDescriptorToSecurityDescriptor("D:(A;;GA;;;" + me + ")(A;;GA;;;SY)", 1, out descriptor, IntPtr.Zero)) throw new Win32Exception();
    bool present, defaulted; IntPtr dacl; if (!GetSecurityDescriptorDacl(descriptor, out present, out dacl, out defaulted)) throw new Win32Exception();
    if (!SetTokenInformation(user, 6, ref dacl, IntPtr.Size)) throw new Win32Exception();
    StartupInfo startup = new StartupInfo { cb = Marshal.SizeOf(typeof(StartupInfo)) };
