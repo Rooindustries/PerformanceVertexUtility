@@ -8,7 +8,7 @@ namespace RooIndustries.Optimizer;
 internal static class GovernorClaims
 {
     private sealed record Check(string Field, JsonElement? Original, JsonElement? Proposed);
-    private sealed record Claim(string Feature, int ProcessId, long? Created, string? ExecutablePath, string? ImageName, string[] Fields, Check[]? Checks = null, string? Journal = null);
+    private sealed record Claim(string Feature, int ProcessId, long? Created, string? ExecutablePath, string? ImageName, string[] Fields, Check[]? Checks = null, string? Journal = null, string? Record = null);
     private sealed record Doubt(string Feature, string Path, string Reason, string[] Fields);
 
     private sealed class Evidence(string dataRoot, HashSet<string> wanted)
@@ -70,10 +70,10 @@ internal static class GovernorClaims
     {
         var claims = Overlapping(identity, field, dataRoot, repoRoot, journalPath, out _);
         var journals = claims.Where(claim => claim.Journal is { } path && StartsFrom(path, field, current, desired)).Select(claim => claim.Journal!).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
-        var released = claims.Where(claim => claim.Journal is null && claim.Checks is not null)
+        var released = claims.Where(claim => claim.Journal is null && claim.Checks is not null && claim.Record is not null)
             .SelectMany(claim => claim.Checks!.Where(check => check.Field == field && check.Original is { } original && Same(field, desired, original) == true &&
-                (check.Proposed is not { } proposed || Same(field, current, proposed) == true)).Select(check => new ReleasedClaim(claim.Feature, check.Original!.Value)))
-            .DistinctBy(claim => claim.Feature + "\n" + claim.Original.GetRawText()).ToArray();
+                (check.Proposed is not { } proposed || Same(field, current, proposed) == true)).Select(check => new ReleasedClaim(claim.Feature, check.Original!.Value, claim.Record!)))
+            .DistinctBy(claim => claim.Feature + "\n" + claim.Original.GetRawText() + "\n" + claim.Record).ToArray();
         return (journals, released);
     }
 
@@ -364,7 +364,9 @@ internal static class GovernorClaims
         }
         var started = Time(Text(snapshot, "processStartTimeUtc"));
         if (!string.IsNullOrWhiteSpace(name) && !name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) name += ".exe";
-        evidence.Claims.Add(new(feature, processId, started?.ToFileTimeUtc(), executablePath, name, checks.Keys.ToArray(), checks.Values.ToArray()));
+        var stamp = Text(snapshot, "capturedAtUtc");
+        var record = string.IsNullOrWhiteSpace(stamp) ? null : (Text(snapshot, "sessionId") ?? "") + "|" + stamp;
+        evidence.Claims.Add(new(feature, processId, started?.ToFileTimeUtc(), executablePath, name, checks.Keys.ToArray(), checks.Values.ToArray(), Record: record));
     }
 
     private static JsonElement? Original(JsonElement snapshot, string field) =>

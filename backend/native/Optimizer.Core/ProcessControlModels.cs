@@ -107,7 +107,7 @@ public sealed class ControlChange
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public List<ReleasedClaim>? Released { get; set; }
 }
 
-public sealed record ReleasedClaim(string Feature, JsonElement Original);
+public sealed record ReleasedClaim(string Feature, JsonElement Original, string Record);
 
 public sealed class ProcessControlJournal
 {

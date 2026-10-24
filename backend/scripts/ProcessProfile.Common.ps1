@@ -1130,11 +1130,19 @@ function Get-RooIndustriesRestoreControlOwnershipReason {
     return $null
 }
 
+function Get-RooIndustriesSnapshotRecord {
+    param($Snapshot)
+    $stamp = [string](Get-RooIndustriesPropertyValue $Snapshot 'capturedAtUtc' '')
+    if ([string]::IsNullOrWhiteSpace($stamp)) { return '' }
+    return [string](Get-RooIndustriesPropertyValue $Snapshot 'sessionId' '') + '|' + $stamp
+}
+
 function Test-RooIndustriesReleasedControl {
-    param([long]$ProcessId, [long]$Created, [string]$Control, [string]$Feature, $Original)
+    param([long]$ProcessId, [long]$Created, [string]$Control, [string]$Feature, $Original, [string]$Record)
+    if ([string]::IsNullOrWhiteSpace($Record)) { return $false }
     $native = switch ($Control) { 'priorityClass' { 'cpuPriority' } 'affinityMask' { 'affinity' } default { $Control } }
     foreach ($release in @((Read-RooIndustriesProcessOperationOwnership).releases)) {
-        if ($release.processId -eq $ProcessId -and $release.creationTimeFileTimeUtc -eq $Created -and $release.control -ceq $native -and $release.feature -ceq $Feature -and
+        if ($release.processId -eq $ProcessId -and $release.creationTimeFileTimeUtc -eq $Created -and $release.control -ceq $native -and $release.feature -ceq $Feature -and $release.record -ceq $Record -and
             (Test-RooIndustriesControlValueEqual $Control $release.original $Original)) { return $true }
     }
     return $false
@@ -1396,7 +1404,7 @@ function Confirm-RooIndustriesRestoreControl {
                 if (Test-RooIndustriesControlValueEqual $control $now $original) {
                     $candidateConfirmed = $true
                 } elseif ($Feature -and $applied.known -and (Test-RooIndustriesControlValueEqual $control $now $applied.value) -and
-                    (Test-RooIndustriesReleasedControl $savedId $savedBirth $control $Feature $original)) {
+                    (Test-RooIndustriesReleasedControl $savedId $savedBirth $control $Feature $original (Get-RooIndustriesSnapshotRecord $Snapshot))) {
                     $candidateConfirmed = $true
                 } elseif (-not $applied.known -or -not $applied.verified) {
                     throw $script:RooIndustriesUnprovenWrite

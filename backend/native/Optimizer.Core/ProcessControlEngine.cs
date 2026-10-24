@@ -313,7 +313,7 @@ public sealed class ProcessControlEngine
                             var (stacked, released) = owned.SetBack(journal.Preview.Identity, change.Name, current, change.Desired);
                             if (released.Length > 0)
                             {
-                                change.Released = (change.Released ?? []).Concat(released).DistinctBy(claim => claim.Feature + "\n" + claim.Original.GetRawText()).ToList();
+                                change.Released = (change.Released ?? []).Concat(released).DistinctBy(claim => claim.Feature + "\n" + claim.Original.GetRawText() + "\n" + claim.Record).ToList();
                                 Save(journalPath, journal);
                             }
                             if (stacked.Length > 0) { current = Release(change.Name, stacked); continue; }

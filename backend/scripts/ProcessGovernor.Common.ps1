@@ -711,7 +711,7 @@ function Test-RooIndustriesGovernorReleasedControl {
     $field=switch($Control){'priorityClass'{'originalPriorityClass'}'affinityMask'{'originalAffinityMask'}'ioPriority'{'originalIoPriority'}'memoryPriority'{'originalMemoryPriority'}'gpuPriority'{'originalGpuPriority'}default{$null}}
     $started=[DateTime]::MinValue
     if($null -eq $field -or -not [DateTime]::TryParse([string](Get-RooIndustriesPropertyValue $Snapshot 'processStartTimeUtc' ''),[Globalization.CultureInfo]::InvariantCulture,[Globalization.DateTimeStyles]::RoundtripKind,[ref]$started)){return $false}
-    return Test-RooIndustriesReleasedControl ([long](Get-RooIndustriesPropertyValue $Snapshot 'processId' 0)) $started.ToUniversalTime().ToFileTimeUtc() $Control 'Background limits' (Get-RooIndustriesPropertyValue $Snapshot $field $null)
+    return Test-RooIndustriesReleasedControl ([long](Get-RooIndustriesPropertyValue $Snapshot 'processId' 0)) $started.ToUniversalTime().ToFileTimeUtc() $Control 'Background limits' (Get-RooIndustriesPropertyValue $Snapshot $field $null) (Get-RooIndustriesSnapshotRecord $Snapshot)
 }
 
 function Select-RooIndustriesGovernorOwnedRestoreChanges {

@@ -104,8 +104,8 @@ function Read-RooIndustriesProcessOperationOwnership {
             $releasedBy.creationTimeFileTimeUtc -is [string] -and [long]::TryParse($releasedBy.creationTimeFileTimeUtc, [ref]$releasedAt)) {
             foreach ($change in $released) {
                 foreach ($claim in @($change.released)) {
-                    if ($claim -is [pscustomobject] -and $claim.feature -is [string]) {
-                        $releases.Add([pscustomobject]@{ processId = [long]$releasedBy.processId; creationTimeFileTimeUtc = $releasedAt; control = $change.name; feature = $claim.feature; original = $claim.original }) | Out-Null
+                    if ($claim -is [pscustomobject] -and $claim.feature -is [string] -and $claim.record -is [string] -and $claim.record) {
+                        $releases.Add([pscustomobject]@{ processId = [long]$releasedBy.processId; creationTimeFileTimeUtc = $releasedAt; control = $change.name; feature = $claim.feature; original = $claim.original; record = $claim.record }) | Out-Null
                     }
                 }
             }
