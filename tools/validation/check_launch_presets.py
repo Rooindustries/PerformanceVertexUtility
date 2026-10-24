@@ -36,7 +36,7 @@ def negative_controls(catalog, schema):
         presets.append(dict(copy.deepcopy(presets[0]), **fields))
     cases = {
         'preset with Realtime CPU priority': ('settings/cpuPriority: ', lambda presets: presets[0]['settings'].update(cpuPriority='Realtime')),
-        'preset with High I/O priority': ('settings/ioPriority: ', lambda presets: presets[0]['settings'].update(ioPriority=3)),
+        'preset with disk priority above High': ('settings/ioPriority: ', lambda presets: presets[0]['settings'].update(ioPriority=4)),
         'preset with Realtime GPU priority': ('settings/gpuPriority: ', lambda presets: presets[0]['settings'].update(gpuPriority=5)),
         'preset with I/O priority written as true': ('settings/ioPriority: ', lambda presets: presets[0]['settings'].update(ioPriority=True)),
         'preset with a setting the session form lacks': ("'affinity' was unexpected", lambda presets: presets[0]['settings'].update(affinity={'group': 0, 'mask': '0x1'})),

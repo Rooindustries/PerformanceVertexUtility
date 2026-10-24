@@ -57,8 +57,8 @@ static class CoreChoiceChecks
             await page.PreviewCommand.ExecuteAsync(null);
             check(Mask(requested) == 0xFFFF,
                 "Restricting a game to the ticked CPUs 0-15 (CPUs 16-31 off) reviews exactly those CPUs, not the CPUs it runs on now" + " | reviewed mask 0x" + Mask(requested).ToString("X") + " | " + page.Status + " " + page.Detail);
-            check(page.ReviewSummary.Contains("CPU affinity: group 0 · 0xFFFFFFFF → group 0 · 0xFFFF", StringComparison.Ordinal),
-                "The review shows the game moving from all 32 CPUs to CPUs 0-15" + " | " + page.ReviewSummary);
+            check(page.ReviewSummary.Contains("CPU cores: Cores 1–32 → Cores 1–16", StringComparison.Ordinal),
+                "The review shows the game moving from all 32 cores to cores 1–16" + " | " + page.ReviewSummary);
 
             page = await Open();
             page.SetHardAffinity = true;
@@ -145,33 +145,36 @@ static class CoreChoiceChecks
         {
             App.Operations.ProcessSnapshot = new(launcher, Read(0xfffffffeu), topology, Controls(mask));
             var games = new GameSessionViewModel { GamePath = @"C:\Games\game.exe" };
-            games.SelectedLauncher = new CpuProcessChoice(77, "launcher.exe");
+            games.SelectedLauncher = new GameLauncherChoice(77, "launcher.exe", "Launcher");
             return games;
         }
         string Offered(GameSessionViewModel games) => string.Join(", ", games.CoreChoices.Select(choice => choice.Label + " " + choice.Affinity.Mask));
+        ulong Ticked(GameSessionViewModel games) => games.Cores.Where(box => box.IsChecked).Aggregate(0UL, (mask, box) => mask | box.Bit);
         try
         {
             var games = Open(TwoCcds(), "0xFFFFFFFF");
             var io = games.Settings.Single(setting => setting.Name == "ioPriority");
-            check(io.Options.Any(option => option.Value?.GetInt32() == 3), "The Games tab offers High I/O priority for the game" + " | offered: " + string.Join(", ", io.Options.Select(option => option.Label)));
+            check(io.Options.Any(option => option.Value?.GetInt32() == 3), "The Games tab offers High disk priority for the game" + " | offered: " + string.Join(", ", io.Options.Select(option => option.Label)));
             var first = games.CoreChoices.FirstOrDefault(choice => ProcessTarget.ParseMask(choice.Affinity.Mask) == 0xFFFF);
             var second = games.CoreChoices.FirstOrDefault(choice => ProcessTarget.ParseMask(choice.Affinity.Mask) == 0xFFFF0000);
-            check(first is not null && second is not null && games.SelectedCores == games.CoreChoices[0] && ProcessTarget.ParseMask(games.CoreChoices[0].Affinity.Mask) == 0xFFFFFFFF,
-                "On a CPU with two last-level cache groups, CPU cores offers each group, and all cores stay the default" + " | offered: " + Offered(games));
-            check(first!.Label == "Cache group 1 (CPUs 0-15)" && second!.Label == "Cache group 2 (CPUs 16-31)", "Each cache group names its CPUs" + " | offered: " + Offered(games));
-            games.SelectedCores = first;
+            check(first is not null && second is not null && games.CoreChoices.Count == 2 && games.AllCores && games.AffinityMask == "0xFFFFFFFF",
+                "On a CPU with two last-level cache groups, the core quick choices offer each group, and all cores stay the default" + " | offered: " + Offered(games));
+            check(first!.Label == "Cache group 1 (cores 1–16)" && second!.Label == "Cache group 2 (cores 17–32)", "Each cache group names its cores the way the core boxes do" + " | offered: " + Offered(games));
+            games.UseCoreChoice(first);
+            check(games.AffinityMask == "0xFFFF" && Ticked(games) == 0xFFFF && !games.AllCores, "Picking the first cache group ticks exactly its cores" + " | mask " + games.AffinityMask);
             io.Selected = io.Options.Single(option => option.Value?.GetInt32() == 3);
-            games.AcceptLauncherScope = true;
             await games.PreviewCommand.ExecuteAsync(null);
             check(requested is not null && requested["ioPriority"].GetInt32() == 3 && Mask(requested) == 0xFFFF && games.CanStart,
-                "Reviewing High I/O with the first cache group sends exactly those settings and Start can be pressed" + " | " + games.Status + " " + games.Detail);
-            check(games.ReviewSummary.Contains("I/O priority: High", StringComparison.Ordinal) && games.ReviewSummary.Contains("High I/O priority is set on the game once it starts and stays until you select Stop and restore.", StringComparison.Ordinal),
-                "The review says when High I/O priority takes effect and how it comes back" + " | " + games.ReviewSummary);
+                "Reviewing High disk priority with the first cache group sends exactly those settings and Start can be pressed" + " | " + games.Status + " " + games.Detail);
+            check(games.ReviewSummary.Contains("Disk priority: High", StringComparison.Ordinal)
+                && games.ReviewSummary.Contains("High disk priority is set on the game once it starts and stays until you select Stop and restore.", StringComparison.Ordinal)
+                && games.ReviewSummary.Contains("Other apps this launcher opens get the same cores.", StringComparison.Ordinal),
+                "The review says when High disk priority takes effect and how it comes back, and only the cores are shared with the launcher's other apps" + " | " + games.ReviewSummary);
 
             games = Open(TwoCcds(), "0xFFFF");
-            check(games.CoreChoices.Count == 1, "When the launcher may only use one cache group, CPU cores offers no other group" + " | offered: " + Offered(games));
+            check(games.CoreChoices.Count == 0, "When the launcher may only use one cache group, there are no cache group choices" + " | offered: " + Offered(games));
             games = Open(Hybrid(), "0xFF");
-            check(games.CoreChoices.Select(choice => choice.Label).SequenceEqual(["All allowed cores", "Performance cores", "Efficiency cores"]),
+            check(games.CoreChoices.Select(choice => choice.Label).SequenceEqual(["Performance cores", "Efficiency cores"]),
                 "A CPU with one cache keeps its performance and efficiency core choices" + " | offered: " + Offered(games));
         }
         finally { App.Operations.ProcessSnapshot = savedSnapshot; App.Operations.GameReview = null; }

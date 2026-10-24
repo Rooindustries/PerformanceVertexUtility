@@ -48,5 +48,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Update="Fixtures/game-tune-restore-skips.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../../backend/catalogs/launch-presets.json" Link="Fixtures/launch-presets.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../../backend/contracts/roo-industries-backend-contracts.schema.json" Link="Fixtures/roo-industries-backend-contracts.schema.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

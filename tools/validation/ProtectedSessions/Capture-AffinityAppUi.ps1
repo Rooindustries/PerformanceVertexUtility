@@ -198,19 +198,26 @@ try{
  $path=WaitFor {Enabled 'GameSessionExecutable'} 60 'the game file box'
  $path.GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern).SetValue($gamePath);Start-Sleep -Milliseconds 500
  Invoke (WaitFor {Enabled 'GameSessionRefresh'} 30 'Refresh on Games')
- $launcherChoice=Choose (WaitFor {Enabled 'GameSessionLauncher'} 60 'the launcher list') {param($n) $n -like ('* · PID '+$launcherPid)} 'the launcher fixture'
- $gameIo=WaitFor {@($window.FindAll($TS::Descendants,[Windows.Automation.AndCondition]::new([Windows.Automation.PropertyCondition]::new($A::NameProperty,'I/O priority'),[Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty,$CT::ComboBox)))|Where-Object {$_.Current.AutomationId -ne 'ioPriority' -and $_.Current.IsEnabled})[0]} 30 'the game I/O priority choice'
+ # The Games tab names a launcher by its file name, so a second copy of the fixture would show as "(copy 2)" and fail the exact match.
+ $launcherChoice=Choose (WaitFor {Enabled 'GameSessionLauncher'} 60 'the launcher list') {param($n) $n -eq [IO.Path]::GetFileNameWithoutExtension($launcherPath)} 'the launcher fixture'
+ $gameIo=WaitFor {@($window.FindAll($TS::Descendants,[Windows.Automation.AndCondition]::new([Windows.Automation.PropertyCondition]::new($A::NameProperty,'Disk priority'),[Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty,$CT::ComboBox)))|Where-Object {$_.Current.AutomationId -ne 'ioPriority' -and $_.Current.IsEnabled})[0]} 30 'the game disk priority choice'
  $ioOffered=Offered $gameIo 'games-io-choices'
  $gameIoChoice=if(@($ioOffered|Where-Object {$_ -like 'High*'}).Count){Choose $gameIo {param($n) $n -like 'High*'} 'High I/O priority for the game'}else{$evidence.missed+=@('High I/O priority for the game');'not offered'}
- $coresBox=WaitFor {Enabled 'GameSessionCores'} 60 'the CPU cores list'
- $coresOffered=Offered $coresBox 'games-cores-choices'
- $coreChoice=if(@($coresOffered|Where-Object {$_ -like 'Cache group 1*'}).Count){Choose $coresBox {param($n) $n -like 'Cache group 1*'} 'the first cache group'}else{$evidence.missed+=@('the first cache group');'not offered'}
- $advanced=ById 'GameSessionAdvanced';try{$advanced.GetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern).Expand()}catch{};Start-Sleep -Milliseconds 600
- $maskField=WaitFor {ById 'GameSessionMask'} 15 'the custom CPU mask'
- if($coreChoice -eq 'not offered'){$maskField.GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern).SetValue('0x'+$keepMask.ToString('X'));Start-Sleep -Milliseconds 600;$evidence.games.typedMask='0x'+$keepMask.ToString('X')}
- $groupText=$maskField.GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern).Current.Value
- $groupMask=[Convert]::ToUInt64($groupText.Replace('0x','').Replace('0X',''),16)
- Toggle (WaitFor {Enabled 'GameSessionScope'} 30 'the launcher scope box') $true
+ function TickedCores{$mask=[uint64]0;foreach($n in 1..64){$e=ById ('GameSessionCore'+$n);if(-not$e){break};if($e.GetCurrentPattern([Windows.Automation.TogglePattern]::Pattern).Current.ToggleState -eq [Windows.Automation.ToggleState]::On){$mask=$mask -bor ([uint64]1 -shl ($n-1))}};return $mask}
+ $allCores=WaitFor {Enabled 'GameSessionAllCores'} 90 'the launcher cores'
+ $coreButtons=@($window.FindAll($TS::Descendants,[Windows.Automation.PropertyCondition]::new($A::AutomationIdProperty,'GameSessionCoreChoice')))
+ $coresOffered=@($coreButtons|ForEach-Object {$_.Current.Name})
+ Into 'GameSessionAllCores';Step 'games-cores-choices' @{offered=$coresOffered}|Out-Null
+ $groupButton=@($coreButtons|Where-Object {$_.Current.Name -like 'Cache group 1*'})[0]
+ if($groupButton){Invoke $groupButton;Start-Sleep -Milliseconds 600;$coreChoice=$groupButton.Current.Name}
+ else{
+  $evidence.missed+=@('the first cache group');$coreChoice='not offered'
+  Toggle $allCores $false;Start-Sleep -Milliseconds 400
+  foreach($bit in $keep){Toggle (WaitFor {Enabled ('GameSessionCore'+($bit+1))} 15 ('core '+($bit+1))) $true}
+  Start-Sleep -Milliseconds 600;$evidence.games.tickedMask='0x'+$keepMask.ToString('X')
+ }
+ $groupMask=TickedCores;$groupText='0x'+$groupMask.ToString('X')
+ if(-not$groupMask){throw 'No cores are ticked for the game.'}
  Step 'games-chosen' @{launcher=$launcherChoice;io=$gameIoChoice;cores=$coreChoice;mask=$groupText;ioOffered=$ioOffered;coresOffered=$coresOffered}|Out-Null
  $preview=Soft {Enabled 'GameSessionPreview'} 60 'Review changes on Games'
  if($preview){Invoke $preview;$gameReview=Soft {$t=Text 'GameSessionReview';if($t){$t}elseif((Text 'GameSessionStatus') -like "Couldn't*"){'(no review: '+(Text 'GameSessionStatus')+')'}} 120 'the session review'}

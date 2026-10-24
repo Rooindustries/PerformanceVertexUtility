@@ -67,8 +67,8 @@ function Open-TransparencyRegistry {
     if (-not $writable) { throw 'Transparency registry key unavailable; retained' }
     $writable
 }
-function Has-Profile([string[]]$texts) { for ($i = 0; $i -lt $texts.Count - 1; $i++) { if ($texts[$i] -ceq $CheckProfile -and $texts[$i + 1] -match 'selected settings') { return $true } }; return $false }
-function Undo-Profiles { Nav 'Undo changes'; WaitFor { $t = @(Texts); if (($t -contains 'Saved settings') -and ($t -notcontains 'Reading restore state')) { $t } } 60 'Undo page' }
+function Has-Profile([string[]]$texts) { for ($i = 0; $i -lt $texts.Count - 1; $i++) { if ($texts[$i] -ceq $CheckProfile -and $texts[$i + 1] -match 'settings? · undo (it|them) in Windows tweaks$') { return $true } }; return $false }
+function Undo-Profiles { Nav 'Undo changes'; WaitFor { $t = @(Texts); if (($t -contains 'What you can undo') -and ($t -notcontains 'Checking what you can undo')) { $t } } 60 'Undo page' }
 function Find-Row {
     $search = WaitFor { ById 'WindowsTweaksSearch' } 30 'search box'
     $search.GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern).SetValue('Transparency Effects'); Start-Sleep 1
@@ -112,7 +112,7 @@ function New-CacheGameSession {
 }
 function Governor-Row {
     Nav 'Undo changes'
-    WaitFor { $t = @(Texts); $i = [Array]::IndexOf($t, 'Governor'); if (($t -notcontains 'Reading restore state') -and $i -ge 0 -and $i -lt $t.Count - 1) { $t[$i + 1] } } 60 'Governor row on the Undo page'
+    WaitFor { $t = @(Texts); $i = [Array]::IndexOf($t, 'Automatic app rules'); if (($t -notcontains 'Checking what you can undo') -and $i -ge 0 -and $i -lt $t.Count - 1) { $t[$i + 1] } } 60 'Governor row on the Undo page'
 }
 function Find-PickItem($combo, [string]$like) {
     $item = @($combo.FindAll($TS::Descendants, [Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty, $CT::ListItem)) | Where-Object { $_.Current.Name -like $like })[0]
@@ -324,13 +324,13 @@ try {
 
     $ruleTasksBefore = @(Get-ScheduledTask -ErrorAction SilentlyContinue | Where-Object { $_.TaskName -match 'ProcessRules' })
     $policyRoot = Get-ChildItem $env:LOCALAPPDATA -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -match 'OptimizationSuite' } | ForEach-Object { Join-Path $_.FullName 'process-rules' } | Where-Object { Test-Path $_ } | Select-Object -First 1
-    $governorBuild = (@(Undo-Profiles) -contains 'Governor')
+    $governorBuild = (@(Undo-Profiles) -contains 'Automatic app rules')
     if ($governorBuild) {
         $probe = Start-CacheProbe 900
         Start-Sleep 3
         $rowBefore = Governor-Row
         Log ('Governor row before the rule: ' + $rowBefore); Shot '5-undo-before-rule'
-        if ($rowBefore -ne 'No rules') { throw "The governor already has rules on this PC ($rowBefore); refusing to add a test rule." }
+        if ($rowBefore -ne 'Nothing set up') { throw "The governor already has rules on this PC ($rowBefore); refusing to add a test rule." }
         Nav 'Games'; Start-Sleep 1; Select-Tab 'ProcessesTab'
         Invoke-Element (WaitFor { ById 'ProcessRefresh' } 20 'process refresh'); Start-Sleep 2
         Pick 'ProcessPicker' '*RooIndustriesLoadTimesProbe*'
@@ -357,7 +357,7 @@ try {
         Check ($deleted -match '^Rule deleted') 'the governor rule was deleted' ($deleted + ' :: ' + (ById 'ProcessDetail').Current.Name)
         if ($deleted -match '^Rule deleted') { $script:Cleanup = $null; $script:GovernorRule = $false }
         $rowDeleted = Governor-Row
-        Check ($rowDeleted -eq 'No rules') 'cached Undo page drops the governor rule after it is deleted' ("row=" + $rowDeleted)
+        Check ($rowDeleted -eq 'Nothing set up') 'cached Undo page drops the governor rule after it is deleted' ("row=" + $rowDeleted)
         Shot '7-undo-after-delete'
         Stop-OwnedProcess $probe.OwnershipReceipt
     }

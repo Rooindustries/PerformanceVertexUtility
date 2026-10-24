@@ -143,7 +143,7 @@ $Pages = @(
     @{ Name = 'Windows tweaks'; Nav = 'Windows tweaks'; Usable = { $l = ById 'WindowsTweaksList'; $l -and $l.FindFirst($TS::Children, [Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty, $CT::ListItem)) }; Complete = { $s = ById 'WindowsTweaksStatus'; $s -and $s.Current.Name -match '^\d+ settings$|recovery|Restart' }; State = { $s = ById 'WindowsTweaksStatus'; $s -and $s.Current.Name -match '^\d+ settings|recovery|Restart' }; Timeout = 120 },
     @{ Name = 'Tools'; Nav = 'Tools'; Usable = { HasName 'HWiNFO' }; Complete = { HasName 'HWiNFO' }; Timeout = 45 },
     @{ Name = 'Tools/BIOS settings'; Invoke = 'OpenFirmware'; Usable = { HasName 'Load your BIOS settings' }; Complete = 'settle'; Timeout = 45 },
-    @{ Name = 'Undo changes'; Nav = 'Undo changes'; Usable = { HasName 'Saved settings' }; Complete = { (HasName 'Saved settings') -and -not (HasName 'Reading restore state') }; Timeout = 60 },
+    @{ Name = 'Undo changes'; Nav = 'Undo changes'; Usable = { HasName 'What you can undo' }; Complete = { (HasName 'What you can undo') -and -not (HasName 'Checking what you can undo') }; Timeout = 60 },
     @{ Name = 'Report a bug'; Nav = 'Report a bug'; Usable = { HasName 'Your report' }; Complete = { HasName 'Processor' }; Timeout = 60 },
     @{ Name = 'Settings'; Nav = 'Settings'; Usable = { HasName 'Appearance' }; Complete = { HasName 'Appearance' }; Timeout = 30 },
     @{ Name = 'Home'; Nav = 'Home'; Usable = { HasName 'Start here' }; Complete = { HasText ' in the background$' }; Timeout = 60 }

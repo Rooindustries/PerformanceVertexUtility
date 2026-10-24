@@ -41,7 +41,7 @@ static class LaunchPresetChecks
             Check(converted["executionQoS"].GetRawText() == JsonSerializer.SerializeToElement(new PowerThrottling(0, 0).WithExecutionMode("high"), OperationFiles.Json).GetRawText()
                 && converted["cpuPriority"].GetRawText() == "\"High\"", "A preset's power mode becomes the value the game session form sends, and other settings pass through as written");
             Check(Refused(Preset("bad", "{\"cpuPriority\":\"Realtime\"}"))?.Contains("real-time CPU priority", StringComparison.Ordinal) == true, "A preset with Realtime CPU priority is refused by the session's own check");
-            Check(Refused(Preset("high-io", "{\"ioPriority\":3}")) is null, "The session's own check accepts High I/O priority, which the session sets on the running game; only the catalog schema keeps it out of presets");
+            Check(Refused(Preset("high-io", "{\"ioPriority\":3}")) is null, "A preset with High disk priority passes the session's own check, which sets it on the running game");
             Check(Refused(Preset("bad", "{\"gpuPriority\":5}"))?.Contains("Real-time GPU priority", StringComparison.Ordinal) == true, "A preset with Realtime GPU priority is refused by the session's own check");
             var good = Preset("good", "{\"cpuPriority\":\"AboveNormal\"}");
             foreach (var (label, presets) in new (string, string)[]
