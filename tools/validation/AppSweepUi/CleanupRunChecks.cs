@@ -375,6 +375,15 @@ static class CleanupRunChecks
                     live.LastError = null;
                     live.OfficialPreview = _ => Task.FromResult<OfficialUninstallPreview?>(new OfficialUninstallPreview { DryRun = true, Commands = [] });
                     await model.PreviewRemovalCommand.ExecuteAsync(null); Look("checked");
+                    live.OfficialPreview = id => Task.FromResult<OfficialUninstallPreview?>(new OfficialUninstallPreview
+                    {
+                        DryRun = true,
+                        Commands = [new UninstallCommand { AppId = id, CommandType = "registry-uninstall-string", RawCommand = "uninstall.exe /S", CommandLine = "\"C:\\Fixture\\uninstall.exe\" /S", ExecutableSha256 = new string('a', 64), Blocked = true }],
+                    });
+                    await model.PreviewRemovalCommand.ExecuteAsync(null); Look("needed by Windows");
+                    if (model.OfficialPreviewState != UninstallCleanupViewModel.BlockedHere) problems.Add("an app Windows or games may need doesn't say to use Remove apps: " + model.OfficialPreviewState);
+                    live.OfficialPreview = _ => Task.FromResult<OfficialUninstallPreview?>(new OfficialUninstallPreview { DryRun = true, Commands = [] });
+                    await model.PreviewRemovalCommand.ExecuteAsync(null);
                     live.LastError = raw;
                     live.LeftoverScan = _ => Task.FromResult<LeftoverScan?>(null);
                     await model.ScanLeftoversCommand.ExecuteAsync(null); Look("scan failed");

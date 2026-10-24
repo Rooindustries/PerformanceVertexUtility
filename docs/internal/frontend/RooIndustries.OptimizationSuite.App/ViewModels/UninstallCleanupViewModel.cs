@@ -369,7 +369,7 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
                 : NoUninstaller;
             PrimaryRemovalButtonLabel = SelectedHasOfficialRemover ? "Check uninstaller" : "Check app";
             OfficialPreviewState = command.Blocked
-                ? "Windows, games or other apps may need this app, so it can't be removed here."
+                ? BlockedHere
                 : SelectedHasOfficialRemover
                     ? "Uninstaller checked. Nothing has run yet."
                     : "Checked. Nothing has run yet.";
@@ -899,6 +899,7 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
     }
 
     private const string NoUninstaller = "No uninstaller. The app's files get deleted instead, and they're backed up first.";
+    public const string BlockedHere = "Windows, games or other apps may need this app, so this tab won't remove it. Use Remove apps to remove it.";
     private const string CheckFailed = "Couldn't check this app's uninstaller. Try again, or use Remove apps.";
     private const string ScanFailed = "Couldn't look for leftovers. Try again.";
     private const string PlanFailed = "Make the list again. If it keeps failing, send a bug report.";
