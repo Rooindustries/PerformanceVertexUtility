@@ -424,6 +424,25 @@ static class CleanupRunChecks
                     if (!model.FinalCheckPassed || !model.CanApplyCleanupAction) return "one approval and a passed final check didn't unlock Remove app: " + model.ApplyApprovalSummary;
                     live.LastError = raw;
                     await model.ApplyCleanupCommand.ExecuteAsync(null); Look("removal failed");
+                    string Result(string id, string status, bool real) => JsonSerializer.Serialize(new
+                    {
+                        actionId = "apps.invokeUninstallCleanupApplyPackage", appId = id, dryRun = !real, status, executionMode = real ? "real" : "preview",
+                        gates = new[] { new { gateId = "confirm-apply", required = true, satisfied = real, blocking = !real } },
+                        errors = Array.Empty<object>(), summary = new { approvalReady = true, deletedCount = 1, cleanupItemCount = 1, blockingGateCount = real ? 0 : 1 },
+                    });
+                    live.LastError = null;
+                    live.CleanupApply = (id, _, _, real) => Task.FromResult<string?>(Result(id, real ? "success" : "preview", real));
+                    await model.RunFinalCheckCommand.ExecuteAsync(null);
+                    await model.ApplyCleanupCommand.ExecuteAsync(null); Look("removed");
+                    if (model.CleanupExecutionState != "Done: 1 item removed." || model.CanApplyCleanupAction) problems.Add("Remove app stays clickable after a finished removal: " + model.CleanupExecutionState);
+                    live.CleanupApply = (id, _, _, real) => Task.FromResult<string?>(Result(id, real ? "cleanup-review-required" : "preview", real));
+                    await model.RunFinalCheckCommand.ExecuteAsync(null);
+                    await model.ApplyCleanupCommand.ExecuteAsync(null); Look("uninstaller ran");
+                    if (model.ApplyApprovalSummary != "Find leftovers next." || model.CanRunFinalCheckAction || model.RemovalApproved) problems.Add("after its uninstaller ran, the old list still looks ready: " + model.ApplyApprovalSummary);
+                    model.LeftoverScanCompleted = true; model.CleanupPlanReady = true; model.RemovalApproved = true;
+                    live.CleanupApply = (id, _, _, real) => Task.FromResult<string?>(Result(id, "failed", real));
+                    await model.RunFinalCheckCommand.ExecuteAsync(null); Look("final check failed");
+                    if (model.CleanupExecutionState != "Final check failed." || model.FinalCheckPassed) problems.Add("a failed final check reads as a failed removal: " + model.CleanupExecutionState);
                     if (typeof(UninstallCleanupViewModel).GetProperties().Count(property => property.PropertyType == typeof(bool) && property.Name.EndsWith("Approved", StringComparison.Ordinal)) != 1)
                         problems.Add("more than one approval box is back");
                     if (sent.Count != 2 || !sent.All(call => call.Route && call.List) || sent[0].Real || !sent[1].Real) problems.Add("the one box didn't approve both the uninstaller and the list: " + string.Join(", ", sent));

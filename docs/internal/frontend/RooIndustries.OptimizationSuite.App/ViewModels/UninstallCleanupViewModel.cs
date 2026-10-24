@@ -745,7 +745,7 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
             {
                 CleanupExecutionState = "App removed. Find leftovers again to clean up what it left.";
                 CleanupExecutionDetail = "Its uninstaller may have changed things, so the old list wasn't used.";
-                FinalCheckPassed = false;
+                StartAgainFromLeftovers();
                 SetSelectedRecovery(expectedAppId);
                 return;
             }
@@ -758,6 +758,7 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
                 CleanupExecutionDetail = CleanupRestoreAvailable
                     ? "Restore can put them back."
                     : "No backup was confirmed, so Restore isn't offered.";
+                FinalCheckPassed = false;
                 return;
             }
 
@@ -765,14 +766,15 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
             {
                 CleanupExecutionState = "Check whether the app is gone.";
                 CleanupExecutionDetail = "Its uninstaller was still running, so it was left to finish. When it's done, find leftovers again.";
-                FinalCheckPassed = false;
+                StartAgainFromLeftovers();
                 SetSelectedRecovery(expectedAppId);
                 return;
             }
             if (status is "partial" or "failed")
             {
-                CleanupExecutionState = status == "partial" ? "Removal stopped partway." : "Removal failed.";
-                CleanupExecutionDetail = deleted.ToString(CultureInfo.InvariantCulture) + (deleted == 1 ? " item was" : " items were") + " removed. " + RetryRemoval;
+                CleanupExecutionState = !applied ? "Final check failed." : status == "partial" ? "Removal stopped partway." : "Removal failed.";
+                CleanupExecutionDetail = !applied ? RetryFinalCheck : deleted.ToString(CultureInfo.InvariantCulture) + (deleted == 1 ? " item was" : " items were") + " removed. " + RetryRemoval;
+                FinalCheckPassed = false;
                 SetSelectedRecovery(expectedAppId);
                 return;
             }
@@ -803,6 +805,14 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
             FinalCheckPassed = false;
             SetSelectedRecovery(expectedAppId);
         }
+    }
+
+    private void StartAgainFromLeftovers()
+    {
+        FinalCheckPassed = false;
+        RemovalApproved = false;
+        CleanupPlanReady = false;
+        LeftoverScanCompleted = false;
     }
 
     private void SummarizeCleanupRestore(string? json, string? operationError, bool restoreSucceeded)
