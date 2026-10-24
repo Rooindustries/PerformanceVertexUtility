@@ -550,8 +550,7 @@ void ReadyCleanup(UninstallCleanupViewModel model, InstalledApp app)
     model.RemovalPathReviewed = true;
     model.LeftoverScanCompleted = true;
     model.CleanupPlanReady = true;
-    model.RemoverPathApproved = true;
-    model.CleanupListApproved = true;
+    model.RemovalApproved = true;
 }
 
 if (args is ["governor-task", var taskRoot, var taskName, var registered, var enabled, var repeats, var installRoot])
@@ -1261,8 +1260,8 @@ if (args is [] or ["responses"] or ["cleanup"] or ["race"])
     App.Live.LastError = "Controlled route failure";
     App.Live.OfficialPreview = _ => Task.FromResult<OfficialUninstallPreview?>(null);
     await cleanup.PreviewRemovalCommand.ExecuteAsync(null);
-    Check(!cleanup.RemovalPathReviewed && cleanup.OfficialPreviewState.Contains("Controlled route failure", StringComparison.Ordinal),
-        "A null removal-route response remains unavailable with its operation error");
+    Check(!cleanup.RemovalPathReviewed && cleanup.OfficialPreviewState == "Couldn't check this app's uninstaller. Try again, or use Remove apps.",
+        "A null removal-route response stays unavailable and says what to do instead of the raw error");
 
     const string reviewedLine = "\"C:\\Windows\\system32\\msiexec.exe\" /x {11111111-2222-3333-4444-555555555555} /norestart";
     App.Live.OfficialPreview = id => Task.FromResult<OfficialUninstallPreview?>(new OfficialUninstallPreview
@@ -1281,16 +1280,16 @@ if (args is [] or ["responses"] or ["cleanup"] or ["race"])
         await cleanup.PreviewRemovalCommand.ExecuteAsync(null);
     }
     bool RouteBlocked() => !cleanup.RemovalPathReviewed && !cleanup.CanReviewRemovalAction && cleanup.PrimaryRemovalButtonLabel == "Use Remove apps"
-        && cleanup.ApplyApprovalSummary == "Can't run this app's remover. Use Remove apps to remove it.";
+        && cleanup.ApplyApprovalSummary == "Can't run this app's uninstaller here. Use Remove apps to remove it.";
     const string goneLine = "\"C:\\Program Files\\Gone\\uninstall.exe\" /S";
     await CheckRoute(new UninstallCommand { CommandType = "registry-uninstall-string", RawCommand = goneLine, CommandLine = goneLine, ExecutableSha256 = null, ExecutableState = "missing" });
-    Check(RouteBlocked() && cleanup.OfficialPreviewState.Contains("remover file is missing", StringComparison.Ordinal), "A remover whose file is missing is blocked and says the file is missing");
+    Check(RouteBlocked() && cleanup.OfficialPreviewState.Contains("uninstaller file is missing", StringComparison.Ordinal), "A remover whose file is missing is blocked and says the file is missing");
     var routeCalls = 0;
     App.Live.OfficialPreview = _ => { routeCalls++; return Task.FromResult<OfficialUninstallPreview?>(EmptyOfficial()); };
     await cleanup.PreviewRemovalCommand.ExecuteAsync(null);
     Check(routeCalls == 0 && RouteBlocked(), "A blocked route cannot be re-run from the same button");
     await CheckRoute(new UninstallCommand { CommandType = "registry-uninstall-string", RawCommand = goneLine, CommandLine = goneLine, ExecutableSha256 = null, ExecutableState = "unreadable" });
-    Check(RouteBlocked() && cleanup.OfficialPreviewState.Contains("remover file can't be read", StringComparison.Ordinal), "A remover file that exists but can't be read says so instead of calling it missing");
+    Check(RouteBlocked() && cleanup.OfficialPreviewState.Contains("uninstaller file can't be read", StringComparison.Ordinal), "A remover file that exists but can't be read says so instead of calling it missing");
     await CheckRoute(new UninstallCommand { CommandType = "registry-uninstall-string", RawCommand = "uninstall.exe /S", CommandLine = null });
     Check(RouteBlocked() && cleanup.OfficialPreviewState.Contains("doesn't point to one exact file", StringComparison.Ordinal), "A vendor remover that cannot be resolved to one file is blocked and says why");
     await CheckRoute(new UninstallCommand { CommandType = "appx-package-removal-preview", RawCommand = "Remove-AppxPackage -User 'S-1-5-21-1' -Package 'Vendor.App_1.0.0.0_x64__abc' -ErrorAction Stop", CommandLine = null });
@@ -1305,11 +1304,11 @@ if (args is [] or ["responses"] or ["cleanup"] or ["race"])
     App.Live.LastError = "Controlled leftover failure";
     App.Live.LeftoverScan = _ => Task.FromResult<LeftoverScan?>(null);
     await cleanup.ScanLeftoversCommand.ExecuteAsync(null);
-    Check(!cleanup.LeftoverScanCompleted && cleanup.LeftoverState.Contains("Controlled leftover failure", StringComparison.Ordinal),
+    Check(!cleanup.LeftoverScanCompleted && cleanup.LeftoverState == "Couldn't look for leftovers. Try again.",
         "A null leftover scan cannot become a successful empty scan");
     App.Live.LeftoverScan = id => Task.FromResult<LeftoverScan?>(EmptyScan(id));
     await cleanup.ScanLeftoversCommand.ExecuteAsync(null);
-    Check(cleanup.LeftoverScanCompleted && cleanup.Leftovers.Count == 0 && cleanup.LeftoverState.Contains("No leftover targets", StringComparison.Ordinal),
+    Check(cleanup.LeftoverScanCompleted && cleanup.Leftovers.Count == 0 && cleanup.LeftoverState == "No leftovers found for this app.",
         "A successful empty leftover scan remains distinct from no response");
     App.Live.OperationError = "Controlled scan exit failure";
     await cleanup.ScanLeftoversCommand.ExecuteAsync(null);
@@ -1338,7 +1337,7 @@ if (args is [] or ["responses"] or ["cleanup"] or ["race"])
         Errors = [new IssueModel { Message = "Controlled blocking scan error", Blocking = true }],
     });
     await cleanup.ScanLeftoversCommand.ExecuteAsync(null);
-    Check(!cleanup.LeftoverScanCompleted && cleanup.Leftovers.Count == 0 && cleanup.LeftoverState.Contains("Controlled blocking scan error", StringComparison.Ordinal),
+    Check(!cleanup.LeftoverScanCompleted && cleanup.Leftovers.Count == 0 && cleanup.LeftoverState == "Couldn't look for leftovers. Try again.",
         "A favorable scan payload cannot override its blocking error");
 
     App.Live.LeftoverScan = id => Task.FromResult<LeftoverScan?>(EmptyScan(id));
@@ -1347,7 +1346,7 @@ if (args is [] or ["responses"] or ["cleanup"] or ["race"])
     App.Live.LastError = "Controlled manifest failure";
     App.Live.CleanupManifest = _ => Task.FromResult<CleanupManifest?>(null);
     await cleanup.BuildCleanupListCommand.ExecuteAsync(null);
-    Check(!cleanup.CleanupPlanReady && cleanup.CleanupPlanState.Contains("Controlled manifest failure", StringComparison.Ordinal),
+    Check(!cleanup.CleanupPlanReady && cleanup.CleanupPlanState == "Couldn't make the removal list.",
         "A null cleanup manifest cannot unlock the cleanup plan");
     App.Live.CleanupManifest = id => Task.FromResult<CleanupManifest?>(new CleanupManifest
     {
@@ -1359,13 +1358,13 @@ if (args is [] or ["responses"] or ["cleanup"] or ["race"])
     });
     App.Live.LastError = null;
     await cleanup.BuildCleanupListCommand.ExecuteAsync(null);
-    Check(!cleanup.CleanupPlanReady && cleanup.CleanupPlanState.Contains("Controlled blocking manifest error", StringComparison.Ordinal),
+    Check(!cleanup.CleanupPlanReady && cleanup.CleanupPlanState == "Couldn't make the removal list.",
         "A favorable cleanup manifest cannot override its blocking error");
     App.Live.CleanupManifest = id => Task.FromResult<CleanupManifest?>(EmptyManifest(id));
     App.Live.LastError = "Controlled plan failure";
     App.Live.CleanupPlan = _ => Task.FromResult<UninstallCleanupExecutionPlan?>(null);
     await cleanup.BuildCleanupListCommand.ExecuteAsync(null);
-    Check(!cleanup.CleanupPlanReady && cleanup.RemovalPlanDetail?.Contains("Controlled plan failure", StringComparison.Ordinal) == true,
+    Check(!cleanup.CleanupPlanReady && cleanup.RemovalPlanDetail == "Make the list again. If it keeps failing, send a bug report.",
         "A null execution plan cannot mark an empty manifest ready");
     App.Live.CleanupPlan = id => Task.FromResult<UninstallCleanupExecutionPlan?>(new UninstallCleanupExecutionPlan
     {
@@ -1381,13 +1380,12 @@ if (args is [] or ["responses"] or ["cleanup"] or ["race"])
     App.Live.LastError = null;
     await cleanup.BuildCleanupListCommand.ExecuteAsync(null);
     Check(cleanup.CleanupPlanReady, "A successful empty manifest and execution plan can complete review");
-    cleanup.RemoverPathApproved = true;
-    cleanup.CleanupListApproved = true;
+    cleanup.RemovalApproved = true;
     App.Live.CleanupApply = (_, _, _, _) => Task.FromResult<string?>(null);
     App.Live.LastError = "Controlled final check failure";
     await cleanup.RunFinalCheckCommand.ExecuteAsync(null);
-    Check(!cleanup.FinalCheckPassed && cleanup.CleanupExecutionDetail?.Contains("Controlled final check failure", StringComparison.Ordinal) == true,
-        "A missing final-check response remains unapproved with its operation error");
+    Check(!cleanup.FinalCheckPassed && cleanup.CleanupExecutionDetail == "Nothing was removed. Try the final check again.",
+        "A missing final-check response stays unapproved and says what to do instead of the raw error");
     App.Live.CleanupApply = (id, _, _, _) => Task.FromResult<string?>(JsonSerializer.Serialize(new
     {
         actionId = "apps.invokeUninstallCleanupApplyPackage",
@@ -1491,7 +1489,6 @@ if (args is [] or ["responses"] or ["cleanup"] or ["race"])
         var applyA = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
         ReadyCleanup(cleanup, appA);
         cleanup.FinalCheckPassed = true;
-        cleanup.RealCleanupApproved = true;
         App.Live.CleanupApply = (_, _, _, _) => applyA.Task;
         var oldApply = cleanup.ApplyCleanupCommand.ExecuteAsync(null);
         cleanup.SelectedApp = appB;

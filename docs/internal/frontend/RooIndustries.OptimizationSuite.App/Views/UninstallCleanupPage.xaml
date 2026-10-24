@@ -33,11 +33,11 @@
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <TextBlock Grid.Column="0" Text="{x:Bind Type}" FontSize="11" VerticalAlignment="Center" Width="78"
+                <TextBlock Grid.Column="0" Text="{x:Bind TypeLabel}" FontSize="11" VerticalAlignment="Center" Width="78"
                            Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                 <TextBlock Grid.Column="1" Text="{x:Bind Target}" FontSize="12" VerticalAlignment="Center"
                            FontFamily="Consolas, monospace" Foreground="{StaticResource RooIndustriesTextSecondaryBrush}" TextTrimming="CharacterEllipsis" />
-                <TextBlock Grid.Column="2" Text="{x:Bind Confidence}" FontSize="11" VerticalAlignment="Center"
+                <TextBlock Grid.Column="2" Text="{x:Bind ConfidenceLabel}" FontSize="11" VerticalAlignment="Center"
                            Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
             </Grid>
         </DataTemplate>
@@ -83,7 +83,7 @@
                         <StackPanel Grid.Column="1" Spacing="7">
                             <ContentControl Content="{x:Bind ViewModel}" ContentTemplate="{StaticResource PageRefreshNoticeTemplate}" HorizontalContentAlignment="Stretch" Visibility="{x:Bind ViewModel.OutOfDateNotice, Mode=OneWay, Converter={StaticResource StringToVisibility}}" />
                             <TextBlock Text="Remove apps" FontSize="22" FontWeight="SemiBold" Foreground="{StaticResource RooIndustriesTextPrimaryBrush}" />
-                            <TextBlock Text="Remove selected applications, then review leftover files and registry data." FontSize="13" LineHeight="19" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                            <TextBlock Text="Uninstall apps you don't need, then clean up what they leave behind." FontSize="13" LineHeight="19" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                             <TextBlock FontSize="12" LineHeight="17" Foreground="{StaticResource RooIndustriesTextMutedBrush}">
                                 <Run Text="{x:Bind BulkRemoval.ViewModel.InstalledAppCount, Mode=OneWay}" /><Run Text=" apps installed" />
                                 <Run Text="" />
@@ -139,18 +139,18 @@
                         <StackPanel Spacing="5">
                             <TextBlock Text="App details" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                             <TextBlock Text="Pick an app to review" FontSize="20" FontWeight="SemiBold" Foreground="{StaticResource RooIndustriesTextPrimaryBrush}" />
-                            <TextBlock Text="Select an app to inspect its uninstaller and scan for leftover files."
+                            <TextBlock Text="Pick an app to remove it and clean up what it leaves behind."
                                        FontSize="13" LineHeight="19" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextSecondaryBrush}" />
                         </StackPanel>
                         <StackPanel Spacing="9">
                             <TextBlock TextWrapping="Wrap" FontSize="13" LineHeight="18">
-                                <Run Text="Path" FontWeight="SemiBold" Foreground="{StaticResource RooIndustriesTextSecondaryBrush}" /><Run Text=": Check the app's uninstaller." Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                                <Run Text="Check" FontWeight="SemiBold" Foreground="{StaticResource RooIndustriesTextSecondaryBrush}" /><Run Text=": See how this app uninstalls." Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                             </TextBlock>
                             <TextBlock TextWrapping="Wrap" FontSize="13" LineHeight="18">
-                                <Run Text="Scan" FontWeight="SemiBold" Foreground="{StaticResource RooIndustriesTextSecondaryBrush}" /><Run Text=": Find leftover files." Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                                <Run Text="Find leftovers" FontWeight="SemiBold" Foreground="{StaticResource RooIndustriesTextSecondaryBrush}" /><Run Text=": See what it leaves behind. Nothing is removed." Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                             </TextBlock>
                             <TextBlock TextWrapping="Wrap" FontSize="13" LineHeight="18">
-                                <Run Text="Apply" FontWeight="SemiBold" Foreground="{StaticResource RooIndustriesTextSecondaryBrush}" /><Run Text=": Review selected files before removing them." Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                                <Run Text="Remove" FontWeight="SemiBold" Foreground="{StaticResource RooIndustriesTextSecondaryBrush}" /><Run Text=": Check the list, then remove the app." Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                             </TextBlock>
                         </StackPanel>
                     </StackPanel>
@@ -176,7 +176,7 @@
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
                                         <StackPanel Grid.Column="0" Spacing="4">
-                                            <TextBlock Text="Removal run" FontSize="16" FontWeight="SemiBold" Foreground="{StaticResource RooIndustriesTextPrimaryBrush}" />
+                                            <TextBlock Text="Remove this app" FontSize="16" FontWeight="SemiBold" Foreground="{StaticResource RooIndustriesTextPrimaryBrush}" />
                                             <TextBlock Text="{x:Bind ViewModel.ApplyApprovalSummary, Mode=OneWay}" FontSize="12" LineHeight="17"
                                                        TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                                         </StackPanel>
@@ -196,60 +196,38 @@
                                         </Grid.RowDefinitions>
                                         <Button Grid.Row="0" Grid.Column="0" Content="{x:Bind ViewModel.PrimaryRemovalButtonLabel, Mode=OneWay}" Command="{x:Bind ViewModel.PreviewRemovalCommand}"
                                                 AutomationProperties.AutomationId="AppsCleanupCheckRouteButton"
-                                                AutomationProperties.Name="Check removal route"
+                                                AutomationProperties.Name="Check how this app uninstalls"
                                                 IsEnabled="{x:Bind ViewModel.CanReviewRemovalAction, Mode=OneWay}" HorizontalAlignment="Stretch" Padding="10,8" />
-                                        <Button Grid.Row="0" Grid.Column="1" Content="Scan leftovers" Command="{x:Bind ViewModel.ScanLeftoversCommand}"
+                                        <Button Grid.Row="0" Grid.Column="1" Content="Find leftovers" Command="{x:Bind ViewModel.ScanLeftoversCommand}"
                                                 AutomationProperties.AutomationId="AppsCleanupScanLeftoversButton"
-                                                AutomationProperties.Name="Scan leftovers"
+                                                AutomationProperties.Name="Find leftovers"
                                                 IsEnabled="{x:Bind ViewModel.CanScanAction, Mode=OneWay}" HorizontalAlignment="Stretch" Padding="10,8" />
-                                        <Button Grid.Row="0" Grid.Column="2" Content="Build list" Command="{x:Bind ViewModel.BuildCleanupListCommand}"
+                                        <Button Grid.Row="0" Grid.Column="2" Content="Make list" Command="{x:Bind ViewModel.BuildCleanupListCommand}"
                                                 AutomationProperties.AutomationId="AppsCleanupBuildListButton"
-                                                AutomationProperties.Name="Build removal list"
+                                                AutomationProperties.Name="Make the removal list"
                                                 IsEnabled="{x:Bind ViewModel.CanBuildCleanupListAction, Mode=OneWay}" HorizontalAlignment="Stretch" Padding="10,8" />
-                                        <Button Grid.Row="1" Grid.Column="0" Content="Run final check" Command="{x:Bind ViewModel.RunFinalCheckCommand}"
+                                        <Button Grid.Row="1" Grid.Column="0" Content="Final check" Command="{x:Bind ViewModel.RunFinalCheckCommand}"
                                                 AutomationProperties.AutomationId="AppsCleanupRunFinalCheckButton"
-                                                AutomationProperties.Name="Run cleanup final check"
+                                                AutomationProperties.Name="Run the final check"
                                                 IsEnabled="{x:Bind ViewModel.CanRunFinalCheckAction, Mode=OneWay}"
                                                 HorizontalAlignment="Stretch" Padding="10,8" />
-                                        <Button Grid.Row="1" Grid.Column="1" Content="Apply cleanup" Command="{x:Bind ViewModel.ApplyCleanupCommand}"
+                                        <Button Grid.Row="1" Grid.Column="1" Content="Remove app" Command="{x:Bind ViewModel.ApplyCleanupCommand}"
                                                 AutomationProperties.AutomationId="AppsCleanupApplyReviewedRunButton"
-                                                AutomationProperties.Name="Apply reviewed cleanup"
+                                                AutomationProperties.Name="Remove this app"
                                                 IsEnabled="{x:Bind ViewModel.CanApplyCleanupAction, Mode=OneWay}"
                                                 Background="{StaticResource RooIndustriesNavCtaBrush}" Foreground="{StaticResource RooIndustriesOnCtaBrush}" HorizontalAlignment="Stretch" Padding="10,8" />
                                         <Button Grid.Row="1" Grid.Column="2" Content="Restore from backup" Command="{x:Bind ViewModel.RestoreCleanupCommand}"
                                                 AutomationProperties.AutomationId="AppsCleanupRestoreFromBackupButton"
-                                                AutomationProperties.Name="Restore removal from backup"
+                                                AutomationProperties.Name="Restore from backup"
                                                 IsEnabled="{x:Bind ViewModel.CanRestoreCleanupAction, Mode=OneWay}" HorizontalAlignment="Stretch" Padding="10,8" />
                                     </Grid>
 
-                                    <Grid ColumnSpacing="12" RowSpacing="8">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="*" />
-                                        </Grid.ColumnDefinitions>
-                                        <Grid.RowDefinitions>
-                                            <RowDefinition Height="Auto" />
-                                            <RowDefinition Height="Auto" />
-                                        </Grid.RowDefinitions>
-                                        <CheckBox Grid.Column="0" Content="I reviewed the route and dependency risks"
-                                                  AutomationProperties.AutomationId="AppsCleanupReviewedRouteCheckBox"
-                                                  IsChecked="{x:Bind ViewModel.RemoverPathApproved, Mode=TwoWay}"
-                                                  IsEnabled="{x:Bind ViewModel.CleanupPlanReady, Mode=OneWay}"
-                                                  Foreground="{StaticResource RooIndustriesTextSecondaryBrush}" />
-                                        <CheckBox Grid.Column="1" Content="I reviewed the removal list"
-                                                  AutomationProperties.AutomationId="AppsCleanupReviewedListCheckBox"
-                                                  IsChecked="{x:Bind ViewModel.CleanupListApproved, Mode=TwoWay}"
-                                                  IsEnabled="{x:Bind ViewModel.CleanupPlanReady, Mode=OneWay}"
-                                                  Foreground="{StaticResource RooIndustriesTextSecondaryBrush}" />
-                                        <CheckBox Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
-                                                  AutomationProperties.AutomationId="AppsCleanupFinalApplyCheckBox"
-                                                  IsChecked="{x:Bind ViewModel.RealCleanupApproved, Mode=TwoWay}"
-                                                  IsEnabled="{x:Bind ViewModel.CleanupPlanReady, Mode=OneWay}"
-                                                  Foreground="{StaticResource RooIndustriesTextSecondaryBrush}">
-                                            <TextBlock Text="I understand this removes the reviewed files from this PC"
-                                                       TextWrapping="WrapWholeWords" />
-                                        </CheckBox>
-                                    </Grid>
+                                    <CheckBox AutomationProperties.AutomationId="AppsCleanupApproveRemovalCheckBox"
+                                              IsChecked="{x:Bind ViewModel.RemovalApproved, Mode=TwoWay}"
+                                              IsEnabled="{x:Bind ViewModel.CleanupPlanReady, Mode=OneWay}"
+                                              Foreground="{StaticResource RooIndustriesTextSecondaryBrush}">
+                                        <TextBlock Text="{x:Bind ViewModel.RemovalApprovalLabel, Mode=OneWay}" TextWrapping="WrapWholeWords" />
+                                    </CheckBox>
 
                                     <Grid RowSpacing="8">
                                         <Grid.RowDefinitions>
@@ -311,11 +289,13 @@
                                     <TextBlock Text="{x:Bind ViewModel.RemovalPathHelp, Mode=OneWay}" FontSize="12" LineHeight="17" TextWrapping="Wrap"
                                                Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                                 </StackPanel>
-                                <Border CornerRadius="8" Background="{StaticResource RooIndustriesSurfaceInputBrush}" BorderBrush="{StaticResource RooIndustriesBorderBrush}" BorderThickness="1" Padding="14,12">
-                                    <TextBlock Text="{x:Bind ViewModel.OfficialCommand, Mode=OneWay}" FontSize="12" FontFamily="Consolas, monospace"
-                                               TextWrapping="Wrap" MaxLines="4" LineHeight="19" LineStackingStrategy="BlockLineHeight"
-                                               TextTrimming="CharacterEllipsis" Foreground="{StaticResource RooIndustriesTextSecondaryBrush}" />
-                                </Border>
+                                <Expander Header="Details" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" AutomationProperties.AutomationId="AppsCleanupCommandDetails">
+                                    <Border CornerRadius="8" Background="{StaticResource RooIndustriesSurfaceInputBrush}" BorderBrush="{StaticResource RooIndustriesBorderBrush}" BorderThickness="1" Padding="14,12">
+                                        <TextBlock Text="{x:Bind ViewModel.OfficialCommand, Mode=OneWay}" FontSize="12" FontFamily="Consolas, monospace"
+                                                   TextWrapping="Wrap" MaxLines="4" LineHeight="19" LineStackingStrategy="BlockLineHeight"
+                                                   TextTrimming="CharacterEllipsis" Foreground="{StaticResource RooIndustriesTextSecondaryBrush}" IsTextSelectionEnabled="True" />
+                                    </Border>
+                                </Expander>
                                 <StackPanel Spacing="6">
                                     <TextBlock Text="Installed at" FontSize="11" LineHeight="16" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                                     <TextBlock Text="{x:Bind ViewModel.InstallLocation, Mode=OneWay}" FontSize="12" LineHeight="19" FontFamily="Consolas, monospace"
@@ -326,7 +306,7 @@
                             </StackPanel>
 
                             <StackPanel Spacing="12">
-                                <TextBlock Text="Leftover files" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                                <TextBlock Text="Leftovers" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                                 <TextBlock Text="{x:Bind ViewModel.LeftoverState, Mode=OneWay}" FontSize="12" LineHeight="17" TextWrapping="Wrap"
                                            Foreground="{StaticResource RooIndustriesTextMutedBrush}"
                                            Visibility="{x:Bind ViewModel.LeftoverState, Mode=OneWay, Converter={StaticResource StringToVisibility}}" />
@@ -337,8 +317,8 @@
                             </StackPanel>
 
                             <StackPanel Spacing="12">
-                                <TextBlock Text="Selected items" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
-                                <TextBlock Text="Review the selected items and backup before removing them."
+                                <TextBlock Text="Removal list" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                                <TextBlock Text="Nothing is removed until you press Remove app."
                                            FontSize="12" LineHeight="17" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                                 <TextBlock Text="{x:Bind ViewModel.CleanupPlanState, Mode=OneWay}" FontSize="12" LineHeight="17" TextWrapping="Wrap"
                                            Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
