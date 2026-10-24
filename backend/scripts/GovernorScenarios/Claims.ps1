@@ -361,7 +361,7 @@ function Test-ScenarioClaimsApplyOnceUndoOwnRace {
 }
 
 function Show-ClaimsJournal([string]$Name,$Journal){
-    Note $Name ([ordered]@{status=$Journal.status;changes=@($Journal.changes|ForEach-Object {[ordered]@{name=$_.name;status=$_.status;observed=$_.observed;error=$_.error;released=@($_.released|ForEach-Object {$_.feature})}})})
+    Note $Name ([ordered]@{status=$Journal.status;changes=@($Journal.changes|ForEach-Object {[ordered]@{name=$_.name;status=$_.status;observed=$_.observed;error=$_.error;released=@($_.released|Where-Object {$null -ne $_}|ForEach-Object {$_.feature})}})})
 }
 
 function New-ClaimsSessionRecord([Diagnostics.Process]$Process,[hashtable]$Controls){
@@ -443,9 +443,9 @@ function Test-ScenarioClaimsUndoSetBackBackgroundPriorities {
     Show-ClaimsJournal 'undo' $undo
     Assert ($undo.status -eq 'restored' -and (Read-Field $probe 'cpuPriority') -eq 'BelowNormal') 'Undo finishes with the original CPU priority in place'
     $restored=Invoke-ClaimsFeature 'Restore-ProcessProfileBackup.ps1' @{BackupPath=[string]$profile.backup.location;ConfirmApply=$true}
-    Note 'profileUndo' @{status=$restored.status;pending=$restored.restorePendingCount}
+    Note 'profileUndo' @{status=$restored.status;pending=$restored.result.restorePendingCount}
     Assert ((Read-Field $probe 'cpuPriority') -eq 'BelowNormal') 'Background priorities Undo leaves the original instead of writing the Apply once value back'
-    Assert ($restored.status -eq 'success' -and $restored.restorePendingCount -eq 0) 'Background priorities Undo finishes instead of leaving that setting waiting'
+    Assert ($restored.status -eq 'success' -and $restored.result.restorePendingCount -eq 0) 'Background priorities Undo finishes instead of leaving that setting waiting'
 }
 
 function Test-ScenarioClaimsUndoNoReleaseForEarlierChange {
@@ -462,8 +462,8 @@ function Test-ScenarioClaimsUndoNoReleaseForEarlierChange {
     $undo=Core 'process-restore' @{journalPath=$applied.journal;repoRoot=$repo} $script:claimsRules
     Show-ClaimsJournal 'undo' $undo
     $restored=Invoke-ClaimsFeature 'Restore-ProcessProfileBackup.ps1' @{BackupPath=[string]$profile.backup.location;ConfirmApply=$true}
-    Note 'profileUndo' @{status=$restored.status;pending=$restored.restorePendingCount}
-    Assert ($undo.status -eq 'restored' -and @((Get-ClaimsChange $undo 'cpuPriority')[0].released).Count -eq 0 -and (Read-Field $probe 'cpuPriority') -eq 'Normal') 'Undo doesn''t release a change made before Apply once, so its own Undo still puts the real original back'
+    Note 'profileUndo' @{status=$restored.status;pending=$restored.result.restorePendingCount}
+    Assert ($undo.status -eq 'restored' -and @((Get-ClaimsChange $undo 'cpuPriority')[0].released|Where-Object {$null -ne $_}).Count -eq 0 -and (Read-Field $probe 'cpuPriority') -eq 'Normal') 'Undo doesn''t release a change made before Apply once, so its own Undo still puts the real original back'
 
     $probe=Start-Probe (Copy-Probe 'ClaimsEarlierSession.exe')
     $memory=Read-Field $probe 'memoryPriority'
