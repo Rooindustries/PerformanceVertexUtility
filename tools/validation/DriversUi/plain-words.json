@@ -11,8 +11,10 @@
     { "pattern": "\\(TM\\)", "why": "a trademark mark" },
     { "pattern": " cores / ", "why": "the old core and thread format" },
     { "pattern": "\\bDriver \\d+(\\.\\d+){3} / ", "why": "the raw Windows driver version and date" },
-    { "pattern": "\\b\\d{4}-\\d{2}-\\d{2}\\b", "why": "a raw yyyy-MM-dd date" }
+    { "pattern": "\\b\\d{4}-\\d{2}-\\d{2}\\b", "why": "a raw yyyy-MM-dd date" },
+    { "pattern": "\\b\\d{1,2}/\\d{1,2}/\\d{4}\\b", "why": "a raw month/day/year date" },
+    { "pattern": "\\b\\d{2}:\\d{2}:\\d{2}\\b", "why": "a raw time of day" }
   ],
   "driverLine": "^Driver (\\d|from )",
-  "nvidiaDriverLine": "^Driver \\d{3}\\.\\d{2}( \u00b7 .+)?$"
+  "nvidiaDriverLine": "^Driver \\d{3}\\.\\d{2} \u00b7 \\d{1,2} \\p{L}{3,} \\d{4}$"
 }

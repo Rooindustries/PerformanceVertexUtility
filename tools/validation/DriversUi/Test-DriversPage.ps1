@@ -66,7 +66,7 @@ try{
  $env:DOTNET_ROOT=Split-Path $dotnet -Parent;$env:ROO_INDUSTRIES_DOTNET_EXE=$dotnet
  $app=Start-OwnedProcess -FilePath $exe[0].FullName -WindowStyle Normal -Purpose 'suite-test-build' -Lifetime invocation
  $script:window=WaitFor {$w=$A::RootElement.FindFirst($TS::Children,[Windows.Automation.PropertyCondition]::new($A::ProcessIdProperty,[int]$app.Identity.pid));if($w -and $w.Current.NativeWindowHandle -ne 0){$w}} 180
- if(-not$script:window){throw 'The app window never opened.'}
+ if(-not$script:window){throw ('The app window never opened'+$(if($app.process.HasExited){'; the app exited with code '+$app.process.ExitCode}else{'; the app is still running without a window'})+'.')}
  $script:hwnd=[IntPtr]::new([long]$script:window.Current.NativeWindowHandle)
  [RooIndustriesDriversPage]::ShowWindow($script:hwnd,9)|Out-Null
  [RooIndustriesDriversPage]::SetWindowPos($script:hwnd,[IntPtr]::new(-1),0,0,1280,1000,0x0040)|Out-Null
