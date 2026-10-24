@@ -309,8 +309,8 @@ static class CleanupRunChecks
                 if (row is not { Removed: true }) return (row is null ? "after reload: " : "list did not reload: ") + Listed(model);
                 if (row.SecondaryLabel != "Finished while you were away. Pick it to see the result.") return "result-only row subtitle: " + row.SecondaryLabel;
                 model.SelectedApp = row;
-                var failure = Idle(model) ?? (model.CleanupExecutionState == "App removed. Find leftovers again to clean up what it left."
-                    && model.CleanupExecutionDetail == "Its uninstaller may have changed things, so the old list wasn't used."
+                var failure = Idle(model) ?? (model.CleanupExecutionState == "App removed. The old list wasn't used."
+                    && model.CleanupExecutionDetail == "Its uninstaller may have changed things. To clean up what it left, start again from Check."
                     ? null : "own app: " + model.CleanupExecutionState + " / " + model.CleanupExecutionDetail);
                 if (failure is not null) return failure;
                 model.SelectedApp = null;
@@ -434,12 +434,17 @@ static class CleanupRunChecks
                     live.CleanupApply = (id, _, _, real) => Task.FromResult<string?>(Result(id, real ? "success" : "preview", real));
                     await model.RunFinalCheckCommand.ExecuteAsync(null);
                     await model.ApplyCleanupCommand.ExecuteAsync(null); Look("removed");
-                    if (model.CleanupExecutionState != "Done: 1 item removed." || model.CanApplyCleanupAction) problems.Add("Remove app stays clickable after a finished removal: " + model.CleanupExecutionState);
+                    if (model.CleanupExecutionState != "Done: 1 item removed." || model.CanApplyCleanupAction || model.CanRunFinalCheckAction || model.CanBuildCleanupListAction)
+                        problems.Add("the finished list can run again after a removal: " + model.CleanupExecutionState);
+                    model.RemovalPathReviewed = true; model.LeftoverScanCompleted = true; model.CleanupPlanReady = true; model.RemovalApproved = true;
                     live.CleanupApply = (id, _, _, real) => Task.FromResult<string?>(Result(id, real ? "cleanup-review-required" : "preview", real));
                     await model.RunFinalCheckCommand.ExecuteAsync(null);
+                    live.LastCleanupRollbackPath = "kept";
                     await model.ApplyCleanupCommand.ExecuteAsync(null); Look("uninstaller ran");
-                    if (model.ApplyApprovalSummary != "Find leftovers next." || model.CanRunFinalCheckAction || model.RemovalApproved) problems.Add("after its uninstaller ran, the old list still looks ready: " + model.ApplyApprovalSummary);
-                    model.LeftoverScanCompleted = true; model.CleanupPlanReady = true; model.RemovalApproved = true;
+                    if (model.ApplyApprovalSummary != "Check the app first." || model.CanRunFinalCheckAction || model.CanBuildCleanupListAction || model.RemovalApproved)
+                        problems.Add("after its uninstaller ran, the old check or list still looks ready: " + model.ApplyApprovalSummary);
+                    if (live.LastCleanupRollbackPath is not null) problems.Add("the stored uninstaller check was kept after a real run");
+                    model.RemovalPathReviewed = true; model.LeftoverScanCompleted = true; model.CleanupPlanReady = true; model.RemovalApproved = true;
                     live.CleanupApply = (id, _, _, real) => Task.FromResult<string?>(Result(id, "failed", real));
                     await model.RunFinalCheckCommand.ExecuteAsync(null); Look("final check failed");
                     if (model.CleanupExecutionState != "Final check failed." || model.FinalCheckPassed) problems.Add("a failed final check reads as a failed removal: " + model.CleanupExecutionState);

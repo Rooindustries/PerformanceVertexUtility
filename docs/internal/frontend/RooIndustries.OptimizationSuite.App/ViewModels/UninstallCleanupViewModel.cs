@@ -743,9 +743,9 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
 
             if (status == "cleanup-review-required")
             {
-                CleanupExecutionState = "App removed. Find leftovers again to clean up what it left.";
-                CleanupExecutionDetail = "Its uninstaller may have changed things, so the old list wasn't used.";
-                StartAgainFromLeftovers();
+                CleanupExecutionState = "App removed. The old list wasn't used.";
+                CleanupExecutionDetail = "Its uninstaller may have changed things. To clean up what it left, start again from Check.";
+                StartAgain();
                 SetSelectedRecovery(expectedAppId);
                 return;
             }
@@ -758,15 +758,15 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
                 CleanupExecutionDetail = CleanupRestoreAvailable
                     ? "Restore can put them back."
                     : "No backup was confirmed, so Restore isn't offered.";
-                FinalCheckPassed = false;
+                StartAgain();
                 return;
             }
 
             if (status == "needs-reconciliation")
             {
                 CleanupExecutionState = "Check whether the app is gone.";
-                CleanupExecutionDetail = "Its uninstaller was still running, so it was left to finish. When it's done, find leftovers again.";
-                StartAgainFromLeftovers();
+                CleanupExecutionDetail = "Its uninstaller was still running, so it was left to finish. When it's done, start again from Check.";
+                StartAgain();
                 SetSelectedRecovery(expectedAppId);
                 return;
             }
@@ -774,7 +774,8 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
             {
                 CleanupExecutionState = !applied ? "Final check failed." : status == "partial" ? "Removal stopped partway." : "Removal failed.";
                 CleanupExecutionDetail = !applied ? RetryFinalCheck : deleted.ToString(CultureInfo.InvariantCulture) + (deleted == 1 ? " item was" : " items were") + " removed. " + RetryRemoval;
-                FinalCheckPassed = false;
+                if (applied) StartAgain();
+                else FinalCheckPassed = false;
                 SetSelectedRecovery(expectedAppId);
                 return;
             }
@@ -807,12 +808,14 @@ public partial class UninstallCleanupViewModel : PageViewModelBase
         }
     }
 
-    private void StartAgainFromLeftovers()
+    private void StartAgain()
     {
+        App.Live.DiscardCleanupReview();
         FinalCheckPassed = false;
         RemovalApproved = false;
         CleanupPlanReady = false;
         LeftoverScanCompleted = false;
+        RemovalPathReviewed = false;
     }
 
     private void SummarizeCleanupRestore(string? json, string? operationError, bool restoreSucceeded)
