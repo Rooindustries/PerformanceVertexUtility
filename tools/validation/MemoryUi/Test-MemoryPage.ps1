@@ -15,6 +15,45 @@ public static class RooIndustriesMemoryPage {
  [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr h,IntPtr after,int x,int y,int w,int hgt,uint flags);
 }
 '@
+Add-Type -TypeDefinition @'
+using System; using System.ComponentModel; using System.Runtime.InteropServices; using System.Text;
+public static class RooIndustriesMemoryUser {
+ [StructLayout(LayoutKind.Sequential)] struct SidAndAttributes { public IntPtr Sid; public uint Attributes; }
+ [StructLayout(LayoutKind.Sequential, CharSet=CharSet.Unicode)] struct StartupInfo { public int cb; public string lpReserved, lpDesktop, lpTitle; public int dwX, dwY, dwXSize, dwYSize, dwXCountChars, dwYCountChars, dwFillAttribute, dwFlags; public short wShowWindow, cbReserved2; public IntPtr lpReserved2, hStdInput, hStdOutput, hStdError; }
+ [StructLayout(LayoutKind.Sequential)] struct ProcessInformation { public IntPtr hProcess, hThread; public int dwProcessId, dwThreadId; }
+ [DllImport("kernel32.dll")] static extern IntPtr GetCurrentProcess();
+ [DllImport("advapi32.dll", SetLastError=true)] static extern bool OpenProcessToken(IntPtr process, uint access, out IntPtr token);
+ [DllImport("advapi32.dll", SetLastError=true)] static extern bool CreateRestrictedToken(IntPtr existing, uint flags, uint disableCount, SidAndAttributes[] disable, uint deleteCount, IntPtr delete, uint restrictCount, IntPtr restrict, out IntPtr token);
+ [DllImport("advapi32.dll", SetLastError=true, CharSet=CharSet.Unicode)] static extern bool ConvertStringSidToSid(string text, out IntPtr sid);
+ [DllImport("advapi32.dll")] static extern int GetLengthSid(IntPtr sid);
+ [DllImport("advapi32.dll", SetLastError=true)] static extern bool SetTokenInformation(IntPtr token, int infoClass, ref SidAndAttributes info, int length);
+ [DllImport("advapi32.dll", SetLastError=true, CharSet=CharSet.Unicode)] static extern bool CreateProcessAsUser(IntPtr token, string application, StringBuilder command, IntPtr processAttributes, IntPtr threadAttributes, bool inherit, uint flags, IntPtr environment, string directory, ref StartupInfo startup, out ProcessInformation info);
+ [DllImport("kernel32.dll")] static extern uint WaitForSingleObject(IntPtr handle, uint milliseconds);
+ [DllImport("kernel32.dll")] static extern bool GetExitCodeProcess(IntPtr process, out uint code);
+ [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr handle);
+ [DllImport("kernel32.dll")] static extern IntPtr LocalFree(IntPtr memory);
+ static IntPtr Sid(string text) { IntPtr sid; if (!ConvertStringSidToSid(text, out sid)) throw new Win32Exception(); return sid; }
+ public static int Run(string command, uint milliseconds) {
+  IntPtr own = IntPtr.Zero, user = IntPtr.Zero, admins = Sid("S-1-5-32-544"), localAdmin = Sid("S-1-5-114"), medium = Sid("S-1-16-8192");
+  ProcessInformation info = new ProcessInformation();
+  try {
+   if (!OpenProcessToken(GetCurrentProcess(), 0x0001 | 0x0002 | 0x0008 | 0x0080, out own)) throw new Win32Exception();
+   SidAndAttributes[] disable = { new SidAndAttributes { Sid = admins }, new SidAndAttributes { Sid = localAdmin } };
+   if (!CreateRestrictedToken(own, 0x1 | 0x4, (uint)disable.Length, disable, 0, IntPtr.Zero, 0, IntPtr.Zero, out user)) throw new Win32Exception();
+   SidAndAttributes label = new SidAndAttributes { Sid = medium, Attributes = 0x20 };
+   if (!SetTokenInformation(user, 25, ref label, Marshal.SizeOf(typeof(SidAndAttributes)) + GetLengthSid(medium))) throw new Win32Exception();
+   StartupInfo startup = new StartupInfo { cb = Marshal.SizeOf(typeof(StartupInfo)) };
+   if (!CreateProcessAsUser(user, null, new StringBuilder(command), IntPtr.Zero, IntPtr.Zero, false, 0x08000000, IntPtr.Zero, null, ref startup, out info)) throw new Win32Exception();
+   if (WaitForSingleObject(info.hProcess, milliseconds) != 0) return -2;
+   uint code; GetExitCodeProcess(info.hProcess, out code); return (int)code;
+  } finally {
+   if (info.hThread != IntPtr.Zero) CloseHandle(info.hThread); if (info.hProcess != IntPtr.Zero) CloseHandle(info.hProcess);
+   if (user != IntPtr.Zero) CloseHandle(user); if (own != IntPtr.Zero) CloseHandle(own);
+   LocalFree(admins); LocalFree(localAdmin); LocalFree(medium);
+  }
+ }
+}
+'@
 [RooIndustriesMemoryPage]::SetProcessDPIAware()|Out-Null
 $A=[Windows.Automation.AutomationElement];$TS=[Windows.Automation.TreeScope];$CT=[Windows.Automation.ControlType]
 $words=[IO.File]::ReadAllText((Join-Path $Source 'tools\validation\MemoryUi\plain-words.json'))|ConvertFrom-Json
@@ -74,16 +113,12 @@ function LimitedRead([string]$Script){
  $work=Join-Path ([IO.Path]::GetTempPath()) ('roo-industries-memory-'+[Guid]::NewGuid().ToString('N'))
  [IO.Directory]::CreateDirectory($work)|Out-Null
  try{
-  $json=Join-Path $work 'read.json';$done=Join-Path $work 'done.txt'
-  $command="`$admin=([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator);try{`$text=(& '"+$Script+"' 2>`$null|Out-String);`$code=[string]`$LASTEXITCODE}catch{`$text='';`$code='threw'};[IO.File]::WriteAllText('"+$json+"',`$text);[IO.File]::WriteAllText('"+$done+"',`$code+' '+`$admin)"
-  $system=Join-Path $env:SystemRoot 'System32'
-  $encoded=[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
-  Start-Process -FilePath (Join-Path $system 'runas.exe') -ArgumentList ('/trustlevel:0x20000 "'+(Join-Path $system 'conhost.exe')+' --headless '+(Join-Path $system 'WindowsPowerShell\v1.0\powershell.exe')+' -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand '+$encoded+'"') -WindowStyle Hidden -Wait
-  if(-not (WaitFor {[IO.File]::Exists($done)} 240)){return [pscustomobject]@{exit='timed out';admin=$null;json=$null}}
-  Start-Sleep -Milliseconds 300
-  $parts=[IO.File]::ReadAllText($done).Split(' ')
+  $json=Join-Path $work 'read.json';$who=Join-Path $work 'who.txt'
+  $command="[IO.File]::WriteAllText('"+$who+"',[string]([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)+' '+(whoami /groups /fo csv|ConvertFrom-Csv|Where-Object {`$_.'Group Name' -like 'Mandatory Label\*'}).'Group Name');`$text=(& '"+$Script+"' 2>`$null|Out-String);[IO.File]::WriteAllText('"+$json+"',`$text);exit `$LASTEXITCODE"
+  $shell=Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+  $code=[RooIndustriesMemoryUser]::Run('"'+$shell+'" -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand '+[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command)),240000)
   $parsed=$null;try{$parsed=[IO.File]::ReadAllText($json)|ConvertFrom-Json}catch{}
-  [pscustomobject]@{exit=$parts[0];admin=$parts[1];json=$parsed}
+  [pscustomobject]@{exit=[string]$code;who=$(if([IO.File]::Exists($who)){[IO.File]::ReadAllText($who)}else{''});json=$parsed}
  }finally{Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue}
 }
 function Named($Read){@($Read.json.processes|Where-Object {$_.fileDescription}|ForEach-Object {[int]$_.pid})}
@@ -106,7 +141,7 @@ try{
  $exe=@(Get-ChildItem -LiteralPath (Join-Path $Source 'docs\internal\frontend\RooIndustries.OptimizationSuite.App\bin\x64\Debug') -Recurse -Filter 'RooIndustries.OptimizationSuite.App.exe'|Sort-Object LastWriteTimeUtc -Descending)
  if(-not$exe.Count){throw 'The app test build produced no executable.'}
  $total=LimitedRead $inventory
- Check ($total.admin -eq 'False') 'the normal-user reads run without admin rights' ('admin '+$total.admin)
+ Check ($total.who -ceq 'False Mandatory Label\Medium Mandatory Level') 'the normal-user reads run without admin rights, like an app opened normally' $total.who
  Check ($total.exit -eq '0' -and [long]$total.json.summary.processCount -gt 0 -and [long]$total.json.summary.availableMemoryBytes -gt 0) 'without admin rights the RAM totals still read' ('exit '+$total.exit+', '+$total.json.summary.processCount+' tasks, '+$total.json.summary.availableMemoryBytes+' bytes free')
  $list=LimitedRead $classification
  Check ($list.exit -eq '0' -and @($list.json.processes).Count -gt 0 -and -not @($list.json.errors).Count) 'without admin rights the list of apps using the most RAM still reads' ('exit '+$list.exit+', '+@($list.json.processes).Count+' tasks, '+((@($list.json.errors)|ForEach-Object {$_.code+': '+$_.message}) -join ' | '))
