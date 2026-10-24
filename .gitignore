@@ -54,3 +54,12 @@ docs/internal/references/
 # Large bundled development archive; release packaging should decide what to include.
 vendor/
 vendor/Utilities.zip
+
+# Agent instruction files
+AGENTS.md
+CLAUDE.md
+GEMINI.md
+.claude/
+.codex/
+.cursor/
+.agents/

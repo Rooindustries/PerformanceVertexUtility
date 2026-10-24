@@ -772,7 +772,6 @@
     {
       "text": "ROO-673",
       "files": [
-        "AGENTS.md",
         "tools/validation/Background/README.md"
       ],
       "reason": "Linear issue key for the restore test-harness repair that moves the harness-blocked scenarios back into the default group."
