@@ -66,12 +66,12 @@ try {
    $preview=Get-Content -Raw $previewFile.FullName|ConvertFrom-Json;Save 'verified-review.json' $preview
    if($preview.identity.processId -ne $target.Id -or $preview.desired.cpuPriority -ne 'High' -or $preview.desired.ioPriority -ne 3 -or $preview.desired.affinity.mask -ne '0xFFF'){throw 'Review does not match the owned PID and exact requested controls'}
    InvokeId 'ProcessApply';WaitFor {(ById 'ProcessRestore').Current.IsEnabled} 60 'applied'|Out-Null;$immediate=(ById 'ProcessDetail').Current.Name;Save 'immediate-result-detail.json' $immediate;Shot 'immediate-result';Start-Sleep 10;Shot 'partial-result';$later=(ById 'ProcessDetail').Current.Name;Save 'later-result-detail.json' $later;Save 'apply-journal.json' (Get-Content -Raw (Join-Path $previewFile.DirectoryName 'journal.json')|ConvertFrom-Json);$after=Read $target;Save 'after.json' $after
-   Save 'result-display-check.json' @{immediate=$immediate;afterTenSeconds=$later;immediateNamesControls=($immediate -match 'CPU priority:' -and $immediate -match 'I/O priority:' -and $immediate -match 'CPU affinity:');retained=($immediate -ceq $later)}
-   if($immediate -cne $later -or $later -notmatch 'CPU priority:.*not changed' -or $later -notmatch 'I/O priority:.*set to' -or $later -notmatch 'CPU affinity:.*set to'){throw 'Per-control result was hidden or misreported'}
+   Save 'result-display-check.json' @{immediate=$immediate;afterTenSeconds=$later;immediateNamesControls=($immediate -match 'CPU priority:' -and $immediate -match 'Disk priority:' -and $immediate -match 'CPU cores:');retained=($immediate -ceq $later)}
+   if($immediate -cne $later -or $later -notmatch 'CPU priority:.*not changed' -or $later -notmatch 'Disk priority:.*set to' -or $later -notmatch 'CPU cores:.*set to'){throw 'Per-control result was hidden or misreported'}
    if($after.priorityClass -ne 'Normal' -or $after.ioPriority -ne 3 -or $after.affinityMask -ne 4095){throw 'Apply once did not retain Normal CPU and change I/O + affinity'}
    $target.ProcessorAffinity=[IntPtr]3;Save 'external-affinity.json' (Read $target)
    InvokeId 'ProcessRestore';WaitFor {(ById 'ProcessStatus').Current.Name -match "weren't restored"} 60 'partial restore'|Out-Null;Shot 'restore-conflict';$restored=Read $target;Save 'restored.json' $restored;Save 'restore-detail.json' (ById 'ProcessDetail').Current.Name
-   if($restored.affinityMask -ne 3 -or (ById 'ProcessDetail').Current.Name -notmatch 'CPU affinity:.*not restored'){throw 'External affinity was overwritten or its conflict was hidden'}
+   if($restored.affinityMask -ne 3 -or (ById 'ProcessDetail').Current.Name -notmatch 'CPU cores:.*not restored'){throw 'External affinity was overwritten or its conflict was hidden'}
    foreach($field in 'priorityClass','ioPriority','memoryPriority'){if([string]$restored.$field -cne [string]$before.$field){throw ('Running process Restore did not return '+$field)}}
    $target.ProcessorAffinity=[IntPtr]4095;InvokeId 'ProcessRestore';WaitFor {(ById 'ProcessStatus').Current.Name -eq 'Original controls restored.' -and (ById 'cpuPriority').Current.IsEnabled} 60 'fixture restoration completed'|Out-Null;Save 'restored-after-conflict-cleared.json' (Read $target)
    if($target.ProcessorAffinity.ToInt64() -ne $before.affinityMask){throw 'Fixture affinity was not restored after the conflict was cleared'}
@@ -88,11 +88,10 @@ try {
    Nav 'Games';InvokeId 'GamesTab';InvokeId 'GameSessionNew';SetValue 'GameSessionExecutable' $gamePath
    ChooseId 'GameSessionLauncher' ('*RooFixtureLauncher*PID '+$launcher.Id)
    $cpu=WaitFor {@(All|Where-Object {$_.Current.ControlType -eq $CT::ComboBox -and $_.Current.Name -eq 'CPU priority'})|Select-Object -First 1} 90 'launch CPU options'
-   $io=WaitFor {@(All|Where-Object {$_.Current.ControlType -eq $CT::ComboBox -and $_.Current.Name -eq 'I/O priority'})|Select-Object -First 1} 90 'launch I/O options'
+   $io=WaitFor {@(All|Where-Object {$_.Current.ControlType -eq $CT::ComboBox -and $_.Current.Name -eq 'Disk priority'})|Select-Object -First 1} 90 'launch disk priority options'
    $cpuNames=@(Options $cpu|ForEach-Object {$_.Current.Name});$cpu.GetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern).Collapse()
    $ioNames=@(Options $io|ForEach-Object {$_.Current.Name});$io.GetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern).Collapse()
    Save 'choices.json' @{cpu=$cpuNames;io=$ioNames};if($cpuNames -contains 'Realtime' -or @($ioNames|Where-Object {$_ -like 'High*'}).Count){throw 'Unsupported launch priorities are offered'}
-   Toggle 'GameSessionScope'
    SetValue 'GameSessionExecutable' $launcher.Path;InvokeId 'GameSessionPreview';WaitFor {(ById 'GameSessionDetail').Current.Name -match 'launcher|Launcher'} 60 'own launcher refusal';Shot 'same-launcher'
    SetValue 'GameSessionExecutable' $gamePath;$game=Start-Process $gamePath -ArgumentList '-t 127.0.0.1' -WindowStyle Hidden -PassThru;$owned.Add((New-OwnedProcess $game))
    InvokeId 'GameSessionPreview';WaitFor {(ById 'GameSessionDetail').Current.Name -match 'Close|close'} 60 'game running refusal';Shot 'game-running'

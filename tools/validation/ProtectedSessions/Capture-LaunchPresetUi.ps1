@@ -1,6 +1,8 @@
 param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutRoot,[Parameter(Mandatory)][ValidatePattern('^[a-z][a-z0-9-]{0,30}$')][string]$Label)
 $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
+# A relative -Source would make every path below, and the path-length check, relative too.
+$Source=[IO.Path]::GetFullPath([IO.Path]::Combine((Get-Location -PSProvider FileSystem).ProviderPath,$Source))
 . (Join-Path $Source 'tools\validation\Update\Harness.Common.ps1')
 . (Join-Path $Source 'backend\scripts\BrandCompatibility.Common.ps1')
 $nonce=Initialize-HarnessInvocation ('launch-presets-'+$Label) $OutRoot
@@ -19,16 +21,17 @@ public static class RooIndustriesPresetCapture {
 [RooIndustriesPresetCapture]::SetProcessDPIAware()|Out-Null
 $A=[Windows.Automation.AutomationElement];$TS=[Windows.Automation.TreeScope];$CT=[Windows.Automation.ControlType]
 $catalog=([IO.File]::ReadAllText((Join-Path $Source 'backend\catalogs\launch-presets.json'))|ConvertFrom-Json).presets
-$names=[ordered]@{cpuPriority='CPU priority';ioPriority='I/O priority';memoryPriority='Memory priority';gpuPriority='GPU priority';executionQoS='Power mode';priorityBoost='Priority boost'}
+$names=[ordered]@{cpuPriority='CPU priority';ioPriority='Disk priority';memoryPriority='Memory priority';gpuPriority='GPU priority';executionQoS='Power mode';priorityBoost='Priority boost'}
 $labels=@{
  cpuPriority=@{Idle='Idle';BelowNormal='Below normal';Normal='Normal';AboveNormal='Above normal';High='High'}
  ioPriority=@{'0'='Very low';'1'='Low';'2'='Normal'}
  memoryPriority=@{'1'='Very low';'2'='Low';'3'='Medium';'4'='Below normal';'5'='Normal'}
  gpuPriority=@{'0'='Idle';'1'='Below normal';'2'='Normal';'3'='Above normal';'4'='High'}
  executionQoS=@{systemManaged='Windows managed';eco='Eco';high='High performance'}
- priorityBoost=@{'True'='Allow dynamic boosts';'False'='Disable dynamic boosts'}
+ priorityBoost=@{'True'='On';'False'='Off'}
 }
-$starterHint='A preset fills in the settings below. You can still change any of them.'
+$starterHint='Pick one to fill in the settings below. You can still change them.'
+$dash=[string][char]0x2013
 $evidence=[ordered]@{label=$Label;picker=$false;checks=@();shots=@();reviews=[ordered]@{};video=$null;claimedReviews=0}
 function WaitFor([scriptblock]$Probe,[double]$Limit,[string]$What){$deadline=[DateTime]::UtcNow.AddSeconds($Limit);while([DateTime]::UtcNow -lt $deadline){try{$value=& $Probe}catch{$value=$null};if($value){return $value};Start-Sleep -Milliseconds 100};throw ('Timed out waiting for '+$What)}
 function ById([string]$Id){$window.FindFirst($TS::Descendants,[Windows.Automation.PropertyCondition]::new($A::AutomationIdProperty,$Id))}
@@ -37,6 +40,8 @@ function Activate($Element){if(-not$Element){throw 'Missing UI element'};try{$El
 function InvokeId([string]$Id){Activate (WaitFor {$e=ById $Id;if($e -and $e.Current.IsEnabled){$e}} 90 $Id)}
 function SetText([string]$Id,[string]$Value){(WaitFor {$e=ById $Id;if($e -and $e.Current.IsEnabled){$e}} 90 $Id).GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern).SetValue($Value)}
 function Check([string]$Id){$p=(WaitFor {ById $Id} 45 $Id).GetCurrentPattern([Windows.Automation.TogglePattern]::Pattern);if([string]$p.Current.ToggleState -ne 'On'){$p.Toggle()}}
+function Uncheck([string]$Id){$p=(WaitFor {ById $Id} 45 $Id).GetCurrentPattern([Windows.Automation.TogglePattern]::Pattern);if([string]$p.Current.ToggleState -ne 'Off'){$p.Toggle()}}
+function Ticked([string]$Id){[string](ById $Id).GetCurrentPattern([Windows.Automation.TogglePattern]::Pattern).Current.ToggleState}
 function Shown($Box){
  try{$value=$Box.GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern).Current.Value;if($value){return $value}}catch{}
  try{$selected=@($Box.GetCurrentPattern([Windows.Automation.SelectionPattern]::Pattern).Current.GetSelection());if($selected.Count){return $selected[0].Current.Name}}catch{}
@@ -124,9 +129,13 @@ try{
  WaitFor {$e=ById 'GameSessionExecutable';$e -and $e.Current.IsEnabled} 90 'a new game session form'|Out-Null
  SetText 'GameSessionExecutable' $gamePath
  Choose (WaitFor {ById 'GameSessionLauncher'} 60 'the launcher list') ('*PID '+$launcher.Identity.pid)
- WaitFor {$c=Combo 'CPU cores';$c -and (Shown $c)} 90 'the launcher cores'|Out-Null
- Check 'GameSessionScope'
+ WaitFor {$e=ById 'GameSessionAllCores';if($e -and $e.Current.IsEnabled){$e}else{$c=Combo 'CPU cores';if($c -and (Shown $c)){$c}}} 90 'the launcher cores'|Out-Null
  $evidence.picker=[bool](ById 'GameSessionPreset')
+ if(-not$evidence.picker){
+  # A build from before the picker still uses its older names and needs its launcher checkbox before Review.
+  $names.ioPriority='I/O priority';$labels.priorityBoost=@{'True'='Allow dynamic boosts';'False'='Disable dynamic boosts'}
+  Check 'GameSessionScope'
+ }
  Start-Sleep -Milliseconds 800
  Shot 'fresh'
  if(-not$evidence.picker){
@@ -151,30 +160,28 @@ try{
   $competitive=@($catalog|Where-Object id -EQ 'competitive')[0]
   Choose (ById 'GameSessionPreset') $competitive.name
   WaitFor {(Hint) -ceq $competitive.description} 30 'Competitive description'|Out-Null
-  Choose (Combo 'I/O priority') 'Low'
+  Choose (Combo $names.ioPriority) 'Low'
   WaitFor {(Hint) -like 'Your own mix*'} 30 'the Custom hint'|Out-Null
   Assert 'A priority edit after a preset shows Custom' ((Picked) -eq '') @{picked=(Picked);hint=(Hint);placeholder=(Placeholder);settings=(Settings)}
   Shot 'custom'
   Choose (ById 'GameSessionPreset') $competitive.name
   WaitFor {(Hint) -ceq $competitive.description} 30 'Competitive description'|Out-Null
-  (WaitFor {ById 'GameSessionAdvanced'} 30 'Custom CPU mask').GetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern).Expand()
-  $all=(WaitFor {$e=ById 'GameSessionMask';if($e -and $e.Current.IsEnabled){$e}} 30 'the CPU mask').GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern).Current.Value
-  $allowed=[Convert]::ToUInt64($all.Trim().Substring(2),16)
-  $fewer=$allowed -band 0xFF;if($fewer -eq $allowed){$fewer=$allowed -band 0x7F};if(-not$fewer -or $fewer -eq $allowed){throw ('No smaller core set exists inside '+$all)}
-  $mask='0x'+$fewer.ToString('X')
-  SetText 'GameSessionMask' $mask
+  $usable=@(1..9|Where-Object {$e=ById ('GameSessionCore'+$_);$e -and $e.Current.IsEnabled})
+  if($usable.Count -ne 9){throw ('This capture needs a launcher that can use Cores 1 to 9; usable here: '+($usable -join ','))}
+  Uncheck 'GameSessionAllCores'
+  foreach($core in 1..8){Check ('GameSessionCore'+$core)}
   Start-Sleep -Milliseconds 600
-  Assert 'A core edit after a preset keeps the preset' ((Picked) -ceq $competitive.name -and (Hint) -ceq $competitive.description) @{picked=(Picked);hint=(Hint);mask=$mask;allowed=$all}
+  $coreState=[ordered]@{picked=(Picked);hint=(Hint);allCores=(Ticked 'GameSessionAllCores');core8=(Ticked 'GameSessionCore8');core9=(Ticked 'GameSessionCore9')}
+  Assert 'A core pick after a preset keeps the preset' ((Picked) -ceq $competitive.name -and (Hint) -ceq $competitive.description -and $coreState.allCores -eq 'Off' -and $coreState.core8 -eq 'On' -and $coreState.core9 -eq 'Off') $coreState
   Shot 'cores'
   InvokeId 'GameSessionPreview'
   $text=WaitFor {$t=Review;if($t -and (ById 'GameSessionStart').Current.IsEnabled){$t}} 90 'the review'
   $evidence.reviews.cores=$text
-  Assert 'Review after a core edit names the preset and the cores' ($text -match ('(?m)^Preset: '+$competitive.name+'$') -and $text -match ('(?m)^Cores: '+$mask+'$')) $text
+  Assert 'Review after a core pick names the preset and Cores 1-8, with no hex mask' ($text -match ('(?m)^Preset: '+$competitive.name+'$') -and $text -match ('(?m)^Cores: 1'+$dash+'8$') -and $text -notmatch '0x') $text
   Start-Sleep -Milliseconds 600
   Shot 'review'
   ClaimReviews
-  SetText 'GameSessionMask' $all
-  (ById 'GameSessionAdvanced').GetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern).Collapse()
+  Check 'GameSessionAllCores'
   $balanced=@($catalog|Where-Object id -EQ 'balanced')[0];$streaming=@($catalog|Where-Object id -EQ 'streaming')[0]
   Choose (ById 'GameSessionPreset') $streaming.name
   WaitFor {(Hint) -ceq $streaming.description} 30 'Streaming description'|Out-Null
