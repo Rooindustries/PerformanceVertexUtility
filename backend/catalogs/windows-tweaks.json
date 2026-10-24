@@ -71816,7 +71816,7 @@
       "options": [
         {
           "id": "choice-abe3c9cd2753a893",
-          "name": "apply",
+          "name": "Never send samples",
           "changes": [],
           "availability": [
             {
@@ -71841,7 +71841,7 @@
         },
         {
           "id": "choice-5bcd1ae8bde75d17",
-          "name": "source-default",
+          "name": "Windows default",
           "changes": [],
           "availability": [
             {
@@ -71960,7 +71960,7 @@
       "options": [
         {
           "id": "choice-67be079d14255d63",
-          "name": "apply",
+          "name": "Disabled",
           "changes": [],
           "availability": [
             {
@@ -71985,7 +71985,7 @@
         },
         {
           "id": "choice-0d3a235d95139d66",
-          "name": "source-default",
+          "name": "Windows default",
           "changes": [],
           "availability": [
             {
@@ -73121,7 +73121,7 @@
       "options": [
         {
           "id": "choice-ffc10555b475eb57",
-          "name": "apply",
+          "name": "Disabled",
           "changes": [],
           "availability": [
             {

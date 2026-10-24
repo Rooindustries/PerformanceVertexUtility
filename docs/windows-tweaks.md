@@ -283,7 +283,8 @@ current-user key and runs its real catalog row through apply, readback and Undo.
 devices that hold binary, nothing or an older DWORD, and checks each choice writes
 Windows' type and Undo puts back the exact earlier type and data. The desktop
 suite's `--type-twins <repo>` loads an older app's number choice through the app
-and checks it shows and writes as its text twin.
+and checks it shows and writes as its text twin, and `--review-labels <repo>`
+checks the words each review and undo line shows.
 
 Catalog contracts and negative controls run with:
 
@@ -301,6 +302,10 @@ from the proposed change. A value Windows itself sets, such as automatic DNS or
 the built-in encrypted DNS entries, reads as Windows default. A per-device setting
 whose devices hold different values reads as Varies by device, and an adapter
 setting that is on for only some protocols names them, such as On for IPv4 and IPv6.
+A choice imported from another tool is named in words, never by that tool's internal
+apply or source-default step, and the catalog compiler refuses one that would be.
+Defender sample submission reads as Windows default, Never send samples, Always ask
+before sending or Send all samples automatically.
 Choose a value, then turn on the row's switch to select that action for review;
 turning it back off clears that selection. Before another choice is selected, a row
 reads on when Windows has its starting choice, or any of its choices if the row has
