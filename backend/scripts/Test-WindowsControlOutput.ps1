@@ -46,12 +46,11 @@ $stray=@($lines | Where-Object { $_ -notmatch '^ROO_INDUSTRIES_CONTROL \d+ ' })
 if($stray.Count -lt 1){throw ('The fixture output line did not reach standard output: '+($lines -join ' | '))}
 if(@($stray | Where-Object { [array]::IndexOf($lines,$_) -lt $firstIndex -or [array]::IndexOf($lines,$_) -gt $secondIndex }).Count){throw ('Output from one batch read leaked next to another address: '+($lines -join ' | '))}
 Write-Host ('PASS batched reads keep request order and keep each read''s stray output before its own result ('+$stray.Count+' stray lines before the second result)')
-function Modules([string]$path){'Import-Module Microsoft.PowerShell.Utility; $global:PSModuleAutoLoadingPreference=''None''; $env:PSModulePath='''+$path.Replace("'","''")+''''}
+function Modules([string]$path){'Import-Module Microsoft.PowerShell.Utility,CimCmdlets; $global:PSModuleAutoLoadingPreference=''None''; $env:PSModulePath='''+$path.Replace("'","''")+''''}
 $hidden=Modules (Join-Path ([IO.Path]::GetTempPath()) ('roo-industries-no-modules-'+[guid]::NewGuid().ToString('N')))
 $guarded=[ordered]@{
  'Windows Firewall'=[ordered]@{kind='firewall-profile';target='Public';property='enabled'}
  'Exploit protection'=[ordered]@{kind='mitigations';target='system';property='policy'}
- 'Microsoft Defender Antivirus'=[ordered]@{kind='defender';target='system';property='SubmitSamplesConsent'}
  'Device power management'=[ordered]@{kind='device-power';target='non-network';property='enabled'}
  'Encrypted DNS'=[ordered]@{kind='dns-over-https';target='203.0.113.253';property='configuration'}
  'Teredo'=[ordered]@{kind='teredo';target='system';property='type'}
@@ -67,8 +66,8 @@ $missing=@((Run-Helper $source) -split "`r?`n" | Where-Object { $_ -match '^ROO_
 $features=@($guarded.Keys)
 $wrong=@(for($index=0;$index -lt $features.Count;$index++){if($missing.Count -le $index -or $missing[$index].error -cne (Unavailable $features[$index])){$features[$index]+': '+$(if($missing.Count -gt $index){[string]$missing[$index].error}else{'no result'})}})
 if($missing.Count -ne $features.Count -or $wrong.Count){throw ('A Windows version without a setting''s PowerShell commands must read that row as not available: '+($wrong -join ' | '))}
-Write-Host ('PASS Windows versions without a setting''s PowerShell commands read all '+$features.Count+' command-backed kinds, Defender included, as not available')
-$setters='Set-NetFirewallProfile','Set-MpPreference','Add-DnsClientDohServerAddress','Set-DnsClientDohServerAddress','Remove-DnsClientDohServerAddress','Set-NetTeredoConfiguration','Enable-MMAgent','Disable-MMAgent','Set-WindowsReservedStorageState','Enable-WindowsOptionalFeature','Disable-WindowsOptionalFeature','Enable-NetAdapterBinding','Disable-NetAdapterBinding','Set-NetAdapterLso','Set-NetAdapterRsc','Set-NetAdapterAdvancedProperty','Set-CimInstance'
+Write-Host ('PASS Windows versions without a setting''s PowerShell commands read all '+$features.Count+' command-backed kinds as not available')
+$setters='Set-NetFirewallProfile','Add-DnsClientDohServerAddress','Set-DnsClientDohServerAddress','Remove-DnsClientDohServerAddress','Set-NetTeredoConfiguration','Enable-MMAgent','Disable-MMAgent','Set-WindowsReservedStorageState','Enable-WindowsOptionalFeature','Disable-WindowsOptionalFeature','Enable-NetAdapterBinding','Disable-NetAdapterBinding','Set-NetAdapterLso','Set-NetAdapterRsc','Set-NetAdapterAdvancedProperty','Set-CimInstance','Invoke-CimMethod'
 $providers=$hidden+[Environment]::NewLine+(($setters|ForEach-Object {'function '+$_+' {[Console]::Out.WriteLine(''FIXTURE SETTER RAN'')}'}) -join [Environment]::NewLine)
 foreach($feature in $features){
  $address=$guarded[$feature]
@@ -77,30 +76,77 @@ foreach($feature in $features){
  if($output -match 'FIXTURE SETTER RAN' -or ($output|ConvertFrom-Json).error -cne (Unavailable $feature)){throw ('An apply or undo without '+$feature+'''s getter must stop as not available before any setter runs: '+$output)}
 }
 Write-Host ('PASS applies and undos of all '+$features.Count+' command-backed kinds stop as not available before any setter runs')
-$providers=$hidden+@'
-
-$script:consent=1
-function Get-MpPreference {[pscustomobject]@{SubmitSamplesConsent=$script:consent}}
-function Set-MpPreference {param([int]$SubmitSamplesConsent) $script:consent=$SubmitSamplesConsent}
-'@
-$defender=$guarded['Microsoft Defender Antivirus']
-$request=@{action='write';address=$defender;before=@{address=$defender;identity='defender:system:SubmitSamplesConsent';binding='defender:system';value=1};after=2}
-$present=Run-Helper $source
-$parsed=$present|ConvertFrom-Json
-if($null -ne $parsed.error -or $parsed.value -ne 2){throw ('Windows with the Defender commands must still read and change the Defender row: '+$present)}
-Write-Host 'PASS Windows with the Defender commands still reads and changes the Defender row'
+$defender=[ordered]@{kind='defender';target='system';property='SubmitSamplesConsent'}
+$notInstalled='Microsoft Defender Antivirus is not installed.'
+$stopped='Microsoft Defender Antivirus is not available with its service stopped. Windows stops it when another antivirus takes over.'
+$service=Get-Service -Name WinDefend -ErrorAction SilentlyContinue
+$real=if($null -eq $service){$notInstalled}elseif($service.Status -eq 'Stopped'){$stopped}else{[string][int](Get-MpPreference).SubmitSamplesConsent}
+function DefenderRead([int]$timeout=60000){$read=(Run-Helper $source $timeout)|ConvertFrom-Json;if($null -ne $read.error){[string]$read.error}else{[string]$read.value}}
 $fixture=[IO.Directory]::CreateDirectory((Join-Path ([IO.Path]::GetTempPath()) ('roo-industries-broken-module-'+[guid]::NewGuid().ToString('N')))).FullName
+$state=Join-Path $fixture 'defender.json'
 try{
  $module=[IO.Directory]::CreateDirectory((Join-Path $fixture 'BrokenDefender')).FullName
  [IO.File]::WriteAllText((Join-Path $module 'BrokenDefender.psd1'),"@{RootModule='BrokenDefender.psm1';ModuleVersion='1.0';FunctionsToExport=@('Get-MpPreference','Set-MpPreference')}")
  [IO.File]::WriteAllText((Join-Path $module 'BrokenDefender.psm1'),"throw 'The Defender provider dependency could not be loaded.'")
- $providers=Modules $fixture
- $request=@{action='read-batch';addresses=@($defender,[ordered]@{kind='defender';target='system';property='MAPSReporting'})}
- $failed=@((Run-Helper $source) -split "`r?`n" | Where-Object { $_ -match '^ROO_INDUSTRIES_CONTROL \d+ ' } | ForEach-Object { ($_ -replace '^ROO_INDUSTRIES_CONTROL \d+ ','')|ConvertFrom-Json })
- if($failed.Count -ne 2 -or @($failed|Where-Object {[string]$_.error -notlike '*The Defender provider dependency could not be loaded.*' -or [string]$_.error -ceq (Unavailable 'Microsoft Defender Antivirus')}).Count){throw ('Defender reads whose module is installed but fails to load must report the load error, not not available: '+($failed|ConvertTo-Json -Compress))}
- Write-Host 'PASS Defender reads report the load error, not not available, when Defender''s module is installed but fails to load'
-}finally{[IO.Directory]::Delete($fixture,$true)}
-$getters=@{'firewall-profile'='Get-NetFirewallProfile';'mitigations'='Get-ProcessMitigation';'defender'='Get-MpPreference';'device-power'='Get-PnpDevice';'dns-over-https'='Get-DnsClientDohServerAddress';'teredo'='Get-NetTeredoConfiguration';'memory'='Get-MMAgent';'reserved-storage'='Get-WindowsReservedStorageState';'network-adapter'='Get-NetAdapter'}
+ $broken=Modules $fixture
+ $request=@{action='read';address=$defender}
+ $providers=$hidden;$withoutCommands=DefenderRead
+ $providers=$broken;$withBrokenModule=DefenderRead
+ if($withoutCommands -cne $real -or $withBrokenModule -cne $real){throw ('The Defender row must read this PC''s real state ('+$real+') through Windows'' Defender provider when Defender''s PowerShell commands are missing or fail to load: '+$withoutCommands+' | '+$withBrokenModule)}
+ Write-Host ('PASS the Defender row reads this PC''s real state ('+$real+') through Windows'' Defender provider when Defender''s PowerShell commands are missing and when their module fails to load')
+ $cim=@'
+function Get-CimInstance {
+ param([string]$Namespace,[string]$ClassName,[string]$Filter)
+ $fixture=[IO.File]::ReadAllText($env:ROO_INDUSTRIES_FIXTURE_DEFENDER)|ConvertFrom-Json
+ if($ClassName -ceq 'Win32_Service' -and $Filter -ceq "Name='WinDefend'"){if($fixture.service){[pscustomobject]@{Name='WinDefend';State=[string]$fixture.service}};return}
+ if($Namespace -cne 'root/Microsoft/Windows/Defender' -or $ClassName -cne 'MSFT_MpPreference'){throw ('Unexpected CIM read: '+$Namespace+' '+$ClassName+' '+$Filter)}
+ if($fixture.provider){throw [string]$fixture.provider}
+ [pscustomobject]@{SubmitSamplesConsent=[byte]$fixture.consent}
+}
+function Invoke-CimMethod {
+ param([string]$Namespace,[string]$ClassName,[string]$MethodName,[hashtable]$Arguments)
+ $fixture=[IO.File]::ReadAllText($env:ROO_INDUSTRIES_FIXTURE_DEFENDER)|ConvertFrom-Json
+ $fixture.calls=[string]$fixture.calls+$Namespace+' '+$ClassName+'.'+$MethodName+' '+(@($Arguments.Keys|Sort-Object|ForEach-Object {$_+'='+$Arguments[$_]+':'+$Arguments[$_].GetType().Name}) -join ',')+';'
+ if([int]$fixture.result -le 0 -and -not $fixture.stuck){$fixture.consent=[int]$Arguments['SubmitSamplesConsent']}
+ [IO.File]::WriteAllText($env:ROO_INDUSTRIES_FIXTURE_DEFENDER,($fixture|ConvertTo-Json -Compress))
+ if([int]$fixture.result -lt 0){[pscustomobject]@{PSComputerName=$null}}else{[pscustomobject]@{ReturnValue=[uint32]$fixture.result}}
+}
+'@
+ $env:ROO_INDUSTRIES_FIXTURE_DEFENDER=$state
+ function Defender($provider,$service,[int]$consent=1,[int]$result=-1,[bool]$stuck=$false){[IO.File]::WriteAllText($state,([ordered]@{consent=$consent;provider=$provider;service=$service;result=$result;stuck=$stuck;calls=''}|ConvertTo-Json -Compress))}
+ function Saved{[IO.File]::ReadAllText($state)|ConvertFrom-Json}
+ function Change([int]$before,[int]$after){$script:request=@{action='write';address=$defender;before=@{address=$defender;identity='defender:system:SubmitSamplesConsent';binding='defender:system';value=$before};after=$after};(Run-Helper $source)|ConvertFrom-Json}
+ $set='root/Microsoft/Windows/Defender MSFT_MpPreference.Set SubmitSamplesConsent='
+ $providers=$hidden+[Environment]::NewLine+$cim
+ Defender $null 'Running' 1
+ $applied=Change 1 2;$afterApply=Saved
+ $providers=$broken+[Environment]::NewLine+$cim
+ $undone=Change 2 1;$afterUndo=Saved
+ if($null -ne $applied.error -or $applied.value -ne 2 -or $afterApply.consent -ne 2 -or $afterApply.calls -cne ($set+'2:Byte;') -or $null -ne $undone.error -or $undone.value -ne 1 -or $afterUndo.consent -ne 1 -or $afterUndo.calls -cne ($set+'2:Byte;'+$set+'1:Byte;')){throw ('Without Defender''s PowerShell commands, the Defender row must apply and undo through MSFT_MpPreference.Set and read back the result: '+($applied|ConvertTo-Json -Compress)+' '+($afterApply|ConvertTo-Json -Compress)+' | '+($undone|ConvertTo-Json -Compress)+' '+($afterUndo|ConvertTo-Json -Compress))}
+ Write-Host 'PASS without Defender''s PowerShell commands the Defender row applies and undoes through MSFT_MpPreference.Set, one byte value each, and reads back the result'
+ Defender $null 'Running' 1 2
+ $refused=Change 1 2;$afterRefusal=Saved
+ if([string]$refused.error -notlike '*Microsoft Defender Antivirus refused the change*' -or $afterRefusal.consent -ne 1 -or $afterRefusal.calls -cne ($set+'2:Byte;')){throw ('A Defender change the provider refuses must fail with its result: '+($refused|ConvertTo-Json -Compress)+' '+($afterRefusal|ConvertTo-Json -Compress))}
+ Write-Host 'PASS a Defender change the provider refuses fails with its result'
+ Defender $null 'Running' 1 -1 $true
+ $kept=Change 1 2;$afterKept=Saved
+ if([string]$kept.error -notlike '*Microsoft Defender Antivirus kept its previous sample-submission choice*' -or $afterKept.consent -ne 1){throw ('A Defender change Windows does not take must fail instead of reporting success: '+($kept|ConvertTo-Json -Compress)+' '+($afterKept|ConvertTo-Json -Compress))}
+ Write-Host 'PASS a Defender change Windows does not take fails instead of reporting success'
+ $providers=$hidden+[Environment]::NewLine+$cim
+ $lacking=@(
+  @{name='Defender removed';provider='Invalid namespace';service=$null;expected=$notInstalled},
+  @{name='Defender service stopped';provider='Operation failed with the following error: 0x800106ba';service='Stopped';expected=$stopped},
+  @{name='Defender running with a failing provider';provider='The Defender provider failed: 0x80004005';service='Running';expected='The Defender provider failed: 0x80004005'}
+ )
+ foreach($case in $lacking){
+  Defender $case.provider $case.service 1
+  $request=@{action='read';address=$defender};$read=DefenderRead
+  $write=Change 1 2;$after=Saved
+  if($read -cne $case.expected -or [string]$write.error -cne $case.expected -or $after.calls -or $after.consent -ne 1){throw ($case.name+' must read and stop every change with "'+$case.expected+'" before any Defender write: '+$read+' | '+($write|ConvertTo-Json -Compress)+' | '+($after|ConvertTo-Json -Compress))}
+ }
+ Write-Host 'PASS a PC whose Defender is removed reads not installed, a stopped Defender service reads not available, a running Defender whose provider fails keeps its own error, and none of them reaches a Defender write'
+}finally{$env:ROO_INDUSTRIES_FIXTURE_DEFENDER=$null;[IO.Directory]::Delete($fixture,$true)}
+$getters=@{'firewall-profile'='Get-NetFirewallProfile';'mitigations'='Get-ProcessMitigation';'device-power'='Get-PnpDevice';'dns-over-https'='Get-DnsClientDohServerAddress';'teredo'='Get-NetTeredoConfiguration';'memory'='Get-MMAgent';'reserved-storage'='Get-WindowsReservedStorageState';'network-adapter'='Get-NetAdapter'}
 $providers=''
 $local=@($guarded.Values|Where-Object { $_.kind -ne 'windows-feature' })
 $request=@{action='read-batch';addresses=$local}

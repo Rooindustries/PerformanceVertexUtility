@@ -704,17 +704,19 @@ static class FreshnessChecks
             if (!passed) Console.WriteLine("  simple mode lists [" + string.Join(", ", simple) + "], dns " + (dns is null ? "missing" : dns.CanRetry + "/" + dns.UnavailableHere + "/" + dns.Current + "/" + dns.Detail) + ", storage " + (storage is null ? "missing" : storage.CanRetry + "/" + storage.UnavailableHere + "/" + storage.Current + "/" + storage.Detail) + ", failing " + (failed is null ? "missing" : failed.CanRetry + "/" + failed.Current));
             return passed;
         });
-        await Scenario("Defender on a Windows version without its commands is unavailable here without a retry, while another failed read keeps Couldn't check", async () =>
+        await Scenario("Defender removed or stopped by another antivirus is unavailable here without a retry, while a failing Defender provider and another failed read keep Couldn't check", async () =>
         {
-            const string defender = "windows.171a004ed11767da", failing = "windows.3c9ad96209a9da2f";
-            const string defenderMissing = "Microsoft Defender Antivirus is not available with this Windows version.";
+            const string defender = "windows.171a004ed11767da", stopped = "fixture.defender-stopped", provider = "fixture.defender-provider", failing = "windows.3c9ad96209a9da2f";
+            const string removed = "Microsoft Defender Antivirus is not installed.", turnedOff = "Microsoft Defender Antivirus is not available with its service stopped. Windows stops it when another antivirus takes over.";
             RegistryAddress Address(string name) => new("CurrentUser", "Registry64", @"Software\RooIndustriesUiModelFixture", "value", name);
             TweakDefinition Setting(string id) => new(id, id, "System", "Fixture", 10240, 26200, ["*"], "none",
                 [new("on", "On", [new(Address(id), 1)]), new("off", "Off", [new(Address(id), 0)])], [new("Fixture", "fixture", "isolated UI validation")], null, false);
-            var fixture = new Fixture(Path.Combine(root, "missing-defender-command"), new TweakCatalog(1, "missing-defender", [Setting(defender), Setting(failing)], [])) { Missing = false };
+            var fixture = new Fixture(Path.Combine(root, "missing-defender"), new TweakCatalog(1, "missing-defender", [Setting(defender), Setting(stopped), Setting(provider), Setting(failing)], [])) { Missing = false };
             fixture.TransformStatus = inspection => inspection with { Settings = inspection.Settings.Select(status => status.Id switch
             {
-                defender => status with { Error = defenderMissing, Supported = false },
+                defender => status with { Error = removed, Supported = false },
+                stopped => status with { Error = turnedOff, Supported = false },
+                provider => status with { Error = "The WMI provider returned an error: 0x80041013", Supported = false },
                 failing => status with { Error = "Access is denied.", Supported = false },
                 _ => status,
             }).ToArray() };
@@ -722,39 +724,39 @@ static class FreshnessChecks
             model.ShowAdvanced = false;
             var simple = model.Rows.Select(row => row.Id).ToArray();
             model.ShowAdvanced = true;
-            var missing = model.Rows.SingleOrDefault(row => row.Id == defender);
-            var failed = model.Rows.SingleOrDefault(row => row.Id == failing);
-            var passed = simple.SequenceEqual([failing])
-                && missing is { CanRetry: false, UnavailableHere: true, Current: "Not available here" } && missing.Detail == defenderMissing
-                && failed is { CanRetry: true, Current: "Couldn't check" };
-            if (!passed) Console.WriteLine("  simple mode lists [" + string.Join(", ", simple) + "], defender " + (missing is null ? "missing" : missing.CanRetry + "/" + missing.UnavailableHere + "/" + missing.Current + "/" + missing.Detail) + ", failing " + (failed is null ? "missing" : failed.CanRetry + "/" + failed.Current));
+            var rows = new[] { defender, stopped, provider, failing }.Select(id => model.Rows.SingleOrDefault(row => row.Id == id)).ToArray();
+            var passed = simple.Order().SequenceEqual(new[] { provider, failing }.Order())
+                && rows[0] is { CanRetry: false, UnavailableHere: true, Current: "Not available here" } && rows[0]!.Detail == removed
+                && rows[1] is { CanRetry: false, UnavailableHere: true, Current: "Not available here" } && rows[1]!.Detail == turnedOff
+                && rows.Skip(2).All(row => row is { CanRetry: true, UnavailableHere: false, Current: "Couldn't check" });
+            if (!passed) Console.WriteLine("  simple mode lists [" + string.Join(", ", simple) + "], rows " + string.Join(" | ", rows.Select(row => row is null ? "missing" : row.CanRetry + "/" + row.UnavailableHere + "/" + row.Current + "/" + row.Detail)));
             return passed;
         });
-        await Scenario("Defender whose PowerShell module is installed but fails to load keeps Couldn't check with a retry, even when the load error names a missing file, and a network row with the same failure keeps its read-failure wording", async () =>
+        await Scenario("A setting whose PowerShell module is installed but fails to load keeps Couldn't check with a retry, even when the load error names a missing file, and a network row with the same failure keeps its read-failure wording", async () =>
         {
-            const string defender = "windows.171a004ed11767da", damaged = "windows.3c9ad96209a9da2f", network = "windows.bcd77ad54a7accc0", thrown = "The Defender provider dependency could not be loaded.";
-            var modules = Path.Combine(root, "broken-defender-modules"); var module = Directory.CreateDirectory(Path.Combine(modules, "BrokenDefender")).FullName;
-            File.WriteAllText(Path.Combine(module, "BrokenDefender.psd1"), "@{RootModule='BrokenDefender.psm1';ModuleVersion='1.0';FunctionsToExport=@('Get-MpPreference','Set-MpPreference')}");
-            File.WriteAllText(Path.Combine(module, "BrokenDefender.psm1"), "throw '" + thrown + "'");
-            var loadError = await HelperError(modules, new ControlAddress("defender", "system", "SubmitSamplesConsent"));
-            var missingFile = loadError.Replace(thrown, "Could not load file or assembly 'MpProvider'. The system cannot find the file specified. (Exception from HRESULT: 0x80070002)", StringComparison.Ordinal);
+            const string firewall = "fixture.firewall", damaged = "windows.3c9ad96209a9da2f", network = "windows.bcd77ad54a7accc0", thrown = "The firewall provider dependency could not be loaded.";
+            var modules = Path.Combine(root, "broken-firewall-modules"); var module = Directory.CreateDirectory(Path.Combine(modules, "BrokenFirewall")).FullName;
+            File.WriteAllText(Path.Combine(module, "BrokenFirewall.psd1"), "@{RootModule='BrokenFirewall.psm1';ModuleVersion='1.0';FunctionsToExport=@('Get-NetFirewallProfile','Set-NetFirewallProfile')}");
+            File.WriteAllText(Path.Combine(module, "BrokenFirewall.psm1"), "throw '" + thrown + "'");
+            var loadError = await HelperError(modules, new ControlAddress("firewall-profile", "Public", "enabled"));
+            var missingFile = loadError.Replace(thrown, "Could not load file or assembly 'NetSecurityProvider'. The system cannot find the file specified. (Exception from HRESULT: 0x80070002)", StringComparison.Ordinal);
             RegistryAddress Address(string name) => new("CurrentUser", "Registry64", @"Software\RooIndustriesUiModelFixture", "value", name);
             TweakDefinition Setting(string id, string category = "System") => new(id, id, category, "Fixture", 10240, 26200, ["*"], "none",
                 [new("on", "On", [new(Address(id), 1)]), new("off", "Off", [new(Address(id), 0)])], [new("Fixture", "fixture", "isolated UI validation")], null, false);
-            var fixture = new Fixture(Path.Combine(root, "unloaded-defender-module"), new TweakCatalog(1, "unloaded-defender", [Setting(defender), Setting(damaged), Setting(network, "Network")], [])) { Missing = false };
+            var fixture = new Fixture(Path.Combine(root, "unloaded-firewall-module"), new TweakCatalog(1, "unloaded-firewall", [Setting(firewall), Setting(damaged), Setting(network, "Network")], [])) { Missing = false };
             fixture.TransformStatus = inspection => inspection with { Settings = inspection.Settings.Select(status => status.Id switch
             {
-                defender => status with { Error = loadError, Supported = false },
+                firewall => status with { Error = loadError, Supported = false },
                 damaged => status with { Error = missingFile, Supported = false },
-                network => status with { Error = loadError.Replace("Microsoft Defender Antivirus", "Network adapter configuration", StringComparison.Ordinal), Supported = false },
+                network => status with { Error = loadError.Replace("Windows Firewall", "Network adapter configuration", StringComparison.Ordinal), Supported = false },
                 _ => status,
             }).ToArray() };
             App.Operations = fixture; var model = new WindowsTweaksViewModel(); await model.ShowAsync();
             model.ShowAdvanced = false;
             var simple = model.Rows.Select(row => row.Id).ToArray();
             model.ShowAdvanced = true;
-            var rows = new[] { defender, damaged, network }.Select(id => model.Rows.SingleOrDefault(row => row.Id == id)).ToArray();
-            var passed = loadError.Contains(thrown, StringComparison.Ordinal) && simple.Order().SequenceEqual(new[] { defender, damaged, network }.Order())
+            var rows = new[] { firewall, damaged, network }.Select(id => model.Rows.SingleOrDefault(row => row.Id == id)).ToArray();
+            var passed = loadError.Contains(thrown, StringComparison.Ordinal) && simple.Order().SequenceEqual(new[] { firewall, damaged, network }.Order())
                 && rows.All(row => row is { CanRetry: true, UnavailableHere: false, Current: "Couldn't check" }) && rows[2]?.Detail == "Windows could not read this preference. Refresh to try again.";
             if (!passed) Console.WriteLine("  helper said " + loadError + "; simple mode lists [" + string.Join(", ", simple) + "], rows " + string.Join(" | ", rows.Select(row => row is null ? "missing" : row.CanRetry + "/" + row.UnavailableHere + "/" + row.Current)));
             return passed;
