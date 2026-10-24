@@ -28,7 +28,7 @@ public static class RooIndustriesAffinityApp {
 [RooIndustriesAffinityApp]::SetProcessDPIAware()|Out-Null
 $A=[Windows.Automation.AutomationElement];$TS=[Windows.Automation.TreeScope];$CT=[Windows.Automation.ControlType]
 $evidence=[ordered]@{steps=@();chooseWays=@()};$status='fail'
-$app=$null;$window=$null;$recorder=$null;$owned=[Collections.Generic.List[object]]::new();$roots=[Collections.Generic.List[string]]::new()
+$app=$null;$window=$null;$recorder=$null;$owned=[Collections.Generic.List[object]]::new();$roots=[Collections.Generic.List[string]]::new();$copies=[Collections.Generic.List[object]]::new();$copies=[Collections.Generic.List[object]]::new()
 $operations=Join-Path $env:LOCALAPPDATA 'RooIndustriesOptimizationSuite\operations'
 $before=@(if([IO.Directory]::Exists($operations)){[IO.Directory]::GetDirectories($operations)})
 function WaitFor([scriptblock]$Check,[double]$Limit,[string]$What){$deadline=[DateTime]::UtcNow.AddSeconds($Limit);while([DateTime]::UtcNow -lt $deadline){try{$value=& $Check}catch{$value=$null};if($value){return $value};Start-Sleep -Milliseconds 200};throw ('Timed out waiting for '+$What)}
@@ -119,7 +119,7 @@ try{
  if(-not$exe.Count){throw 'The app build produced no executable.'}
  $gamePath=Join-Path $bin 'RooIndustriesLaunchPolicyProbe.exe'
  $launcherPath=Join-Path $bin 'RooIndustriesHighIoLauncher.exe';$stubPath=Join-Path $bin 'RooIndustriesHighIoStub.exe'
- Copy-HarnessFile $gamePath $launcherPath 'launcher-fixture'|Out-Null;Copy-HarnessFile $gamePath $stubPath 'stub-fixture'|Out-Null
+ $copies.Add((Copy-HarnessFile $gamePath $launcherPath 'launcher-fixture'));$copies.Add((Copy-HarnessFile $gamePath $stubPath 'stub-fixture'))
  # Comparison variant: the same clicks as the PR's capture on main and on the PR, but a result the build doesn't reach is recorded instead of ending the run.
  # A wait's condition reads $probe, so no helper on the call stack may name a parameter $Probe.
  function Soft([scriptblock]$Check,[double]$Limit,[string]$What){try{WaitFor $Check $Limit $What}catch{$script:evidence.missed+=@($What);$null}}
@@ -253,6 +253,7 @@ try{
  Start-Sleep -Seconds 3
  if($app){try{$window.GetCurrentPattern([Windows.Automation.WindowPattern]::Pattern).Close();if(-not$app.process.WaitForExit(20000)){Stop-HarnessProcess $app}}catch{try{Stop-HarnessProcess $app}catch{$evidence.cleanupError+=@($_.Exception.Message)}}}
  foreach($process in $owned){try{if(-not$process.process.WaitForExit(15000)){Stop-HarnessProcess $process}}catch{$evidence.cleanupError+=@($_.Exception.Message)}}
+ foreach($copy in $copies){try{Remove-HarnessEntry $copy}catch{$evidence.cleanupError+=@($_.Exception.Message)}}
  $created=@(if([IO.Directory]::Exists($operations)){[IO.Directory]::GetDirectories($operations)|Where-Object {$before -notcontains $_ -and [IO.Path]::GetFileName($_) -match '^(game-session|process)-'}})
  $evidence.createdOperations=@($created|ForEach-Object {[IO.Path]::GetFileName($_)})
  $settled=$status -eq 'pass' -and -not$evidence.cleanupError

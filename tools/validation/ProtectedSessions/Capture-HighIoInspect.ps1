@@ -209,9 +209,10 @@ try{
  $explorerWindow=WaitFor {$h=[RooIndustriesInspectCapture]::Window([int]$explorer.Identity.pid,'PROCEXPLORER');if($h -ne [IntPtr]::Zero){$h}} 30 'Process Explorer'
  [RooIndustriesInspectCapture]::ShowWindow($explorerWindow,3)|Out-Null
  Note 'started';try{$evidence.processExplorer.columns=ExplorerColumns}catch{$evidence.processExplorer.columnsError=$_.Exception.Message;Tree ($A::FromHandle($explorerWindow)) 'process-explorer-tree.json'}
+ function LogLines{$read=@();if(Test-Path -LiteralPath $log){$stream=[IO.FileStream]::new($log,'Open','Read','ReadWrite');try{$read=@([IO.StreamReader]::new($stream).ReadToEnd() -split "`r?`n")}finally{$stream.Dispose()}};return ,$read}
  $seen=0
  while($true){
-  $lines=@();if(Test-Path -LiteralPath $log){$stream=[IO.FileStream]::new($log,'Open','Read','ReadWrite');try{$lines=@([IO.StreamReader]::new($stream).ReadToEnd() -split "`r?`n")}finally{$stream.Dispose()}}
+  $lines=LogLines
   $pauses=@($lines|Where-Object {$_ -match '^INSPECT (.+?): game PID (\d+) for (\d+) s; expected I/O (\d), affinity 0x([0-9A-F]+)'})
   while($seen -lt $pauses.Count){
    $null=$pauses[$seen] -match '^INSPECT (.+?): game PID (\d+) for (\d+) s; expected I/O (\d), affinity 0x([0-9A-F]+)';$seen++
@@ -225,7 +226,7 @@ try{
   if($test.process.HasExited){break}
   Start-Sleep -Milliseconds 300
  }
- $test.process.WaitForExit();$evidence.testExit=$test.process.ExitCode
+ $test.process.WaitForExit();$evidence.testExit=$test.process.ExitCode;$lines=LogLines
  Copy-Item -LiteralPath (Join-Path $Source 'artifacts') -Destination (Join-Path $directory 'source-artifacts') -Recurse
  $evidence.testPassed=[bool](@($lines|Where-Object {$_ -match '^High I/O session assertions: \d+'}).Count)
  $failed=@($evidence.pauses|Where-Object {$_.taskManagerError -or $_.processExplorerError -or -not $_.taskManager.matches})
