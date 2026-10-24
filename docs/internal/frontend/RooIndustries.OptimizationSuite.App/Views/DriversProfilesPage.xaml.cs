@@ -1,5 +1,7 @@
+using System;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using RooIndustries.OptimizationSuite.Services;
 using RooIndustries.OptimizationSuite.ViewModels;
 
 namespace RooIndustries.OptimizationSuite.Views;
@@ -7,7 +9,7 @@ namespace RooIndustries.OptimizationSuite.Views;
 public sealed partial class DriversProfilesPage : Page, IRevalidatingPage
 {
     public System.Threading.Tasks.Task RevalidateAsync() => ViewModel.RevalidateAsync();
-    public DriversProfilesViewModel ViewModel { get; } = new();
+    public DriversProfilesViewModel ViewModel { get; } = new() { Tools = () => new ToolLauncherService(App.Live.RepoRoot ?? throw new InvalidOperationException(AppLog.MissingFiles)) };
 
     public DriversProfilesPage()
     {

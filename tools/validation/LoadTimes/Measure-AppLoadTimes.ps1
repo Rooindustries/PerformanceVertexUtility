@@ -139,7 +139,7 @@ $Pages = @(
     @{ Name = 'Games/Processes'; Tab = 'ProcessesTab'; Usable = { Visible (ById 'ProcessPicker') }; Complete = 'cycle:ProcessRefresh'; Timeout = 60 },
     @{ Name = 'Games/Background'; Tab = 'BackgroundTab'; Usable = { HasText ' running$' }; Complete = { HasText ' running$' }; Timeout = 60; After = 'GamesTab' },
     @{ Name = 'Remove apps'; Nav = 'Remove apps'; Usable = { HasName 'Remove selected applications, then review leftover files and registry data.' }; Complete = { HasText '^[1-9]\d* apps installed' }; Timeout = 60 },
-    @{ Name = 'Graphics drivers'; Nav = 'Graphics drivers'; Usable = { HasName 'Drivers & GPU' }; Complete = { HasName 'Processor' }; Timeout = 60 },
+    @{ Name = 'Graphics drivers'; Nav = 'Graphics drivers'; Usable = { HasName 'Driver downloads' }; Complete = { HasName 'Processor' }; Timeout = 60 },
     @{ Name = 'Windows tweaks'; Nav = 'Windows tweaks'; Usable = { $l = ById 'WindowsTweaksList'; $l -and $l.FindFirst($TS::Children, [Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty, $CT::ListItem)) }; Complete = { $s = ById 'WindowsTweaksStatus'; $s -and $s.Current.Name -match '^\d+ settings$|recovery|Restart' }; State = { $s = ById 'WindowsTweaksStatus'; $s -and $s.Current.Name -match '^\d+ settings|recovery|Restart' }; Timeout = 120 },
     @{ Name = 'Tools'; Nav = 'Tools'; Usable = { HasName 'HWiNFO' }; Complete = { HasName 'HWiNFO' }; Timeout = 45 },
     @{ Name = 'Tools/BIOS settings'; Invoke = 'OpenFirmware'; Usable = { HasName 'Load your BIOS settings' }; Complete = 'settle'; Timeout = 45 },
