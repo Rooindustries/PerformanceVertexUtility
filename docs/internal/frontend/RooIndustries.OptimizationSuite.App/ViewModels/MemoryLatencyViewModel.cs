@@ -86,10 +86,10 @@ public partial class MemoryLatencyViewModel : PageViewModelBase
             .Take(6))
         {
             TopMemoryRows.Add(new BackgroundRow(
-                string.IsNullOrWhiteSpace(p.DisplayName) ? Naming.FriendlyName(p.Name) : p.DisplayName!,
+                p.FileDescription ?? (string.IsNullOrWhiteSpace(p.DisplayName) ? Naming.FriendlyName(p.Name) : p.DisplayName!),
                 Naming.CategoryLabel(p.Category),
                 Format.Bytes(p.WorkingSetBytes),
-                p.Protected ? "Left alone" : "",
+                p.Protected ? "Never limited" : "",
                 p.Protected ? "low" : "neutral"));
         }
     }

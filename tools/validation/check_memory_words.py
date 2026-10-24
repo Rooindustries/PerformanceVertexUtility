@@ -62,7 +62,8 @@ def check(root: Path | str) -> list[str]:
 MUTATIONS = {
     'a "Memory by process" panel title': (XAML[0], 'Text="Apps using the most RAM"', 'Text="Memory by process"'),
     'a backend error shown under the app list': (VIEW_MODEL, 'TopMemoryNote = classification is null ? TopUnavailable : "";', 'TopMemoryNote = classification is null ? classificationResult.Error ?? "" : "";'),
-    'an "Excluded" row state': (VIEW_MODEL, 'p.Protected ? "Left alone" : ""', 'p.Protected ? "Excluded" : "Normal"'),
+    'an "Excluded" row state': (VIEW_MODEL, 'p.Protected ? "Never limited" : ""', 'p.Protected ? "Excluded" : "Normal"'),
+    'a "Left alone" row state': (VIEW_MODEL, 'p.Protected ? "Never limited" : ""', 'p.Protected ? "Left alone" : ""'),
     'a hex mask in a guide': (GUIDES, 'Close what you don\'t need before you start a game.', 'Set affinity 0x3F before you start a game.'),
     'a raw category value': (VIEW_MODEL, '"See temperatures, clock speeds and fan speeds."', '"foregroundGame"'),
 }

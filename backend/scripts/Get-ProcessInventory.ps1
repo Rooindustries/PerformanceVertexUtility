@@ -46,6 +46,18 @@ function Get-ProcessInventoryName {
     return "$name.exe"
 }
 
+$fileDescriptions = @{}
+function Get-ProcessFileDescription {
+    param([string]$ExecutablePath)
+    if ([string]::IsNullOrWhiteSpace($ExecutablePath)) { return $null }
+    if (-not $fileDescriptions.ContainsKey($ExecutablePath)) {
+        $description = $null
+        try { $description = [Diagnostics.FileVersionInfo]::GetVersionInfo($ExecutablePath).FileDescription } catch { }
+        $fileDescriptions[$ExecutablePath] = if ([string]::IsNullOrWhiteSpace($description)) { $null } else { $description.Trim() }
+    }
+    return $fileDescriptions[$ExecutablePath]
+}
+
 function Get-ProcessSessionIdSafe {
     param([System.Diagnostics.Process]$Process)
     try { return [int]$Process.SessionId } catch { return $null }
@@ -165,6 +177,7 @@ foreach ($proc in $rawProcesses) {
         name = [string]$proc.Name
         displayName = $null
         executablePath = $proc.ExecutablePath
+        fileDescription = Get-ProcessFileDescription $proc.ExecutablePath
         publisher = $null
         commandLine = if ($IncludeCommandLine) { $proc.CommandLine } else { $null }
         category = $category

@@ -70,6 +70,23 @@ function Mend([string]$Path){
 }
 function Fault([string]$Path){Mend $Path;[IO.File]::Move($Path,(Kept $Path));[IO.File]::WriteAllText($Path,$fault)}
 function MendAll{$failed=@(foreach($path in @($inventory,$classification)){try{Mend $path}catch{$_.Exception.Message}});if($failed.Count){throw ($failed -join ' ')}}
+function LimitedRead([string]$Script){
+ $work=Join-Path ([IO.Path]::GetTempPath()) ('roo-industries-memory-'+[Guid]::NewGuid().ToString('N'))
+ [IO.Directory]::CreateDirectory($work)|Out-Null
+ try{
+  $json=Join-Path $work 'read.json';$done=Join-Path $work 'done.txt'
+  $command="`$admin=([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator);try{`$text=(& '"+$Script+"' 2>`$null|Out-String);`$code=[string]`$LASTEXITCODE}catch{`$text='';`$code='threw'};[IO.File]::WriteAllText('"+$json+"',`$text);[IO.File]::WriteAllText('"+$done+"',`$code+' '+`$admin)"
+  $system=Join-Path $env:SystemRoot 'System32'
+  $encoded=[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
+  Start-Process -FilePath (Join-Path $system 'runas.exe') -ArgumentList ('/trustlevel:0x20000 "'+(Join-Path $system 'conhost.exe')+' --headless '+(Join-Path $system 'WindowsPowerShell\v1.0\powershell.exe')+' -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand '+$encoded+'"') -WindowStyle Hidden -Wait
+  if(-not (WaitFor {[IO.File]::Exists($done)} 240)){return [pscustomobject]@{exit='timed out';admin=$null;json=$null}}
+  Start-Sleep -Milliseconds 300
+  $parts=[IO.File]::ReadAllText($done).Split(' ')
+  $parsed=$null;try{$parsed=[IO.File]::ReadAllText($json)|ConvertFrom-Json}catch{}
+  [pscustomobject]@{exit=$parts[0];admin=$parts[1];json=$parsed}
+ }finally{Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue}
+}
+function Named($Read){@($Read.json.processes|Where-Object {$_.fileDescription}|ForEach-Object {[int]$_.pid})}
 $dotnet=@((Join-Path $env:LOCALAPPDATA 'Microsoft\dotnet\dotnet.exe'),(Join-Path $env:USERPROFILE '.dotnet\dotnet.exe'),(Join-Path $env:ProgramFiles 'dotnet\dotnet.exe')|Where-Object {Test-Path -LiteralPath $_ -PathType Leaf}|Where-Object {@(& $_ --list-sdks 2>$null).Count}|Select-Object -First 1)
 if(-not$dotnet){throw 'No .NET SDK was found for the test build.'}
 $dotnet=$dotnet[0]
@@ -88,6 +105,15 @@ try{
  if($LASTEXITCODE -ne 0){throw 'The app test build failed; see build.log.'}
  $exe=@(Get-ChildItem -LiteralPath (Join-Path $Source 'docs\internal\frontend\RooIndustries.OptimizationSuite.App\bin\x64\Debug') -Recurse -Filter 'RooIndustries.OptimizationSuite.App.exe'|Sort-Object LastWriteTimeUtc -Descending)
  if(-not$exe.Count){throw 'The app test build produced no executable.'}
+ $total=LimitedRead $inventory
+ Check ($total.admin -eq 'False') 'the normal-user reads run without admin rights' ('admin '+$total.admin)
+ Check ($total.exit -eq '0' -and [long]$total.json.summary.processCount -gt 0 -and [long]$total.json.summary.availableMemoryBytes -gt 0) 'without admin rights the RAM totals still read' ('exit '+$total.exit+', '+$total.json.summary.processCount+' tasks, '+$total.json.summary.availableMemoryBytes+' bytes free')
+ $list=LimitedRead $classification
+ Check ($list.exit -eq '0' -and @($list.json.processes).Count -gt 0 -and -not @($list.json.errors).Count) 'without admin rights the list of apps using the most RAM still reads' ('exit '+$list.exit+', '+@($list.json.processes).Count+' tasks, '+((@($list.json.errors)|ForEach-Object {$_.code+': '+$_.message}) -join ' | '))
+ $named=$null;try{$named=& (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe') -NoProfile -ExecutionPolicy Bypass -File $classification 2>$null|Out-String|ConvertFrom-Json}catch{}
+ $limitedNamed=@(Named $list);$limitedSeen=@($list.json.processes|ForEach-Object {[int]$_.pid})
+ $unnamed=@($named.processes|Where-Object {$_.fileDescription -and $limitedNamed -notcontains [int]$_.pid -and $limitedSeen -contains [int]$_.pid}|ForEach-Object {$_.name})
+ Check ($null -ne $named -and @(Named $named).Count -gt 0 -and -not $unnamed.Count) 'without admin rights every app keeps the name Windows has for it' (($unnamed|Select-Object -Unique -First 12) -join ', ')
  foreach($path in @($inventory,$classification)){Fault $path}
  $env:DOTNET_ROOT=Split-Path $dotnet -Parent;$env:ROO_INDUSTRIES_DOTNET_EXE=$dotnet;$env:ROO_INDUSTRIES_INITIAL_NAV='memory'
  $app=Start-OwnedProcess -FilePath $exe[0].FullName -WindowStyle Normal -Purpose 'suite-test-build' -Lifetime invocation
@@ -126,6 +152,9 @@ try{
  Start-Sleep 2
  Check (@(Shown|Where-Object {$_ -cmatch '^\d+% of your RAM in use$'}).Count -eq 1) 'the headline says how much RAM is in use in plain words'
  foreach($text in @("See what's using your RAM and how to free it up for games.",'Apps using the most RAM','Tools to check your PC')){Check (HasText $text) ('the page shows "'+$text+'"')}
+ $rawNamed=@($named.processes|Where-Object {$_.fileDescription -and $_.fileDescription -ne [IO.Path]::GetFileNameWithoutExtension([string]$_.name)}|ForEach-Object {[IO.Path]::GetFileNameWithoutExtension([string]$_.name)})
+ $shownApps=@($script:window.FindAll($TS::Descendants,[Windows.Automation.PropertyCondition]::new($A::AutomationIdProperty,'MemoryAppName'))|ForEach-Object {$_.Current.Name})
+ Check ($shownApps.Count -gt 0 -and -not @($shownApps|Where-Object {$rawNamed -contains $_}).Count) 'the app list shows the name Windows has for each app, not its raw program name' ($shownApps -join ', ')
  Check ((ScrollTo 0) -eq 0) 'the Memory page scrolls to its top';Shot 'memory-loaded-top'
  Check ((ScrollTo 100) -ge 99) 'the Memory page scrolls to its bottom';Shot 'memory-loaded-bottom'
  Check ($toolTitles.Count -and -not @($toolTitles|Where-Object {-not (HasText ('Go to Tools for '+$_))}).Count) ('every tool has a "Go to Tools" button that names its tool ('+($toolTitles -join ', ')+')')

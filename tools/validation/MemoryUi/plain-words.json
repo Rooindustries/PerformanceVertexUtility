@@ -14,6 +14,7 @@
     { "pattern": "\\bsingle channel\\b", "why": "a developer phrase" },
     { "pattern": "\\bcore parking\\b", "why": "a developer phrase" },
     { "pattern": "\\bexcluded\\b", "why": "an internal plan name" },
+    { "pattern": "\\bleft alone\\b", "why": "a state that doesn't say what it means" },
     { "pattern": "\\bpowershell\\b", "why": "raw script error text" },
     { "pattern": "\\.ps1\\b", "why": "a raw script name" },
     { "pattern": "\\bregistry\\b", "why": "raw system error text" },

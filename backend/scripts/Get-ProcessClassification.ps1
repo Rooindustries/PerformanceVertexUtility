@@ -42,6 +42,7 @@ try {
             name = [string](Get-RooIndustriesPropertyValue $proc 'name' '')
             displayName = Get-RooIndustriesPropertyValue $proc 'displayName' $null
             executablePath = Get-RooIndustriesPropertyValue $proc 'executablePath' $null
+            fileDescription = Get-RooIndustriesPropertyValue $proc 'fileDescription' $null
             publisher = Get-RooIndustriesPropertyValue $proc 'publisher' $null
             commandLine = if ($IncludeCommandLine) { Get-RooIndustriesPropertyValue $proc 'commandLine' $null } else { $null }
             category = [string](Get-RooIndustriesPropertyValue $proc 'category' 'unknown')
