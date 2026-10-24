@@ -1,0 +1,18 @@
+{
+  "screen": "Graphics drivers",
+  "banned": [
+    { "pattern": "\\bManual\\b", "caseSensitive": true, "why": "an internal review tag" },
+    { "pattern": "Drivers & GPU", "why": "the old page title" },
+    { "pattern": "Network & devices", "why": "the old panel name" },
+    { "pattern": "No driver recommendations", "why": "the old empty download card" },
+    { "pattern": "Close and reopen", "why": "the old error advice" },
+    { "pattern": "Microsoft Windows", "why": "the long Windows name" },
+    { "pattern": "\\(R\\)", "why": "a trademark mark" },
+    { "pattern": "\\(TM\\)", "why": "a trademark mark" },
+    { "pattern": " cores / ", "why": "the old core and thread format" },
+    { "pattern": "\\bDriver \\d+(\\.\\d+){3} / ", "why": "the raw Windows driver version and date" },
+    { "pattern": "\\b\\d{4}-\\d{2}-\\d{2}\\b", "why": "a raw yyyy-MM-dd date" }
+  ],
+  "driverLine": "^Driver (\\d|from )",
+  "nvidiaDriverLine": "^Driver \\d{3}\\.\\d{2}( \u00b7 .+)?$"
+}
