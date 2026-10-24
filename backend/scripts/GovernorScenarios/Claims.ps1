@@ -416,6 +416,29 @@ function Test-ScenarioClaimsUndoSetBackBackgroundPriorities {
     Assert ((Read-Field $probe 'cpuPriority') -eq 'BelowNormal') 'Background priorities Undo leaves the original instead of writing the Apply once value back'
 }
 
+function Test-ScenarioClaimsUndoReleaseOnlyThatRecord {
+    Initialize-ClaimsRedirect
+    $repo=New-ClaimsRepo
+    $state=Join-Path $repo 'backend\state'
+    $name='ClaimsBackOnce.exe'
+    $probe=Start-Probe (Copy-Probe $name)
+    Set-Field $probe 'cpuPriority' 'BelowNormal'
+    $applied=Invoke-ClaimsApplyOnce $probe @{cpuPriority='Normal'} $script:claimsRules $script:claimsData
+    $first=Invoke-ClaimsFeature 'Apply-ProcessProfile.ps1' @{ProfilePath=(New-ClaimsProfile $name 'background');StateRoot=$state;ConfirmApply=$true}
+    Write-ClaimsProfilePointer $first
+    $undo=Core 'process-restore' @{journalPath=$applied.journal;repoRoot=$repo} $script:claimsRules
+    Show-ClaimsJournal 'undo' $undo
+    Invoke-ClaimsFeature 'Restore-ProcessProfileBackup.ps1' @{BackupPath=[string]$first.backup.location;ConfirmApply=$true}|Out-Null
+    Assert ($undo.status -eq 'restored' -and (Read-Field $probe 'cpuPriority') -eq 'BelowNormal') 'Undo and the first Background priorities Undo leave the original in place'
+    Set-Field $probe 'cpuPriority' 'Normal'
+    $second=Invoke-ClaimsFeature 'Apply-ProcessProfile.ps1' @{ProfilePath=(New-ClaimsProfile $name 'background');StateRoot=$state;ConfirmApply=$true}
+    Write-ClaimsProfilePointer $second
+    Assert ([string]$second.backup.location -ne [string]$first.backup.location -and (Read-Field $probe 'cpuPriority') -eq 'BelowNormal') 'Another program set Normal, then a new Background priorities run lowered it again'
+    $restored=Invoke-ClaimsFeature 'Restore-ProcessProfileBackup.ps1' @{BackupPath=[string]$second.backup.location;ConfirmApply=$true}
+    Note 'secondProfileUndo' $restored.status
+    Assert ((Read-Field $probe 'cpuPriority') -eq 'Normal') 'The new run''s Undo puts back the value it started from; the earlier release does not apply to it'
+}
+
 function Test-ScenarioClaimsUndoSetBackBackgroundLimits {
     Initialize-ClaimsRedirect
     $repo=New-ClaimsRepo
