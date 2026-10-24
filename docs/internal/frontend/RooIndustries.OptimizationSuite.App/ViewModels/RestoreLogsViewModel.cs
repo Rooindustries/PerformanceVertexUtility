@@ -67,7 +67,7 @@ public partial class RestoreLogsViewModel : PageViewModelBase
             || games.Any(game => game.Worker.State is null || game.Worker.HostRunning is null);
 
         var restart = windows?.Pending is { Phase: "awaiting-restart" } pending && windows.State?.History.Any(item => item.OperationId == pending.Plan.OperationId) == true;
-        RestoreHeadline = restart ? "Restart your PC to finish a Windows feature change." : windows?.Pending is not null ? "A Windows change didn't finish. Press Review recovery in Windows tweaks." : restorable
+        RestoreHeadline = restart ? "A Windows feature change needs a restart. After you restart, press Review recovery in Windows tweaks to finish it." : windows?.Pending is not null ? "A Windows change didn't finish. Press Review recovery in Windows tweaks." : restorable
             ? "You've got changes you can undo. Each row tells you where."
             : unavailable ? "Couldn't check everything. Open this page again to retry."
                 : Nothing + ".";
@@ -97,7 +97,7 @@ public partial class RestoreLogsViewModel : PageViewModelBase
             rulesState switch { "running" => signIn == "yes" ? "safe" : "medium", "paused" or "off" when leftoverApps == 0 && rules!.Worker.HostRunning is not null => "neutral", _ => "medium" }));
 
         var profiles = windows?.State?.Profiles.Length ?? 0;
-        RestoreRows.Add(new StatusLine("Windows tweaks", windows is null ? CouldNotCheck : windows.Pending is not null ? restart ? "Restart your PC to finish" : "A change didn't finish · press Review recovery in Windows tweaks" :
+        RestoreRows.Add(new StatusLine("Windows tweaks", windows is null ? CouldNotCheck : windows.Pending is not null ? restart ? "Restart your PC, then press Review recovery in Windows tweaks" : "A change didn't finish · press Review recovery in Windows tweaks" :
             profiles > 0 ? profiles + (profiles == 1 ? " profile to undo" : " profiles to undo") : Nothing, windows is null || windows.Pending is not null ? "medium" : profiles > 0 ? "safe" : "neutral"));
         foreach (var profile in windows?.State?.Profiles ?? [])
             RestoreRows.Add(new StatusLine(ProfileName(profile.Id, profile.Controls?.Select(claim => claim.Target)), profile.Selections.Length + (profile.Selections.Length == 1 ? " setting · undo it in Windows tweaks" : " settings · undo them in Windows tweaks"), "safe"));
@@ -129,11 +129,12 @@ public partial class RestoreLogsViewModel : PageViewModelBase
                     : outcomes.Contains("steppedBack") ? " · another app changed some of its settings, so the governor left those alone" : " · on for this app"), "Undo in Processes", "low"));
         }
 
+        var tuneUndo = session is null ? CouldNotCheck : RecoveryAvailable(session.Status, session.Restorable) switch { true => "Undo in Games", false => Nothing, null => CouldNotCheck };
         foreach (var item in session is { DryRun: false } ? session.ChangedItems ?? [] : [])
         {
             HistoryRows.Add(new AuditRow("Recent", "Game priority", "low", DisplayName(item),
                 "CPU priority " + Priority(item.OriginalPriorityClass) + " → " + Priority(item.AppliedPriorityClass),
-                "Undo in Games", "low"));
+                tuneUndo, "low"));
         }
 
         foreach (var item in session is { DryRun: false } ? session.RestoredItems ?? [] : [])
@@ -148,7 +149,7 @@ public partial class RestoreLogsViewModel : PageViewModelBase
         {
             HistoryRows.Add(new AuditRow("Recent", "Background limits", "medium",
                 restraints + (restraints == 1 ? " background app" : " background apps"),
-                "Lower priority while your game runs", "Undo in Games", "low"));
+                "Lower priority while your game runs", RecoveryAvailable(governor!.Status, governor.Restorable) switch { true => "Undo in Games", false => Nothing, null => CouldNotCheck }, "low"));
         }
 
         foreach (var game in games.Where(game => game.Worker.State is not null))

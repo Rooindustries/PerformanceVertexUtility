@@ -15,7 +15,7 @@ static class UndoChangesChecks
         "Review profile", "saved profiles", "Saved settings", "stepped back", "kept by the governor", "could not", "process settings", "file-permissions-", "restore-point-",
         "AboveNormal", "BelowNormal", "RealTime", "restartRequired", "notFound", "leftAsSet", "steppedBack", "notPutBack", "awaiting-restart", "0x", "\u2014", "  ",
     ];
-    private static readonly string[] UndoColumn = ["Undo in Games", "Undo in Processes", "Undo in Windows tweaks", "Done", "Nothing to undo"];
+    private static readonly string[] UndoColumn = ["Undo in Games", "Undo in Processes", "Undo in Windows tweaks", "Done", "Nothing to undo", "Couldn't check"];
     private static readonly string Folder = OperatingSystem.IsWindows() ? @"C:\Fixture\" : "/fixture/";
 
     public static async Task RunAsync(Action<bool, string> check)
@@ -122,6 +122,17 @@ static class UndoChangesChecks
         var shown = new[] { page.RestoreHeadline }.Concat(page.RestoreRows.SelectMany(row => new[] { row.Label, row.Value }))
             .Concat(page.HistoryRows.SelectMany(row => new[] { row.Time, row.Action, row.Target, row.Change, row.RestoreText })).ToArray();
         Clean(check, shown, "Undo changes rows on a PC with every kind of change");
+
+        App.Live.GameStatusModel = new GameTuneSessionStatus { DryRun = false, Status = "completed", Restorable = false, ChangedItems = [tuned, idle], RestoredItems = [tuned] };
+        App.Live.GovernorStatusModel = new ProcessGovernorSessionStatus { DryRun = false, Status = "completed", Restorable = false, ActiveRestraints = App.Live.GovernorStatusModel.ActiveRestraints };
+        page = new RestoreLogsViewModel();
+        await page.InitializeAsync();
+        var finished = page.HistoryRows.Where(row => row.Action is "Game priority" or "Background limits").Select(row => (row.Change, row.RestoreText)).ToArray();
+        check(finished.SequenceEqual(new[]
+            {
+                ("CPU priority Normal → Above normal", "Nothing to undo"), ("CPU priority Below normal → Idle", "Nothing to undo"), ("CPU priority back to Normal", "Done"),
+                ("Lower priority while your game runs", "Nothing to undo"),
+            }), "A finished Game priority or Background limits run with no backup left never offers Undo in Games for its old changes\n    got: " + string.Join(" | ", finished));
     }
 
     private static async Task HeadlinesAsync(Action<bool, string> check)
@@ -159,8 +170,9 @@ static class UndoChangesChecks
             History = [History("op-1", "my-settings", 1, null)],
         };
         page = await Read(new TweakRecovery(state, new ControlJournal(plan, "review", 1, "awaiting-restart"), "hash"));
-        check(page.RestoreHeadline == "Restart your PC to finish a Windows feature change." && Windows(page) == "Restart your PC to finish",
-            "A Windows feature change waiting for a restart says to restart the PC");
+        check(page.RestoreHeadline == "A Windows feature change needs a restart. After you restart, press Review recovery in Windows tweaks to finish it."
+                && Windows(page) == "Restart your PC, then press Review recovery in Windows tweaks",
+            "A Windows feature change waiting for a restart says to restart, then finish it with Review recovery, which stays true after the restart until it is checked");
         Clean(check, shown.ToArray(), "Undo changes headlines and rows for nothing changed, unreadable, cut off and restart states");
     }
 
