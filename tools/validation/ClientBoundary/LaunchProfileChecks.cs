@@ -53,6 +53,23 @@ static class LaunchProfileChecks
         return key?.GetValue(name);
     }
     static bool NoLaunchPolicy() { using var key = Registry.LocalMachine.OpenSubKey(Ifeo); return key is null; }
+    sealed record PresetReading(string Cpu, int Io, uint Memory, int Gpu, uint PowerControl, uint PowerState, bool Boost, ulong Cores);
+    [StructLayout(LayoutKind.Sequential)] struct NativePower { public uint Version, ControlMask, StateMask; }
+    static PresetReading ReadPreset(Process process)
+    {
+        process.Refresh();
+        var power = new NativePower { Version = 1 };
+        if (!GetProcessInformation(process.Handle, 0, out var memory, 4) || !GetPowerInformation(process.Handle, 4, ref power, 12) || power.Version != 1)
+            throw new InvalidOperationException("Independent memory/power getters failed.");
+        return new(process.PriorityClass.ToString(), Io(process), memory, Gpu(process), power.ControlMask, power.StateMask, process.PriorityBoostEnabled, Affinity(process));
+    }
+
+    public static async Task Presets(string repo)
+    {
+        foreach (var preset in LaunchPresetCatalog.Read(Path.Combine(repo, "backend", "catalogs", "launch-presets.json")).Presets)
+            await Run(repo, false, preset: preset);
+        Console.WriteLine("Launch preset session assertions: " + passed);
+    }
     static string TaskName(string sessionRoot) => "Roo Industries Protected Session " + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(Path.GetFullPath(sessionRoot).ToLowerInvariant())))[..16];
     static (int Exit, string Output) Schtasks(params string[] arguments)
     {
@@ -95,7 +112,7 @@ static class LaunchProfileChecks
         }
     }
 
-    public static async Task Run(string repo, bool recovery, bool cleanupFault = false, bool completion = false, string? harnessFault = null, bool sameName = false)
+    public static async Task Run(string repo, bool recovery, bool cleanupFault = false, bool completion = false, string? harnessFault = null, bool sameName = false, LaunchPreset? preset = null)
     {
         var root = Path.Combine(Path.GetTempPath(), "roo-industries-launch-profile-" + Guid.NewGuid().ToString("N"));
         var operations = Path.Combine(root, "operations");
@@ -215,10 +232,109 @@ static class LaunchProfileChecks
             Check(core != 0 && core != original && Io(first) == 1, "The launcher fixture starts with more than one core and its own I/O priority");
             var controls = new Dictionary<string, JsonElement> { ["cpuPriority"] = V("AboveNormal"), ["ioPriority"] = V(2), ["affinity"] = V(new AffinityState(0, "0x" + core.ToString("X"))) };
 
-            if (completion) await Completion();
+            if (preset is not null) await PresetCycle();
+            else if (completion) await Completion();
             else if (sameName) await SameName();
             else await (recovery ? Recovery() : Profiles());
             Console.WriteLine((recovery ? "Session recovery" : "Launch profile") + " assertions: " + passed);
+
+            async Task PresetCycle()
+            {
+                var choice = preset!;
+                var app = App();
+                var observations = new List<object>();
+                PresetReading Observe(Process process, string stage)
+                {
+                    var observed = ReadPreset(process);
+                    var observation = new { stage, values = observed };
+                    observations.Add(observation);
+                    Console.WriteLine("PRESET " + JsonSerializer.Serialize(new { preset = choice.Id, observation }));
+                    return observed;
+                }
+                var launcherOriginal = ReadPreset(first);
+                var baselineGame = await Game(first);
+                var baseline = Observe(baselineGame, "Original");
+                EndGame(baselineGame);
+                var selected = choice.Controls();
+                selected["affinity"] = V(new AffinityState(0, "0x" + core.ToString("X")));
+                var expected = baseline with { Cores = core };
+                foreach (var (name, value) in choice.Settings)
+                    expected = name switch
+                    {
+                        "cpuPriority" => expected with { Cpu = value.GetString()! },
+                        "ioPriority" => expected with { Io = value.GetInt32() },
+                        "memoryPriority" => expected with { Memory = value.GetUInt32() },
+                        "gpuPriority" => expected with { Gpu = value.GetInt32() },
+                        "priorityBoost" => expected with { Boost = value.GetBoolean() },
+                        "executionQoS" => expected with
+                        {
+                            PowerControl = value.GetString() == "systemManaged" ? baseline.PowerControl & ~1u : baseline.PowerControl | 1u,
+                            PowerState = value.GetString() == "eco" ? baseline.PowerState | 1u : baseline.PowerState & ~1u,
+                        },
+                        _ => throw new InvalidDataException("The preset proof needs an independent reader for " + name),
+                    };
+                async Task<GameSessionReview> Review()
+                {
+                    var result = await app.PreviewGameSessionAsync(first.Id, gamePath, selected, true);
+                    Check(choice.Matches(result.Plan.Controls), choice.Name + " Preview keeps exactly the catalog priorities");
+                    return result;
+                }
+                async Task<Process> Applied(OptimizerService client, GameSessionEntry entry, Process launcher, string stage)
+                {
+                    var game = await Game(launcher);
+                    await Until(async () => (await client.ReadGameSessionAsync(entry.SessionRoot)).State?.Status == "active", "The preset game did not become active.");
+                    var observed = Observe(game, stage);
+                    Check(observed == expected, choice.Name + " " + stage + " independently confirms every chosen value and preserves unnamed settings");
+                    return game;
+                }
+                void LiveRestored(Process game, string stage)
+                {
+                    var observed = Observe(game, stage);
+                    Check(observed == baseline with { Cpu = expected.Cpu }, choice.Name + " restores exact live originals; CPU launch priority clears on the next game start");
+                }
+                var review = await Review();
+                Check(ReadPreset(first) == launcherOriginal && NoLaunchPolicy(), choice.Name + " Preview changes no launcher value or launch policy");
+                var started = await app.StartGameSessionAsync(review);
+                var game = await Applied(app, new GameSessionEntry(review.SessionRoot, started), first, "Start");
+                var stopped = await app.StopGameSessionAsync(review.SessionRoot);
+                Check(GameSessionDisplay.Restored(stopped) && NoLaunchPolicy() && ReadPreset(first) == launcherOriginal &&
+                    stopped.State!.Games.Single(entry => entry.Identity.ProcessId == game.Id).Fields.Single(field => field.Name == "cpuPriority").Status == "restartRequired",
+                    choice.Name + " Stop restores the launcher and launch policy and reports the game's CPU restart requirement");
+                LiveRestored(game, "Stop"); EndGame(game);
+                var fresh = await Game(first);
+                Check(Observe(fresh, "Fresh after Stop") == baseline, choice.Name + " a fresh game has every original value after Stop"); EndGame(fresh);
+
+                review = await Review();
+                app.RequireNoLaunchProfile(review.Plan);
+                await app.StartGameSessionAsync(review);
+                var saved = await app.SaveLaunchProfileAsync(review);
+                Check(File.ReadAllBytes(Path.Combine(saved.Root, "reviewed-preview.json")).SequenceEqual(File.ReadAllBytes(review.PreviewPath)) && choice.Matches(saved.Saved.Controls),
+                    choice.Name + " Save for next time keeps the exact reviewed bytes and values");
+                game = await Applied(app, (await app.ReadGameSessionsAsync()).Single(entry => entry.SessionRoot == review.SessionRoot), first, "Save");
+                EndGame(game);
+                await CloseLauncher(first);
+                await Until(async () => await Restored(review.SessionRoot), "Closing the launcher did not restore the preset session.");
+                Check(NoLaunchPolicy(), choice.Name + " closing the launcher removes its game launch policy");
+                var reopened = App();
+                var second = await OpenLauncher();
+                var secondOriginal = ReadPreset(second);
+                var rearmed = await ArmedFor(reopened, second);
+                Check(ProtectedSessions.ProfileMismatch(saved.Saved, rearmed.Worker.State!.Preview) is null && choice.Matches(rearmed.Worker.State.Preview.Controls),
+                    choice.Name + " reopening the launcher rearms the exact saved controls");
+                game = await Applied(reopened, rearmed, second, "Rearm");
+                Check(await reopened.DisableLaunchProfileAsync(saved.Root) is null && NoLaunchPolicy() && ReadPreset(second) == secondOriginal,
+                    choice.Name + " Turn off removes the saved profile and restores the launcher's original values");
+                LiveRestored(game, "Turn off"); EndGame(game);
+                fresh = await Game(second);
+                Check(Observe(fresh, "Fresh after Turn off") == baseline, choice.Name + " a fresh game has every original value after Turn off"); EndGame(fresh);
+                await CloseLauncher(second);
+                await OpenLauncher(); await Ticks(reopened, 3);
+                Check((await reopened.ReadLaunchProfilesAsync()).Length == 0 && (await Sessions()).All(entry => GameSessionDisplay.Restored(entry.Worker)) && NoLaunchPolicy(),
+                    choice.Name + " stays off when the launcher opens again");
+                var evidence = Path.Combine(repo, "artifacts", "validation", "launch-preset-" + choice.Id + "-" + Guid.NewGuid().ToString("N") + ".json");
+                OperationFiles.Write(evidence, new { preset = choice.Id, original = baseline, requested = expected, observations });
+                Console.WriteLine("Preset readback receipt: " + evidence);
+            }
 
             async Task Profiles()
             {
@@ -669,4 +785,6 @@ static class LaunchProfileChecks
     [DllImport("ntdll.dll")] static extern int NtQueryInformationProcess(IntPtr process, int information, ref int value, int length, IntPtr returned);
     [DllImport("kernel32.dll", SetLastError = true)] static extern bool GetProcessAffinityMask(IntPtr process, out UIntPtr mask, out UIntPtr system);
     [DllImport("gdi32.dll")] static extern int D3DKMTGetProcessSchedulingPriorityClass(IntPtr process, out int value);
+    [DllImport("kernel32.dll", SetLastError = true)] static extern bool GetProcessInformation(IntPtr process, int information, out uint value, uint length);
+    [DllImport("kernel32.dll", EntryPoint = "GetProcessInformation", SetLastError = true)] static extern bool GetPowerInformation(IntPtr process, int information, ref NativePower value, uint length);
 }

@@ -128,9 +128,9 @@ function Restore-Script([string]$path) {
     Restore-OwnedFile $receipts[0]
     $script:Renamed = @($script:Renamed | Where-Object { $_ -ne $receipts[0] }); Log ("restored " + (Split-Path $path -Leaf))
 }
-function Memory-Error { @(Named 'Memory information is unavailable').Count -gt 0 }
-function Memory-Loaded { (@(Named 'Memory by process').Count -gt 0) -and -not (Memory-Error) }
-function Memory-Note { @($script:Win.FindAll($TS::Descendants, [Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty, $CT::Text)) | Where-Object { -not $_.Current.IsOffscreen -and $_.Current.Name -like 'Memory by process is unavailable*' }).Count -gt 0 }
+function Memory-Error { @(Named "Couldn't check your memory").Count -gt 0 }
+function Memory-Loaded { (@(Named 'Apps using the most RAM').Count -gt 0) -and -not (Memory-Error) }
+function Memory-Note { @($script:Win.FindAll($TS::Descendants, [Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty, $CT::Text)) | Where-Object { -not $_.Current.IsOffscreen -and $_.Current.Name -like "Couldn't see which apps use the most RAM*" }).Count -gt 0 }
 
 $wasSimple = $null
 try {
@@ -157,7 +157,7 @@ try {
 
     Restore-Script $inventory
     Invoke-Element $retry
-    Check (Eventually { (Memory-Loaded) -and (Memory-Note) } 60) 'Retry with only the process list still failing loads the page and says memory by process is unavailable' ''
+    Check (Eventually { (Memory-Loaded) -and (Memory-Note) } 60) 'Retry with only the process list still failing loads the page and says which apps use the most RAM could not be read' ''
     Shot 'memory-partial'
 
     Restore-Script $classification

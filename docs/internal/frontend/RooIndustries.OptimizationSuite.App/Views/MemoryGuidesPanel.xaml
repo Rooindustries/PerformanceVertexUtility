@@ -3,7 +3,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:models="using:RooIndustries.OptimizationSuite.Models">
-    <Border Style="{StaticResource PanelBorderStyle}" AutomationProperties.AutomationId="MemoryGuides">
+    <Border Style="{StaticResource PanelBorderStyle}">
         <StackPanel Spacing="10">
             <TextBlock Text="{x:Bind Guides.Title}" Style="{StaticResource PanelLabelTextBlockStyle}" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
             <TextBlock Text="{x:Bind Guides.Intro}" FontSize="13" LineHeight="19" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextSecondaryBrush}" />

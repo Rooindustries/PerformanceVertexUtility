@@ -33,6 +33,7 @@ public sealed class ProcessItem
     public string? Name { get; set; }
     public string? DisplayName { get; set; }
     public string? Publisher { get; set; }
+    public string? FileDescription { get; set; }
     public string? Category { get; set; }
     public string? Protection { get; set; }
     public string? Classification { get; set; }

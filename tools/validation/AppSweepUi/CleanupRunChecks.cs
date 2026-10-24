@@ -67,9 +67,7 @@ static class CleanupRunChecks
                 model.RemovalPathReviewed = true;
                 model.LeftoverScanCompleted = true;
                 model.CleanupPlanReady = true;
-                model.RemoverPathApproved = true;
-                model.CleanupListApproved = true;
-                model.RealCleanupApproved = true;
+                model.RemovalApproved = true;
                 model.FinalCheckPassed = true;
             }
             string? Buttons(UninstallCleanupViewModel model, bool busy)
@@ -81,7 +79,7 @@ static class CleanupRunChecks
             string? Locked(UninstallCleanupViewModel model) => Buttons(model, busy: true);
             string? Idle(UninstallCleanupViewModel model) => Buttons(model, busy: false);
             string Listed(UninstallCleanupViewModel model) => "apps: " + string.Join(", ", model.Apps.Select(app => app.AppId + (app.Removed ? " (removed)" : "")));
-            string Waiting(InstalledApp app) => "Still cleaning up " + app.FriendlyName + ". Pick it again to see the result.";
+            string Waiting(InstalledApp app) => "Still removing " + app.FriendlyName + ". Pick it again to see the result.";
             (UninstallCleanupViewModel Model, TaskCompletionSource<string?> Remover, List<string> Calls, Task Run) StartApply(InstalledApp app)
             {
                 var remover = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -104,7 +102,7 @@ static class CleanupRunChecks
                 var failure = Locked(model) ?? (model.ApplyApprovalSummary == Waiting(appA) ? null : "summary: " + model.ApplyApprovalSummary);
                 remover.SetResult(null);
                 await run;
-                return before == "Applying reviewed cleanup..." ? failure : "state at start: " + before;
+                return before == "Removing this app..." ? failure : "state at start: " + before;
             });
 
             await Scenario("A second cleanup can't start while one runs, for another app or for the running app picked again", async () =>
@@ -126,7 +124,7 @@ static class CleanupRunChecks
                 var (model, remover, _, run) = StartApply(appA);
                 model.SelectedApp = appB;
                 model.SelectedApp = appA;
-                var failure = Locked(model) ?? (model.CleanupExecutionState == "Applying reviewed cleanup..." && model.ApplyApprovalSummary == "Still cleaning up this app. The result shows here when it's done."
+                var failure = Locked(model) ?? (model.CleanupExecutionState == "Removing this app..." && model.ApplyApprovalSummary == "Still removing this app. The result shows here when it's done."
                     ? null : "state: " + model.CleanupExecutionState + " / summary: " + model.ApplyApprovalSummary);
                 remover.SetResult(null);
                 await run;
@@ -143,11 +141,11 @@ static class CleanupRunChecks
                 if (model.ScanBusy || !model.CanScanAction || model.CleanupExecutionState != stateB || model.CleanupRestoreAvailable)
                     return "picked app after finish: busy=" + model.ScanBusy + " scan=" + model.CanScanAction + " state=" + model.CleanupExecutionState + " restore=" + model.CleanupRestoreAvailable;
                 model.SelectedApp = appA;
-                if (model.CleanupExecutionState != "Cleanup applied: 2 items removed." || model.CleanupExecutionDetail != "Restore is ready from the backup." || !model.CanRestoreCleanupAction)
+                if (model.CleanupExecutionState != "Done: 2 items removed." || model.CleanupExecutionDetail != "Restore can put them back." || !model.CanRestoreCleanupAction)
                     return "own app: " + model.CleanupExecutionState + " / " + model.CleanupExecutionDetail + " restore=" + model.CanRestoreCleanupAction;
                 model.SelectedApp = appB;
                 model.SelectedApp = appA;
-                return model.CleanupExecutionState != "Cleanup applied: 2 items removed." && model.CanRestoreCleanupAction
+                return model.CleanupExecutionState != "Done: 2 items removed." && model.CanRestoreCleanupAction
                     ? null : "second visit: " + model.CleanupExecutionState + " restore=" + model.CanRestoreCleanupAction;
             });
 
@@ -158,7 +156,7 @@ static class CleanupRunChecks
                 model.SelectedApp = appA;
                 remover.SetResult(Applied(appA.AppId!, Rollback(appA.AppId!), deleted: 1));
                 await run;
-                return !model.ScanBusy && model.CleanupExecutionState == "Cleanup applied: 1 item removed." && model.CanRestoreCleanupAction
+                return !model.ScanBusy && model.CleanupExecutionState == "Done: 1 item removed." && model.CanRestoreCleanupAction
                     ? null : "busy=" + model.ScanBusy + " state=" + model.CleanupExecutionState + " restore=" + model.CanRestoreCleanupAction;
             });
 
@@ -168,10 +166,10 @@ static class CleanupRunChecks
                 model.SelectedApp = appB;
                 remover.SetException(new IOException("Controlled remover failure"));
                 await run;
-                if (model.ScanBusy || model.CleanupExecutionDetail?.Contains("Controlled remover failure", StringComparison.Ordinal) == true)
+                if (model.ScanBusy || model.CleanupExecutionState == "Couldn't confirm the removal.")
                     return "picked app: busy=" + model.ScanBusy + " detail=" + model.CleanupExecutionDetail;
                 model.SelectedApp = appA;
-                return model.CleanupExecutionState == "Cleanup result was not confirmed." && model.CleanupExecutionDetail == "Controlled remover failure"
+                return model.CleanupExecutionState == "Couldn't confirm the removal." && model.CleanupExecutionDetail == "If Restore is offered, use it before you try again."
                     ? null : "own app: " + model.CleanupExecutionState + " / " + model.CleanupExecutionDetail;
             });
 
@@ -232,7 +230,7 @@ static class CleanupRunChecks
                 if (failure is not null) return failure;
                 await model.InitializeAsync();
                 model.SelectedApp = model.Apps.Single(app => app.AppId == appA.AppId);
-                return model.CleanupExecutionState == "Cleanup stopped partway through." && model.CanRestoreCleanupAction
+                return model.CleanupExecutionState == "Removal stopped partway." && model.CanRestoreCleanupAction
                     ? null : "own app: " + model.CleanupExecutionState + " restore=" + model.CanRestoreCleanupAction;
             });
 
@@ -311,8 +309,8 @@ static class CleanupRunChecks
                 if (row is not { Removed: true }) return (row is null ? "after reload: " : "list did not reload: ") + Listed(model);
                 if (row.SecondaryLabel != "Finished while you were away. Pick it to see the result.") return "result-only row subtitle: " + row.SecondaryLabel;
                 model.SelectedApp = row;
-                var failure = Idle(model) ?? (model.CleanupExecutionState == "App removal completed. Leftover cleanup needs a new review."
-                    && model.CleanupExecutionDetail == "The old deletion list was not applied. Leftover files require a fresh scan and separate approval."
+                var failure = Idle(model) ?? (model.CleanupExecutionState == "App removed. The old list wasn't used."
+                    && model.CleanupExecutionDetail == "Its uninstaller may have changed things. To clean up what it left, start again from Check."
                     ? null : "own app: " + model.CleanupExecutionState + " / " + model.CleanupExecutionDetail);
                 if (failure is not null) return failure;
                 model.SelectedApp = null;
@@ -350,6 +348,115 @@ static class CleanupRunChecks
                 finally { live.CleanupRecoveryDelay = TimeSpan.Zero; }
             });
 
+            await Scenario("Leftover cleanup shows plain words, keeps raw errors in the app log and asks once before it removes an app", async () =>
+            {
+                var logged = new List<string>();
+                var observer = AppLog.Observer;
+                var kept = (live.OfficialPreview, live.CleanupManifest, live.CleanupPlan);
+                AppLog.Observer = (_, detail) => { if (detail is not null) lock (logged) logged.Add(detail); };
+                try
+                {
+                    const string raw = "Invoke-UninstallCleanupApplyPackage.ps1: System.IO.IOException: Access to the path 'C:\\Fixture' is denied.";
+                    var model = new UninstallCleanupViewModel { SelectedApp = appA };
+                    var problems = new List<string>();
+                    void Look(string step)
+                    {
+                        foreach (var property in typeof(UninstallCleanupViewModel).GetProperties()
+                            .Where(property => property.PropertyType == typeof(string) && property.Name is not ("SearchText" or "SelectedName" or "SelectedSummary" or "InstallLocation" or "OfficialCommand" or "Sources")))
+                            if (property.GetValue(model) is string text && BulkRemovalChecks.Jargon(text) is { } token) problems.Add(step + ": " + property.Name + " shows '" + token + "': " + text);
+                        foreach (var item in model.Leftovers)
+                            if (BulkRemovalChecks.Jargon(item.TypeLabel + " " + item.ConfidenceLabel) is { } token || item.TypeLabel == item.Type || item.ConfidenceLabel == item.Confidence)
+                                problems.Add(step + ": leftover shows " + item.Type + " / " + item.Confidence + " as " + item.TypeLabel + " / " + item.ConfidenceLabel);
+                    }
+                    Look("start");
+                    live.LastError = raw;
+                    live.OfficialPreview = _ => Task.FromResult<OfficialUninstallPreview?>(null);
+                    await model.PreviewRemovalCommand.ExecuteAsync(null); Look("check failed");
+                    live.LastError = null;
+                    live.OfficialPreview = _ => Task.FromResult<OfficialUninstallPreview?>(new OfficialUninstallPreview { DryRun = true, Commands = [] });
+                    await model.PreviewRemovalCommand.ExecuteAsync(null); Look("checked");
+                    live.OfficialPreview = id => Task.FromResult<OfficialUninstallPreview?>(new OfficialUninstallPreview
+                    {
+                        DryRun = true,
+                        Commands = [new UninstallCommand { AppId = id, CommandType = "registry-uninstall-string", RawCommand = "uninstall.exe /S", CommandLine = "\"C:\\Fixture\\uninstall.exe\" /S", ExecutableSha256 = new string('a', 64), Blocked = true }],
+                    });
+                    await model.PreviewRemovalCommand.ExecuteAsync(null); Look("needed by Windows");
+                    if (model.OfficialPreviewState != UninstallCleanupViewModel.BlockedHere) problems.Add("an app Windows or games may need doesn't say to use Remove apps: " + model.OfficialPreviewState);
+                    live.OfficialPreview = _ => Task.FromResult<OfficialUninstallPreview?>(new OfficialUninstallPreview { DryRun = true, Commands = [] });
+                    await model.PreviewRemovalCommand.ExecuteAsync(null);
+                    live.LastError = raw;
+                    live.LeftoverScan = _ => Task.FromResult<LeftoverScan?>(null);
+                    await model.ScanLeftoversCommand.ExecuteAsync(null); Look("scan failed");
+                    live.LastError = null;
+                    live.LeftoverScan = id => Task.FromResult<LeftoverScan?>(new LeftoverScan
+                    {
+                        AppId = id, DryRun = true, Summary = new LeftoverScanSummary { ItemCount = 4 },
+                        Items = [new() { ItemId = "a", Type = "folder", Confidence = "high", Target = @"C:\Fixture" }, new() { ItemId = "b", Type = "registryKey", Confidence = "medium", Target = @"HKCU\Software\Fixture" },
+                            new() { ItemId = "c", Type = "scheduledTask", Confidence = "low", Target = @"\Fixture" }, new() { ItemId = "d", Type = "service", Target = "FixtureService" }],
+                    });
+                    await model.ScanLeftoversCommand.ExecuteAsync(null); Look("scanned");
+                    live.LastError = raw;
+                    live.CleanupManifest = _ => Task.FromResult<CleanupManifest?>(null);
+                    await model.BuildCleanupListCommand.ExecuteAsync(null); Look("list failed");
+                    live.LastError = null;
+                    live.CleanupManifest = id => Task.FromResult<CleanupManifest?>(new CleanupManifest { AppId = id, DryRun = true, Items = [], Summary = new CleanupManifestSummary() });
+                    live.CleanupPlan = _ => throw new InvalidOperationException(raw);
+                    await model.BuildCleanupListCommand.ExecuteAsync(null); Look("plan failed");
+                    live.CleanupPlan = id => Task.FromResult<UninstallCleanupExecutionPlan?>(new UninstallCleanupExecutionPlan
+                    {
+                        AppId = id, DryRun = true, Status = "review-ready", Summary = new UninstallExecutionSummary { ExecutionReady = true, DisposableFixtureExecutionReady = true },
+                    });
+                    await model.BuildCleanupListCommand.ExecuteAsync(null); Look("list ready");
+                    if (!model.CleanupPlanReady || model.CanRunFinalCheckAction) return "the final check unlocked before the approval box, or the list never got ready: ready=" + model.CleanupPlanReady;
+                    var sent = new List<(bool Route, bool List, bool Real)>();
+                    live.CleanupApply = (id, route, list, real) =>
+                    {
+                        sent.Add((route, list, real));
+                        return Task.FromResult<string?>(real ? null : JsonSerializer.Serialize(new
+                        {
+                            actionId = "apps.invokeUninstallCleanupApplyPackage", appId = id, dryRun = true, status = "preview", executionMode = "preview",
+                            gates = new[] { new { gateId = "confirm-apply", required = true, satisfied = false, blocking = true }, new { gateId = "review-inputs", required = true, satisfied = true, blocking = false } },
+                            errors = Array.Empty<object>(), summary = new { approvalReady = true, cleanupItemCount = 2, blockingGateCount = 1 },
+                        }));
+                    };
+                    model.RemovalApproved = true;
+                    await model.RunFinalCheckCommand.ExecuteAsync(null); Look("final check");
+                    if (!model.FinalCheckPassed || !model.CanApplyCleanupAction) return "one approval and a passed final check didn't unlock Remove app: " + model.ApplyApprovalSummary;
+                    live.LastError = raw;
+                    await model.ApplyCleanupCommand.ExecuteAsync(null); Look("removal failed");
+                    string Result(string id, string status, bool real) => JsonSerializer.Serialize(new
+                    {
+                        actionId = "apps.invokeUninstallCleanupApplyPackage", appId = id, dryRun = !real, status, executionMode = real ? "real" : "preview",
+                        gates = new[] { new { gateId = "confirm-apply", required = true, satisfied = real, blocking = !real } },
+                        errors = Array.Empty<object>(), summary = new { approvalReady = true, deletedCount = 1, cleanupItemCount = 1, blockingGateCount = real ? 0 : 1 },
+                    });
+                    live.LastError = null;
+                    live.CleanupApply = (id, _, _, real) => Task.FromResult<string?>(Result(id, real ? "success" : "preview", real));
+                    await model.RunFinalCheckCommand.ExecuteAsync(null);
+                    await model.ApplyCleanupCommand.ExecuteAsync(null); Look("removed");
+                    if (model.CleanupExecutionState != "Done: 1 item removed." || model.CanApplyCleanupAction || model.CanRunFinalCheckAction || model.CanBuildCleanupListAction)
+                        problems.Add("the finished list can run again after a removal: " + model.CleanupExecutionState);
+                    model.RemovalPathReviewed = true; model.LeftoverScanCompleted = true; model.CleanupPlanReady = true; model.RemovalApproved = true;
+                    live.CleanupApply = (id, _, _, real) => Task.FromResult<string?>(Result(id, real ? "cleanup-review-required" : "preview", real));
+                    await model.RunFinalCheckCommand.ExecuteAsync(null);
+                    live.LastCleanupRollbackPath = "kept";
+                    await model.ApplyCleanupCommand.ExecuteAsync(null); Look("uninstaller ran");
+                    if (model.ApplyApprovalSummary != "Check the app first." || model.CanRunFinalCheckAction || model.CanBuildCleanupListAction || model.RemovalApproved)
+                        problems.Add("after its uninstaller ran, the old check or list still looks ready: " + model.ApplyApprovalSummary);
+                    if (live.LastCleanupRollbackPath is not null) problems.Add("the stored uninstaller check was kept after a real run");
+                    model.RemovalPathReviewed = true; model.LeftoverScanCompleted = true; model.CleanupPlanReady = true; model.RemovalApproved = true;
+                    live.CleanupApply = (id, _, _, real) => Task.FromResult<string?>(Result(id, "failed", real));
+                    await model.RunFinalCheckCommand.ExecuteAsync(null); Look("final check failed");
+                    if (model.CleanupExecutionState != "Final check failed." || model.FinalCheckPassed) problems.Add("a failed final check reads as a failed removal: " + model.CleanupExecutionState);
+                    if (typeof(UninstallCleanupViewModel).GetProperties().Count(property => property.PropertyType == typeof(bool) && property.Name.EndsWith("Approved", StringComparison.Ordinal)) != 1)
+                        problems.Add("more than one approval box is back");
+                    if (sent.Count != 2 || !sent.All(call => call.Route && call.List) || sent[0].Real || !sent[1].Real) problems.Add("the one box didn't approve both the uninstaller and the list: " + string.Join(", ", sent));
+                    if (logged.Count(line => line.Contains("Access to the path", StringComparison.Ordinal)) < 4) problems.Add("raw errors didn't reach the app log: " + logged.Count);
+                    return problems.Count == 0 ? null : string.Join(" | ", problems);
+                }
+                finally { AppLog.Observer = observer; (live.OfficialPreview, live.CleanupManifest, live.CleanupPlan) = kept; }
+            });
+
             foreach (var removedByRun in new[] { false, true })
                 await Scenario(removedByRun
                     ? "A cleanup that removed its app while another app is picked marks the app's saved-cleanup row as waiting until its result is shown"
@@ -373,7 +480,7 @@ static class CleanupRunChecks
                     if (row is null || row.Removed != removedByRun || row.SecondaryLabel != "Finished while you were away. Pick it to see the result.")
                         return "row before its result was shown: " + (row is null ? Listed(model) : "removed=" + row.Removed + " / " + row.SecondaryLabel);
                     model.SelectedApp = row;
-                    if (model.CleanupExecutionState != "Cleanup applied: 2 items removed.") return "own app: " + model.CleanupExecutionState;
+                    if (model.CleanupExecutionState != "Done: 2 items removed.") return "own app: " + model.CleanupExecutionState;
                     model.SelectedApp = null;
                     await model.RevalidateAsync();
                     row = model.Apps.SingleOrDefault(app => app.AppId == appA.AppId);

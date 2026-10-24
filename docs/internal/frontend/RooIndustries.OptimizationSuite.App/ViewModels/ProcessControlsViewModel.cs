@@ -316,6 +316,7 @@ public partial class ProcessControlsViewModel : ObservableObject
     private bool _observing;
     private bool _resultShown;
     private bool _signInAtRisk;
+    private bool _syncingCpus;
 
     public ProcessControlsViewModel() => _selectedCpuMode = CpuModes[0];
     public bool CanEdit => !Busy && !RestoreAvailable;
@@ -326,7 +327,7 @@ public partial class ProcessControlsViewModel : ObservableObject
     public bool ShowLogicalCpus => SelectedCpuMode.Kind == "logical" || SetHardAffinity;
     public bool ShowTopology => SelectedCpuMode.Kind is "core" or "cache" or "numa";
     public bool CanPreview => CanEdit && _snapshot is not null &&
-        (SelectedCpuMode.Kind == "unchanged" || CpuSetsAvailable) && (!SetHardAffinity || AffinityAvailable) &&
+        (SelectedCpuMode.Kind == "unchanged" || CpuSetsAvailable) && (!SetHardAffinity || AffinityAvailable && ValidAffinity()) &&
         (Controls.Any(row => row.Available && row.Selected.Value is not null) || SelectedCpuMode.Kind != "unchanged" || SetHardAffinity);
     public bool CanApply => !Busy && _review is not null && !RestoreAvailable;
     public bool CanRestore => !Busy && RestoreAvailable;
@@ -350,8 +351,17 @@ public partial class ProcessControlsViewModel : ObservableObject
     partial void OnAffinityAvailableChanged(bool value) => NotifyState();
     partial void OnRuleNameChanged(string value) => OnPropertyChanged(nameof(CanSaveRule));
     partial void OnOneThreadPerCoreChanged(bool value) => Invalidate();
-    partial void OnSetHardAffinityChanged(bool value) => Invalidate();
-    partial void OnAffinityMaskChanged(string value) => Invalidate();
+    private bool SyncCpus => !_syncingCpus && SelectedCpuMode.Kind != "logical";
+    partial void OnSetHardAffinityChanged(bool value)
+    {
+        if (value && SyncCpus) CpusFromAffinity();
+        Invalidate();
+    }
+    partial void OnAffinityMaskChanged(string value)
+    {
+        if (SetHardAffinity && SyncCpus) CpusFromAffinity();
+        Invalidate();
+    }
     partial void OnSelectedTopologyChanged(TopologyChoice? value) => Invalidate();
     partial void OnSelectedCpuModeChanged(CpuMode value)
     {
@@ -359,6 +369,7 @@ public partial class ProcessControlsViewModel : ObservableObject
         if (_snapshot is not null && ShowTopology)
             foreach (var item in _snapshot.Topology.Select(cpu => new TopologyChoice(cpu.Group, value.Kind == "core" ? cpu.Core : value.Kind == "cache" ? cpu.Cache : cpu.Numa)).Distinct()) TopologyChoices.Add(item);
         SelectedTopology = TopologyChoices.FirstOrDefault();
+        if (SetHardAffinity && SyncCpus) CpusFromAffinity();
         Invalidate();
     }
     partial void OnSelectedProcessChanged(CpuProcessChoice? value) { Invalidate(); _readTask = ReadProcessAsync(value, ++_selectionVersion); }
@@ -451,7 +462,48 @@ public partial class ProcessControlsViewModel : ObservableObject
         finally { if (version == _selectionVersion) Busy = false; NotifyState(); }
     }
 
-    private void Changed(object? sender, PropertyChangedEventArgs args) { if (args.PropertyName == "Selected") Invalidate(); }
+    private void Changed(object? sender, PropertyChangedEventArgs args)
+    {
+        if (args.PropertyName != "Selected" || _syncingCpus) return;
+        if (sender is LogicalCpuChoice && SetHardAffinity && SyncCpus) AffinityFromCpus();
+        Invalidate();
+    }
+
+    private bool ValidAffinity()
+    {
+        try
+        {
+            var mask = ProcessTarget.ParseMask(AffinityMask.Trim());
+            var group = Cpus.Where(cpu => cpu.Cpu.Group == _affinityGroup).Aggregate(0UL, (bits, cpu) => bits | (1UL << cpu.Cpu.Index));
+            return mask != 0 && (mask & ~group) == 0;
+        }
+        catch (Exception error) when (error is FormatException or OverflowException) { return false; }
+    }
+
+    private void CpusFromAffinity()
+    {
+        if (!ValidAffinity()) return;
+        var mask = ProcessTarget.ParseMask(AffinityMask.Trim());
+        _syncingCpus = true;
+        try
+        {
+            foreach (var cpu in Cpus) cpu.Selected = cpu.Cpu.Available && cpu.Cpu.Group == _affinityGroup && (mask & (1UL << cpu.Cpu.Index)) != 0;
+        }
+        finally { _syncingCpus = false; }
+    }
+
+    private void AffinityFromCpus()
+    {
+        var selected = Cpus.Where(cpu => cpu.Selected && cpu.Cpu.Available).Select(cpu => cpu.Cpu).ToArray();
+        var reserved = ValidAffinity() ? ProcessTarget.ParseMask(AffinityMask.Trim()) & Cpus.Where(cpu => !cpu.Cpu.Available && cpu.Cpu.Group == _affinityGroup).Aggregate(0UL, (mask, cpu) => mask | (1UL << cpu.Cpu.Index)) : 0UL;
+        _syncingCpus = true;
+        try
+        {
+            AffinityMask = selected.Length == 0 || selected.Any(cpu => cpu.Group != _affinityGroup) ? ""
+                : "0x" + selected.Aggregate(reserved, (mask, cpu) => mask | (1UL << cpu.Index)).ToString("X");
+        }
+        finally { _syncingCpus = false; }
+    }
 
     private (Dictionary<string, JsonElement> Controls, CpuSelection? Selection) Desired()
     {
@@ -741,14 +793,20 @@ public partial class ProcessControlsViewModel : ObservableObject
             SelectedCpuMode = CpuModes.Single(mode => mode.Kind == (rule.CpuSelection?.Kind ?? "unchanged"));
             OneThreadPerCore = rule.CpuSelection?.OneThreadPerCore == true;
             if (ShowTopology) SelectedTopology = TopologyChoices.SingleOrDefault(item => item.Group == rule.CpuSelection?.Group && item.Index == rule.CpuSelection.Index);
-            foreach (var cpu in Cpus) cpu.Selected = rule.CpuSelection?.Processors?.Contains(new(cpu.Cpu.Group, cpu.Cpu.Index)) == true;
-            SetHardAffinity = rule.Controls.ContainsKey("affinity");
-            if (SetHardAffinity)
+            _syncingCpus = true;
+            try
             {
-                var affinity = rule.Controls["affinity"].Deserialize<AffinityState>(OperationFiles.Json)!;
-                if (affinity.Group != _affinityGroup) throw new InvalidOperationException("The process is in another processor group. Review its hard affinity before saving.");
-                AffinityMask = affinity.Mask;
+                foreach (var cpu in Cpus) cpu.Selected = rule.CpuSelection?.Processors?.Contains(new(cpu.Cpu.Group, cpu.Cpu.Index)) == true;
+                SetHardAffinity = rule.Controls.ContainsKey("affinity");
+                if (SetHardAffinity)
+                {
+                    var affinity = rule.Controls["affinity"].Deserialize<AffinityState>(OperationFiles.Json)!;
+                    if (affinity.Group != _affinityGroup) throw new InvalidOperationException("The process is in another processor group. Review its hard affinity before saving.");
+                    AffinityMask = affinity.Mask;
+                }
             }
+            finally { _syncingCpus = false; }
+            if (SetHardAffinity && SelectedCpuMode.Kind != "logical") CpusFromAffinity();
             Status = "Editing " + rule.Name;
             Detail = "Change the controls, then preview and save to replace this rule.";
         }
@@ -863,13 +921,13 @@ public partial class ProcessControlsViewModel : ObservableObject
         "gpuPriority" => [Option("Idle", 0), Option("Below normal", 1), Option("Normal", 2), Option("Above normal", 3), Option("High", 4), Option("Realtime · can freeze your PC", 5)],
         "memoryPriority" => [Option("Very low", 1), Option("Low", 2), Option("Medium", 3), Option("Below normal", 4), Option("Normal", 5)],
         "executionQoS" => [Option("Windows managed", "systemManaged"), Option("Eco", "eco"), Option("High performance", "high")],
-        "priorityBoost" => [Option("Allow dynamic boosts", true), Option("Disable dynamic boosts", false)],
+        "priorityBoost" => [Option("On", true), Option("Off", false)],
         _ => throw new ArgumentException("Unknown control.", nameof(name)),
     };
     public static string Label(string name) => name switch
     {
-        "cpuPriority" => "CPU priority", "ioPriority" => "I/O priority", "gpuPriority" => "GPU priority", "memoryPriority" => "Memory priority",
-        "executionQoS" => "Power mode", "priorityBoost" => "Priority boost", "cpuSets" => "Preferred CPUs", "affinity" => "CPU affinity", _ => name,
+        "cpuPriority" => "CPU priority", "ioPriority" => "Disk priority", "gpuPriority" => "GPU priority", "memoryPriority" => "Memory priority",
+        "executionQoS" => "Power mode", "priorityBoost" => "Priority boost", "cpuSets" => "Preferred CPUs", "affinity" => "CPU cores", _ => name,
     };
     private static bool Readable(ControlRead read) => read.Known && read.Error is null && read.Value is { ValueKind: not (JsonValueKind.Null or JsonValueKind.Undefined) };
     private static string DescribeRead(string name, ControlRead read)
@@ -880,11 +938,31 @@ public partial class ProcessControlsViewModel : ObservableObject
     public static string Describe(string name, JsonElement value) => name switch
     {
         "executionQoS" => value.Deserialize<PowerThrottling>(OperationFiles.Json)?.ExecutionMode switch { "systemManaged" => "Windows managed", "eco" => "Eco", "high" => "High performance", _ => "unknown" },
-        "affinity" => value.Deserialize<AffinityState>(OperationFiles.Json) is { } affinity ? "group " + affinity.Group + " · " + affinity.Mask : "unknown",
+        "affinity" => value.Deserialize<AffinityState>(OperationFiles.Json) is { } affinity ? CoreList(affinity.Mask) + (affinity.Group == 0 ? "" : " in group " + affinity.Group) : "unknown",
         "cpuSets" => value.GetArrayLength() == 0 ? "Windows default" : value.GetArrayLength() + " selected",
-        "priorityBoost" => value.GetBoolean() ? "allowed" : "disabled",
+        "priorityBoost" => value.GetBoolean() ? "On" : "Off",
         "cpuPriority" => value.GetString() switch { "BelowNormal" => "Below normal", "AboveNormal" => "Above normal", "RealTime" => "Realtime", var text => text ?? "unknown" },
         "ioPriority" or "gpuPriority" or "memoryPriority" => Options(name).SingleOrDefault(option => option.Value?.GetInt32() == value.GetInt32())?.Label.Split(" · ")[0] ?? value.ToString(),
         _ => value.ToString(),
     };
+    public static string CoreList(string mask)
+    {
+        ulong bits;
+        try { bits = ProcessTarget.ParseMask(mask); }
+        catch (Exception error) when (error is FormatException or OverflowException or ArgumentException) { return "unknown"; }
+        return bits == 0 ? "No cores" : (System.Numerics.BitOperations.PopCount(bits) == 1 ? "Core " : "Cores ") + CoreRanges(bits);
+    }
+    public static string CoreRanges(ulong mask)
+    {
+        var ranges = new List<string>();
+        for (var bit = 0; bit < 64; bit++)
+        {
+            if ((mask >> bit & 1) == 0) continue;
+            var end = bit;
+            while (end < 63 && (mask >> (end + 1) & 1) != 0) end++;
+            ranges.Add(end == bit ? $"{bit + 1}" : $"{bit + 1}–{end + 1}");
+            bit = end;
+        }
+        return string.Join(", ", ranges);
+    }
 }

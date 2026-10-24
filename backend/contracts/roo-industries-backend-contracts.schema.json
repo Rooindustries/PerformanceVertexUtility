@@ -1005,6 +1005,12 @@
             "null"
           ]
         },
+        "fileDescription": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "executablePath": {
           "type": [
             "string",
@@ -2450,7 +2456,8 @@
                     "enum": [
                       0,
                       1,
-                      2
+                      2,
+                      3
                     ]
                   },
                   "memoryPriority": {

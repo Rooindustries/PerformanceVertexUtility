@@ -716,6 +716,8 @@ function Select-RooIndustriesGovernorOwnedRestoreChanges {
         if(-not(Test-RooIndustriesControlValueEqual $control (Get-RooIndustriesPropertyValue $change 'currentValue' $null) (Get-RooIndustriesPropertyValue $owned[0] 'proposedValue' $null))) {
             $change.blocked=$true
             $change.blockedReason='The control changed externally; its current value was preserved.'
+        } elseif(Test-RooIndustriesSnapshotReleased $Snapshot $control 'Background limits') {
+            continue
         }
         $change
     }

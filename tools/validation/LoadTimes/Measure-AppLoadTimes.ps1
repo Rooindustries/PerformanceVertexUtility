@@ -139,11 +139,11 @@ $Pages = @(
     @{ Name = 'Games/Processes'; Tab = 'ProcessesTab'; Usable = { Visible (ById 'ProcessPicker') }; Complete = 'cycle:ProcessRefresh'; Timeout = 60 },
     @{ Name = 'Games/Background'; Tab = 'BackgroundTab'; Usable = { HasText ' running$' }; Complete = { HasText ' running$' }; Timeout = 60; After = 'GamesTab' },
     @{ Name = 'Remove apps'; Nav = 'Remove apps'; Usable = { HasName 'Remove selected applications, then review leftover files and registry data.' }; Complete = { HasText '^[1-9]\d* apps installed' }; Timeout = 60 },
-    @{ Name = 'Graphics drivers'; Nav = 'Graphics drivers'; Usable = { HasName 'Drivers & GPU' }; Complete = { HasName 'Processor' }; Timeout = 60 },
+    @{ Name = 'Graphics drivers'; Nav = 'Graphics drivers'; Usable = { HasName 'Driver downloads' }; Complete = { HasName 'Processor' }; Timeout = 60 },
     @{ Name = 'Windows tweaks'; Nav = 'Windows tweaks'; Usable = { $l = ById 'WindowsTweaksList'; $l -and $l.FindFirst($TS::Children, [Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty, $CT::ListItem)) }; Complete = { $s = ById 'WindowsTweaksStatus'; $s -and $s.Current.Name -match '^\d+ settings$|recovery|Restart' }; State = { $s = ById 'WindowsTweaksStatus'; $s -and $s.Current.Name -match '^\d+ settings|recovery|Restart' }; Timeout = 120 },
     @{ Name = 'Tools'; Nav = 'Tools'; Usable = { HasName 'HWiNFO' }; Complete = { HasName 'HWiNFO' }; Timeout = 45 },
     @{ Name = 'Tools/BIOS settings'; Invoke = 'OpenFirmware'; Usable = { HasName 'Load your BIOS settings' }; Complete = 'settle'; Timeout = 45 },
-    @{ Name = 'Undo changes'; Nav = 'Undo changes'; Usable = { HasName 'Saved settings' }; Complete = { (HasName 'Saved settings') -and -not (HasName 'Reading restore state') }; Timeout = 60 },
+    @{ Name = 'Undo changes'; Nav = 'Undo changes'; Usable = { HasName 'What you can undo' }; Complete = { (HasName 'What you can undo') -and -not (HasName 'Checking what you can undo') }; Timeout = 60 },
     @{ Name = 'Report a bug'; Nav = 'Report a bug'; Usable = { HasName 'Your report' }; Complete = { HasName 'Processor' }; Timeout = 60 },
     @{ Name = 'Settings'; Nav = 'Settings'; Usable = { HasName 'Appearance' }; Complete = { HasName 'Appearance' }; Timeout = 30 },
     @{ Name = 'Home'; Nav = 'Home'; Usable = { HasName 'Start here' }; Complete = { HasText ' in the background$' }; Timeout = 60 }
@@ -151,7 +151,7 @@ $Pages = @(
 $Advanced = @(
     @{ Name = 'Remove apps/Leftovers'; Before = 'Remove apps'; Tab = 'LeftoversTab'; Usable = { HasName 'Pick an app to review' }; Complete = 'settle'; Timeout = 60; After = 'RemovalTab' },
     @{ Name = 'Startup & services'; Nav = 'Startup & services'; Usable = { HasName 'Running background apps' }; Complete = { (HasName 'Running background apps') -and -not (HasName 'Reading startup and services') }; Timeout = 60 },
-    @{ Name = 'Memory'; Nav = 'Memory'; Usable = { HasName 'Memory by process' }; Complete = { (HasName 'Memory by process') -and -not (HasName 'Reading memory and latency') }; Timeout = 60 },
+    @{ Name = 'Memory'; Nav = 'Memory'; Usable = { HasName 'Apps using the most RAM' }; Complete = { (HasName 'Apps using the most RAM') -and -not (HasName 'Checking your RAM') }; Timeout = 60 },
     @{ Name = 'Timer & cache'; Nav = 'Timer & cache'; Usable = { HasName 'Timer & shader cache' }; Complete = 'settle'; Timeout = 60 }
 )
 function Visit([hashtable]$page, [string]$tour, [string]$visit) {

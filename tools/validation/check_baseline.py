@@ -325,6 +325,11 @@ def validate(root: Path, contracts_only: bool = False):
                 failures.append(f'Negative control failed: {label} was not stopped at the read walk timeout')
         failures.extend(runpy.run_path(str(Path(__file__).with_name('check_launch_presets.py')))['check'](root))
         failures.extend(runpy.run_path(str(Path(__file__).with_name('check_tool_words.py')))['check'](root))
+        memory_words = runpy.run_path(str(Path(__file__).with_name('check_memory_words.py')))
+        failures.extend(memory_words['check'](root))
+        for label, caught in memory_words['negative_controls'](root).items():
+            if not caught:
+                failures.append(f'Negative control failed: {label} passed the Memory plain words check')
         failures.extend(runpy.run_path(str(Path(__file__).with_name("check_branding.py")))["check"](root))
         for label, passed in branding_negative_controls().items():
             if not passed:
@@ -341,6 +346,11 @@ def validate(root: Path, contracts_only: bool = False):
         for label, passed in product_name_negative_controls().items():
             if not passed:
                 failures.append(f'Negative control failed: {label} did not match the product name check result')
+        agent_files = runpy.run_path(str(Path(__file__).with_name('check_agent_files.py')))
+        failures.extend(agent_files['check'](root))
+        for label, passed in agent_files['negative_controls']().items():
+            if not passed:
+                failures.append(f'Negative control failed: {label} did not match the agent file check result')
         failures.extend(runpy.run_path(str(Path(__file__).with_name('check_fixture_cleanup.py')))['check'](root))
         for label, passed in fixture_cleanup_negative_controls().items():
             if not passed:

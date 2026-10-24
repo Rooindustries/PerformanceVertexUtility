@@ -33,6 +33,8 @@ if (args is ["--restart"]) { RestartChecks.Run(Check); return; }
 if (args is ["--child-env", var childScenario, var childMode]) { await ChildEnvironmentChecks.Run(Check, childScenario, childMode, null); return; }
 if (args is ["--child-env", var fixtureScenario, var fixtureMode, var fixtureDirectory]) { await ChildEnvironmentChecks.Run(Check, fixtureScenario, fixtureMode, fixtureDirectory); return; }
 if (args is ["--control-reads"]) { ControlReadFaultChecks.Run(Check); MissingCommandChecks.Run(Check); return; }
+if (args is ["--mitigation-rows", var mitigationRepo, var mitigationEvidence]) { MitigationCommandChecks.RunReal(Check, mitigationRepo, mitigationEvidence); return; }
+if (args is ["--security-rows", var securityRepo, var securityEvidence]) { MissingCommandChecks.RunReal(Check, securityRepo, securityEvidence); return; }
 if (args is ["--operation-files"]) { OperationFileChecks.Run(Check); ReplaceRaceChecks.Run(Check); ReplaceFaultChecks.Run(Check); return; }
 if (args is ["--branding"]) { BrandCompatibilityChecks.Run(Check); return; }
 if (args is ["--marked-root-start", var markedParent, var markedHive, .. var markedOptions]) { DataFolderChecks.MarkedRootChild(markedParent, markedHive, markedOptions.Contains("acknowledge")); return; }
@@ -136,14 +138,18 @@ try
     Check(applied.Status == "applied" && Oracle.Memory(probe.Handle) == desiredMemory && Oracle.Boost(probe.Handle) != boostBefore, "Reviewed memory and priority-boost changes reach Windows");
     var repeat = engine.Apply(previewPath, reviewHash, journalPath);
     Check(repeat.Status == "applied", "Duplicate apply observes the existing assignment without a second dispatch");
-    Oracle.SetMemory(probe.Handle, desiredMemory == 4 ? 1u : 4u);
-    var conflict = engine.Restore(journalPath);
-    Check(conflict.Status == "needsReconciliation" && Oracle.Memory(probe.Handle) == 4 && Oracle.Boost(probe.Handle) == boostBefore, "Restore preserves a foreign field while restoring independently owned fields");
+    var foreignMemory = desiredMemory == 4 ? 1u : 4u;
+    Oracle.SetMemory(probe.Handle, foreignMemory);
+    var conflict = engine.RestoreApplyOnce(journalPath, root, null);
+    var left = conflict.Changes.Single(change => change.Name == "memoryPriority");
+    Check(conflict.Status == "restored" && left.Status == "leftAsSet" && left.Error == ProcessControlEngine.LeftAsSet && left.Observed?.GetUInt32() == foreignMemory
+        && Oracle.Memory(probe.Handle) == foreignMemory && Oracle.Boost(probe.Handle) == boostBefore, "Restore finishes, keeps and names a field another program changed, and restores independently owned fields");
     Oracle.SetMemory(probe.Handle, desiredMemory);
-    var restored = engine.Restore(journalPath);
-    Check(restored.Status == "restored" && Oracle.Memory(probe.Handle) == memoryBefore, "A reconciled field restores its original memory priority");
+    var repeated = engine.RestoreApplyOnce(journalPath, root, null);
+    Check(repeated.Status == "restored" && Oracle.Memory(probe.Handle) == desiredMemory, "A finished restore does not take back a field it left to another program");
     var postRestore = engine.Apply(previewPath, reviewHash, journalPath);
-    Check(postRestore.Status == "restored" && Oracle.Memory(probe.Handle) == memoryBefore, "A restored review cannot be reapplied");
+    Check(postRestore.Status == "restored" && Oracle.Memory(probe.Handle) == desiredMemory, "A restored review cannot be reapplied");
+    Oracle.SetMemory(probe.Handle, memoryBefore);
 
     var powerBefore = Oracle.Power(probe.Handle);
     Oracle.SetPower(probe.Handle, new PowerThrottling(4, 4));

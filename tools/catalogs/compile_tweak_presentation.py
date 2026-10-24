@@ -36,6 +36,25 @@ WINDOWS_DEFAULTS = {
     ('.Default\\Control Panel\\Keyboard', 'InitialKeyboardIndicators'): '2147483648',
 }
 BUILT_IN_DOH = {'1.1.1.1', '1.0.0.1', '2606:4700:4700::1111', '2606:4700:4700::1001', '8.8.8.8', '8.8.4.4', '2001:4860:4860::8888', '2001:4860:4860::8844', '9.9.9.9', '149.112.112.112', '2620:fe::fe', '2620:fe::9'}
+EXPLOIT = ' (exploit protection)'
+SECURITY = {
+    ('defender', 'SubmitSamplesConsent'): ('Send suspicious files to Microsoft (Defender)', "Microsoft Defender can send files it isn't sure about to Microsoft for a closer look. Windows default sends files that are unlikely to hold personal data and asks before sending others. Never send keeps every file on this PC, but it also stops Defender from blocking brand-new threats on first sight."),
+    ('mitigations', 'Aslr.BottomUp'): ('Randomize memory allocations' + EXPLOIT, "Puts each program's memory at less predictable spots, so attacks have a harder time finding what they target. In Windows Security: Randomize memory allocations (Bottom-up ASLR)."),
+    ('mitigations', 'Dep.Enable'): ('Block code from running in data memory' + EXPLOIT, 'Stops programs from running code out of memory meant only for data, a common attack trick. 64-bit programs always have this on, so it only changes 32-bit programs. In Windows Security: Data Execution Prevention (DEP).'),
+    ('mitigations', 'Aslr.HighEntropy'): ('Wider memory randomization for 64-bit programs' + EXPLOIT, 'Gives 64-bit programs a much larger range of random memory spots, which makes memory attacks harder. In Windows Security: High-entropy ASLR.'),
+    ('mitigations', 'Sehop.Enable'): ('Check crash handlers before they run' + EXPLOIT, "Makes sure a program's error handling hasn't been tampered with before Windows runs it. Only 32-bit programs use this kind of error handling. In Windows Security: Validate exception chains (SEHOP)."),
+    ('mitigations', 'Cfg.Enable'): ('Check where programs jump in their code' + EXPLOIT, 'Stops attacks from sending a program to code it was never meant to run. In Windows Security: Control flow guard (CFG).'),
+    ('mitigations', 'StrictHandle.Enable'): ('Close programs that misuse system handles' + EXPLOIT, "Ends a program right away when it uses a Windows handle that isn't valid, instead of letting it carry on. Windows Security shows this only for each app, under Program settings: Validate handle usage."),
+    ('mitigations', 'ExtensionPoint.DisableExtensionPoints'): ('Block old-style add-ins from loading into programs' + EXPLOIT, 'Stops older kinds of add-ins from loading themselves into every program. Windows Security shows this only for each app, under Program settings: Disable extension points.'),
+    ('mitigations', 'Aslr.ForceRelocateImages'): ('Move every program to a new memory spot' + EXPLOIT, "Moves programs to a new memory spot even when they weren't built for it. With Randomize memory allocations on, that spot is hard to predict. Some older programs may not start. In Windows Security: Force randomization for images (Mandatory ASLR)."),
+    ('mitigations', 'FontDisable.Audit'): ('Log untrusted font loads' + EXPLOIT, "Writes to Windows' event log when a program loads a font from outside the Windows fonts folder. It only logs; nothing is blocked. Windows Security shows this only for each app, under Program settings: Block untrusted fonts, audit mode."),
+    ('mitigations', 'DynamicCode.Audit'): ('Log code created while programs run' + EXPLOIT, "Writes to Windows' event log when a program creates or changes code in memory as it runs. It only logs; nothing is blocked. Windows Security shows this only for each app, under Program settings: Arbitrary code guard (ACG), audit mode."),
+    ('mitigations', 'ImageLoad.AuditRemoteImageLoads'): ('Log programs loading files from network shares' + EXPLOIT, "Writes to Windows' event log when a program loads a code file from another PC on the network. It only logs; nothing is blocked. Windows Security shows this only for each app, under Program settings: Block remote images, audit mode."),
+    ('mitigations', 'Dep.EmulateAtlThunks'): ('Keep older programs working with data protection' + EXPLOIT, 'Lets older programs built on a common Windows code library keep running while data memory protection is on. Windows Security shows this only for each app, under Program settings: Enable ATL thunk emulation, part of Data Execution Prevention (DEP).'),
+    ('mitigations', 'Cfg.SuppressExports'): ('Block direct jumps into shared functions' + EXPLOIT, "Tightens Control flow guard so attacks can't jump straight into a program's shared functions. Windows Security doesn't show this setting."),
+    ('mitigations', 'DynamicCode.BlockDynamicCode'): ('Block code created while programs run' + EXPLOIT, 'Stops programs from creating or changing code in memory as they run. Browsers and some games rely on this and may not start. Windows Security shows this only for each app, under Program settings: Arbitrary code guard (ACG).'),
+    ('mitigations', 'ImageLoad.BlockRemoteImageLoads'): ('Block programs loading files from network shares' + EXPLOIT, 'Stops programs from loading code files from another PC on the network. Windows Security shows this only for each app, under Program settings: Block remote images.'),
+}
 SECTIONS = {'Privacy': 'privacy', 'Apps and browsers': 'apps', 'Services': 'services', 'Devices': 'devices', 'Network': 'network', 'Desktop and File Explorer': 'windows', 'Windows & Explorer': 'windows', 'Windows Update': 'updates', 'Scheduled tasks': 'services', 'Security': 'security', 'Gaming and display': 'gaming', 'System': 'windows'}
 NETWORK_SUMMARIES = {
     ('value', 'NetworkThrottlingIndex'): 'Balance network traffic with games and media.',
@@ -103,6 +122,11 @@ def compile_presentation():
         extras = setting['category'] in ('Apps and browsers', 'System', 'Desktop and File Explorer', 'Windows & Explorer') and any(word in setting['name'].lower() for word in ('advertis', 'sponsored', 'suggestion', 'recommendation', 'subscription button', 'ai-generated themes', 'bing chat', 'sidebar', 'shopping assistant', 'copilot', 'cortana'))
         if extras or 'contentdeliverymanager' in address.get('keyPath', '').lower() or 'copilot' in value_name.lower() or value_name in ('AllowNewsAndInterests', 'EnableFeeds', 'TaskbarDa', 'AllowCortana', 'AllowRecallEnablement', 'DisableAIDataAnalysis', 'DisableWindowsConsumerFeatures', 'DisableConsumerFeatures', 'SilentInstalledAppsEnabled'):
             entry['section'] = 'debloat'
+        field = prop if kind == 'defender' else next((key for key in change['value'] if '.Override' not in key), None) if kind == 'mitigations' else None
+        if (kind, field) in SECURITY:
+            entry['name'], entry['description'] = SECURITY[(kind, field)]
+            if kind == 'mitigations':
+                entry['choices'] = {option['id']: {'ON': 'On', 'OFF': 'Off'}[option['controls'][0]['value'][field]] for option in setting['options']}
         copy = NETWORK.get(value_name)
         if copy:
             name, description, topic, labels = copy

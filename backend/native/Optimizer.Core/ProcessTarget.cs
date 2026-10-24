@@ -26,17 +26,31 @@ public sealed class ProcessTarget : IDisposable
         _handle = handle; _pid = processId; _access = access; _writable = writable; _borrowed = borrowed;
     }
 
+    internal const uint CaptureAccess = 0x101200;
+
     internal static ProcessTarget CaptureGpu(int processId)
-        => new(CpuApi.OpenWithoutPrivileges(0x101200, processId), processId, 0x101200, ["gpuPriority"]);
+        => new(CpuApi.OpenWithoutPrivileges(CaptureAccess, processId), processId, CaptureAccess, ["gpuPriority", "ioPriority"]);
 
     internal static ProcessTarget ReceiveGpu(long value)
     {
         if (value <= 0) throw new InvalidDataException("Invalid retained process handle.");
         var handle = new ProcessHandle(new IntPtr(value));
         var pid = GetProcessId(handle);
-        if (pid == 0) { var error = Marshal.GetLastWin32Error(); handle.Dispose(); throw new CpuFailure("GetProcessId", error, 0x101200); }
-        return new(handle, checked((int)pid), 0x101200, ["gpuPriority"]);
+        if (pid == 0) { var error = Marshal.GetLastWin32Error(); handle.Dispose(); throw new CpuFailure("GetProcessId", error, CaptureAccess); }
+        return new(handle, checked((int)pid), CaptureAccess, ["gpuPriority", "ioPriority"]);
     }
+
+    internal int ProcessId => _pid;
+
+    internal int ParentProcessId()
+    {
+        EnsureRunning();
+        var information = new byte[48];
+        CheckStatus(NtQueryBasicInformation(_handle, 0, information, information.Length, IntPtr.Zero), "NtQueryInformationProcess(ProcessBasicInformation)");
+        return checked((int)BitConverter.ToInt64(information, 40));
+    }
+
+    internal uint Granted() => GrantedAccess(_handle, _access);
 
     internal long CopyTo(ProcessHandle destination)
     {
@@ -379,6 +393,7 @@ public sealed class ProcessTarget : IDisposable
     [DllImport("ntdll.dll")] private static extern int NtQueryObject(ProcessHandle handle, int informationClass, byte[] information, int length, out int returned);
     [DllImport("ntdll.dll")] private static extern int NtQueryInformationProcess(ProcessHandle process, int informationClass, ref int value, int size, IntPtr returned);
     [DllImport("ntdll.dll")] private static extern int NtSetInformationProcess(ProcessHandle process, int informationClass, ref int value, int size);
+    [DllImport("ntdll.dll", EntryPoint = "NtQueryInformationProcess")] private static extern int NtQueryBasicInformation(ProcessHandle process, int informationClass, byte[] value, int size, IntPtr returned);
     [DllImport("gdi32.dll")] private static extern int D3DKMTGetProcessSchedulingPriorityClass(ProcessHandle process, out int value);
     [DllImport("gdi32.dll")] private static extern int D3DKMTSetProcessSchedulingPriorityClass(ProcessHandle process, int value);
     [DllImport("advapi32.dll", SetLastError=true)] private static extern bool OpenProcessToken(ProcessHandle process, uint access, out SafeAccessTokenHandle token);

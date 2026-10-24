@@ -83,7 +83,7 @@ public sealed class InstalledApp
 
     public string FriendlyName => NormalizeName(DisplayName);
     public string AccountLabel => SourceType != "appx" ? "" : SourceIdentity is { } identity && identity.TryGetProperty("scope", out var scope) && scope.GetString() == "registered-user"
-        ? "Windows account: " + (identity.TryGetProperty("userSid", out var sid) ? sid.GetString() : "Unknown") : "This Windows user";
+        ? WindowsAccounts.Label(identity.TryGetProperty("userSid", out var sid) ? sid.GetString() : null) : "Your account";
     public string SelectionLabel => AccountLabel.Length == 0 ? FriendlyName : FriendlyName + " · " + AccountLabel;
 
     public override string ToString() => SelectionLabel;
@@ -290,6 +290,27 @@ public sealed class LeftoverScanSummary
     public string? DeletionMode { get; set; }
 }
 
+public static class WindowsAccounts
+{
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> Labels = new(StringComparer.OrdinalIgnoreCase);
+
+    public static string Label(string? sid) => string.IsNullOrWhiteSpace(sid) ? "Another account" : Labels.GetOrAdd(sid, Lookup);
+
+    private static string Lookup(string sid)
+    {
+        try
+        {
+            var name = new System.Security.Principal.SecurityIdentifier(sid).Translate(typeof(System.Security.Principal.NTAccount)).Value;
+            var user = name[(name.LastIndexOf('\\') + 1)..];
+            return user.Length == 0 ? "Another account" : user + "'s account";
+        }
+        catch
+        {
+            return "Another account";
+        }
+    }
+}
+
 public sealed class LeftoverItem
 {
     public string? ItemId { get; set; }
@@ -298,6 +319,8 @@ public sealed class LeftoverItem
     public List<string>? MatchedBy { get; set; }
     public string? Confidence { get; set; }
     public string? Risk { get; set; }
+    public string TypeLabel => Type switch { "folder" => "Folder", "file" => "File", "service" => "Service", "scheduledTask" => "Task", "registryKey" => "Registry key", "registryValue" => "Registry value", _ => "Other" };
+    public string ConfidenceLabel => Confidence switch { "high" => "Sure match", "medium" => "Likely match", "low" => "Possible match", _ => "" };
     public bool DefaultSelected { get; set; }
     public bool Protected { get; set; }
     public string? Reason { get; set; }

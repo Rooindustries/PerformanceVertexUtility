@@ -208,8 +208,8 @@ static class UpdateInstallChecks
             new("Remove selected apps", ["removal"], "the removal result", () => removing.ApplyCommand.ExecuteAsync(null),
                 () => App.Operations.RemovalPointer == removalJournal, () => removing.Status == "Removal didn't start." && Refused(removing.Detail) && removing.CanApply, () => App.Operations.RemovalPointer is null),
             new("Reviewed cleanup apply", ["cleanup"], "the cleanup result", () => cleanup!.ApplyCleanupCommand.ExecuteAsync(null),
-                () => cleanupInputs == "registry:Editor" && cleanup!.CleanupExecutionState != "Applying reviewed cleanup...",
-                () => cleanup!.CleanupExecutionState == "Cleanup didn't start." && Refused(cleanup.CleanupExecutionDetail) && cleanup.CanApplyCleanup, () => cleanupInputs is null),
+                () => cleanupInputs == "registry:Editor" && cleanup!.CleanupExecutionState != "Removing this app...",
+                () => cleanup!.CleanupExecutionState == "Removal didn't start." && Refused(cleanup.CleanupExecutionDetail) && cleanup.CanApplyCleanup, () => cleanupInputs is null),
         ];
 
         ServiceSteps.Pause = async step =>
@@ -262,8 +262,8 @@ static class UpdateInstallChecks
                         await cleanup.InitializeAsync();
                         cleanup.SelectedApp = cleanup.Apps.Single();
                         cleanup.RemovalPathReviewed = true; cleanup.LeftoverScanCompleted = true; cleanup.CleanupPlanReady = true;
-                        cleanup.RemoverPathApproved = true; cleanup.CleanupListApproved = true;
-                        cleanup.FinalCheckPassed = true; cleanup.RealCleanupApproved = true;
+                        cleanup.RemovalApproved = true;
+                        cleanup.FinalCheckPassed = true;
                         App.Live.CleanupApply = (id, _, _, _) => ServiceSteps.Then<string?>("cleanup",
                             () => JsonSerializer.Serialize(new { actionId = "apps.invokeUninstallCleanupApplyPackage", appId = id, dryRun = false, status = "success", executionMode = "real", summary = new { deletedCount = 1 } }),
                             () => cleanupInputs = id);
@@ -325,12 +325,12 @@ static class UpdateInstallChecks
             ServiceSteps.Pause = null;
             Set(removing, "_phase", "preview");
             cleanup!.RemovalPathReviewed = true; cleanup.LeftoverScanCompleted = true; cleanup.CleanupPlanReady = true;
-            cleanup.RemoverPathApproved = true; cleanup.CleanupListApproved = true;
-            cleanup.FinalCheckPassed = true; cleanup.RealCleanupApproved = true;
+            cleanup.RemovalApproved = true;
+            cleanup.FinalCheckPassed = true;
             App.Live.CleanupApply = (_, _, _, _) => throw new IOException("Controlled cleanup input write failure");
             await removing.ApplyCommand.ExecuteAsync(null);
             await cleanup.ApplyCleanupCommand.ExecuteAsync(null);
-            check(!RunningChanges.Any && closed.SequenceEqual([true, true]) && removing.Status == "Removal needs checking." && cleanup.CleanupExecutionDetail == "Controlled cleanup input write failure",
+            check(!RunningChanges.Any && closed.SequenceEqual([true, true]) && removing.Status == "Removal needs checking." && cleanup.CleanupExecutionDetail == "If Restore is offered, use it before you try again.",
                 "A removal or cleanup that fails while preparing its files stops counting as running, and Close when done fires for each");
         }
         finally

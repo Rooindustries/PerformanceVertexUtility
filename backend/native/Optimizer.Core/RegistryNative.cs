@@ -40,6 +40,7 @@ public static partial class RegistryNative
     private const uint Query = 1, SetValue = 2, CreateSubKey = 4, Enumerate = 8, Delete = 0x10000, ReadControl = 0x20000, WriteDacl = 0x40000, WriteOwner = 0x80000;
     private const uint Read = Query | Enumerate | ReadControl;
     private const uint Change = Read | SetValue | CreateSubKey | Delete;
+    internal static Func<SafeRegistryHandle>? MachineRoot;
     private const uint OpenLink = 8;
 
     public static SafeRegistryHandle? OpenRead(RegistryAddress address)
@@ -290,6 +291,7 @@ public static partial class RegistryNative
             var expected = "\\REGISTRY\\USER\\" + OperationOwner.Current().UserSid;
             if (!string.Equals(NativeName(key), expected, StringComparison.OrdinalIgnoreCase)) { key.Dispose(); throw new InvalidDataException("The registry user root does not belong to the current SID."); }
         }
+        else if (hive == "LocalMachine" && MachineRoot is { } machine) key = machine();
         else if (hive == "LocalMachine") Check(RegOpenKeyEx(new SafeRegistryHandle(new IntPtr(unchecked((int)0x80000002)), false), "", 0, Query | Enumerate, out key), "RegOpenKeyEx(HKLM)");
         else throw new InvalidDataException("Unsupported registry hive.");
         return key;

@@ -2302,19 +2302,48 @@
     "section": "services"
   },
   "windows.eebc9f3fde48834c": {
-    "section": "security"
+    "section": "security",
+    "name": "Randomize memory allocations (exploit protection)",
+    "description": "Puts each program's memory at less predictable spots, so attacks have a harder time finding what they target. In Windows Security: Randomize memory allocations (Bottom-up ASLR).",
+    "choices": {
+      "choice-b5bb494d28763265": "On",
+      "choice-5a2b45fa154b0ead": "Off"
+    }
   },
   "windows.05719d3bbe469a81": {
-    "section": "security"
+    "section": "security",
+    "name": "Block code from running in data memory (exploit protection)",
+    "description": "Stops programs from running code out of memory meant only for data, a common attack trick. 64-bit programs always have this on, so it only changes 32-bit programs. In Windows Security: Data Execution Prevention (DEP).",
+    "choices": {
+      "choice-1bccf6645cfb1195": "On"
+    }
   },
   "windows.feed5b43081ccd87": {
-    "section": "security"
+    "section": "security",
+    "name": "Wider memory randomization for 64-bit programs (exploit protection)",
+    "description": "Gives 64-bit programs a much larger range of random memory spots, which makes memory attacks harder. In Windows Security: High-entropy ASLR.",
+    "choices": {
+      "choice-7ed8500cd1f27f9e": "On",
+      "choice-469cfe8a8a4f4b3c": "Off"
+    }
   },
   "windows.ff7c1955e9c48cfa": {
-    "section": "security"
+    "section": "security",
+    "name": "Check crash handlers before they run (exploit protection)",
+    "description": "Makes sure a program's error handling hasn't been tampered with before Windows runs it. Only 32-bit programs use this kind of error handling. In Windows Security: Validate exception chains (SEHOP).",
+    "choices": {
+      "choice-585b84483305050c": "On",
+      "choice-96716c2fb599b6fc": "Off"
+    }
   },
   "windows.6eec44b714e4d017": {
-    "section": "security"
+    "section": "security",
+    "name": "Check where programs jump in their code (exploit protection)",
+    "description": "Stops attacks from sending a program to code it was never meant to run. In Windows Security: Control flow guard (CFG).",
+    "choices": {
+      "choice-fa569b9240d35018": "On",
+      "choice-8dec51f655aab290": "Off"
+    }
   },
   "windows.4eea42c34823699b": {
     "section": "security"
@@ -2327,43 +2356,83 @@
   },
   "windows.28146ee0c1c01a41": {
     "section": "security",
-    "name": "Other Security Mitigations · Strict Handle: Enable"
+    "name": "Close programs that misuse system handles (exploit protection)",
+    "description": "Ends a program right away when it uses a Windows handle that isn't valid, instead of letting it carry on. Windows Security shows this only for each app, under Program settings: Validate handle usage.",
+    "choices": {
+      "choice-5d2fc10b38b64fc2": "Off"
+    }
   },
   "windows.425c7c122debad41": {
     "section": "security",
-    "name": "Other Security Mitigations · Extension Point: Disable Extension Points"
+    "name": "Block old-style add-ins from loading into programs (exploit protection)",
+    "description": "Stops older kinds of add-ins from loading themselves into every program. Windows Security shows this only for each app, under Program settings: Disable extension points.",
+    "choices": {
+      "choice-c40ff98b4b385d37": "Off"
+    }
   },
   "windows.4e370476ec7da1d5": {
     "section": "security",
-    "name": "Other Security Mitigations · Aslr: Force Relocate Images"
+    "name": "Move every program to a new memory spot (exploit protection)",
+    "description": "Moves programs to a new memory spot even when they weren't built for it. With Randomize memory allocations on, that spot is hard to predict. Some older programs may not start. In Windows Security: Force randomization for images (Mandatory ASLR).",
+    "choices": {
+      "choice-becc1f1ad15a3fd1": "Off"
+    }
   },
   "windows.4f67b523391fa90d": {
     "section": "security",
-    "name": "Other Security Mitigations · Font Disable: Audit"
+    "name": "Log untrusted font loads (exploit protection)",
+    "description": "Writes to Windows' event log when a program loads a font from outside the Windows fonts folder. It only logs; nothing is blocked. Windows Security shows this only for each app, under Program settings: Block untrusted fonts, audit mode.",
+    "choices": {
+      "choice-233094d84b3d095b": "Off"
+    }
   },
   "windows.503faa10463becc1": {
     "section": "security",
-    "name": "Other Security Mitigations · Dynamic Code: Audit"
+    "name": "Log code created while programs run (exploit protection)",
+    "description": "Writes to Windows' event log when a program creates or changes code in memory as it runs. It only logs; nothing is blocked. Windows Security shows this only for each app, under Program settings: Arbitrary code guard (ACG), audit mode.",
+    "choices": {
+      "choice-c59144ebc5327970": "Off"
+    }
   },
   "windows.8888baaf939cd57c": {
     "section": "security",
-    "name": "Other Security Mitigations · Image Load: Audit Remote Image Loads"
+    "name": "Log programs loading files from network shares (exploit protection)",
+    "description": "Writes to Windows' event log when a program loads a code file from another PC on the network. It only logs; nothing is blocked. Windows Security shows this only for each app, under Program settings: Block remote images, audit mode.",
+    "choices": {
+      "choice-634add7bfd8b3f37": "Off"
+    }
   },
   "windows.ce1a1856ab034ce4": {
     "section": "security",
-    "name": "Other Security Mitigations · Dep: Emulate Atl Thunks"
+    "name": "Keep older programs working with data protection (exploit protection)",
+    "description": "Lets older programs built on a common Windows code library keep running while data memory protection is on. Windows Security shows this only for each app, under Program settings: Enable ATL thunk emulation, part of Data Execution Prevention (DEP).",
+    "choices": {
+      "choice-6e985a4340dff0d9": "Off"
+    }
   },
   "windows.edfcc4d1ab758ab8": {
     "section": "security",
-    "name": "Other Security Mitigations · Cfg: Suppress Exports"
+    "name": "Block direct jumps into shared functions (exploit protection)",
+    "description": "Tightens Control flow guard so attacks can't jump straight into a program's shared functions. Windows Security doesn't show this setting.",
+    "choices": {
+      "choice-af6083940d1a7fef": "Off"
+    }
   },
   "windows.f906140db3b12805": {
     "section": "security",
-    "name": "Other Security Mitigations · Dynamic Code: Block Dynamic Code"
+    "name": "Block code created while programs run (exploit protection)",
+    "description": "Stops programs from creating or changing code in memory as they run. Browsers and some games rely on this and may not start. Windows Security shows this only for each app, under Program settings: Arbitrary code guard (ACG).",
+    "choices": {
+      "choice-4da5f609ee854f17": "Off"
+    }
   },
   "windows.fb2a5a0a4f1642de": {
     "section": "security",
-    "name": "Other Security Mitigations · Image Load: Block Remote Image Loads"
+    "name": "Block programs loading files from network shares (exploit protection)",
+    "description": "Stops programs from loading code files from another PC on the network. Windows Security shows this only for each app, under Program settings: Block remote images.",
+    "choices": {
+      "choice-e36f4c3110949957": "Off"
+    }
   },
   "windows.a71ca3e5541cb544": {
     "section": "security"
@@ -4054,7 +4123,9 @@
     "section": "privacy"
   },
   "windows.171a004ed11767da": {
-    "section": "privacy"
+    "section": "privacy",
+    "name": "Send suspicious files to Microsoft (Defender)",
+    "description": "Microsoft Defender can send files it isn't sure about to Microsoft for a closer look. Windows default sends files that are unlikely to hold personal data and asks before sending others. Never send keeps every file on this PC, but it also stops Defender from blocking brand-new threats on first sight."
   },
   "windows.2cc6f805d9290289": {
     "section": "privacy"

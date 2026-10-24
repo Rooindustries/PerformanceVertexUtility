@@ -21,6 +21,14 @@ public static class ProcessFailures
         ProcessTarget.NtFailure native => native.Code == 0xC0000022,
         _ => false,
     };
+
+    public static bool Refused(Exception error) => Denied(error) || error switch
+    {
+        System.ComponentModel.Win32Exception win32 => win32.NativeErrorCode is 1300 or 1314,
+        InvalidDataException { InnerException: ControlReadException read } => read.Error is { CodeKind: "win32", Code: 1300 or 1314 } or { CodeKind: "ntstatus", Code: 0xC0000061 },
+        ProcessTarget.NtFailure native => native.Code == 0xC0000061,
+        _ => false,
+    };
 }
 public sealed class ProcessEndedException() : InvalidOperationException("The target process has exited.");
 
@@ -96,7 +104,11 @@ public sealed class ControlChange
     public JsonElement? Observed { get; set; }
     public string? Error { get; set; }
     public string? ErrorKind { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public DateTime? AppliedAtUtc { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public List<ReleasedClaim>? Released { get; set; }
 }
+
+public sealed record ReleasedClaim(string Feature, JsonElement Original, string Record);
 
 public sealed class ProcessControlJournal
 {

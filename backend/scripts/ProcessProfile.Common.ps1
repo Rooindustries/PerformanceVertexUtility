@@ -591,6 +591,49 @@ public static class RooIndustriesNativeProcessControl {
     public static extern bool GetProcessAffinityMask(IntPtr process, out IntPtr processMask, out IntPtr systemMask);
     [DllImport("kernel32.dll")]
     public static extern ushort GetActiveProcessorGroupCount();
+    [StructLayout(LayoutKind.Sequential)]
+    private struct SystemProcessIdInformation { public IntPtr ProcessId; public ushort Length; public ushort MaximumLength; public IntPtr Buffer; }
+    [DllImport("ntdll.dll")]
+    private static extern int NtQuerySystemInformation(int informationClass, ref SystemProcessIdInformation information, int length, out int returned);
+    [StructLayout(LayoutKind.Sequential)]
+    private struct UnicodeString { public ushort Length; public ushort MaximumLength; public IntPtr Buffer; }
+    [StructLayout(LayoutKind.Sequential)]
+    private struct ObjectAttributes { public int Length; public IntPtr RootDirectory; public IntPtr ObjectName; public uint Attributes; public IntPtr SecurityDescriptor; public IntPtr SecurityQualityOfService; }
+    [DllImport("ntdll.dll")]
+    private static extern int NtOpenSymbolicLinkObject(out IntPtr link, uint access, ref ObjectAttributes attributes);
+    [DllImport("ntdll.dll")]
+    private static extern int NtQuerySymbolicLinkObject(IntPtr link, ref UnicodeString target, out int returned);
+    [DllImport("ntdll.dll")]
+    private static extern int NtClose(IntPtr handle);
+    private static string DriveDevice(string letter) {
+        string name = "\\GLOBAL??\\" + letter;
+        IntPtr text = Marshal.StringToHGlobalUni(name), objectName = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(UnicodeString))), target = Marshal.AllocHGlobal(0xFFFE);
+        try {
+            Marshal.StructureToPtr(new UnicodeString { Length = (ushort)(name.Length * 2), MaximumLength = (ushort)(name.Length * 2 + 2), Buffer = text }, objectName, false);
+            var attributes = new ObjectAttributes { Length = Marshal.SizeOf(typeof(ObjectAttributes)), ObjectName = objectName, Attributes = 0x40 };
+            IntPtr link;
+            if (NtOpenSymbolicLinkObject(out link, 1, ref attributes) != 0) return null;
+            try {
+                var value = new UnicodeString { MaximumLength = 0xFFFE, Buffer = target };
+                int returned;
+                return NtQuerySymbolicLinkObject(link, ref value, out returned) == 0 ? Marshal.PtrToStringUni(target, value.Length / 2) : null;
+            } finally { NtClose(link); }
+        } finally { Marshal.FreeHGlobal(text); Marshal.FreeHGlobal(objectName); Marshal.FreeHGlobal(target); }
+    }
+    public static string ImageFilePath(int processId) {
+        IntPtr buffer = Marshal.AllocHGlobal(0xFFFE);
+        try {
+            var information = new SystemProcessIdInformation { ProcessId = new IntPtr(processId), MaximumLength = 0xFFFE, Buffer = buffer };
+            int returned;
+            if (NtQuerySystemInformation(88, ref information, Marshal.SizeOf(typeof(SystemProcessIdInformation)), out returned) != 0 || information.Length == 0) return null;
+            string image = Marshal.PtrToStringUni(buffer, information.Length / 2);
+            for (char letter = 'A'; letter <= 'Z'; letter++) {
+                string device = DriveDevice(letter + ":");
+                if (device != null && image.StartsWith(device + "\\", StringComparison.OrdinalIgnoreCase)) return letter + ":" + image.Substring(device.Length);
+            }
+            return null;
+        } finally { Marshal.FreeHGlobal(buffer); }
+    }
 }
 public sealed class RooIndustriesIoPriorityPrivilege : IDisposable {
     private Microsoft.Win32.SafeHandles.SafeFileHandle token;
@@ -1130,6 +1173,31 @@ function Get-RooIndustriesRestoreControlOwnershipReason {
     return $null
 }
 
+function Get-RooIndustriesSnapshotRecord {
+    param($Snapshot)
+    $stamp = [string](Get-RooIndustriesPropertyValue $Snapshot 'capturedAtUtc' '')
+    if ([string]::IsNullOrWhiteSpace($stamp)) { return '' }
+    return [string](Get-RooIndustriesPropertyValue $Snapshot 'sessionId' '') + '|' + $stamp
+}
+
+function Test-RooIndustriesSnapshotReleased {
+    param($Snapshot, [string]$Control, [string]$Feature)
+    $record = Get-RooIndustriesSnapshotRecord $Snapshot
+    $field = switch ($Control) { 'priorityClass' { 'originalPriorityClass' } 'affinityMask' { 'originalAffinityMask' } 'ioPriority' { 'originalIoPriority' } 'memoryPriority' { 'originalMemoryPriority' } 'gpuPriority' { 'originalGpuPriority' } default { $null } }
+    $started = [DateTime]::MinValue
+    $processId = Get-RooIndustriesPropertyValue $Snapshot 'processId' 0
+    if ([string]::IsNullOrWhiteSpace($Feature) -or [string]::IsNullOrWhiteSpace($record) -or $null -eq $field -or ($processId -isnot [int] -and $processId -isnot [long]) -or
+        -not [DateTime]::TryParse([string](Get-RooIndustriesPropertyValue $Snapshot 'processStartTimeUtc' ''), [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::RoundtripKind, [ref]$started)) { return $false }
+    $created = $started.ToUniversalTime().ToFileTimeUtc()
+    $original = Get-RooIndustriesPropertyValue $Snapshot $field $null
+    $native = switch ($Control) { 'priorityClass' { 'cpuPriority' } 'affinityMask' { 'affinity' } default { $Control } }
+    foreach ($release in @(Read-RooIndustriesProcessOperationReleases)) {
+        if ($release.processId -eq $processId -and $release.creationTimeFileTimeUtc -eq $created -and $release.control -ceq $native -and $release.feature -ceq $Feature -and $release.record -ceq $record -and
+            (Test-RooIndustriesControlValueEqual $Control $release.original $original)) { return $true }
+    }
+    return $false
+}
+
 function Get-RooIndustriesAppliedControlValue {
     param($Snapshot, [string]$Control)
     $recorded = @(Get-RooIndustriesPropertyArray $Snapshot 'controlChanges' | Where-Object { [string](Get-RooIndustriesPropertyValue $_ 'control' '') -eq $Control })
@@ -1148,7 +1216,7 @@ function Get-RooIndustriesAppliedControlValue {
 }
 
 function Split-RooIndustriesLeftAsSetRestoreChanges {
-    param($Snapshot, [object[]]$Changes, $CurrentState)
+    param($Snapshot, [object[]]$Changes, $CurrentState, [string]$Feature = '')
     $restore = New-Object System.Collections.Generic.List[object]
     $left = New-Object System.Collections.Generic.List[object]
     $original = New-Object System.Collections.Generic.List[object]
@@ -1237,6 +1305,10 @@ function Split-RooIndustriesLeftAsSetRestoreChanges {
             $original.Add([pscustomobject]@{ control = $control; originalValue = $savedOriginal; appliedValue = $applied.value; appliedKnown = $applied.known }) | Out-Null
             continue
         }
+        if ($readable -and $applied.known -and $applied.verified -and (Test-RooIndustriesControlValueEqual $control $current $applied.value) -and (Test-RooIndustriesSnapshotReleased $Snapshot $control $Feature)) {
+            $original.Add([pscustomobject]@{ control = $control; originalValue = $current; appliedValue = $applied.value; appliedKnown = $applied.known }) | Out-Null
+            continue
+        }
         if ($readable -and $applied.known -and $applied.verified -and -not (Test-RooIndustriesControlValueEqual $control $current $applied.value)) {
             $left.Add([pscustomobject]@{ control = $control; currentValue = $current; appliedValue = $applied.value; originalValue = $savedOriginal; outcome = 'leftAsSet'; reason = $script:RooIndustriesLeftAsSet }) | Out-Null
             continue
@@ -1306,7 +1378,7 @@ function Test-RooIndustriesRestoreInstanceEnded {
 }
 
 function Confirm-RooIndustriesRestoreControl {
-    param([System.Diagnostics.Process]$Process, $Check, $Snapshot, $Entry, $Change = $null)
+    param([System.Diagnostics.Process]$Process, $Check, $Snapshot, $Entry, $Change = $null, [string]$Feature = '')
     $control = [string](Get-RooIndustriesPropertyValue $Check 'control' '')
     $candidateConfirmed = $false
     $candidateRestored = $false
@@ -1384,6 +1456,9 @@ function Confirm-RooIndustriesRestoreControl {
                 $now = Get-RooIndustriesProcessControlReadback $Process $control
                 if ([string]::IsNullOrWhiteSpace([string]$now)) { throw $script:RooIndustriesLeftAsSetChangedBack }
                 if (Test-RooIndustriesControlValueEqual $control $now $original) {
+                    $candidateConfirmed = $true
+                } elseif ($Feature -and $applied.known -and $applied.verified -and (Test-RooIndustriesControlValueEqual $control $now $applied.value) -and
+                    (Test-RooIndustriesSnapshotReleased $Snapshot $control $Feature)) {
                     $candidateConfirmed = $true
                 } elseif (-not $applied.known -or -not $applied.verified) {
                     throw $script:RooIndustriesUnprovenWrite
