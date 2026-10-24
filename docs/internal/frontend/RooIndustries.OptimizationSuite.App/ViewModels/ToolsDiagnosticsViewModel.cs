@@ -17,16 +17,17 @@ public partial class ToolsDiagnosticsViewModel : PageViewModelBase
     [ObservableProperty] private string _status = "";
     [ObservableProperty] private string _count = "";
     [ObservableProperty] private bool _busy;
-    public string[] Categories { get; } = ["All tools", "Diagnostics", "Tuning", "System", "Drivers", "Runtimes"];
+    public string[] Categories { get; } = ["All tools", "Diagnostics", "Tuning", "System", "Drivers", "Game support"];
     public ObservableCollection<ToolRow> ToolRows { get; } = new();
     partial void OnSearchChanged(string value) => Filter();
     partial void OnCategoryChanged(string value) => Filter();
 
     protected override async Task LoadCoreAsync()
     {
-        _launcher = new ToolLauncherService(App.Live.RepoRoot ?? throw new InvalidOperationException("The tools package could not be found. Reopen the app from its installation folder."));
+        _launcher = new ToolLauncherService(App.Live.RepoRoot ?? throw new InvalidOperationException(ToolLauncherService.MissingFiles));
         _all.Clear();
-        foreach (var tool in await _launcher.ReadAsync()) _all.Add(new(tool, _launcher.Resolve(tool)));
+        try { foreach (var tool in await _launcher.ReadAsync()) _all.Add(new(tool, _launcher.Resolve(tool))); }
+        catch (Exception ex) { throw new InvalidOperationException(ToolLauncherService.ExplainList(ex), ex); }
         Filter();
     }
 
@@ -35,7 +36,7 @@ public partial class ToolsDiagnosticsViewModel : PageViewModelBase
         ToolRows.Clear();
         foreach (var row in _all.Where(t => (Category == "All tools" || t.Category == Category)
             && (t.Name + " " + t.Description).Contains(Search.Trim(), StringComparison.OrdinalIgnoreCase))) ToolRows.Add(row);
-        Count = ToolRows.Count == 0 ? "No tools match. Try another search or category." : ToolRows.Count + " tools";
+        Count = ToolRows.Count switch { 0 => "No tools match. Try another search or category.", 1 => "1 tool", var count => count + " tools" };
     }
 
     public async Task OpenAsync(ToolRow row)
@@ -43,7 +44,11 @@ public partial class ToolsDiagnosticsViewModel : PageViewModelBase
         if (_launcher is null || Busy) return;
         Busy = true;
         try { Status = await _launcher.OpenAsync(row.Definition); }
-        catch (Exception ex) { Status = row.Name + ": " + ex.Message; }
+        catch (Exception ex)
+        {
+            AppLog.Write(nameof(ToolsDiagnosticsViewModel), row.Definition.Id + ": " + ex);
+            Status = ToolLauncherService.Explain(row.Definition, ex);
+        }
         finally { Busy = false; }
     }
 }
