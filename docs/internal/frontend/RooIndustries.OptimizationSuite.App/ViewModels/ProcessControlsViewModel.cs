@@ -887,7 +887,6 @@ public partial class ProcessControlsViewModel : ObservableObject
         "ioPriority" or "gpuPriority" or "memoryPriority" => Options(name).SingleOrDefault(option => option.Value?.GetInt32() == value.GetInt32())?.Label.Split(" · ")[0] ?? value.ToString(),
         _ => value.ToString(),
     };
-    // Cores are numbered from 1 by logical processor, so bit 0 of a mask is Core 1: "Core 3", "Cores 1–4, 9, 11–12".
     public static string CoreList(string mask)
     {
         ulong bits;

@@ -1,7 +1,6 @@
 param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutRoot,[Parameter(Mandatory)][ValidatePattern('^[a-z][a-z0-9-]{0,30}$')][string]$Label)
 $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
-# A relative -Source would make every path below, and the path-length check, relative too.
 $Source=[IO.Path]::GetFullPath([IO.Path]::Combine((Get-Location -PSProvider FileSystem).ProviderPath,$Source))
 . (Join-Path $Source 'tools\validation\Update\Harness.Common.ps1')
 . (Join-Path $Source 'backend\scripts\BrandCompatibility.Common.ps1')
@@ -132,7 +131,6 @@ try{
  WaitFor {$e=ById 'GameSessionAllCores';if($e -and $e.Current.IsEnabled){$e}else{$c=Combo 'CPU cores';if($c -and (Shown $c)){$c}}} 90 'the launcher cores'|Out-Null
  $evidence.picker=[bool](ById 'GameSessionPreset')
  if(-not$evidence.picker){
-  # A build from before the picker still uses its older names and needs its launcher checkbox before Review.
   $names.ioPriority='I/O priority';$labels.priorityBoost=@{'True'='Allow dynamic boosts';'False'='Disable dynamic boosts'}
   Check 'GameSessionScope'
  }

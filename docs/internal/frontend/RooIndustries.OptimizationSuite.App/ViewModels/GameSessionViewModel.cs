@@ -43,7 +43,6 @@ public sealed record GameCoreChoice(string Label, AffinityState Affinity)
     public override string ToString() => Label;
 }
 
-// One checkbox per logical processor, numbered from 1. A core the launcher can't use stays unchecked and disabled.
 public sealed class GameCoreBox(byte index, string kind, bool enabled) : ObservableObject
 {
     private bool _isChecked;
@@ -116,7 +115,6 @@ public partial class GameSessionViewModel : ObservableObject
     public string PresetHint => _presetsError ?? SelectedPreset?.Description
         ?? (_customPreset || AnyChosen ? "Your own mix. Picking a preset changes the priorities but keeps your cores." : "Pick one to fill in the settings below. You can still change them.");
 
-    // The mask sent to the backend. All cores is exactly the launcher's own mask, so a reserved core it already had stays included.
     public string AffinityMask => _coreMask == 0 ? "" : "0x" + _coreMask.ToString("X");
     public bool AllCores
     {
@@ -226,7 +224,6 @@ public partial class GameSessionViewModel : ObservableObject
                     if (setting.Name == "executionQoS") desired = JsonSerializer.SerializeToElement(desired.Deserialize<PowerThrottling>(OperationFiles.Json)!.ExecutionMode);
                     setting.Selected = setting.Options.FirstOrDefault(option => option.Value?.GetRawText() == desired.GetRawText()) ?? setting.Options[0];
                 }
-                // Until the launcher is read there are no checkboxes, so the page shows the session's cores as text.
                 _allowedMask = Mask(state.Preview.OriginalAffinity.Mask); SetCores(Mask(state.DesiredAffinity.Mask));
                 MatchPreset();
             }
@@ -392,7 +389,6 @@ public partial class GameSessionViewModel : ObservableObject
             var controls = SettingControls();
             var group = _launcher!.Controls["affinity"].Require().Deserialize<AffinityState>(OperationFiles.Json)!.Group;
             controls["affinity"] = JsonSerializer.SerializeToElement(new AffinityState(group, AffinityMask), OperationFiles.Json);
-            // Review then Start is the approval. Core limits and disk or memory priority reach the launcher's other new apps, and the review says so.
             _review = await App.Operations.PreviewGameSessionAsync(SelectedLauncher!.Id, GamePath.Trim(), controls, acceptLauncherScope: true);
             var launcher = Path.GetFileName(_review.Plan.Launcher.ExecutablePath);
             var original = Mask(_review.Plan.OriginalAffinity.Mask);
@@ -549,6 +545,8 @@ public partial class GameSessionViewModel : ObservableObject
                     }
                     var known = field.Observed is { Known: true, Error: null, Value: not null };
                     var observed = known ? ProcessControlsViewModel.Describe(field.Name, field.Observed!.Require()) : "Unavailable";
+                    if (known && field.Name == "affinity" && field.Observed!.Require().Deserialize<AffinityState>(OperationFiles.Json) is { } now &&
+                        now.Group == session.Preview.OriginalAffinity.Group && Mask(now.Mask) == Mask(session.Preview.OriginalAffinity.Mask)) observed = "All cores";
                     if (field.Status == "released") observed = "Session limit removed";
                     else if (field.Status == "restartRequired" && known) observed = "Last: " + observed;
                     var result = field.Name == "affinity" && _pendingAffinity is not null ? "Switching cores" : FieldResult(field.Status);

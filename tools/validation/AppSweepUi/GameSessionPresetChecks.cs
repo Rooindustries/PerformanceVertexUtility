@@ -18,8 +18,6 @@ static class GameSessionPresetChecks
         var schema = JsonNode.Parse(File.ReadAllText(Path.Combine(fixtures, "roo-industries-backend-contracts.schema.json")))!;
         var allowed = schema["$defs"]!["launchPresetCatalog"]!["properties"]!["presets"]!["items"]!["properties"]!["settings"]!["properties"]!.AsObject();
         var launcher = new RunningProcess(4100, "1", Path.Combine(fixtures, "launcher.exe"));
-        // Twelve logical processors: Cores 1-8 are performance cores and 9-12 efficiency cores. Core 11 is reserved for another app and
-        // Core 12 is outside the launcher's cores, so the launcher may use Cores 1-11 and the picker lets you check Cores 1-10.
         LogicalCpu[] topology = [.. Enumerable.Range(0, 12).Select(index => new LogicalCpu((uint)index, 0, (byte)index, (byte)(index / 2), 0, 0, (byte)(index < 8 ? 1 : 0), false, index == 10, false))];
         const string launcherCores = "0x7FF";
         var usable = string.Join(",", Enumerable.Range(1, 10));
@@ -244,10 +242,11 @@ static class GameSessionPresetChecks
                 "Changing to all cores says it's switching and shows All cores next to the cores the game still reads");
             state.Games[0].Fields.Single(field => field.Name == "affinity").Observed = ControlRead.From(new AffinityState(0, launcherCores));
             await reopened.ObserveAsync();
+            check(reopened.Fields.Single(field => field.Label == "CPU cores") is { Requested: "All cores", Observed: "All cores" }, "Once the game reads the launcher's own cores, Applied settings says All cores on both sides");
             Pick(reopened, 1, 2, 3, 4, 5, 6, 7, 8);
             await reopened.SwitchCoresCommand.ExecuteAsync(null);
             check(switched == "0xFF" && reopened.Detail == "Switching to cores 1–8. Check Current below."
-                && reopened.Fields.Single(field => field.Label == "CPU cores") is { Requested: "Cores 1–8", Observed: "Cores 1–11", Result: "Switching cores" },
+                && reopened.Fields.Single(field => field.Label == "CPU cores") is { Requested: "Cores 1–8", Observed: "All cores", Result: "Switching cores" },
                 "Once the game confirms all cores, changing to Cores 1-8 says which cores it's switching to");
             var pair = Session(Game(4300, reviewed), Game(4301, reviewed));
             pair.Games[1].Fields.Single(field => field.Name == "affinity").Status = "released";
