@@ -129,6 +129,8 @@ static class ToolLauncherChecks
 
             var blocked = new System.ComponentModel.Win32Exception(225);
             Plain(ToolLauncherService.Explain(tool, blocked), blocked, "Your antivirus or Windows Security blocked Fixture Tool. Allow it there, then try again.", "A tool blocked by antivirus");
+            var policy = new System.ComponentModel.Win32Exception(1260);
+            Plain(ToolLauncherService.Explain(tool, policy), policy, "A Windows policy on this PC blocks Fixture Tool. Ask whoever manages this PC to allow it.", "A tool blocked by a Windows policy");
             var elevation = new System.ComponentModel.Win32Exception(740);
             Plain(ToolLauncherService.Explain(tool, elevation), elevation, "Fixture Tool needs admin rights. Reopen the app as an administrator, then try again.", "A tool that needs admin rights");
             var noShell = new InvalidOperationException(RooIndustries.Optimizer.RuntimeEnvironment.ExplorerNotRunning);
