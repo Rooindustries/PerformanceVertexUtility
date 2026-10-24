@@ -10,7 +10,8 @@ function Convert-CimDate {
     param([object]$Value)
     if ($null -eq $Value) { return $null }
     try {
-        return ([System.Management.ManagementDateTimeConverter]::ToDateTime([string]$Value)).ToString('yyyy-MM-dd')
+        $date = if ($Value -is [datetime]) { $Value } else { [System.Management.ManagementDateTimeConverter]::ToDateTime([string]$Value) }
+        return $date.ToUniversalTime().ToString('yyyy-MM-dd')
     } catch {
         return [string]$Value
     }

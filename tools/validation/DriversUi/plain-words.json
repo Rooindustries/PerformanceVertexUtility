@@ -1,0 +1,26 @@
+{
+  "screen": "Graphics drivers",
+  "banned": [
+    { "pattern": "\\bManual\\b", "caseSensitive": true, "why": "an internal review tag" },
+    { "pattern": "Drivers & GPU", "why": "the old page title" },
+    { "pattern": "Network & devices", "why": "the old panel name" },
+    { "pattern": "No driver recommendations", "why": "the old empty download card" },
+    { "pattern": "Close and reopen", "why": "the old error advice" },
+    { "pattern": "Open Tools and pick|Use Tools to", "why": "a message sending people to Tools instead of a button" },
+    { "pattern": "Microsoft Windows", "why": "the long Windows name" },
+    { "pattern": "\\(R\\)", "why": "a trademark mark" },
+    { "pattern": "\\(TM\\)", "why": "a trademark mark" },
+    { "pattern": " cores / ", "why": "the old core and thread format" },
+    { "pattern": "\\bDriver \\d+(\\.\\d+){3} / ", "why": "the raw Windows driver version and date" },
+    { "pattern": "\\b\\d{4}-\\d{2}-\\d{2}\\b", "why": "a raw yyyy-MM-dd date" },
+    { "pattern": "\\b\\d{1,2}/\\d{1,2}/\\d{4}\\b", "why": "a raw month/day/year date" },
+    { "pattern": "\\b\\d{2}:\\d{2}:\\d{2}\\b", "why": "a raw time of day" }
+  ],
+  "driverLine": "^Driver (\\d|from )",
+  "nvidiaDriverLine": "^Driver \\d{3}\\.\\d{2} \u00b7 \\d{1,2} \\p{L}{3,} \\d{4}$",
+  "nvidiaUndatedDriverLine": "^Driver \\d{3}\\.\\d{2}$",
+  "nvidiaButton": "^(Get|Install|Open) NVIDIA App & Driver$",
+  "amdDriverLine": "^Driver \\d+(\\.\\d+){3} \u00b7 \\d{1,2} \\p{L}{3,} \\d{4}$",
+  "amdUndatedDriverLine": "^Driver \\d+(\\.\\d+){3}$",
+  "amdButton": "^(Get|Install|Open) AMD Software: Adrenalin Edition$"
+}

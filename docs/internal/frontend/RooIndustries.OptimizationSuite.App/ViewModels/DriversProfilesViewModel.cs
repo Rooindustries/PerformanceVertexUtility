@@ -1,6 +1,7 @@
 using System;
 using System.Collections.ObjectModel;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -20,6 +21,17 @@ public partial class DriversProfilesViewModel : PageViewModelBase
     [ObservableProperty] private string? _primaryGpuName;
     [ObservableProperty] private string? _primaryGpuDriverSummary;
     [ObservableProperty] private bool _hasRecommendations;
+    [ObservableProperty] private string _driverDownloadHint = AnyMakerHint;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasDriverTool))]
+    [NotifyCanExecuteChangedFor(nameof(GetDriverCommand))]
+    private string? _driverToolAction;
+    [ObservableProperty] private string _driverToolStatus = "";
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(GetDriverCommand))]
+    private bool _driverToolBusy;
+    private ToolLauncherService? _tools;
+    private ToolDefinition? _driverTool;
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanCheckNvidiaAction))]
     [NotifyPropertyChangedFor(nameof(CanApproveNvidiaProfile))]
@@ -67,6 +79,8 @@ public partial class DriversProfilesViewModel : PageViewModelBase
     public ObservableCollection<DriverRecommendation> Recommendations { get; } = new();
     public ObservableCollection<string> ManualGateWarnings { get; } = new();
     public ObservableCollection<NvidiaProfileEntry> NvidiaProfiles { get; } = new();
+    public Func<ToolLauncherService>? Tools { get; init; }
+    public bool HasDriverTool => DriverToolAction is not null;
     public bool CanCheckNvidiaAction => HasNvidiaProfiles && !NvidiaBusy;
     public bool CanApproveNvidiaProfile => HasNvidia && HasNvidiaProfiles && !NvidiaBusy;
     public bool CanApplyNvidiaProfile => CanApproveNvidiaProfile && NvidiaExportReviewed && NvidiaProfileApproved && NvidiaBenchmarkReady;
@@ -79,29 +93,57 @@ public partial class DriversProfilesViewModel : PageViewModelBase
                 ? "Ready to apply " + NvidiaProfileName + "."
                 : "Review export, exact profile approval, and benchmark evidence first.";
 
+    public const string ReadFailed = "Hit Retry to try again. Still stuck? Let us know in Report a bug.";
+    private const string AnyMakerHint = "Download it from your graphics card maker's website.";
+    public const string NvidiaDriverTool = "NVIDIA App & Driver";
+    public const string AmdDriverTool = "AMD Software: Adrenalin Edition";
+    private static readonly string[] PlaceholderMachineNames =
+    [
+        "To Be Filled By O.E.M.", "System manufacturer", "System Product Name",
+        "Default string", "Not Applicable", "Not Specified", "O.E.M.", "OEM",
+    ];
+
     protected override async Task LoadCoreAsync()
+    {
+        try
+        {
+            await LoadHardwareAsync();
+        }
+        catch (Exception error)
+        {
+            AppLog.Write(nameof(DriversProfilesViewModel), error.ToString());
+            ErrorMessage = ReadFailed;
+        }
+    }
+
+    private async Task LoadHardwareAsync()
     {
         var hardware = await App.Live.GetDriverHardwareAsync(fresh: Fresh && !Quiet);
         if (hardware?.Machine is null)
         {
-            ErrorMessage = "We couldn't read your hardware yet. Close and reopen to try again.";
+            ErrorMessage = ReadFailed;
             return;
         }
 
-        MachineModel = string.Join(" ", new[] { hardware.Machine.Manufacturer, hardware.Machine.Model }
-            .Where(x => !string.IsNullOrWhiteSpace(x)));
-        MachineOsCaption = hardware.Machine.OsCaption;
+        MachineModel = MachineName(hardware.Machine);
+        MachineOsCaption = WindowsName(hardware.Machine.OsCaption);
         CpuName = Clean(hardware.Cpu?.Name);
-        CpuCoreSummary = hardware.Cpu is null ? null : $"{hardware.Cpu.Cores} cores / {hardware.Cpu.LogicalProcessors} threads";
+        CpuCoreSummary = hardware.Cpu is { Cores: > 0, LogicalProcessors: > 0 } cpu ? $"{cpu.Cores} cores, {cpu.LogicalProcessors} threads" : null;
 
         Gpus.Clear();
         foreach (var g in hardware.Gpus ?? Enumerable.Empty<GpuInfo>()) Gpus.Add(g);
-        var primary = Gpus.FirstOrDefault(g => IsNvidia(g)) ?? Gpus.FirstOrDefault();
+        var primary = Gpus.FirstOrDefault(IsNvidia) ?? Gpus.FirstOrDefault(IsAmd) ?? Gpus.FirstOrDefault();
         PrimaryGpuName = Clean(primary?.Name);
-        PrimaryGpuDriverSummary = primary is null ? null : $"Driver {primary.DriverVersion} / {primary.DriverDate}";
+        PrimaryGpuDriverSummary = primary is null ? null : DriverSummary(primary);
+        var driverTool = primary is null ? null : IsNvidia(primary) ? NvidiaDriverTool : IsAmd(primary) ? AmdDriverTool : null;
+        DriverDownloadHint = driverTool is not null ? ""
+            : primary is not null && IsMaker(primary, "Intel") ? "Download it from Intel's website."
+            : AnyMakerHint;
+        await FindDriverToolAsync(driverTool);
 
         NetworkAdapters.Clear();
-        foreach (var n in hardware.NetworkAdapters ?? Enumerable.Empty<NetworkAdapterInfo>()) NetworkAdapters.Add(n);
+        foreach (var n in hardware.NetworkAdapters ?? Enumerable.Empty<NetworkAdapterInfo>())
+            NetworkAdapters.Add(new NetworkAdapterInfo { Name = Clean(n.Name), Vendor = n.Vendor, DriverVersion = n.DriverVersion, Protected = n.Protected, Reason = n.Reason });
 
         HasNvidia = Gpus.Any(IsNvidia);
 
@@ -300,9 +342,100 @@ public partial class DriversProfilesViewModel : PageViewModelBase
         }
     }
 
-    private static bool IsNvidia(GpuInfo g)
-        => (g.Vendor?.Contains("NVIDIA", StringComparison.OrdinalIgnoreCase) ?? false)
-           || (g.Name?.Contains("NVIDIA", StringComparison.OrdinalIgnoreCase) ?? false);
+    private async Task FindDriverToolAsync(string? name)
+    {
+        if (_driverTool?.Name != name) DriverToolStatus = "";
+        _driverTool = null;
+        DriverToolAction = null;
+        if (name is null || Tools is null) return;
+        try
+        {
+            _tools ??= Tools();
+            _driverTool = (await _tools.ReadAsync()).FirstOrDefault(tool => tool.Name == name)
+                ?? throw new InvalidDataException("The tool list has no " + name + " entry.");
+            DriverToolAction = _tools.Resolve(_driverTool).Action + " " + _driverTool.Name;
+        }
+        catch (Exception error)
+        {
+            AppLog.Write(nameof(DriversProfilesViewModel), error.ToString());
+            _driverTool = null;
+            DriverToolStatus = AppLog.MissingFiles;
+        }
+    }
+
+    private bool CanGetDriver() => _driverTool is not null && !DriverToolBusy;
+
+    [RelayCommand(CanExecute = nameof(CanGetDriver))]
+    private async Task GetDriverAsync()
+    {
+        if (_tools is null || _driverTool is not { } tool) return;
+        DriverToolBusy = true;
+        try
+        {
+            var action = _tools.Resolve(tool).Action;
+            await _tools.OpenAsync(tool);
+            DriverToolStatus = action switch
+            {
+                "Get" => "Opened the " + tool.Name + " download page.",
+                "Install" => "The " + tool.Name + " installer is open. Finish its setup there.",
+                _ => "Opened " + tool.Name + ".",
+            };
+            DriverToolAction = _tools.Resolve(tool).Action + " " + tool.Name;
+        }
+        catch (Exception error)
+        {
+            AppLog.Write(nameof(DriversProfilesViewModel), error.ToString());
+            DriverToolStatus = "Couldn't open " + tool.Name + ". Try again, or let us know in Report a bug.";
+        }
+        finally
+        {
+            DriverToolBusy = false;
+        }
+    }
+
+    private static bool IsNvidia(GpuInfo g) => IsMaker(g, "NVIDIA");
+
+    private static bool IsAmd(GpuInfo g) => IsMaker(g, "AMD") || IsMaker(g, "Radeon");
+
+    private static bool IsMaker(GpuInfo g, string maker)
+        => (g.Vendor?.Contains(maker, StringComparison.OrdinalIgnoreCase) ?? false)
+           || (g.Name?.Contains(maker, StringComparison.OrdinalIgnoreCase) ?? false);
+
+    private static string? MachineName(MachineInfo machine)
+    {
+        var parts = new[] { machine.Manufacturer, machine.Model }
+            .Select(part => part?.Trim())
+            .OfType<string>()
+            .Where(part => part.Length > 0)
+            .ToArray();
+        var named = parts.Where(part => !PlaceholderMachineNames.Contains(part, StringComparer.OrdinalIgnoreCase)).ToArray();
+        return named.Length > 0 ? string.Join(" ", named) : parts.Length > 0 ? "Custom-built PC" : null;
+    }
+
+    private static string? WindowsName(string? caption)
+    {
+        var name = caption?.Trim();
+        return name is not null && name.StartsWith("Microsoft ", StringComparison.OrdinalIgnoreCase) ? name["Microsoft ".Length..] : name;
+    }
+
+    private static string? DriverSummary(GpuInfo gpu)
+    {
+        var version = IsNvidia(gpu) ? NvidiaDriverVersion(gpu.DriverVersion) : gpu.DriverVersion?.Trim();
+        var released = DateTime.TryParseExact(gpu.DriverDate, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date)
+            ? date.ToString("d MMM yyyy", CultureInfo.CurrentCulture)
+            : null;
+        if (string.IsNullOrEmpty(version)) return released is null ? null : "Driver from " + released;
+        return released is null ? "Driver " + version : "Driver " + version + " · " + released;
+    }
+
+    private static string? NvidiaDriverVersion(string? windowsVersion)
+    {
+        var parts = windowsVersion?.Trim().Split('.');
+        if (parts is not { Length: 4 } || parts[3].Length != 4 || !parts.All(part => part.Length > 0 && part.All(char.IsAsciiDigit)))
+            return windowsVersion?.Trim();
+        var digits = parts[2][^1] + parts[3];
+        return digits[..3] + "." + digits[3..];
+    }
 
     private static string? Clean(string? name)
     {

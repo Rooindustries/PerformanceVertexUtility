@@ -260,6 +260,12 @@ try {
     } else {
         Add-Failure "Read-only driver and hardware summary returned an unexpected shape"
     }
+    $rawDates = @(@($driverSummary.gpus | ForEach-Object { $_.driverDate }) + @($driverSummary.installedDrivers | ForEach-Object { $_.date }) | Where-Object { $null -ne $_ -and [string]$_ -notmatch '^\d{4}-\d{2}-\d{2}$' })
+    if ($rawDates.Count -eq 0) {
+        Add-Pass "Driver dates in the hardware summary are yyyy-MM-dd"
+    } else {
+        Add-Failure "Driver dates in the hardware summary are not yyyy-MM-dd: $(($rawDates | Select-Object -Unique -First 3) -join ', ')"
+    }
 } catch {
     Add-Failure "Read-only driver and hardware summary failed: $($_.Exception.Message)"
 }
