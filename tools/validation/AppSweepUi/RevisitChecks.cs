@@ -179,12 +179,13 @@ static class RevisitChecks
             return after == "Tool check finished" && drivers.NvidiaActionTitle.EndsWith("is ready to review", StringComparison.Ordinal);
         });
 
-        async Task<bool> GraphicsDrivers(DriverHardwareSummary? hardware, Func<DriversProfilesViewModel, bool> shows)
+        async Task<bool> GraphicsDrivers(DriverHardwareSummary? hardware, Func<DriversProfilesViewModel, bool> shows, bool unreadableProfiles = false)
         {
             var (savedHardware, savedProfiles) = (App.Live.DriverHardware, App.Data.NvidiaProfiles);
             try
             {
                 App.Live.LastError = null; App.Live.OperationError = null; App.Live.DriverHardware = hardware;
+                if (unreadableProfiles) App.Data.NvidiaProfiles = null!;
                 var drivers = new DriversProfilesViewModel();
                 await drivers.InitializeAsync();
                 return shows(drivers);
@@ -219,15 +220,11 @@ static class RevisitChecks
         await Scenario("Graphics drivers says what to do when the hardware read comes back empty", () => GraphicsDrivers(null,
             drivers => !drivers.IsReady && drivers.ErrorMessage == DriversProfilesViewModel.ReadFailed));
 
-        await Scenario("Graphics drivers shows a plain sentence, not the raw error, when reading the page fails", () =>
+        await Scenario("Graphics drivers shows a plain sentence, not the raw error, when reading the page fails", () => GraphicsDrivers(new DriverHardwareSummary
         {
-            App.Data.NvidiaProfiles = null!;
-            return GraphicsDrivers(new DriverHardwareSummary
-            {
-                Machine = new() { Manufacturer = "Fixture", Model = "PC", OsCaption = "Windows" },
-                Gpus = [new() { Name = "NVIDIA Fixture GPU", DriverVersion = "1.0", DriverDate = "2026-01-01" }],
-            }, drivers => !drivers.IsReady && drivers.ErrorMessage == DriversProfilesViewModel.ReadFailed);
-        });
+            Machine = new() { Manufacturer = "Fixture", Model = "PC", OsCaption = "Windows" },
+            Gpus = [new() { Name = "NVIDIA Fixture GPU", DriverVersion = "1.0", DriverDate = "2026-01-01" }],
+        }, drivers => !drivers.IsReady && drivers.ErrorMessage == DriversProfilesViewModel.ReadFailed, unreadableProfiles: true));
 
         await Scenario("The Graphics drivers page shows no internal tags or confirmation boxes and offers Retry when the read fails", () =>
         {
