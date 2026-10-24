@@ -28,12 +28,11 @@ function Invoke-CimMethod {
 
 """;
     const string LoadFailure = "The Defender provider dependency could not be loaded.";
-    const string MitigationLoadFailure = "The ProcessMitigations provider dependency could not be loaded.";
     const string NotInstalled = "Microsoft Defender Antivirus is not installed.";
     const string Stopped = "Microsoft Defender Antivirus is not available with its service stopped. Windows stops it when another antivirus takes over.";
     const string Parent = @"Software\RooIndustriesTweakTests";
 
-    static Func<object, Process> Launcher(string providers, string state, string modules)
+    internal static Func<object, Process> Launcher(string providers, string state, string modules)
     {
         string helper;
         using (var resource = typeof(PowerShellControls).Assembly.GetManifestResourceStream("Optimizer.Core.WindowsControls.ps1") ?? throw new FileNotFoundException("The Windows control helper is missing."))
@@ -63,7 +62,7 @@ function Invoke-CimMethod {
         catch (Exception error) { return error.Message; }
     }
 
-    static string BrokenModule(string folder, string name, string thrown, params string[] commands)
+    internal static string BrokenModule(string folder, string name, string thrown, params string[] commands)
     {
         var modules = Path.Combine(folder, name.ToLowerInvariant() + "-modules");
         Directory.CreateDirectory(Path.Combine(modules, name));
@@ -90,26 +89,18 @@ function Invoke-CimMethod {
             var hidden = Launcher("", state, none); var hiddenDefender = Launcher(Provider, state, none); var brokenDefender = Launcher(Provider, state, modules);
             var defender = new ControlAddress("defender", "system", "SubmitSamplesConsent");
             var mitigations = new ControlAddress("mitigations", "system", "policy");
-            PowerShellControls.Launcher = Launcher("", state, BrokenModule(folder.FullName, "BrokenMitigations", MitigationLoadFailure, "Get-ProcessMitigation"));
-            var unloadedStore = new RegistryTweakStore(new("CurrentUser", "Registry64", root + @"\Recovery", "value", "State"));
-            var unloadedEngine = new TweakEngine(new TweakCatalog(1, "unloaded-mitigations", [Setting("mitigations", mitigations, JsonDocument.Parse("""{"Aslr.BottomUp":"ON","Aslr.OverrideBottomUp":false}""").RootElement, true)], []), unloadedStore);
-            string Unloaded() => unloadedEngine.Detect().Settings.Single(setting => setting.Id == "mitigations").Error ?? "read";
-            var (firstRead, retryRead) = (Unloaded(), Unloaded());
-            var unloadedReview = Error(() => unloadedEngine.Preview("exploit-unloaded", [new("mitigations", "set")]));
-            check(firstRead.Contains(MitigationLoadFailure, StringComparison.Ordinal) && retryRead == firstRead && unloadedReview.Contains(MitigationLoadFailure, StringComparison.Ordinal)
-                && unloadedStore.ReadState() is null && unloadedStore.Recovery().Pending is null,
-                "Exploit protection whose module is installed but fails to load reads the load error on every retry and refuses a review before anything is saved or written: " + firstRead + " | " + retryRead + " | " + unloadedReview);
+            MitigationCommandChecks.Run(check, folder.FullName);
             PowerShellControls.Launcher = hidden;
             (string Feature, ControlAddress Address)[] rows =
             [
                 ("Windows Firewall", new("firewall-profile", "Public", "enabled")),
                 ("Device power management", new("device-power", "non-network", "enabled")), ("Encrypted DNS", new("dns-over-https", "203.0.113.253", "configuration")),
                 ("Teredo", new("teredo", "system", "type")), ("Memory compression", new("memory", "system", "compression")), ("Reserved storage", new("reserved-storage", "system", "enabled")),
-                ("Network adapter configuration", new("network-adapter", "primary", "ipv6-binding")), ("Exploit protection", mitigations),
+                ("Network adapter configuration", new("network-adapter", "primary", "ipv6-binding")),
             ];
             var reads = new WindowsControlStore().ReadMany(rows.Select(row => row.Address).ToArray());
             var wrong = rows.Where(row => reads[row.Address].Error?.Message != Unavailable(row.Feature)).Select(row => row.Feature + ": " + (reads[row.Address].Error?.Message ?? "read")).ToArray();
-            check(wrong.Length == 0, "Every command-backed Windows setting, exploit protection included, reads as not available when its PowerShell commands are missing: " + string.Join(" | ", wrong));
+            check(wrong.Length == 0, "Every command-backed Windows setting reads as not available when its PowerShell commands are missing: " + string.Join(" | ", wrong));
 
             TweakDefinition Setting(string id, ControlAddress address, JsonElement desired, bool patch = false) => new(id, id, "Fixture", "Fixture", 10240, int.MaxValue, ["*"], "none",
                 [new("set", "Set", [], Controls: [new(address, desired, patch)])], [new("Roo Industries", "fixture", "missing PowerShell commands")]);
@@ -123,10 +114,10 @@ function Invoke-CimMethod {
 
             PowerShellControls.Launcher = hiddenDefender;
             var detected = engine.Detect().Settings.ToDictionary(setting => setting.Id);
-            check(detected["defender"] is { Supported: true, Error: null, Controls: [{ } read] } && read.Value.GetInt32() == 1 && detected["mitigations"].Error == Unavailable("Exploit protection"),
+            check(detected["defender"] is { Supported: true, Error: null, Controls: [{ } read] } && read.Value.GetInt32() == 1 && detected["mitigations"].Error is null,
                 "Without Defender's PowerShell commands the Windows tweaks page reads the Defender row's real value from Windows' Defender provider: " + detected["defender"].Error + " | " + detected["mitigations"].Error);
             var exploit = Error(() => engine.Preview("exploit", [new("mitigations", "set")]));
-            check(exploit == Unavailable("Exploit protection") && store.ReadState() is null && Untouched(1), "Reviewing an exploit protection change without its readback command stops as not available before anything is written: " + exploit);
+            check(exploit == "no error" && store.ReadState() is null && Untouched(1), "Reviewing exploit protection without its PowerShell commands reads the store without writing: " + exploit);
 
             var apply = Review(engine.Preview("defender-fixture", [new("defender", "set")]));
             PowerShellControls.Launcher = brokenDefender;
@@ -180,7 +171,7 @@ function Invoke-CimMethod {
         }
     }
 
-    static string WindowsPowerShell(string command)
+    internal static string WindowsPowerShell(string command)
     {
         var start = new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, @"WindowsPowerShell\v1.0\powershell.exe")) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
         foreach (var argument in new[] { "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", "$ErrorActionPreference='Stop'; " + command }) start.ArgumentList.Add(argument);

@@ -72,9 +72,9 @@ try{
  $evidence.hiddenCommandFound=$probe[0];$evidence.firewallCommandFound=$probe[1]
  if($LASTEXITCODE -ne 0 -or $probe.Count -ne 2 -or $probe[0] -ne 'False' -or $probe[1] -ne 'True'){throw ('The helper providers must hide '+$HiddenCommand+' and keep the other modules: '+($probe -join ','))}
  if($BrokenModule){
-  $broken=[IO.Directory]::CreateDirectory((Join-Path $directory 'modules\BrokenDefender')).FullName
-  [IO.File]::WriteAllText((Join-Path $broken 'BrokenDefender.psd1'),"@{RootModule='BrokenDefender.psm1';ModuleVersion='1.0';FunctionsToExport=@('Get-MpPreference','Set-MpPreference')}")
-  [IO.File]::WriteAllText((Join-Path $broken 'BrokenDefender.psm1'),"throw 'The Defender provider dependency could not be loaded.'")
+  $broken=[IO.Directory]::CreateDirectory((Join-Path $directory 'modules\BrokenCommands')).FullName
+  [IO.File]::WriteAllText((Join-Path $broken 'BrokenCommands.psd1'),("@{RootModule='BrokenCommands.psm1';ModuleVersion='1.0';FunctionsToExport=@('"+$HiddenCommand.Replace("'","''")+"')}"))
+  [IO.File]::WriteAllText((Join-Path $broken 'BrokenCommands.psm1'),"throw 'The command provider dependency could not be loaded.'")
   $env:ROO_INDUSTRIES_TEST_MODULE_PATH=Split-Path $broken -Parent
  }
  $env:ROO_INDUSTRIES_TEST_MODULES=$modules -join ';';$env:ROO_INDUSTRIES_INITIAL_NAV='windows';$env:ROO_INDUSTRIES_DOTNET_EXE=$dotnet;$env:DOTNET_ROOT=Split-Path $dotnet -Parent

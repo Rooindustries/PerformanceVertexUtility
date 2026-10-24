@@ -63,6 +63,13 @@ try
         CompositionChecks.Run(root, Check, Reject); ControlChecks.Run(root, Check, Reject);
         Console.WriteLine($"Completed {count} release planning checks."); return;
     }
+    if (args is [_, "--mitigation-catalog", var mitigationOutput])
+    {
+        MitigationChecks.Run(Check, Reject);
+        var mitigations = catalog.Settings.Where(row => row.Options.Any(option => option.Controls?.Any(control => control.Address.Kind == "mitigations") == true)).ToArray();
+        Check(mitigations.Length == 15, "The mitigation catalog gate includes all 15 rows");
+        CatalogMatrixChecks.Run(root, catalog with { Settings = mitigations, Presets = [], Incompatible = null }, mitigationOutput); return;
+    }
     if (args is [_, "--catalog-matrix", var matrixOutput]) { CatalogMatrixChecks.Run(root, catalog, matrixOutput); return; }
     if (args is [_, "--preset-matrix", var presetOutput]) { CatalogMatrixChecks.Presets(root, catalog, presetOutput); return; }
     if (args is [_, "--restore-point-fixture", var restoreEvidence]) { RestorePointChecks.Native(restoreEvidence, Check); Console.WriteLine($"Completed {count} native restore-point checks."); return; }
