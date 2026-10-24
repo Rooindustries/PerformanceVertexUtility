@@ -148,6 +148,7 @@ public partial class WindowsTweakRow : ObservableObject
         var on = devices[0].EnumerateObject().Where(field => field.Value.ValueKind == System.Text.Json.JsonValueKind.True).Select(field => field.Name switch { "ipv4v1" => "IPv4 version 1", "ipv4" => "IPv4", "ipv6" => "IPv6", _ => field.Name }).ToArray();
         return on.Length == 0 ? null : "On for " + (on.Length == 1 ? on[0] : string.Join(", ", on[..^1]) + " and " + on[^1]);
     }
+    public static string? SampleSubmission(int value) => value switch { 0 => "Always ask before sending", 1 => "Windows default", 2 => "Never send samples", 3 => "Send all samples automatically", _ => null };
     private static string? ServiceState(TweakControlRead control) => (control.Address.Property, control.Value.ValueKind) switch
     {
         ("startup", System.Text.Json.JsonValueKind.Number) => control.Value.GetInt32() switch { 0 => "Boot", 1 => "System", 2 => "Automatic", 3 => "Manual", 4 => "Disabled", _ => null },
@@ -250,6 +251,8 @@ public partial class WindowsTweakRow : ObservableObject
         if (status is { Error: null, ConfiguredChoices.Length: 0, Controls: [{ Address.Kind: "service" } service] } && ServiceState(service) is { } state) Current = state;
         if (status is { Error: null, ConfiguredChoices.Length: 0, Controls: [{ Address: { Kind: "filesystem", Property: "last-access" }, Value.ValueKind: System.Text.Json.JsonValueKind.Number } lastAccess] })
             Current = lastAccess.Value.GetInt32() switch { 2 => "Updated (Windows managed)", 3 => "Not updated (Windows managed)", _ => Current };
+        if (status is { Error: null, ConfiguredChoices.Length: 0, Controls: [{ Address: { Kind: "defender", Property: "SubmitSamplesConsent" }, Value.ValueKind: System.Text.Json.JsonValueKind.Number } consent] })
+            Current = SampleSubmission(consent.Value.GetInt32()) ?? Current;
         if (status is { Error: null, ConfiguredChoices.Length: 0, Controls: [{ Address.Kind: "mitigations", Value.ValueKind: System.Text.Json.JsonValueKind.Object } policy] } && MitigationFields(Definition) is { Length: > 0 } fields
             && fields.All(field => policy.Value.TryGetProperty(field, out var value) && (value.ValueKind == System.Text.Json.JsonValueKind.String && value.GetString() == "NOTSET" || value.ValueKind == System.Text.Json.JsonValueKind.False)) && NoRawPolicy(policy.Value)) Current = "Windows default";
         if (Current == "Custom value" && status is { Error: null } && Presentation.Defaults is { } defaults && WindowsDefault(status, defaults)) Current = "Windows default";
@@ -830,7 +833,7 @@ public partial class WindowsTweaksViewModel : ObservableObject
     private static string Capitalize(string text) => text.Length == 0 ? text : char.ToUpperInvariant(text[0]) + text[1..];
     private static string Humanize(System.Text.Json.JsonElement value) => value.ValueKind switch
     {
-        System.Text.Json.JsonValueKind.String => value.GetString() switch { "ON" => "On", "OFF" => "Off", "NOTSET" => "Not set", var text => text ?? "" },
+        System.Text.Json.JsonValueKind.String => value.GetString() switch { "ON" => "On", "OFF" => "Off", "NOTSET" => "Windows default", var text => text ?? "" },
         System.Text.Json.JsonValueKind.True => "On", System.Text.Json.JsonValueKind.False => "Off", System.Text.Json.JsonValueKind.Null => "Not set",
         _ => value.ToString(),
     };
@@ -839,6 +842,7 @@ public partial class WindowsTweaksViewModel : ObservableObject
         if (value.ValueKind == System.Text.Json.JsonValueKind.Null) return "No override";
         if (value.ValueKind is System.Text.Json.JsonValueKind.True or System.Text.Json.JsonValueKind.False) return Switch(address.Property, value.GetBoolean());
         if (address.Kind == "service" && address.Property == "startup") return value.GetInt32() switch { 0 => "Boot", 1 => "System", 2 => "Automatic", 3 => "Manual", 4 => "Disabled", _ => value.ToString() };
+        if (address.Kind == "defender" && address.Property == "SubmitSamplesConsent") return WindowsTweakRow.SampleSubmission(value.GetInt32()) ?? value.ToString();
         if (address.Kind == "hibernation") return value.GetProperty("mode").GetString() + " · Fast Startup " + (value.GetProperty("fastStartup").ValueKind == System.Text.Json.JsonValueKind.Null ? "not configured" : value.GetProperty("fastStartup").GetUInt32() == 0 ? "off" : "on");
         if (address.Kind == "hosts") return value.GetProperty("block").ValueKind == System.Text.Json.JsonValueKind.Null ? "No hosts block from this app" : "Reviewed hosts block present";
         if (address.Kind is "file-acl" or "file-ownership")

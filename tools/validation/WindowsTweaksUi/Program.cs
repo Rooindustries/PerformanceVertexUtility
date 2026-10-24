@@ -60,6 +60,12 @@ if (args is ["--type-twins", var twinsRepo])
     finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
     return;
 }
+if (args is ["--review-labels", var labelsRepo])
+{
+    try { await ReviewLabelChecks.Run(root, Path.GetFullPath(labelsRepo), Check); Console.WriteLine($"Completed {count} review label UI checks."); }
+    finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+    return;
+}
 if (args is ["--retained-profiles"])
 {
     try { await RetainedProfileChecks.Run(root, TwoSettingCatalog(), Check); Console.WriteLine($"Completed {count} retained profile UI checks."); }

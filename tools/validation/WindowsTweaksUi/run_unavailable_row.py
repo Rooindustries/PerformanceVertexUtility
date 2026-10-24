@@ -60,6 +60,7 @@ def main():
     parser.add_argument('--skip-checks', action='store_true')
     parser.add_argument('--before-fix', action='store_true', help='Expect the row as it read before the fix')
     parser.add_argument('--broken-module', action='store_true', help="Put a Defender module that fails to load on the app's module path")
+    parser.add_argument('--reads', action='store_true', help='Expect the row to read its real value from Windows')
     args = parser.parse_args()
     args.out_dir.mkdir(parents=True, exist_ok=False)
     receipt = windows.upload_frame(args.host, args.expected_machine, 'roo-industries-ur', True, args.parent)
@@ -84,7 +85,8 @@ def main():
                 raise RuntimeError('Remote checks failed or returned incomplete results: ' + json.dumps(markers))
         result = windows.interactive_frame(args.host, args.expected_machine, receipt, 'tools/validation/WindowsTweaksUi/Capture-UnavailableRow.ps1',
                                            {'Source': receipt['stagingPath'], 'OutRoot': receipt['runRoot'] + r'\capture', 'Label': args.label,
-                                            **({'BeforeFix': True} if args.before_fix else {}), **({'BrokenModule': True} if args.broken_module else {})}, 30)
+                                            **({'BeforeFix': True} if args.before_fix else {}), **({'BrokenModule': True} if args.broken_module else {}),
+                                            **({'Reads': True} if args.reads else {})}, 30)
         (args.out_dir / 'capture.log').write_text(result.stdout)
         evidence = next(line.split(' ', 2)[2] for line in result.stdout.splitlines() if line.startswith('ROO_INDUSTRIES_ROW_CAPTURE pass '))
         windows.run_transport(args.host, 'scp', ['-r', args.host + ':' + evidence.replace('\\', '/'), str(args.out_dir / 'evidence')],
