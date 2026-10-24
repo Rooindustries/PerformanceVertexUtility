@@ -37,7 +37,7 @@ public static class RooIndustriesMemoryUser {
  [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr handle);
  [DllImport("kernel32.dll")] static extern IntPtr LocalFree(IntPtr memory);
  static IntPtr Sid(string text) { IntPtr sid; if (!ConvertStringSidToSid(text, out sid)) throw new Win32Exception(); return sid; }
- public static int Run(string command, uint milliseconds) {
+ public static int Run(string command, string directory, uint milliseconds) {
   string me = System.Security.Principal.WindowsIdentity.GetCurrent().User.Value;
   IntPtr own = IntPtr.Zero, user = IntPtr.Zero, descriptor = IntPtr.Zero, owner = Sid(me), admins = Sid("S-1-5-32-544"), localAdmin = Sid("S-1-5-114"), medium = Sid("S-1-16-8192");
   ProcessInformation info = new ProcessInformation();
@@ -53,7 +53,7 @@ public static class RooIndustriesMemoryUser {
    bool present, defaulted; IntPtr dacl; if (!GetSecurityDescriptorDacl(descriptor, out present, out dacl, out defaulted)) throw new Win32Exception();
    if (!SetTokenInformation(user, 6, ref dacl, IntPtr.Size)) throw new Win32Exception();
    StartupInfo startup = new StartupInfo { cb = Marshal.SizeOf(typeof(StartupInfo)) };
-   if (!CreateProcessAsUser(user, null, new StringBuilder(command), IntPtr.Zero, IntPtr.Zero, false, 0x08000000 | 0x01000000, IntPtr.Zero, null, ref startup, out info)) throw new Win32Exception();
+   if (!CreateProcessAsUser(user, null, new StringBuilder(command), IntPtr.Zero, IntPtr.Zero, false, 0x08000000, IntPtr.Zero, directory, ref startup, out info)) throw new Win32Exception();
    if (WaitForSingleObject(info.hProcess, milliseconds) != 0) return -2;
    uint code; GetExitCodeProcess(info.hProcess, out code); return (int)code;
   } finally {
@@ -126,7 +126,7 @@ function LimitedRead([string]$Script){
   $json=Join-Path $work 'read.json';$who=Join-Path $work 'who.txt'
   $command="[IO.File]::WriteAllText('"+$who+"',[string]([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)+' '+(whoami /groups /fo csv|ConvertFrom-Csv|Where-Object {`$_.'Group Name' -like 'Mandatory Label\*'}).'Group Name');`$text=(& '"+$Script+"' 2>`$null|Out-String);[IO.File]::WriteAllText('"+$json+"',`$text);exit `$LASTEXITCODE"
   $shell=Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
-  $code=[RooIndustriesMemoryUser]::Run('"'+$shell+'" -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand '+[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command)),240000)
+  $code=[RooIndustriesMemoryUser]::Run('"'+$shell+'" -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand '+[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command)),$work,240000)
   $parsed=$null;try{$parsed=[IO.File]::ReadAllText($json)|ConvertFrom-Json}catch{}
   [pscustomobject]@{exit=[string]$code;who=$(if([IO.File]::Exists($who)){[IO.File]::ReadAllText($who)}else{''});json=$parsed}
  }finally{Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue}
