@@ -16,5 +16,6 @@
     { "pattern": "\\b\\d{2}:\\d{2}:\\d{2}\\b", "why": "a raw time of day" }
   ],
   "driverLine": "^Driver (\\d|from )",
-  "nvidiaDriverLine": "^Driver \\d{3}\\.\\d{2} \u00b7 \\d{1,2} \\p{L}{3,} \\d{4}$"
+  "nvidiaDriverLine": "^Driver \\d{3}\\.\\d{2} \u00b7 \\d{1,2} \\p{L}{3,} \\d{4}$",
+  "nvidiaUndatedDriverLine": "^Driver \\d{3}\\.\\d{2}$"
 }

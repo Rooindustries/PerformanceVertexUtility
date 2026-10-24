@@ -23,8 +23,8 @@ $banned=@($words.banned|ForEach-Object {
  $options=if($_.caseSensitive){[Text.RegularExpressions.RegexOptions]::None}else{[Text.RegularExpressions.RegexOptions]::IgnoreCase}
  [pscustomobject]@{regex=[regex]::new($_.pattern,$options);why=$_.why}
 })
-$driverLine=[regex]::new($words.driverLine);$nvidiaLine=[regex]::new($words.nvidiaDriverLine)
-$evidence=[ordered]@{label=$Label;gpus=@();nvidia=$false;checks=@();shots=@();shown=@();driverLines=@()}
+$driverLine=[regex]::new($words.driverLine);$nvidiaLine=[regex]::new($words.nvidiaDriverLine);$nvidiaUndatedLine=[regex]::new($words.nvidiaUndatedDriverLine)
+$evidence=[ordered]@{label=$Label;gpus=@();nvidia=$false;nvidiaDated=$false;checks=@();shots=@();shown=@();driverLines=@()}
 function Check([bool]$Ok,[string]$Name,[string]$Detail=''){$script:evidence.checks+=@([ordered]@{pass=$Ok;name=$Name;detail=$Detail})}
 function WaitFor([scriptblock]$Probe,[double]$Limit){$deadline=[DateTime]::UtcNow.AddSeconds($Limit);while([DateTime]::UtcNow -lt $deadline){try{$value=& $Probe}catch{$value=$null};if($value){return $value};Start-Sleep -Milliseconds 200};return $null}
 function ById([string]$Id){$script:window.FindFirst($TS::Descendants,[Windows.Automation.PropertyCondition]::new($A::AutomationIdProperty,$Id))}
@@ -51,7 +51,9 @@ $app=$null;$status='fail'
 try{
  if(@(Get-Process -Name 'RooIndustries.OptimizationSuite.App' -ErrorAction SilentlyContinue).Count){throw 'The Suite is already open; this check does not take over another window.'}
  $evidence.gpus=@(Get-CimInstance Win32_VideoController|ForEach-Object {[string]$_.Name})
- $evidence.nvidia=[bool]@(Get-CimInstance Win32_VideoController|Where-Object {([string]$_.Name+' '+[string]$_.AdapterCompatibility) -match 'NVIDIA'}).Count
+ $nvidiaGpu=@(Get-CimInstance Win32_VideoController|Where-Object {([string]$_.Name+' '+[string]$_.AdapterCompatibility) -match 'NVIDIA'}|Select-Object -First 1)
+ $evidence.nvidia=[bool]$nvidiaGpu.Count
+ $evidence.nvidiaDated=[bool]@($nvidiaGpu|Where-Object {$null -ne $_.DriverDate}).Count
  Initialize-HarnessBuildFolders $Source
  Ensure-HarnessOutputDirectory (Join-Path $Source 'backend\bin')
  $env:MSBUILDDISABLENODEREUSE='1';$env:DOTNET_CLI_USE_MSBUILD_SERVER='0';$env:DOTNET_CLI_TELEMETRY_OPTOUT='1'
@@ -85,7 +87,7 @@ try{
  $found=@(foreach($text in $texts){foreach($rule in $banned){if($rule.regex.IsMatch($text)){'"'+$text+'" shows '+$rule.why}}})
  Check ($found.Count -eq 0) 'the Graphics drivers page shows no old labels, trademark marks, raw driver versions or raw dates' (($found|Select-Object -First 12) -join ' | ')
  $lines=@($texts|Where-Object {$driverLine.IsMatch($_)});$evidence.driverLines=$lines
- if($evidence.nvidia){Check ($lines.Count -eq 1 -and $nvidiaLine.IsMatch($lines[0])) 'with an NVIDIA card the driver line shows the NVIDIA driver number and a readable date' ($lines -join ' | ')}
+ if($evidence.nvidia){$expected=if($evidence.nvidiaDated){$nvidiaLine}else{$nvidiaUndatedLine};Check ($lines.Count -eq 1 -and $expected.IsMatch($lines[0])) 'with an NVIDIA card the driver line shows the NVIDIA driver number, and a readable date when Windows reports one' ($lines -join ' | ')}
  [RooIndustriesDriversPage]::SetWindowPos($script:hwnd,[IntPtr]::new(-2),0,0,0,0,0x0003)|Out-Null
  $script:window.GetCurrentPattern([Windows.Automation.WindowPattern]::Pattern).Close()
  if(-not$app.process.WaitForExit(20000)){Stop-HarnessProcess $app};$app=$null
