@@ -24,7 +24,7 @@ static class RetainedGpuChecks
         return Process.Start(info) ?? throw new InvalidOperationException("Fixture did not start.");
     }
 
-    internal static void Run(string repo, string dotnet)
+    internal static void Run(string repo, string dotnet, bool highIo = false)
     {
         Environment.SetEnvironmentVariable("DOTNET_ROOT_X64", Path.GetDirectoryName(dotnet));
         var root = Path.Combine(Path.GetTempPath(), "roo-industries-retained-gpu-check-" + Guid.NewGuid().ToString("N"));
@@ -59,7 +59,10 @@ static class RetainedGpuChecks
             {
                 var session = Path.Combine(root, "session-" + trial); states.Add(session);
                 var previewPath = Path.Combine(root, "preview-" + trial + ".json");
-                OperationFiles.Write(previewPath, engine.Preview(launcher.Id, GamePath, new() { ["gpuPriority"] = JsonSerializer.SerializeToElement(3) }, true));
+                var controls = new Dictionary<string, JsonElement> { ["gpuPriority"] = JsonSerializer.SerializeToElement(3) };
+                var paired = highIo && trial is not (>= 4 and < 7);
+                if (paired) controls.Add("ioPriority", JsonSerializer.SerializeToElement(3));
+                OperationFiles.Write(previewPath, engine.Preview(launcher.Id, GamePath, controls, true));
                 var request = Path.Combine(session, "request.json");
                 OperationFiles.Write(request, new { schemaVersion = 1, repoRoot = Path.GetFullPath(repo), sessionRoot = session, previewPath, reviewHash = OperationFiles.HashFile(previewPath), confirm = true });
                 var worker = Start(Path.Combine(repo, "backend", "bin", "optimizer", "session", "RooIndustries.SessionHost.exe"), "run", request); workers.Add(worker); identities.Add(worker,FixtureProcess.Started(worker,evidence));
@@ -81,16 +84,17 @@ static class RetainedGpuChecks
                 Check(denied, "A fresh GPU control handle is denied on the disposable fixture");
                 if (trial is >= 4 and < 7)
                 {
-                    Until(() => Directory.GetFiles(Path.Combine(session, "gpu-handles"), "*.ready.json").Length == 1, "Recovery readback missing.");
-                    var readyPath = Directory.GetFiles(Path.Combine(session, "gpu-handles"), "*.ready.json").Single();
+                    Until(() => Directory.GetFiles(Path.Combine(session, "gpu-handles"), "*.gpuPriority.ready.json").Length == 1, "Recovery readback missing.");
+                    var readyPath = Directory.GetFiles(Path.Combine(session, "gpu-handles"), "*.gpuPriority.ready.json").Single();
                     Check(State(session).Games.All(item => item.Fields.All(value => value.JournalPath is null)), "Negative fixture changes recovery evidence before any apply");
                     var changed = JsonNode.Parse(File.ReadAllText(readyPath))!;
                     if (trial == 4) { changed["original"]!["known"] = false; changed["original"]!["value"] = 3; }
                     if (trial == 5) changed["original"]!["value"] = 1;
                     if (trial == 6) changed["transfer"]!["operationId"] = Guid.NewGuid().ToString("N");
                     OperationFiles.Write(readyPath, changed);
-                    Until(() => State(session).Games.Any(item => item.Fields.Any(value => value.Status == "conflict")), "Contradictory recovery evidence was accepted.");
-                    Check(Oracle.Gpu(game) == 2 && State(session).Games.Single().Fields.Single().JournalPath is null, "Unknown, conflicting or stale recovery evidence cannot authorize a GPU change");
+                    var refusal = trial == 4 ? "unavailable" : "conflict";
+                    Until(() => State(session).Games.Any(item => item.Fields.Any(value => value.Status == refusal)), "Contradictory recovery evidence was accepted.");
+                    Check(Oracle.Gpu(game) == 2 && State(session).Games.Single().Fields.Single().JournalPath is null, trial == 4 ? "An original the watcher couldn't read shows Unavailable and changes nothing" : "Conflicting or stale recovery evidence cannot authorize a GPU change");
                     engine.Command(session, "stop");
                     Check(worker.WaitForExit(20000), "Rejected session stops");
                     Until(() => File.Exists(Path.Combine(session, "recovery-result.json")), "Rejected session watcher did not finish.");
@@ -101,26 +105,34 @@ static class RetainedGpuChecks
                     continue;
                 }
                 Until(() => State(session).Status == "active", "Retained GPU session did not apply.");
-                var field = State(session).Games.Single().Fields.Single();
+                var field = State(session).Games.Single().Fields.Single(value => value.Name == "gpuPriority");
                 var journal = OperationFiles.Read<ProcessControlJournal>(field.JournalPath!);
                 Check(journal.UpdatedAtUtc >= locked && Oracle.Gpu(game) == 3, "The actual GPU class changes after fresh access is denied");
-                var ready = Directory.GetFiles(Path.Combine(session, "gpu-handles"), "*.ready.json").Single();
-                var ack = OperationFiles.Read<JsonElement>(ready);
-                Check(ack.GetProperty("original").GetProperty("known").GetBoolean() && ack.GetProperty("original").GetProperty("value").GetInt32() == 2, "The separate watcher independently captured original class 2");
+                JsonElement Ack(string control) => OperationFiles.Read<JsonElement>(Directory.GetFiles(Path.Combine(session, "gpu-handles"), "*." + control + ".ready.json").Single());
+                var ack = Ack("gpuPriority");
+                Check(ack.GetProperty("control").GetString() == "gpuPriority" && ack.GetProperty("original").GetProperty("known").GetBoolean() && ack.GetProperty("original").GetProperty("value").GetInt32() == 2, "The separate watcher independently captured original class 2");
+                var ioAck = paired ? Ack("ioPriority") : default;
+                var originalIo = paired ? ioAck.GetProperty("original").GetProperty("value").GetInt32() : 0;
+                if (paired) Check(Oracle.Io(game) == 3 && ioAck.GetProperty("control").GetString() == "ioPriority" && ioAck.GetProperty("original").GetProperty("known").GetBoolean(), "The watcher acknowledges I/O on its own and High is applied alongside GPU priority after fresh setters are denied");
                 if (trial == 7) throw new CleanupSignal();
                 if (trial == 0)
                 {
                     for (var tick = 0; tick < 12; tick++) { Check(Oracle.Gpu(game) == 3, "Independent sustained GPU class readback is 3"); Thread.Sleep(1000); }
                     Oracle.SetGpu(game, 2);
-                    Until(() => Oracle.Gpu(game) == 3 && State(session).Games.Single().Fields.Single().Reapplications > 0, "Original-value reset was not reapplied.");
+                    Until(() => Oracle.Gpu(game) == 3 && State(session).Games.Single().Fields.Single(value => value.Name == "gpuPriority").Reapplications > 0, "Original-value reset was not reapplied.");
                     Check(true, "Retained handle reapplies a reset to its captured original");
+                    if (paired)
+                    {
+                        Oracle.SetIo(game, originalIo);
+                        Until(() => Oracle.Io(game) == 3 && State(session).Games.Single().Fields.Single(value => value.Name == "ioPriority").Reapplications > 0, "Paired I/O reset was not reapplied through the retained handle.");
+                    }
                     engine.Command(session, "stop");
                 }
                 else if (trial == 1) identities[worker].Stop();
                 else if (trial == 2)
                 {
                     Oracle.SetGpu(game, 1);
-                    Until(() => State(session).Games.Single().Fields.Single().Status == "conflict", "Foreign class was not reported.");
+                    Until(() => State(session).Games.Single().Fields.Single(value => value.Name == "gpuPriority").Status == "conflict", "Foreign class was not reported.");
                     engine.Command(session, "stop");
                 }
                 else
@@ -135,6 +147,7 @@ static class RetainedGpuChecks
                 if (trial != 3) Until(() => File.Exists(Path.Combine(session, "recovery-result.json")), "Recovery watcher did not finish.");
                 var actual = Oracle.Gpu(game);
                 Check(actual == (trial == 2 ? 1 : 2), trial == 2 ? "A foreign GPU class is preserved during stop and recovery" : "Actual GPU class restores through a retained handle");
+                if (paired) Check(Oracle.Io(game) == originalIo, "Stop, worker/watch death and a foreign GPU value each restore the independent original I/O priority");
                 Check(State(session).Status == (trial == 2 ? "recoveryRequired" : trial == 3 ? "stoppedWithErrors" : "stopped"), "Session outcome matches independent recovery evidence");
                 proof.Add(new { trial, game.Id, actual, locked, journal.UpdatedAtUtc, state = State(session) });
                 File.WriteAllText(Path.Combine(gameRoot, "stop"), "");
@@ -198,7 +211,7 @@ static class RetainedGpuChecks
         OperationFiles.Write(Path.Combine(root, "gpu-result.json"), new { gpu.Adapter, gpu.Dispatches, verified = gpu.VerifyOutput() });
     }
 
-    static void DenyNewGpuHandles(Process self)
+    internal static void DenyNewGpuHandles(Process self)
     {
         GetKernelObjectSecurity(self.Handle, 4, null, 0, out var needed);
         var bytes = new byte[needed];

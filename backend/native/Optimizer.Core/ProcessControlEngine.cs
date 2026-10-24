@@ -119,6 +119,35 @@ public sealed class ProcessControlEngine
         return Execute(target, journal, journalPath);
     }
 
+    internal ProcessControlJournal Adopt(string previewPath, string reviewHash, string journalPath)
+    {
+        RequireSeparate(previewPath, journalPath);
+        var preview = OperationFiles.Read<ProcessControlPreview>(previewPath, reviewHash);
+        ValidatePreview(preview);
+        preview.Owner.Verify();
+        using var lease = OperationFiles.Lock(journalPath);
+        using var instanceLease = InstanceLease(preview.Identity);
+        if (File.Exists(journalPath)) throw new InvalidDataException("This process already has a recovery journal.");
+        using var target = Open(preview.Identity.ProcessId, readControls: preview.Desired.Keys);
+        preview.Identity.Verify(target.Identity());
+        if (_excluded(preview.Identity)) throw new InvalidOperationException("This application is now excluded by the protection policy.");
+        target.RequireUnprotected();
+        if (preview.TopologyHash != CpuSelection.Fingerprint(target.Topology())) throw new InvalidDataException("Topology changed after preview.");
+        var changes = new List<ControlChange>();
+        foreach (var pair in preview.Desired)
+        {
+            var current = target.Read(pair.Key).Require();
+            if (!ProcessTarget.Equivalent(pair.Key, current, pair.Value)) throw new InvalidOperationException("The inherited " + ProcessControlBlockedException.Label(pair.Key) + " changed before it was recorded.");
+            changes.Add(new ControlChange { Name = pair.Key, Original = preview.Original[pair.Key].Require(), Desired = pair.Value, Status = "applied", Observed = current });
+        }
+        var journal = new ProcessControlJournal
+        {
+            SchemaVersion = 1, Preview = preview, PreviewPath = Path.GetFullPath(previewPath), ReviewHash = reviewHash, Status = "applied", UpdatedAtUtc = DateTime.UtcNow, Changes = changes,
+        };
+        Save(journalPath, journal);
+        return journal;
+    }
+
     private ProcessControlJournal Resume(ProcessControlPreview preview, ProcessControlJournal journal, string journalPath)
     {
         using var target = Open(preview.Identity.ProcessId, preview.Desired.Keys);

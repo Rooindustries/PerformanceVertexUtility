@@ -8,7 +8,7 @@ public static class GameSessionDisplay
 {
     public static bool Restored(ProtectedSessionStatus status) => status.HostRunning == false && status.Error is null && status.State is { } state &&
         state.Status is "stopped" or "stoppedWithErrors" && state.RegistryStatus == "restored" && state.JobStatus == "cleared" &&
-        state.Games.All(game => game.Fields.All(field => field.JournalPath is null || field.Status is "restored" or "expired"));
+        state.Games.All(game => game.Fields.All(field => field.JournalPath is null || field.Status is "restored" or "expired" or "leftAsIs"));
 
     public static bool CoresMatch(ProtectedSessionStatus status, string mask)
     {
@@ -36,6 +36,7 @@ public static class GameSessionDisplay
         var games = state.Games.Where(game => !game.Exited).ToArray();
         if (pendingAffinity is not null && !CoresMatch(status, pendingAffinity))
             return games.Length == 0 ? "New cores are set · launch the game normally" : "Switching cores · checking the game";
+        if (state.Refused is { Count: > 0 }) return "Partly applied · check each setting below";
         if (games.Length == 0) return state.Status == "armed" ? "Ready · launch the game normally" : "Preparing the session";
         var applied = state.Preview.Controls.All(control => games.All(game =>
         {

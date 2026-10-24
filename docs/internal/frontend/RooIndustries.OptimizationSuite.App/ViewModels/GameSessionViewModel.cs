@@ -27,14 +27,13 @@ public partial class GameSessionSetting : ObservableObject
     {
         Name = name;
         Options = new[] { new ControlOption("Keep current", null) }.Concat(ProcessControlsViewModel.Options(name)
-            .Where(option => LaunchSupported(name, option.Value))).ToArray();
+            .Where(option => LaunchSupported(name, option.Value)).Select(option => name == "ioPriority" ? option with { Label = option.Label.Split(" · ")[0] } : option)).ToArray();
         _selected = Options[0];
     }
 
     internal static bool LaunchSupported(string name, JsonElement? value) => value is not { } chosen || name switch
     {
         "cpuPriority" => LaunchPriorities.CpuPriorities.Contains(chosen.GetString()),
-        "ioPriority" => chosen.GetInt32() <= LaunchPriorities.MaxIoPriority,
         "gpuPriority" => chosen.GetInt32() != 5,
         _ => true,
     };
@@ -403,6 +402,11 @@ public partial class GameSessionViewModel : ObservableObject
                 if (mask != 0) CoreChoices.Add(new(kind == "performance" ? "Performance cores" : "Efficiency cores", new(original.Group, "0x" + mask.ToString("X"))));
             }
         }
+        var caches = snapshot.Topology.Where(cpu => cpu.Group == original.Group && cpu.Available).GroupBy(cpu => cpu.Cache)
+            .Select(cache => cache.Aggregate(0UL, (value, cpu) => value | (1UL << cpu.Index)) & allowed).Where(mask => mask != 0).OrderBy(mask => mask & (~mask + 1)).ToArray();
+        if (caches.Length > 1)
+            for (var number = 0; number < caches.Length; number++)
+                CoreChoices.Add(new("Cache group " + (number + 1) + " (cores " + ProcessControlsViewModel.CoreRanges(caches[number]) + ")", new(original.Group, "0x" + caches[number].ToString("X"))));
         _allowedMask = allowed; SetCores(allowed);
     }
 
@@ -419,13 +423,15 @@ public partial class GameSessionViewModel : ObservableObject
             _review = await App.Operations.PreviewGameSessionAsync(SelectedLauncher!.Id, GamePath.Trim(), controls, acceptLauncherScope: true);
             var launcher = Path.GetFileName(_review.Plan.Launcher.ExecutablePath);
             var original = Mask(_review.Plan.OriginalAffinity.Mask);
-            var shared = new[] { _coreMask != original ? "cores" : null, controls.ContainsKey("ioPriority") ? "disk priority" : null, controls.ContainsKey("memoryPriority") ? "memory priority" : null }
+            var highIo = controls.TryGetValue("ioPriority", out var io) && io.GetInt32() > LaunchPriorities.MaxIoPriority;
+            var shared = new[] { _coreMask != original ? "cores" : null, controls.ContainsKey("ioPriority") && !highIo ? "disk priority" : null, controls.ContainsKey("memoryPriority") ? "memory priority" : null }
                 .OfType<string>().ToArray();
             var lines = new List<string> { Path.GetFileName(_review.Plan.GamePath) + " via " + launcher };
             if (SelectedPreset is { } preset) lines.Add("Preset: " + preset.Name);
             lines.AddRange(Settings.Where(setting => setting.Selected.Value is not null).Select(setting => setting.Label + ": " + setting.Selected.Label));
             lines.Add("Cores: " + CoreText(_coreMask, original));
             if (shared.Length > 0) lines.Add("Other apps this launcher opens get the same " + (shared.Length == 1 ? shared[0] : string.Join(", ", shared[..^1]) + " and " + shared[^1]) + ".");
+            if (highIo) lines.Add("High disk priority is set on the game once it starts and stays until you select Stop and restore. If the game restarts itself, the new copy gets it too and Stop puts it back. Other programs the game starts, such as a crash reporter, also start with High disk priority and keep it until they close.");
             if (KeepArmed) lines.Add("Saved for next time: these turn back on whenever " + launcher + " opens while this app is open. After a restart, open the app once and they're back. Turn them off under Saved launch settings.");
             ReviewSummary = string.Join("\n", lines);
             Status = "Review these settings, then select Start."; Detail = "Launch the game normally after the session reports Ready.";
@@ -558,6 +564,9 @@ public partial class GameSessionViewModel : ObservableObject
         if (current.HostRunning == false || _pendingAffinity is not null && GameSessionDisplay.CoresMatch(current, _pendingAffinity)) _pendingAffinity = null;
         _current = current; Status = GameSessionDisplay.Title(current, _pendingAffinity); Fields.Clear();
         Detail = current.Error ?? (current.State is { } state ? string.Join("\n", state.Errors) : "No session state was returned. Refresh before retrying.");
+        if (current.State is { Refused: { Count: > 0 } refused } refusing)
+            Detail = string.Join("\n", new[] { Detail }.Where(text => text.Length != 0).Concat(refused.Select(id =>
+                Path.GetFileName(refusing.Preview.GamePath) + " (PID " + id + ") didn't let the app check it, so only the CPU limit and launch priorities reach it.")));
         if (current.State is { } session)
         {
             var games = session.Games.Where(game => !game.Exited).ToArray();
@@ -599,9 +608,9 @@ public partial class GameSessionViewModel : ObservableObject
     }
     private static string FieldResult(string status) => status switch
     {
-        "applied" => "Applied", "pending" => "Waiting", "initializing" => "Graphics starting", "awaitingRecovery" => "Preparing restore",
+        "applied" => "Applied", "pending" => "Waiting", "capturing" => "Preparing game settings", "initializing" => "Graphics starting", "awaitingRecovery" => "Preparing restore",
         "unavailable" => "Unavailable", "conflict" => "Changed elsewhere", "notApplied" => "Not applied", "restartRequired" => "Restart required",
-        "restored" => "Restored", "expired" => "Game exited", "released" => "Core limit removed", "reapplyIntent" => "Reapplying", _ => "Needs attention",
+        "restored" => "Restored", "leftAsIs" => "Already set when this game started, left as is", "expired" => "Game exited", "released" => "Core limit removed", "reapplyIntent" => "Reapplying", _ => "Needs attention",
     };
     private void Invalidate() { _review = null; ReviewSummary = ""; NotifyState(); }
     private void NotifyState()

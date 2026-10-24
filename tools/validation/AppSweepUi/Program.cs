@@ -613,6 +613,12 @@ if (args is [] or ["process"])
         "An attached error blocks CPU selection even when known and value are favorable");
 }
 
+if (args is [] or ["process-cores"]) await CoreChoiceChecks.ProcessesAsync(Check);
+if (args is ["process-cores"]) { Console.WriteLine($"Completed {count} Processes page core checks."); return; }
+
+if (args is [] or ["game-session-setup"]) await CoreChoiceChecks.GamesAsync(Check);
+if (args is ["game-session-setup"]) { Console.WriteLine($"Completed {count} Games tab setup checks."); return; }
+
 if (args is [] or ["startup"])
 {
     App.Live.Classification = null;
