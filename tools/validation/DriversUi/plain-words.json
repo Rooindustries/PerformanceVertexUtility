@@ -17,5 +17,9 @@
   ],
   "driverLine": "^Driver (\\d|from )",
   "nvidiaDriverLine": "^Driver \\d{3}\\.\\d{2} \u00b7 \\d{1,2} \\p{L}{3,} \\d{4}$",
-  "nvidiaUndatedDriverLine": "^Driver \\d{3}\\.\\d{2}$"
+  "nvidiaUndatedDriverLine": "^Driver \\d{3}\\.\\d{2}$",
+  "nvidiaHint": "Open Tools and pick NVIDIA App & Driver.",
+  "amdDriverLine": "^Driver \\d+(\\.\\d+){3} \u00b7 \\d{1,2} \\p{L}{3,} \\d{4}$",
+  "amdUndatedDriverLine": "^Driver \\d+(\\.\\d+){3}$",
+  "amdHint": "Open Tools and pick AMD Software: Adrenalin Edition."
 }
