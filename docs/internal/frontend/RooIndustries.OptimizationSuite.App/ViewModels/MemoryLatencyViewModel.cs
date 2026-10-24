@@ -72,7 +72,7 @@ public partial class MemoryLatencyViewModel : PageViewModelBase
         PressureState = percent >= 85 ? "high" : percent >= 65 ? "medium" : "safe";
         MemoryHeadline = percent + "% of your RAM in use";
         MemoryDetail = Format.Bytes(summary!.AvailableMemoryBytes!.Value) + " free of " + Format.Bytes(totalBytes!.Value) + " · "
-            + summary.ProcessCount + " programs running · "
+            + summary.ProcessCount + " tasks running · "
             + summary.BackgroundProcessCount + " in the background";
     }
 
