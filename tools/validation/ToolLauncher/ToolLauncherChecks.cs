@@ -131,6 +131,10 @@ static class ToolLauncherChecks
             Plain(ToolLauncherService.Explain(tool, blocked), blocked, "Your antivirus or Windows Security blocked Fixture Tool. Allow it there, then try again.", "A tool blocked by antivirus");
             var elevation = new System.ComponentModel.Win32Exception(740);
             Plain(ToolLauncherService.Explain(tool, elevation), elevation, "Fixture Tool needs admin rights. Reopen the app as an administrator, then try again.", "A tool that needs admin rights");
+            var noShell = new InvalidOperationException(RooIndustries.Optimizer.RuntimeEnvironment.ExplorerNotRunning);
+            Plain(ToolLauncherService.Explain(tool, noShell), noShell, "Windows Explorer isn't running. Sign in to Windows, then try again.", "A tool opened while Windows Explorer isn't running");
+            var noExplorer = new InvalidOperationException("Windows Explorer did not start.");
+            Plain(ToolLauncherService.Explain(tool, noExplorer), noExplorer, "Couldn't open Fixture Tool. Details are in the app log (Settings, Open logs folder).", "Windows Explorer failing to start");
             var unknown = new NotSupportedException("Fixture raw failure text");
             Plain(ToolLauncherService.Explain(tool, unknown), unknown, "Couldn't open Fixture Tool. Details are in the app log (Settings, Open logs folder).", "Any other tool failure");
         }

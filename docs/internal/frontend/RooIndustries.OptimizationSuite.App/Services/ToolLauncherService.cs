@@ -80,7 +80,7 @@ public sealed class ToolLauncherService
         Win32Exception { NativeErrorCode: 193 or 216 } or InvalidDataException => "The app's copy of " + tool.Name + " is damaged. Reinstall the app to fix it.",
         UriFormatException => tool.Name + "'s download link is broken. Update the app to fix it.",
         IOException => "Couldn't unpack " + tool.Name + ". Make sure your drive has free space, then try again.",
-        InvalidOperationException { Message: var text } when text.StartsWith("Windows Explorer", StringComparison.Ordinal) => "Windows Explorer isn't running. Sign in to Windows, then try again.",
+        InvalidOperationException { Message: RooIndustries.Optimizer.RuntimeEnvironment.ExplorerNotRunning } => "Windows Explorer isn't running. Sign in to Windows, then try again.",
         _ => "Couldn't open " + tool.Name + ". Details are in the app log (Settings, Open logs folder)."
     };
 
