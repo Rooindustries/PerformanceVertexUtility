@@ -187,8 +187,8 @@ static class RevisitChecks
             await cleanup.InitializeAsync();
             cleanup.SelectedApp = cleanup.Apps.Single(app => app.AppId == "registry:Editor");
             cleanup.RemovalPathReviewed = true; cleanup.LeftoverScanCompleted = true; cleanup.CleanupPlanReady = true;
-            cleanup.RemoverPathApproved = true; cleanup.CleanupListApproved = true;
-            cleanup.FinalCheckPassed = true; cleanup.RealCleanupApproved = true;
+            cleanup.RemovalApproved = true;
+            cleanup.FinalCheckPassed = true;
             App.Live.CleanupApply = (id, _, _, _) =>
             {
                 using (DataGeneration.BeginChange()) { App.Live.InstalledApps = Apps("Player"); }
