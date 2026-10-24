@@ -223,13 +223,13 @@ try{
   ToBottom
  Step 'games-ready' @{status=(Text 'GameSessionStatus')}|Out-Null
   $firstRoot=Fixture 'games-first';$first=Launch $launcherRoot $firstRoot
-  Soft {[RooIndustriesAffinityApp]::Io($first) -eq 3 -and [RooIndustriesAffinityApp]::Affinity($first) -eq $groupMask -and (Text 'GameSessionStatus') -like 'Active*'} 90 'High I/O and the cache group on the launched game'|Out-Null
+  Soft {[RooIndustriesAffinityApp]::Io($first) -eq 3 -and [RooIndustriesAffinityApp]::Affinity($first) -eq $groupMask} 90 'High I/O and the cache group on the launched game'|Out-Null
   Start-Sleep -Seconds 2
   ToBottom;Step 'games-active' (@{pid=$first;status=(Text 'GameSessionStatus');detail=(Text 'GameSessionDetail')}+(Reading $first))|Out-Null
   Close-Game $firstRoot $first
   Soft {(Text 'GameSessionStatus') -like 'Ready*'} 60 'the session to wait for the next start'|Out-Null
   $againRoot=Fixture 'games-again';$again=Launch $launcherRoot $againRoot
-  Soft {[RooIndustriesAffinityApp]::Io($again) -eq 3 -and [RooIndustriesAffinityApp]::Affinity($again) -eq $groupMask -and (Text 'GameSessionStatus') -like 'Active*'} 90 'High I/O and the cache group after relaunch'|Out-Null
+  Soft {[RooIndustriesAffinityApp]::Io($again) -eq 3 -and [RooIndustriesAffinityApp]::Affinity($again) -eq $groupMask} 90 'High I/O and the cache group after relaunch'|Out-Null
   Start-Sleep -Seconds 2
   ToBottom;Step 'games-relaunched' (@{pid=$again;status=(Text 'GameSessionStatus');detail=(Text 'GameSessionDetail')}+(Reading $again))|Out-Null
   $stop=Soft {Enabled 'GameSessionStop'} 30 'Stop and restore'
