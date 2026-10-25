@@ -1,10 +1,11 @@
 param(
-    [string]$Source = (Join-Path $PSScriptRoot '../../..'),
+    [string]$Source,
     [Parameter(Mandatory = $true)][string]$Out,
     [ValidateSet('All', 'RecoveryRace', 'ManualRace', 'Controls', 'LegacySelection')][string]$Scenario = 'All'
 )
 
 $ErrorActionPreference = 'Stop'
+if (-not $Source) { $Source = Join-Path $PSScriptRoot '../../..' }
 $results = New-Object System.Collections.Generic.List[object]
 $checks = New-Object System.Collections.Generic.List[object]
 $engine = Join-Path $Out 'engine'

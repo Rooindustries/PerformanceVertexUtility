@@ -85,13 +85,13 @@
   },
   {
     "file": "tools/validation/Update/Check-UpgradeRehearsal.ps1",
-    "line": 12,
+    "line": 13,
     "text": "function Get-HarnessItem([string]$Path,[switch]$Force){$i=Get-Item -LiteralPath $Path -Force;[pscustomobject]@{FullName=$i.FullName;IsDirectory=$i.PSIsContainer;Attributes=$i.Attributes}}",
     "reason": "Linux-only disposable filesystem fixture adapter; real Windows uses the existing extended-path harness helpers."
   },
   {
     "file": "tools/validation/Update/Check-UpgradeRehearsal.ps1",
-    "line": 13,
+    "line": 14,
     "text": "function Get-HarnessTree([string]$Path){Get-ChildItem -LiteralPath $Path -Recurse -Force|ForEach-Object {Get-HarnessItem $_.FullName}}",
     "reason": "Linux-only disposable filesystem fixture adapter; real Windows uses the existing extended-path harness helpers."
   },
@@ -103,19 +103,19 @@
   },
   {
     "file": "tools/validation/Update/Check-UpgradeRehearsalRecovery.ps1",
-    "line": 11,
+    "line": 12,
     "text": "function Get-HarnessItem([string]$Path,[switch]$Force){$i=Get-Item -LiteralPath $Path -Force;[pscustomobject]@{FullName=$i.FullName;IsDirectory=$i.PSIsContainer;Attributes=$i.Attributes}}",
     "reason": "Linux-only disposable filesystem adapter. Native Windows APIs stay in the production harness; this scenario never connects to Windows."
   },
   {
     "file": "tools/validation/Update/Check-UpgradeRehearsalRecovery.ps1",
-    "line": 12,
+    "line": 13,
     "text": "function Get-HarnessTree([string]$Path){Get-ChildItem -LiteralPath $Path -Recurse -Force|ForEach-Object {Get-HarnessItem $_.FullName}}",
     "reason": "Linux-only disposable filesystem adapter. Native Windows APIs stay in the production harness; this scenario never connects to Windows."
   },
   {
     "file": "tools/validation/Update/Check-UpgradeRehearsalRecovery.ps1",
-    "line": 13,
+    "line": 14,
     "text": "function Get-HarnessFileSha256([string]$Path){(Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash}",
     "reason": "Linux-only disposable filesystem adapter. Native Windows APIs stay in the production harness; this scenario never connects to Windows."
   }

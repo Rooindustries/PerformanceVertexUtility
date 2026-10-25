@@ -1,7 +1,8 @@
-param([Parameter(Mandatory)][string]$OutRoot,[string]$ToolRoot=$PSScriptRoot,
+param([Parameter(Mandatory)][string]$OutRoot,[string]$ToolRoot,
  [ValidateSet('All','Journey','JourneyEmpty','Recover','Compare','Untouched','TasksReady','TasksRunning','ForeignAccount','ForeignRoot','Atomic','Verify','Conflict','Reordered','ChangedField','BeforeOutput','Unsupported','Runner','ReplacedRoot','SelectedRoot','PreviousJournal','ReplaceError','ForeignJournal','CorruptPrimary')][string]$Case='All',
  [int]$KillAt=0,[switch]$SkipCrashMatrix,[switch]$MatrixOnly,[int]$MatrixParts=1,[int]$MatrixPart=0,[ValidateSet('Both','Journey','JourneyEmpty')][string]$MatrixVariant='Both')
 $ErrorActionPreference='Stop'
+if(-not$ToolRoot){$ToolRoot=$PSScriptRoot}
 if($env:OS -eq 'Windows_NT'){throw 'Run the recovery fault-injection scenario on Linux PowerShell.'}
 $env:COMPUTERNAME='fixture-machine'
 function Read-Fixture([string]$Name){[IO.File]::ReadAllText((Join-Path $OutRoot $Name))|ConvertFrom-Json}
