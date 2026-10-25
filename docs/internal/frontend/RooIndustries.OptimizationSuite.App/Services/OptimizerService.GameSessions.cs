@@ -81,14 +81,10 @@ public sealed partial class OptimizerService
         return stale.Length != 0;
     }
 
-    public async Task<bool> GameSessionsBlockUpdateAsync()
+    public async Task<GameSessionEntry[]> RecoverAndReadGameSessionsAsync()
     {
         await RecoverStaleGameSessionsAsync().ConfigureAwait(false);
-        var sessions = await ReadGameSessionsAsync().ConfigureAwait(false);
-        if (sessions.Any(entry => entry.Worker.HostRunning == true)) return true;
-        if (sessions.Any(entry => entry.Worker.HostRunning is null || entry.Worker.Error is not null))
-            throw new InvalidDataException("Couldn't confirm that all game sessions have stopped. Check Games and Undo changes first.");
-        return false;
+        return await ReadGameSessionsAsync().ConfigureAwait(false);
     }
 
     public Task<ProtectedSessionStatus> StopGameSessionAsync(string sessionRoot)

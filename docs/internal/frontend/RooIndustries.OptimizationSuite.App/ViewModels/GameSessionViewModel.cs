@@ -85,6 +85,7 @@ public partial class GameSessionViewModel : ObservableObject
     [ObservableProperty] private string _reviewSummary = "";
     private ProcessControlSnapshot? _launcher;
     private GameSessionReview? _review;
+    private string? _turningOff;
     private ProtectedSessionStatus? _current;
     private string? _sessionRoot;
     private string? _pendingAffinity;
@@ -478,7 +479,8 @@ public partial class GameSessionViewModel : ObservableObject
     {
         try
         {
-            var rows = (await App.Operations.ReadLaunchProfilesAsync()).Select(entry => new LaunchProfileRow(entry.Root, entry.Title + PresetLabel(entry.Saved.Controls), OptimizerService.DescribeLaunchProfile(entry))).ToArray();
+            var rows = (await App.Operations.ReadLaunchProfilesAsync()).Select(entry => entry.Root == _turningOff && Profiles.FirstOrDefault(row => row.Root == entry.Root) is { } shown ? shown
+                : new LaunchProfileRow(entry.Root, entry.Title + PresetLabel(entry.Saved.Controls), OptimizerService.DescribeLaunchProfile(entry))).ToArray();
             if (rows.SequenceEqual(Profiles)) return;
             Profiles.Clear(); foreach (var row in rows) Profiles.Add(row);
         }
@@ -490,7 +492,7 @@ public partial class GameSessionViewModel : ObservableObject
         while (Busy) await Task.Delay(100);
         if (Profiles.FirstOrDefault(item => item.Root == row.Root) is not { } current) return;
         row = current;
-        Busy = true;
+        Busy = true; _turningOff = row.Root;
         string status, detail;
         try
         {
@@ -499,7 +501,7 @@ public partial class GameSessionViewModel : ObservableObject
             detail = problem ?? row.Title + " is back to its original settings. They won't turn on again by themselves.";
         }
         catch (Exception error) { status = "Couldn't turn off the saved settings."; detail = error.Message; }
-        finally { Busy = false; }
+        finally { Busy = false; _turningOff = null; }
         await RefreshAsync();
         await RefreshProfilesAsync();
         Status = status; Detail = detail;

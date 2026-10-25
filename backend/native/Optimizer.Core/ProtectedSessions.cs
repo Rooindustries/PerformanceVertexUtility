@@ -59,7 +59,7 @@ public sealed class ProtectedSessionState
 }
 public sealed record ProtectedSessionStatus(ProtectedSessionState? State, bool? HostRunning, string? Error)
 {
-    public bool Restored => HostRunning == false && Error is null && State is { } state && ProtectedSessions.IsRestored(state);
+    public bool Restored => HostRunning == false && Error is null && (State is null || ProtectedSessions.IsRestored(State));
 }
 public sealed record ProtectedSessionCommand(OperationOwner Owner, string OperationId, RunningProcess Host, string Action, AffinityState? Affinity);
 public sealed record ProtectedWatchReady(OperationOwner Owner, string OperationId, RunningProcess Host, RunningProcess Watcher, bool HoldingJob);
@@ -612,6 +612,7 @@ public sealed class ProtectedSessions
     private void VerifyLaunch(ProtectedSessionPreview plan)
     {
         ValidatePlan(plan);
+        if (!Alive(plan.Launcher)) throw new InvalidOperationException(LauncherClosed);
         using var launcher = new ProcessTarget(plan.Launcher.ProcessId); plan.Launcher.Verify(launcher.Identity()); launcher.RequireUnprotected();
         if (launcher.UserSid() != plan.Owner.UserSid || CpuSelection.Fingerprint(launcher.Topology()) != plan.TopologyHash || _excluded(plan.Launcher)) throw new InvalidDataException("Launcher ownership, topology or exclusion changed.");
         if (OperationFiles.HashFile(plan.GamePath) != plan.GameHash || OperationFiles.HashFile(plan.Launcher.ExecutablePath) != plan.LauncherHash) throw new InvalidDataException("An executable changed after review.");

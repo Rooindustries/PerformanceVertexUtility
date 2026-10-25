@@ -33,8 +33,14 @@ public sealed partial class OptimizerService
         {
             try { if (await RecoverStaleGameSessionsAsync().ConfigureAwait(false)) GameSessionsChanged?.Invoke(); }
             catch (Exception error) { AppLog.Write("games", "Game sessions couldn't be checked at startup: " + error.Message); }
+            string? lastError = null;
             while (await timer.WaitForNextTickAsync(stop).ConfigureAwait(false))
-                if (await RearmLaunchProfilesAsync().ConfigureAwait(false)) GameSessionsChanged?.Invoke();
+                try { if (await RearmLaunchProfilesAsync().ConfigureAwait(false)) GameSessionsChanged?.Invoke(); lastError = null; }
+                catch (Exception error) when (error is not OperationCanceledException)
+                {
+                    if (lastError != error.Message) AppLog.Write("profiles", "Saved launch settings couldn't be checked this time: " + error.Message);
+                    lastError = error.Message;
+                }
         }
         catch (OperationCanceledException) { }
     });

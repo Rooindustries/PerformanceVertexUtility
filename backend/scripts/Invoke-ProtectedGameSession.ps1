@@ -96,7 +96,28 @@ if($Action -eq 'Start'){
     Register-ScheduledTask -TaskName $taskName -Description $description -Action $execute -Principal $principal -Settings $settings -Trigger (New-ScheduledTaskTrigger -AtLogOn -User $owner) -Force|Out-Null
     Start-ScheduledTask -TaskName $taskName
     $clock=[Diagnostics.Stopwatch]::StartNew()
-    do {$status=Invoke-Core 'protected-session-status';if($status.hostRunning -eq $true -and $status.state.status -in @('armed','active','partial')){break};if($status.state -and $status.hostRunning -eq $false){if(Test-Path (Join-Path $SessionRoot 'worker-error.json')){$failure=Get-Content -Raw (Join-Path $SessionRoot 'worker-error.json')|ConvertFrom-Json;throw ('Session startup failed: '+$failure.error+' '+$failure.hresult)};throw ('Session stopped during startup: '+($status.state.errors -join '; '))};Start-Sleep -Milliseconds 200}while($clock.Elapsed.TotalSeconds -lt 35)
+    $failurePath=Join-Path $SessionRoot 'worker-error.json'
+    do {
+        $status=Invoke-Core 'protected-session-status'
+        if($status.hostRunning -eq $true -and $status.state.status -in @('armed','active','partial')){break}
+        if($status.hostRunning -eq $false -and ($status.state -or (Test-Path -LiteralPath $failurePath))){
+            $failure=if(Test-Path -LiteralPath $failurePath){Get-Content -Raw -LiteralPath $failurePath|ConvertFrom-Json}else{$null}
+            if(-not $status.state){
+                $wait=[Diagnostics.Stopwatch]::StartNew()
+                while((Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue).State -eq 'Running' -and $wait.Elapsed.TotalSeconds -lt 15){Start-Sleep -Milliseconds 200}
+                if(-not(Test-Path -LiteralPath (Join-Path $SessionRoot 'session.json'))){
+                    try{
+                        if(Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue){Unregister-ScheduledTask -TaskName $taskName -Confirm:$false}
+                        Remove-Item -LiteralPath $SessionRoot -Recurse -Force
+                    }
+                    catch{throw ('Session startup failed: '+$failure.error+' Its unused session files could not be removed: '+$_.Exception.Message)}
+                }
+            }
+            if($failure){throw ('Session startup failed: '+$failure.error)}
+            throw ('Session stopped during startup: '+($status.state.errors -join '; '))
+        }
+        Start-Sleep -Milliseconds 200
+    }while($clock.Elapsed.TotalSeconds -lt 35)
     if($status.hostRunning -ne $true -or $status.state.status -notin @('armed','active','partial')){throw 'Session startup was not verified; inspect its retained recovery state.'}
 }
 if($Action -eq 'Affinity'){
@@ -116,8 +137,7 @@ if($Action -eq 'Stop'){
 }
 if($Action -eq 'Recover'){
     $status=Invoke-Core 'protected-session-status'
-    if(-not $status.state){throw 'There is no session recovery state.'}
-    Invoke-Core 'protected-session-recover' @{operationId=$status.state.preview.operationId;acceptEarlierVersion=[bool]$AcceptEarlierVersion}|Out-Null
+    if($status.state){Invoke-Core 'protected-session-recover' @{operationId=$status.state.preview.operationId;acceptEarlierVersion=[bool]$AcceptEarlierVersion}|Out-Null}
     if($task -and (Test-Restored (Invoke-Core 'protected-session-status')) -and (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue)){Unregister-ScheduledTask -TaskName $taskName -Confirm:$false}
 }
 @{schemaVersion=1;status='completed';data=@{sessionRoot=$SessionRoot;taskName=$taskName;worker=(Invoke-Core 'protected-session-status')}}|ConvertTo-Json -Depth 40

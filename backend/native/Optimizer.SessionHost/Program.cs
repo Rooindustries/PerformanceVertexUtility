@@ -51,6 +51,7 @@ catch (Exception error)
 {
     if (root is not null) OperationFiles.Write(Path.Combine(root, args.FirstOrDefault() == "watch" ? "watch-error.json" : "worker-error.json"), new { error = error.Message, type = error.GetType().Name, hresult = $"0x{error.HResult:X8}", detail = error.ToString() });
     else Console.Error.WriteLine(error.Message);
+    if (root is not null && args.FirstOrDefault() == "run" && !File.Exists(Path.Combine(root, "session.json"))) RemoveTask(root);
     Environment.ExitCode = 1;
 }
 
