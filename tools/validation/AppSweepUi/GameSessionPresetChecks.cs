@@ -238,6 +238,15 @@ static class GameSessionPresetChecks
             Setting(manual, "ioPriority").Selected = Setting(manual, "ioPriority").Options[0];
             await manual.PreviewCommand.ExecuteAsync(null);
             check(Lines(manual)[^1] == "Other apps this launcher opens get the same memory priority.", "With only memory priority chosen the review names just that for the launcher's other apps");
+            App.Operations.GameStartFailure = "Session startup failed: " + ProtectedSessions.LauncherClosed;
+            try
+            {
+                await manual.StartCommand.ExecuteAsync(null);
+                await manual.ObserveAsync();
+                check(manual.Status == "Session startup needs attention." && manual.Detail.Contains(ProtectedSessions.LauncherClosed, StringComparison.Ordinal) && !manual.CanStop && !manual.CanRecover,
+                    "A start that failed before changing anything keeps its plain reason on screen instead of switching to Session state unavailable");
+            }
+            finally { App.Operations.GameStartFailure = null; App.Operations.RemovedSessions.Clear(); }
 
             var desired = new AffinityState(0, "0xFF");
             ProtectedGameState Game(int processId, Dictionary<string, JsonElement> controls) => new()

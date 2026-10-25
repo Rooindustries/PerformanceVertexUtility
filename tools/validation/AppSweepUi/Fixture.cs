@@ -397,9 +397,12 @@ namespace RooIndustries.OptimizationSuite.Services
         }
         public void RequireNoLaunchProfile(ProtectedSessionPreview plan) { }
         public List<GameSessionReview> StartedSessions { get; } = new();
+        public string? GameStartFailure { get; set; }
+        public HashSet<string> RemovedSessions { get; } = new(StringComparer.OrdinalIgnoreCase);
         public Task<ProtectedSessionStatus> StartGameSessionAsync(GameSessionReview review)
         {
             if (GameReview is null) throw new InvalidOperationException("Unexpected game session start.");
+            if (GameStartFailure is { } failure) { RemovedSessions.Add(review.SessionRoot); throw new InvalidOperationException(failure); }
             StartedSessions.Add(review);
             return Task.FromResult(new ProtectedSessionStatus(null, true, null));
         }
@@ -413,7 +416,7 @@ namespace RooIndustries.OptimizationSuite.Services
         public Task<LaunchProfileEntry[]> ReadLaunchProfilesAsync() => Task.FromResult(LaunchProfiles);
         public Func<string, Task<string?>>? ProfileTurnOff { get; set; }
         public Task<string?> DisableLaunchProfileAsync(string root) => ProfileTurnOff is { } turnOff ? turnOff(root) : throw new InvalidOperationException("Unexpected saved launch settings turn-off.");
-        public Task<ProtectedSessionStatus> ReadGameSessionAsync(string sessionRoot) => Task.FromResult(GameSessions.FirstOrDefault(entry => entry.SessionRoot == sessionRoot)?.Worker ?? new ProtectedSessionStatus(null, null, "No fixture session."));
+        public Task<ProtectedSessionStatus> ReadGameSessionAsync(string sessionRoot) => RemovedSessions.Contains(sessionRoot) ? Task.FromResult(new ProtectedSessionStatus(null, false, null)) : Task.FromResult(GameSessions.FirstOrDefault(entry => entry.SessionRoot == sessionRoot)?.Worker ?? new ProtectedSessionStatus(null, null, "No fixture session."));
         public Task<ProtectedSessionStatus> StopGameSessionAsync(string sessionRoot) => throw new InvalidOperationException("Unexpected game session stop.");
         public Task<ProtectedSessionStatus> RecoverGameSessionAsync(string sessionRoot) => throw new InvalidOperationException("Unexpected game session recovery.");
         public Func<string, string, ProtectedSessionStatus>? GameSwitch { get; set; }

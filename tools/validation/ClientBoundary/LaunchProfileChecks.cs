@@ -849,6 +849,19 @@ static class LaunchProfileChecks
                 Check(!File.Exists(Path.Combine(left.SessionRoot, "session.json")) && lateError.Contains("cancelled", StringComparison.Ordinal) && NoLaunchPolicy() && Affinity(leftLauncher) == original,
                     "A worker that runs after the cancel changes nothing, even though its launcher is still open");
 
+                var failed = await App().PreviewGameSessionAsync(leftLauncher.Id, gamePath, controls, true);
+                Directory.CreateDirectory(failed.SessionRoot);
+                OperationFiles.Write(Path.Combine(failed.SessionRoot, "worker-request.json"), new { schemaVersion = 1, repoRoot = repo, sessionRoot = failed.SessionRoot, previewPath = failed.PreviewPath, reviewHash = failed.Hash, confirm = true });
+                OperationFiles.Write(Path.Combine(failed.SessionRoot, "worker-error.json"), new { error = "An earlier worker for this start stopped before it changed anything.", type = "InvalidOperationException", hresult = "0x80131509", detail = "" });
+                var failedTask = Path.Combine(root, "failed-task.xml");
+                XDocument.Parse(taskTemplate.Replace(afterRefusal.SessionRoot, failed.SessionRoot, StringComparison.Ordinal)).Save(failedTask);
+                Check(Schtasks("/Create", "/TN", TaskName(failed.SessionRoot), "/XML", failedTask).Exit == 0 && GameSessionDisplay.Restored(await App().ReadGameSessionAsync(failed.SessionRoot)),
+                    "A start whose worker already gave up counts as finished, though its sign-in task couldn't be removed");
+                Schtasks("/Run", "/TN", TaskName(failed.SessionRoot));
+                await Until(() => Task.FromResult(!TaskExists(failed.SessionRoot) || File.Exists(Path.Combine(failed.SessionRoot, "session.json"))), "The finished start's sign-in task neither finished nor armed.");
+                Check(!File.Exists(Path.Combine(failed.SessionRoot, "session.json")) && File.ReadAllText(Path.Combine(failed.SessionRoot, "worker-error.json")).Contains("already stopped", StringComparison.Ordinal) && NoLaunchPolicy() && Affinity(leftLauncher) == original,
+                    "Its sign-in task then changes nothing, even though its launcher is still open");
+
                 var raceReview = await App().PreviewGameSessionAsync(leftLauncher.Id, gamePath, controls, true);
                 using var gateHeld = new ManualResetEventSlim();
                 using var gateRelease = new ManualResetEventSlim();
