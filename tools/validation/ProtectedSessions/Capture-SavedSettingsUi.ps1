@@ -194,6 +194,7 @@ try{
  Start-Sleep -Milliseconds 600
  $refused=Step 'start-refused' @{seconds=$seconds;status=(Text 'GameSessionStatus');detail=(Text 'GameSessionDetail');leftovers=(Leftovers)}
  Expect 'start-refused' ($refused.status -like '*attention*' -and "$($refused.detail)".Contains("Another session owns this game's launch settings.")) 'the Games tab shows the refusal and its reason'
+ Expect 'start-refused' ($seconds -lt 30) ('it took '+$seconds+' seconds to fail; a refused start should fail right away')
  Expect 'start-refused' ($refused.leftovers.Count -eq 0) ('it left '+($refused.leftovers -join ', '))
  $imageLock.ReleaseMutex();$imageLock.Dispose();$imageLock=$null
 
