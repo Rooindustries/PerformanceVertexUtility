@@ -1999,13 +1999,20 @@ try {
             $loaded=$null
             try { & { . $HarnessPath -Action RollbackModule -ModuleId fixture -ManifestPath $fixtureManifest -DataRoot $emptyRoot -ConfirmApply } } catch { $loaded=$_.Exception.Message }
             Assert ($loaded -like '*Apply or Undo is running*') 'A suite that loads the harness waits on its own test change lock'
-            $invoked=$null
-            try { & $HarnessPath -Action RollbackModule -ModuleId fixture -ManifestPath $fixtureManifest -DataRoot $emptyRoot -ConfirmApply } catch { $invoked=$_.Exception.Message }
-            Assert ($invoked -like 'No backups found*') 'A normal harness run keeps the machine-wide change lock while a test lock name is set'
         } finally {
             [IO.File]::WriteAllText($release,'release')
             if (-not $process.WaitForExit(30000)) { $process.Kill() }
             $process.Dispose()
+        }
+        & {
+            # No lock can be opened under a name this long, so only a run that ignores it reaches the machine-wide lock, free or held by a real run.
+            $RooIndustriesTestChangeLock='Global\RooIndustries.LeanClientOptimizer.Changes.Test.'+('x'*300)
+            $unusable=$null
+            try { & { . $HarnessPath -Action RollbackModule -ModuleId fixture -ManifestPath $fixtureManifest -DataRoot $emptyRoot -ConfirmApply } } catch { $unusable=$_.Exception.Message }
+            Assert ($unusable -and $unusable -notlike 'No backups found*' -and $unusable -notlike '*Apply or Undo is running*') ('A suite that loads the harness cannot open a test change lock name that is too long ('+$unusable+')')
+            $invoked=$null
+            try { & $HarnessPath -Action RollbackModule -ModuleId fixture -ManifestPath $fixtureManifest -DataRoot $emptyRoot -ConfirmApply } catch { $invoked=$_.Exception.Message }
+            Assert ($invoked -like 'No backups found*' -or $invoked -like '*Apply or Undo is running*') ('A normal harness run ignores the test lock name and uses the machine-wide change lock ('+$invoked+')')
         }
     } }
     if ($Scenario -in 'All','BackupWrite') { & {

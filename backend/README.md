@@ -100,7 +100,7 @@ The legacy rollback suite also has a fixture-only base/new apply comparison. Sup
 
 Set `ROO_INDUSTRIES_LEGACY_BASE_HARNESS` and `ROO_INDUSTRIES_LEGACY_BASE_HARNESS_SHA256` to include that comparison in the suite's `All` scenario through `Test-Baseline.ps1`. The comparison removes its fixture in `finally` and never changes real services.
 
-The legacy rollback suite loads the harness with its own change lock for each run, so several suites on one PC, or a suite next to a real harness run, never wait on each other. A harness started any other way (`-File` or `&`) always uses the one machine-wide lock; `-Scenario ChangeLock` checks both.
+The legacy rollback suite loads the harness with its own change lock for each run, so several suites on one PC, or a suite next to a real harness run, never wait on each other. A harness started any other way (`-File` or `&`) always uses the one machine-wide lock; `-Scenario ChangeLock` checks both, and still passes while a real harness run holds that lock.
 
 From Linux, configure a Windows SSH alias with its own authorized key and use the direct helper:
 
