@@ -11,6 +11,8 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+$ChangeLockName = 'Global\RooIndustries.LeanClientOptimizer.Changes'
+if ($MyInvocation.InvocationName -eq '.' -and $RooIndustriesTestChangeLock) { $ChangeLockName = $RooIndustriesTestChangeLock }
 
 if ([string]::IsNullOrWhiteSpace($ManifestPath)) {
     $ManifestPath = Join-Path $PSScriptRoot 'modules\tweak_manifest.json'
@@ -42,7 +44,7 @@ function Write-JsonFile {
 }
 
 function Enter-ChangeLock {
-    $lock = [Threading.Mutex]::new($false, 'Global\RooIndustries.LeanClientOptimizer.Changes')
+    $lock = [Threading.Mutex]::new($false, $ChangeLockName)
     try { $owned = $lock.WaitOne(2000) } catch [Threading.AbandonedMutexException] { $owned = $true }
     if ($owned) { return $lock }
     $lock.Dispose()

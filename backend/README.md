@@ -92,13 +92,15 @@ Run individual regressions with `-TestName`:
 .\tools\scripts\Test-Baseline.ps1 -TestName Test-LegacyModuleRollback.ps1,Test-UninstallCleanupApplyPackage.ps1
 ```
 
-The legacy rollback suite also has a fixture-only base/new apply comparison. Supply an exported base harness and its SHA-256; it records the actual absent/present UInt32-max outcomes and checks differing-kind writes on a disposable HKCU key:
+The legacy rollback suite also has a fixture-only base/new apply comparison. Supply the harness from your change's base branch (for example `git show origin/main:LeanClientOptimizer.ps1`), exported to an owned folder, and its SHA-256. On a disposable HKCU key it records what the base does with an absent or present UInt32-max DWORD and with an existing String value (harnesses before PR #78 keep it a String, later ones rewrite it as a DWORD), and requires the new harness to write exact DWORD data in all three cases:
 
 ```powershell
 .\backend\scripts\Test-LegacyModuleRollback.ps1 -Scenario ApplyComparison -BaseHarnessPath C:\OwnedFixture\base.ps1 -BaseHarnessSha256 <sha256>
 ```
 
 Set `ROO_INDUSTRIES_LEGACY_BASE_HARNESS` and `ROO_INDUSTRIES_LEGACY_BASE_HARNESS_SHA256` to include that comparison in the suite's `All` scenario through `Test-Baseline.ps1`. The comparison removes its fixture in `finally` and never changes real services.
+
+The legacy rollback suite loads the harness with its own change lock for each run, so several suites on one PC, or a suite next to a real harness run, never wait on each other. A harness started any other way (`-File` or `&`) always uses the one machine-wide lock; `-Scenario ChangeLock` checks both.
 
 From Linux, configure a Windows SSH alias with its own authorized key and use the direct helper:
 
