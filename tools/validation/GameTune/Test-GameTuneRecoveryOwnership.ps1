@@ -109,7 +109,7 @@ function Invoke-RestoreCase {
         if ($Outcome -eq 'applied') {
             Check (-not $saved.restorable -and $saved.sessionStatus -eq 'completed' -and @($saved.leftAsSetItems | Where-Object { $_.control -eq $Conflict -and (Test-RooIndustriesControlValueEqual $Conflict $_.currentValue $foreign) }).Count -eq 1) "$Name lists the control left as another program set it and finishes the restore"
         } else {
-            Check ($saved.restorable -and $saved.sessionStatus -eq 'failed' -and @($saved.leftAsSetItems).Count -eq 0 -and @($saved.skippedItems | ForEach-Object { [regex]::Split([string]$_.reason, '; (?=\w+: )') }) -contains ($Conflict + ': ' + $script:RooIndustriesUnprovenWrite)) "$Name keeps the unconfirmed control and its recovery and says it couldn't confirm the write"
+            Check ($saved.restorable -and $saved.sessionStatus -eq 'failed' -and @($saved.leftAsSetItems).Count -eq 0 -and @($saved.skippedItems | ForEach-Object { [regex]::Split([string]$_.reason, '; (?=\w+: )') }) -ccontains ($Conflict + ': ' + $script:RooIndustriesUnprovenWrite)) "$Name keeps the unconfirmed control and its recovery and says it couldn't confirm the write"
         }
         if ($Mode -eq 'Recovery') {
             $before = [IO.File]::ReadAllText($sessionPath)
