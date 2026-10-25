@@ -18,7 +18,7 @@ public sealed class FileLease : IDisposable
     private readonly bool _writable;
     public string Path { get; }
 
-    private FileLease(string path, bool writable, bool create, bool directory, bool restore, bool shareDelete = false, bool policy = false, bool content = false, bool owner = false)
+    private FileLease(string path, bool writable, bool create, bool directory, bool restore, bool shareDelete = false, bool policy = false, bool content = false, bool owner = false, bool move = false)
     {
         Path = NormalizePath(path);
         _writable = writable;
@@ -36,6 +36,7 @@ public sealed class FileLease : IDisposable
                 var access = ReadData | ReadAttributes | Synchronize;
                 if (final) access |= ReadControl | (writable ? Delete : 0);
                 if (final && restore) access |= (create ? 2u : 0u) | WriteAttributes | WriteDacl | WriteOwner;
+                if (final && move) access |= WriteAttributes | WriteDacl;
                 if (final && policy) access = ReadAttributes | ReadControl | Synchronize | (writable ? WriteDacl : 0);
                 if (final && owner) access |= WriteOwner;
                 if (final && content) access = ReadData | ReadAttributes | ReadControl | Synchronize | (writable ? 2u | WriteAttributes : 0u);
@@ -55,6 +56,7 @@ public sealed class FileLease : IDisposable
     public static FileLease Open(string path, bool writable = false) => new(path, writable, false, false, false);
     public static FileLease Create(string path, bool directory) => new(path, true, true, directory, true);
     public static FileLease OpenForRestore(string path) => new(path, true, false, false, true);
+    public static FileLease OpenForMove(string path) => new(path, true, false, false, false, move: true);
     public static FileLease OpenPolicy(string path, bool writable = false, bool owner = false) => new(path, writable, false, false, false, policy: true, owner: owner);
     public void SetOwner(byte[] sid)
     {
@@ -142,6 +144,41 @@ public sealed class FileLease : IDisposable
             CreationTime = basic.CreationTime, LastWriteTime = basic.LastWriteTime, LastAccessTime = basic.LastAccessTime,
             Security = ReadSecurity(_handle), SecurityCoverage = 7, Streams = ReadStreams(canonical, standard.Directory),
         };
+    }
+
+    public FileIdentity ObjectIdentity => Identity(_handle);
+
+    public void ReplaceDacl(byte[] descriptor)
+    {
+        if (!_writable) throw new InvalidOperationException("A detection handle cannot change permissions.");
+        var source = new RawSecurityDescriptor(descriptor, 0);
+        if (source.DiscretionaryAcl is null || (source.ControlFlags & ControlFlags.DiscretionaryAclPresent) == 0) throw new InvalidDataException("A complete file DACL is required.");
+        var flags = source.ControlFlags & (ControlFlags.DiscretionaryAclAutoInherited | ControlFlags.DiscretionaryAclProtected);
+        Set(flags & ~ControlFlags.DiscretionaryAclAutoInherited);
+        if ((flags & ControlFlags.DiscretionaryAclAutoInherited) != 0) Set(flags | ControlFlags.DiscretionaryAclAutoInheritRequired);
+        void Set(ControlFlags control)
+        {
+            var replacement = new RawSecurityDescriptor(control | ControlFlags.DiscretionaryAclPresent, null, null, null, source.DiscretionaryAcl);
+            var bytes = new byte[replacement.BinaryLength]; replacement.GetBinaryForm(bytes, 0);
+            if (!SetKernelObjectSecurity(_handle, 4, bytes)) Fail("SetKernelObjectSecurity(DACL)");
+        }
+    }
+
+    public void RestoreMoved(FileSnapshot original)
+    {
+        ReplaceDacl(original.Security);
+        RestoreTimes(original);
+    }
+
+    public void RestoreTimes(FileSnapshot original)
+    {
+        if (!_writable) throw new InvalidOperationException("A detection handle cannot restore file metadata.");
+        var basic = new FileBasicInfo
+        {
+            CreationTime = original.CreationTime, LastAccessTime = original.LastAccessTime, LastWriteTime = original.LastWriteTime,
+            FileAttributes = original.Attributes,
+        };
+        if (!SetBasicInformation(_handle, 0, ref basic, Marshal.SizeOf<FileBasicInfo>())) Fail("SetFileInformationByHandle(FileBasicInfo)");
     }
 
     public string[] Children()
@@ -251,9 +288,14 @@ public sealed class FileLease : IDisposable
 
     public void RenameToSibling(string name)
     {
-        if (!_writable) throw new InvalidOperationException("A detection handle cannot rename a file.");
         RequireComponent(name);
-        var bytes = Encoding.Unicode.GetBytes(System.IO.Path.Combine(System.IO.Path.GetDirectoryName(Path)!, name));
+        RenameTo(System.IO.Path.Combine(System.IO.Path.GetDirectoryName(Path)!, name));
+    }
+
+    public void RenameTo(string destination)
+    {
+        if (!_writable) throw new InvalidOperationException("A detection handle cannot rename a file.");
+        var bytes = Encoding.Unicode.GetBytes(NormalizePath(destination));
         var buffer = Marshal.AllocHGlobal(24 + bytes.Length);
         try
         {

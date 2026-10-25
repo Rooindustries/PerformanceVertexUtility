@@ -7,10 +7,11 @@ using RooIndustries.Optimizer;
 
 static class RefusalChecks
 {
-    public static void Run(Action<bool, string> check)
+    public static void Run(Action<bool, string> check, TestVolume volume)
     {
         var root = TestFixtures.InheritingRoot("explicit-refusal");
-        var source = Path.Combine(root, "App");
+        var far = Path.Combine(volume.Root, "roo-industries-explicit-refusal-" + Guid.NewGuid().ToString("N"));
+        var source = Path.Combine(far, "App");
         var explicitOnly = Path.Combine(source, "explicit.txt");
         var ordinary = Path.Combine(source, "ordinary.txt");
         var operations = Path.Combine(root, "Operations");
@@ -40,7 +41,7 @@ static class RefusalChecks
             var applied = engine.Apply(reviewPath, OperationFiles.HashFile(reviewPath), journalPath);
             var error = string.Join(" | ", applied.Entries.Where(entry => entry.Error is not null).Select(entry => entry.Error));
             Console.WriteLine("Explicit-only refusal: " + applied.Status + " " + error);
-            check(applied.Status != "applied" && error.Contains("Backup verification differs in permissions", StringComparison.Ordinal), "Cleanup refuses an item whose explicit-only permissions it cannot restore exactly and says why");
+            check(applied.Status != "applied" && error.Contains("Backup verification differs in permissions", StringComparison.Ordinal), "Copying cleanup from another drive refuses an item whose explicit-only permissions it cannot restore exactly and says why");
             check(applied.Status == "needsReconciliation" && applied.Entries.All(entry => entry.Status == "pending" && entry.BackupHash is null), "A refused cleanup deletes nothing and records that no backup is kept");
             check(!Directory.EnumerateFiles(operations, "file-backup-*").Any(), "A refused cleanup removes the backup copies it had already made");
             check(File.ReadAllBytes(explicitOnly).SequenceEqual(bytesBefore.Item1) && File.ReadAllBytes(ordinary).SequenceEqual(bytesBefore.Item2) && Sddl(explicitOnly) == before && Sddl(ordinary) == ordinaryBefore && Sddl(source) == sourceBefore, "A refused cleanup leaves the files, the folder and their permissions unchanged");
@@ -48,8 +49,8 @@ static class RefusalChecks
             var restored = engine.Restore(journalPath);
             check(restored.Status == "needsReconciliation" && File.ReadAllBytes(journalPath).SequenceEqual(journalBytes) && File.ReadAllBytes(explicitOnly).SequenceEqual(bytesBefore.Item1) && Sddl(ordinary) == ordinaryBefore, "Restore does nothing after a refused cleanup");
         }
-        finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
-        check(!Directory.Exists(root), "Refusal validation removes its fixture");
+        finally { foreach (var folder in new[] { root, far }.Where(Directory.Exists)) Directory.Delete(folder, true); }
+        check(!Directory.Exists(root) && !Directory.Exists(far), "Refusal validation removes its fixture");
     }
 
     static string Sddl(string path)
@@ -62,15 +63,17 @@ static class RefusalChecks
         try { return Marshal.PtrToStringUni(text) ?? ""; } finally { LocalFree(text); }
     }
 
-    static void SetDacl(string path, string sddl)
+    static void SetDacl(string path, string sddl) => SetSecurity(path, sddl, 4);
+
+    internal static void SetSecurity(string path, string sddl, uint information)
     {
         if (!ConvertStringSecurityDescriptorToSecurityDescriptor(sddl, 1, out var descriptor, out var size)) throw new Win32Exception(Marshal.GetLastWin32Error());
         try
         {
             var bytes = new byte[size];
             Marshal.Copy(descriptor, bytes, 0, (int)size);
-            using var handle = Open(path, 0x20000 | 0x40000);
-            if (!SetKernelObjectSecurity(handle, 4, bytes)) throw new Win32Exception(Marshal.GetLastWin32Error());
+            using var handle = Open(path, 0x20000 | 0x40000 | ((information & 1) != 0 ? 0x80000u : 0));
+            if (!SetKernelObjectSecurity(handle, information, bytes)) throw new Win32Exception(Marshal.GetLastWin32Error());
         }
         finally { LocalFree(descriptor); }
     }

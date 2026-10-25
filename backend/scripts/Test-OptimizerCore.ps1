@@ -4,7 +4,7 @@ if([string]::IsNullOrWhiteSpace($DotNetPath)){$DotNetPath=(Get-Command dotnet.ex
 $env:DOTNET_ROOT=Split-Path $DotNetPath -Parent
 $root=Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 $arguments=@('run','--project',(Join-Path $root 'tools\validation\OptimizerCore\OptimizerCore.csproj'),'--configuration','Release')
-if($Area -in 'all','data-folder','operation-files'){$arguments+='-p:GovernorTestHooks=true'}
+if($Area -in 'all','data-folder','operation-files','files'){$arguments+='-p:GovernorTestHooks=true'}
 if($Area -ne 'all'){$arguments+=@('--',('--'+$Area))+$Scenario}
 if($Evidence){
     New-Item -ItemType Directory -Force -Path (Split-Path $Evidence -Parent)|Out-Null
