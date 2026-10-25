@@ -57,9 +57,13 @@ public sealed class ProtectedSessionState
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public List<int>? Refused { get; set; }
     public required DateTime UpdatedAtUtc { get; set; }
 }
-public sealed record ProtectedSessionStatus(ProtectedSessionState? State, bool? HostRunning, string? Error);
+public sealed record ProtectedSessionStatus(ProtectedSessionState? State, bool? HostRunning, string? Error)
+{
+    public bool Restored => HostRunning == false && Error is null && State is { } state && ProtectedSessions.IsRestored(state);
+}
 public sealed record ProtectedSessionCommand(OperationOwner Owner, string OperationId, RunningProcess Host, string Action, AffinityState? Affinity);
 public sealed record ProtectedWatchReady(OperationOwner Owner, string OperationId, RunningProcess Host, RunningProcess Watcher, bool HoldingJob);
+public sealed record ProtectedSessionBoot([property: JsonRequired] string BootId);
 
 public sealed class ProtectedSessions
 {
@@ -73,6 +77,7 @@ public sealed class ProtectedSessions
         state.Games.All(game => game.Fields.All(field => field.JournalPath is null || field.Status is "restored" or "expired" or "leftAsIs"));
     private static string StatePath(string root) => Path.Combine(Path.GetFullPath(root), "session.json");
     private static string CommandPath(string root) => Path.Combine(Path.GetFullPath(root), "command.json");
+    private static string BootPath(string root) => Path.Combine(Path.GetFullPath(root), "boot.json");
     private static JsonElement Value<T>(T value) => JsonSerializer.SerializeToElement(value, OperationFiles.Json);
     private static readonly string[] StartupFields = ["cpuPriority", "ioPriority", "memoryPriority"];
     private static readonly string[] NativeFields = ["gpuPriority", "executionQoS", "priorityBoost"];
@@ -224,6 +229,7 @@ public sealed class ProtectedSessions
                 RegistryStatus = "pending", JobStatus = "pending", DesiredAffinity = plan.Controls.TryGetValue("affinity", out var mask) ? mask.Deserialize<AffinityState>(OperationFiles.Json)! : plan.OriginalAffinity,
                 LauncherJournal = null, Games = [], Errors = [], UpdatedAtUtc = DateTime.UtcNow,
             };
+            if (ProcessPolicyHost.BootId() is { } bootId) OperationFiles.Write(BootPath(root), new ProtectedSessionBoot(bootId));
             Save(root, state);
             gate.Dispose();
             ProcessJob? job = null;
@@ -559,7 +565,7 @@ public sealed class ProtectedSessions
         try
         {
             if (job is not null) job.Clear(ProcessTarget.ParseMask(state.Preview.OriginalAffinity.Mask));
-            else if ((state.JobStatus is "attachIntent" or "applied") && (Alive(state.Preview.Launcher) || LimitedGame(state))) throw new InvalidOperationException("The session job is unavailable; recovery cannot confirm its limits were cleared.");
+            else if ((state.JobStatus is "attachIntent" or "applied") && (Alive(state.Preview.Launcher) || !EarlierBoot(root, state) && LimitedGame(state))) throw new InvalidOperationException("The session job is unavailable; recovery cannot confirm its limits were cleared.");
             state.JobStatus = "cleared";
             foreach (var field in state.Games.SelectMany(game => game.Fields).Where(field => field.Route == "job")) field.Status = "released";
         }
@@ -696,6 +702,12 @@ public sealed class ProtectedSessions
             Thread.Sleep(50);
         }
         throw new TimeoutException("The recovery watcher did not acknowledge the session job.");
+    }
+    private static bool EarlierBoot(string root, ProtectedSessionState state)
+    {
+        if (ProcessPolicyHost.BootId() is not { } now || DateTime.UtcNow - TimeSpan.FromMilliseconds(Environment.TickCount64) <= DateTime.FromFileTimeUtc(Created(state.Host))) return false;
+        try { return OperationFiles.Read<ProtectedSessionBoot>(BootPath(root)).BootId != now; }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidDataException or JsonException) { return false; }
     }
     private static bool LimitedGame(ProtectedSessionState state)
     {
