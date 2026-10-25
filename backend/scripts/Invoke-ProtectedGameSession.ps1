@@ -29,10 +29,10 @@ function Invoke-Core([string]$Operation,[hashtable]$Fields=@{}) {
 function Complete-PendingStart{
     $clock=[Diagnostics.Stopwatch]::StartNew()
     do {
-        if((Invoke-Core 'protected-session-cancel').cancelled){return}
         $now=Invoke-Core 'protected-session-status'
         if($now.state -or $now.hostRunning -ne $true){return}
-        Start-Sleep -Milliseconds 250
+        if((Invoke-Core 'protected-session-cancel').cancelled){return}
+        Start-Sleep -Milliseconds 500
     }while($clock.Elapsed.TotalSeconds -lt 40)
     throw 'The session is still starting. Try again in a moment.'
 }

@@ -480,7 +480,8 @@ public partial class GameSessionViewModel : ObservableObject
     {
         try
         {
-            var rows = (await App.Operations.ReadLaunchProfilesAsync()).Select(entry => entry.Root == _turningOff && Profiles.FirstOrDefault(row => row.Root == entry.Root) is { } shown ? shown
+            var turning = _turningOff;
+            var rows = (await App.Operations.ReadLaunchProfilesAsync()).Select(entry => entry.Root == turning && Profiles.FirstOrDefault(row => row.Root == entry.Root) is { } shown ? shown
                 : new LaunchProfileRow(entry.Root, entry.Title + PresetLabel(entry.Saved.Controls), OptimizerService.DescribeLaunchProfile(entry))).ToArray();
             if (rows.SequenceEqual(Profiles)) return;
             Profiles.Clear(); foreach (var row in rows) Profiles.Add(row);
@@ -566,8 +567,7 @@ public partial class GameSessionViewModel : ObservableObject
     {
         if (current.HostRunning == false || _pendingAffinity is not null && GameSessionDisplay.CoresMatch(current, _pendingAffinity)) _pendingAffinity = null;
         _current = current; Status = GameSessionDisplay.Title(current, _pendingAffinity); Fields.Clear();
-        Detail = current.Error ?? (current.State is { } state ? string.Join("\n", state.Errors) : current.HostRunning == true
-            ? "It hasn't changed anything yet. Stop and restore cancels it, or waits for it to finish starting and then puts everything back." : "No session state was returned. Refresh before retrying.");
+        Detail = current.Error ?? (current.State is { } state ? string.Join("\n", state.Errors) : current.HostRunning == true ? "" : "No session state was returned. Refresh before retrying.");
         if (current.State is { Refused: { Count: > 0 } refused } refusing)
             Detail = string.Join("\n", new[] { Detail }.Where(text => text.Length != 0).Concat(refused.Select(id =>
                 Path.GetFileName(refusing.Preview.GamePath) + " (PID " + id + ") didn't let the app check it, so only the CPU limit and launch priorities reach it.")));
