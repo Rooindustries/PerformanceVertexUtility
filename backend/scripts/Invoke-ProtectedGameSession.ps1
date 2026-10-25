@@ -16,11 +16,7 @@ if(-not $DotNetPath -and (Test-Path -LiteralPath (Join-Path $HostDirectory 'host
 if(-not $DotNetPath){$DotNetPath=Get-RooIndustriesDevelopmentDotNet $HostDirectory}
 $DotNetPath=[IO.Path]::GetFullPath($DotNetPath)
 if($Action -notin @('Preview','Status') -and -not $ConfirmApply){throw 'Review the protected-session operation before using -ConfirmApply.'}
-function Test-Restored($Worker){
-    return $Worker -and $Worker.hostRunning -eq $false -and -not $Worker.error -and $Worker.state -and
-        $Worker.state.status -in @('stopped','stoppedWithErrors') -and $Worker.state.registryStatus -eq 'restored' -and $Worker.state.jobStatus -eq 'cleared' -and
-        @($Worker.state.games|ForEach-Object {$_.fields}|Where-Object {$_.journalPath -and $_.status -notin @('restored','expired')}).Count -eq 0
-}
+function Test-Restored($Worker){return $Worker -and $Worker.restored -eq $true}
 function Invoke-Core([string]$Operation,[hashtable]$Fields=@{}) {
     $request=@{schemaVersion=1;repoRoot=$repoRoot;confirm=[bool]$ConfirmApply}
     if($SessionRoot){$request.sessionRoot=$SessionRoot}

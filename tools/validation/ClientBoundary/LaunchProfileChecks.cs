@@ -4,6 +4,7 @@ using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Xml.Linq;
 using Microsoft.Win32;
 using RooIndustries.OptimizationSuite.Models;
@@ -690,6 +691,62 @@ static class LaunchProfileChecks
                 }
                 finally { markers.SetValue(marker, protectedAt, RegistryValueKind.QWord); }
                 Check((await RemoveAll()).Exit == 0 && await Restored(legacy.SessionRoot) && NoLaunchPolicy(), "After the fixture protection time is restored, cleanup recovers the last session");
+
+                var boosted = new Dictionary<string, JsonElement>(controls) { ["priorityBoost"] = V(true) };
+                var keptLauncher = await OpenLauncher();
+                var kept = await Arm(keptLauncher, boosted);
+                var keptGame = await Game(keptLauncher);
+                await Until(async () => (await App().ReadGameSessionAsync(kept.SessionRoot)).State?.Status == "active", "The game with its own priority boost was not verified.");
+                var stopped = await App().StopGameSessionAsync(kept.SessionRoot);
+                var leftAsIs = stopped.State!.Games.SelectMany(game => game.Fields).Count(field => field.Name == "priorityBoost" && field.Status == "leftAsIs");
+                var stopKeptTask = TaskExists(kept.SessionRoot);
+                var keptCores = Affinity(keptGame);
+                EndGame(keptGame);
+                var removing = await Arm(keptLauncher, boosted);
+                var removingGame = await Game(keptLauncher);
+                await Until(async () => (await App().ReadGameSessionAsync(removing.SessionRoot)).State?.Status == "active", "The second game with its own priority boost was not verified.");
+                var removal = await RemoveAll();
+                Console.WriteLine(JsonSerializer.Serialize(new { leftAsIs, stopKeptTask, removalExit = removal.Exit, removalOutput = removal.Output.Trim() }));
+                Check(GameSessionDisplay.Restored(stopped) && leftAsIs == 1 && !stopKeptTask && keptCores == original,
+                    "Stop finishes a session whose game already had the requested priority boost, leaves the boost as is and removes the sign-in task");
+                Check(removal.Exit == 0 && await Restored(kept.SessionRoot) && await Restored(removing.SessionRoot) && !TaskExists(kept.SessionRoot) && !TaskExists(removing.SessionRoot) &&
+                    NoLaunchPolicy() && Affinity(removingGame) == original, "Uninstall cleanup finishes when a game kept a setting it already had, and removes every session task");
+                EndGame(removingGame);
+
+                var restartLauncher = await OpenLauncher();
+                var restart = await Arm(restartLauncher, controls);
+                PowerLoss(restart.SessionRoot); await CloseLauncher(restartLauncher);
+                var pinned = await Game(null);
+                pinned.ProcessorAffinity = (nint)core;
+                Check(!GameSessionDisplay.Restored(await App().RecoverGameSessionAsync(restart.SessionRoot)) && Affinity(pinned) == core && TaskExists(restart.SessionRoot),
+                    "Without a restart, a game copy on the session's cores could still be inside its core limit, so Recover still waits");
+                var statePath = Path.Combine(restart.SessionRoot, "session.json");
+                var bootPath = Path.Combine(restart.SessionRoot, "boot.json");
+                var startedIn = File.Exists(bootPath) ? JsonNode.Parse(File.ReadAllText(bootPath))!["bootId"]!.GetValue<string>() : null;
+                using (var prefetch = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management\PrefetchParameters"))
+                    Check(prefetch?.GetValue("BootId")?.ToString() is { } registryBoot && registryBoot == ProcessPolicyHost.BootId(), "The start number the session reads matches the one Windows records for this start");
+                Check(startedIn is not null && startedIn == ProcessPolicyHost.BootId() && !JsonNode.Parse(File.ReadAllText(statePath))!.AsObject().ContainsKey("bootId"),
+                    "The session records which Windows start it ran in beside its state, so older versions can still read the state");
+                string SetWorkerStart(string created)
+                {
+                    var saved = JsonNode.Parse(File.ReadAllText(statePath))!.AsObject();
+                    var before = saved["host"]!["creationTimeFileTimeUtc"]!.GetValue<string>();
+                    saved["host"]!["creationTimeFileTimeUtc"] = created;
+                    OperationFiles.Write(statePath, saved);
+                    return before;
+                }
+                var beforeBoot = (DateTime.UtcNow - TimeSpan.FromMilliseconds(Environment.TickCount64)).AddMinutes(-10).ToFileTimeUtc().ToString(System.Globalization.CultureInfo.InvariantCulture);
+                var workerStart = SetWorkerStart(beforeBoot);
+                Check(!GameSessionDisplay.Restored(await App().RecoverGameSessionAsync(restart.SessionRoot)) && Affinity(pinned) == core && TaskExists(restart.SessionRoot),
+                    "A worker start time before this Windows start alone, as a clock change could show, doesn't let Recover skip the core-limit check");
+                OperationFiles.Write(bootPath, new { bootId = (long.Parse(startedIn!) - 1).ToString(System.Globalization.CultureInfo.InvariantCulture) });
+                SetWorkerStart(workerStart);
+                Check(!GameSessionDisplay.Restored(await App().RecoverGameSessionAsync(restart.SessionRoot)) && Affinity(pinned) == core && TaskExists(restart.SessionRoot),
+                    "A different start number alone, as a resume from hibernation could show, doesn't let Recover skip the core-limit check while the worker started in this Windows start");
+                SetWorkerStart(beforeBoot);
+                Check(GameSessionDisplay.Restored(await App().RecoverGameSessionAsync(restart.SessionRoot)) && NoLaunchPolicy() && !TaskExists(restart.SessionRoot) && Affinity(pinned) == core,
+                    "After a restart, Recover finishes while a copy of the game pinned to the session's cores runs, and leaves that copy's cores alone");
+                EndGame(pinned);
             }
         }
         catch (Exception error)
