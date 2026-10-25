@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
+using System.Security.AccessControl;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -80,6 +81,8 @@ static class LaunchProfileChecks
         var output = schtasks.StandardOutput.ReadToEnd(); schtasks.StandardError.ReadToEnd(); schtasks.WaitForExit();
         return (schtasks.ExitCode, output);
     }
+    static Task<string?> UpdateBlocker(OptimizerService app) => new InstallGate(app.RecoverAndReadGameSessionsAsync,
+        () => Task.FromResult(new LiveDataResult<string>("{\"active\":false}", null)), () => false, () => ("C:", long.MaxValue)).ReasonAsync();
     static bool TaskExists(string sessionRoot) => Schtasks("/Query", "/TN", TaskName(sessionRoot)).Exit == 0;
     static string TaskXml(string sessionRoot) => Schtasks("/Query", "/TN", TaskName(sessionRoot), "/XML").Output;
 
@@ -422,6 +425,38 @@ static class LaunchProfileChecks
                 Check(kept.Length == 3 && kept.Any(entry => entry.SessionRoot == latest.SessionRoot) && !Directory.Exists(Path.GetDirectoryName(review.SessionRoot)) && !TaskExists(review.SessionRoot),
                     "Old restored sessions of saved settings are pruned to the latest three, tasks included");
 
+                await CloseLauncher(sixth);
+                await Until(async () => (await Sessions()).All(entry => GameSessionDisplay.Restored(entry.Worker)), "Closing the launcher did not end the latest session.");
+                var watcher = App();
+                using var watching = new CancellationTokenSource();
+                var folder = new DirectoryInfo(operations);
+                var access = folder.GetAccessControl(AccessControlSections.Access).GetSecurityDescriptorSddlForm(AccessControlSections.Access);
+                Process seventh;
+                try
+                {
+                    watcher.WatchGameSessions(watching.Token);
+                    var denied = folder.GetAccessControl(AccessControlSections.Access);
+                    denied.AddAccessRule(new FileSystemAccessRule(System.Security.Principal.WindowsIdentity.GetCurrent().User!, FileSystemRights.ListDirectory, AccessControlType.Deny));
+                    folder.SetAccessControl(denied);
+                    var unreadable = false;
+                    try { Directory.GetDirectories(operations); } catch (UnauthorizedAccessException) { unreadable = true; }
+                    await Task.Delay(7000);
+                    var restored = folder.GetAccessControl(AccessControlSections.Access);
+                    restored.SetSecurityDescriptorSddlForm(access, AccessControlSections.Access);
+                    folder.SetAccessControl(restored);
+                    Check(unreadable, "The saved-settings folder can't be listed for a few seconds, like a folder another program has locked");
+                    seventh = await OpenLauncher();
+                    await Until(async () => (await Sessions()).Any(entry => entry.Worker.HostRunning == true && entry.Worker.State?.Preview.Launcher.ProcessId == seventh.Id), "The background check stopped after one failed folder read, so the next launcher run was not set up.", 60);
+                    Check(Equals(Launch("CpuPriorityClass"), 6) && Affinity(seventh) == core, "After a failed folder read the background check keeps going and sets up the next launcher run on its own");
+                }
+                finally
+                {
+                    watching.Cancel();
+                    var reset = folder.GetAccessControl(AccessControlSections.Access);
+                    reset.SetSecurityDescriptorSddlForm(access, AccessControlSections.Access);
+                    folder.SetAccessControl(reset);
+                }
+
                 var idle = App();
                 var clock = Stopwatch.StartNew(); var cpu = Process.GetCurrentProcess().TotalProcessorTime;
                 var changes = 0;
@@ -433,11 +468,11 @@ static class LaunchProfileChecks
 
                 var off = App();
                 Check(await off.DisableLaunchProfileAsync((await Profile()).Root) is null, "Turning the saved settings off reports no problems");
-                Check((await Sessions()).All(entry => GameSessionDisplay.Restored(entry.Worker)) && NoLaunchPolicy() && Affinity(sixth) == original && Io(sixth) == 1 && (await off.ReadLaunchProfilesAsync()).Length == 0,
+                Check((await Sessions()).All(entry => GameSessionDisplay.Restored(entry.Worker)) && NoLaunchPolicy() && Affinity(seventh) == original && Io(seventh) == 1 && (await off.ReadLaunchProfilesAsync()).Length == 0,
                     "Turning them off stops the session, restores the launcher and game settings and removes the profile");
                 await Ticks(off, 4);
                 Check((await Sessions()).All(entry => GameSessionDisplay.Restored(entry.Worker)) && NoLaunchPolicy(), "Nothing is set up again after the settings are turned off");
-                await CloseLauncher(sixth);
+                await CloseLauncher(seventh);
             }
 
             async Task SameName()
@@ -513,8 +548,7 @@ static class LaunchProfileChecks
                     try
                     {
                         markers.SetValue(marker, DateTime.UtcNow.AddMinutes(1).ToFileTimeUtc(), RegistryValueKind.QWord);
-                        try { updateBlocked = await App().GameSessionsBlockUpdateAsync(); }
-                        catch (InvalidDataException) { updateBlocked = true; }
+                        updateBlocked = await UpdateBlocker(App()) is not null;
                     }
                     finally { markers.SetValue(marker, protectedAt, RegistryValueKind.QWord); }
                 }
@@ -561,7 +595,7 @@ static class LaunchProfileChecks
                     var recovered = await App().RecoverGameSessionAsync(expired.SessionRoot);
                     Check(GameSessionDisplay.Restored(recovered) && recovered.State!.Games.Single().Exited && recovered.State.Games.Single().Fields.Single().Status == "expired" && !TaskExists(expired.SessionRoot) && !File.Exists(missing),
                         "After the original game exits, recovery expires its missing native backup and removes the task");
-                    Check(!await App().GameSessionsBlockUpdateAsync() && NoLaunchPolicy(), "An expired native control no longer blocks an update");
+                    Check(await UpdateBlocker(App()) is null && NoLaunchPolicy(), "An expired native control no longer blocks an update");
                 }
                 finally
                 {
@@ -636,7 +670,7 @@ static class LaunchProfileChecks
                 var update = await Arm(await OpenLauncher(), controls);
                 PowerLoss(update.SessionRoot); await CloseLauncher(launchers[^1].Process);
                 Check((await App().ReadGameSessionAsync(update.SessionRoot)).Error is not null, "The interrupted session reports an error, which used to block app updates");
-                Check(!await App().GameSessionsBlockUpdateAsync() && await Restored(update.SessionRoot) && NoLaunchPolicy(), "The update check restores a recoverable session and lets the update install");
+                Check(await UpdateBlocker(App()) is null && await Restored(update.SessionRoot) && NoLaunchPolicy(), "The app's install check restores a recoverable session and lets the update install");
 
                 var startup = await Arm(await OpenLauncher(), controls);
                 PowerLoss(startup.SessionRoot); await CloseLauncher(launchers[^1].Process);
@@ -747,6 +781,56 @@ static class LaunchProfileChecks
                 Check(GameSessionDisplay.Restored(await App().RecoverGameSessionAsync(restart.SessionRoot)) && NoLaunchPolicy() && !TaskExists(restart.SessionRoot) && Affinity(pinned) == core,
                     "After a restart, Recover finishes while a copy of the game pinned to the session's cores runs, and leaves that copy's cores alone");
                 EndGame(pinned);
+
+                var imageName = BrandCompatibility.LaunchMutexPrefix + OperationFiles.Hash(Encoding.UTF8.GetBytes(Path.GetFileName(gamePath).ToUpperInvariant()));
+                using var heldImage = new ManualResetEventSlim();
+                using var releaseImage = new ManualResetEventSlim();
+                var imageOwned = false;
+                var imageHolder = new Thread(() =>
+                {
+                    using var image = new Mutex(true, imageName, out imageOwned);
+                    heldImage.Set(); releaseImage.Wait();
+                    if (imageOwned) image.ReleaseMutex();
+                }) { IsBackground = true };
+                imageHolder.Start(); heldImage.Wait();
+                var refusedLauncher = await OpenLauncher();
+                var refusedReview = await App().PreviewGameSessionAsync(refusedLauncher.Id, gamePath, controls, true);
+                var refusedClock = Stopwatch.StartNew(); string? refusedError = null;
+                try { await App().StartGameSessionAsync(refusedReview); } catch (Exception error) { refusedError = error.Message; }
+                var refusedSeconds = refusedClock.Elapsed.TotalSeconds;
+                releaseImage.Set(); imageHolder.Join();
+                Console.WriteLine(JsonSerializer.Serialize(new { refusedError, refusedSeconds, folder = Directory.Exists(refusedReview.SessionRoot), task = TaskExists(refusedReview.SessionRoot) }));
+                Check(imageOwned && refusedError?.Contains("Another session owns this game's launch settings", StringComparison.Ordinal) == true && refusedSeconds < 30 &&
+                    !Directory.Exists(refusedReview.SessionRoot) && !TaskExists(refusedReview.SessionRoot) && NoLaunchPolicy() && Affinity(refusedLauncher) == original,
+                    "A start the worker refuses before saving anything fails right away with its reason and leaves no session folder or sign-in task");
+                var afterRefusal = await Arm(refusedLauncher, controls);
+                Check((await App().ReadGameSessionAsync(afterRefusal.SessionRoot)).HostRunning == true && Equals(Launch("CpuPriorityClass"), 6), "The next start for the same launcher arms normally");
+                var taskTemplate = TaskXml(afterRefusal.SessionRoot);
+                Check(GameSessionDisplay.Restored(await App().StopGameSessionAsync(afterRefusal.SessionRoot)) && NoLaunchPolicy(), "That session stops and restores as usual");
+
+                var closedLauncher = await OpenLauncher();
+                var closedReview = await App().PreviewGameSessionAsync(closedLauncher.Id, gamePath, controls, true);
+                await CloseLauncher(closedLauncher);
+                string? closedError = null;
+                try { await App().StartGameSessionAsync(closedReview); } catch (Exception error) { closedError = error.Message; }
+                Check(closedError?.Contains(ProtectedSessions.LauncherClosed, StringComparison.Ordinal) == true && !Directory.Exists(closedReview.SessionRoot) && !TaskExists(closedReview.SessionRoot),
+                    "Start after the launcher closed says the launcher closed, in plain words, and leaves nothing behind");
+
+                var cutLauncher = await OpenLauncher();
+                var cut = await App().PreviewGameSessionAsync(cutLauncher.Id, gamePath, controls, true);
+                await CloseLauncher(cutLauncher);
+                Directory.CreateDirectory(cut.SessionRoot);
+                OperationFiles.Write(Path.Combine(cut.SessionRoot, "worker-request.json"), new { schemaVersion = 1, repoRoot = repo, sessionRoot = cut.SessionRoot, previewPath = cut.PreviewPath, reviewHash = cut.Hash, confirm = true });
+                var cutTask = Path.Combine(root, "cut-task.xml");
+                XDocument.Parse(taskTemplate.Replace(afterRefusal.SessionRoot, cut.SessionRoot, StringComparison.Ordinal)).Save(cutTask);
+                Check(Schtasks("/Create", "/TN", TaskName(cut.SessionRoot), "/XML", cutTask).Exit == 0, "A start cut off before its worker ran leaves its folder and sign-in task, as when the app closes mid-start");
+                Check(GameSessionDisplay.Restored((await Sessions()).Single(entry => entry.SessionRoot == cut.SessionRoot).Worker),
+                    "A session that never saved anything counts as nothing to put back, so it doesn't block the next session or saved settings");
+                Schtasks("/Run", "/TN", TaskName(cut.SessionRoot));
+                await Until(() => Task.FromResult(!TaskExists(cut.SessionRoot)), "At sign-in the task of a start that never got going did not remove itself.");
+                Check(File.Exists(Path.Combine(cut.SessionRoot, "worker-error.json")) && !File.Exists(Path.Combine(cut.SessionRoot, "session.json")) && NoLaunchPolicy(),
+                    "At sign-in, the task of a start that never got going changes nothing and removes itself");
+                Check(GameSessionDisplay.Restored(await App().RecoverGameSessionAsync(cut.SessionRoot)) && await UpdateBlocker(App()) is null, "Recover on that session finishes, and it doesn't block an update");
             }
         }
         catch (Exception error)

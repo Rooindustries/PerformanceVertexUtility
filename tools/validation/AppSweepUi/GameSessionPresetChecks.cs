@@ -195,6 +195,21 @@ static class GameSessionPresetChecks
             await model.RefreshProfilesAsync();
             check(model.Profiles.Select(row => row.Title).SequenceEqual(["game.exe via launcher.exe · " + picked.Name + " preset", "game.exe via launcher.exe"]),
                 "Saved launch settings name the preset their values match, and only that one");
+            var turning = new TaskCompletionSource<string?>();
+            App.Operations.ProfileTurnOff = root =>
+            {
+                App.Operations.LaunchProfiles = [App.Operations.LaunchProfiles[0] with { Enabled = false }, App.Operations.LaunchProfiles[1]];
+                return turning.Task;
+            };
+            var shown = model.Profiles[0].Status;
+            var turnOff = model.TurnOffProfileAsync(model.Profiles[0]);
+            await model.RefreshProfilesAsync();
+            check(model.Profiles[0].Status == shown, "While saved settings are turning off, their row keeps its text instead of flashing that a session still needs restoring");
+            App.Operations.LaunchProfiles = [App.Operations.LaunchProfiles[1]];
+            turning.SetResult(null);
+            await turnOff;
+            check(model.Status == "Saved settings turned off" && model.Profiles.Count == 1 && model.Profiles.All(row => !row.Status.StartsWith("Turned off", StringComparison.Ordinal)),
+                "When turning off finishes, only its final message shows and the row is gone");
 
             App.Operations.GameSessions = [];
             var manual = new GameSessionViewModel();
@@ -311,6 +326,7 @@ static class GameSessionPresetChecks
         finally
         {
             (App.Live.Inventory, App.Operations.ProcessSnapshot, App.Operations.GameSessions, App.Operations.LaunchProfiles, GameSessionViewModel.PresetsPath, AppLog.Observer, App.Operations.GameReview, App.Operations.GameSwitch) = before;
+            App.Operations.ProfileTurnOff = null;
             App.Operations.StartedSessions.RemoveRange(started, App.Operations.StartedSessions.Count - started);
             App.Operations.SavedLaunchProfiles.RemoveRange(saved, App.Operations.SavedLaunchProfiles.Count - saved);
             App.Operations.ProcessReads = null;

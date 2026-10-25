@@ -31,7 +31,7 @@ namespace RooIndustries.OptimizationSuite.Services
     public sealed record NvidiaProfileRecovery(string ProfileId, string RollbackManifestPath, string ExportPath, string? Generation = null);
     public sealed record GameSessionEntry(string SessionRoot, ProtectedSessionStatus Worker, string? ProfileId = null);
     public sealed record GameSessionReview(ProtectedSessionPreview Plan, string PreviewPath, string Hash, string SessionRoot);
-    public sealed record LaunchProfileEntry(string Root, ProtectedSessionPreview Saved)
+    public sealed record LaunchProfileEntry(string Root, ProtectedSessionPreview Saved, bool Enabled = true)
     {
         public string Title => Path.GetFileName(Saved.GamePath) + " via " + Path.GetFileName(Saved.Launcher.ExecutablePath);
     }
@@ -55,7 +55,8 @@ namespace RooIndustries.OptimizationSuite.Services
     public static class OptimizerService
     {
         public static Task<T?> ReadJournalAsync<T>(string path) => throw new InvalidOperationException("Unexpected journal read.");
-        public static string DescribeLaunchProfile(LaunchProfileEntry entry) => "Waiting for " + Path.GetFileName(entry.Saved.Launcher.ExecutablePath) + " to open.";
+        public static string DescribeLaunchProfile(LaunchProfileEntry entry) => entry.Enabled ? "Waiting for " + Path.GetFileName(entry.Saved.Launcher.ExecutablePath) + " to open."
+            : "Turned off, but a session still needs restoring. Pick it under Previous sessions and select Recover settings.";
     }
 
     public static class LiveDataService
@@ -410,7 +411,8 @@ namespace RooIndustries.OptimizationSuite.Services
         }
         public LaunchProfileEntry[] LaunchProfiles { get; set; } = [];
         public Task<LaunchProfileEntry[]> ReadLaunchProfilesAsync() => Task.FromResult(LaunchProfiles);
-        public Task<string?> DisableLaunchProfileAsync(string root) => throw new InvalidOperationException("Unexpected saved launch settings turn-off.");
+        public Func<string, Task<string?>>? ProfileTurnOff { get; set; }
+        public Task<string?> DisableLaunchProfileAsync(string root) => ProfileTurnOff is { } turnOff ? turnOff(root) : throw new InvalidOperationException("Unexpected saved launch settings turn-off.");
         public Task<ProtectedSessionStatus> ReadGameSessionAsync(string sessionRoot) => Task.FromResult(GameSessions.FirstOrDefault(entry => entry.SessionRoot == sessionRoot)?.Worker ?? new ProtectedSessionStatus(null, null, "No fixture session."));
         public Task<ProtectedSessionStatus> StopGameSessionAsync(string sessionRoot) => throw new InvalidOperationException("Unexpected game session stop.");
         public Task<ProtectedSessionStatus> RecoverGameSessionAsync(string sessionRoot) => throw new InvalidOperationException("Unexpected game session recovery.");
