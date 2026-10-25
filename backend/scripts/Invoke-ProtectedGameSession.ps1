@@ -107,9 +107,12 @@ if($Action -eq 'Start'){
     Start-ScheduledTask -TaskName $taskName
     $clock=[Diagnostics.Stopwatch]::StartNew()
     $failurePath=Join-Path $SessionRoot 'worker-error.json'
+    $cancelPath=Join-Path $SessionRoot 'start-cancelled.json'
     do {
         $status=Invoke-Core 'protected-session-status'
         if($status.hostRunning -eq $true -and $status.state.status -in @('armed','active','partial')){break}
+        # Stop cancelled this start before its worker changed anything. Keep the folder: its note makes a worker that starts late refuse too.
+        if($status.hostRunning -eq $false -and -not $status.state -and (Test-Path -LiteralPath $cancelPath)){throw 'Session start was cancelled before it changed anything.'}
         if($status.hostRunning -eq $false -and ($status.state -or (Test-Path -LiteralPath $failurePath))){
             $failure=if(Test-Path -LiteralPath $failurePath){Get-Content -Raw -LiteralPath $failurePath|ConvertFrom-Json}else{$null}
             if(-not $status.state){

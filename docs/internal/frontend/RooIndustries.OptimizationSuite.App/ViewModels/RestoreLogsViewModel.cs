@@ -60,7 +60,7 @@ public partial class RestoreLogsViewModel : PageViewModelBase
         var leftAsSet = rules is not null && GovernorDisplay.LeftAsSet(rules).Length > 0;
         var leftoverApps = rules is null ? 0 : GovernorDisplay.Apps(GovernorDisplay.Holding(rules));
         var retry = rules is not null && GovernorDisplay.CanRetry(rules, rulesState) ? " · press Put settings back in Games > Processes" : "";
-        var restorable = windows?.State?.Profiles.Length > 0 || gameRecovery == true || governorRecovery == true || leftoverApps > 0 || games.Any(game => game.Worker.State is not null && !GameSessionDisplay.Restored(game.Worker));
+        var restorable = windows?.State?.Profiles.Length > 0 || gameRecovery == true || governorRecovery == true || leftoverApps > 0 || games.Any(game => (game.Worker.State is not null || game.Worker.HostRunning == true) && !GameSessionDisplay.Restored(game.Worker));
         var signIn = rules is not null && rulesState == "running" ? GovernorDisplay.SignIn(rules) : "yes";
         var signInNote = signIn switch { "yes" => "", "no" => " · they won't start when you sign in · press Start in Games > Processes to fix that", _ => " · couldn't confirm they start when you sign in · press Start in Games > Processes to fix that" };
         var unavailable = windows is null || gameRecovery is null || governorRecovery is null || rules is null || rulesState == "notResponding" || rules.Worker.HostRunning is null || rules.Summary.UnreadableRules is { Length: > 0 } || rules.Summary.RulesError is not null || rules.Summary.SecurityProblem is not (null or "missing")
