@@ -78,6 +78,9 @@ public sealed class ProtectedSessions
     private static string StatePath(string root) => Path.Combine(Path.GetFullPath(root), "session.json");
     private static string CommandPath(string root) => Path.Combine(Path.GetFullPath(root), "command.json");
     private static string BootPath(string root) => Path.Combine(Path.GetFullPath(root), "boot.json");
+    private static string CancelPath(string root) => Path.Combine(Path.GetFullPath(root), "start-cancelled.json");
+    private static bool Starting(string root) => File.Exists(Path.Combine(Path.GetFullPath(root), "worker-request.json")) &&
+        !File.Exists(Path.Combine(Path.GetFullPath(root), "worker-error.json")) && !File.Exists(CancelPath(root));
     private static JsonElement Value<T>(T value) => JsonSerializer.SerializeToElement(value, OperationFiles.Json);
     private static readonly string[] StartupFields = ["cpuPriority", "ioPriority", "memoryPriority"];
     private static readonly string[] NativeFields = ["gpuPriority", "executionQoS", "priorityBoost"];
@@ -170,7 +173,7 @@ public sealed class ProtectedSessions
     }
     public ProtectedSessionStatus Status(string root)
     {
-        if (!File.Exists(StatePath(root))) return new(null, false, null);
+        if (!File.Exists(StatePath(root))) return new(null, Starting(root), null);
         var state = ReadState(root);
         try { var alive = Alive(state.Host); return new(state, alive, !alive && !IsRestored(state) ? "The worker exited; saved state requires recovery." : alive && DateTime.UtcNow - state.UpdatedAtUtc > TimeSpan.FromSeconds(15) ? "The worker heartbeat is stale." : null); }
         catch (Exception error) { return new(state, null, error.Message); }
@@ -194,6 +197,7 @@ public sealed class ProtectedSessions
         root = Path.GetFullPath(root); previewPath = Path.GetFullPath(previewPath);
         using var lease = OperationFiles.Lock(Path.Combine(root, "worker"));
         if (File.Exists(StatePath(root))) throw new InvalidOperationException("Use a new session directory; recover the previous session before rearming.");
+        if (File.Exists(CancelPath(root))) throw new InvalidOperationException("This start was cancelled before it changed anything.");
         var plan = OperationFiles.Read<ProtectedSessionPreview>(previewPath, reviewHash); ValidatePlan(plan);
         var governor = new ProcessPolicyStore(ProcessPolicyStore.RootFor(root));
         using var gate = ProcessPolicyStore.Gate();
@@ -289,6 +293,20 @@ public sealed class ProtectedSessions
             return state;
         }
         finally { imageLease.ReleaseMutex(); }
+    }
+
+    public bool CancelStart(string root)
+    {
+        if (File.Exists(StatePath(root))) return false;
+        FileStream lease;
+        try { lease = OperationFiles.Lock(Path.Combine(Path.GetFullPath(root), "worker")); }
+        catch (IOException error) when ((error.HResult & 0xffff) is 32 or 33) { return false; }
+        using (lease)
+        {
+            if (File.Exists(StatePath(root))) return false;
+            OperationFiles.Write(CancelPath(root), new { atUtc = DateTime.UtcNow });
+            return true;
+        }
     }
 
     public ProtectedSessionState Recover(string root, string operationId) => Recover(root, operationId, null);

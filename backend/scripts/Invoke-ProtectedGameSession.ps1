@@ -26,6 +26,16 @@ function Invoke-Core([string]$Operation,[hashtable]$Fields=@{}) {
     if($exit -ne 0 -or $result.status -ne 'completed'){throw ($Operation+' failed (exit '+$exit+'): '+$result.error.message)}
     return $result.data
 }
+function Complete-PendingStart{
+    $clock=[Diagnostics.Stopwatch]::StartNew()
+    do {
+        if((Invoke-Core 'protected-session-cancel').cancelled){return}
+        $now=Invoke-Core 'protected-session-status'
+        if($now.state -or $now.hostRunning -ne $true){return}
+        Start-Sleep -Milliseconds 250
+    }while($clock.Elapsed.TotalSeconds -lt 40)
+    throw 'The session is still starting. Try again in a moment.'
+}
 if($Action -eq 'Preview'){
     if(-not $PreviewPath -or -not $ControlsPath -or -not $GamePath -or $LauncherProcessId -le 0){throw 'Provide the launcher PID, game executable, controls JSON and preview output path.'}
     $plan=Invoke-Core 'protected-session-preview' @{processId=$LauncherProcessId;gamePath=[IO.Path]::GetFullPath($GamePath);controlsPath=[IO.Path]::GetFullPath($ControlsPath);outputPath=[IO.Path]::GetFullPath($PreviewPath);acceptLauncherScope=[bool]$AcceptLauncherScope}
@@ -44,17 +54,17 @@ if($Action -eq 'Start'){
 if($Action -eq 'RemoveAll'){
     if(-not $OperationsRoot){$OperationsRoot=Join-Path (Get-RooIndustriesLocalDataRoot) 'operations'}
     $OperationsRoot=[IO.Path]::GetFullPath($OperationsRoot).TrimEnd('\','/')
-    $results=@();$failed=$false
+    $results=@();$failed=$false;$kept=@()
     $directories=if(Test-Path -LiteralPath $OperationsRoot){@(Get-ChildItem -LiteralPath $OperationsRoot -Directory -Filter 'game-session-*')}else{@()}
     foreach($directory in $directories){
         $root=Join-Path $directory.FullName 'session'
-        if(-not(Test-Path -LiteralPath (Join-Path $root 'session.json'))){continue}
+        if(-not(Test-Path -LiteralPath (Join-Path $root 'session.json')) -and -not(Test-Path -LiteralPath (Join-Path $root 'worker-request.json'))){continue}
         try{
             $result=(& $PSCommandPath -Action Stop -SessionRoot $root -HostDirectory $HostDirectory -DotNetPath $dotNetOverride -ConfirmApply)|ConvertFrom-Json
             if(-not(Test-Restored $result.data.worker)){throw 'The session still needs recovery; its saved state and task were kept.'}
             $results+=@{sessionRoot=$root;status='restored'}
         }
-        catch{$failed=$true;$results+=@{sessionRoot=$root;status='failed';error=$_.Exception.Message}}
+        catch{$failed=$true;$kept+=$root;$results+=@{sessionRoot=$root;status='failed';error=$_.Exception.Message}}
     }
     $owner=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
     try{
@@ -65,7 +75,7 @@ if($Action -eq 'RemoveAll'){
         $parts=@([string]$_.Description -split ' \| ')
         $parts.Count -eq 3 -and $parts[1] -eq $owner -and (Split-Path -Leaf $parts[2]) -eq 'session' -and
             (Split-Path -Leaf (Split-Path -Parent $parts[2])) -like 'game-session-*' -and
-            (Split-Path -Parent (Split-Path -Parent $parts[2])) -ieq $OperationsRoot -and -not(Test-Path -LiteralPath (Join-Path $parts[2] 'session.json'))
+            (Split-Path -Parent (Split-Path -Parent $parts[2])) -ieq $OperationsRoot -and -not(Test-Path -LiteralPath (Join-Path $parts[2] 'session.json')) -and $kept -notcontains $parts[2]
     })){
         try{Unregister-ScheduledTask -TaskName $leftover.TaskName -Confirm:$false}
         catch{$failed=$true;$results+=@{taskName=$leftover.TaskName;status='failed';error=$_.Exception.Message}}
@@ -128,6 +138,7 @@ if($Action -eq 'Affinity'){
 if($Action -eq 'Stop'){
     $status=Invoke-Core 'protected-session-status'
     if($null -eq $status.hostRunning){throw $status.error}
+    if(-not $status.state -and $status.hostRunning){Complete-PendingStart;$status=Invoke-Core 'protected-session-status'}
     if($status.hostRunning){Invoke-Core 'protected-session-stop'|Out-Null}
     $clock=[Diagnostics.Stopwatch]::StartNew()
     do {$status=Invoke-Core 'protected-session-status';if($status.hostRunning -eq $false){break};Start-Sleep -Milliseconds 200}while($clock.Elapsed.TotalSeconds -lt 30)
@@ -137,6 +148,7 @@ if($Action -eq 'Stop'){
 }
 if($Action -eq 'Recover'){
     $status=Invoke-Core 'protected-session-status'
+    if(-not $status.state -and $status.hostRunning -and -not(Invoke-Core 'protected-session-cancel').cancelled){throw 'The session is still starting. Stop it instead, or try again in a moment.'}
     if($status.state){Invoke-Core 'protected-session-recover' @{operationId=$status.state.preview.operationId;acceptEarlierVersion=[bool]$AcceptEarlierVersion}|Out-Null}
     if($task -and (Test-Restored (Invoke-Core 'protected-session-status')) -and (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue)){Unregister-ScheduledTask -TaskName $taskName -Confirm:$false}
 }

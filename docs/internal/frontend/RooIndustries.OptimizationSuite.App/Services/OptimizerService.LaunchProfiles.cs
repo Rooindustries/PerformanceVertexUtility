@@ -182,8 +182,9 @@ public sealed partial class OptimizerService
     private async Task<LaunchProfileState> ArmProfileAsync(LaunchProfileEntry entry, RunningProcess launcher)
     {
         var id = entry.Profile.ProfileId;
-        foreach (var stale in (await ReadGameSessionsAsync().ConfigureAwait(false)).Where(session => session.ProfileId == id && session.Worker.HostRunning == false && !GameSessionDisplay.Restored(session.Worker)))
-            if (!GameSessionDisplay.Restored(await RecoverGameSessionAsync(stale.SessionRoot).ConfigureAwait(false)))
+        foreach (var stale in (await ReadGameSessionsAsync().ConfigureAwait(false)).Where(session => session.ProfileId == id && !GameSessionDisplay.Restored(session.Worker) &&
+            (session.Worker.HostRunning == false || session.Worker is { HostRunning: true, State: null })))
+            if (!GameSessionDisplay.Restored(await (stale.Worker.HostRunning == true ? StopGameSessionAsync(stale.SessionRoot) : RecoverGameSessionAsync(stale.SessionRoot)).ConfigureAwait(false)))
                 return Ended("failed", "A saved session couldn't be restored. Pick it under Previous sessions and select Recover settings.");
         var sessions = await ReadGameSessionsAsync().ConfigureAwait(false);
         if (sessions.FirstOrDefault(session => !GameSessionDisplay.Restored(session.Worker)) is { } outstanding)

@@ -144,6 +144,10 @@ try
         case "protected-session-status":
             data = new ProtectedSessions(Excluded).Status(Require(request.SessionRoot, "session directory"));
             break;
+        case "protected-session-cancel":
+            RequireConfirmation(request);
+            data = new { cancelled = new ProtectedSessions(Excluded).CancelStart(Require(request.SessionRoot, "session directory")) };
+            break;
         case "protected-session-stop":
         case "protected-session-affinity":
             RequireConfirmation(request);
