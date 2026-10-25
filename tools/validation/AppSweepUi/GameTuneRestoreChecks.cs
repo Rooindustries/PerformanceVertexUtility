@@ -8,6 +8,9 @@ static class GameTuneRestoreChecks
 {
     const string BlockedReason = "A saved control has no valid original value. Its current value and backup were kept.";
     const string UnconfirmedReason = "priorityClass: Undo couldn't confirm another program still holds it, so it was left alone. Run Undo again.";
+    const string UnprovenReason = "priorityClass: Undo couldn't confirm it set this value, so it was left alone. It resets when that app restarts.";
+    const string ManagedReason = "affinityMask: Another saved change still uses this control. Undo that change first, then try again.";
+    const string IoReason = "ioPriority: Windows could not read back I/O priority.";
 
     public static async Task SkipReasonsAsync(Action<bool, string> check)
     {
@@ -34,11 +37,29 @@ static class GameTuneRestoreChecks
             var mixed = new PerformanceProfilesViewModel();
             App.Live.GameTuneStatusText = Reason(envelopes["refresh"], UnconfirmedReason);
             await RefreshSessions(mixed);
-            App.Live.GameTuneRestoreText = Reason(envelopes["first"], UnconfirmedReason + "; ioPriority: Windows could not read back I/O priority.");
+            App.Live.GameTuneRestoreText = Reason(envelopes["first"], UnconfirmedReason + "; " + IoReason);
             await mixed.RestoreMatchTuneCommand.ExecuteAsync(null);
             check(mixed.MatchTuneStatus == "Game restore needs attention"
-                    && mixed.MatchTuneDetail == "FixtureGame.exe (CPU priority): Undo couldn't confirm another program still holds it, so it was left alone. Run Undo again.\nFixtureGame.exe (I/O priority): Windows could not read back I/O priority.",
+                    && mixed.MatchTuneDetail == "FixtureGame.exe (CPU priority): Restore couldn't confirm another program still holds it, so it was left alone. Restore again once that app closes.\nFixtureGame.exe (I/O priority): Windows could not read back I/O priority.",
                 "A Restore that kept two settings names each setting with its own reason");
+
+            foreach (var (name, reason, shown) in new[]
+            {
+                ("another program", UnconfirmedReason, "FixtureGame.exe (CPU priority): Restore couldn't confirm another program still holds it, so it was left alone. Restore again once that app closes."),
+                ("unproven write", UnprovenReason + "; " + IoReason, "FixtureGame.exe (CPU priority): Restore couldn't confirm it set this value, so it was left alone. It resets when that app restarts; then Restore again.\nFixtureGame.exe (I/O priority): Windows could not read back I/O priority."),
+                ("another saved change", ManagedReason, "FixtureGame.exe (CPU affinity): Another saved change still uses this control. Restore that change first, then try again."),
+            })
+            {
+                var card = new PerformanceProfilesViewModel();
+                App.Live.GameTuneStatusText = Reason(envelopes["refresh"], reason);
+                await RefreshSessions(card);
+                check(card.MatchTuneStatus == "Needs attention" && card.MatchTuneDetail == shown && card.MatchTuneRestoreAvailable,
+                    "A refreshed Game Tune card uses this page's Restore wording: " + name);
+                App.Live.GameTuneRestoreText = Reason(envelopes["first"], reason);
+                await card.RestoreMatchTuneCommand.ExecuteAsync(null);
+                check(card.MatchTuneStatus == "Game restore needs attention" && card.MatchTuneDetail == shown && card.MatchTuneRestoreAvailable,
+                    "A Game Tune Restore card uses this page's Restore wording: " + name);
+            }
         }
         finally
         {
