@@ -309,6 +309,26 @@ static class GameSessionPresetChecks
                 && several.Fields.Single(field => field.Label == "CPU cores · PID 4301") is { Observed: "Session limit removed", Result: "Core limit removed" },
                 "With two game processes each row names its process, and a released core limit says Core limit removed");
 
+            var preparing = Path.Combine(root, "game-session-preparing", "session");
+            App.Operations.GameSessions = [new GameSessionEntry(preparing, new ProtectedSessionStatus(null, true, null))];
+            App.Operations.GameStop = stopped =>
+            {
+                App.Operations.RemovedSessions.Add(stopped);
+                App.Operations.GameSessions = [new GameSessionEntry(stopped, new ProtectedSessionStatus(null, false, null))];
+                return new ProtectedSessionStatus(null, false, null);
+            };
+            try
+            {
+                var cancelling = new GameSessionViewModel();
+                await cancelling.InitializeAsync();
+                check(cancelling.Status == "Preparing the session" && cancelling.CanStop, "A start still in progress shows as preparing and can be stopped");
+                await cancelling.StopCommand.ExecuteAsync(null);
+                await cancelling.ObserveAsync();
+                check(cancelling.Status == "Didn't start · nothing was changed" && cancelling.Detail == "" && !cancelling.CanStop,
+                    "Stop on a start still in progress says it didn't start and changed nothing, and keeps saying so after the next refresh");
+            }
+            finally { App.Operations.GameStop = null; App.Operations.RemovedSessions.Clear(); }
+
             GameSessionViewModel.PresetsPath = Path.Combine(fixtures, "missing-launch-presets.json");
             App.Operations.GameSessions = [];
             var missing = new GameSessionViewModel();

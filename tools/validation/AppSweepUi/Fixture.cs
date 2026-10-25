@@ -417,7 +417,8 @@ namespace RooIndustries.OptimizationSuite.Services
         public Func<string, Task<string?>>? ProfileTurnOff { get; set; }
         public Task<string?> DisableLaunchProfileAsync(string root) => ProfileTurnOff is { } turnOff ? turnOff(root) : throw new InvalidOperationException("Unexpected saved launch settings turn-off.");
         public Task<ProtectedSessionStatus> ReadGameSessionAsync(string sessionRoot) => RemovedSessions.Contains(sessionRoot) ? Task.FromResult(new ProtectedSessionStatus(null, false, null)) : Task.FromResult(GameSessions.FirstOrDefault(entry => entry.SessionRoot == sessionRoot)?.Worker ?? new ProtectedSessionStatus(null, null, "No fixture session."));
-        public Task<ProtectedSessionStatus> StopGameSessionAsync(string sessionRoot) => throw new InvalidOperationException("Unexpected game session stop.");
+        public Func<string, ProtectedSessionStatus>? GameStop { get; set; }
+        public Task<ProtectedSessionStatus> StopGameSessionAsync(string sessionRoot) => GameStop is { } stop ? Task.FromResult(stop(sessionRoot)) : throw new InvalidOperationException("Unexpected game session stop.");
         public Task<ProtectedSessionStatus> RecoverGameSessionAsync(string sessionRoot) => throw new InvalidOperationException("Unexpected game session recovery.");
         public Func<string, string, ProtectedSessionStatus>? GameSwitch { get; set; }
         public Task<ProtectedSessionStatus> SwitchGameCoresAsync(string sessionRoot, string affinityMask)
