@@ -41,7 +41,14 @@ public sealed partial class OptimizerService
     {
         ValidateGameSessionRoot(review.SessionRoot);
         if (!string.Equals(Hash(review.PreviewPath), review.Hash, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("The reviewed game settings changed. Preview them again.");
-        var status = await GameSessionActionAsync("Start", review.SessionRoot, " -PreviewPath " + Quote(review.PreviewPath) + " -ReviewHash " + Quote(review.Hash));
+        ProtectedSessionStatus status;
+        try { status = await GameSessionActionAsync("Start", review.SessionRoot, " -PreviewPath " + Quote(review.PreviewPath) + " -ReviewHash " + Quote(review.Hash)); }
+        catch when (!Directory.Exists(review.SessionRoot))
+        {
+            try { Directory.Delete(Path.GetDirectoryName(review.SessionRoot)!, true); }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException) { AppLog.Write("games", "A review that didn't start couldn't be removed: " + error.Message); }
+            throw;
+        }
         if (status.State?.Preview.OperationId != review.Plan.OperationId || status.HostRunning != true)
             throw new InvalidDataException("The game session did not start. Check Undo changes before trying again.");
         return status;

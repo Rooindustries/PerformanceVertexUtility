@@ -79,8 +79,8 @@ public sealed class ProtectedSessions
     private static string CommandPath(string root) => Path.Combine(Path.GetFullPath(root), "command.json");
     private static string BootPath(string root) => Path.Combine(Path.GetFullPath(root), "boot.json");
     private static string CancelPath(string root) => Path.Combine(Path.GetFullPath(root), "start-cancelled.json");
-    private static bool Starting(string root) => File.Exists(Path.Combine(Path.GetFullPath(root), "worker-request.json")) &&
-        !File.Exists(Path.Combine(Path.GetFullPath(root), "worker-error.json")) && !File.Exists(CancelPath(root));
+    private static string FailurePath(string root) => Path.Combine(Path.GetFullPath(root), "worker-error.json");
+    private static bool Starting(string root) => File.Exists(Path.Combine(Path.GetFullPath(root), "worker-request.json")) && !File.Exists(FailurePath(root)) && !File.Exists(CancelPath(root));
     private static JsonElement Value<T>(T value) => JsonSerializer.SerializeToElement(value, OperationFiles.Json);
     private static readonly string[] StartupFields = ["cpuPriority", "ioPriority", "memoryPriority"];
     private static readonly string[] NativeFields = ["gpuPriority", "executionQoS", "priorityBoost"];
@@ -183,6 +183,7 @@ public sealed class ProtectedSessions
         if (action is not ("stop" or "affinity")) throw new InvalidDataException("Unknown session command.");
         var status = Status(root);
         if (status.HostRunning != true) throw new InvalidOperationException(status.Error ?? "The session worker is not running. Recover its saved state before starting again.");
+        if (status.State is null) throw new InvalidOperationException("The session is still starting. Try again in a moment.");
         if (action == "affinity" && !status.State!.Preview.Controls.ContainsKey("affinity")) throw new InvalidDataException("Affinity was not part of the reviewed session.");
         if (action == "affinity") ValidateAffinity(affinity ?? throw new InvalidDataException("Select an affinity."), status.State!.Preview.OriginalAffinity);
         using var lease = OperationFiles.Lock(CommandPath(root));
@@ -198,6 +199,7 @@ public sealed class ProtectedSessions
         using var lease = OperationFiles.Lock(Path.Combine(root, "worker"));
         if (File.Exists(StatePath(root))) throw new InvalidOperationException("Use a new session directory; recover the previous session before rearming.");
         if (File.Exists(CancelPath(root))) throw new InvalidOperationException("This start was cancelled before it changed anything.");
+        if (File.Exists(FailurePath(root))) throw new InvalidOperationException("This start already stopped before it changed anything.");
         var plan = OperationFiles.Read<ProtectedSessionPreview>(previewPath, reviewHash); ValidatePlan(plan);
         var governor = new ProcessPolicyStore(ProcessPolicyStore.RootFor(root));
         using var gate = ProcessPolicyStore.Gate();
