@@ -26,6 +26,9 @@ function Get-PowerShellFailures([string]$Path, [string]$Relative, [switch]$Analy
         $parameters = @(if ($ast.ParamBlock) { $ast.ParamBlock.Parameters })
         $advanced = @($ast.ParamBlock.Attributes) + @($parameters | ForEach-Object { $_.Attributes }) | Where-Object { $_ -is [System.Management.Automation.Language.AttributeBaseAst] -and $_.TypeName.GetReflectionAttributeType() -in @([System.Management.Automation.CmdletBindingAttribute], [System.Management.Automation.ParameterAttribute]) }
         foreach ($parameter in @(if ($advanced) { $parameters | Where-Object { $_.DefaultValue } })) {
+            $value = $parameter.DefaultValue
+            while ($value -is [System.Management.Automation.Language.ParenExpressionAst] -and @($value.Pipeline.PipelineElements).Count -eq 1 -and $value.Pipeline.PipelineElements[0] -is [System.Management.Automation.Language.CommandExpressionAst]) { $value = $value.Pipeline.PipelineElements[0].Expression }
+            if ($value -is [System.Management.Automation.Language.ScriptBlockExpressionAst]) { continue }
             $location = $parameter.DefaultValue.Find({ param($node) $node -is [System.Management.Automation.Language.VariableExpressionAst] -and $node.VariablePath.IsVariable -and ($node.VariablePath.UserPath -replace '^\w+:') -in @('PSScriptRoot', 'PSCommandPath', 'MyInvocation') }, $true)
             if ($location) {
                 '{0}:{1}: PS51ScriptRoot: Windows PowerShell 5.1 leaves ${2} empty in an advanced script''s parameter default when run with -File; set the default in the script body.' -f $Relative, $parameter.Extent.StartLineNumber, $location.VariablePath.UserPath
@@ -47,6 +50,8 @@ function Test-PowerShellControls {
         @{ File = 'bare-parameter-default.ps1'; Source = "param([Parameter][string]`$Out, [string]`$Tool = (Join-Path `$PSScriptRoot 'tool.ps1'))"; Analyze = $true; Expected = 'bare-parameter-default.ps1:1: PS51ScriptRoot: * $PSScriptRoot *' },
         @{ File = 'scoped-default.ps1'; Source = "[CmdletBinding()]param([string]`$Tool = (Join-Path `$script:PSScriptRoot 'tool.ps1'))"; Analyze = $true; Expected = 'scoped-default.ps1:1: PS51ScriptRoot: * $script:PSScriptRoot *' },
         @{ File = 'invocation-default.ps1'; Source = "[CmdletBinding(SupportsShouldProcess)]param([string]`$Self = `$MyInvocation.MyCommand.Path)"; Analyze = $true; Expected = 'invocation-default.ps1:1: PS51ScriptRoot: * $MyInvocation *' },
+        @{ File = 'invoked-block-default.ps1'; Source = "[CmdletBinding()]param([string]`$Root = (& { `$PSScriptRoot }))"; Analyze = $true; Expected = 'invoked-block-default.ps1:1: PS51ScriptRoot: * $PSScriptRoot *' },
+        @{ File = 'deferred-block-default.ps1'; Source = "[CmdletBinding()]param([scriptblock]`$Root = { `$PSScriptRoot }, [scriptblock]`$Self = ({ `$PSCommandPath }))"; Analyze = $true; Expected = $null },
         @{ File = 'script-root-plain.ps1'; Source = "param([ValidateNotNullOrEmpty()][string]`$Tool = (Join-Path `$PSScriptRoot 'tool.ps1'))"; Analyze = $true; Expected = $null },
         @{ File = 'script-root-body.ps1'; Source = "param([string]`$Tool, [Parameter(Mandatory = `$true)][string]`$Out)`nif (-not `$Tool) { `$Tool = Join-Path `$PSScriptRoot 'tool.ps1' }`nfunction Use-Tool { [CmdletBinding()] param([string]`$Path = (Join-Path `$PSScriptRoot 'tool.ps1')) `$Path }"; Analyze = $true; Expected = $null },
         @{ File = 'suppressed-error.ps1'; Source = "[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseCompatibleSyntax','')]`nparam()`n`$a = `$null ?? 'x'"; Analyze = $true; Expected = 'suppressed-error.ps1:3: PSUseCompatibleSyntax: *' }
