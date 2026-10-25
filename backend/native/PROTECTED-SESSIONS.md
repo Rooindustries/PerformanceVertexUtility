@@ -71,7 +71,7 @@ An independent watcher acknowledges the job handle before the launcher is attach
 
 For a captured GPU session, the watcher also retains its own game handle. If both worker and watcher exit, those handles are lost; manual recovery can still be denied while a protected game remains alive. A saved original is not proof that a new handle can restore it.
 
-After a system restart, or if both worker and watcher were terminated, the session's task recovers it at the next sign-in, and the app recovers it when it opens and before installing an update. A missing job blocks recovery only while the old launcher or a copy of the game that still has the session's core limit is running, because only those can still be inside it. The session records which Windows start it ran in (the `BootId` Windows keeps under `PrefetchParameters`); after a restart nothing can still be inside its job, so recovery finishes even while a copy of the game runs on the same cores. To recover by hand:
+After a system restart, or if both worker and watcher were terminated, the session's task recovers it at the next sign-in, and the app recovers it when it opens and before installing an update. A missing job blocks recovery only while the old launcher or a copy of the game that still has the session's core limit is running, because only those can still be inside it. The session records which Windows start it ran in (`KUSER_SHARED_DATA.BootId`, the boot number the Windows loader sets once per start and nothing can change while Windows runs); after a restart nothing can still be inside its job, so recovery finishes even while a copy of the game runs on the same cores. To recover by hand:
 
 ```powershell
 .\backend\scripts\Invoke-ProtectedGameSession.ps1 -Action Recover `

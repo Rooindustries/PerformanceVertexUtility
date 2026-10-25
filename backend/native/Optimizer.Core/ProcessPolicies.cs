@@ -4,7 +4,6 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Microsoft.Win32;
 
 namespace RooIndustries.Optimizer;
 
@@ -606,15 +605,9 @@ public sealed class ProcessPolicyHost
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern bool QueryUnbiasedInterruptTime(out ulong unbiasedTime);
 
-    public static string? BootId()
-    {
-        try
-        {
-            using var key = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management\PrefetchParameters");
-            return key?.GetValue("BootId")?.ToString();
-        }
-        catch (Exception) { return null; }
-    }
+    private static readonly IntPtr SharedUserDataBootId = new(0x7FFE02C4);
+
+    public static string? BootId() => OperatingSystem.IsWindows() ? ((uint)Marshal.ReadInt32(SharedUserDataBootId)).ToString(System.Globalization.CultureInfo.InvariantCulture) : null;
 
     private PolicyHostState Load()
     {
