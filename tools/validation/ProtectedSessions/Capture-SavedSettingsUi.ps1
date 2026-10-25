@@ -27,10 +27,21 @@ public static class RooIndustriesSavedSettingsUi {
 '@
 [RooIndustriesSavedSettingsUi]::SetProcessDPIAware()|Out-Null
 $A=[Windows.Automation.AutomationElement];$TS=[Windows.Automation.TreeScope];$CT=[Windows.Automation.ControlType]
-$evidence=[ordered]@{label=$Label;steps=@();chooseWays=@()};$status='fail';$imageLock=$null
+$evidence=[ordered]@{label=$Label;steps=@();chooseWays=@();unexpected=@()};$status='fail';$imageLock=$null
 $app=$null;$window=$null;$recorder=$null;$owned=[Collections.Generic.List[object]]::new();$roots=[Collections.Generic.List[string]]::new();$copies=[Collections.Generic.List[object]]::new()
 $operations=Join-Path $env:LOCALAPPDATA 'RooIndustriesOptimizationSuite\operations'
 $before=@(if([IO.Directory]::Exists($operations)){[IO.Directory]::GetDirectories($operations)})
+$ifeo='HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\RooIndustriesSavedGame.exe'
+function TaskName([string]$Session){$sha=[Security.Cryptography.SHA256]::Create();try{'Roo Industries Protected Session '+([BitConverter]::ToString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes(([IO.Path]::GetFullPath($Session)).ToLowerInvariant())))).Replace('-','').Substring(0,16)}finally{$sha.Dispose()}}
+function SessionTasks{@(Get-ScheduledTask -ErrorAction SilentlyContinue|Where-Object {$_.Description -like ('Roo Industries protected game session | * | '+$operations+'\game-session-*')})}
+$beforeTasks=@(SessionTasks|ForEach-Object {$_.TaskName})
+function Leftovers{
+ # A start that changed nothing must leave no session folder and no sign-in task behind.
+ $folders=@(if([IO.Directory]::Exists($operations)){[IO.Directory]::GetDirectories($operations)|Where-Object {$before -notcontains $_ -and [IO.Path]::GetFileName($_) -like 'game-session-*'}|ForEach-Object {Join-Path $_ 'session'}|Where-Object {[IO.Directory]::Exists($_) -and -not[IO.File]::Exists((Join-Path $_ 'session.json'))}})
+ $tasks=@(SessionTasks|Where-Object {$beforeTasks -notcontains $_.TaskName -and -not[IO.File]::Exists((Join-Path ($_.Description -split ' \| ')[-1] 'session.json'))}|ForEach-Object {$_.TaskName})
+ return @($folders)+$tasks
+}
+function Expect([string]$Step,[bool]$Ok,[string]$What){if(-not$Ok){$script:evidence.unexpected+=@($Step+': '+$What)}}
 function WaitFor([scriptblock]$Check,[double]$Limit,[string]$What){$deadline=[DateTime]::UtcNow.AddSeconds($Limit);while([DateTime]::UtcNow -lt $deadline){try{$value=& $Check}catch{$value=$null};if($value){return $value};Start-Sleep -Milliseconds 200};throw ('Timed out waiting for '+$What)}
 function ById([string]$Id){$window.FindFirst($TS::Descendants,[Windows.Automation.PropertyCondition]::new($A::AutomationIdProperty,$Id))}
 function Text([string]$Id){$e=ById $Id;if($e){$e.Current.Name}else{$null}}
@@ -135,7 +146,6 @@ try{
  $probe=Join-Path $bin 'RooIndustriesLaunchPolicyProbe.exe'
  $gamePath=Join-Path $bin 'RooIndustriesSavedGame.exe';$launcherPath=Join-Path $bin 'RooIndustriesSavedLauncher.exe'
  $copies.Add((Copy-HarnessFile $probe $gamePath 'saved-game-fixture'));$copies.Add((Copy-HarnessFile $probe $launcherPath 'saved-launcher-fixture'))
- $ifeo='HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\RooIndustriesSavedGame.exe'
  if(Test-Path -LiteralPath $ifeo){throw 'The fixture game already has launch priorities; this capture needs them absent.'}
 
  $env:ROO_INDUSTRIES_INITIAL_NAV='profiles';$env:ROO_INDUSTRIES_BACKEND_ROOT=$Source;$env:ROO_INDUSTRIES_DOTNET_EXE=$dotnet
@@ -182,7 +192,9 @@ try{
  WaitFor {(Text 'GameSessionStatus') -like '*attention*' -or (Text 'GameSessionStatus') -like 'Ready*'} 90 'the refused start to finish'|Out-Null
  $seconds=[Math]::Round($clock.Elapsed.TotalSeconds,1)
  Start-Sleep -Milliseconds 600
- Step 'start-refused' @{seconds=$seconds;status=(Text 'GameSessionStatus');detail=(Text 'GameSessionDetail')}|Out-Null
+ $refused=Step 'start-refused' @{seconds=$seconds;status=(Text 'GameSessionStatus');detail=(Text 'GameSessionDetail');leftovers=(Leftovers)}
+ Expect 'start-refused' ($refused.status -like '*attention*' -and "$($refused.detail)".Contains("Another session owns this game's launch settings.")) 'the Games tab shows the refusal and its reason'
+ Expect 'start-refused' ($refused.leftovers.Count -eq 0) ('it left '+($refused.leftovers -join ', '))
  $imageLock.ReleaseMutex();$imageLock.Dispose();$imageLock=$null
 
  Setup|Out-Null
@@ -193,7 +205,10 @@ try{
  Invoke (WaitFor {Enabled 'GameSessionStart'} 60 'Start after the launcher closed')
  WaitFor {(Text 'GameSessionStatus') -like '*attention*' -or (Text 'GameSessionStatus') -like 'Ready*'} 90 'the start after the launcher closed to finish'|Out-Null
  Start-Sleep -Milliseconds 600
- Step 'launcher-closed' @{status=(Text 'GameSessionStatus');detail=(Text 'GameSessionDetail')}|Out-Null
+ $closed=Step 'launcher-closed' @{status=(Text 'GameSessionStatus');detail=(Text 'GameSessionDetail');leftovers=(Leftovers)}
+ Expect 'launcher-closed' ($closed.status -like '*attention*' -and "$($closed.detail)".Contains('The launcher you picked has closed.')) 'the Games tab says the launcher closed'
+ Expect 'launcher-closed' ($closed.leftovers.Count -eq 0) ('it left '+($closed.leftovers -join ', '))
+ if($evidence.unexpected.Count){throw ('Unexpected: '+($evidence.unexpected -join '; '))}
  $status='pass'
 }catch{
  $evidence.error=$_.Exception.Message
@@ -212,16 +227,18 @@ try{
   if([IO.Directory]::Exists($session)){
    $state=Join-Path $session 'session.json'
    if([IO.File]::Exists($state)){
-    try{& (Join-Path $Source 'backend\scripts\Invoke-ProtectedGameSession.ps1') -Action Recover -SessionRoot $session -DotNetPath $dotnet -ConfirmApply|Out-Null}catch{$evidence.cleanupError+=@('recover '+$session+': '+$_.Exception.Message)}
+    try{$recovered=& (Join-Path $Source 'backend\scripts\Invoke-ProtectedGameSession.ps1') -Action Recover -SessionRoot $session -DotNetPath $dotnet -ConfirmApply|ConvertFrom-Json}catch{$evidence.cleanupError+=@('recover '+$session+': '+$_.Exception.Message);continue}
+    # Keep the operation and its task when recovery didn't finish, so its saved state stays recoverable.
+    if($recovered.data.worker.restored -ne $true){$evidence.cleanupError+=@('recover '+$session+': not restored');continue}
    }
-   $sha=[Security.Cryptography.SHA256]::Create()
-   try{$task='Roo Industries Protected Session '+([BitConverter]::ToString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes(([IO.Path]::GetFullPath($session)).ToLowerInvariant())))).Replace('-','').Substring(0,16)}finally{$sha.Dispose()}
+   $task=TaskName $session
    if(Get-ScheduledTask -TaskName $task -ErrorAction SilentlyContinue){$evidence.leftTasks+=@($task);try{Unregister-ScheduledTask -TaskName $task -Confirm:$false}catch{$evidence.cleanupError+=@($_.Exception.Message)}}
   }
  }
  foreach($copy in $copies){try{Remove-HarnessEntry $copy}catch{$evidence.cleanupError+=@($_.Exception.Message)}}
  if(Test-Path -LiteralPath $ifeo){$evidence.cleanupError+=@('The fixture game still has launch priorities after cleanup.')}
  $settled=-not$evidence.cleanupError
+ if($evidence.leftTasks){$status='fail'}
  foreach($folder in $created){if($settled){try{[IO.Directory]::Delete($folder,$true)}catch{$settled=$false;$evidence.cleanupError+=@($_.Exception.Message)}}}
  $evidence.removedOperations=$settled
  if(-not$settled){$status='fail'}

@@ -856,6 +856,20 @@ static class LaunchProfileChecks
                 Check(!File.Exists(Path.Combine(left.SessionRoot, "session.json")) && lateError.Contains("cancelled", StringComparison.Ordinal) && NoLaunchPolicy() && Affinity(leftLauncher) == original,
                     "A worker that runs after the cancel changes nothing, even though its launcher is still open");
 
+                var cancelledStart = await App().PreviewGameSessionAsync(leftLauncher.Id, gamePath, controls, true);
+                Directory.CreateDirectory(cancelledStart.SessionRoot);
+                OperationFiles.Write(Path.Combine(cancelledStart.SessionRoot, "start-cancelled.json"), new { atUtc = DateTime.UtcNow });
+                string? cancelledError = null;
+                var cancelledClock = Stopwatch.StartNew();
+                try { await App().StartGameSessionAsync(cancelledStart); } catch (Exception error) { cancelledError = error.Message; }
+                var cancelledSeconds = cancelledClock.Elapsed.TotalSeconds;
+                await Until(() => Task.FromResult(!TaskExists(cancelledStart.SessionRoot) || File.Exists(Path.Combine(cancelledStart.SessionRoot, "session.json"))), "The cancelled start's sign-in task neither finished nor armed.");
+                Console.WriteLine(JsonSerializer.Serialize(new { cancelledError, cancelledSeconds, marker = File.Exists(Path.Combine(cancelledStart.SessionRoot, "start-cancelled.json")) }));
+                Check(cancelledError == "Session start was cancelled before it changed anything." && cancelledSeconds < 15 && File.Exists(Path.Combine(cancelledStart.SessionRoot, "start-cancelled.json")),
+                    "A start that Stop cancelled says so right away and keeps the note that makes a late worker refuse");
+                Check(!File.Exists(Path.Combine(cancelledStart.SessionRoot, "session.json")) && NoLaunchPolicy() && Affinity(leftLauncher) == original && GameSessionDisplay.Restored(await App().ReadGameSessionAsync(cancelledStart.SessionRoot)),
+                    "Its worker changes nothing and the start counts as nothing to put back");
+
                 var failed = await App().PreviewGameSessionAsync(leftLauncher.Id, gamePath, controls, true);
                 Directory.CreateDirectory(failed.SessionRoot);
                 OperationFiles.Write(Path.Combine(failed.SessionRoot, "worker-request.json"), new { schemaVersion = 1, repoRoot = repo, sessionRoot = failed.SessionRoot, previewPath = failed.PreviewPath, reviewHash = failed.Hash, confirm = true });
