@@ -1,0 +1,346 @@
+using System.Diagnostics;
+using System.Reflection;
+using System.Security.Principal;
+using System.Text;
+using Microsoft.Win32;
+using RooIndustries.Optimizer;
+
+static class FileMoveChecks
+{
+    static readonly string User = WindowsIdentity.GetCurrent().User!.Value;
+    static readonly string IdentityHash = OperationFiles.Hash(Encoding.UTF8.GetBytes("file move fixture"));
+
+    static CleanupAuthority Authority() => new()
+    {
+        AppId = "fixture:file-move", ProviderIdentityHash = IdentityHash, Owner = OperationOwner.Current(),
+        RegistrationPresent = false, ProviderQueryComplete = true, RebootPending = false, RemoverRunning = false, RemovalResolved = true,
+    };
+
+    public static void Run(Action<bool, string> check, TestVolume volume)
+    {
+        var root = TestFixtures.InheritingRoot("file-move");
+        var far = Path.Combine(volume.Root, "roo-industries-file-move-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            SameDrive(check, root);
+            ProtectedStore(check, root);
+            OtherDrive(check, root, far);
+            LowSpace(check, root, volume, far);
+            BatchLowSpace(check, root, far);
+            Crashes(check, root, far);
+            Thousand(check, root);
+        }
+        finally
+        {
+            foreach (var folder in new[] { root, far }.Where(Directory.Exists))
+            {
+                foreach (var file in Directory.EnumerateFiles(folder, "*", SearchOption.AllDirectories)) File.SetAttributes(file, FileAttributes.Normal);
+                Directory.Delete(folder, true);
+            }
+        }
+        check(!Directory.Exists(root) && !Directory.Exists(far), "Move validation removes its fixtures, undo copies and journals on both drives");
+    }
+
+    public static void Child(string[] args)
+    {
+        var authority = Authority();
+        var engine = new FileCleanupEngine(() => authority);
+        var result = args is ["apply", var review, var hash, var journal] ? engine.Apply(review, hash, journal)
+            : args is ["restore", var restoreJournal] ? engine.Restore(restoreJournal) : throw new ArgumentException("Unknown file crash step.");
+        Console.WriteLine("completed " + result.Status);
+    }
+
+    static void SameDrive(Action<bool, string> check, string root)
+    {
+        const long big = 256L << 20;
+        var app = Tree(Path.Combine(root, "same"), "App", exotic: true, big);
+        var plan = Review(Path.Combine(root, "same", "Undo"), app);
+        var drive = Path.GetPathRoot(plan.Journal)!;
+        var before = new DriveInfo(drive).AvailableFreeSpace;
+        var applied = plan.Engine.Apply(plan.Review, plan.Hash, plan.Journal);
+        var used = before - new DriveInfo(drive).AvailableFreeSpace;
+        Console.WriteLine("Same-drive cleanup of a " + (big >> 20) + " MB tree changed free space on " + drive + " by " + (used >> 20) + " MB");
+        check(applied.Status == "applied" && !Directory.Exists(app) && applied.Entries.All(entry => SameObject(entry.BackupPath, entry.Original)),
+            "Same-drive leftovers move into the undo folder as the same files and folders instead of being copied");
+        check(used < big / 2, "Cleaning " + (big >> 20) + " MB of same-drive leftovers takes no extra space on that drive (" + (used >> 20) + " MB used)");
+        var restored = plan.Engine.Restore(plan.Journal);
+        var problems = Mismatches(plan.Plan, _ => true);
+        foreach (var problem in problems) Console.WriteLine("  " + problem);
+        check(restored.Status == "restored" && problems.Length == 0 && applied.Entries.All(entry => !Path.Exists(entry.BackupPath)),
+            "Restore moves the same files back with their data, alternate streams, permissions (inherited, inherited from another folder, explicit-only and protected), attributes and times");
+    }
+
+    static void ProtectedStore(Action<bool, string> check, string root)
+    {
+        var app = Tree(Path.Combine(root, "protected"), "App", exotic: true);
+        var store = Path.Combine(root, "protected", "Undo");
+        Directory.CreateDirectory(store);
+        RefusalChecks.SetSecurity(store, "O:BAD:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;0x1200a9;;;OW)(A;OICI;0x1200a9;;;" + User + ")", 1 | 4);
+        check(PolicyRootSecurity.Problem(store, OperationsFolder.Kind, deep: true) is null, "The undo folder fixture starts as protected as the app's recovery folder");
+        var plan = Review(store, app);
+        var applied = plan.Engine.Apply(plan.Review, plan.Hash, plan.Journal);
+        var problem = PolicyRootSecurity.Problem(store, OperationsFolder.Kind, deep: true);
+        check(applied.Status == "applied" && problem is null,
+            "Leftovers moved into the protected recovery folder take its admin-only permissions, so the folder stays protected (" + (problem ?? "still protected") + ")");
+        var restored = plan.Engine.Restore(plan.Journal);
+        var problems = Mismatches(plan.Plan, _ => true);
+        foreach (var item in problems) Console.WriteLine("  " + item);
+        check(restored.Status == "restored" && problems.Length == 0, "Restore from the protected recovery folder gives every moved leftover its own permissions back");
+    }
+
+    static void OtherDrive(Action<bool, string> check, string root, string far)
+    {
+        var remote = Tree(Path.Combine(far, "other"), "App", exotic: false);
+        var local = Tree(Path.Combine(root, "mixed"), "Local", exotic: false);
+        var plan = Review(Path.Combine(root, "mixed", "Undo"), remote, local);
+        bool Far(string path) => path.StartsWith(Path.GetPathRoot(far)!, StringComparison.OrdinalIgnoreCase);
+        var applied = plan.Engine.Apply(plan.Review, plan.Hash, plan.Journal);
+        check(applied.Status == "applied" && !Directory.Exists(remote) && !Directory.Exists(local) &&
+            applied.Entries.Where(entry => Far(entry.Original.Path)).All(entry => entry.BackupHash is not null && !SameObject(entry.BackupPath, entry.Original)) &&
+            applied.Entries.Where(entry => !Far(entry.Original.Path)).All(entry => SameObject(entry.BackupPath, entry.Original)),
+            "One cleanup copies the leftovers on another drive and moves the ones on the undo folder's drive");
+        var restored = plan.Engine.Restore(plan.Journal);
+        var problems = Mismatches(plan.Plan, file => !Far(file.Path));
+        foreach (var problem in problems) Console.WriteLine("  " + problem);
+        check(restored.Status == "restored" && problems.Length == 0, "Restore brings back copied leftovers on the other drive and moved ones on this drive exactly");
+    }
+
+    static void LowSpace(Action<bool, string> check, string root, TestVolume volume, string far)
+    {
+        var free = new DriveInfo(volume.Root).AvailableFreeSpace;
+        var app = Tree(Path.Combine(root, "low"), "App", exotic: false, free / 2);
+        var plan = Review(Path.Combine(far, "low", "Undo"), app);
+        string? refusal = null;
+        FileCleanupJournal? result = null;
+        try { result = plan.Engine.Apply(plan.Review, plan.Hash, plan.Journal); }
+        catch (IOException error) { refusal = error.Message; }
+        Console.WriteLine("Low-space cleanup: " + (refusal ?? result?.Status + " " + string.Join(" | ", result!.Entries.Where(entry => entry.Error is not null).Select(entry => entry.Error))));
+        var after = new DriveInfo(volume.Root).AvailableFreeSpace;
+        check(refusal is not null && refusal.Contains("enough free space on " + volume.Root.TrimEnd('\\'), StringComparison.Ordinal) && refusal.Contains(Path.GetPathRoot(app)!.TrimEnd('\\'), StringComparison.Ordinal),
+            "A cleanup whose undo copies don't fit on the undo folder's drive with room to spare is refused and says which drives and how much space");
+        check(!File.Exists(plan.Journal) && !Directory.EnumerateFileSystemEntries(Path.GetDirectoryName(plan.Journal)!, "file-backup-*").Any() && Math.Abs(free - after) < 64L << 20 && Mismatches(plan.Plan, _ => true).Length == 0,
+            "The refusal comes before any change: no journal, no copies, the drive's free space and every leftover untouched");
+
+        var hook = typeof(FileCleanupEngine).GetField("CheckpointReached", BindingFlags.NonPublic | BindingFlags.Static);
+        var pair = Path.Combine(root, "shrinking", "App");
+        Directory.CreateDirectory(pair);
+        foreach (var name in new[] { "first.bin", "second.bin" })
+            using (var stream = new FileStream(Path.Combine(pair, name), FileMode.CreateNew)) stream.SetLength(100L << 20);
+        var shrinking = Review(Path.Combine(far, "shrinking", "Undo"), pair);
+        var filler = Path.Combine(far, "filler.bin");
+        var filled = false;
+        hook?.SetValue(null, (Action<int>)(point =>
+        {
+            if (point != 2) return;
+            using var stream = new FileStream(filler, FileMode.CreateNew);
+            stream.SetLength(new DriveInfo(volume.Root).AvailableFreeSpace - (1L << 30) - (150L << 20));
+            filled = true;
+        }));
+        FileCleanupJournal stopped;
+        try { stopped = shrinking.Engine.Apply(shrinking.Review, shrinking.Hash, shrinking.Journal); }
+        finally { hook?.SetValue(null, null); }
+        var stoppedError = string.Join(" | ", stopped.Entries.Where(entry => entry.Error is not null).Select(entry => entry.Error));
+        Console.WriteLine("Space that shrinks during the copies: " + stopped.Status + " " + stoppedError);
+        check(hook is not null && filled, "The space-shrink scenario reached the point after the first copy (needs a GovernorTestHooks build)");
+        check(stopped.Status == "needsReconciliation" && stoppedError.Contains("enough free space", StringComparison.Ordinal) &&
+            stopped.Entries.All(entry => entry.Status == "pending") && !Directory.EnumerateFileSystemEntries(Path.GetDirectoryName(shrinking.Journal)!, "file-backup-*").Any() &&
+            Mismatches(shrinking.Plan, _ => true).Length == 0 && new DriveInfo(volume.Root).AvailableFreeSpace >= 1L << 30,
+            "When other programs eat the space during the copies, cleanup stops before the drive drops under its spare room, removes its copies and deletes nothing");
+        File.Delete(filler);
+    }
+
+    static void BatchLowSpace(Action<bool, string> check, string root, string far)
+    {
+        var registryRoot = "Software\\RooIndustriesCleanupSpaceTests\\" + Guid.NewGuid().ToString("N");
+        using var hive = RegistryKey.OpenBaseKey(RegistryHive.CurrentUser, RegistryView.Registry64);
+        using var owned = OwnedRegistryKey.Create(hive, registryRoot);
+        var scope = Path.Combine(root, "batch");
+        var operations = Path.Combine(far, "batch-operations");
+        var contexts = new Dictionary<string, CleanupContext>();
+        var free = new DriveInfo(Path.GetPathRoot(far)!).AvailableFreeSpace;
+        foreach (var (name, size) in new[] { ("Roo Industries Space One", 0L), ("Roo Industries Space Two", free / 2) })
+        {
+            var source = Path.Combine(scope, name);
+            Directory.CreateDirectory(source);
+            File.WriteAllText(Path.Combine(source, "data.txt"), name + " file");
+            if (size > 0) using (var stream = new FileStream(Path.Combine(source, "large.bin"), FileMode.CreateNew)) stream.SetLength(size);
+            using (var key = hive.CreateSubKey(registryRoot + "\\" + name)) key.SetValue("Original", name + " registry");
+            var app = new CleanupApplication { AppId = "fixture:" + name, DisplayName = name, Publisher = "Roo Industries", InstallLocation = source, PackageFamilyName = null };
+            var authority = new CleanupAuthority
+            {
+                AppId = app.AppId, ProviderIdentityHash = OperationFiles.Hash(Encoding.UTF8.GetBytes(name)), Owner = OperationOwner.Current(),
+                ProviderQueryComplete = true, RegistrationPresent = false, RebootPending = false, RemoverRunning = false, RemovalResolved = true,
+            };
+            contexts.Add(app.AppId, new CleanupContext(Path.Combine(scope, "queue.json"), authority, app, [], true));
+        }
+        var peers = contexts.Values.Select(context => context.Application).ToArray();
+        foreach (var appId in contexts.Keys.ToArray()) contexts[appId] = contexts[appId] with { Peers = peers };
+        ApplicationCleanup App(string source, string appId) => new(() => contexts[appId], [scope], [new("CurrentUser", "Registry64", registryRoot, "key", null)]);
+        var parts = new List<CleanupPart>();
+        foreach (var context in contexts.Values)
+        {
+            var engine = App(context.Source, context.Application.AppId);
+            var path = Path.Combine(operations, context.Application.DisplayName, "review.json");
+            engine.Preview(path, engine.Scan(CancellationToken.None).Candidates.Select(item => item.ItemId).ToArray(), true, true);
+            parts.Add(new(path, OperationFiles.HashFile(path), Path.Combine(Path.GetDirectoryName(path)!, "journal.json")));
+        }
+        var batchPath = Path.Combine(operations, "batch-review.json");
+        var journalPath = Path.Combine(operations, "batch-journal.json");
+        CleanupBatch.Preview(batchPath, parts.ToArray());
+        string? refusal = null;
+        try { new CleanupBatch(App).Apply(batchPath, OperationFiles.HashFile(batchPath), journalPath); }
+        catch (IOException error) { refusal = error.Message; }
+        Console.WriteLine("Low-space batch: " + (refusal ?? "started"));
+        using var one = hive.OpenSubKey(registryRoot + "\\Roo Industries Space One");
+        check(refusal is not null && refusal.Contains("enough free space", StringComparison.Ordinal) && one?.GetValue("Original") as string == "Roo Industries Space One registry" &&
+            contexts.Values.All(context => Directory.Exists(context.Application.InstallLocation)) && parts.All(part => !File.Exists(part.JournalPath)),
+            "A batch whose undo copies don't fit is refused before the first app's registry keys or files change");
+    }
+
+    static void Crashes(Action<bool, string> check, string root, string far)
+    {
+        foreach (var phase in new[] { "apply", "restore" })
+        {
+            var covered = 0;
+            for (var at = 1; at < 200; at++)
+            {
+                var label = phase + "-" + at;
+                var near = Tree(Path.Combine(root, "crash", label), "App", exotic: true);
+                var remote = Tree(Path.Combine(far, "crash", label), "App", exotic: false);
+                var plan = Review(Path.Combine(root, "crash", label, "Undo"), near, remote);
+                bool Far(string path) => path.StartsWith(Path.GetPathRoot(far)!, StringComparison.OrdinalIgnoreCase);
+                if (phase == "restore" && plan.Engine.Apply(plan.Review, plan.Hash, plan.Journal).Status != "applied") { check(false, "Crash fixture " + label + " applies before its restore is interrupted"); break; }
+                var exit = RunChild(at, phase == "apply" ? ["apply", plan.Review, plan.Hash, plan.Journal] : ["restore", plan.Journal]);
+                if (exit != 0 && exit != -1) { check(false, "The " + phase + " child at step " + at + " ends only by finishing or by being killed (exit " + exit + ")"); break; }
+                if (exit == 0)
+                {
+                    check(covered > 0, "Every " + phase + " step is interrupted at least once (needs a GovernorTestHooks build)");
+                    Console.WriteLine("Interrupted " + phase + " at each of its " + covered + " steps");
+                    break;
+                }
+                covered++;
+                var journal = OperationFiles.Read<FileCleanupJournal>(plan.Journal);
+                var lost = plan.Plan.Files.Where(file => !Path.Exists(file.Path) && !journal.Entries.Any(entry => entry.Original.Path == file.Path && Path.Exists(entry.BackupPath))).Select(file => file.Path).ToArray();
+                var restored = plan.Engine.Restore(plan.Journal);
+                var problems = Mismatches(plan.Plan, file => !Far(file.Path));
+                var leftovers = journal.Entries.Where(entry => !Far(entry.Original.Path) && Path.Exists(entry.BackupPath)).Select(entry => entry.BackupPath).ToArray();
+                foreach (var problem in problems.Concat(lost.Select(path => "lost " + path)).Concat(leftovers.Select(path => "left in undo folder " + path))) Console.WriteLine("  " + label + " " + problem);
+                if (restored.Status != "restored") Console.WriteLine("  " + label + " " + restored.Status + " " + string.Join(" | ", restored.Entries.Where(entry => entry.Error is not null).Select(entry => entry.Original.Path + ": " + entry.Error)));
+                check(lost.Length == 0 && problems.Length == 0 && leftovers.Length == 0 && restored.Status is "restored" or "preparing",
+                    "After the " + phase + " is killed at step " + at + ", every leftover is either in place or in the undo folder, and Restore puts all of them back exactly");
+            }
+        }
+    }
+
+    static void Thousand(Action<bool, string> check, string root)
+    {
+        var app = Path.Combine(root, "thousand", "App");
+        for (var folder = 0; folder < 50; folder++)
+        {
+            var directory = Path.Combine(app, "Folder " + folder);
+            Directory.CreateDirectory(directory);
+            for (var file = 0; file < 20; file++) File.WriteAllBytes(Path.Combine(directory, "file " + file + ".dat"), Enumerable.Repeat((byte)(folder + file), 4096).ToArray());
+        }
+        var plan = Review(Path.Combine(root, "thousand", "Undo"), app);
+        var store = Path.GetDirectoryName(plan.Journal)!;
+        var writes = 0;
+        var overflow = false;
+        using var watcher = new FileSystemWatcher(store, "journal.json.*.tmp") { InternalBufferSize = 65536, NotifyFilter = NotifyFilters.FileName };
+        watcher.Created += (_, _) => Interlocked.Increment(ref writes);
+        watcher.Error += (_, _) => overflow = true;
+        watcher.EnableRaisingEvents = true;
+        var timer = Stopwatch.StartNew();
+        var applied = plan.Engine.Apply(plan.Review, plan.Hash, plan.Journal);
+        var applyTime = timer.Elapsed;
+        Thread.Sleep(500);
+        var applyWrites = writes;
+        timer.Restart();
+        var restored = plan.Engine.Restore(plan.Journal);
+        var restoreTime = timer.Elapsed;
+        Thread.Sleep(500);
+        var restoreWrites = writes - applyWrites;
+        Console.WriteLine("TIMING " + plan.Plan.Files.Length + " entries (1000 files): apply " + applyTime.TotalMilliseconds.ToString("0") + " ms with " + applyWrites +
+            " journal writes, restore " + restoreTime.TotalMilliseconds.ToString("0") + " ms with " + restoreWrites + " journal writes" + (overflow ? " (watcher overflowed)" : ""));
+        check(applied.Status == "applied" && restored.Status == "restored" && Mismatches(plan.Plan, _ => true).Length == 0, "A 1,000-file cleanup applies and restores exactly");
+        check(!overflow && applyWrites <= 4 && restoreWrites <= 2, "A 1,000-file cleanup writes its journal a few times per run, not once or more per file");
+    }
+
+    static int RunChild(int at, string[] step)
+    {
+        var start = new ProcessStartInfo(Environment.ProcessPath!) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
+        if (Path.GetFileNameWithoutExtension(Environment.ProcessPath) == "dotnet") start.ArgumentList.Add(Assembly.GetEntryAssembly()!.Location);
+        start.ArgumentList.Add("--file-crash");
+        foreach (var argument in step) start.ArgumentList.Add(argument);
+        start.Environment["ROO_INDUSTRIES_TEST_FILE_CRASH_AT"] = at.ToString();
+        using var child = Process.Start(start) ?? throw new InvalidOperationException("The crash child did not start.");
+        var output = child.StandardOutput.ReadToEndAsync();
+        var errors = child.StandardError.ReadToEndAsync();
+        if (!child.WaitForExit(120000)) { child.Kill(); throw new TimeoutException("The crash child did not finish."); }
+        if (child.ExitCode != 0 && !string.IsNullOrWhiteSpace(errors.Result)) Console.WriteLine("  child " + step[0] + "@" + at + ": " + errors.Result.Trim().Split('\n')[0]);
+        if (child.ExitCode != -1) Console.WriteLine("  child " + step[0] + "@" + at + " output: " + output.Result.Trim());
+        return child.ExitCode == 0 && output.Result.Contains("completed", StringComparison.Ordinal) ? 0 : child.ExitCode == 0 ? -2 : child.ExitCode;
+    }
+
+    static (FileCleanupEngine Engine, string Review, string Hash, string Journal, FileCleanupPreview Plan) Review(string store, params string[] roots)
+    {
+        var authority = Authority();
+        var engine = new FileCleanupEngine(() => authority);
+        var plan = engine.Preview(authority.AppId, authority.ProviderIdentityHash, roots, true);
+        Directory.CreateDirectory(store);
+        var review = Path.Combine(store, "review.json");
+        OperationFiles.Write(review, plan);
+        return (engine, review, OperationFiles.HashFile(review), Path.Combine(store, "journal.json"), plan);
+    }
+
+    static string Tree(string parent, string name, bool exotic, long big = 0)
+    {
+        var app = Path.Combine(parent, name);
+        var data = Path.Combine(app, "Data");
+        Directory.CreateDirectory(data);
+        var readme = Path.Combine(app, "readme.txt");
+        File.WriteAllText(readme, "original λ readme", new UTF8Encoding(false));
+        File.WriteAllBytes(readme + ":extra", [1, 2, 0, 4, 255]);
+        File.WriteAllBytes(Path.Combine(data, "settings.bin"), [4, 3, 2, 1, 0]);
+        Directory.CreateDirectory(Path.Combine(data, "Empty"));
+        if (exotic)
+        {
+            var elsewhere = Path.Combine(parent, name + " elsewhere");
+            Directory.CreateDirectory(elsewhere);
+            RefusalChecks.SetSecurity(elsewhere, "D:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;FA;;;" + User + ")(A;OICI;FR;;;WD)", 4);
+            File.WriteAllText(Path.Combine(elsewhere, "moved-in.txt"), "inherited from another folder");
+            File.Move(Path.Combine(elsewhere, "moved-in.txt"), Path.Combine(data, "moved-in.txt"));
+            Directory.Delete(elsewhere);
+            File.WriteAllText(Path.Combine(data, "explicit.txt"), "explicit only");
+            RefusalChecks.SetSecurity(Path.Combine(data, "explicit.txt"), "D:(A;;FA;;;SY)(A;;FA;;;BA)(A;;FA;;;" + User + ")", 4);
+            File.WriteAllText(Path.Combine(data, "protected.txt"), "protected");
+            RefusalChecks.SetSecurity(Path.Combine(data, "protected.txt"), "D:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;FA;;;" + User + ")", 4);
+        }
+        if (big > 0) using (var stream = new FileStream(Path.Combine(app, "big.bin"), FileMode.CreateNew)) stream.SetLength(big);
+        File.SetAttributes(readme, FileAttributes.ReadOnly | FileAttributes.Hidden);
+        return app;
+    }
+
+    static bool SameObject(string path, FileSnapshot original)
+    {
+        try { using var lease = FileLease.Open(path); return lease.Capture().Identity == original.Identity; }
+        catch (Exception error) when (error is System.ComponentModel.Win32Exception or InvalidDataException) { return false; }
+    }
+
+    static string[] Mismatches(FileCleanupPreview plan, Func<FileSnapshot, bool> sameObject)
+    {
+        var problems = new List<string>();
+        foreach (var file in plan.Files)
+        {
+            try
+            {
+                using var lease = FileLease.Open(file.Path);
+                var current = lease.Capture();
+                var differences = file.Differences(current).ToList();
+                if (sameObject(file) && current.Identity != file.Identity) differences.Add("identity");
+                if (differences.Count != 0) problems.Add(file.Path + ": " + string.Join(", ", differences));
+            }
+            catch (Exception error) when (error is System.ComponentModel.Win32Exception or InvalidDataException) { problems.Add(file.Path + ": " + error.Message); }
+        }
+        return problems.ToArray();
+    }
+}

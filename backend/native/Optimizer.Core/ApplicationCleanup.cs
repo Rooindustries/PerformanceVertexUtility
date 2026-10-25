@@ -129,6 +129,8 @@ public sealed class ApplicationCleanup(Func<CleanupContext> currentContext,
         try
         {
             Authority();
+            if (preview.Files is { } planned && !File.Exists(planned.JournalPath))
+                FileCleanupEngine.RequireSpace([(OperationFiles.Read<FileCleanupPreview>(planned.PreviewPath, planned.ReviewHash), planned.JournalPath)]);
             if (preview.Registry is { } registry)
             {
                 journal.RegistryStatus = "applying";

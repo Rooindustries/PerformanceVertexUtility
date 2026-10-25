@@ -3,9 +3,10 @@ using RooIndustries.Optimizer;
 
 static class FileChecks
 {
-    public static void Run(Action<bool, string> check)
+    public static void Run(Action<bool, string> check, TestVolume volume)
     {
         var root = TestFixtures.InheritingRoot("file-core");
+        var far = Path.Combine(volume.Root, "roo-industries-file-core-" + Guid.NewGuid().ToString("N"));
         var source = Path.Combine(root, "Application files");
         var operations = Path.Combine(root, "Operations");
         Directory.CreateDirectory(Path.Combine(source, "Settings"));
@@ -46,29 +47,33 @@ static class FileChecks
             File.WriteAllText(text, "new user data");
             check(engine.Restore(journalPath).Status == "needsReconciliation" && File.ReadAllText(text) == "new user data", "Repeated file restore preserves newer destination data");
 
-            var partialRoot = Path.Combine(root, "Partial recovery");
-            Directory.CreateDirectory(partialRoot);
-            File.WriteAllText(Path.Combine(partialRoot, "first.txt"), "first original");
-            File.WriteAllText(Path.Combine(partialRoot, "second.txt"), "second original");
-            var partialPreview = engine.Preview(authority.AppId, identityHash, [partialRoot], true);
-            var partialPath = Path.Combine(operations, "partial-preview.json");
-            var partialJournal = Path.Combine(operations, "partial-journal.json");
-            OperationFiles.Write(partialPath, partialPreview);
-            var partial = engine.Apply(partialPath, OperationFiles.HashFile(partialPath), partialJournal);
-            check(partial.Status == "applied", "Partial-recovery fixture starts from a verified deletion with complete backups");
-            var broken = partial.Entries.Single(entry => entry.Original.Path.EndsWith("second.txt"));
-            var saved = File.ReadAllBytes(broken.BackupPath);
-            File.WriteAllBytes(broken.BackupPath, [1, 2, 3]);
-            var interrupted = engine.Restore(partialJournal);
-            check(interrupted.Status == "needsReconciliation" && File.ReadAllText(Path.Combine(partialRoot, "first.txt")) == "first original" && !File.Exists(Path.Combine(partialRoot, "second.txt")),
-                "A corrupt later backup preserves completed restoration and reports the incomplete directory");
-            File.WriteAllBytes(broken.BackupPath, saved);
-            var resumed = engine.Restore(partialJournal);
-            if (resumed.Status != "restored") Console.WriteLine(string.Join("\n", resumed.Entries.Select(entry => entry.Error)));
-            check(resumed.Status == "restored" && File.ReadAllText(Path.Combine(partialRoot, "second.txt")) == "second original" && resumed.Entries.Single(entry => entry.Original.Directory).DirectoryMetadataRestored,
-                "Retry uses the recorded directory identity and finalizes metadata after all child data is restored");
+            foreach (var (drive, parent) in new[] { ("same drive", root), ("other drive", far) })
+            {
+                var partialRoot = Path.Combine(parent, "Partial recovery");
+                Directory.CreateDirectory(partialRoot);
+                File.WriteAllText(Path.Combine(partialRoot, "first.txt"), "first original");
+                File.WriteAllText(Path.Combine(partialRoot, "second.txt"), "second original");
+                var partialPreview = engine.Preview(authority.AppId, identityHash, [partialRoot], true);
+                var partialPath = Path.Combine(operations, drive + " partial-preview.json");
+                var partialJournal = Path.Combine(operations, drive + " partial-journal.json");
+                OperationFiles.Write(partialPath, partialPreview);
+                var partial = engine.Apply(partialPath, OperationFiles.HashFile(partialPath), partialJournal);
+                check(partial.Status == "applied", drive + ": partial-recovery fixture starts from a verified deletion with complete undo copies");
+                var broken = partial.Entries.Single(entry => entry.Original.Path.EndsWith("second.txt"));
+                var saved = File.ReadAllBytes(broken.BackupPath);
+                File.WriteAllBytes(broken.BackupPath, [1, 2, 3]);
+                var interrupted = engine.Restore(partialJournal);
+                check(interrupted.Status == "needsReconciliation" && File.ReadAllText(Path.Combine(partialRoot, "first.txt")) == "first original" && !File.Exists(Path.Combine(partialRoot, "second.txt")),
+                    drive + ": a corrupt later undo copy preserves completed restoration and reports the incomplete directory");
+                File.WriteAllBytes(broken.BackupPath, saved);
+                File.SetLastWriteTimeUtc(broken.BackupPath, DateTime.FromFileTimeUtc(broken.Original.LastWriteTime));
+                var resumed = engine.Restore(partialJournal);
+                if (resumed.Status != "restored") Console.WriteLine(string.Join("\n", resumed.Entries.Select(entry => entry.Error)));
+                check(resumed.Status == "restored" && File.ReadAllText(Path.Combine(partialRoot, "second.txt")) == "second original" && resumed.Entries.Single(entry => entry.Original.Directory).DirectoryMetadataRestored,
+                    drive + ": retry uses the recorded directory identity and finalizes metadata after all child data is restored");
+            }
 
-            var checkpointRoot = Path.Combine(root, "Creation checkpoint");
+            var checkpointRoot = Path.Combine(far, "Creation checkpoint");
             Directory.CreateDirectory(checkpointRoot);
             File.WriteAllText(Path.Combine(checkpointRoot, "data.txt"), "checkpoint data");
             var checkpointPreview = engine.Preview(authority.AppId, identityHash, [checkpointRoot], true);
@@ -89,9 +94,12 @@ static class FileChecks
         }
         finally
         {
-            foreach (var file in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)) File.SetAttributes(file, FileAttributes.Normal);
-            Directory.Delete(root, true);
+            foreach (var folder in new[] { root, far }.Where(Directory.Exists))
+            {
+                foreach (var file in Directory.EnumerateFiles(folder, "*", SearchOption.AllDirectories)) File.SetAttributes(file, FileAttributes.Normal);
+                Directory.Delete(folder, true);
+            }
         }
-        check(!Directory.Exists(root), "File validation removes its reviewed, backup and mirror fixtures");
+        check(!Directory.Exists(root) && !Directory.Exists(far), "File validation removes its reviewed, backup and mirror fixtures");
     }
 }

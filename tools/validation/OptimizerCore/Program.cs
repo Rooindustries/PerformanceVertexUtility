@@ -40,7 +40,13 @@ if (args is ["--branding"]) { BrandCompatibilityChecks.Run(Check); return; }
 if (args is ["--marked-root-start", var markedParent, var markedHive, .. var markedOptions]) { DataFolderChecks.MarkedRootChild(markedParent, markedHive, markedOptions.Contains("acknowledge")); return; }
 if (args is ["--data-folder", .. var scenarios]) { DataFolderChecks.Run(Check, scenarios); return; }
 if (args is [var child, ..] && child.StartsWith("--child-", StringComparison.Ordinal) || args is ["--timer-worker-fake", ..]) { DataRootChild.Run(args); return; }
-if (args is ["--files"]) { FileChecks.Run(Check); FileConflictChecks.Run(Check); RefusalChecks.Run(Check); return; }
+if (args is ["--file-crash", .. var crashStep]) { FileMoveChecks.Child(crashStep); return; }
+void Files()
+{
+    using var volume = TestVolume.Create(Path.GetTempPath(), 2048);
+    FileChecks.Run(Check, volume); FileConflictChecks.Run(Check); RefusalChecks.Run(Check, volume); FileMoveChecks.Run(Check, volume);
+}
+if (args is ["--files"]) { Files(); return; }
 if (args is ["--registry"]) { RegistryChecks.Run(Check); RegistryConflictChecks.Run(Check); RegistryRefusalChecks.Run(Check); return; }
 if (args is ["--policies"]) { ProcessIdentityChecks.Run(Check); PolicyChecks.Run(Check); return; }
 if (args is ["--alias-ownership-probe", var aliasRoot, var aliasPeer]) { AliasOwnershipChecks.Probe(aliasRoot, aliasPeer); return; }
@@ -236,9 +242,7 @@ ReplaceFaultChecks.Run(Check);
 RegistryChecks.Run(Check);
 RegistryConflictChecks.Run(Check);
 RegistryRefusalChecks.Run(Check);
-FileChecks.Run(Check);
-FileConflictChecks.Run(Check);
-RefusalChecks.Run(Check);
+Files();
 ProcessIdentityChecks.Run(Check);
 PolicyChecks.Run(Check);
 DiscoveryChecks.Run(Check);

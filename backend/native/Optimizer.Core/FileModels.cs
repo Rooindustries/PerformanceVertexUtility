@@ -53,6 +53,7 @@ public sealed class FileBackupEntry
 {
     public required FileSnapshot Original { get; init; }
     public required string BackupPath { get; init; }
+    public bool Moved { get; set; }
     public string? BackupHash { get; set; }
     public required string Status { get; set; }
     public string? Error { get; set; }

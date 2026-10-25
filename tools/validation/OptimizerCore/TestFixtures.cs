@@ -20,6 +20,60 @@ static class TestFixtures
     }
 }
 
+sealed class TestVolume : IDisposable
+{
+    private readonly string _image;
+    public string Root { get; }
+
+    private TestVolume(string image, string root) { _image = image; Root = root; }
+
+    public static TestVolume Create(string folder, int megabytes)
+    {
+        var used = DriveInfo.GetDrives().Select(drive => char.ToUpperInvariant(drive.Name[0])).ToHashSet();
+        var letter = Enumerable.Range('M', 'Z' - 'M' + 1).Select(code => (char)code).Reverse().First(candidate => !used.Contains(candidate));
+        var image = Path.Combine(folder, "roo-industries-volume-" + Guid.NewGuid().ToString("N") + ".vhdx");
+        var volume = new TestVolume(image, letter + ":\\");
+        try
+        {
+            DiskPart("create vdisk file=\"" + image + "\" maximum=" + megabytes + " type=expandable", "select vdisk file=\"" + image + "\"", "attach vdisk",
+                "create partition primary", "format fs=ntfs quick label=RooIndustriesTest", "assign letter=" + letter);
+            if (!new DriveInfo(volume.Root).IsReady || new DriveInfo(volume.Root).DriveFormat != "NTFS") throw new InvalidOperationException("The disposable test drive did not mount at " + volume.Root);
+            return volume;
+        }
+        catch
+        {
+            try { volume.Dispose(); }
+            catch (Exception cleanup) { Console.WriteLine("FATAL the test drive at " + image + " could not be removed: " + cleanup.Message); }
+            throw;
+        }
+    }
+
+    public void Dispose()
+    {
+        if (!File.Exists(_image)) return;
+        try { DiskPart("select vdisk file=\"" + _image + "\"", "detach vdisk"); }
+        finally { File.Delete(_image); }
+    }
+
+    private static void DiskPart(params string[] commands)
+    {
+        var script = Path.Combine(Path.GetTempPath(), "roo-industries-diskpart-" + Guid.NewGuid().ToString("N") + ".txt");
+        File.WriteAllLines(script, commands);
+        try
+        {
+            var start = new System.Diagnostics.ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "diskpart.exe"), "/s \"" + script + "\"")
+            {
+                UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true,
+            };
+            using var process = System.Diagnostics.Process.Start(start) ?? throw new InvalidOperationException("diskpart did not start.");
+            var output = process.StandardOutput.ReadToEnd() + process.StandardError.ReadToEnd();
+            if (!process.WaitForExit(120000)) { process.Kill(); throw new TimeoutException("diskpart did not finish."); }
+            if (process.ExitCode != 0) throw new InvalidOperationException("diskpart failed (" + process.ExitCode + "): " + output);
+        }
+        finally { File.Delete(script); }
+    }
+}
+
 sealed class OwnedRegistryKey : IDisposable
 {
     [DllImport("advapi32.dll", CharSet = CharSet.Unicode)] static extern int RegCreateKeyEx(SafeRegistryHandle key, string subKey, int reserved, string? className, int options, int access, IntPtr security, out IntPtr result, out int disposition);

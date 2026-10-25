@@ -71,6 +71,8 @@ public sealed class CleanupBatch(Func<string, string, ApplicationCleanup> applic
         if (journal.ReviewHash != reviewHash) throw new InvalidDataException("The batch journal belongs to another review.");
         if (journal.RestoreStarted) return journal;
         ClearCancellation(journalPath, preview.BatchId, resumeCancellationId);
+        FileCleanupEngine.RequireSpace(preview.Parts.Where(part => part.Preview.Files is not null && journal.Entries.Any(entry => entry.OperationId == part.Preview.OperationId && entry.Status == "pending"))
+            .Select(part => (OperationFiles.Read<FileCleanupPreview>(part.Preview.Files!.PreviewPath, part.Preview.Files.ReviewHash), part.Preview.Files.JournalPath)));
         journal.Status = "running";
         Save(journalPath, journal);
         foreach (var entry in journal.Entries)
