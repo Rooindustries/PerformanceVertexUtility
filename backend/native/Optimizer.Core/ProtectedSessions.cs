@@ -701,7 +701,8 @@ public sealed class ProtectedSessions
         }
         throw new TimeoutException("The recovery watcher did not acknowledge the session job.");
     }
-    private static bool EarlierBoot(ProtectedSessionState state) => state.BootId is { } started && ProcessPolicyHost.BootId() is { } now && started != now;
+    private static bool EarlierBoot(ProtectedSessionState state) => state.BootId is { } started && ProcessPolicyHost.BootId() is { } now && started != now &&
+        DateTime.UtcNow - TimeSpan.FromMilliseconds(Environment.TickCount64) > DateTime.FromFileTimeUtc(Created(state.Host));
     private static bool LimitedGame(ProtectedSessionState state)
     {
         var desired = ProcessTarget.ParseMask(state.DesiredAffinity.Mask);

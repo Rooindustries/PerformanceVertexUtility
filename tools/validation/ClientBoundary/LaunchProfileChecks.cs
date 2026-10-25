@@ -705,6 +705,12 @@ static class LaunchProfileChecks
                 Check(startedIn is not null && startedIn == ProcessPolicyHost.BootId(), "The session records which Windows start it ran in");
                 saved["bootId"] = (long.Parse(startedIn!) - 1).ToString();
                 OperationFiles.Write(statePath, saved);
+                Check(!GameSessionDisplay.Restored(await App().RecoverGameSessionAsync(restart.SessionRoot)) && Affinity(pinned) == core && TaskExists(restart.SessionRoot),
+                    "A different start number alone, as a resume from hibernation could show, still doesn't let Recover skip the core-limit check while the worker started in this Windows start");
+                saved = JsonNode.Parse(File.ReadAllText(statePath))!.AsObject();
+                var bootedAt = DateTime.UtcNow - TimeSpan.FromMilliseconds(Environment.TickCount64);
+                saved["host"]!["creationTimeFileTimeUtc"] = bootedAt.AddMinutes(-10).ToFileTimeUtc().ToString(System.Globalization.CultureInfo.InvariantCulture);
+                OperationFiles.Write(statePath, saved);
                 Check(GameSessionDisplay.Restored(await App().RecoverGameSessionAsync(restart.SessionRoot)) && NoLaunchPolicy() && !TaskExists(restart.SessionRoot) && Affinity(pinned) == core,
                     "After a restart, Recover finishes while a copy of the game pinned to the session's cores runs, and leaves that copy's cores alone");
                 EndGame(pinned);
