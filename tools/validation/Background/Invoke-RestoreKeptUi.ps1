@@ -147,7 +147,7 @@ try{
  finally{
   try{if($journal -and [IO.File]::Exists($journal)){HostCall 'process-restore' @{journalPath=$journal;acceptEarlierVersion=$true}|Out-Null}}
   finally{
-   try{if($Scenario -eq 'saved-change' -and $gameSession -and $gameSession.restorable){& (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe') -NoProfile -NonInteractive -ExecutionPolicy Bypass -File (Join-Path $AppRoot 'backend\scripts\Stop-GameTuneSession.ps1') -SessionId $gameSession.sessionId -SessionPath $gameSession.sessionPath -BackupPath $gameSession.backupManifestPath -ConfirmApply|Out-Null}}
+   try{if($Scenario -eq 'saved-change' -and $gameSession -and $gameSession.restorable){$stopped=& (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe') -NoProfile -NonInteractive -ExecutionPolicy Bypass -File (Join-Path $AppRoot 'backend\scripts\Stop-GameTuneSession.ps1') -SessionId $gameSession.sessionId -SessionPath $gameSession.sessionPath -BackupPath $gameSession.backupManifestPath -ConfirmApply;$code=$LASTEXITCODE;$closed=try{($stopped -join "`n")|ConvertFrom-Json}catch{$null};if($code -or $null -eq $closed -or $closed.restorable -ne $false){throw ('Game priority cleanup left its session open: '+($stopped -join ' '))}}}
    finally{
     try{if($fixture){Stop-OwnedProcess $fixture}}
     finally{if($operation -and [IO.Directory]::Exists($operation)){Remove-Item -LiteralPath $operation -Recurse -Force}}
