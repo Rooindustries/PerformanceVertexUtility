@@ -5,12 +5,13 @@ param(
     [Parameter(Mandatory)][string]$CurrentInstaller,
     [Parameter(Mandatory)][string]$NewInstaller,
     [Parameter(Mandatory)][ValidatePattern('^[0-9A-Fa-f]{64}$')][string]$NewInstallerSha256,
-    [string]$Source = (Split-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) -Parent),
+    [string]$Source,
     [string]$Exe = 'C:\Program Files\Roo Industries\Optimization Suite\app\RooIndustries.OptimizationSuite.App.exe',
     [Parameter(Mandatory)][string]$ExpectedMachine
 )
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
+if (-not $Source) { $Source = Split-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) -Parent }
 $FailureModes = @(
     'Preflight exits nonzero or lacks its matching result JSON, or another runner phase has no named PASS: retain the runner result and fail.',
     'EnableLUA is missing or invalid, or B startup/helper elevation differs from its recorded expectation: record FAIL without skipping the token check.',

@@ -1,9 +1,10 @@
 param(
-    [string]$Source = (Join-Path $PSScriptRoot '../../..'),
+    [string]$Source,
     [Parameter(Mandatory = $true)][string]$Out
 )
 
 $ErrorActionPreference = 'Stop'
+if (-not $Source) { $Source = Join-Path $PSScriptRoot '../../..' }
 $checks = New-Object System.Collections.Generic.List[object]
 $engine = Join-Path $Out 'engine'
 New-Item -ItemType Directory -Path $engine -Force | Out-Null

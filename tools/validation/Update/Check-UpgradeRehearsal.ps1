@@ -1,5 +1,6 @@
-param([Parameter(Mandatory)][string]$OutRoot,[string]$ToolRoot=$PSScriptRoot,[string]$Source)
+param([Parameter(Mandatory)][string]$OutRoot,[string]$ToolRoot,[string]$Source)
 $ErrorActionPreference='Stop'
+if(-not$ToolRoot){$ToolRoot=$PSScriptRoot}
 if($Source){. (Join-Path $Source 'tools\validation\Update\Harness.Common.ps1');Initialize-HarnessInvocation 'upgrade-file-checks' $OutRoot|Out-Null;Ensure-HarnessOutputDirectory $OutRoot}
 if(-not$Source){[IO.Directory]::CreateDirectory($OutRoot)|Out-Null}
 $rows=[Collections.Generic.List[object]]::new()
