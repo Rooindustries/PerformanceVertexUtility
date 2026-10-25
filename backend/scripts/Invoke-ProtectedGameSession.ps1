@@ -95,16 +95,30 @@ $task=Find-RooIndustriesCompatibleTask $taskName ($script:RooIndustriesLegacyIde
 if($task){$taskName=$task.TaskName;$description=$task.Description}
 if($Action -eq 'Start'){
     if(Test-Path -LiteralPath (Join-Path $SessionRoot 'session.json')){throw 'This session already has recovery state. Stop/recover it, then create a new preview and session directory.'}
-    [IO.Directory]::CreateDirectory($SessionRoot)|Out-Null
-    $requestPath=Join-Path $SessionRoot 'worker-request.json'
-    [IO.File]::WriteAllText($requestPath,(@{schemaVersion=1;repoRoot=$repoRoot;sessionRoot=$SessionRoot;previewPath=[IO.Path]::GetFullPath($PreviewPath);reviewHash=$ReviewHash;confirm=$true}|ConvertTo-Json),[Text.UTF8Encoding]::new($false))
     $workerExe=Join-Path $HostDirectory 'session\RooIndustries.SessionHost.exe'
-    if(-not(Test-Path -LiteralPath $workerExe)){throw 'Build-OptimizerHost.ps1 must package the background session executable.'}
+    if(-not(Test-Path -LiteralPath $workerExe)){throw 'The app''s background session program is missing, so nothing was changed. Reinstall the app, then try again.'}
+    $requestPath=Join-Path $SessionRoot 'worker-request.json'
     $execute=New-RooIndustriesElevatedTaskAction $workerExe @('run',$requestPath) (Split-Path $workerExe -Parent)
     $principal=New-ScheduledTaskPrincipal -UserId $owner -LogonType Interactive -RunLevel Highest
     $settings=New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -Priority 6
-    Register-ScheduledTask -TaskName $taskName -Description $description -Action $execute -Principal $principal -Settings $settings -Trigger (New-ScheduledTaskTrigger -AtLogOn -User $owner) -Force|Out-Null
-    Start-ScheduledTask -TaskName $taskName
+    [IO.Directory]::CreateDirectory($SessionRoot)|Out-Null
+    try{
+        # The sign-in task exists before the request does: session status reads a request whose task is gone as a start that ended.
+        Register-ScheduledTask -TaskName $taskName -Description $description -Action $execute -Principal $principal -Settings $settings -Trigger (New-ScheduledTaskTrigger -AtLogOn -User $owner) -Force|Out-Null
+        [IO.File]::WriteAllText($requestPath,(@{schemaVersion=1;repoRoot=$repoRoot;sessionRoot=$SessionRoot;previewPath=[IO.Path]::GetFullPath($PreviewPath);reviewHash=$ReviewHash;confirm=$true}|ConvertTo-Json),[Text.UTF8Encoding]::new($false))
+        Start-ScheduledTask -TaskName $taskName
+    }catch{
+        $reason=$_.Exception.Message
+        # Cancel under the worker's lock, then remove the task and the folder. If a worker already holds that lock, it started: wait for it below.
+        try{
+            $cancelled=-not(Test-Path -LiteralPath $requestPath) -or (Invoke-Core 'protected-session-cancel').cancelled
+            if($cancelled){
+                if(Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue){Unregister-ScheduledTask -TaskName $taskName -Confirm:$false}
+                Remove-Item -LiteralPath $SessionRoot -Recurse -Force
+            }
+        }catch{throw ('Session startup failed: '+$reason+' Its unused session files could not be removed: '+$_.Exception.Message)}
+        if($cancelled){throw ('Session startup failed: '+$reason)}
+    }
     $clock=[Diagnostics.Stopwatch]::StartNew()
     $failurePath=Join-Path $SessionRoot 'worker-error.json'
     $cancelPath=Join-Path $SessionRoot 'start-cancelled.json'

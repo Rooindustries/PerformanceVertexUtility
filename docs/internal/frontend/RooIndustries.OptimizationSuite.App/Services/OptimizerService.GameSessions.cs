@@ -16,7 +16,8 @@ public sealed record GameSessionEntry(string SessionRoot, ProtectedSessionStatus
 {
     public override string ToString() => (Worker.State is { } state
         ? Path.GetFileNameWithoutExtension(state.Preview.GamePath) + " · " + state.UpdatedAtUtc.ToLocalTime().ToString("g")
-        : Path.GetFileName(Path.GetDirectoryName(SessionRoot)) + " · state unavailable") + (ProfileId is null ? "" : " · saved settings");
+        : Path.GetFileName(Path.GetDirectoryName(SessionRoot)) + (Worker.HostRunning == true ? " · preparing" : GameSessionDisplay.Restored(Worker) ? " · didn't start" : " · state unavailable"))
+        + (ProfileId is null ? "" : " · saved settings");
 }
 
 public sealed partial class OptimizerService

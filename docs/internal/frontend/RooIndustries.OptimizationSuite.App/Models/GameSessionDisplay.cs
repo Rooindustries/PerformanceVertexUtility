@@ -24,7 +24,7 @@ public static class GameSessionDisplay
     public static string Title(ProtectedSessionStatus status, string? pendingAffinity = null)
     {
         var state = status.State;
-        if (state is null) return status.HostRunning == true ? "Preparing the session" : "Session state unavailable";
+        if (state is null) return status.HostRunning == true ? "Preparing the session" : Restored(status) ? "Didn't start · nothing was changed" : "Session state unavailable";
         if (status.HostRunning is null || status.Error is not null) return "Session needs attention";
         if (Restored(status)) return state.Games.Any(game => !game.Exited && game.Fields.Any(field => field.Status == "restartRequired"))
             ? "Stopped · restart the game to clear launch priorities" : "Stopped · original settings restored";

@@ -1,5 +1,7 @@
 #nullable enable
 using System.Diagnostics;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -80,7 +82,15 @@ public sealed class ProtectedSessions
     private static string BootPath(string root) => Path.Combine(Path.GetFullPath(root), "boot.json");
     private static string CancelPath(string root) => Path.Combine(Path.GetFullPath(root), "start-cancelled.json");
     private static string FailurePath(string root) => Path.Combine(Path.GetFullPath(root), "worker-error.json");
-    private static bool Starting(string root) => File.Exists(Path.Combine(Path.GetFullPath(root), "worker-request.json")) && !File.Exists(FailurePath(root)) && !File.Exists(CancelPath(root));
+    public static string StartTaskName(string root) => "Roo Industries Protected Session " + TaskSuffix(root);
+    private static string TaskSuffix(string root) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(Path.GetFullPath(root).ToLowerInvariant())))[..16];
+    // A start can still change something only while its sign-in task can run a worker for it. A request whose task is gone, with nothing saved,
+    // is a start that ended early: Start or its worker stopped before saving anything, or an earlier version left it behind.
+    private static bool Starting(string root)
+    {
+        if (!File.Exists(Path.Combine(Path.GetFullPath(root), "worker-request.json")) || File.Exists(FailurePath(root)) || File.Exists(CancelPath(root))) return false;
+        return ScheduledTasks.Registered(StartTaskName(root)) is not false || ScheduledTasks.Registered(BrandCompatibility.LegacyGameTaskPrefix + TaskSuffix(root)) is not false;
+    }
     private static JsonElement Value<T>(T value) => JsonSerializer.SerializeToElement(value, OperationFiles.Json);
     private static readonly string[] StartupFields = ["cpuPriority", "ioPriority", "memoryPriority"];
     private static readonly string[] NativeFields = ["gpuPriority", "executionQoS", "priorityBoost"];

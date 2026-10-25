@@ -1,6 +1,4 @@
 using System.Diagnostics;
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using RooIndustries.Optimizer;
@@ -60,7 +58,7 @@ static void RemoveTask(string root)
 {
     var start = new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "schtasks.exe")) { UseShellExecute = false, CreateNoWindow = true };
     RuntimeEnvironment.Apply(start);
-    foreach (var argument in new[] { "/Delete", "/TN", "Roo Industries Protected Session " + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(root.ToLowerInvariant())))[..16], "/F" }) start.ArgumentList.Add(argument);
+    foreach (var argument in new[] { "/Delete", "/TN", ProtectedSessions.StartTaskName(root), "/F" }) start.ArgumentList.Add(argument);
     using var schtasks = Process.Start(start);
     schtasks?.WaitForExit(30000);
 }

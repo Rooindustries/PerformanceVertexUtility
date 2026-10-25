@@ -13,6 +13,7 @@ public static class BrandCompatibility
     public const string LaunchMutexPrefix = "Global\\RooLaunchPriorities-";
     public const string LauncherLeasePrefix = "roo-protected-launcher-";
     public const string LegacyJobPrefix = "Global\\RooProtectedSession-";
+    public const string LegacyGameTaskPrefix = "Roo Protected Session ";
     public const string LegacyEnvironmentPrefix = "ROO_";
 
     private static readonly Lazy<string> Local = new(() => DefaultDataRoot(RuntimeEnvironment.LocalAppData));
