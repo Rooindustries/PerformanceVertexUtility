@@ -176,7 +176,8 @@ try{
  Start-Sleep -Milliseconds 600
  Stop-Recorder $recorder;$recorder=$null
  $flash=@($texts|Where-Object {$_.row -like 'Turned off, but*'}).Count -gt 0
- Step 'turned-off' @{texts=$texts;flashed=$flash;status=(Text 'GameSessionStatus');detail=(Text 'GameSessionDetail');launchPriorities=(Test-Path -LiteralPath $ifeo)}|Out-Null
+ $off=Step 'turned-off' @{texts=$texts;flashed=$flash;status=(Text 'GameSessionStatus');detail=(Text 'GameSessionDetail');launchPriorities=(Test-Path -LiteralPath $ifeo)}
+ Expect 'turned-off' (-not $flash -and $off.status -ceq 'Saved settings turned off' -and -not $off.launchPriorities) 'turning off finished cleanly, without a flash, and the game has no launch priorities left'
 
  $sha=[Security.Cryptography.SHA256]::Create()
  $prefix=[regex]::Match([IO.File]::ReadAllText((Join-Path $Source 'backend\native\Optimizer.Core\BrandCompatibility.cs')),'LaunchMutexPrefix = "(.+?)";').Groups[1].Value.Replace('\\','\')
@@ -209,6 +210,15 @@ try{
  $closed=Step 'launcher-closed' @{status=(Text 'GameSessionStatus');detail=(Text 'GameSessionDetail');leftovers=(Leftovers)}
  Expect 'launcher-closed' ($closed.status -like '*attention*' -and "$($closed.detail)".Contains('The launcher you picked has closed.')) 'the Games tab says the launcher closed'
  Expect 'launcher-closed' ($closed.leftovers.Count -eq 0) ('it left '+($closed.leftovers -join ', '))
+ # A start whose request outlived its sign-in task, as Start leaves it if it stops before saving anything, or an older version left it.
+ $endedOperation=Join-Path $operations ('game-session-'+[Guid]::NewGuid().ToString('N'));$endedRoot=Join-Path $endedOperation 'session'
+ [IO.Directory]::CreateDirectory($endedRoot)|Out-Null
+ [IO.File]::WriteAllText((Join-Path $endedRoot 'worker-request.json'),(@{schemaVersion=1;repoRoot=$Source;sessionRoot=$endedRoot;previewPath=(Join-Path $endedOperation 'preview.json');reviewHash='';confirm=$true}|ConvertTo-Json))
+ Invoke (WaitFor {Enabled 'GameSessionRefresh'} 60 'Refresh on Games');Start-Sleep -Seconds 2
+ $entry=Choose (WaitFor {Enabled 'GameSessionHistory'} 60 'the session list') {param($n) $n -like ([IO.Path]::GetFileName($endedOperation)+' ·*')} 'the start that never got going'
+ Start-Sleep -Seconds 3
+ $endedStep=Step 'ended-start' @{entry=$entry;status=(Text 'GameSessionStatus');detail=(Text 'GameSessionDetail')}
+ Expect 'ended-start' ($entry -like "* · didn't start" -and $endedStep.status -ceq "Didn't start · nothing was changed") 'the list and the status say the start didn''t start and changed nothing'
  if($evidence.unexpected.Count){throw ('Unexpected: '+($evidence.unexpected -join '; '))}
  $status='pass'
 }catch{

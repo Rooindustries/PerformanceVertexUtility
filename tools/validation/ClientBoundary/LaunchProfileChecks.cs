@@ -870,6 +870,37 @@ static class LaunchProfileChecks
                 Check(!File.Exists(Path.Combine(cancelledStart.SessionRoot, "session.json")) && NoLaunchPolicy() && Affinity(leftLauncher) == original && GameSessionDisplay.Restored(await App().ReadGameSessionAsync(cancelledStart.SessionRoot)),
                     "Its worker changes nothing and the start counts as nothing to put back");
 
+                var taskGone = await App().PreviewGameSessionAsync(leftLauncher.Id, gamePath, controls, true);
+                Directory.CreateDirectory(taskGone.SessionRoot);
+                OperationFiles.Write(Path.Combine(taskGone.SessionRoot, "worker-request.json"), new { schemaVersion = 1, repoRoot = repo, sessionRoot = taskGone.SessionRoot, previewPath = taskGone.PreviewPath, reviewHash = taskGone.Hash, confirm = true });
+                var taskless = (await Sessions()).Single(entry => entry.SessionRoot == taskGone.SessionRoot);
+                Check(!TaskExists(taskGone.SessionRoot) && GameSessionDisplay.Restored(taskless.Worker) && taskless.ToString().EndsWith(" · didn't start", StringComparison.Ordinal) && await UpdateBlocker(App()) is null,
+                    "A start whose request outlived its sign-in task, as when Start stopped before saving anything or an older version left it, counts as finished and doesn't block an update");
+
+                var early = await App().PreviewGameSessionAsync(leftLauncher.Id, gamePath, controls, true);
+                Directory.CreateDirectory(early.SessionRoot);
+                File.WriteAllText(Path.Combine(early.SessionRoot, "worker-request.json"), "{");
+                var earlyTask = Path.Combine(root, "early-task.xml");
+                XDocument.Parse(taskTemplate.Replace(afterRefusal.SessionRoot, early.SessionRoot, StringComparison.Ordinal)).Save(earlyTask);
+                Check(Schtasks("/Create", "/TN", TaskName(early.SessionRoot), "/XML", earlyTask).Exit == 0 && (await Sessions()).Single(entry => entry.SessionRoot == early.SessionRoot).Worker.HostRunning == true,
+                    "A start whose sign-in task is still there shows as preparing");
+                Schtasks("/Run", "/TN", TaskName(early.SessionRoot));
+                await Until(() => Task.FromResult(!TaskExists(early.SessionRoot)), "A worker that couldn't read its request did not remove its sign-in task.");
+                Check(!File.Exists(Path.Combine(early.SessionRoot, "worker-error.json")) && GameSessionDisplay.Restored((await Sessions()).Single(entry => entry.SessionRoot == early.SessionRoot).Worker)
+                    && await UpdateBlocker(App()) is null && NoLaunchPolicy() && Affinity(leftLauncher) == original,
+                    "A worker that fails before it knows its folder ends the start: it changes nothing and the start doesn't stay preparing or block an update");
+
+                var workerExe = Path.Combine(repo, "backend", "bin", "optimizer", "session", "RooIndustries.SessionHost.exe");
+                var missing = await App().PreviewGameSessionAsync(leftLauncher.Id, gamePath, controls, true);
+                string? missingError = null;
+                File.Move(workerExe, workerExe + ".hidden");
+                try { try { await App().StartGameSessionAsync(missing); } catch (Exception error) { missingError = error.Message; } }
+                finally { File.Move(workerExe + ".hidden", workerExe); }
+                Console.WriteLine(JsonSerializer.Serialize(new { missingError, folder = Directory.Exists(missing.SessionRoot), task = TaskExists(missing.SessionRoot) }));
+                Check(missingError?.Contains("background session program is missing", StringComparison.Ordinal) == true && !Directory.Exists(missing.SessionRoot) && !TaskExists(missing.SessionRoot)
+                    && await UpdateBlocker(App()) is null && NoLaunchPolicy(),
+                    "Start with the background session program missing says so in plain words and leaves no session, sign-in task or update block behind");
+
                 var failed = await App().PreviewGameSessionAsync(leftLauncher.Id, gamePath, controls, true);
                 Directory.CreateDirectory(failed.SessionRoot);
                 OperationFiles.Write(Path.Combine(failed.SessionRoot, "worker-request.json"), new { schemaVersion = 1, repoRoot = repo, sessionRoot = failed.SessionRoot, previewPath = failed.PreviewPath, reviewHash = failed.Hash, confirm = true });

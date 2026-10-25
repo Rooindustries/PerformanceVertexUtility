@@ -70,6 +70,10 @@ static class GameSessionChecks
         Check(!GameSessionDisplay.Restored(starting) && GameSessionDisplay.Title(starting) == "Preparing the session", "A start whose worker hasn't saved anything yet shows as preparing, never as finished");
         var gaveUp = new ProtectedSessionStatus(null, false, null);
         Check(GameSessionDisplay.Restored(gaveUp), "A start that ended before saving anything counts as nothing to put back");
+        Check(GameSessionDisplay.Title(gaveUp) == "Didn't start · nothing was changed" && new GameSessionEntry(Path.Combine("operations", "game-session-1", "session"), gaveUp).ToString() == "game-session-1 · didn't start",
+            "A start that ended before saving anything says it didn't start and changed nothing, not that its state is unavailable");
+        Check(new GameSessionEntry(Path.Combine("operations", "game-session-2", "session"), starting).ToString() == "game-session-2 · preparing" && new GameSessionEntry(Path.Combine("operations", "game-session-3", "session"), new(null, null, "x")).ToString() == "game-session-3 · state unavailable",
+            "Previous sessions say a start is preparing, and keep state unavailable for a session that couldn't be read");
         Console.WriteLine("Game session display assertions: " + passed);
     }
 
