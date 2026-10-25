@@ -793,12 +793,19 @@ static class LaunchProfileChecks
                     if (imageOwned) image.ReleaseMutex();
                 }) { IsBackground = true };
                 imageHolder.Start(); heldImage.Wait();
-                var refusedLauncher = await OpenLauncher();
-                var refusedReview = await App().PreviewGameSessionAsync(refusedLauncher.Id, gamePath, controls, true);
-                var refusedClock = Stopwatch.StartNew(); string? refusedError = null;
-                try { await App().StartGameSessionAsync(refusedReview); } catch (Exception error) { refusedError = error.Message; }
-                var refusedSeconds = refusedClock.Elapsed.TotalSeconds;
-                releaseImage.Set(); imageHolder.Join();
+                Process refusedLauncher;
+                GameSessionReview refusedReview;
+                string? refusedError = null;
+                double refusedSeconds;
+                try
+                {
+                    refusedLauncher = await OpenLauncher();
+                    refusedReview = await App().PreviewGameSessionAsync(refusedLauncher.Id, gamePath, controls, true);
+                    var refusedClock = Stopwatch.StartNew();
+                    try { await App().StartGameSessionAsync(refusedReview); } catch (Exception error) { refusedError = error.Message; }
+                    refusedSeconds = refusedClock.Elapsed.TotalSeconds;
+                }
+                finally { releaseImage.Set(); imageHolder.Join(); }
                 Console.WriteLine(JsonSerializer.Serialize(new { refusedError, refusedSeconds, folder = Directory.Exists(refusedReview.SessionRoot), task = TaskExists(refusedReview.SessionRoot) }));
                 Check(imageOwned && refusedError?.Contains("Another session owns this game's launch settings", StringComparison.Ordinal) == true && refusedSeconds < 30 &&
                     !Directory.Exists(refusedReview.SessionRoot) && !TaskExists(refusedReview.SessionRoot) && NoLaunchPolicy() && Affinity(refusedLauncher) == original,
