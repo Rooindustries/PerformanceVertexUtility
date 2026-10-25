@@ -700,17 +700,27 @@ static class LaunchProfileChecks
                 Check(!GameSessionDisplay.Restored(await App().RecoverGameSessionAsync(restart.SessionRoot)) && Affinity(pinned) == core && TaskExists(restart.SessionRoot),
                     "Without a restart, a game copy on the session's cores could still be inside its core limit, so Recover still waits");
                 var statePath = Path.Combine(restart.SessionRoot, "session.json");
-                var saved = JsonNode.Parse(File.ReadAllText(statePath))!.AsObject();
-                var startedIn = saved["bootId"]?.GetValue<string>();
-                Check(startedIn is not null && startedIn == ProcessPolicyHost.BootId(), "The session records which Windows start it ran in");
-                saved["bootId"] = (long.Parse(startedIn!) - 1).ToString();
-                OperationFiles.Write(statePath, saved);
+                var bootPath = Path.Combine(restart.SessionRoot, "boot.json");
+                var startedIn = File.Exists(bootPath) ? JsonNode.Parse(File.ReadAllText(bootPath))!["bootId"]!.GetValue<string>() : null;
+                Check(startedIn is not null && startedIn == ProcessPolicyHost.BootId() && !JsonNode.Parse(File.ReadAllText(statePath))!.AsObject().ContainsKey("bootId"),
+                    "The session records which Windows start it ran in beside its state, so older versions can still read the state");
+                string SetWorkerStart(string created)
+                {
+                    var saved = JsonNode.Parse(File.ReadAllText(statePath))!.AsObject();
+                    var before = saved["host"]!["creationTimeFileTimeUtc"]!.GetValue<string>();
+                    saved["host"]!["creationTimeFileTimeUtc"] = created;
+                    OperationFiles.Write(statePath, saved);
+                    return before;
+                }
+                var beforeBoot = (DateTime.UtcNow - TimeSpan.FromMilliseconds(Environment.TickCount64)).AddMinutes(-10).ToFileTimeUtc().ToString(System.Globalization.CultureInfo.InvariantCulture);
+                var workerStart = SetWorkerStart(beforeBoot);
                 Check(!GameSessionDisplay.Restored(await App().RecoverGameSessionAsync(restart.SessionRoot)) && Affinity(pinned) == core && TaskExists(restart.SessionRoot),
-                    "A different start number alone, as a resume from hibernation could show, still doesn't let Recover skip the core-limit check while the worker started in this Windows start");
-                saved = JsonNode.Parse(File.ReadAllText(statePath))!.AsObject();
-                var bootedAt = DateTime.UtcNow - TimeSpan.FromMilliseconds(Environment.TickCount64);
-                saved["host"]!["creationTimeFileTimeUtc"] = bootedAt.AddMinutes(-10).ToFileTimeUtc().ToString(System.Globalization.CultureInfo.InvariantCulture);
-                OperationFiles.Write(statePath, saved);
+                    "A worker start time before this Windows start alone, as a clock change could show, doesn't let Recover skip the core-limit check");
+                OperationFiles.Write(bootPath, new { bootId = (long.Parse(startedIn!) - 1).ToString(System.Globalization.CultureInfo.InvariantCulture) });
+                SetWorkerStart(workerStart);
+                Check(!GameSessionDisplay.Restored(await App().RecoverGameSessionAsync(restart.SessionRoot)) && Affinity(pinned) == core && TaskExists(restart.SessionRoot),
+                    "A different start number alone, as a resume from hibernation could show, doesn't let Recover skip the core-limit check while the worker started in this Windows start");
+                SetWorkerStart(beforeBoot);
                 Check(GameSessionDisplay.Restored(await App().RecoverGameSessionAsync(restart.SessionRoot)) && NoLaunchPolicy() && !TaskExists(restart.SessionRoot) && Affinity(pinned) == core,
                     "After a restart, Recover finishes while a copy of the game pinned to the session's cores runs, and leaves that copy's cores alone");
                 EndGame(pinned);
