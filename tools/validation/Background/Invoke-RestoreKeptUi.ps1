@@ -10,6 +10,10 @@ Add-Type -AssemblyName UIAutomationClient,UIAutomationTypes,System.Drawing,Syste
 Add-Type @'
 using System;using System.Runtime.InteropServices;
 public static class RooIndustriesRestoreKeptUi {
+ [StructLayout(LayoutKind.Sequential)] public struct Rect { public int Left, Top, Right, Bottom; }
+ [DllImport("user32.dll")] public static extern bool PrintWindow(IntPtr window, IntPtr dc, uint flags);
+ [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr window, out Rect rect);
+ [DllImport("dwmapi.dll")] public static extern int DwmGetWindowAttribute(IntPtr window, int attribute, out Rect rect, int size);
  [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
  [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr h,IntPtr after,int x,int y,int width,int height,uint flags);
@@ -29,7 +33,14 @@ function ById([string]$id){$window.FindFirst($TS::Descendants,[Windows.Automatio
 function Button([string]$name){$window.FindFirst($TS::Descendants,[Windows.Automation.AndCondition]::new([Windows.Automation.PropertyCondition]::new($A::NameProperty,$name),[Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty,$CT::Button)))}
 function Activate($e){if(-not$e){throw 'Missing UI element'};try{$e.GetCurrentPattern([Windows.Automation.ScrollItemPattern]::Pattern).ScrollIntoView()}catch{};try{$e.GetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern).Select();return}catch{};$e.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()}
 function Nav([string]$name){Activate (WaitFor {@(All|Where-Object {$_.Current.Name -eq $name -and $_.Current.ControlType -eq $CT::ListItem})|Select-Object -First 1} 45 $name)}
-function Capture([string]$path){$r=$window.Current.BoundingRectangle;$b=[Drawing.Bitmap]::new([int]$r.Width,[int]$r.Height);$g=[Drawing.Graphics]::FromImage($b);try{$g.CopyFromScreen([int]$r.X,[int]$r.Y,0,0,$b.Size);$b.Save($path,[Drawing.Imaging.ImageFormat]::Png)}finally{$g.Dispose();$b.Dispose()}}
+function Capture([string]$path){
+ $h=[IntPtr]::new($window.Current.NativeWindowHandle);$rect=New-Object RooIndustriesRestoreKeptUi+Rect;if(-not[RooIndustriesRestoreKeptUi]::GetWindowRect($h,[ref]$rect)){throw 'The app window could not be measured.'}
+ $frame=New-Object RooIndustriesRestoreKeptUi+Rect;if([RooIndustriesRestoreKeptUi]::DwmGetWindowAttribute($h,9,[ref]$frame,16) -ne 0){$frame=$rect}
+ $b=[Drawing.Bitmap]::new($rect.Right-$rect.Left,$rect.Bottom-$rect.Top);$g=[Drawing.Graphics]::FromImage($b);$dc=$g.GetHdc()
+ try{if(-not[RooIndustriesRestoreKeptUi]::PrintWindow($h,$dc,2)){throw 'The app window could not be drawn for a screenshot.'}}finally{$g.ReleaseHdc($dc);$g.Dispose()}
+ $area=[Drawing.Rectangle]::Intersect([Drawing.Rectangle]::new($frame.Left-$rect.Left,$frame.Top-$rect.Top,$frame.Right-$frame.Left,$frame.Bottom-$frame.Top),[Drawing.Rectangle]::new(0,0,$b.Width,$b.Height))
+ $c=$b.Clone($area,$b.PixelFormat);try{$c.Save($path,[Drawing.Imaging.ImageFormat]::Png)}finally{$c.Dispose();$b.Dispose()}
+}
 function Shot([string]$name){Save ($name+'-text.json') (Texts);Capture (Join-Path $directory ($name+'.png'))}
 function Frame{$script:frameCount++;Capture (Join-Path $frames ('{0:D4}.png' -f $script:frameCount));$timeline.Add(@{frame=$script:frameCount;ms=$clock.ElapsedMilliseconds})|Out-Null}
 function Card{$title=WaitFor {@(All|Where-Object {$_.Current.ControlType -eq $CT::Text -and $_.Current.Name -ceq 'Game priority'})|Select-Object -First 1} 30 'Game priority card';$panel=[Windows.Automation.TreeWalker]::RawViewWalker.GetParent($title);@($panel.FindAll($TS::Children,[Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty,$CT::Text))|ForEach-Object {$_.Current.Name})}
