@@ -55,9 +55,13 @@ public sealed class ProtectedSessionState
     public required List<ProtectedGameState> Games { get; init; }
     public required List<string> Errors { get; set; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public List<int>? Refused { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public string? BootId { get; init; }
     public required DateTime UpdatedAtUtc { get; set; }
 }
-public sealed record ProtectedSessionStatus(ProtectedSessionState? State, bool? HostRunning, string? Error);
+public sealed record ProtectedSessionStatus(ProtectedSessionState? State, bool? HostRunning, string? Error)
+{
+    public bool Restored => HostRunning == false && Error is null && State is { } state && ProtectedSessions.IsRestored(state);
+}
 public sealed record ProtectedSessionCommand(OperationOwner Owner, string OperationId, RunningProcess Host, string Action, AffinityState? Affinity);
 public sealed record ProtectedWatchReady(OperationOwner Owner, string OperationId, RunningProcess Host, RunningProcess Watcher, bool HoldingJob);
 
@@ -222,7 +226,7 @@ public sealed class ProtectedSessions
             {
                 SchemaVersion = 1, Preview = plan, PreviewPath = previewPath, ReviewHash = reviewHash, Host = self.Identity(), Status = "starting",
                 RegistryStatus = "pending", JobStatus = "pending", DesiredAffinity = plan.Controls.TryGetValue("affinity", out var mask) ? mask.Deserialize<AffinityState>(OperationFiles.Json)! : plan.OriginalAffinity,
-                LauncherJournal = null, Games = [], Errors = [], UpdatedAtUtc = DateTime.UtcNow,
+                LauncherJournal = null, Games = [], Errors = [], BootId = ProcessPolicyHost.BootId(), UpdatedAtUtc = DateTime.UtcNow,
             };
             Save(root, state);
             gate.Dispose();
@@ -559,7 +563,7 @@ public sealed class ProtectedSessions
         try
         {
             if (job is not null) job.Clear(ProcessTarget.ParseMask(state.Preview.OriginalAffinity.Mask));
-            else if ((state.JobStatus is "attachIntent" or "applied") && (Alive(state.Preview.Launcher) || LimitedGame(state))) throw new InvalidOperationException("The session job is unavailable; recovery cannot confirm its limits were cleared.");
+            else if ((state.JobStatus is "attachIntent" or "applied") && (Alive(state.Preview.Launcher) || !EarlierBoot(state) && LimitedGame(state))) throw new InvalidOperationException("The session job is unavailable; recovery cannot confirm its limits were cleared.");
             state.JobStatus = "cleared";
             foreach (var field in state.Games.SelectMany(game => game.Fields).Where(field => field.Route == "job")) field.Status = "released";
         }
@@ -697,6 +701,7 @@ public sealed class ProtectedSessions
         }
         throw new TimeoutException("The recovery watcher did not acknowledge the session job.");
     }
+    private static bool EarlierBoot(ProtectedSessionState state) => state.BootId is { } started && ProcessPolicyHost.BootId() is { } now && started != now;
     private static bool LimitedGame(ProtectedSessionState state)
     {
         var desired = ProcessTarget.ParseMask(state.DesiredAffinity.Mask);
