@@ -387,7 +387,7 @@ switch($Phase){
         $s=Describe-State;$out.state=$s
         Check ($s.hostRunning -eq $true -and $state.recordedHostIdentity -and $s.hostIdentity -and $s.hostIdentity.creationTimeFileTimeUtc -cne $state.recordedHostIdentity.creationTimeFileTimeUtc) 'A new governor worker runs after setup'
         Check ($s.hostFile.createdUtc -ne $state.recordedHostFile.createdUtc) 'Setup deleted and replaced the host files'
-        Check ((Same @($s.ruleFiles|Sort-Object name) @($state.recordedRules|Sort-Object name))) 'Setup kept the saved rules byte for byte'
+        Check ((Same @($s.ruleFiles|Sort-Object {$_.name}) @($state.recordedRules|Sort-Object {$_.name}))) 'Setup kept the saved rules byte for byte'
     }
     'verify-removed' {
         $probe=Get-Probe $state.probePid

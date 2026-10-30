@@ -125,9 +125,9 @@ for name, profile, script, newline in cases:
         assert len((script if body_target else guard + script).encode()) == target
     evaluated_path = harmless.group(1) if args.payload_from else frame + '/evaluated.txt'
     token = base64.b64encode((bootstrap + '\n# ' + uuid.uuid4().hex).encode('utf-16le')).decode()
-    command = 'powershell.exe -NoProfile -NonInteractive -OutputFormat Text -ExecutionPolicy Bypass -EncodedCommand ' + token
+    command = t.REMOTE_INPUT + 'powershell.exe -NoProfile -NonInteractive -OutputFormat Text -ExecutionPolicy Bypass -EncodedCommand ' + token
     if profile == 'outer-powershell':
-        command = 'powershell.exe -NoProfile -NonInteractive -Command "' + command + '"'
+        command = 'powershell.exe -NoProfile -NonInteractive -Command "' + command.replace('$', '`$') + '"'
     wire = base64.b64encode((guard + script).encode()).decode() + ('\n' if newline or line_framing else '')
     controller_script = scope + f". {p(helper)};$frame={p(frame)};$token={p(token)};$evaluated={p(evaluated_path)};" + r'''
 $held=@{};$rows=@();$lower=[DateTime]::UtcNow.ToFileTimeUtc();$deadline=[DateTime]::UtcNow.AddSeconds(14)
@@ -183,7 +183,7 @@ try {
         return token.encode('ascii') if data == original_bootstrap.encode('utf-16le') else saved_encode(data)
 
     def bounded(actual_command, **kwargs):
-        if actual_command[-1] != 'powershell.exe -NoProfile -NonInteractive -OutputFormat Text -ExecutionPolicy Bypass -EncodedCommand ' + token or kwargs['input'].rstrip('\n') != wire.rstrip('\n'):
+        if actual_command[-1] != t.REMOTE_INPUT + 'powershell.exe -NoProfile -NonInteractive -OutputFormat Text -ExecutionPolicy Bypass -EncodedCommand ' + token or kwargs['input'].rstrip('\n') != wire.rstrip('\n'):
             raise ValueError('Actual invoke transport differs from the retained reproduction')
         kwargs['input'] = wire
         kwargs['timeout'] = 12

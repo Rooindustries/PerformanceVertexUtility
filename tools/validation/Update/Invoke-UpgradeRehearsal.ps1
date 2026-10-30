@@ -77,7 +77,7 @@ if($PreflightOnly){
  foreach($row in $asFound.paths){Assert-RehearsalPathState $row $row.path}
  $after=@{paths=@($paths|ForEach-Object {Get-RehearsalPathState $_});tasks=@(Get-RehearsalTasks);markers=(Get-RehearsalMarkers $roots)}
  Save 'preflight-after.json' $after
- Check 'preflight leaves file hashes, tasks and registration unchanged' $after ((Test-RehearsalSnapshot @($after.tasks|Sort-Object folder,name) @($asFound.tasks|Sort-Object folder,name)) -and (Test-RehearsalSnapshot $after.markers $asFound.markers))
+ Check 'preflight leaves file hashes, tasks and registration unchanged' $after ((Test-RehearsalSnapshot @($after.tasks|Sort-Object {$_.folder},{$_.name}) @($asFound.tasks|Sort-Object {$_.folder},{$_.name})) -and (Test-RehearsalSnapshot $after.markers $asFound.markers))
  Complete-HarnessInvocation 'pass' -Cleanup|Out-Null;return
 }
 if(-not$canInstall -and -not$MoveAsideExistingState){throw 'Existing app state retained. The rehearsal requires an empty installation, data roots, product tasks and shortcuts.'}
