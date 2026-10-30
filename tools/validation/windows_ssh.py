@@ -28,7 +28,8 @@ EVIDENCE_TIMEOUT = 600
 CLEANUP_TIMEOUT = 900
 # OpenSSH runs commands through Windows PowerShell, which hands a child process only the input that has already
 # arrived; piping $input forwards the rest as it comes, so a script sent a moment late still reaches PowerShell.
-REMOTE_INPUT = '$input | '
+# Plain ASCII keeps a profile's output encoding from adding a byte order mark to the script.
+REMOTE_INPUT = '$OutputEncoding=[Text.Encoding]::ASCII;$input | '
 
 
 class HostUnreachable(subprocess.CalledProcessError):

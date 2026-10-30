@@ -27,7 +27,7 @@ function Get-RehearsalPathState([string]$Path){
 }
 function Assert-RehearsalPathState($Expected,[string]$Path){
  $actual=Get-RehearsalPathState $Path
- if($actual.exists -ne $Expected.exists -or -not(Test-RehearsalSnapshot $Expected.items $actual.items)){throw ('Rehearsal state hash or metadata mismatch; retained: '+$Path)}
+ if($actual.exists -ne $Expected.exists -or -not(Test-RehearsalSnapshot @($Expected.items|Sort-Object {$_.relative}) $actual.items)){throw ('Rehearsal state hash or metadata mismatch; retained: '+$Path)}
 }
 function Move-RehearsalPath([string]$From,[string]$To){
  if(Test-HarnessPath $To){throw ('Rehearsal destination exists; retained: '+$To)}
@@ -203,7 +203,8 @@ function Save-RehearsalOutputs($Entry){
 }
 function Assert-RehearsalRestored($Entry){
  foreach($row in $Entry.metadata.paths){Assert-RehearsalPathState $row.before $row.before.path}
- if(-not(Test-RehearsalSnapshot $Entry.metadata.markers (Get-RehearsalMarkers $Entry.metadata.roots))){throw 'Protected-folder registration restore differs; retained.'}
+ $saved=$Entry.metadata.markers
+ if(-not(Test-RehearsalSnapshot @{parents=$saved.parents;values=@($saved.values|Sort-Object {$_.name})} (Get-RehearsalMarkers $Entry.metadata.roots))){throw 'Protected-folder registration restore differs; retained.'}
  if(-not(Test-RehearsalSnapshot @($Entry.metadata.tasks|Sort-Object {$_.folder},{$_.name}) @((Get-RehearsalTasks)|Sort-Object {$_.folder},{$_.name}))){throw 'Restored product tasks differ; retained.'}
 }
 function Restore-RehearsalState($Entry){
