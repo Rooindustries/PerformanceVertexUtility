@@ -123,12 +123,15 @@ if($Action -eq 'Start'){
         Start-ScheduledTask -TaskName $taskName
     }catch{
         $reason=$_.Exception.Message
-        # Cancel under the worker's lock, then remove the task and the folder. If a worker already holds that lock, it started: wait for it below.
+        # Cancel under the worker's lock, then remove the task. If a worker already holds that lock, it started: wait for it below.
+        # Once the request exists a worker may already have read it, so the folder keeps its cancel note for that worker to refuse on;
+        # only a start that never wrote its request removes the folder it made.
         try{
-            $cancelled=-not(Test-Path -LiteralPath $requestPath) -or (Invoke-Core 'protected-session-cancel').cancelled
+            $written=Test-Path -LiteralPath $requestPath
+            $cancelled=-not $written -or (Invoke-Core 'protected-session-cancel').cancelled
             if($cancelled){
                 Remove-SessionTask $taskName
-                if($madeRoot){Remove-Item -LiteralPath $SessionRoot -Recurse -Force}elseif(Test-Path -LiteralPath $requestPath){Remove-Item -LiteralPath $requestPath -Force -ErrorAction Stop}
+                if(-not $written -and $madeRoot){Remove-Item -LiteralPath $SessionRoot -Recurse -Force}
             }
         }catch{throw ('Session startup failed: '+$reason+' Its unused session files could not be removed: '+$_.Exception.Message)}
         if($cancelled){throw ('Session startup failed: '+$reason)}
