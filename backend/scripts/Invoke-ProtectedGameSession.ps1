@@ -107,14 +107,14 @@ $task=Find-RooIndustriesCompatibleTask $taskName ($script:RooIndustriesLegacyIde
 if($task){$taskName=$task.TaskName;$description=$task.Description}
 if($Action -eq 'Start'){
     if(Test-Path -LiteralPath (Join-Path $SessionRoot 'session.json')){throw 'This session already has recovery state. Stop/recover it, then create a new preview and session directory.'}
-    # A failed start removes its folder, so it only ever starts in a new or empty one.
-    if((Test-Path -LiteralPath $SessionRoot) -and @(Get-ChildItem -LiteralPath $SessionRoot -Force).Count){throw 'This session folder already has files. Create a new preview and session directory.'}
     $workerExe=Join-Path $HostDirectory 'session\RooIndustries.SessionHost.exe'
     if(-not(Test-Path -LiteralPath $workerExe)){throw 'The app''s background session program is missing, so nothing was changed. Reinstall the app, then try again.'}
     $requestPath=Join-Path $SessionRoot 'worker-request.json'
     $execute=New-RooIndustriesElevatedTaskAction $workerExe @('run',$requestPath) (Split-Path $workerExe -Parent)
     $principal=New-ScheduledTaskPrincipal -UserId $owner -LogonType Interactive -RunLevel Highest
     $settings=New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -Priority 6
+    # A start that ends early removes the folder only if it made it; in a folder that was already there it removes just its request.
+    $madeRoot=-not(Test-Path -LiteralPath $SessionRoot)
     [IO.Directory]::CreateDirectory($SessionRoot)|Out-Null
     try{
         # The sign-in task exists before the request does: session status reads a request whose task is gone as a start that ended.
@@ -128,7 +128,7 @@ if($Action -eq 'Start'){
             $cancelled=-not(Test-Path -LiteralPath $requestPath) -or (Invoke-Core 'protected-session-cancel').cancelled
             if($cancelled){
                 Remove-SessionTask $taskName
-                Remove-Item -LiteralPath $SessionRoot -Recurse -Force
+                if($madeRoot){Remove-Item -LiteralPath $SessionRoot -Recurse -Force}else{Remove-Item -LiteralPath $requestPath -Force -ErrorAction SilentlyContinue}
             }
         }catch{throw ('Session startup failed: '+$reason+' Its unused session files could not be removed: '+$_.Exception.Message)}
         if($cancelled){throw ('Session startup failed: '+$reason)}
@@ -151,7 +151,7 @@ if($Action -eq 'Start'){
                 if(-not(Test-Path -LiteralPath (Join-Path $SessionRoot 'session.json'))){
                     try{
                         Remove-SessionTask $taskName
-                        Remove-Item -LiteralPath $SessionRoot -Recurse -Force
+                        if($madeRoot){Remove-Item -LiteralPath $SessionRoot -Recurse -Force}else{Remove-Item -LiteralPath $requestPath,$failurePath -Force -ErrorAction SilentlyContinue}
                     }
                     catch{throw ('Session startup failed: '+$(if($failure){$failure.error}else{$noReason})+' Its unused session files could not be removed: '+$_.Exception.Message)}
                 }
