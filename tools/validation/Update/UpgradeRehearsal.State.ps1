@@ -23,7 +23,7 @@ function Get-RehearsalPathState([string]$Path){
    @{relative=$item.FullName.Substring($Path.Length);directory=$item.IsDirectory;attributes=[int]$item.Attributes;created=[IO.File]::GetCreationTimeUtc((Get-HarnessLongPath $item.FullName)).Ticks;written=[IO.File]::GetLastWriteTimeUtc((Get-HarnessLongPath $item.FullName)).Ticks;security=$security;sha256=$(if(-not$item.IsDirectory){Get-HarnessFileSha256 $item.FullName}else{''})}
   }
  })
- @{path=$Path;exists=$exists;items=@($rows|Sort-Object relative)}
+ @{path=$Path;exists=$exists;items=@($rows|Sort-Object {$_.relative})}
 }
 function Assert-RehearsalPathState($Expected,[string]$Path){
  $actual=Get-RehearsalPathState $Path
@@ -61,7 +61,7 @@ function Get-RehearsalMarkers([string[]]$Roots,[switch]$All){
     @{name=$name;kind=[string]$key.GetValueKind($name);value=$key.GetValue($name,$null,[Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)}
    }
   }})
-  @{parents=$parents;values=@($values|Sort-Object name)}
+  @{parents=$parents;values=@($values|Sort-Object {$_.name})}
  }finally{if($key){$key.Dispose()}}
 }
 function Remove-RehearsalMarker([string]$Name){
@@ -204,7 +204,7 @@ function Save-RehearsalOutputs($Entry){
 function Assert-RehearsalRestored($Entry){
  foreach($row in $Entry.metadata.paths){Assert-RehearsalPathState $row.before $row.before.path}
  if(-not(Test-RehearsalSnapshot $Entry.metadata.markers (Get-RehearsalMarkers $Entry.metadata.roots))){throw 'Protected-folder registration restore differs; retained.'}
- if(-not(Test-RehearsalSnapshot @($Entry.metadata.tasks|Sort-Object folder,name) @((Get-RehearsalTasks)|Sort-Object folder,name))){throw 'Restored product tasks differ; retained.'}
+ if(-not(Test-RehearsalSnapshot @($Entry.metadata.tasks|Sort-Object {$_.folder},{$_.name}) @((Get-RehearsalTasks)|Sort-Object {$_.folder},{$_.name}))){throw 'Restored product tasks differ; retained.'}
 }
 function Restore-RehearsalState($Entry){
  $Entry=Get-HarnessEntryById $Entry.id;$state=$Entry.metadata
