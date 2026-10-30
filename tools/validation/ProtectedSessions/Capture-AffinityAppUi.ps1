@@ -29,7 +29,9 @@ public static class RooIndustriesAffinityApp {
 $A=[Windows.Automation.AutomationElement];$TS=[Windows.Automation.TreeScope];$CT=[Windows.Automation.ControlType]
 $evidence=[ordered]@{steps=@();chooseWays=@()};$status='fail'
 $app=$null;$window=$null;$recorder=$null;$owned=[Collections.Generic.List[object]]::new();$roots=[Collections.Generic.List[string]]::new();$copies=[Collections.Generic.List[object]]::new();$copies=[Collections.Generic.List[object]]::new()
-$operations=Join-Path $env:LOCALAPPDATA 'RooIndustriesOptimizationSuite\operations'
+# The app's data folder: an older folder name stays in use where it already exists.
+. (Join-Path $Source 'backend\scripts\BrandCompatibility.Common.ps1')
+$operations=Join-Path (Get-RooIndustriesLocalDataRoot) 'operations'
 $before=@(if([IO.Directory]::Exists($operations)){[IO.Directory]::GetDirectories($operations)})
 function WaitFor([scriptblock]$Check,[double]$Limit,[string]$What){$deadline=[DateTime]::UtcNow.AddSeconds($Limit);while([DateTime]::UtcNow -lt $deadline){try{$value=& $Check}catch{$value=$null};if($value){return $value};Start-Sleep -Milliseconds 200};throw ('Timed out waiting for '+$What)}
 function ById([string]$Id){$window.FindFirst($TS::Descendants,[Windows.Automation.PropertyCondition]::new($A::AutomationIdProperty,$Id))}

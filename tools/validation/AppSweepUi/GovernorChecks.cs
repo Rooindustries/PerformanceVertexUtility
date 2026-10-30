@@ -829,7 +829,8 @@ static class GovernorChecks
         var recovery = new bool?[] { null, false, true };
         var sessions = new (string Name, GameSessionEntry[] Games)[]
         {
-            ("none", []), ("host unknown", [new("s", new ProtectedSessionStatus(null, null, null))]), ("state unreadable", [new("s", new ProtectedSessionStatus(null, false, null))]),
+            ("none", []), ("host unknown", [new("s", new ProtectedSessionStatus(null, null, null))]), ("start that changed nothing", [new("s", new ProtectedSessionStatus(null, false, null))]),
+            ("preparing", [new("s", new ProtectedSessionStatus(null, true, null))]),
         };
         var windows = new (string Name, TweakRecovery? Value)[] { ("unreadable", null), ("none", new TweakRecovery(null, null, null)) };
         var failures = new Dictionary<string, string>();
@@ -865,12 +866,13 @@ static class GovernorChecks
             var governor = rows.Single(row => row.Label == "Automatic app rules").Value;
             var nothing = headline == "Nothing to undo.";
             var worker = snapshot?.Worker;
-            var unreadable = windowValue is null || gameRecovery is null || governorRecovery is null || games.Any(game => game.Worker.State is null || game.Worker.HostRunning is null) || snapshot is null
+            var unreadable = windowValue is null || gameRecovery is null || governorRecovery is null || games.Any(game => game.Worker.HostRunning is null) || snapshot is null
                 || worker!.HostRunning is null || worker.HostRunning == true && worker.Error is not null || snapshot.Summary.RulesError is not null || snapshot.Summary.UnreadableRules is { Length: > 0 }
                 || snapshot.Summary.SecurityProblem is not (null or "missing") || governor.StartsWith("Not responding", StringComparison.Ordinal) || governor == "Couldn't check" || governor.Contains("couldn't check", StringComparison.Ordinal);
             string Input() => governorName + " | windows " + windowName + " | games " + sessionName + " | game " + gameRecovery + " | governor session " + governorRecovery + " => " + headline + " || " + governor;
             Verify(governor.Split(" · ")[0], "Undo headline says there is nothing to restore while a source is unreadable or the governor is not responding", !(nothing && unreadable), Input);
             Verify(governor.Split(" · ")[0], "Undo page shows a safe status while a source is unreadable or the governor is not responding", history.RestoreState != "safe" || !unreadable, Input);
+            Verify(governor.Split(" · ")[0], "Undo headline says there is nothing to restore while a game session is still preparing", !(nothing && games.Any(game => game.Worker.State is null && game.Worker.HostRunning == true)), Input);
             Verify(governor.Split(" · ")[0], "Undo headline says there is nothing to restore while the governor row counts apps with settings", !(nothing && governor.Any(letter => letter is >= '1' and <= '9')), Input);
             Verify(governor.Split(" · ")[0], "Governor row says its settings are put back while the worker state is unreadable, not answering, or an app still holds a setting",
                 governor != "Paused · settings put back" || snapshot is not null && worker!.HostRunning is not null && !(worker.HostRunning == true && worker.Error is not null)

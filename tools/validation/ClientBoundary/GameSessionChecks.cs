@@ -66,6 +66,14 @@ static class GameSessionChecks
         Check(GameSessionDisplay.Title(Armed([4242])) == "Partly applied · check each setting below", "A game in the launcher that won't let the app check it shows the session as partly applied, not ready" + " | " + GameSessionDisplay.Title(Armed([4242])));
         var inherited = Ended("stopped", "leftAsIs");
         Check(GameSessionDisplay.Restored(inherited) && ProtectedSessions.IsRestored(inherited.State!), "A field the game already had when it started, left as is, doesn't keep the session outstanding");
+        var starting = new ProtectedSessionStatus(null, true, null);
+        Check(!GameSessionDisplay.Restored(starting) && GameSessionDisplay.Title(starting) == "Preparing the session", "A start whose worker hasn't saved anything yet shows as preparing, never as finished");
+        var gaveUp = new ProtectedSessionStatus(null, false, null);
+        Check(GameSessionDisplay.Restored(gaveUp), "A start that ended before saving anything counts as nothing to put back");
+        Check(GameSessionDisplay.Title(gaveUp) == "Didn't start · nothing was changed" && new GameSessionEntry(Path.Combine("operations", "game-session-1", "session"), gaveUp).ToString() == "game-session-1 · didn't start",
+            "A start that ended before saving anything says it didn't start and changed nothing, not that its state is unavailable");
+        Check(new GameSessionEntry(Path.Combine("operations", "game-session-2", "session"), starting).ToString() == "game-session-2 · preparing" && new GameSessionEntry(Path.Combine("operations", "game-session-3", "session"), new(null, null, "x")).ToString() == "game-session-3 · state unavailable",
+            "Previous sessions say a start is preparing, and keep state unavailable for a session that couldn't be read");
         Console.WriteLine("Game session display assertions: " + passed);
     }
 

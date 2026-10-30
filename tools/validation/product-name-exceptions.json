@@ -167,9 +167,9 @@
     {
       "text": "\"Roo Industries Protected Session \"",
       "files": [
-        "backend/native/Optimizer.SessionHost/Program.cs"
+        "backend/native/Optimizer.Core/ProtectedSessions.cs"
       ],
-      "reason": "Protected session task name; the worker removes its own task after sign-in recovery."
+      "reason": "Protected session task name; session status checks whether a start's task can still run its worker, and the worker removes its own task after sign-in recovery."
     },
     {
       "text": "'Roo Industries protected game session | '",
