@@ -8,7 +8,7 @@ using RooIndustries.Optimizer;
 
 static class GameSessionPresetChecks
 {
-    const string SavedLine = "Saved for next time: these turn back on whenever launcher.exe opens while this app is open. After a restart, open the app once and they're back. Turn them off under Saved launch settings.";
+    const string SavedLine = "Saved for next time: these turn back on whenever launcher.exe opens, also after a restart. The app keeps running in the background until you turn them off under Saved launch settings.";
     const string NoCore = "Pick at least one core.";
 
     public static async Task RunAsync(Action<bool, string> check)
