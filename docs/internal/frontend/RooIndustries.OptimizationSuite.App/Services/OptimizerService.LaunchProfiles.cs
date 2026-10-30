@@ -184,8 +184,8 @@ public sealed partial class OptimizerService
             for (var clock = Stopwatch.StartNew(); ; await Task.Delay(100).ConfigureAwait(false))
             {
                 try { return new ProfileHold(_profileGate, new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None)); }
-                catch (IOException) when (clock.Elapsed < ProfileLockLimit) { }
-                catch (IOException) { throw new IOException("Another copy of the app is busy with saved launch settings. Try again in a minute."); }
+                catch (IOException error) when ((error.HResult & 0xffff) is 32 or 33 && clock.Elapsed < ProfileLockLimit) { }
+                catch (IOException error) when ((error.HResult & 0xffff) is 32 or 33) { throw new IOException("Another copy of the app is busy with saved launch settings. Try again in a minute.", error); }
             }
         }
         catch { _profileGate.Release(); throw; }
