@@ -17,6 +17,11 @@ if(-not $DotNetPath){$DotNetPath=Get-RooIndustriesDevelopmentDotNet $HostDirecto
 $DotNetPath=[IO.Path]::GetFullPath($DotNetPath)
 if($Action -notin @('Preview','Status') -and -not $ConfirmApply){throw 'Review the protected-session operation before using -ConfirmApply.'}
 function Test-Restored($Worker){return $Worker -and $Worker.restored -eq $true}
+# A worker removes its own task after a start that ended, so a task that is already gone counts as removed.
+function Remove-SessionTask([string]$Name){
+    try{Unregister-ScheduledTask -TaskName $Name -Confirm:$false -ErrorAction Stop}
+    catch{if(Get-ScheduledTask -TaskName $Name -ErrorAction SilentlyContinue){throw}}
+}
 function Invoke-Core([string]$Operation,[hashtable]$Fields=@{}) {
     $request=@{schemaVersion=1;repoRoot=$repoRoot;confirm=[bool]$ConfirmApply}
     if($SessionRoot){$request.sessionRoot=$SessionRoot}
@@ -78,7 +83,7 @@ if($Action -eq 'RemoveAll'){
             (Split-Path -Leaf (Split-Path -Parent $parts[2])) -like 'game-session-*' -and
             (Split-Path -Parent (Split-Path -Parent $parts[2])) -ieq $OperationsRoot -and -not(Test-Path -LiteralPath (Join-Path $parts[2] 'session.json')) -and $kept -notcontains $parts[2]
     })){
-        try{Unregister-ScheduledTask -TaskName $leftover.TaskName -Confirm:$false}
+        try{Remove-SessionTask $leftover.TaskName}
         catch{$failed=$true;$results+=@{taskName=$leftover.TaskName;status='failed';error=$_.Exception.Message}}
     }
     @{schemaVersion=1;status=$(if($failed){'failed'}else{'completed'});data=@{sessions=$results}}|ConvertTo-Json -Depth 10
@@ -114,7 +119,7 @@ if($Action -eq 'Start'){
         try{
             $cancelled=-not(Test-Path -LiteralPath $requestPath) -or (Invoke-Core 'protected-session-cancel').cancelled
             if($cancelled){
-                if(Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue){Unregister-ScheduledTask -TaskName $taskName -Confirm:$false}
+                Remove-SessionTask $taskName
                 Remove-Item -LiteralPath $SessionRoot -Recurse -Force
             }
         }catch{throw ('Session startup failed: '+$reason+' Its unused session files could not be removed: '+$_.Exception.Message)}
@@ -123,25 +128,28 @@ if($Action -eq 'Start'){
     $clock=[Diagnostics.Stopwatch]::StartNew()
     $failurePath=Join-Path $SessionRoot 'worker-error.json'
     $cancelPath=Join-Path $SessionRoot 'start-cancelled.json'
+    $noReason='The background session program stopped before it changed anything. Try again, and reinstall the app if it keeps happening.'
     do {
         $status=Invoke-Core 'protected-session-status'
         if($status.hostRunning -eq $true -and $status.state.status -in @('armed','active','partial')){break}
         # Stop cancelled this start before its worker changed anything. Keep the folder: its note makes a worker that starts late refuse too.
         if($status.hostRunning -eq $false -and -not $status.state -and (Test-Path -LiteralPath $cancelPath)){throw 'Session start was cancelled before it changed anything.'}
-        if($status.hostRunning -eq $false -and ($status.state -or (Test-Path -LiteralPath $failurePath))){
+        # Not running with nothing saved means the start ended: its worker gave up, with or without saying why, and can't run again.
+        if($status.hostRunning -eq $false){
             $failure=if(Test-Path -LiteralPath $failurePath){Get-Content -Raw -LiteralPath $failurePath|ConvertFrom-Json}else{$null}
             if(-not $status.state){
                 $wait=[Diagnostics.Stopwatch]::StartNew()
                 while((Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue).State -eq 'Running' -and $wait.Elapsed.TotalSeconds -lt 15){Start-Sleep -Milliseconds 200}
                 if(-not(Test-Path -LiteralPath (Join-Path $SessionRoot 'session.json'))){
                     try{
-                        if(Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue){Unregister-ScheduledTask -TaskName $taskName -Confirm:$false}
+                        Remove-SessionTask $taskName
                         Remove-Item -LiteralPath $SessionRoot -Recurse -Force
                     }
-                    catch{throw ('Session startup failed: '+$failure.error+' Its unused session files could not be removed: '+$_.Exception.Message)}
+                    catch{throw ('Session startup failed: '+$(if($failure){$failure.error}else{$noReason})+' Its unused session files could not be removed: '+$_.Exception.Message)}
                 }
             }
             if($failure){throw ('Session startup failed: '+$failure.error)}
+            if(-not $status.state){throw ('Session startup failed: '+$noReason)}
             throw ('Session stopped during startup: '+($status.state.errors -join '; '))
         }
         Start-Sleep -Milliseconds 200
@@ -162,12 +170,12 @@ if($Action -eq 'Stop'){
     do {$status=Invoke-Core 'protected-session-status';if($status.hostRunning -eq $false){break};Start-Sleep -Milliseconds 200}while($clock.Elapsed.TotalSeconds -lt 30)
     if($status.hostRunning -ne $false){throw 'Worker shutdown is not verified; recovery state was retained.'}
     if($status.state -and -not(Test-Restored $status)){Invoke-Core 'protected-session-recover' @{operationId=$status.state.preview.operationId;acceptEarlierVersion=[bool]$AcceptEarlierVersion}|Out-Null}
-    if($task -and (Test-Restored (Invoke-Core 'protected-session-status')) -and (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue)){Unregister-ScheduledTask -TaskName $taskName -Confirm:$false}
+    if($task -and (Test-Restored (Invoke-Core 'protected-session-status'))){Remove-SessionTask $taskName}
 }
 if($Action -eq 'Recover'){
     $status=Invoke-Core 'protected-session-status'
     if(-not $status.state -and $status.hostRunning -and -not(Invoke-Core 'protected-session-cancel').cancelled){throw 'The session is still starting. Stop it instead, or try again in a moment.'}
     if($status.state){Invoke-Core 'protected-session-recover' @{operationId=$status.state.preview.operationId;acceptEarlierVersion=[bool]$AcceptEarlierVersion}|Out-Null}
-    if($task -and (Test-Restored (Invoke-Core 'protected-session-status')) -and (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue)){Unregister-ScheduledTask -TaskName $taskName -Confirm:$false}
+    if($task -and (Test-Restored (Invoke-Core 'protected-session-status'))){Remove-SessionTask $taskName}
 }
 @{schemaVersion=1;status='completed';data=@{sessionRoot=$SessionRoot;taskName=$taskName;worker=(Invoke-Core 'protected-session-status')}}|ConvertTo-Json -Depth 40
