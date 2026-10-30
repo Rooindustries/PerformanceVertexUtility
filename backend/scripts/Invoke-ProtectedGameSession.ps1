@@ -18,9 +18,15 @@ $DotNetPath=[IO.Path]::GetFullPath($DotNetPath)
 if($Action -notin @('Preview','Status') -and -not $ConfirmApply){throw 'Review the protected-session operation before using -ConfirmApply.'}
 function Test-Restored($Worker){return $Worker -and $Worker.restored -eq $true}
 # A worker removes its own task after a start that ended, so a task that is already gone counts as removed.
+# Only a lookup that says not found proves that; any other lookup failure keeps the removal error.
 function Remove-SessionTask([string]$Name){
     try{Unregister-ScheduledTask -TaskName $Name -Confirm:$false -ErrorAction Stop}
-    catch{if(Get-ScheduledTask -TaskName $Name -ErrorAction SilentlyContinue){throw}}
+    catch{
+        $removal=$_
+        try{Get-ScheduledTask -TaskName $Name -ErrorAction Stop|Out-Null}
+        catch{if($_.CategoryInfo.Category -eq [Management.Automation.ErrorCategory]::ObjectNotFound){return};throw $removal}
+        throw $removal
+    }
 }
 function Invoke-Core([string]$Operation,[hashtable]$Fields=@{}) {
     $request=@{schemaVersion=1;repoRoot=$repoRoot;confirm=[bool]$ConfirmApply}
@@ -101,6 +107,8 @@ $task=Find-RooIndustriesCompatibleTask $taskName ($script:RooIndustriesLegacyIde
 if($task){$taskName=$task.TaskName;$description=$task.Description}
 if($Action -eq 'Start'){
     if(Test-Path -LiteralPath (Join-Path $SessionRoot 'session.json')){throw 'This session already has recovery state. Stop/recover it, then create a new preview and session directory.'}
+    # A failed start removes its folder, so it only ever starts in a new or empty one.
+    if((Test-Path -LiteralPath $SessionRoot) -and @(Get-ChildItem -LiteralPath $SessionRoot -Force).Count){throw 'This session folder already has files. Create a new preview and session directory.'}
     $workerExe=Join-Path $HostDirectory 'session\RooIndustries.SessionHost.exe'
     if(-not(Test-Path -LiteralPath $workerExe)){throw 'The app''s background session program is missing, so nothing was changed. Reinstall the app, then try again.'}
     $requestPath=Join-Path $SessionRoot 'worker-request.json'
