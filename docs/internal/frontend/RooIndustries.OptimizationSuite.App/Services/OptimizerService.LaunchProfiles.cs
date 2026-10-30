@@ -12,6 +12,7 @@ namespace RooIndustries.OptimizationSuite.Services;
 
 public sealed record LaunchProfile(int SchemaVersion, string ProfileId, OperationOwner Owner, bool Enabled, string ReviewHash);
 public sealed record LaunchProfileState(RunningProcess Launcher, string Status, string? SessionRoot, string? Message, int Attempts, DateTime UpdatedAtUtc);
+public sealed record SignInStart(string TaskName, bool Registered);
 public sealed record LaunchProfileEntry(string Root, LaunchProfile Profile, ProtectedSessionPreview Saved, LaunchProfileState? State)
 {
     public string Title => Path.GetFileName(Saved.GamePath) + " via " + Path.GetFileName(Saved.Launcher.ExecutablePath);
@@ -19,12 +20,16 @@ public sealed record LaunchProfileEntry(string Root, LaunchProfile Profile, Prot
 
 public sealed partial class OptimizerService
 {
+    public const string SavedSettingsArgument = "--saved-settings";
     private const string ProfileMarker = "launch-profile.txt";
     private const int ProfileAttempts = 6;
     private static readonly TimeSpan ProfileRetry = TimeSpan.FromSeconds(10);
+    private static readonly TimeSpan ProfileLockLimit = TimeSpan.FromMinutes(2);
     private readonly SemaphoreSlim _profileGate = new(1, 1);
     private readonly Dictionary<string, string> _profileErrors = new(StringComparer.OrdinalIgnoreCase);
     public event Action? GameSessionsChanged;
+    // The program the sign-in start runs with SavedSettingsArgument: this app.
+    public string? SignInProgram { get; init; } = Environment.ProcessPath;
 
     public void WatchGameSessions(CancellationToken stop) => _ = Task.Run(async () =>
     {
@@ -83,12 +88,13 @@ public sealed partial class OptimizerService
     public async Task<LaunchProfileEntry> SaveLaunchProfileAsync(GameSessionReview review)
     {
         var root = Path.Combine(await EnsureStorageAsync().ConfigureAwait(false), "launch-profile-" + review.Plan.OperationId);
-        await _profileGate.WaitAsync().ConfigureAwait(false);
-        try
+        using (await HoldProfilesAsync().ConfigureAwait(false))
         {
             RequireNoLaunchProfile(review.Plan);
             var bytes = await File.ReadAllBytesAsync(review.PreviewPath).ConfigureAwait(false);
             if (!string.Equals(OperationFiles.Hash(bytes), review.Hash, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("The reviewed game settings changed. Preview them again.");
+            // Saved settings also turn on after a restart: the app starts at sign-in, without a window, to watch for the launcher.
+            await SetSignInStartAsync(true).ConfigureAwait(false);
             Directory.CreateDirectory(root);
             await File.WriteAllBytesAsync(Path.Combine(root, "reviewed-preview.json"), bytes).ConfigureAwait(false);
             await File.WriteAllTextAsync(Path.Combine(Path.GetDirectoryName(review.SessionRoot)!, ProfileMarker), review.Plan.OperationId).ConfigureAwait(false);
@@ -96,13 +102,11 @@ public sealed partial class OptimizerService
             OperationFiles.Write(Path.Combine(root, "profile.json"), new LaunchProfile(1, review.Plan.OperationId, review.Plan.Owner, true, review.Hash));
             return ReadLaunchProfile(root);
         }
-        finally { _profileGate.Release(); }
     }
 
     public async Task<string?> DisableLaunchProfileAsync(string root)
     {
-        await _profileGate.WaitAsync().ConfigureAwait(false);
-        try
+        using (await HoldProfilesAsync().ConfigureAwait(false))
         {
             var entry = ReadLaunchProfile(root);
             OperationFiles.Write(Path.Combine(root, "profile.json"), entry.Profile with { Enabled = false });
@@ -118,9 +122,84 @@ public sealed partial class OptimizerService
             }
             if (problems.Count != 0) return string.Join("\n", problems);
             Directory.Delete(root, true);
+            if (!HasSavedLaunchSettings())
+                try { await SetSignInStartAsync(false).ConfigureAwait(false); }
+                catch (Exception error) { AppLog.Write("profiles", "The sign-in start for saved launch settings couldn't be removed; it ends itself at the next sign-in: " + error.Message); }
             return null;
         }
-        finally { _profileGate.Release(); }
+    }
+
+    private enum SavedLaunchSettings { None, Some, Unknown }
+
+    // Unknown when the folder or a saved profile couldn't be read this time, such as a file another program holds for a moment.
+    private SavedLaunchSettings SavedLaunchSettingsState()
+    {
+        // Listing directly tells a missing folder (none saved) from one that can't be read; Directory.Exists says false for both.
+        string[] roots;
+        try { roots = Directory.GetDirectories(_storage, "launch-profile-*"); }
+        catch (DirectoryNotFoundException) { return SavedLaunchSettings.None; }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException) { return SavedLaunchSettings.Unknown; }
+        var unknown = false;
+        foreach (var root in roots)
+        {
+            try { if (ReadLaunchProfile(root).Profile.Enabled) return SavedLaunchSettings.Some; }
+            // A damaged, half-written or other-PC profile can never turn on; only a read that could work next time is unknown.
+            catch (Exception error) when (error is InvalidDataException or System.Text.Json.JsonException or FileNotFoundException or DirectoryNotFoundException) { }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException) { unknown = true; }
+            catch (Exception) { }
+        }
+        return unknown ? SavedLaunchSettings.Unknown : SavedLaunchSettings.None;
+    }
+
+    // True unless there are certainly none: a read that failed keeps the app and its sign-in start as they are.
+    public bool HasSavedLaunchSettings() => SavedLaunchSettingsState() != SavedLaunchSettings.None;
+
+    // On while any saved settings are on, so they turn on after a restart too; off once there are certainly none.
+    public async Task KeepSavedSettingsAtSignInAsync()
+    {
+        await EnsureStorageAsync().ConfigureAwait(false);
+        using (await HoldProfilesAsync().ConfigureAwait(false))
+            switch (SavedLaunchSettingsState())
+            {
+                case SavedLaunchSettings.Some: await SetSignInStartAsync(true).ConfigureAwait(false); break;
+                case SavedLaunchSettings.None: await SetSignInStartAsync(false).ConfigureAwait(false); break;
+            }
+    }
+
+    private async Task SetSignInStartAsync(bool on)
+    {
+        var result = RequireData(await RunAsync<SignInStart>("Invoke-ProtectedGameSession.ps1", (on
+            ? "-Action WatchAtSignIn -AppPath " + Quote(SignInProgram ?? throw new InvalidOperationException(AppLog.MissingFiles))
+            : "-Action StopWatchAtSignIn") + " -OperationsRoot " + Quote(_storage) + " -ConfirmApply").ConfigureAwait(false));
+        if (result.Registered != on) throw new InvalidDataException(on ? "Windows didn't keep the sign-in start for saved launch settings." : "Windows kept the sign-in start for saved launch settings.");
+    }
+
+    // One copy of the app at a time changes saved settings: a sign-in start and a window opened beside it share them.
+    private async Task<IDisposable> HoldProfilesAsync()
+    {
+        await _profileGate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            var path = Path.Combine(_storage, "launch-profiles.lock");
+            for (var clock = Stopwatch.StartNew(); ; await Task.Delay(100).ConfigureAwait(false))
+            {
+                try { return new ProfileHold(_profileGate, new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None)); }
+                catch (IOException error) when ((error.HResult & 0xffff) is 32 or 33 && clock.Elapsed < ProfileLockLimit) { }
+                catch (IOException error) when ((error.HResult & 0xffff) is 32 or 33) { throw new IOException("Another copy of the app is busy with saved launch settings. Try again in a minute.", error); }
+            }
+        }
+        catch { _profileGate.Release(); throw; }
+    }
+
+    private sealed class ProfileHold(SemaphoreSlim gate, FileStream file) : IDisposable
+    {
+        private int _released;
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref _released, 1) != 0) return;
+            file.Dispose();
+            gate.Release();
+        }
     }
 
     public static string DescribeLaunchProfile(LaunchProfileEntry entry)
@@ -163,8 +242,7 @@ public sealed partial class OptimizerService
     {
         var entry = ReadLaunchProfile(root);
         if (!entry.Profile.Enabled || (entry.State is { } current && Running(current.Launcher) ? current.Launcher : FindLauncher(entry.Saved)) is not { } launcher || !Due(entry.State, launcher)) return false;
-        await _profileGate.WaitAsync().ConfigureAwait(false);
-        try
+        using (await HoldProfilesAsync().ConfigureAwait(false))
         {
             entry = ReadLaunchProfile(root);
             if (!entry.Profile.Enabled || !Due(entry.State, launcher)) return false;
@@ -173,7 +251,6 @@ public sealed partial class OptimizerService
             catch (Exception error) { SaveProfileState(root, new(launcher, attempts < ProfileAttempts ? "retrying" : "failed", null, error.Message, attempts, DateTime.UtcNow)); }
             return true;
         }
-        finally { _profileGate.Release(); }
     }
 
     private static bool Due(LaunchProfileState? state, RunningProcess launcher)

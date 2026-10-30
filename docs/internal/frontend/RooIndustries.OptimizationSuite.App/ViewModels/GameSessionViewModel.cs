@@ -433,7 +433,7 @@ public partial class GameSessionViewModel : ObservableObject
             lines.Add("Cores: " + CoreText(_coreMask, original));
             if (shared.Length > 0) lines.Add("Other apps this launcher opens get the same " + (shared.Length == 1 ? shared[0] : string.Join(", ", shared[..^1]) + " and " + shared[^1]) + ".");
             if (highIo) lines.Add("High disk priority is set on the game once it starts and stays until you select Stop and restore. If the game restarts itself, the new copy gets it too and Stop puts it back. Other programs the game starts, such as a crash reporter, also start with High disk priority and keep it until they close.");
-            if (KeepArmed) lines.Add("Saved for next time: these turn back on whenever " + launcher + " opens while this app is open. After a restart, open the app once and they're back. Turn them off under Saved launch settings.");
+            if (KeepArmed) lines.Add("Saved for next time: these turn back on whenever " + launcher + " opens, also after a restart. The app keeps running in the background until you turn them off under Saved launch settings.");
             ReviewSummary = string.Join("\n", lines);
             Status = "Review these settings, then select Start."; Detail = "Launch the game normally after the session reports Ready.";
         }
@@ -459,7 +459,7 @@ public partial class GameSessionViewModel : ObservableObject
             ShowStatus(await App.Operations.StartGameSessionAsync(review));
             if (keep)
             {
-                try { await App.Operations.SaveLaunchProfileAsync(review); saved = "Saved for next time. These settings turn back on whenever " + Path.GetFileName(review.Plan.Launcher.ExecutablePath) + " opens while the app is open."; }
+                try { await App.Operations.SaveLaunchProfileAsync(review); saved = "Saved for next time. These settings turn back on whenever " + Path.GetFileName(review.Plan.Launcher.ExecutablePath) + " opens, also after a restart."; }
                 catch (Exception error) { saved = "The session started, but its settings weren't saved for next time: " + error.Message; }
             }
         }

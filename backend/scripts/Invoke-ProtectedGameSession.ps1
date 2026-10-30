@@ -1,8 +1,8 @@
 param(
-    [Parameter(Mandatory=$true)][ValidateSet('Preview','Start','Status','Affinity','Stop','Recover','RemoveAll')][string]$Action,
+    [Parameter(Mandatory=$true)][ValidateSet('Preview','Start','Status','Affinity','Stop','Recover','RemoveAll','WatchAtSignIn','StopWatchAtSignIn')][string]$Action,
     [string]$SessionRoot='', [string]$PreviewPath='', [string]$ReviewHash='', [string]$OperationsRoot='',
     [int]$LauncherProcessId=0, [string]$GamePath='', [string]$ControlsPath='', [string]$AffinityMask='',
-    [string]$HostDirectory='', [string]$DotNetPath='', [switch]$AcceptLauncherScope, [switch]$AcceptEarlierVersion, [switch]$ConfirmApply
+    [string]$HostDirectory='', [string]$DotNetPath='', [string]$AppPath='', [switch]$AcceptLauncherScope, [switch]$AcceptEarlierVersion, [switch]$ConfirmApply
 )
 $ErrorActionPreference='Stop'
 $dotNetOverride=$DotNetPath
@@ -63,10 +63,95 @@ if($Action -eq 'Start'){
         $SessionRoot=Join-Path $operations ('game-session-'+$plan.operationId+'\session')
     }
 }
+# Saved launch settings start the app at sign-in, without a window, so they turn on after a restart too.
+function Get-SavedSettingsStart([string]$Root){
+    $owner=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+    $sha=[Security.Cryptography.SHA256]::Create()
+    try{$suffix=([BitConverter]::ToString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes(($owner+'|'+$Root).ToLowerInvariant())))).Replace('-','').Substring(0,16)}finally{$sha.Dispose()}
+    return @{owner=$owner;taskName='Performance Vertex Utility Saved Launch Settings '+$suffix;description='Performance Vertex Utility saved launch settings | '+$owner+' | '+$Root}
+}
+# The sign-in task runs the app elevated, so only a program in a folder only administrators can change may run there:
+# no link on the way, owned by SYSTEM, Administrators or TrustedInstaller, and no one else allowed to write, delete or
+# change permissions. Checked up to the drive root, which stays out because it lets users add folders of their own.
+function Get-AdminOnlyProblem([string]$Path){
+    $trusted=@('S-1-5-18','S-1-5-32-544','S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464')
+    $item=Get-Item -LiteralPath $Path -Force -ErrorAction Stop
+    while($item -and $item.FullName.TrimEnd('\') -ine [IO.Path]::GetPathRoot($item.FullName).TrimEnd('\')){
+        if($item.Attributes -band [IO.FileAttributes]::ReparsePoint){return $item.FullName+' is a link'}
+        $acl=$item.GetAccessControl()
+        if($trusted -notcontains $acl.GetOwner([Security.Principal.SecurityIdentifier]).Value){return $item.FullName+' is not owned by an administrator'}
+        $writer=@($acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])|Where-Object {$_.AccessControlType -eq 'Allow' -and -not($_.PropagationFlags -band [Security.AccessControl.PropagationFlags]::InheritOnly) -and $trusted -notcontains $_.IdentityReference.Value -and (([int64]$_.FileSystemRights -band 0x500D0156) -ne 0)})
+        if($writer.Count){return $item.FullName+' can be changed by '+$writer[0].IdentityReference.Value}
+        $item=if($item -is [IO.FileInfo]){$item.Directory}else{$item.Parent}
+    }
+    return $null
+}
+# Task Scheduler reports a task's user by account name even when it was registered by SID.
+function Get-TaskUserSid([string]$User){
+    if($User -match '^S-1-'){return $User}
+    try{return ([Security.Principal.NTAccount]$User).Translate([Security.Principal.SecurityIdentifier]).Value}catch{return ''}
+}
+if($Action -in @('WatchAtSignIn','StopWatchAtSignIn')){
+    if(-not $OperationsRoot){$OperationsRoot=Join-Path (Get-RooIndustriesLocalDataRoot) 'operations'}
+    $start=Get-SavedSettingsStart ([IO.Path]::GetFullPath($OperationsRoot).TrimEnd('\','/'))
+    $existing=Get-ScheduledTask -TaskName $start.taskName -ErrorAction SilentlyContinue
+    if($Action -eq 'WatchAtSignIn'){
+        if(-not $AppPath){throw 'Provide the app program that starts at sign-in.'}
+        $AppPath=[IO.Path]::GetFullPath($AppPath)
+        if(-not(Test-Path -LiteralPath $AppPath -PathType Leaf) -or [IO.Path]::GetExtension($AppPath) -ne '.exe'){throw 'App files are missing or damaged. Install the app again.'}
+        if($null -ne ($problem=Get-AdminOnlyProblem $AppPath)){throw ('Saved launch settings can''t start this copy of the app at sign-in, because other programs could change it ('+$problem+'). Install the app, then save them from the installed copy.')}
+        $execute=New-RooIndustriesElevatedTaskAction $AppPath @('--saved-settings') (Split-Path $AppPath -Parent)
+        # A matching task stays as it is: this app may be running as that task right now.
+        $same=$existing -and @($existing.Actions).Count -eq 1 -and $existing.Actions[0].Execute -eq $execute.Execute -and $existing.Actions[0].Arguments -ceq $execute.Arguments -and
+            (Get-TaskUserSid $existing.Principal.UserId) -eq $start.owner -and [string]$existing.Principal.RunLevel -eq 'Highest' -and $existing.Description -ceq $start.description -and
+            @($existing.Triggers).Count -eq 1 -and $existing.Triggers[0].CimClass.CimClassName -eq 'MSFT_TaskLogonTrigger' -and (Get-TaskUserSid $existing.Triggers[0].UserId) -eq $start.owner -and $existing.Settings.Enabled
+        if(-not $same){
+            $principal=New-ScheduledTaskPrincipal -UserId $start.owner -LogonType Interactive -RunLevel Highest
+            $settings=New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -Priority 6
+            Register-ScheduledTask -TaskName $start.taskName -Description $start.description -Action $execute -Principal $principal -Settings $settings -Trigger (New-ScheduledTaskTrigger -AtLogOn -User $start.owner) -Force|Out-Null
+        }
+    }
+    elseif($existing){Remove-SessionTask $start.taskName}
+    @{schemaVersion=1;status='completed';data=@{taskName=$start.taskName;registered=[bool](Get-ScheduledTask -TaskName $start.taskName -ErrorAction SilentlyContinue)}}|ConvertTo-Json -Depth 5
+    return
+}
 if($Action -eq 'RemoveAll'){
     if(-not $OperationsRoot){$OperationsRoot=Join-Path (Get-RooIndustriesLocalDataRoot) 'operations'}
     $OperationsRoot=[IO.Path]::GetFullPath($OperationsRoot).TrimEnd('\','/')
     $results=@();$failed=$false;$kept=@()
+    # The app goes first, so nothing turns saved launch settings on again while their sessions are put back.
+    $start=Get-SavedSettingsStart $OperationsRoot
+    try{Remove-SessionTask $start.taskName}
+    catch{$failed=$true;$results+=@{taskName=$start.taskName;status='failed';error=$_.Exception.Message}}
+    $appExe=Join-Path $repoRoot 'app\RooIndustries.OptimizationSuite.App.exe'
+    # The app's own helpers go with it: a script it was running could otherwise still start a session after the folder list
+    # below (sessions themselves start through Task Scheduler). Programs the user opened from the app, such as tools or
+    # uninstallers, are left alone, and so is this script with everything that started it.
+    $system=[Environment]::SystemDirectory
+    $helpers=@((Join-Path $system 'WindowsPowerShell\v1.0\powershell.exe'),(Join-Path $system 'conhost.exe'),(Join-Path $system 'cmd.exe'))
+    $installed=$repoRoot.TrimEnd('\')+'\'
+    try{$all=@(Get-CimInstance Win32_Process -ErrorAction Stop)}
+    catch{$failed=$true;$results+=@{app=$appExe;status='failed';error=('The running programs could not be listed: '+$_.Exception.Message)};$all=@()}
+    # A parent that exited can leave its ID to a newer process, so the walk up stops at a "parent" younger than its child.
+    $mine=@($PID);$walk=@($all|Where-Object {$_.ProcessId -eq $PID})[0]
+    while($walk -and $mine.Count -lt 64){
+        $parent=@($all|Where-Object {$_.ProcessId -eq $walk.ParentProcessId -and $_.CreationDate -le $walk.CreationDate})[0]
+        if(-not $parent -or $mine -contains $parent.ProcessId){break}
+        $mine+=$parent.ProcessId;$walk=$parent
+    }
+    foreach($app in @($all|Where-Object {$_.ExecutablePath -and $_.ExecutablePath -ieq $appExe -and $mine -notcontains $_.ProcessId})){
+        $tree=@($app);$next=@($app)
+        while($next.Count){
+            $next=@($all|Where-Object {$child=$_;$child.ExecutablePath -and ($child.ExecutablePath.StartsWith($installed,[StringComparison]::OrdinalIgnoreCase) -or $helpers -contains $child.ExecutablePath) -and
+                $mine -notcontains $child.ProcessId -and $tree -notcontains $child -and @($next|Where-Object {$child.ParentProcessId -eq $_.ProcessId -and $child.CreationDate -ge $_.CreationDate}).Count})
+            $tree+=$next
+        }
+        foreach($process in $tree){
+            # A helper can end by itself once the app is gone (its console host does), which counts as closed.
+            try{$running=Get-Process -Id $process.ProcessId -ErrorAction SilentlyContinue;if($running -and [Math]::Abs(($running.StartTime-$process.CreationDate).TotalSeconds) -lt 1){try{$running.Kill()}catch{$running.Refresh();if(-not $running.HasExited){throw}};if(-not $running.WaitForExit(15000)){throw ($process.Name+' did not close.')}}}
+            catch{$failed=$true;$results+=@{app=$appExe;process=$process.Name;status='failed';error=$_.Exception.Message}}
+        }
+    }
     $directories=if(Test-Path -LiteralPath $OperationsRoot){@(Get-ChildItem -LiteralPath $OperationsRoot -Directory -Filter 'game-session-*')}else{@()}
     foreach($directory in $directories){
         $root=Join-Path $directory.FullName 'session'
@@ -113,7 +198,8 @@ if($Action -eq 'Start'){
     $execute=New-RooIndustriesElevatedTaskAction $workerExe @('run',$requestPath) (Split-Path $workerExe -Parent)
     $principal=New-ScheduledTaskPrincipal -UserId $owner -LogonType Interactive -RunLevel Highest
     $settings=New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -Priority 6
-    # A start that ends early removes the folder only if it made it; in a folder that was already there it removes just its request.
+    # A start that ends early never deletes files it didn't create: it removes the folder only if it made it, and in a folder that
+    # was already there it removes just its request and the worker's error note once the worker gave up.
     $madeRoot=-not(Test-Path -LiteralPath $SessionRoot)
     [IO.Directory]::CreateDirectory($SessionRoot)|Out-Null
     try{
