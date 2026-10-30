@@ -446,7 +446,9 @@ static class LaunchProfileChecks
                     folder.SetAccessControl(restored);
                     Check(unreadable, "The saved-settings folder can't be listed for a few seconds, like a folder another program has locked");
                     seventh = await OpenLauncher();
-                    await Until(async () => (await Sessions()).Any(entry => entry.Worker.HostRunning == true && entry.Worker.State?.Preview.Launcher.ProcessId == seventh.Id), "The background check stopped after one failed folder read, so the next launcher run was not set up.", 60);
+                    await Until(async () => (await Sessions()).Any(entry => entry.Worker.HostRunning == true && entry.Worker.State?.Preview.Launcher.ProcessId == seventh.Id &&
+                        GameSessionDisplay.Title(entry.Worker).StartsWith("Ready", StringComparison.Ordinal)) &&
+                        (await Profile()).State is { Status: "armed" } armed && armed.Launcher.ProcessId == seventh.Id, "The background check stopped after one failed folder read, so the next launcher run was not set up.", 60);
                     Check(Equals(Launch("CpuPriorityClass"), 6) && Affinity(seventh) == core, "After a failed folder read the background check keeps going and sets up the next launcher run on its own");
                 }
                 finally

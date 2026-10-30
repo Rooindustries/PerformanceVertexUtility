@@ -1332,7 +1332,7 @@ public sealed class LiveDataService
         using var change = extraArgs.Contains("-ConfirmApply", StringComparison.Ordinal) ? DataGeneration.BeginChange() : null;
         var tail = string.IsNullOrWhiteSpace(extraArgs) ? string.Empty : " " + extraArgs;
         var arguments =
-            $"-NoProfile -ExecutionPolicy Bypass -Command \"{RooIndustries.Optimizer.RuntimeEnvironment.PowerShellPrelude}[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; & '{scriptPath}'{tail}\"";
+            $"-NoProfile -ExecutionPolicy Bypass -Command \"{RooIndustries.Optimizer.RuntimeEnvironment.PowerShellPrelude}[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; {RooIndustries.Optimizer.RuntimeEnvironment.PowerShellCall("& '" + scriptPath + "'" + tail)}\"";
 
         var psi = new ProcessStartInfo
         {

@@ -1,6 +1,8 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Net;
+using System.Text.RegularExpressions;
 using System.Threading;
 
 namespace RooIndustries.OptimizationSuite.Services;
@@ -22,6 +24,7 @@ public static class AppLog
 
     public static string Explain(string source, string? detail, string fallback)
     {
+        detail = PowerShellErrors(detail);
         Write(source, detail);
         var line = (detail ?? "").Split('\n').Select(value => value.Trim()).FirstOrDefault(value => value.Length > 0) ?? "";
         var script = line.IndexOf(".ps1 : ", StringComparison.OrdinalIgnoreCase);
@@ -29,6 +32,14 @@ public static class AppLog
         var command = line.IndexOf(" : ", StringComparison.Ordinal);
         if (command > 0 && !line[..command].Contains(' ')) line = line[(command + 3)..].Trim();
         return line.Length is 0 or > 240 || line.StartsWith('#') || line.StartsWith('<') || line.Contains("Exception", StringComparison.Ordinal) || line.Contains(":\\", StringComparison.Ordinal) ? fallback : line;
+    }
+
+    // Windows PowerShell writes errors to a redirected error stream as a CLIXML block: read the text inside it.
+    private static string? PowerShellErrors(string? detail)
+    {
+        if (detail is null || !detail.TrimStart().StartsWith("#< CLIXML", StringComparison.Ordinal)) return detail;
+        return string.Concat(Regex.Matches(detail, "<S S=\"Error\">(.*?)</S>", RegexOptions.Singleline).Select(match =>
+            Regex.Replace(WebUtility.HtmlDecode(match.Groups[1].Value), "_x([0-9A-Fa-f]{4})_", code => ((char)Convert.ToInt32(code.Groups[1].Value, 16)).ToString())));
     }
 
     public static void Timing(string call, System.Diagnostics.Stopwatch elapsed, string outcome)
