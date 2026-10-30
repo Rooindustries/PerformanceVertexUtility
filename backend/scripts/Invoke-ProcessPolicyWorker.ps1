@@ -43,7 +43,7 @@ function Invoke-Core([string]$CoreAction,[object]$Extra=@{}) {
     } finally {if($hostArgs.Count -gt 0){[Environment]::SetEnvironmentVariable('DOTNET_ROOT',$previousRoot,'Process')}}
     if([string]::IsNullOrWhiteSpace($text)){throw ($CoreAction+' failed (exit '+$exitCode+'): the helper returned no output.')}
     try {$result=$text|ConvertFrom-Json} catch {throw ($CoreAction+' failed (exit '+$exitCode+'): the helper returned '+$text.Substring(0,[Math]::Min(300,$text.Length)))}
-    if($exitCode -ne 0 -or $result.status -ne 'completed'){throw ($CoreAction+' failed (exit '+$exitCode+'): '+$result.error.message)}
+    if($exitCode -ne 0 -or $result.status -ne 'completed'){if($result.error.message){throw [string]$result.error.message};throw ($CoreAction+' failed (exit '+$exitCode+').')}
     return $result.data
 }
 

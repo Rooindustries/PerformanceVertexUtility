@@ -23,7 +23,8 @@ function Invoke-Core([string]$Operation,[hashtable]$Fields=@{}) {
     foreach($key in $Fields.Keys){$request[$key]=$Fields[$key]}
     $OutputEncoding=[Text.UTF8Encoding]::new($false)
     $text=@(($request|ConvertTo-Json -Depth 20)|& $DotNetPath @hostArgs $Operation '-') -join "`n";$exit=$LASTEXITCODE;$result=$text|ConvertFrom-Json
-    if($exit -ne 0 -or $result.status -ne 'completed'){throw ($Operation+' failed (exit '+$exit+'): '+$result.error.message)}
+    # The helper's message is written for the person using the app; the operation name only stands in when there is none.
+    if($exit -ne 0 -or $result.status -ne 'completed'){if($result.error.message){throw [string]$result.error.message};throw ($Operation+' failed (exit '+$exit+').')}
     return $result.data
 }
 function Complete-PendingStart{

@@ -34,5 +34,5 @@ try {
     $code=$LASTEXITCODE
 } finally {if($hostArgs.Count -gt 0){[Environment]::SetEnvironmentVariable('DOTNET_ROOT',$previousRoot,'Process')}}
 $result=$output|ConvertFrom-Json
-if($code -ne 0 -or $result.status -ne 'completed'){throw ('Cleanup exclusions failed (exit '+$code+'): '+$result.error.message)}
+if($code -ne 0 -or $result.status -ne 'completed'){if($result.error.message){throw [string]$result.error.message};throw ('Cleanup exclusions failed (exit '+$code+').')}
 $output
