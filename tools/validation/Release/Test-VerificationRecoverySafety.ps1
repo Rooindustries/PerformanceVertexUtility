@@ -1,5 +1,6 @@
-﻿param([Parameter(Mandatory=$true)][string]$Runner,[Parameter(Mandatory=$true)][string]$OutDir,[Alias('Before')][switch]$LegacyBefore,[string[]]$Only=@(),[string]$LauncherCommon=(Join-Path $PSScriptRoot 'LauncherChecks.Common.ps1'),[Parameter(Mandatory)][string]$ExpectedMachine)
+﻿param([Parameter(Mandatory=$true)][string]$Runner,[Parameter(Mandatory=$true)][string]$OutDir,[Alias('Before')][switch]$LegacyBefore,[string[]]$Only=@(),[string]$LauncherCommon,[Parameter(Mandatory)][string]$ExpectedMachine)
 $ErrorActionPreference='Stop'
+if(-not $LauncherCommon){$LauncherCommon=Join-Path $PSScriptRoot 'LauncherChecks.Common.ps1'}
 $Only=@($Only|ForEach-Object {$_ -split ','})
 if($env:COMPUTERNAME -ine $ExpectedMachine){throw 'Wrong fixture computer'}
 $identity=[Security.Principal.WindowsIdentity]::GetCurrent()
