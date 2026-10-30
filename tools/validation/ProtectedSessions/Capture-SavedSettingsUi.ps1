@@ -29,7 +29,7 @@ public static class RooIndustriesSavedSettingsUi {
 $A=[Windows.Automation.AutomationElement];$TS=[Windows.Automation.TreeScope];$CT=[Windows.Automation.ControlType]
 $evidence=[ordered]@{label=$Label;steps=@();chooseWays=@();unexpected=@()};$status='fail';$imageLock=$null
 $app=$null;$window=$null;$recorder=$null;$owned=[Collections.Generic.List[object]]::new();$roots=[Collections.Generic.List[string]]::new();$copies=[Collections.Generic.List[object]]::new()
-# The app's data folder: the older RooOptimizationSuite name stays in use where it already exists.
+# The app's data folder: an older folder name stays in use where it already exists.
 . (Join-Path $Source 'backend\scripts\BrandCompatibility.Common.ps1')
 $operations=Join-Path (Get-RooIndustriesLocalDataRoot) 'operations'
 $before=@(if([IO.Directory]::Exists($operations)){[IO.Directory]::GetDirectories($operations)})
