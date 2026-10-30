@@ -60,11 +60,11 @@ public partial class RestoreLogsViewModel : PageViewModelBase
         var leftAsSet = rules is not null && GovernorDisplay.LeftAsSet(rules).Length > 0;
         var leftoverApps = rules is null ? 0 : GovernorDisplay.Apps(GovernorDisplay.Holding(rules));
         var retry = rules is not null && GovernorDisplay.CanRetry(rules, rulesState) ? " · press Put settings back in Games > Processes" : "";
-        var restorable = windows?.State?.Profiles.Length > 0 || gameRecovery == true || governorRecovery == true || leftoverApps > 0 || games.Any(game => game.Worker.State is not null && !GameSessionDisplay.Restored(game.Worker));
+        var restorable = windows?.State?.Profiles.Length > 0 || gameRecovery == true || governorRecovery == true || leftoverApps > 0 || games.Any(game => (game.Worker.State is not null || game.Worker.HostRunning == true) && !GameSessionDisplay.Restored(game.Worker));
         var signIn = rules is not null && rulesState == "running" ? GovernorDisplay.SignIn(rules) : "yes";
         var signInNote = signIn switch { "yes" => "", "no" => " · they won't start when you sign in · press Start in Games > Processes to fix that", _ => " · couldn't confirm they start when you sign in · press Start in Games > Processes to fix that" };
         var unavailable = windows is null || gameRecovery is null || governorRecovery is null || rules is null || rulesState == "notResponding" || rules.Worker.HostRunning is null || rules.Summary.UnreadableRules is { Length: > 0 } || rules.Summary.RulesError is not null || rules.Summary.SecurityProblem is not (null or "missing")
-            || games.Any(game => game.Worker.State is null || game.Worker.HostRunning is null);
+            || games.Any(game => game.Worker.HostRunning is null);
 
         var restart = windows?.Pending is { Phase: "awaiting-restart" } pending && windows.State?.History.Any(item => item.OperationId == pending.Plan.OperationId) == true;
         RestoreHeadline = restart ? "A Windows feature change needs a restart. After you restart, press Review recovery in Windows tweaks to finish it." : windows?.Pending is not null ? "A Windows change didn't finish. Press Review recovery in Windows tweaks." : restorable
@@ -102,7 +102,7 @@ public partial class RestoreLogsViewModel : PageViewModelBase
             profiles > 0 ? profiles + (profiles == 1 ? " profile to undo" : " profiles to undo") : Nothing, windows is null || windows.Pending is not null ? "medium" : profiles > 0 ? "safe" : "neutral"));
         foreach (var profile in windows?.State?.Profiles ?? [])
             RestoreRows.Add(new StatusLine(ProfileName(profile.Id, profile.Controls?.Select(claim => claim.Target)), profile.Selections.Length + (profile.Selections.Length == 1 ? " setting · undo it in Windows tweaks" : " settings · undo them in Windows tweaks"), "safe"));
-        foreach (var game in games)
+        foreach (var game in games.Where(game => game.Worker.State is not null || !GameSessionDisplay.Restored(game.Worker)))
             RestoreRows.Add(new StatusLine(game.Worker.State is { } state ? GameName(state) : "Game session",
                 SessionText(game.Worker), GameSessionDisplay.Restored(game.Worker) ? "neutral" : "medium"));
 
@@ -180,7 +180,7 @@ public partial class RestoreLogsViewModel : PageViewModelBase
 
     private static string SessionText(ProtectedSessionStatus status)
     {
-        if (status.State is not { } state) return CouldNotCheck;
+        if (status.State is not { } state) return status.HostRunning == true ? "Preparing the session · open Games" : CouldNotCheck;
         if (status.HostRunning is null || status.Error is not null) return "Couldn't check this session · open Games";
         if (GameSessionDisplay.Restored(status)) return state.Games.Any(game => !game.Exited && game.Fields.Any(field => field.Status == "restartRequired"))
             ? "Settings put back · restart the game to clear its launch priorities" : "Settings put back";

@@ -1,5 +1,7 @@
 #nullable enable
 using System.Diagnostics;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -59,7 +61,7 @@ public sealed class ProtectedSessionState
 }
 public sealed record ProtectedSessionStatus(ProtectedSessionState? State, bool? HostRunning, string? Error)
 {
-    public bool Restored => HostRunning == false && Error is null && State is { } state && ProtectedSessions.IsRestored(state);
+    public bool Restored => HostRunning == false && Error is null && (State is null || ProtectedSessions.IsRestored(State));
 }
 public sealed record ProtectedSessionCommand(OperationOwner Owner, string OperationId, RunningProcess Host, string Action, AffinityState? Affinity);
 public sealed record ProtectedWatchReady(OperationOwner Owner, string OperationId, RunningProcess Host, RunningProcess Watcher, bool HoldingJob);
@@ -78,6 +80,17 @@ public sealed class ProtectedSessions
     private static string StatePath(string root) => Path.Combine(Path.GetFullPath(root), "session.json");
     private static string CommandPath(string root) => Path.Combine(Path.GetFullPath(root), "command.json");
     private static string BootPath(string root) => Path.Combine(Path.GetFullPath(root), "boot.json");
+    private static string CancelPath(string root) => Path.Combine(Path.GetFullPath(root), "start-cancelled.json");
+    private static string FailurePath(string root) => Path.Combine(Path.GetFullPath(root), "worker-error.json");
+    public static string StartTaskName(string root) => "Roo Industries Protected Session " + TaskSuffix(root);
+    private static string TaskSuffix(string root) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(Path.GetFullPath(root).ToLowerInvariant())))[..16];
+    // A start can still change something only while its sign-in task can run a worker for it. A request whose task is gone, with nothing saved,
+    // is a start that ended early: Start or its worker stopped before saving anything, or an earlier version left it behind.
+    private static bool Starting(string root)
+    {
+        if (!File.Exists(Path.Combine(Path.GetFullPath(root), "worker-request.json")) || File.Exists(FailurePath(root)) || File.Exists(CancelPath(root))) return false;
+        return ScheduledTasks.Registered(StartTaskName(root)) is not false || ScheduledTasks.Registered(BrandCompatibility.LegacyGameTaskPrefix + TaskSuffix(root)) is not false;
+    }
     private static JsonElement Value<T>(T value) => JsonSerializer.SerializeToElement(value, OperationFiles.Json);
     private static readonly string[] StartupFields = ["cpuPriority", "ioPriority", "memoryPriority"];
     private static readonly string[] NativeFields = ["gpuPriority", "executionQoS", "priorityBoost"];
@@ -170,7 +183,7 @@ public sealed class ProtectedSessions
     }
     public ProtectedSessionStatus Status(string root)
     {
-        if (!File.Exists(StatePath(root))) return new(null, false, null);
+        if (!File.Exists(StatePath(root))) return new(null, Starting(root), null);
         var state = ReadState(root);
         try { var alive = Alive(state.Host); return new(state, alive, !alive && !IsRestored(state) ? "The worker exited; saved state requires recovery." : alive && DateTime.UtcNow - state.UpdatedAtUtc > TimeSpan.FromSeconds(15) ? "The worker heartbeat is stale." : null); }
         catch (Exception error) { return new(state, null, error.Message); }
@@ -180,6 +193,7 @@ public sealed class ProtectedSessions
         if (action is not ("stop" or "affinity")) throw new InvalidDataException("Unknown session command.");
         var status = Status(root);
         if (status.HostRunning != true) throw new InvalidOperationException(status.Error ?? "The session worker is not running. Recover its saved state before starting again.");
+        if (status.State is null) throw new InvalidOperationException("The session is still starting. Try again in a moment.");
         if (action == "affinity" && !status.State!.Preview.Controls.ContainsKey("affinity")) throw new InvalidDataException("Affinity was not part of the reviewed session.");
         if (action == "affinity") ValidateAffinity(affinity ?? throw new InvalidDataException("Select an affinity."), status.State!.Preview.OriginalAffinity);
         using var lease = OperationFiles.Lock(CommandPath(root));
@@ -194,6 +208,8 @@ public sealed class ProtectedSessions
         root = Path.GetFullPath(root); previewPath = Path.GetFullPath(previewPath);
         using var lease = OperationFiles.Lock(Path.Combine(root, "worker"));
         if (File.Exists(StatePath(root))) throw new InvalidOperationException("Use a new session directory; recover the previous session before rearming.");
+        if (File.Exists(CancelPath(root))) throw new InvalidOperationException("This start was cancelled before it changed anything.");
+        if (File.Exists(FailurePath(root))) throw new InvalidOperationException("This start already stopped before it changed anything.");
         var plan = OperationFiles.Read<ProtectedSessionPreview>(previewPath, reviewHash); ValidatePlan(plan);
         var governor = new ProcessPolicyStore(ProcessPolicyStore.RootFor(root));
         using var gate = ProcessPolicyStore.Gate();
@@ -289,6 +305,20 @@ public sealed class ProtectedSessions
             return state;
         }
         finally { imageLease.ReleaseMutex(); }
+    }
+
+    public bool CancelStart(string root)
+    {
+        if (File.Exists(StatePath(root))) return false;
+        FileStream lease;
+        try { lease = OperationFiles.Lock(Path.Combine(Path.GetFullPath(root), "worker")); }
+        catch (IOException error) when ((error.HResult & 0xffff) is 32 or 33) { return false; }
+        using (lease)
+        {
+            if (File.Exists(StatePath(root))) return false;
+            OperationFiles.Write(CancelPath(root), new { atUtc = DateTime.UtcNow });
+            return true;
+        }
     }
 
     public ProtectedSessionState Recover(string root, string operationId) => Recover(root, operationId, null);
@@ -612,6 +642,7 @@ public sealed class ProtectedSessions
     private void VerifyLaunch(ProtectedSessionPreview plan)
     {
         ValidatePlan(plan);
+        if (!Alive(plan.Launcher)) throw new InvalidOperationException(LauncherClosed);
         using var launcher = new ProcessTarget(plan.Launcher.ProcessId); plan.Launcher.Verify(launcher.Identity()); launcher.RequireUnprotected();
         if (launcher.UserSid() != plan.Owner.UserSid || CpuSelection.Fingerprint(launcher.Topology()) != plan.TopologyHash || _excluded(plan.Launcher)) throw new InvalidDataException("Launcher ownership, topology or exclusion changed.");
         if (OperationFiles.HashFile(plan.GamePath) != plan.GameHash || OperationFiles.HashFile(plan.Launcher.ExecutablePath) != plan.LauncherHash) throw new InvalidDataException("An executable changed after review.");

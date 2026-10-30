@@ -67,13 +67,19 @@ public static class RuntimeEnvironment
     private static string ModulePath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "WindowsPowerShell", "Modules") + ";" +
         Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "Modules");
 
-    public static string PowerShellPrelude => "$env:PSModulePath='" + ModulePath.Replace("'", "''") + "'; "
+    // Windows PowerShell writes progress (such as "Preparing modules for first use") to a redirected error stream as a
+    // CLIXML block. Nothing here shows progress, so it stays out of the stream the app reads errors from.
+    public static string PowerShellPrelude => "$ProgressPreference='SilentlyContinue'; $env:PSModulePath='" + ModulePath.Replace("'", "''") + "'; "
 #if ROO_INDUSTRIES_TEST_HOOKS
         + (Environment.GetEnvironmentVariable("ROO_INDUSTRIES_TEST_MODULES") is { Length: > 0 } modules
             ? "Import-Module " + string.Join(",", modules.Split(';').Select(module => "'" + module.Replace("'", "''") + "'")) + "; $global:PSModuleAutoLoadingPreference='None'; $env:PSModulePath='" +
                 (Environment.GetEnvironmentVariable("ROO_INDUSTRIES_TEST_MODULE_PATH") ?? Path.Combine(Path.GetTempPath(), "roo-industries-no-modules-" + Guid.NewGuid().ToString("N"))).Replace("'", "''") + "'; " : "")
 #endif
         ;
+
+    // Runs a script so that its terminating error reaches the caller as the plain message on the error stream. Windows
+    // PowerShell would write it as a CLIXML block, wrapped at the console width, and the app could only say something went wrong.
+    public static string PowerShellCall(string invocation) => "try{" + invocation + "}catch{[Console]::Error.WriteLine($_.Exception.Message);exit 1}";
 
     private static readonly Lazy<string> TokenProfile = new(() =>
     {

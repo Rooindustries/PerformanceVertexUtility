@@ -144,6 +144,10 @@ try
         case "protected-session-status":
             data = new ProtectedSessions(Excluded).Status(Require(request.SessionRoot, "session directory"));
             break;
+        case "protected-session-cancel":
+            RequireConfirmation(request);
+            data = new { cancelled = new ProtectedSessions(Excluded).CancelStart(Require(request.SessionRoot, "session directory")) };
+            break;
         case "protected-session-stop":
         case "protected-session-affinity":
             RequireConfirmation(request);
@@ -396,13 +400,14 @@ static CleanupApplication Application(JsonElement app)
 static JsonElement RunScript(string repoRoot, string script, string[] arguments)
 {
     static string Quote(string value) => "'" + value.Replace("'", "''") + "'";
-    var command = RuntimeEnvironment.PowerShellPrelude + "[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false); & " + Quote(Path.Combine(repoRoot, "backend", "scripts", script));
+    var call = "& " + Quote(Path.Combine(repoRoot, "backend", "scripts", script));
     if (arguments.Length % 2 != 0) throw new InvalidDataException("Provider parameters must be name/value pairs.");
     for (var index = 0; index < arguments.Length; index += 2)
     {
         if (!Regex.IsMatch(arguments[index], "^-[A-Za-z]+$")) throw new InvalidDataException("Invalid provider parameter name.");
-        command += " " + arguments[index] + " " + Quote(arguments[index + 1]);
+        call += " " + arguments[index] + " " + Quote(arguments[index + 1]);
     }
+    var command = RuntimeEnvironment.PowerShellPrelude + "[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false); " + RuntimeEnvironment.PowerShellCall(call);
     var start = new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe"))
     {
         UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true,

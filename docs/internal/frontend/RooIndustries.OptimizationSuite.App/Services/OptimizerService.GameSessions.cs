@@ -16,7 +16,8 @@ public sealed record GameSessionEntry(string SessionRoot, ProtectedSessionStatus
 {
     public override string ToString() => (Worker.State is { } state
         ? Path.GetFileNameWithoutExtension(state.Preview.GamePath) + " · " + state.UpdatedAtUtc.ToLocalTime().ToString("g")
-        : Path.GetFileName(Path.GetDirectoryName(SessionRoot)) + " · state unavailable") + (ProfileId is null ? "" : " · saved settings");
+        : Path.GetFileName(Path.GetDirectoryName(SessionRoot)) + (Worker.HostRunning == true ? " · preparing" : GameSessionDisplay.Restored(Worker) ? " · didn't start" : " · state unavailable"))
+        + (ProfileId is null ? "" : " · saved settings");
 }
 
 public sealed partial class OptimizerService
@@ -41,7 +42,14 @@ public sealed partial class OptimizerService
     {
         ValidateGameSessionRoot(review.SessionRoot);
         if (!string.Equals(Hash(review.PreviewPath), review.Hash, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("The reviewed game settings changed. Preview them again.");
-        var status = await GameSessionActionAsync("Start", review.SessionRoot, " -PreviewPath " + Quote(review.PreviewPath) + " -ReviewHash " + Quote(review.Hash));
+        ProtectedSessionStatus status;
+        try { status = await GameSessionActionAsync("Start", review.SessionRoot, " -PreviewPath " + Quote(review.PreviewPath) + " -ReviewHash " + Quote(review.Hash)); }
+        catch when (!Directory.Exists(review.SessionRoot))
+        {
+            try { Directory.Delete(Path.GetDirectoryName(review.SessionRoot)!, true); }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException) { AppLog.Write("games", "A review that didn't start couldn't be removed: " + error.Message); }
+            throw;
+        }
         if (status.State?.Preview.OperationId != review.Plan.OperationId || status.HostRunning != true)
             throw new InvalidDataException("The game session did not start. Check Undo changes before trying again.");
         return status;
@@ -81,14 +89,10 @@ public sealed partial class OptimizerService
         return stale.Length != 0;
     }
 
-    public async Task<bool> GameSessionsBlockUpdateAsync()
+    public async Task<GameSessionEntry[]> RecoverAndReadGameSessionsAsync()
     {
         await RecoverStaleGameSessionsAsync().ConfigureAwait(false);
-        var sessions = await ReadGameSessionsAsync().ConfigureAwait(false);
-        if (sessions.Any(entry => entry.Worker.HostRunning == true)) return true;
-        if (sessions.Any(entry => entry.Worker.HostRunning is null || entry.Worker.Error is not null))
-            throw new InvalidDataException("Couldn't confirm that all game sessions have stopped. Check Games and Undo changes first.");
-        return false;
+        return await ReadGameSessionsAsync().ConfigureAwait(false);
     }
 
     public Task<ProtectedSessionStatus> StopGameSessionAsync(string sessionRoot)

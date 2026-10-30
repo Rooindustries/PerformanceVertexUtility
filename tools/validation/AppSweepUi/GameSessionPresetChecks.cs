@@ -195,6 +195,21 @@ static class GameSessionPresetChecks
             await model.RefreshProfilesAsync();
             check(model.Profiles.Select(row => row.Title).SequenceEqual(["game.exe via launcher.exe · " + picked.Name + " preset", "game.exe via launcher.exe"]),
                 "Saved launch settings name the preset their values match, and only that one");
+            var turning = new TaskCompletionSource<string?>();
+            App.Operations.ProfileTurnOff = root =>
+            {
+                App.Operations.LaunchProfiles = [App.Operations.LaunchProfiles[0] with { Enabled = false }, App.Operations.LaunchProfiles[1]];
+                return turning.Task;
+            };
+            var shown = model.Profiles[0].Status;
+            var turnOff = model.TurnOffProfileAsync(model.Profiles[0]);
+            await model.RefreshProfilesAsync();
+            check(model.Profiles[0].Status == shown, "While saved settings are turning off, their row keeps its text instead of flashing that a session still needs restoring");
+            App.Operations.LaunchProfiles = [App.Operations.LaunchProfiles[1]];
+            turning.SetResult(null);
+            await turnOff;
+            check(model.Status == "Saved settings turned off" && model.Profiles.Count == 1 && model.Profiles.All(row => !row.Status.StartsWith("Turned off", StringComparison.Ordinal)),
+                "When turning off finishes, only its final message shows and the row is gone");
 
             App.Operations.GameSessions = [];
             var manual = new GameSessionViewModel();
@@ -223,6 +238,15 @@ static class GameSessionPresetChecks
             Setting(manual, "ioPriority").Selected = Setting(manual, "ioPriority").Options[0];
             await manual.PreviewCommand.ExecuteAsync(null);
             check(Lines(manual)[^1] == "Other apps this launcher opens get the same memory priority.", "With only memory priority chosen the review names just that for the launcher's other apps");
+            App.Operations.GameStartFailure = "Session startup failed: " + ProtectedSessions.LauncherClosed;
+            try
+            {
+                await manual.StartCommand.ExecuteAsync(null);
+                await manual.ObserveAsync();
+                check(manual.Status == "Session startup needs attention." && manual.Detail.Contains(ProtectedSessions.LauncherClosed, StringComparison.Ordinal) && !manual.CanStop && !manual.CanRecover,
+                    "A start that failed before changing anything keeps its plain reason on screen instead of switching to Session state unavailable");
+            }
+            finally { App.Operations.GameStartFailure = null; App.Operations.RemovedSessions.Clear(); }
 
             var desired = new AffinityState(0, "0xFF");
             ProtectedGameState Game(int processId, Dictionary<string, JsonElement> controls) => new()
@@ -285,6 +309,26 @@ static class GameSessionPresetChecks
                 && several.Fields.Single(field => field.Label == "CPU cores · PID 4301") is { Observed: "Session limit removed", Result: "Core limit removed" },
                 "With two game processes each row names its process, and a released core limit says Core limit removed");
 
+            var preparing = Path.Combine(root, "game-session-preparing", "session");
+            App.Operations.GameSessions = [new GameSessionEntry(preparing, new ProtectedSessionStatus(null, true, null))];
+            App.Operations.GameStop = stopped =>
+            {
+                App.Operations.RemovedSessions.Add(stopped);
+                App.Operations.GameSessions = [new GameSessionEntry(stopped, new ProtectedSessionStatus(null, false, null))];
+                return new ProtectedSessionStatus(null, false, null);
+            };
+            try
+            {
+                var cancelling = new GameSessionViewModel();
+                await cancelling.InitializeAsync();
+                check(cancelling.Status == "Preparing the session" && cancelling.CanStop, "A start still in progress shows as preparing and can be stopped");
+                await cancelling.StopCommand.ExecuteAsync(null);
+                await cancelling.ObserveAsync();
+                check(cancelling.Status == "Didn't start · nothing was changed" && cancelling.Detail == "" && !cancelling.CanStop,
+                    "Stop on a start still in progress says it didn't start and changed nothing, and keeps saying so after the next refresh");
+            }
+            finally { App.Operations.GameStop = null; App.Operations.RemovedSessions.Clear(); }
+
             GameSessionViewModel.PresetsPath = Path.Combine(fixtures, "missing-launch-presets.json");
             App.Operations.GameSessions = [];
             var missing = new GameSessionViewModel();
@@ -311,6 +355,7 @@ static class GameSessionPresetChecks
         finally
         {
             (App.Live.Inventory, App.Operations.ProcessSnapshot, App.Operations.GameSessions, App.Operations.LaunchProfiles, GameSessionViewModel.PresetsPath, AppLog.Observer, App.Operations.GameReview, App.Operations.GameSwitch) = before;
+            App.Operations.ProfileTurnOff = null;
             App.Operations.StartedSessions.RemoveRange(started, App.Operations.StartedSessions.Count - started);
             App.Operations.SavedLaunchProfiles.RemoveRange(saved, App.Operations.SavedLaunchProfiles.Count - saved);
             App.Operations.ProcessReads = null;

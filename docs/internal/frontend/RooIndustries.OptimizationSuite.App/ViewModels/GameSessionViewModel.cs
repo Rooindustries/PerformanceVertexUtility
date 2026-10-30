@@ -85,6 +85,7 @@ public partial class GameSessionViewModel : ObservableObject
     [ObservableProperty] private string _reviewSummary = "";
     private ProcessControlSnapshot? _launcher;
     private GameSessionReview? _review;
+    private string? _turningOff;
     private ProtectedSessionStatus? _current;
     private string? _sessionRoot;
     private string? _pendingAffinity;
@@ -467,6 +468,7 @@ public partial class GameSessionViewModel : ObservableObject
             Status = "Session startup needs attention."; Detail = error.Message;
             try { _current = await App.Operations.ReadGameSessionAsync(review.SessionRoot); }
             catch (Exception readError) { _current = new(null, null, readError.Message); }
+            if (_current is { State: null, HostRunning: false, Error: null }) { _sessionRoot = null; _current = null; }
         }
         finally { _review = null; ReviewSummary = ""; Busy = false; }
         await RefreshAsync();
@@ -478,7 +480,9 @@ public partial class GameSessionViewModel : ObservableObject
     {
         try
         {
-            var rows = (await App.Operations.ReadLaunchProfilesAsync()).Select(entry => new LaunchProfileRow(entry.Root, entry.Title + PresetLabel(entry.Saved.Controls), OptimizerService.DescribeLaunchProfile(entry))).ToArray();
+            var turning = _turningOff;
+            var rows = (await App.Operations.ReadLaunchProfilesAsync()).Select(entry => entry.Root == turning && Profiles.FirstOrDefault(row => row.Root == entry.Root) is { } shown ? shown
+                : new LaunchProfileRow(entry.Root, entry.Title + PresetLabel(entry.Saved.Controls), OptimizerService.DescribeLaunchProfile(entry))).ToArray();
             if (rows.SequenceEqual(Profiles)) return;
             Profiles.Clear(); foreach (var row in rows) Profiles.Add(row);
         }
@@ -490,7 +494,7 @@ public partial class GameSessionViewModel : ObservableObject
         while (Busy) await Task.Delay(100);
         if (Profiles.FirstOrDefault(item => item.Root == row.Root) is not { } current) return;
         row = current;
-        Busy = true;
+        Busy = true; _turningOff = row.Root;
         string status, detail;
         try
         {
@@ -499,7 +503,7 @@ public partial class GameSessionViewModel : ObservableObject
             detail = problem ?? row.Title + " is back to its original settings. They won't turn on again by themselves.";
         }
         catch (Exception error) { status = "Couldn't turn off the saved settings."; detail = error.Message; }
-        finally { Busy = false; }
+        finally { Busy = false; _turningOff = null; }
         await RefreshAsync();
         await RefreshProfilesAsync();
         Status = status; Detail = detail;
@@ -563,7 +567,7 @@ public partial class GameSessionViewModel : ObservableObject
     {
         if (current.HostRunning == false || _pendingAffinity is not null && GameSessionDisplay.CoresMatch(current, _pendingAffinity)) _pendingAffinity = null;
         _current = current; Status = GameSessionDisplay.Title(current, _pendingAffinity); Fields.Clear();
-        Detail = current.Error ?? (current.State is { } state ? string.Join("\n", state.Errors) : "No session state was returned. Refresh before retrying.");
+        Detail = current.Error ?? (current.State is { } state ? string.Join("\n", state.Errors) : current.HostRunning == true || GameSessionDisplay.Restored(current) ? "" : "No session state was returned. Refresh before retrying.");
         if (current.State is { Refused: { Count: > 0 } refused } refusing)
             Detail = string.Join("\n", new[] { Detail }.Where(text => text.Length != 0).Concat(refused.Select(id =>
                 Path.GetFileName(refusing.Preview.GamePath) + " (PID " + id + ") didn't let the app check it, so only the CPU limit and launch priorities reach it.")));

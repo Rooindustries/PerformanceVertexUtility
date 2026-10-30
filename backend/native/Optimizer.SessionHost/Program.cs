@@ -1,6 +1,4 @@
 using System.Diagnostics;
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using RooIndustries.Optimizer;
@@ -51,6 +49,8 @@ catch (Exception error)
 {
     if (root is not null) OperationFiles.Write(Path.Combine(root, args.FirstOrDefault() == "watch" ? "watch-error.json" : "worker-error.json"), new { error = error.Message, type = error.GetType().Name, hresult = $"0x{error.HResult:X8}", detail = error.ToString() });
     else Console.Error.WriteLine(error.Message);
+    var startRoot = root ?? (args is ["run", var requestPath] && Path.IsPathFullyQualified(requestPath) ? Path.GetDirectoryName(Path.GetFullPath(requestPath)) : null);
+    if (startRoot is not null && args.FirstOrDefault() == "run" && !File.Exists(Path.Combine(startRoot, "session.json"))) RemoveTask(startRoot);
     Environment.ExitCode = 1;
 }
 
@@ -58,7 +58,7 @@ static void RemoveTask(string root)
 {
     var start = new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "schtasks.exe")) { UseShellExecute = false, CreateNoWindow = true };
     RuntimeEnvironment.Apply(start);
-    foreach (var argument in new[] { "/Delete", "/TN", "Roo Industries Protected Session " + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(root.ToLowerInvariant())))[..16], "/F" }) start.ArgumentList.Add(argument);
+    foreach (var argument in new[] { "/Delete", "/TN", ProtectedSessions.StartTaskName(root), "/F" }) start.ArgumentList.Add(argument);
     using var schtasks = Process.Start(start);
     schtasks?.WaitForExit(30000);
 }
