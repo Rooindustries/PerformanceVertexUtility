@@ -151,9 +151,17 @@ try:
     context.load_cert_chain(work / 'fixture-cert.pem', work / 'fixture-key.pem')
     served = {}
     failures = {}
+    lagging = {}
     class Fixture(http.server.BaseHTTPRequestHandler):
         def do_GET(self):
             path = urlparse(self.path).path
+            if lagging.get(path) and lagging[path][1]:
+                lagging[path][1] -= 1
+                self.send_response(200)
+                self.send_header('Content-Length', str(len(lagging[path][0])))
+                self.end_headers()
+                self.wfile.write(lagging[path][0])
+                return
             if failures.get(path):
                 status = failures[path].pop(0)
                 if status in ('truncated', 'oversize'):
@@ -285,6 +293,29 @@ try:
     def unlisted():
         return serves(late)() or (None if released_list.read_bytes() == b'0.11.0-beta\n' else 'the read-only list changed')
     run('publish-list-write-failure-reported', tool, ['publish', '--installer', str(dummy), '--manifest', str(late), '--installer-path', urlparse(late_url).path[1:], '--feed-path', repair_path, '--yes-publish'], 1, "Published, but couldn't add 0.11.1-beta to released-versions.txt", unlisted, upload_env, True)
+    # Vercel can serve the old feed for up to a minute after an overwrite; the tool must wait for the new bytes.
+    lag_path = 'u/lagging/beta.json'
+    tool = tool_tree('lagging-tree', origin + '/' + lag_path + '\n', b'0.11.0-beta\n')
+    lag_old_url = fixture_url('0.11.0-beta', origin)
+    served[urlparse(lag_old_url).path] = dummy.read_bytes()
+    lag_old = signed('lagging-old', '0.11.0-beta', {'url': lag_old_url, **dummy_identity})
+    (work / 'blob' / lag_path).parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy(lag_old, work / 'blob' / lag_path)
+    lag_new_url = fixture_url('0.11.1-beta', origin)
+    lag_new = signed('lagging-new', '0.11.1-beta', {'url': lag_new_url, **dummy_identity})
+    def caught_up(manifest):
+        return lambda: 'the tool stopped before the feed caught up' if lagging['/' + lag_path][1] or (work / 'blob' / lag_path).read_bytes() != manifest.read_bytes() else None
+    lagging['/' + lag_path] = [lag_old.read_bytes(), 3]
+    run('publish-waits-for-the-feed-to-update', tool, ['publish', '--installer', str(dummy), '--manifest', str(lag_new), '--installer-path', urlparse(lag_new_url).path[1:], '--feed-path', lag_path, '--yes-publish'], 0, 'Published manifest and installer verified over HTTPS.', caught_up(lag_new), upload_env)
+    lag_rollback = lag_new.with_name(lag_new.stem + '.previous-live.json')
+    lagging['/' + lag_path] = [lag_new.read_bytes(), 3]
+    run('set-feed-waits-for-the-feed-to-update', tool, ['set-feed', '--manifest', str(lag_rollback), '--feed-path', lag_path, '--yes-publish'], 0, 'The feed now serves version 0.11.0-beta, verified over HTTPS.', caught_up(lag_rollback), upload_env)
+    lag_newer_url = fixture_url('0.11.2-beta', origin)
+    lag_newer = signed('lagging-newer', '0.11.2-beta', {'url': lag_newer_url, **dummy_identity})
+    lagging['/' + lag_path] = [lag_rollback.read_bytes(), 1000000]
+    lag_list = tool.parent / 'released-versions.txt'
+    run('publish-refused-when-the-feed-never-updates', tool, ['publish', '--installer', str(dummy), '--manifest', str(lag_newer), '--installer-path', urlparse(lag_newer_url).path[1:], '--feed-path', lag_path, '--yes-publish'], 1, 'Published feed still serves other bytes 90 seconds after the upload', lambda: '0.11.2-beta was listed though the feed never served it' if '0.11.2-beta' in lag_list.read_text() else None, upload_env, uploads=True)
+    lagging.clear()
     uploads = (work / 'vercel-calls.txt').read_text().splitlines() if (work / 'vercel-calls.txt').exists() else []
     rows.append({'case': 'no-upload-attempted', 'passed': not uploads, 'calls': uploads})
     print(('PASS ' if not uploads else 'FAIL ') + 'no-upload-attempted')
