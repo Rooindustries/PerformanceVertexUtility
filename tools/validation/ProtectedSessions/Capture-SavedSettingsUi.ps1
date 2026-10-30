@@ -22,13 +22,16 @@ public static class RooIndustriesSavedSettingsUi {
  [DllImport("ntdll.dll")] static extern int NtQueryInformationProcess(IntPtr p,int kind,ref int value,int size,IntPtr returned);
  static IntPtr Open(int pid){var h=OpenProcess(0x1000,false,pid);if(h==IntPtr.Zero)throw new System.ComponentModel.Win32Exception();return h;}
  public static ulong Affinity(int pid){var h=Open(pid);try{UIntPtr mask,system;if(!GetProcessAffinityMask(h,out mask,out system))throw new System.ComponentModel.Win32Exception();return mask.ToUInt64();}finally{CloseHandle(h);}}
+ [DllImport("advapi32.dll")] static extern bool OpenProcessToken(IntPtr p,uint access,out IntPtr token);
+ [DllImport("advapi32.dll")] static extern bool GetTokenInformation(IntPtr token,int kind,out int value,int length,out int returned);
+ public static bool Elevated(int pid){var h=Open(pid);try{IntPtr t;if(!OpenProcessToken(h,8,out t))throw new System.ComponentModel.Win32Exception();try{int v,r;if(!GetTokenInformation(t,20,out v,4,out r))throw new System.ComponentModel.Win32Exception();return v!=0;}finally{CloseHandle(t);}}finally{CloseHandle(h);}}
  public static int Io(int pid){var h=Open(pid);try{int value=0;var status=NtQueryInformationProcess(h,33,ref value,4,IntPtr.Zero);if(status!=0)throw new InvalidOperationException("I/O priority query failed: 0x"+status.ToString("X8"));return value;}finally{CloseHandle(h);}}
 }
 '@
 [RooIndustriesSavedSettingsUi]::SetProcessDPIAware()|Out-Null
 $A=[Windows.Automation.AutomationElement];$TS=[Windows.Automation.TreeScope];$CT=[Windows.Automation.ControlType]
 $evidence=[ordered]@{label=$Label;steps=@();chooseWays=@();unexpected=@()};$status='fail';$imageLock=$null
-$app=$null;$window=$null;$recorder=$null;$owned=[Collections.Generic.List[object]]::new();$roots=[Collections.Generic.List[string]]::new();$copies=[Collections.Generic.List[object]]::new()
+$app=$null;$limited=$null;$window=$null;$recorder=$null;$owned=[Collections.Generic.List[object]]::new();$roots=[Collections.Generic.List[string]]::new();$copies=[Collections.Generic.List[object]]::new()
 # The app's data folder: an older folder name stays in use where it already exists.
 . (Join-Path $Source 'backend\scripts\BrandCompatibility.Common.ps1')
 $operations=Join-Path (Get-RooIndustriesLocalDataRoot) 'operations'
@@ -118,6 +121,36 @@ function Watch-Texts([double]$Limit,[scriptblock]$Done){
  }
  return ,$seen.ToArray()
 }
+function Open-GamesTab{
+ # The self-contained build counts as a release build and opens on Home: pick Games in the menu when the tab isn't showing.
+ $tab=$null;try{$tab=WaitFor {ById 'GamesTab'} 15 'the Games tab'}catch{}
+ if(-not $tab){
+  $nav=WaitFor {@($script:window.FindAll($TS::Descendants,[Windows.Automation.PropertyCondition]::new($A::NameProperty,'Games'))|Where-Object {$_.Current.ControlType -eq $CT::ListItem})[0]} 60 'Games in the menu'
+  try{$nav.GetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern).Select()}catch{$nav.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()}
+  $tab=WaitFor {ById 'GamesTab'} 120 'the Games tab'
+ }
+ Start-Sleep -Seconds 2
+ $skip=ById 'UpdateLaterButton';if($skip){Invoke $skip}
+ $tab.GetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern).Select();Start-Sleep -Seconds 1
+}
+# Only a real window counts: a tooltip the app shows (such as Close Navigation under a resting mouse) is a top-level element too.
+function AppWindow([int]$Id){$A::RootElement.FindFirst($TS::Children,[Windows.Automation.AndCondition]::new([Windows.Automation.PropertyCondition]::new($A::ProcessIdProperty,$Id),[Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty,$CT::Window)))}
+function ProfileState{
+ $saved=@([IO.Directory]::GetDirectories($operations,'launch-profile-*')|Where-Object {$before -notcontains $_})
+ if($saved.Count -ne 1){return $null}
+ $file=Join-Path $saved[0] 'state.json';if([IO.File]::Exists($file)){[IO.File]::ReadAllText($file)|ConvertFrom-Json}
+}
+function Next-Launcher([string]$Name){
+ # Close the running launcher, open a new one and wait until the saved settings turned on for it, with their launch priorities.
+ [IO.File]::WriteAllText((Join-Path $script:launcherRoot 'stop-launcher'),'')
+ WaitFor {-not(Get-Process -Name 'RooIndustriesSavedLauncher' -ErrorAction SilentlyContinue)} 30 'the launcher to close'|Out-Null
+ WaitFor {-not(Test-Path -LiteralPath $ifeo)} 60 'the closed launcher''s session to put its launch priorities back'|Out-Null
+ $script:launcherRoot=Fixture ('launcher-'+$Name)
+ $launcher=Start-OwnedProcess $launcherPath ('--launcher "'+$script:launcherRoot+'"') 'Hidden' 'saved-launcher-fixture';$script:owned.Add($launcher)
+ WaitFor {Test-Path -LiteralPath (Join-Path $script:launcherRoot 'launcher-ready.json')} 30 'the launcher fixture'|Out-Null
+ try{return WaitFor {$state=ProfileState;if($state -and $state.status -eq 'armed' -and $state.launcher.processId -eq [int]$launcher.Identity.pid -and (Test-Path -LiteralPath $ifeo)){$state}} 90 ('the saved settings to turn on for the next launcher run ('+$Name+')')}
+ catch{return $null}
+}
 function Setup{
  Invoke (WaitFor {Enabled 'GameSessionNew'} 60 'New on Games');Start-Sleep -Milliseconds 500
  (WaitFor {Enabled 'GameSessionExecutable'} 60 'the game file box').GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern).SetValue($gamePath);Start-Sleep -Milliseconds 500
@@ -141,7 +174,9 @@ try{
  & $dotnet publish (Join-Path $Source 'tools\validation\ProtectedSessions\ProtectedSessions.csproj') -c Release -o $bin -p:UseSharedCompilation=false *>> $build
  if($LASTEXITCODE -ne 0){throw 'The fixture build failed; see build.log.'}
  $project=Join-Path $Source 'docs\internal\frontend\RooIndustries.OptimizationSuite.App\RooIndustries.OptimizationSuite.App.csproj'
- & $dotnet build $project --configuration Debug -p:Platform=x64 -p:WindowsAppSDKSelfContained=true --disable-build-servers -p:UseSharedCompilation=false *>> $build
+ # Self-contained like the release: the sign-in start runs the app through the clean launcher, which clears DOTNET_ROOT.
+ # Like the release build, the Windows App SDK's own files go to a short folder to stay under the 260-character path limit.
+ & $dotnet build $project --configuration Debug -p:Platform=x64 -r win-x64 --self-contained -p:WindowsAppSDKSelfContained=true ('-p:SelfContainedIntermediateOutputPath='+(Join-Path $Source 'artifacts\wsdk')+'/') --disable-build-servers -p:UseSharedCompilation=false *>> $build
  if($LASTEXITCODE -ne 0){throw 'The app build failed; see build.log.'}
  $exe=@(Get-ChildItem -LiteralPath (Join-Path $Source 'docs\internal\frontend\RooIndustries.OptimizationSuite.App\bin\x64\Debug') -Recurse -Filter 'RooIndustries.OptimizationSuite.App.exe'|Sort-Object LastWriteTimeUtc -Descending)
  if(-not$exe.Count){throw 'The app build produced no executable.'}
@@ -152,12 +187,10 @@ try{
 
  $env:ROO_INDUSTRIES_INITIAL_NAV='profiles';$env:ROO_INDUSTRIES_BACKEND_ROOT=$Source;$env:ROO_INDUSTRIES_DOTNET_EXE=$dotnet
  $app=Start-OwnedProcess -FilePath $exe[0].FullName -WindowStyle Normal -Purpose 'suite-test-build' -Lifetime invocation
- $window=WaitFor {$A::RootElement.FindFirst($TS::Children,[Windows.Automation.PropertyCondition]::new($A::ProcessIdProperty,[int]$app.Identity.pid))} 180 'the app window'
+ $window=WaitFor {AppWindow ([int]$app.Identity.pid)} 180 'the app window'
  $hwnd=[IntPtr]::new([long]$window.Current.NativeWindowHandle)
  [RooIndustriesSavedSettingsUi]::SetWindowPos($hwnd,[IntPtr]::new(-1),20,20,1400,1000,0x40)|Out-Null;[RooIndustriesSavedSettingsUi]::SetForegroundWindow($hwnd)|Out-Null
- $gamesTab=WaitFor {ById 'GamesTab'} 120 'the Games tab';Start-Sleep -Seconds 2
- $skip=ById 'UpdateLaterButton';if($skip){Invoke $skip}
- $gamesTab.GetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern).Select();Start-Sleep -Seconds 1
+ Open-GamesTab
 
  $launcherRoot=Fixture 'launcher'
  $owned.Add((Start-OwnedProcess $launcherPath ('--launcher "'+$launcherRoot+'"') 'Hidden' 'saved-launcher-fixture'))
@@ -172,6 +205,79 @@ try{
  Start-Sleep -Seconds 1
  Step 'saved-ready' @{launcher=$picked.launcher;preset=$picked.preset;row=(Text 'GameSessionProfileStatus');status=(Text 'GameSessionStatus')}|Out-Null
 
+ # Saved settings turn on without the window too: after it closes, and after a restart, through a sign-in start.
+ $owner=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+ $signIn=@(Get-ScheduledTask -ErrorAction SilentlyContinue|Where-Object {$_.TaskName -like 'Performance Vertex Utility Saved Launch Settings *' -and $_.Description -ieq ('Performance Vertex Utility saved launch settings | '+$owner+' | '+$operations)})
+ $startsApp=$signIn.Count -eq 1 -and "$($signIn[0].Actions[0].Arguments)".Contains($exe[0].FullName+'?--saved-settings') -and [string]$signIn[0].Principal.RunLevel -eq 'Highest' -and
+  @($signIn[0].Triggers).Count -eq 1 -and $signIn[0].Triggers[0].CimClass.CimClassName -eq 'MSFT_TaskLogonTrigger'
+ Step 'sign-in-start' @{tasks=@($signIn|ForEach-Object {$_.TaskName});startsApp=$startsApp}|Out-Null
+ if(-not $startsApp){throw 'Save for next time did not add a sign-in start that runs this app with --saved-settings.'}
+ # The sign-in task runs elevated, so it never points at a program other programs could change.
+ $unsafe=Join-Path $env:TEMP ('roo-industries-sign-in-'+[Guid]::NewGuid().ToString('N')+'.exe');[IO.File]::Copy($probe,$unsafe)
+ try{& (Join-Path $Source 'backend\scripts\Invoke-ProtectedGameSession.ps1') -Action WatchAtSignIn -AppPath $unsafe -OperationsRoot $operations -ConfirmApply|Out-Null;$refused=''}
+ catch{$refused=$_.Exception.Message}finally{[IO.File]::Delete($unsafe)}
+ $kept="$((Get-ScheduledTask -TaskName $signIn[0].TaskName).Actions[0].Arguments)".Contains($exe[0].FullName+'?--saved-settings')
+ Step 'sign-in-start-refused' @{refused=$refused;kept=$kept}|Out-Null
+ Expect 'sign-in-start' ($refused.Contains('other programs could change it') -and $kept) 'the sign-in start refuses a program in a folder other programs can change, and keeps pointing at the app'
+ $firstPid=[int]$app.Identity.pid
+ $window.GetCurrentPattern([Windows.Automation.WindowPattern]::Pattern).Close();$window=$null
+ WaitFor {-not(AppWindow $firstPid)} 30 'the window to close'|Out-Null
+ Start-Sleep -Seconds 3
+ Expect 'window-closed' (-not $app.process.HasExited) 'closing the window keeps the app running while saved settings are on'
+ $closedRun=Next-Launcher 'window-closed'
+ $evidence.steps+=@([ordered]@{step='window-closed';atUtc=[DateTime]::UtcNow.ToString('o');running=(-not $app.process.HasExited);armed=[bool]$closedRun})
+ Expect 'window-closed' ($closedRun -and -not(AppWindow $firstPid)) 'with the window closed, the next launcher run gets the saved settings'
+ # Opening the app again brings a window back to the same copy, and closing that one keeps the copy running too.
+ $again=Start-OwnedProcess -FilePath $exe[0].FullName -WindowStyle Normal -Purpose 'suite-reopen' -Lifetime invocation
+ $back=WaitFor {AppWindow $firstPid} 120 'the window to come back'
+ Expect 'window-back' ($again.process.WaitForExit(30000) -and -not $app.process.HasExited) 'opening the app again shows a window in the copy that kept running'
+ $back.GetCurrentPattern([Windows.Automation.WindowPattern]::Pattern).Close()
+ WaitFor {-not(AppWindow $firstPid)} 30 'the second window to close'|Out-Null
+ Start-Sleep -Seconds 2
+ Expect 'window-back' (-not $app.process.HasExited) 'closing the window a second time keeps the app running too'
+ # A restart ends every program; at sign-in Windows runs the sign-in start, and nobody opens the app.
+ [IO.File]::WriteAllText((Join-Path $launcherRoot 'stop-launcher'),'')
+ WaitFor {-not(Get-Process -Name 'RooIndustriesSavedLauncher' -ErrorAction SilentlyContinue)} 30 'the launcher to close'|Out-Null
+ WaitFor {-not(Test-Path -LiteralPath $ifeo)} 60 'the closed launcher''s session to put its launch priorities back'|Out-Null
+ Stop-HarnessProcess $app;$app=$null
+ # Someone opened the app without administrator rights before the sign-in start ran. That copy can't turn saved settings on.
+ # runas /trustlevel gives a token whose Administrators membership is deny-only; on a PC with UAC turned off it still runs
+ # elevated, and then this part is recorded as not possible here instead of checked.
+ $limitedTask='RooIndustriesSavedSettingsLimited_'+[Guid]::NewGuid().ToString('N')
+ Register-ScheduledTask -TaskName $limitedTask -Action (New-ScheduledTaskAction -Execute (Join-Path ([Environment]::SystemDirectory) 'runas.exe') -Argument ('/trustlevel:0x20000 "'+$exe[0].FullName+'"')) -Principal (New-ScheduledTaskPrincipal -UserId ([Security.Principal.WindowsIdentity]::GetCurrent().User.Value) -LogonType Interactive -RunLevel Limited)|Out-Null
+ try{Start-ScheduledTask -TaskName $limitedTask;$limited=WaitFor {@(Get-Process -Name 'RooIndustries.OptimizationSuite.App' -ErrorAction SilentlyContinue|Where-Object {$_.Path -ieq $exe[0].FullName})[0]} 60 'the copy without administrator rights'}
+ finally{Unregister-ScheduledTask -TaskName $limitedTask -Confirm:$false}
+ $limitedWindow=WaitFor {AppWindow $limited.Id} 120 'the window of the copy without administrator rights'
+ $restricted=-not [RooIndustriesSavedSettingsUi]::Elevated($limited.Id)
+ if(-not $restricted){$evidence.steps+=@([ordered]@{step='not-admin';atUtc=[DateTime]::UtcNow.ToString('o');checked=$false;why='this PC runs every copy elevated (UAC is off)'});$limited.Kill();[void]$limited.WaitForExit(15000);$limited=$null}
+ Start-ScheduledTask -TaskName $signIn[0].TaskName
+ $started=WaitFor {@(Get-Process -Name 'RooIndustries.OptimizationSuite.App' -ErrorAction SilentlyContinue|Where-Object {$_.Path -ieq $exe[0].FullName -and (-not $limited -or $_.Id -ne $limited.Id)})[0]} 60 'the sign-in start to run the app'
+ $app=Register-HarnessStartedProcess $started 'suite-sign-in-start' 'invocation'
+ Start-Sleep -Seconds 8
+ if($restricted){Expect 'not-admin' (-not $started.HasExited) 'the sign-in start keeps going while a copy without administrator rights is open'}
+ $signInRun=Next-Launcher 'sign-in'
+ $evidence.steps+=@([ordered]@{step='sign-in';atUtc=[DateTime]::UtcNow.ToString('o');armed=[bool]$signInRun;window=[bool](AppWindow $started.Id)})
+ Expect 'sign-in' ($signInRun -and -not(AppWindow $started.Id)) 'after the sign-in start, with no window open, the next launcher run gets the saved settings'
+ if($restricted){
+  $limitedWindow.GetCurrentPattern([Windows.Automation.WindowPattern]::Pattern).Close()
+  Expect 'not-admin' ($limited.WaitForExit(30000)) 'a copy without administrator rights ends when its window closes, even with saved settings on'
+  # The sign-in copy then takes the single-window key, so the launches below hand over to it.
+  Start-Sleep -Seconds 8
+ }
+ # Saving again, or opening the app, keeps the sign-in start as it is, so the copy it started keeps running.
+ & (Join-Path $Source 'backend\scripts\Invoke-ProtectedGameSession.ps1') -Action WatchAtSignIn -AppPath $exe[0].FullName -OperationsRoot $operations -ConfirmApply|Out-Null
+ Start-Sleep -Seconds 3
+ Expect 'sign-in' (-not $started.HasExited -and (Get-ScheduledTask -TaskName $signIn[0].TaskName).State -eq 'Running') 'keeping the sign-in start on again leaves the copy it started running'
+ # Opening the app hands over to that copy, which shows its window.
+ $second=Start-OwnedProcess -FilePath $exe[0].FullName -WindowStyle Normal -Purpose 'suite-second-open' -Lifetime invocation
+ $window=WaitFor {AppWindow $started.Id} 120 'the running copy to show its window'
+ Expect 'reopened' ($second.process.WaitForExit(30000)) 'opening the app again hands over to the running copy'
+ $hwnd=[IntPtr]::new([long]$window.Current.NativeWindowHandle)
+ [RooIndustriesSavedSettingsUi]::SetWindowPos($hwnd,[IntPtr]::new(-1),20,20,1400,1000,0x40)|Out-Null;[RooIndustriesSavedSettingsUi]::SetForegroundWindow($hwnd)|Out-Null
+ Open-GamesTab
+ WaitFor {(Text 'GameSessionProfileStatus') -like 'Ready*'} 60 'the saved settings row to say Ready'|Out-Null
+ Step 'reopened' @{row=(Text 'GameSessionProfileStatus');status=(Text 'GameSessionStatus')}|Out-Null
+
  $recorder=Start-Recorder 'turn-off'
  Invoke (WaitFor {Enabled 'GameSessionProfileOff'} 30 'Turn off and restore')
  $texts=Watch-Texts 30 {-not(ById 'GameSessionProfileStatus') -and (Text 'GameSessionStatus') -like 'Saved settings turned off*'}
@@ -180,6 +286,7 @@ try{
  $flash=@($texts|Where-Object {$_.row -like 'Turned off, but*'}).Count -gt 0
  $off=Step 'turned-off' @{texts=$texts;flashed=$flash;status=(Text 'GameSessionStatus');detail=(Text 'GameSessionDetail');launchPriorities=(Test-Path -LiteralPath $ifeo)}
  Expect 'turned-off' (-not $flash -and $off.status -ceq 'Saved settings turned off' -and -not $off.launchPriorities) 'turning off finished cleanly, without a flash, and the game has no launch priorities left'
+ Expect 'turned-off' (-not(Get-ScheduledTask -TaskName $signIn[0].TaskName -ErrorAction SilentlyContinue)) 'turning off the last saved settings removes the sign-in start'
 
  $sha=[Security.Cryptography.SHA256]::Create()
  $prefix=[regex]::Match([IO.File]::ReadAllText((Join-Path $Source 'backend\native\Optimizer.Core\BrandCompatibility.cs')),'LaunchMutexPrefix = "(.+?)";').Groups[1].Value.Replace('\\','\')
@@ -221,6 +328,9 @@ try{
  Start-Sleep -Seconds 3
  $endedStep=Step 'ended-start' @{entry=$entry;status=(Text 'GameSessionStatus');detail=(Text 'GameSessionDetail')}
  Expect 'ended-start' ($entry -like "* · didn't start" -and $endedStep.status -ceq "Didn't start · nothing was changed") 'the list and the status say the start didn''t start and changed nothing'
+ # With no saved settings left, closing the window ends the app.
+ $window.GetCurrentPattern([Windows.Automation.WindowPattern]::Pattern).Close();$window=$null
+ Expect 'closed' ($app.process.WaitForExit(30000)) 'with no saved settings left, closing the window ends the app'
  if($evidence.unexpected.Count){throw ('Unexpected: '+($evidence.unexpected -join '; '))}
  $status='pass'
 }catch{
@@ -231,7 +341,9 @@ try{
  try{Stop-Recorder $recorder}catch{$evidence.recorderError=$_.Exception.Message}
  foreach($folder in $roots){if([IO.Directory]::Exists($folder)){[IO.File]::WriteAllText((Join-Path $folder 'stop-launcher'),'')}}
  Start-Sleep -Seconds 3
- if($app){try{$window.GetCurrentPattern([Windows.Automation.WindowPattern]::Pattern).Close();if(-not$app.process.WaitForExit(20000)){Stop-HarnessProcess $app}}catch{try{Stop-HarnessProcess $app}catch{$evidence.cleanupError+=@($_.Exception.Message)}}}
+ if($limited -and -not $limited.HasExited){try{$limited.Kill()}catch{$evidence.cleanupError+=@($_.Exception.Message)}}
+ if($app -and -not $app.process.HasExited){try{$window.GetCurrentPattern([Windows.Automation.WindowPattern]::Pattern).Close();if(-not$app.process.WaitForExit(20000)){Stop-HarnessProcess $app}}catch{try{Stop-HarnessProcess $app}catch{$evidence.cleanupError+=@($_.Exception.Message)}}}
+ foreach($task in @(Get-ScheduledTask -ErrorAction SilentlyContinue|Where-Object {$_.TaskName -like 'Performance Vertex Utility Saved Launch Settings *' -and $_.Description -ieq ('Performance Vertex Utility saved launch settings | '+[Security.Principal.WindowsIdentity]::GetCurrent().User.Value+' | '+$operations)})){$evidence.leftTasks+=@($task.TaskName);try{Unregister-ScheduledTask -TaskName $task.TaskName -Confirm:$false}catch{$evidence.cleanupError+=@($_.Exception.Message)}}
  foreach($process in $owned){try{if(-not$process.process.WaitForExit(15000)){Stop-HarnessProcess $process}}catch{$evidence.cleanupError+=@($_.Exception.Message)}}
  $created=@(if([IO.Directory]::Exists($operations)){[IO.Directory]::GetDirectories($operations)|Where-Object {$before -notcontains $_ -and [IO.Path]::GetFileName($_) -match '^(game-session|launch-profile)-'}})
  $evidence.createdOperations=@($created|ForEach-Object {[IO.Path]::GetFileName($_)})

@@ -15,7 +15,7 @@
             <StackPanel Spacing="12">
                 <StackPanel Spacing="4">
                     <TextBlock Text="Saved launch settings" Style="{StaticResource SectionHeaderTextBlockStyle}" />
-                    <TextBlock Text="These turn back on by themselves whenever the launcher opens, as long as this app is open." TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
+                    <TextBlock Text="These turn back on by themselves whenever the launcher opens, also after a restart. The app keeps running in the background while any are saved." TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" />
                 </StackPanel>
                 <ItemsControl ItemsSource="{x:Bind ViewModel.Profiles}">
                     <ItemsControl.ItemTemplate>
@@ -124,7 +124,7 @@
                 <StackPanel Spacing="12">
                     <TextBlock Text="3. Review and start" Style="{StaticResource SectionHeaderTextBlockStyle}" />
                     <CheckBox IsChecked="{x:Bind ViewModel.KeepArmed, Mode=TwoWay}" IsEnabled="{x:Bind ViewModel.CanEdit, Mode=OneWay}" AutomationProperties.AutomationId="GameSessionKeep">
-                        <TextBlock Text="Save for next time: turn these settings back on whenever this launcher opens while the app is open." TextWrapping="Wrap" />
+                        <TextBlock Text="Save for next time: turn these settings back on whenever this launcher opens, also after a restart." TextWrapping="Wrap" />
                     </CheckBox>
                     <Border Padding="12" CornerRadius="6" Background="{StaticResource RooIndustriesSurfaceInputBrush}" Visibility="{x:Bind ViewModel.HasReview, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
                         <TextBlock Text="{x:Bind ViewModel.ReviewSummary, Mode=OneWay}" TextWrapping="Wrap" AutomationProperties.AutomationId="GameSessionReview" />

@@ -4,6 +4,8 @@ using System.Reflection;
 using RooIndustries.OptimizationSuite.Models;
 using RooIndustries.OptimizationSuite.Services;
 
+// What the saved launch settings' sign-in start runs when these checks stand in for the app.
+if (args is [OptimizerService.SavedSettingsArgument]) return;
 if (args is ["--recovery-slot", var recoveryAction, var recoveryOutput, var recoveryRepo, var slotDirectory]) { await RecoverySlotChecks.Run(recoveryAction, recoveryOutput, recoveryRepo, slotDirectory); return; }
 if (args is ["--recovery-cut", var cutOutput, var cutRepo, var cutDirectory, var cutPids]) { await RecoverySlotChecks.Cut(cutOutput, cutRepo, cutDirectory, cutPids); return; }
 if (args is ["--settings-corruption", var settingsOutput]) { RecoverySlotChecks.Settings(settingsOutput); return; }

@@ -84,6 +84,8 @@ static class LaunchProfileChecks
     static Task<string?> UpdateBlocker(OptimizerService app) => new InstallGate(app.RecoverAndReadGameSessionsAsync,
         () => Task.FromResult(new LiveDataResult<string>("{\"active\":false}", null)), () => false, () => ("C:", long.MaxValue)).ReasonAsync();
     static bool TaskExists(string sessionRoot) => Schtasks("/Query", "/TN", TaskName(sessionRoot)).Exit == 0;
+    static string SignInTask(string operations) => "Performance Vertex Utility Saved Launch Settings " +
+        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes((System.Security.Principal.WindowsIdentity.GetCurrent().User!.Value + "|" + Path.GetFullPath(operations).TrimEnd('\\')).ToLowerInvariant())))[..16];
     static string TaskXml(string sessionRoot) => Schtasks("/Query", "/TN", TaskName(sessionRoot), "/XML").Output;
 
     public static async Task CleanupFailure(string repo)
@@ -347,6 +349,9 @@ static class LaunchProfileChecks
                 app.RequireNoLaunchProfile(review.Plan);
                 await app.StartGameSessionAsync(review);
                 var saved = await app.SaveLaunchProfileAsync(review);
+                var signIn = Schtasks("/Query", "/TN", SignInTask(operations), "/XML").Output;
+                Check(signIn.Contains(Environment.ProcessPath + "?--saved-settings", StringComparison.OrdinalIgnoreCase) && signIn.Contains("<LogonTrigger>", StringComparison.Ordinal) && signIn.Contains("<RunLevel>HighestAvailable</RunLevel>", StringComparison.Ordinal),
+                    "Save for next time adds a sign-in start that runs the app with --saved-settings, so the settings also turn on after a restart");
                 if (cleanupFault)
                 {
                     var broken = Path.Combine(operations, "game-session-" + Guid.NewGuid().ToString("N"), "session");
@@ -470,6 +475,7 @@ static class LaunchProfileChecks
 
                 var off = App();
                 Check(await off.DisableLaunchProfileAsync((await Profile()).Root) is null, "Turning the saved settings off reports no problems");
+                Check(Schtasks("/Query", "/TN", SignInTask(operations)).Exit != 0, "Turning off the last saved settings removes their sign-in start");
                 Check((await Sessions()).All(entry => GameSessionDisplay.Restored(entry.Worker)) && NoLaunchPolicy() && Affinity(seventh) == original && Io(seventh) == 1 && (await off.ReadLaunchProfilesAsync()).Length == 0,
                     "Turning them off stops the session, restores the launcher and game settings and removes the profile");
                 await Ticks(off, 4);
