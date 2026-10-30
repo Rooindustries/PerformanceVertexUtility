@@ -122,7 +122,7 @@ function Save-RehearsalState([string[]]$Paths,[string[]]$Roots,[string]$Image){
 function Suspend-RehearsalState($Entry){
  $state=$Entry.metadata
  Assert-RehearsalBoundary $state.roots
- if(-not(Test-RehearsalSnapshot $state.tasks @(Get-RehearsalTasks)) -or -not(Test-RehearsalSnapshot $state.markers (Get-RehearsalMarkers $state.roots))){throw 'Product state changed before suspension; retained.'}
+ if(-not(Test-RehearsalSnapshot @($state.tasks|Sort-Object {$_.folder},{$_.name}) @((Get-RehearsalTasks)|Sort-Object {$_.folder},{$_.name})) -or -not(Test-RehearsalSnapshot $state.markers (Get-RehearsalMarkers $state.roots))){throw 'Product state changed before suspension; retained.'}
  foreach($row in $state.paths){Assert-RehearsalPathState $row.before $row.before.path}
  $state.started=$true;Set-RehearsalJournal $Entry $state
  $service=Get-RehearsalTaskService
