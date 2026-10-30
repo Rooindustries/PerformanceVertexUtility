@@ -95,6 +95,7 @@ var
   GovernorSuspended: Boolean;
   GovernorResumed: Boolean;
   SetupFolder: String;
+  SavedSettingsCopyClosed: Boolean;
 
 function GetCurrentProcessId: Cardinal; external 'GetCurrentProcessId@kernel32.dll stdcall';
 
@@ -217,9 +218,33 @@ begin
   Log('Governor ' + Action + ' finished with exit code ' + IntToStr(Code));
 end;
 
+// While saved launch settings are on, a copy of the app runs without a window and holds the app's files.
+// Setup ends that copy before it replaces them and starts it again afterwards.
+function CloseSavedSettingsCopy(): Boolean;
+var
+  Code: DWORD;
+  AppPath: String;
+begin
+  Result := False;
+  AppPath := ExpandConstant('{app}\app\{#AppExe}');
+  if not FileExists(AppPath) then exit;
+  StringChangeEx(AppPath, '''', '''''', True);
+  Code := 0;
+  try
+    RunBounded(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
+      '-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "$n=0;foreach($p in @(Get-Process -Name ''' + ChangeFileExt('{#AppExe}', '') + ''' -ErrorAction SilentlyContinue|Where-Object {$_.Path -ieq ''' + AppPath + ''' -and $_.MainWindowHandle -eq 0})){$p.Kill();[void]$p.WaitForExit(15000);$n++};exit $n"',
+      ExpandConstant('{tmp}'), 60000, Code);
+  except
+    Log('The app running for saved launch settings could not be checked: ' + GetExceptionMessage);
+  end;
+  Result := Code > 0;
+  if Result then Log('Closed the app running without a window for saved launch settings.');
+end;
+
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 begin
   Result := '';
+  SavedSettingsCopyClosed := CloseSavedSettingsCopy();
   if not PrepareSetupFolder then
   begin
     Result := 'Setup could not prepare its governor files safely, so no files were changed. Run setup again.';
@@ -258,6 +283,14 @@ begin
     RunGovernorSetup('Resume');
   if (SetupFolder <> '') and DirExists(SetupFolder) then
     DelTree(SetupFolder, True, True, True);
+  if SavedSettingsCopyClosed and not (WizardSilent and (ExpandConstant('{param:ROORELAUNCH|0}') = '1')) then
+  begin
+    AppPath := ExpandConstant('{app}\app\{#AppExe}');
+    if FileExists(AppPath) and Exec(AppPath, '--saved-settings', ExpandConstant('{app}\app'), SW_HIDE, ewNoWait, Code) then
+      Log('Started the app again without a window for saved launch settings.')
+    else
+      Log('Could not start the app again for saved launch settings; it starts at the next sign-in or when opened.');
+  end;
   if WizardSilent and (ExpandConstant('{param:ROORELAUNCH|0}') = '1') then
   begin
     AppPath := ExpandConstant('{app}\app\{#AppExe}');
