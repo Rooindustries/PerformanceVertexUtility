@@ -128,7 +128,7 @@ if($Action -eq 'Start'){
             $cancelled=-not(Test-Path -LiteralPath $requestPath) -or (Invoke-Core 'protected-session-cancel').cancelled
             if($cancelled){
                 Remove-SessionTask $taskName
-                if($madeRoot){Remove-Item -LiteralPath $SessionRoot -Recurse -Force}else{Remove-Item -LiteralPath $requestPath -Force -ErrorAction SilentlyContinue}
+                if($madeRoot){Remove-Item -LiteralPath $SessionRoot -Recurse -Force}elseif(Test-Path -LiteralPath $requestPath){Remove-Item -LiteralPath $requestPath -Force -ErrorAction Stop}
             }
         }catch{throw ('Session startup failed: '+$reason+' Its unused session files could not be removed: '+$_.Exception.Message)}
         if($cancelled){throw ('Session startup failed: '+$reason)}
@@ -151,7 +151,7 @@ if($Action -eq 'Start'){
                 if(-not(Test-Path -LiteralPath (Join-Path $SessionRoot 'session.json'))){
                     try{
                         Remove-SessionTask $taskName
-                        if($madeRoot){Remove-Item -LiteralPath $SessionRoot -Recurse -Force}else{Remove-Item -LiteralPath $requestPath,$failurePath -Force -ErrorAction SilentlyContinue}
+                        if($madeRoot){Remove-Item -LiteralPath $SessionRoot -Recurse -Force}else{foreach($file in $requestPath,$failurePath){if(Test-Path -LiteralPath $file){Remove-Item -LiteralPath $file -Force -ErrorAction Stop}}}
                     }
                     catch{throw ('Session startup failed: '+$(if($failure){$failure.error}else{$noReason})+' Its unused session files could not be removed: '+$_.Exception.Message)}
                 }
