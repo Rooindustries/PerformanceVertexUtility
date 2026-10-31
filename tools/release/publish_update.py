@@ -10,6 +10,7 @@ import shlex
 import subprocess
 import struct
 import sys
+import time
 from datetime import datetime, timezone
 from http.client import HTTPException
 from urllib.error import HTTPError
@@ -22,6 +23,7 @@ from cryptography.hazmat.primitives.asymmetric import ec
 
 ROOT = Path(__file__).resolve().parents[2]
 KEYS = json.loads((ROOT / "tools/release/update-keys.json").read_text())
+FEED_PROPAGATION_SECONDS = 90
 VERSION = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?\Z")
 
 
@@ -260,6 +262,21 @@ def live_feed(feed):
     return data, verify_manifest(data, feed_url=feed)
 
 
+def uploaded_feed(feed, data, refusal):
+    # Vercel Blob can take up to a minute to serve an overwritten file, so an old copy or a failed read only means "not yet".
+    deadline = time.monotonic() + FEED_PROPAGATION_SECONDS
+    while True:
+        try:
+            remote, problem = feed_bytes(feed), "it still serves other bytes"
+        except (ValueError, OSError, HTTPException) as error:
+            remote, problem = None, "the last read failed (" + str(error) + ")"
+        if remote == data:
+            return verify_manifest(data, feed_url=feed)
+        if time.monotonic() >= deadline:
+            raise ValueError(refusal + " " + str(FEED_PROPAGATION_SECONDS) + " seconds after the upload: " + problem)
+        time.sleep(3)
+
+
 def released_versions():
     lines = [line.strip() for line in (ROOT / "tools/release/released-versions.txt").read_text(encoding="utf-8-sig").splitlines()]
     return [line for line in lines if line and not line.startswith("#")]
@@ -337,9 +354,7 @@ def publish(args):
         print("Dry run: nothing uploaded. Publishing requires --yes-publish and user authorization.")
         return
     upload(commands)
-    remote, published = live_feed(feed)
-    if remote != data:
-        raise ValueError("Published feed has not propagated to the signed bytes yet")
+    published = uploaded_feed(feed, data, "Published feed did not serve the signed bytes")
     check_online_installer(published["installer"])
     print("Published manifest and installer verified over HTTPS.")
     try:
@@ -379,9 +394,7 @@ def set_feed(args):
         print("Dry run: nothing uploaded. Changing the feed requires --yes-publish and user authorization.")
         return
     upload([command])
-    remote, _ = live_feed(feed)
-    if remote != data:
-        raise ValueError("The feed has not propagated to the signed bytes yet")
+    uploaded_feed(feed, data, "The feed did not serve the signed bytes")
     print("The feed now serves version " + payload["version"] + ", verified over HTTPS.")
 
 
