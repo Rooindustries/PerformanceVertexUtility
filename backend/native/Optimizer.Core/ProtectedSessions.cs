@@ -430,7 +430,7 @@ public sealed class ProtectedSessions
             foreach (var field in game.Fields)
             {
                 var desired = field.Name == "affinity" ? Value(state.DesiredAffinity) : state.Preview.Controls[field.Name];
-                if (field.Route == "native" && (field.Status is "unavailable" or "conflict")) continue;
+                if ((field.Route == "native" || field.JournalPath is not null) && (field.Status is "unavailable" or "conflict")) continue;
                 var retainedControl = field.Name == "gpuPriority" || field.Name == "ioPriority" && field.Route == "native";
                 if (retainedControl && field.JournalPath is null && gpuHandles?.Refusal(identity) is { } refusal)
                 {
@@ -444,9 +444,15 @@ public sealed class ProtectedSessions
                 var reader = retained ?? target;
                 var controls = retained is null ? _controls : _controls.WithTarget(retained);
                 field.Observed = reader.Read(field.Name);
-                if (field.Route != "native")
+                // A launch value holds until the game changes it itself, as Counter-Strike 2 does with its CPU priority a few seconds in.
+                // From then on the field is kept like a native one, with the game's own value as the original to put back.
+                // If that takeover is refused, the refusal stands until the game holds the saved value again.
+                var held = field.Observed.Known && ProcessTarget.Equivalent(field.Name, field.Observed.Require(), desired);
+                var refused = field.Status is "unavailable" or "conflict";
+                if (field.Route == "job" || field.Route == "launch" && field.JournalPath is null && (held || refused || !field.Observed.Known))
                 {
-                    field.Status = field.Observed.Known && ProcessTarget.Equivalent(field.Name, field.Observed.Require(), desired) ? "applied" : "notApplied";
+                    if (held) { field.Status = "applied"; field.Error = null; }
+                    else if (!refused) field.Status = "notApplied";
                     continue;
                 }
                 try
@@ -459,14 +465,14 @@ public sealed class ProtectedSessions
                         if (recovery == "pending") { field.Status = "awaitingRecovery"; continue; }
                         if (recovery == "unknown") { field.Status = "unavailable"; field.Error = LaunchGpuHandles.OriginalUnreadable; continue; }
                         var inherited = field.Name == "ioPriority" && ProcessTarget.Equivalent(field.Name, field.Observed.Require(), desired) ? InheritedOriginal(state, identity, target, desired) : null;
-                        if (field.Name == "ioPriority" && inherited is null) using (new PrivilegeScope("High I/O priority", "SeIncreaseBasePriorityPrivilege")) { }
+                        if (field.Name == "ioPriority" && RuntimeIo(field.Name, desired) && inherited is null) using (new PrivilegeScope("High I/O priority", "SeIncreaseBasePriorityPrivilege")) { }
                         var folder = Path.Combine(root, "games", identity.ProcessId + "-" + identity.CreationTimeFileTimeUtc, field.Name);
                         var path = Path.Combine(folder, "preview.json");
                         var preview = controls.Preview(processId, new() { [field.Name] = desired });
                         if (inherited is not null) preview = preview with { Original = new(preview.Original, StringComparer.Ordinal) { [field.Name] = inherited } };
                         identity.Verify(preview.Identity); OperationFiles.Write(path, preview);
                         var hash = OperationFiles.HashFile(path); field.PreviewHash = hash;
-                        field.JournalPath = Path.Combine(folder, "journal.json"); Save(root, state);
+                        field.Status = "pending"; field.JournalPath = Path.Combine(folder, "journal.json"); Save(root, state);
                         var result = inherited is null ? controls.Apply(path, hash, field.JournalPath) : controls.Adopt(path, hash, field.JournalPath);
                         if (result.Status != "applied")
                         {
@@ -474,6 +480,7 @@ public sealed class ProtectedSessions
                             var message = string.Join("; ", failed.Select(change => change.Error));
                             throw failed.Length != 0 && failed.All(change => change.ErrorKind == "denied") ? new UnauthorizedAccessException(message) : new InvalidOperationException(message);
                         }
+                        if (field.Route == "launch") field.Reapplications++;
                     }
                     else if (!ProcessTarget.Equivalent(field.Name, field.Observed.Require(), desired))
                     {
@@ -584,7 +591,7 @@ public sealed class ProtectedSessions
                     if (result.Status == "restored" && last.Status == "unchanged") field.Status = "leftAsIs";
                     field.Observed = last.Observed is { } observed ? ControlRead.From(observed) : null; field.Error = last.Error; if (result.Status is not ("restored" or "expired")) errors.Add("Native restoration needs reconciliation: " + field.Name); }
                 catch (Exception error) { errors.Add(error.Message); }
-            foreach (var field in game.Fields.Where(field => field.Route == "launch")) field.Status = game.Exited ? "expired" : "restartRequired";
+            foreach (var field in game.Fields.Where(field => field.Route == "launch" && field.JournalPath is null)) field.Status = game.Exited ? "expired" : "restartRequired";
         }
         try
         {
@@ -685,6 +692,13 @@ public sealed class ProtectedSessions
         ValidatePlan(state.Preview);
         var plan = OperationFiles.Read<ProtectedSessionPreview>(state.PreviewPath, state.ReviewHash);
         if (state.SchemaVersion != 1 || JsonSerializer.Serialize(plan, OperationFiles.Json) != JsonSerializer.Serialize(state.Preview, OperationFiles.Json)) throw new InvalidDataException("Session recovery no longer matches its reviewed source.");
+        ValidateState(root, state);
+        return state;
+    }
+    // Save runs the same checks before it writes, so the watcher and recovery can always read back the last saved state.
+    private static void ValidateState(string root, ProtectedSessionState state)
+    {
+        var plan = state.Preview;
         if (state.LauncherJournal is not null && !string.Equals(Path.GetFullPath(state.LauncherJournal), Path.Combine(Path.GetFullPath(root), "launcher-journal.json"), StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("Launcher recovery path escaped this session.");
         foreach (var game in state.Games)
@@ -704,13 +718,12 @@ public sealed class ProtectedSessions
                     if (field.Observed is null || !field.Observed.Known || !ProcessTarget.Equivalent(field.Name, field.Observed.Require(), expected))
                         throw new InvalidDataException("An applied control lacks matching independent readback.");
                 }
-                if (field.Route != route || field.JournalPath is not null && (route != "native" || !string.Equals(Path.GetFullPath(field.JournalPath), expectedPath, StringComparison.OrdinalIgnoreCase)))
+                if (field.Route != route || field.JournalPath is not null && (route == "job" || !string.Equals(Path.GetFullPath(field.JournalPath), expectedPath, StringComparison.OrdinalIgnoreCase)))
                     throw new InvalidDataException("A recovery control or path escaped the reviewed game session.");
             }
         }
         ValidateAffinity(state.DesiredAffinity, plan.OriginalAffinity);
         if (state.Status == "active" && (state.Games.All(game => game.Exited) || state.Games.Where(game => !game.Exited).Any(game => game.Fields.Any(field => field.Status != "applied")))) throw new InvalidDataException("Active session status disagrees with its control evidence.");
-        return state;
     }
     private static void CheckWatch(string root, ProtectedSessionState state)
     {
@@ -820,6 +833,7 @@ public sealed class ProtectedSessions
     {
         if (state.Status is "armed" or "active" or "partial")
             state.Status = state.Games.All(game => game.Exited) ? "armed" : state.Games.Where(game => !game.Exited).All(game => game.Fields.All(field => field.Status == "applied")) ? "active" : "partial";
+        ValidateState(root, state);
         var path = StatePath(root);
         var bytes = JsonSerializer.SerializeToUtf8Bytes(state, OperationFiles.Json);
         if (_lastStatePath == path && _lastSavedState is not null && bytes.AsSpan().SequenceEqual(_lastSavedState) && DateTime.UtcNow - state.UpdatedAtUtc < TimeSpan.FromSeconds(5)) return;
