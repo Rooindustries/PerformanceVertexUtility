@@ -34,6 +34,25 @@ public static class AppLog
         return line.Length is 0 or > 240 || line.StartsWith('#') || line.StartsWith('<') || line.Contains("Exception", StringComparison.Ordinal) || line.Contains(":\\", StringComparison.Ordinal) ? fallback : line;
     }
 
+    // A script that fails on purpose prints its issues as JSON on standard output: their messages are the cause to log.
+    public static string ScriptIssues(string? output)
+    {
+        if (string.IsNullOrWhiteSpace(output)) return "no output";
+        try
+        {
+            using var document = System.Text.Json.JsonDocument.Parse(output);
+            if (document.RootElement.ValueKind == System.Text.Json.JsonValueKind.Object && document.RootElement.TryGetProperty("errors", out var errors) && errors.ValueKind == System.Text.Json.JsonValueKind.Array)
+            {
+                var messages = errors.EnumerateArray().Select(issue => issue.ValueKind == System.Text.Json.JsonValueKind.Object && issue.TryGetProperty("message", out var message) ? message.ToString() : "")
+                    .Where(message => message.Length > 0).ToArray();
+                if (messages.Length != 0) return string.Join("; ", messages);
+            }
+        }
+        catch (System.Text.Json.JsonException) { }
+        var text = output.Trim();
+        return text.Length <= 2000 ? text : "..." + text[^2000..];
+    }
+
     // Windows PowerShell writes errors to a redirected error stream as a CLIXML block: read the text inside it.
     private static string? PowerShellErrors(string? detail)
     {

@@ -179,16 +179,16 @@ static class LaunchProfileChecks
             Check(NtSuspendProcess(worker.Handle) == 0 && NtSuspendProcess(watcher.Handle) == 0, "The session worker and its watcher are frozen together, like a power loss");
             worker.Kill(); watcher.Kill(); worker.WaitForExit(10000); watcher.WaitForExit(10000);
         }
-        async Task<Process> Game(Process? launcher, bool failReadiness = false)
+        async Task<Process> Game(Process? launcher, bool failReadiness = false, string mode = "none")
         {
             var folder = Path.Combine(root, "game-" + (games.Count + 1)); Directory.CreateDirectory(folder);
             Process? game = null;
             if (launcher is null)
             {
-                game = failReadiness ? Start(gamePath, "--hold-lock", Path.Combine(folder, "held"), Path.Combine(folder, "holder-ready.json"), Path.Combine(folder, "stop")) : Start(gamePath, "--game", folder, "none");
+                game = failReadiness ? Start(gamePath, "--hold-lock", Path.Combine(folder, "held"), Path.Combine(folder, "holder-ready.json"), Path.Combine(folder, "stop")) : Start(gamePath, "--game", folder, mode);
                 games.Add((game, folder, game.StartTime.ToUniversalTime().ToFileTimeUtc()));
             }
-            else OperationFiles.Write(Path.Combine(launchers.Single(item => item.Process == launcher).Root, "launch.json"), new { root = folder, hardware = "none", exe = Path.GetFileName(gamePath) });
+            else OperationFiles.Write(Path.Combine(launchers.Single(item => item.Process == launcher).Root, "launch.json"), new { root = folder, mode, exe = Path.GetFileName(gamePath) });
             await Until(() => Task.FromResult(File.Exists(Path.Combine(folder, "ready.json"))), failReadiness ? "Deliberate standalone readiness failure" : "The game fixture did not start.", failReadiness ? 2 : 60);
             if (game is null) { game = Process.GetProcessById(OperationFiles.Read<JsonElement>(Path.Combine(folder, "ready.json")).GetProperty("pid").GetInt32()); games.Add((game, folder, game.StartTime.ToUniversalTime().ToFileTimeUtc())); }
             return game;
@@ -302,11 +302,28 @@ static class LaunchProfileChecks
                 Check(ReadPreset(first) == launcherOriginal && NoLaunchPolicy(), choice.Name + " Preview changes no launcher value or launch policy");
                 var started = await app.StartGameSessionAsync(review);
                 var game = await Applied(app, new GameSessionEntry(review.SessionRoot, started), first, "Start");
+                Process? resetting = null;
+                if (choice.Settings.ContainsKey("cpuPriority"))
+                {
+                    resetting = await Game(first, mode: "reset-priority");
+                    var resetRoot = games.Single(item => item.Process == resetting).Root;
+                    await Until(async () => File.Exists(Path.Combine(resetRoot, "priority-reset.json")) &&
+                        (await app.ReadGameSessionAsync(review.SessionRoot)).State?.Games.SingleOrDefault(entry => entry.Identity.ProcessId == resetting.Id)?.Fields.Single(field => field.Name == "cpuPriority")
+                            is { Status: "applied", Reapplications: > 0 }, "The session did not put the saved CPU priority back after the game reset its own.", 60);
+                    Check(Observe(resetting, "Game reset its CPU priority") == expected, choice.Name + " puts the saved CPU priority back after the game resets its own, as Counter-Strike 2 does");
+                }
                 var stopped = await app.StopGameSessionAsync(review.SessionRoot);
                 Check(GameSessionDisplay.Restored(stopped) && NoLaunchPolicy() && ReadPreset(first) == launcherOriginal &&
                     stopped.State!.Games.Single(entry => entry.Identity.ProcessId == game.Id).Fields.Single(field => field.Name == "cpuPriority").Status == "restartRequired",
                     choice.Name + " Stop restores the launcher and launch policy and reports the game's CPU restart requirement");
                 LiveRestored(game, "Stop"); EndGame(game);
+                if (resetting is not null)
+                {
+                    Check(stopped.State!.Games.Single(entry => entry.Identity.ProcessId == resetting.Id).Fields.Single(field => field.Name == "cpuPriority").Status == "restored",
+                        choice.Name + " Stop restores the CPU priority of a game that reset its own");
+                    Check(Observe(resetting, "Stop after the game reset") == baseline with { Cpu = "Normal" }, choice.Name + " Stop gives that game the Normal priority it chose itself, and every other original");
+                    EndGame(resetting);
+                }
                 var fresh = await Game(first);
                 Check(Observe(fresh, "Fresh after Stop") == baseline, choice.Name + " a fresh game has every original value after Stop"); EndGame(fresh);
 
