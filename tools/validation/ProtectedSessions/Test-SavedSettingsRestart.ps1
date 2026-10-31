@@ -166,7 +166,7 @@ try{
   $evidence.game=$seen
   $wanted=$saved.controls
   if($wanted.cpuPriority){Expect 'game' ($seen.priorityClass -eq $classes[[string]$wanted.cpuPriority]) ('the game runs at the saved CPU priority '+$wanted.cpuPriority)}
-  if($wanted.affinity){$mask=[string]$wanted.affinity.mask;$cores=if($mask -match '^0[xX]'){[Convert]::ToUInt64($mask.Substring(2),16)}else{[UInt64]$mask};Expect 'game' ($seen.affinity -eq ('0x{0:X}' -f $cores)) ('the game runs on the saved cores '+$mask)}
+  if($wanted.affinity){$mask=[string]$wanted.affinity.mask;$savedMask=if($mask -match '^0[xX]'){[Convert]::ToUInt64($mask.Substring(2),16)}else{[UInt64]$mask};Expect 'game' ($seen.affinity -eq ('0x{0:X}' -f $savedMask)) ('the game runs on the saved cores '+$mask)}
   if($null -ne $wanted.ioPriority){Expect 'game' ($seen.io -eq [int]$wanted.ioPriority) ('the game runs at the saved disk priority '+$wanted.ioPriority)}
   if($null -ne $wanted.priorityBoost){Expect 'game' ($seen.boost -eq [bool]$wanted.priorityBoost) ('the game''s priority boost is '+$wanted.priorityBoost)}
   $window=$null;Shot 'game-running'
