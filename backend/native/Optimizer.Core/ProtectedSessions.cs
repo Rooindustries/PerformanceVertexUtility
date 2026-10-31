@@ -430,7 +430,7 @@ public sealed class ProtectedSessions
             foreach (var field in game.Fields)
             {
                 var desired = field.Name == "affinity" ? Value(state.DesiredAffinity) : state.Preview.Controls[field.Name];
-                if (field.Route != "job" && (field.Status is "unavailable" or "conflict")) continue;
+                if ((field.Route == "native" || field.JournalPath is not null) && (field.Status is "unavailable" or "conflict")) continue;
                 var retainedControl = field.Name == "gpuPriority" || field.Name == "ioPriority" && field.Route == "native";
                 if (retainedControl && field.JournalPath is null && gpuHandles?.Refusal(identity) is { } refusal)
                 {
@@ -446,10 +446,13 @@ public sealed class ProtectedSessions
                 field.Observed = reader.Read(field.Name);
                 // A launch value holds until the game changes it itself, as Counter-Strike 2 does with its CPU priority a few seconds in.
                 // From then on the field is kept like a native one, with the game's own value as the original to put back.
+                // If that takeover is refused, the refusal stands until the game holds the saved value again.
                 var held = field.Observed.Known && ProcessTarget.Equivalent(field.Name, field.Observed.Require(), desired);
-                if (field.Route == "job" || field.Route == "launch" && field.JournalPath is null && (held || !field.Observed.Known))
+                var refused = field.Status is "unavailable" or "conflict";
+                if (field.Route == "job" || field.Route == "launch" && field.JournalPath is null && (held || refused || !field.Observed.Known))
                 {
-                    field.Status = held ? "applied" : "notApplied";
+                    if (held) { field.Status = "applied"; field.Error = null; }
+                    else if (!refused) field.Status = "notApplied";
                     continue;
                 }
                 try
@@ -469,7 +472,7 @@ public sealed class ProtectedSessions
                         if (inherited is not null) preview = preview with { Original = new(preview.Original, StringComparer.Ordinal) { [field.Name] = inherited } };
                         identity.Verify(preview.Identity); OperationFiles.Write(path, preview);
                         var hash = OperationFiles.HashFile(path); field.PreviewHash = hash;
-                        field.JournalPath = Path.Combine(folder, "journal.json"); Save(root, state);
+                        field.Status = "pending"; field.JournalPath = Path.Combine(folder, "journal.json"); Save(root, state);
                         var result = inherited is null ? controls.Apply(path, hash, field.JournalPath) : controls.Adopt(path, hash, field.JournalPath);
                         if (result.Status != "applied")
                         {
