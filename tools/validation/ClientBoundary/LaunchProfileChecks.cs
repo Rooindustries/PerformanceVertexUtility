@@ -319,8 +319,9 @@ static class LaunchProfileChecks
                 LiveRestored(game, "Stop"); EndGame(game);
                 if (resetting is not null)
                 {
-                    Check(stopped.State!.Games.Single(entry => entry.Identity.ProcessId == resetting.Id).Fields.Single(field => field.Name == "cpuPriority").Status == "restored" &&
-                        Observe(resetting, "Stop after the game reset") == baseline, choice.Name + " Stop gives a game that reset its CPU priority its own value back");
+                    Check(stopped.State!.Games.Single(entry => entry.Identity.ProcessId == resetting.Id).Fields.Single(field => field.Name == "cpuPriority").Status == "restored",
+                        choice.Name + " Stop restores the CPU priority of a game that reset its own");
+                    Check(Observe(resetting, "Stop after the game reset") == baseline with { Cpu = "Normal" }, choice.Name + " Stop gives that game the Normal priority it chose itself, and every other original");
                     EndGame(resetting);
                 }
                 var fresh = await Game(first);
