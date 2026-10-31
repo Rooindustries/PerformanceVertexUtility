@@ -3,7 +3,7 @@ using RooIndustries.OptimizationSuite.Services;
 
 static class ChildEnvironmentChecks
 {
-    public static readonly string[] Scenarios = ["app-host", "app-script", "app-live-script"];
+    public static readonly string[] Scenarios = ["app-host", "app-script", "app-live-script", "app-live-script-failure"];
 
     static void Check(bool condition, string message)
     {
@@ -25,6 +25,19 @@ static class ChildEnvironmentChecks
             {
                 var result = await new LiveDataService(backend).RunBackendScriptResultAsync("Show-ChildEnvironment.ps1");
                 Check(result.Error is null && result.Value?.Trim() == "child-environment-ok", "The app accepted the script's text answer through LiveDataService.RunScriptCoreAsync: " + result.Value + result.Error);
+            }); break;
+            case "app-live-script-failure": await Script(mode, "Fail-WithIssue.ps1", "The app's live-data script runner on a failing script", async (backend, service) =>
+            {
+                var logged = new List<string>();
+                AppLog.Observer = (source, detail) => { lock (logged) logged.Add(source + ": " + detail); };
+                try
+                {
+                    var result = await new LiveDataService(backend).RunBackendScriptResultAsync("Fail-WithIssue.ps1");
+                    lock (logged)
+                        Check(result.Error is not null && logged.Contains("backend: Fail-WithIssue.ps1 reported: The fixture failed on purpose"),
+                            "A script that fails with its own issue gets that cause into the app log: " + string.Join(" | ", logged));
+                }
+                finally { AppLog.Observer = null; }
             }); break;
             default: throw new ArgumentException("Unknown child-environment scenario " + scenario);
         }
@@ -53,6 +66,7 @@ static class ChildEnvironmentChecks
             {
                 "Invoke-ProcessCpuSets.ps1" => "param([string]$Action,[int]$TargetProcessId)\n{0}'{\"status\":\"success\",\"changed\":false,\"restoreAvailable\":false,\"data\":null,\"errors\":[]}'\n",
                 "Show-ChildEnvironment.ps1" => "{0}'child-environment-ok'\n",
+                "Fail-WithIssue.ps1" => "{0}'{\"errors\":[{\"code\":\"FIXTURE_FAILED\",\"message\":\"The fixture failed on purpose\"}]}'\nexit 1\n",
                 _ => throw new ArgumentException("Unknown child-environment script " + name),
             };
             File.WriteAllText(Path.Combine(scripts, name), answer.Replace("{0}", ChildEnv.DumpScript("(Join-Path $PSScriptRoot '" + dump + "')")));

@@ -62,8 +62,9 @@ sealed class ChildEnv : IDisposable
         var root = DataFolder.Root;
         var protectedTemp = Path.Combine(root, "temp");
         var secured = Directory.Exists(protectedTemp) && DataFolder.Secured(root);
-        var temp = secured ? protectedTemp : Path.Combine(Windows, "Temp");
-        TempBranch = secured ? "data-folder temp " + protectedTemp : "Windows temp " + temp;
+        var elevated = PolicyRootSecurity.Elevated();
+        var temp = secured ? protectedTemp : elevated ? Path.Combine(Windows, "Temp") : RooIndustries.Optimizer.RuntimeEnvironment.UserTemp;
+        TempBranch = secured ? "data-folder temp " + protectedTemp : elevated ? "Windows temp " + temp : "user temp " + temp;
         var expected = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["SystemRoot"] = Windows, ["windir"] = Windows, ["SystemDrive"] = Path.GetPathRoot(Windows)!.TrimEnd('\\'), ["ComSpec"] = Path.Combine(System32, "cmd.exe"),
