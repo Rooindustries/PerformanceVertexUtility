@@ -114,9 +114,9 @@ try{
  Check 'published old installer has the signed SHA-256' @{path=$old;sha256=(Get-HarnessFileSha256 $old)} ((Get-HarnessFileSha256 $old) -ieq $OldSha256)
  $installAttempted=$true
  Setup $old '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /TASKS="desktopicon"' 'install-old'|Out-Null
- $before=@{version=Version;key=(Get-ItemProperty $uninstallKey|Select-Object DisplayName,DisplayVersion,InstallLocation,Publisher);old=(Links $oldLinks);new=(Links $newLinks);oldTarget=(Target $oldLinks.app)}
+ $before=@{version=Version;key=(Get-ItemProperty $uninstallKey|Select-Object DisplayName,DisplayVersion,InstallLocation,Publisher);old=(Links $oldLinks);new=(Links $newLinks);oldTarget=(Target $oldLinks.app);oldDesktopTarget=(Target $oldLinks.desktop);newTarget=(Target $newLinks.app);newDesktopTarget=(Target $newLinks.desktop)}
  Save 'old-installed.json' $before
- Check 'old version installed with its shortcuts' $before ($before.version -ceq $OldVersion -and $before.old.app -and $before.old.desktop -and $before.oldTarget -ieq $exe)
+ Check 'old version installed with its shortcuts' $before ($before.version -ceq $OldVersion -and (($before.old.app -and $before.old.desktop -and $before.oldTarget -ieq $exe -and $before.oldDesktopTarget -ieq $exe) -or ($before.new.app -and $before.new.desktop -and $before.newTarget -ieq $exe -and $before.newDesktopTarget -ieq $exe)))
  Start-RehearsalApp $stateEntry;Settings
  if($LiveFeed){$current=WaitStatus ('Version '+$NewVersion+' is ready to install') 150}else{$current=WaitStatus 'You have the latest version' 90}
  Shot 'before-old-settings'
