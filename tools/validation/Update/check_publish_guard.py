@@ -310,11 +310,26 @@ try:
     lag_rollback = lag_new.with_name(lag_new.stem + '.previous-live.json')
     lagging['/' + lag_path] = [lag_new.read_bytes(), 3]
     run('set-feed-waits-for-the-feed-to-update', tool, ['set-feed', '--manifest', str(lag_rollback), '--feed-path', lag_path, '--yes-publish'], 0, 'The feed now serves version 0.11.0-beta, verified over HTTPS.', caught_up(lag_rollback), upload_env)
-    lag_newer_url = fixture_url('0.11.2-beta', origin)
-    lag_newer = signed('lagging-newer', '0.11.2-beta', {'url': lag_newer_url, **dummy_identity})
-    lagging['/' + lag_path] = [lag_rollback.read_bytes(), 1000000]
+    # A broken or missing feed is still repaired while the old copy or a 404 is served, and one failed read doesn't end the wait.
+    broken = json.loads(lag_rollback.read_bytes())
+    broken['signature'] = json.loads(lag_new.read_bytes())['signature']
+    broken_bytes = json.dumps(broken).encode()
+    (work / 'blob' / lag_path).write_bytes(broken_bytes)
+    lagging['/' + lag_path] = [broken_bytes, 3]
+    run('set-feed-repair-waits-for-the-feed-to-update', tool, ['set-feed', '--manifest', str(lag_rollback), '--feed-path', lag_path, '--yes-publish'], 0, 'The feed now serves version 0.11.0-beta, verified over HTTPS.', caught_up(lag_rollback), upload_env)
+    (work / 'blob' / lag_path).unlink()
+    failures['/' + lag_path] = [404, 404, 404]
+    run('set-feed-missing-feed-waits-for-the-feed-to-update', tool, ['set-feed', '--manifest', str(lag_rollback), '--feed-path', lag_path, '--yes-publish'], 0, 'The feed now serves version 0.11.0-beta, verified over HTTPS.', lambda: 'the cached 404s were not served' if failures['/' + lag_path] else caught_up(lag_rollback)(), upload_env)
+    lag_retry_url = fixture_url('0.11.2-beta', origin)
+    lag_retry = signed('lagging-retry', '0.11.2-beta', {'url': lag_retry_url, **dummy_identity})
+    lagging['/' + lag_path] = [lag_rollback.read_bytes(), 1]
+    failures['/' + lag_path] = [503]
+    run('publish-waits-through-a-failed-read', tool, ['publish', '--installer', str(dummy), '--manifest', str(lag_retry), '--installer-path', urlparse(lag_retry_url).path[1:], '--feed-path', lag_path, '--yes-publish'], 0, 'Published manifest and installer verified over HTTPS.', lambda: 'the failed read was not served' if failures['/' + lag_path] else caught_up(lag_retry)(), upload_env)
+    lag_newer_url = fixture_url('0.11.3-beta', origin)
+    lag_newer = signed('lagging-newer', '0.11.3-beta', {'url': lag_newer_url, **dummy_identity})
+    lagging['/' + lag_path] = [lag_retry.read_bytes(), 1000000]
     lag_list = tool.parent / 'released-versions.txt'
-    run('publish-refused-when-the-feed-never-updates', tool, ['publish', '--installer', str(dummy), '--manifest', str(lag_newer), '--installer-path', urlparse(lag_newer_url).path[1:], '--feed-path', lag_path, '--yes-publish'], 1, 'Published feed still serves other bytes 90 seconds after the upload', lambda: '0.11.2-beta was listed though the feed never served it' if '0.11.2-beta' in lag_list.read_text() else None, upload_env, uploads=True)
+    run('publish-refused-when-the-feed-never-updates', tool, ['publish', '--installer', str(dummy), '--manifest', str(lag_newer), '--installer-path', urlparse(lag_newer_url).path[1:], '--feed-path', lag_path, '--yes-publish'], 1, 'Published feed did not serve the signed bytes 90 seconds after the upload: it still serves other bytes', lambda: '0.11.3-beta was listed though the feed never served it' if '0.11.3-beta' in lag_list.read_text() else None, upload_env, uploads=True)
     lagging.clear()
     uploads = (work / 'vercel-calls.txt').read_text().splitlines() if (work / 'vercel-calls.txt').exists() else []
     rows.append({'case': 'no-upload-attempted', 'passed': not uploads, 'calls': uploads})

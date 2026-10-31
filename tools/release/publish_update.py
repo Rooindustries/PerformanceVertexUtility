@@ -262,13 +262,18 @@ def live_feed(feed):
     return data, verify_manifest(data, feed_url=feed)
 
 
-def uploaded_feed(feed, data):
-    # Vercel Blob can take up to a minute to serve an overwritten file, so read the feed again until it does.
+def uploaded_feed(feed, data, refusal):
+    # Vercel Blob can take up to a minute to serve an overwritten file, so an old copy or a failed read only means "not yet".
     deadline = time.monotonic() + FEED_PROPAGATION_SECONDS
     while True:
-        remote, live = live_feed(feed)
-        if remote == data or time.monotonic() >= deadline:
-            return remote, live
+        try:
+            remote, problem = feed_bytes(feed), "it still serves other bytes"
+        except (ValueError, OSError, HTTPException) as error:
+            remote, problem = None, "the last read failed (" + str(error) + ")"
+        if remote == data:
+            return verify_manifest(data, feed_url=feed)
+        if time.monotonic() >= deadline:
+            raise ValueError(refusal + " " + str(FEED_PROPAGATION_SECONDS) + " seconds after the upload: " + problem)
         time.sleep(3)
 
 
@@ -349,9 +354,7 @@ def publish(args):
         print("Dry run: nothing uploaded. Publishing requires --yes-publish and user authorization.")
         return
     upload(commands)
-    remote, published = uploaded_feed(feed, data)
-    if remote != data:
-        raise ValueError("Published feed still serves other bytes " + str(FEED_PROPAGATION_SECONDS) + " seconds after the upload")
+    published = uploaded_feed(feed, data, "Published feed did not serve the signed bytes")
     check_online_installer(published["installer"])
     print("Published manifest and installer verified over HTTPS.")
     try:
@@ -391,9 +394,7 @@ def set_feed(args):
         print("Dry run: nothing uploaded. Changing the feed requires --yes-publish and user authorization.")
         return
     upload([command])
-    remote, _ = uploaded_feed(feed, data)
-    if remote != data:
-        raise ValueError("The feed still serves other bytes " + str(FEED_PROPAGATION_SECONDS) + " seconds after the upload")
+    uploaded_feed(feed, data, "The feed did not serve the signed bytes")
     print("The feed now serves version " + payload["version"] + ", verified over HTTPS.")
 
 
