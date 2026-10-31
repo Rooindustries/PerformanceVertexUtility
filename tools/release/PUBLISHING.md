@@ -17,7 +17,7 @@ Testers' apps read the signed feed in `update-feed.txt`. They only offer a versi
    python3 tools/release/publish_update.py publish ... --yes-publish
    ```
 
-   Both runs stop if the version is not newer than the live beta and every version in `released-versions.txt`, or if the live feed doesn't verify (repair it with `set-feed` first). A rollback lowers the live feed but not that list, so testers who kept a rolled-back version are still offered the next publish. They save the live manifest as `<version>-feed.previous-live.json`, which is the rollback copy. After uploading, the tool reads the feed and the installer back over HTTPS, then adds the version to `released-versions.txt` in this checkout.
+   Both runs stop if the version is not newer than the live beta and every version in `released-versions.txt`, or if the live feed doesn't verify (repair it with `set-feed` first). A rollback lowers the live feed but not that list, so testers who kept a rolled-back version are still offered the next publish. They save the live manifest as `<version>-feed.previous-live.json`, which is the rollback copy. After uploading, the tool reads the feed back over HTTPS until it serves the new manifest (Vercel can take up to a minute; the tool waits 90 seconds), checks the installer the same way, then adds the version to `released-versions.txt` in this checkout.
 4. `publish` has already written the new line in `released-versions.txt`. Commit it to `main`. Until it is merged, publish only from this checkout: after a rollback, a checkout without the line would accept the same version again.
 
 ## Rolling back
