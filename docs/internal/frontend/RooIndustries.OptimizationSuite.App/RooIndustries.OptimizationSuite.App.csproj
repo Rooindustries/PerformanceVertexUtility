@@ -10,7 +10,7 @@
     <Title>Performance Vertex Utility</Title>
     <Product>Performance Vertex Utility</Product>
     <Company>Performance Vertex Utility</Company>
-    <Version>0.11.1-beta</Version>
+    <Version>0.11.2-beta</Version>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <Platforms>x86;x64;ARM64</Platforms>
