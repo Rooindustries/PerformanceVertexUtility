@@ -1376,6 +1376,7 @@ public sealed class LiveDataService
         if (process.ExitCode != 0)
         {
             AppLog.Write("backend", Path.GetFileName(scriptPath) + " exited with code " + process.ExitCode);
+            if (string.IsNullOrWhiteSpace(stderr)) AppLog.Write("backend", Path.GetFileName(scriptPath) + " reported: " + AppLog.ScriptIssues(stdout));
             var plain = AppLog.Explain("backend", stderr, "");
             var code = " (code " + process.ExitCode + ")";
             return new(stdout, plain.Length == 0 ? "Something went wrong" + code + ". Details were saved to the app log (Settings, Open logs folder)." : plain + code);

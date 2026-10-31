@@ -430,7 +430,7 @@ public sealed class ProtectedSessions
             foreach (var field in game.Fields)
             {
                 var desired = field.Name == "affinity" ? Value(state.DesiredAffinity) : state.Preview.Controls[field.Name];
-                if (field.Route == "native" && (field.Status is "unavailable" or "conflict")) continue;
+                if (field.Route != "job" && (field.Status is "unavailable" or "conflict")) continue;
                 var retainedControl = field.Name == "gpuPriority" || field.Name == "ioPriority" && field.Route == "native";
                 if (retainedControl && field.JournalPath is null && gpuHandles?.Refusal(identity) is { } refusal)
                 {
@@ -444,9 +444,12 @@ public sealed class ProtectedSessions
                 var reader = retained ?? target;
                 var controls = retained is null ? _controls : _controls.WithTarget(retained);
                 field.Observed = reader.Read(field.Name);
-                if (field.Route != "native")
+                // A launch value holds until the game changes it itself, as Counter-Strike 2 does with its CPU priority a few seconds in.
+                // From then on the field is kept like a native one, with the game's own value as the original to put back.
+                var held = field.Observed.Known && ProcessTarget.Equivalent(field.Name, field.Observed.Require(), desired);
+                if (field.Route == "job" || field.Route == "launch" && field.JournalPath is null && (held || !field.Observed.Known))
                 {
-                    field.Status = field.Observed.Known && ProcessTarget.Equivalent(field.Name, field.Observed.Require(), desired) ? "applied" : "notApplied";
+                    field.Status = held ? "applied" : "notApplied";
                     continue;
                 }
                 try
@@ -459,7 +462,7 @@ public sealed class ProtectedSessions
                         if (recovery == "pending") { field.Status = "awaitingRecovery"; continue; }
                         if (recovery == "unknown") { field.Status = "unavailable"; field.Error = LaunchGpuHandles.OriginalUnreadable; continue; }
                         var inherited = field.Name == "ioPriority" && ProcessTarget.Equivalent(field.Name, field.Observed.Require(), desired) ? InheritedOriginal(state, identity, target, desired) : null;
-                        if (field.Name == "ioPriority" && inherited is null) using (new PrivilegeScope("High I/O priority", "SeIncreaseBasePriorityPrivilege")) { }
+                        if (field.Name == "ioPriority" && RuntimeIo(field.Name, desired) && inherited is null) using (new PrivilegeScope("High I/O priority", "SeIncreaseBasePriorityPrivilege")) { }
                         var folder = Path.Combine(root, "games", identity.ProcessId + "-" + identity.CreationTimeFileTimeUtc, field.Name);
                         var path = Path.Combine(folder, "preview.json");
                         var preview = controls.Preview(processId, new() { [field.Name] = desired });
@@ -474,6 +477,7 @@ public sealed class ProtectedSessions
                             var message = string.Join("; ", failed.Select(change => change.Error));
                             throw failed.Length != 0 && failed.All(change => change.ErrorKind == "denied") ? new UnauthorizedAccessException(message) : new InvalidOperationException(message);
                         }
+                        if (field.Route == "launch") field.Reapplications++;
                     }
                     else if (!ProcessTarget.Equivalent(field.Name, field.Observed.Require(), desired))
                     {
@@ -584,7 +588,7 @@ public sealed class ProtectedSessions
                     if (result.Status == "restored" && last.Status == "unchanged") field.Status = "leftAsIs";
                     field.Observed = last.Observed is { } observed ? ControlRead.From(observed) : null; field.Error = last.Error; if (result.Status is not ("restored" or "expired")) errors.Add("Native restoration needs reconciliation: " + field.Name); }
                 catch (Exception error) { errors.Add(error.Message); }
-            foreach (var field in game.Fields.Where(field => field.Route == "launch")) field.Status = game.Exited ? "expired" : "restartRequired";
+            foreach (var field in game.Fields.Where(field => field.Route == "launch" && field.JournalPath is null)) field.Status = game.Exited ? "expired" : "restartRequired";
         }
         try
         {
@@ -704,7 +708,7 @@ public sealed class ProtectedSessions
                     if (field.Observed is null || !field.Observed.Known || !ProcessTarget.Equivalent(field.Name, field.Observed.Require(), expected))
                         throw new InvalidDataException("An applied control lacks matching independent readback.");
                 }
-                if (field.Route != route || field.JournalPath is not null && (route != "native" || !string.Equals(Path.GetFullPath(field.JournalPath), expectedPath, StringComparison.OrdinalIgnoreCase)))
+                if (field.Route != route || field.JournalPath is not null && (route == "job" || !string.Equals(Path.GetFullPath(field.JournalPath), expectedPath, StringComparison.OrdinalIgnoreCase)))
                     throw new InvalidDataException("A recovery control or path escaped the reviewed game session.");
             }
         }

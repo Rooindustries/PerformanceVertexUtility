@@ -284,7 +284,8 @@ public static class RuntimeEnvironment
             if (Directory.Exists(folder) && !new DirectoryInfo(folder).Attributes.HasFlag(FileAttributes.ReparsePoint) && DataFolder.Secured(root)) return _protectedTemp = folder;
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidDataException or InvalidOperationException or ArgumentException or System.ComponentModel.Win32Exception or System.Security.SecurityException) { }
-        return Path.Combine(windows, "Temp");
+        // A standard user can create files in Windows\Temp but not read them back, so its scripts (Add-Type compiles there) use the user's own temp.
+        return PolicyRootSecurity.Elevated() ? Path.Combine(windows, "Temp") : UserTemp;
     }
 
     private static string UserDomain()
