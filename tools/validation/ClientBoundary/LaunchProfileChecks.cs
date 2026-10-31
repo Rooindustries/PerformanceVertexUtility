@@ -188,7 +188,7 @@ static class LaunchProfileChecks
                 game = failReadiness ? Start(gamePath, "--hold-lock", Path.Combine(folder, "held"), Path.Combine(folder, "holder-ready.json"), Path.Combine(folder, "stop")) : Start(gamePath, "--game", folder, mode);
                 games.Add((game, folder, game.StartTime.ToUniversalTime().ToFileTimeUtc()));
             }
-            else OperationFiles.Write(Path.Combine(launchers.Single(item => item.Process == launcher).Root, "launch.json"), new { root = folder, hardware = mode, exe = Path.GetFileName(gamePath) });
+            else OperationFiles.Write(Path.Combine(launchers.Single(item => item.Process == launcher).Root, "launch.json"), new { root = folder, mode, exe = Path.GetFileName(gamePath) });
             await Until(() => Task.FromResult(File.Exists(Path.Combine(folder, "ready.json"))), failReadiness ? "Deliberate standalone readiness failure" : "The game fixture did not start.", failReadiness ? 2 : 60);
             if (game is null) { game = Process.GetProcessById(OperationFiles.Read<JsonElement>(Path.Combine(folder, "ready.json")).GetProperty("pid").GetInt32()); games.Add((game, folder, game.StartTime.ToUniversalTime().ToFileTimeUtc())); }
             return game;

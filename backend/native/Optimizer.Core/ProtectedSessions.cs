@@ -689,6 +689,13 @@ public sealed class ProtectedSessions
         ValidatePlan(state.Preview);
         var plan = OperationFiles.Read<ProtectedSessionPreview>(state.PreviewPath, state.ReviewHash);
         if (state.SchemaVersion != 1 || JsonSerializer.Serialize(plan, OperationFiles.Json) != JsonSerializer.Serialize(state.Preview, OperationFiles.Json)) throw new InvalidDataException("Session recovery no longer matches its reviewed source.");
+        ValidateState(root, state);
+        return state;
+    }
+    // Save runs the same checks before it writes, so the watcher and recovery can always read back the last saved state.
+    private static void ValidateState(string root, ProtectedSessionState state)
+    {
+        var plan = state.Preview;
         if (state.LauncherJournal is not null && !string.Equals(Path.GetFullPath(state.LauncherJournal), Path.Combine(Path.GetFullPath(root), "launcher-journal.json"), StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("Launcher recovery path escaped this session.");
         foreach (var game in state.Games)
@@ -714,7 +721,6 @@ public sealed class ProtectedSessions
         }
         ValidateAffinity(state.DesiredAffinity, plan.OriginalAffinity);
         if (state.Status == "active" && (state.Games.All(game => game.Exited) || state.Games.Where(game => !game.Exited).Any(game => game.Fields.Any(field => field.Status != "applied")))) throw new InvalidDataException("Active session status disagrees with its control evidence.");
-        return state;
     }
     private static void CheckWatch(string root, ProtectedSessionState state)
     {
@@ -824,6 +830,7 @@ public sealed class ProtectedSessions
     {
         if (state.Status is "armed" or "active" or "partial")
             state.Status = state.Games.All(game => game.Exited) ? "armed" : state.Games.Where(game => !game.Exited).All(game => game.Fields.All(field => field.Status == "applied")) ? "active" : "partial";
+        ValidateState(root, state);
         var path = StatePath(root);
         var bytes = JsonSerializer.SerializeToUtf8Bytes(state, OperationFiles.Json);
         if (_lastStatePath == path && _lastSavedState is not null && bytes.AsSpan().SequenceEqual(_lastSavedState) && DateTime.UtcNow - state.UpdatedAtUtc < TimeSpan.FromSeconds(5)) return;
