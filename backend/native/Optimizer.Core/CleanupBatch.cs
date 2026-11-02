@@ -18,6 +18,8 @@ public sealed class CleanupBatchEntry
     public required string OperationId { get; init; }
     public required string Status { get; set; }
     public string? Error { get; set; }
+    // Restored leftovers that were changed after cleanup, so Restore left them as they are now.
+    public List<string> LeftAsChanged { get; set; } = [];
 }
 
 public sealed class CleanupBatchJournal
@@ -135,6 +137,7 @@ public sealed class CleanupBatch(Func<string, string, ApplicationCleanup> applic
                 var restored = application(part.Preview.Source, part.Preview.AppId).Restore(part.Operation.JournalPath);
                 entry.Status = restored.Status;
                 entry.Error = restored.Errors.Count == 0 ? null : string.Join(Environment.NewLine, restored.Errors);
+                entry.LeftAsChanged = restored.LeftAsChanged;
             }
             catch (Exception error) { entry.Status = "needsReconciliation"; entry.Error = error.Message; }
             Save(journalPath, journal);

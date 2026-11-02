@@ -10,6 +10,29 @@ namespace RooIndustries.Optimizer;
 
 public sealed class CleanupSpaceException(string message) : IOException(message);
 
+// Every reviewed leftover held open with its undo copies made, so nothing else can change them before cleanup deletes them.
+public sealed class FileCleanupHold : IDisposable
+{
+    internal FileCleanupHold(FileStream lease, string journalPath, FileCleanupJournal journal, bool resumed)
+    {
+        Lease = lease; JournalPath = journalPath; Journal = journal; Resumed = resumed;
+    }
+
+    internal FileStream Lease { get; }
+    internal string JournalPath { get; }
+    internal FileCleanupJournal Journal { get; }
+    internal bool Resumed { get; }
+    internal ulong Store { get; set; }
+    internal Dictionary<string, FileLease> Held { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+    public void Dispose()
+    {
+        foreach (var source in Held.Values) source.Dispose();
+        Held.Clear();
+        Lease.Dispose();
+    }
+}
+
 public sealed class FileCleanupEngine(Func<CleanupAuthority> currentAuthority)
 {
     private const string BackupPrefix = "file-backup-";
@@ -32,52 +55,79 @@ public sealed class FileCleanupEngine(Func<CleanupAuthority> currentAuthority)
 
     public FileCleanupJournal Apply(string previewPath, string reviewHash, string journalPath)
     {
+        using var hold = Prepare(previewPath, reviewHash, journalPath);
+        return Apply(hold);
+    }
+
+    // Holds every reviewed leftover, runs every check that can refuse the cleanup (changed since review, open in another program, rights,
+    // free space) and makes the undo copies, all before anything is deleted, so a caller can do this before its other parts change anything.
+    // A refusal leaves nothing behind, so the cleanup can run again from its review.
+    public FileCleanupHold Prepare(string previewPath, string reviewHash, string journalPath)
+    {
         var preview = OperationFiles.Read<FileCleanupPreview>(previewPath, reviewHash);
         ValidatePreview(preview);
         currentAuthority().Verify(preview.AppId, preview.ProviderIdentityHash);
         var directory = Path.GetDirectoryName(Path.GetFullPath(journalPath))!;
         if (preview.Roots.Any(root => Within(directory, root)) || string.Equals(Path.GetFullPath(previewPath), Path.GetFullPath(journalPath), StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("Recovery files and the journal must stay outside deletion targets and reviewed inputs.");
-        using var lease = OperationFiles.Lock(journalPath);
-        if (File.Exists(journalPath)) return ReconcileApplied(journalPath, ReadJournal(journalPath, reviewHash));
-        var journal = new FileCleanupJournal
-        {
-            SchemaVersion = 1, Preview = preview, PreviewPath = Path.GetFullPath(previewPath), ReviewHash = reviewHash,
-            Status = "preparing", UpdatedAtUtc = DateTime.UtcNow,
-            Entries = preview.Files.Select(file => new FileBackupEntry
-            {
-                Original = file, BackupPath = Path.Combine(directory, BackupPrefix + Guid.NewGuid().ToString("N")), Status = "pending",
-            }).ToList(),
-        };
-        var held = new Dictionary<string, FileLease>(StringComparer.OrdinalIgnoreCase);
-        FileLease? storeFolder = null;
+        var lease = OperationFiles.Lock(journalPath);
         try
         {
-            var store = StoreVolume(directory);
-            foreach (var entry in journal.Entries)
+            if (File.Exists(journalPath))
             {
-                var file = entry.Original;
-                var source = Hold(file, store, out var moved);
-                held.Add(file.Path, source);
-                entry.Moved = moved;
-                if (!file.SameObjectAndContent(source.Capture())) throw new InvalidDataException("A file changed after review: " + file.Path);
-                if (file.Directory)
-                {
-                    var expected = preview.Files.Where(child => string.Equals(Path.GetDirectoryName(child.Path), file.Path, StringComparison.OrdinalIgnoreCase)).Select(child => child.Path).Order(StringComparer.OrdinalIgnoreCase);
-                    if (!source.Children().SequenceEqual(expected, StringComparer.OrdinalIgnoreCase)) throw new InvalidDataException("The reviewed directory gained or lost an entry.");
-                }
+                var saved = ReadJournal(journalPath, reviewHash);
+                if (!Unstarted(saved) || !Discard(saved, journalPath)) return new(lease, journalPath, saved, resumed: true);
             }
-            var copies = journal.Entries.Where(entry => !entry.Moved).ToList();
-            var cluster = Cluster(directory);
-            var sizes = copies.Select(entry => Allocated(BackupBytes(entry.Original), cluster)).ToArray();
-            var verify = copies.Count == 0 ? 0 : Allocated(copies.Max(entry => DataBytes(entry.Original)), cluster);
-            var remaining = sizes.Sum();
-            // The journal grows as entries finish and is written beside its previous copy, so its room is kept even when every leftover moves.
-            var record = Allocated(2 * JsonSerializer.SerializeToUtf8Bytes(journal, OperationFiles.Json).LongLength, cluster);
-            RequireFree(directory, remaining + verify + record, copies.Select(entry => entry.Original));
-            var protection = journal.Entries.Any(entry => entry.Moved) ? StoreProtection(directory) : default;
-            Save(journalPath, journal);
-            Checkpoint();
+            var journal = new FileCleanupJournal
+            {
+                SchemaVersion = 1, Preview = preview, PreviewPath = Path.GetFullPath(previewPath), ReviewHash = reviewHash,
+                Status = "preparing", UpdatedAtUtc = DateTime.UtcNow,
+                Entries = preview.Files.Select(file => new FileBackupEntry
+                {
+                    Original = file, BackupPath = Path.Combine(directory, BackupPrefix + Guid.NewGuid().ToString("N")), Status = "pending",
+                }).ToList(),
+            };
+            var hold = new FileCleanupHold(lease, journalPath, journal, resumed: false);
+            try { Prepare(hold, directory); }
+            catch { hold.Dispose(); throw; }
+            return hold;
+        }
+        catch { lease.Dispose(); throw; }
+    }
+
+    private void Prepare(FileCleanupHold hold, string directory)
+    {
+        var (journal, journalPath, held) = (hold.Journal, hold.JournalPath, hold.Held);
+        var preview = journal.Preview;
+        hold.Store = StoreVolume(directory);
+        foreach (var entry in journal.Entries)
+        {
+            var file = entry.Original;
+            FileLease source;
+            bool moved;
+            try { source = Hold(file, hold.Store, out moved); }
+            catch (Win32Exception error) when (error.NativeErrorCode == 32) { throw new IOException(file.Path + " is open in another program. Close it, then run cleanup again."); }
+            held.Add(file.Path, source);
+            entry.Moved = moved;
+            if (!file.SameObjectAndContent(source.Capture())) throw new InvalidDataException("A file changed after review: " + file.Path);
+            if (file.Directory)
+            {
+                var expected = preview.Files.Where(child => string.Equals(Path.GetDirectoryName(child.Path), file.Path, StringComparison.OrdinalIgnoreCase)).Select(child => child.Path).Order(StringComparer.OrdinalIgnoreCase);
+                if (!source.Children().SequenceEqual(expected, StringComparer.OrdinalIgnoreCase)) throw new InvalidDataException("The reviewed directory gained or lost an entry.");
+            }
+        }
+        var copies = journal.Entries.Where(entry => !entry.Moved).ToList();
+        var cluster = Cluster(directory);
+        var sizes = copies.Select(entry => Allocated(BackupBytes(entry.Original), cluster)).ToArray();
+        var verify = copies.Count == 0 ? 0 : Allocated(copies.Max(entry => DataBytes(entry.Original)), cluster);
+        var remaining = sizes.Sum();
+        var record = JournalBytes(preview, journalPath, cluster);
+        RequireFree(directory, remaining + verify + record, copies.Select(entry => entry.Original));
+        if (journal.Entries.Any(entry => entry.Moved)) journal.Protection = StoreProtection(directory);
+        Save(journalPath, journal);
+        Checkpoint();
+        try
+        {
             for (var index = 0; index < copies.Count; index++)
             {
                 var entry = copies[index];
@@ -91,11 +141,32 @@ public sealed class FileCleanupEngine(Func<CleanupAuthority> currentAuthority)
                 entry.Status = "backedUp";
                 Checkpoint();
             }
+        }
+        catch (Exception error)
+        {
+            if (!Discard(journal, journalPath))
+            {
+                journal.Status = "needsReconciliation";
+                journal.Entries.First(entry => entry.Status is "pending" or "backedUp").Error = error.Message;
+                Save(journalPath, journal);
+            }
+            throw;
+        }
+    }
+
+    public FileCleanupJournal Apply(FileCleanupHold hold)
+    {
+        var (journal, journalPath, held) = (hold.Journal, hold.JournalPath, hold.Held);
+        if (hold.Resumed) return ReconcileApplied(journalPath, journal);
+        var preview = journal.Preview;
+        FileLease? storeFolder = null;
+        try
+        {
             currentAuthority().Verify(preview.AppId, preview.ProviderIdentityHash);
             if (journal.Entries.Any(entry => entry.Moved))
             {
-                storeFolder = FileLease.OpenFolder(directory);
-                if (storeFolder.ObjectIdentity.Volume != store) throw new InvalidDataException("The recovery folder moved to another drive during cleanup.");
+                storeFolder = FileLease.OpenFolder(Path.GetDirectoryName(Path.GetFullPath(journalPath))!);
+                if (storeFolder.ObjectIdentity.Volume != hold.Store) throw new InvalidDataException("The recovery folder moved to another drive during cleanup.");
             }
             journal.Status = "deleting";
             Save(journalPath, journal);
@@ -114,7 +185,7 @@ public sealed class FileCleanupEngine(Func<CleanupAuthority> currentAuthority)
                 entry.Status = "deleteIntent";
                 if (entry.Moved)
                 {
-                    source.ReplaceDacl(entry.Original.Directory ? protection.Directory! : protection.File!);
+                    source.ReplaceDacl(Protection(journal, entry.Original));
                     Checkpoint();
                     source.RenameInto(storeFolder!, Path.GetFileName(entry.BackupPath));
                 }
@@ -126,7 +197,7 @@ public sealed class FileCleanupEngine(Func<CleanupAuthority> currentAuthority)
             journal.Status = "applied";
             Save(journalPath, journal);
         }
-        catch (Exception error) when (error is not CleanupSpaceException || File.Exists(journalPath))
+        catch (Exception error)
         {
             journal.Status = "needsReconciliation";
             var active = journal.Entries.FirstOrDefault(entry => entry.Status is "deleteIntent" or "pending") ?? journal.Entries.First();
@@ -141,12 +212,32 @@ public sealed class FileCleanupEngine(Func<CleanupAuthority> currentAuthority)
                 }
             Save(journalPath, journal);
         }
-        finally
-        {
-            foreach (var source in held.Values) source.Dispose();
-            storeFolder?.Dispose();
-        }
+        finally { storeFolder?.Dispose(); }
         return journal;
+    }
+
+    // Cleanup stopped or was refused before it deleted anything, so the only things it made are undo copies.
+    private static bool Unstarted(FileCleanupJournal journal)
+        => journal.Status == "preparing" || journal.Status == "needsReconciliation" && journal.Entries.All(entry => entry.Status is "pending" or "backedUp");
+
+    // Removes an unstarted cleanup's undo copies and then its journal. If a copy can't be removed, the journal stays to keep track of it.
+    private static bool Discard(FileCleanupJournal journal, string journalPath)
+    {
+        foreach (var entry in journal.Entries.Where(entry => !entry.Moved))
+        {
+            try { File.Delete(entry.BackupPath); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+            if (File.Exists(entry.BackupPath)) return false;
+            entry.BackupHash = null;
+            entry.Status = "pending";
+        }
+        if (File.Exists(journalPath)) File.Delete(journalPath);
+        return true;
+    }
+
+    private static byte[] Protection(FileCleanupJournal journal, FileSnapshot original)
+    {
+        var protection = journal.Protection ?? throw new InvalidDataException("The journal doesn't have the undo folder's permissions.");
+        return original.Directory ? protection.Directory : protection.File;
     }
 
     public FileCleanupJournal Restore(string journalPath)
@@ -158,7 +249,7 @@ public sealed class FileCleanupEngine(Func<CleanupAuthority> currentAuthority)
             foreach (var entry in journal.Entries.Where(entry => entry.Status is "pending" or "backedUp")) entry.Status = "deleteIntent";
         if (journal.Entries.All(entry => entry.Status is "pending" or "backedUp")) return journal;
         var conflicts = false;
-        var directories = new Dictionary<string, (FileIdentity Identity, bool Own)>(StringComparer.OrdinalIgnoreCase);
+        var directories = new Dictionary<string, FileIdentity>(StringComparer.OrdinalIgnoreCase);
         var staged = new List<(FileBackupEntry Entry, FileLease Staging)>();
         try
         {
@@ -168,53 +259,18 @@ public sealed class FileCleanupEngine(Func<CleanupAuthority> currentAuthority)
                 {
                     // A finished entry belongs to the user again; anything changed on it since is theirs.
                     if (Finished(entry)) { entry.LeftAsChanged = ChangedSinceRestore(entry) switch { true => LeftAsIs, false => null, null => entry.LeftAsChanged }; continue; }
+                    entry.LeftAsChanged = null;
                     FileLease? existing = null;
                     try { existing = FileLease.Open(entry.Original.Path); }
                     catch (Win32Exception error) when (error.NativeErrorCode is 2 or 3) { }
                     if (existing is not null)
                     {
-                        using (existing)
-                        {
-                            var current = existing.Capture();
-                            if (current.Identity == entry.Original.Identity)
-                            {
-                                if (DataChanged(entry.Original, current) || !entry.Moved && !entry.Original.SameRestorableData(current with { LastWriteTime = entry.Original.LastWriteTime }))
-                                    throw new InvalidDataException("New or changed data occupies the restore destination.");
-                                if (entry.Original.Directory) directories[entry.Original.Path] = (current.Identity, true);
-                                else if (!entry.Original.SameRestorableData(current))
-                                {
-                                    existing.Dispose();
-                                    using var own = FileLease.OpenForMove(entry.Original.Path);
-                                    if (own.ObjectIdentity != entry.Original.Identity) throw new InvalidDataException("New or changed data occupies the restore destination.");
-                                    own.RestoreMoved(entry.Original);
-                                    if (!entry.Original.SameRestorableData(own.Capture())) throw new InvalidDataException("Restored file permissions differ from the backup.");
-                                }
-                            }
-                            else if (!entry.Original.Directory && entry.RestoredIdentity == current.Identity)
-                            {
-                                // This restore's own copy, renamed into place before its attributes and times went back on.
-                                if (ContentChanged(entry.Original, current)) throw new InvalidDataException("New or changed data occupies the restore destination.");
-                                existing.Dispose();
-                                FinishCopy(entry, current);
-                            }
-                            else
-                            {
-                                var unfinishedDirectory = entry.Original.Directory && !entry.DirectoryMetadataRestored && entry.RestoredIdentity == current.Identity;
-                                var compared = unfinishedDirectory ? current with { LastWriteTime = entry.Original.LastWriteTime } : current;
-                                if (!entry.Original.SameRestorableData(compared)) throw new InvalidDataException("New or changed data occupies the restore destination.");
-                                if (unfinishedDirectory || entry.Original.Directory && entry.Status == "restoreIntent" && entry.RestoredIdentity is null)
-                                {
-                                    entry.RestoredIdentity = current.Identity;
-                                    directories[entry.Original.Path] = (current.Identity, false);
-                                }
-                                else if (entry.Original.Directory) entry.DirectoryMetadataRestored = true;
-                            }
-                        }
+                        using (existing) Reconcile(journal, entry, existing, directories);
                         entry.Status = "restored";
                         entry.Error = null;
                         continue;
                     }
-                    if (entry.Moved) RestoreMovedEntry(entry, directories);
+                    if (entry.Moved) RestoreMovedEntry(journal, entry, directories);
                     else if (entry.Original.Directory)
                     {
                         if (entry.BackupHash is null || OperationFiles.HashFile(entry.BackupPath) != entry.BackupHash) throw new InvalidDataException("The file backup is missing or changed.");
@@ -224,7 +280,7 @@ public sealed class FileCleanupEngine(Func<CleanupAuthority> currentAuthority)
                         restored.RestoreData(entry.BackupPath, entry.Original);
                         var snapshot = restored.Capture();
                         if (!entry.Original.SameRestorableData(snapshot)) throw new InvalidDataException("Restored directory data or permissions differ from the backup.");
-                        directories[entry.Original.Path] = (snapshot.Identity, false);
+                        directories[entry.Original.Path] = snapshot.Identity;
                         entry.RestoredIdentity = snapshot.Identity;
                         entry.DirectoryMetadataRestored = false;
                         Save(journalPath, journal);
@@ -265,18 +321,28 @@ public sealed class FileCleanupEngine(Func<CleanupAuthority> currentAuthority)
         {
             try
             {
-                var (identity, own) = directories[entry.Original.Path];
-                string[] differences;
-                using (var probe = FileLease.Open(entry.Original.Path)) differences = entry.Original.Differences(probe.Capture());
+                var identity = directories[entry.Original.Path];
+                FileSnapshot found;
+                using (var probe = FileLease.Open(entry.Original.Path)) found = probe.Capture();
+                bool Ours(FileSnapshot snapshot) => Recorded(entry.Original, snapshot, entry.Moved, entry.Moved ? Protection(journal, entry.Original) : null);
+                if (found.Identity == identity && !Ours(found))
+                {
+                    entry.LeftAsChanged = LeftAsIs;
+                    entry.DirectoryMetadataRestored = true;
+                    entry.Error = null;
+                    continue;
+                }
+                // Only a moved folder still has the undo folder's permissions; anything else left to put back is its attributes and times.
+                var differences = entry.Original.Differences(found);
                 var timesOnly = differences.All(difference => difference is "attributes" or "creation time" or "last-write time");
-                using var directory = differences.Length == 0 ? FileLease.Open(entry.Original.Path) : timesOnly ? FileLease.OpenForTimes(entry.Original.Path)
-                    : own ? FileLease.OpenForMove(entry.Original.Path) : FileLease.OpenForRestore(entry.Original.Path);
+                using var directory = differences.Length == 0 ? FileLease.Open(entry.Original.Path) : timesOnly ? FileLease.OpenForTimes(entry.Original.Path) : FileLease.OpenForMove(entry.Original.Path);
                 var children = journal.Preview.Files.Where(file => string.Equals(Path.GetDirectoryName(file.Path), entry.Original.Path, StringComparison.OrdinalIgnoreCase)).Select(file => file.Path).Order(StringComparer.OrdinalIgnoreCase);
-                if (directory.Capture().Identity != identity || !directory.Children().SequenceEqual(children, StringComparer.OrdinalIgnoreCase))
+                var current = directory.Capture();
+                if (current.Identity != identity || !directory.Children().SequenceEqual(children, StringComparer.OrdinalIgnoreCase) || !Ours(current))
                     throw new InvalidDataException("Directory contents changed during restoration; metadata was left unchanged.");
                 if (journal.Entries.Any(child => child.Original.Path != entry.Original.Path && Within(child.Original.Path, entry.Original.Path) && (child.Status != "restored" || child.Error is not null)))
                     throw new InvalidDataException("A directory still has unresolved child data; its metadata was left unchanged.");
-                if (!timesOnly) { if (own) directory.RestoreMoved(entry.Original); else directory.RestoreMetadata(entry.Original); }
+                if (!timesOnly) directory.RestoreMoved(entry.Original);
                 else if (differences.Length != 0) directory.RestoreTimes(entry.Original);
                 if (!entry.Original.SameRestorableData(directory.Capture())) throw new InvalidDataException("Restored directory metadata differs from the backup.");
                 entry.DirectoryMetadataRestored = true;
@@ -289,7 +355,8 @@ public sealed class FileCleanupEngine(Func<CleanupAuthority> currentAuthority)
         return journal;
     }
 
-    private const string LeftAsIs = "This changed after it was put back, so it was left as is.";
+    private const string LeftAsIs = "This was changed after cleanup, so it was left as is.";
+    private const uint Archive = 0x20, Normal = 0x80;
 
     private static bool Finished(FileBackupEntry entry) => entry.Status == "restored" && entry.Error is null && (!entry.Original.Directory || entry.DirectoryMetadataRestored);
 
@@ -302,7 +369,79 @@ public sealed class FileCleanupEngine(Func<CleanupAuthority> currentAuthority)
         catch (Win32Exception) { return null; }
     }
 
-    private void RestoreMovedEntry(FileBackupEntry entry, Dictionary<string, (FileIdentity Identity, bool Own)> directories)
+    // Something is at the leftover's path. Restore finishes it only when it's in a state cleanup itself left it in. Anything else was changed
+    // by the user or another program after cleanup and is left as it is.
+    private static void Reconcile(FileCleanupJournal journal, FileBackupEntry entry, FileLease existing, Dictionary<string, FileIdentity> directories)
+    {
+        var original = entry.Original;
+        var current = existing.Capture();
+        if (current.Identity == original.Identity)
+        {
+            // The leftover itself: cleanup never deleted it, or an earlier restore moved it back before its own permissions went back on.
+            var protection = entry.Moved ? Protection(journal, original) : null;
+            if (!Recorded(original, current, entry.Moved, protection)) { entry.LeftAsChanged = LeftAsIs; return; }
+            if (original.Directory) { directories[original.Path] = current.Identity; return; }
+            if (original.SameRestorableData(current)) return;
+            existing.Dispose();
+            using var own = FileLease.OpenForMove(original.Path);
+            var held = own.Capture();
+            if (held.Identity != original.Identity || !Recorded(original, held, entry.Moved, protection)) throw new InvalidDataException("This file changed while it was being put back, so it was left as is.");
+            own.RestoreMoved(original);
+            if (!original.SameRestorableData(own.Capture())) throw new InvalidDataException("Restored file permissions differ from the backup.");
+            return;
+        }
+        if (current.Identity == entry.RestoredIdentity)
+        {
+            // This restore's own copy, put in place before its attributes and times went back on.
+            entry.RestoreStagingPath = null;
+            if (!Recorded(original, current, !original.Directory, null)) { entry.LeftAsChanged = LeftAsIs; return; }
+            if (original.Directory) directories[original.Path] = current.Identity;
+            else if (!original.SameRestorableData(current)) { existing.Dispose(); FinishCopy(entry); }
+            return;
+        }
+        if (original.Directory && entry.Status == "restoreIntent" && entry.RestoredIdentity is null && original.SameRestorableData(current))
+        {
+            // A folder this restore made just before it could save the folder's identity.
+            entry.RestoredIdentity = current.Identity;
+            directories[original.Path] = current.Identity;
+            return;
+        }
+        if (original.SameRestorableData(current)) { if (original.Directory) entry.DirectoryMetadataRestored = true; return; }
+        // The moved leftover isn't in the undo folder, so it was never moved or was put back, and someone replaced it since.
+        if (entry.Moved && !Path.Exists(entry.BackupPath)) { entry.LeftAsChanged = LeftAsIs; return; }
+        throw new InvalidDataException("New or changed data occupies the restore destination.");
+    }
+
+    // The states cleanup itself leaves an object in: the reviewed state; for a moved leftover, the undo folder's permissions it takes before
+    // the move; and the archive flag Windows sets when it renames a file, which replaces a plain "normal" flag. A folder's last-write time
+    // follows the entries moved in and out of it and goes back last.
+    private static bool Recorded(FileSnapshot original, FileSnapshot current, bool renamed, byte[]? protection)
+    {
+        var differences = original.Differences(current).ToList();
+        if (original.Directory) differences.Remove("last-write time");
+        if (renamed && current.Attributes == ((original.Attributes & ~Normal) | Archive)) differences.Remove("attributes");
+        if (protection is not null && HasProtection(original, current, protection)) differences.Remove("permissions");
+        return differences.Count == 0;
+    }
+
+    // True when the object keeps its own owner and group and has exactly the undo folder's protected permission list, as cleanup set it.
+    private static bool HasProtection(FileSnapshot original, FileSnapshot current, byte[] protection)
+    {
+        const ControlFlags inheritance = ControlFlags.DiscretionaryAclProtected | ControlFlags.DiscretionaryAclAutoInherited;
+        var now = new RawSecurityDescriptor(current.Security, 0);
+        var before = new RawSecurityDescriptor(original.Security, 0);
+        var folder = new RawSecurityDescriptor(protection, 0);
+        return now.Owner == before.Owner && now.Group == before.Group && (now.ControlFlags & inheritance) == (folder.ControlFlags & inheritance) && Acl(now).SequenceEqual(Acl(folder));
+        static byte[] Acl(RawSecurityDescriptor descriptor)
+        {
+            if (descriptor.DiscretionaryAcl is null) return [];
+            var bytes = new byte[descriptor.DiscretionaryAcl.BinaryLength];
+            descriptor.DiscretionaryAcl.GetBinaryForm(bytes, 0);
+            return bytes;
+        }
+    }
+
+    private void RestoreMovedEntry(FileCleanupJournal journal, FileBackupEntry entry, Dictionary<string, FileIdentity> directories)
     {
         FileLease stored;
         try { stored = FileLease.OpenForMove(entry.BackupPath); }
@@ -310,7 +449,7 @@ public sealed class FileCleanupEngine(Func<CleanupAuthority> currentAuthority)
         using (stored)
         {
             var copy = stored.Capture();
-            if (copy.Identity != entry.Original.Identity || DataChanged(entry.Original, copy) || entry.Original.Directory && stored.Children().Length != 0)
+            if (copy.Identity != entry.Original.Identity || !Recorded(entry.Original, copy, true, Protection(journal, entry.Original)) || entry.Original.Directory && stored.Children().Length != 0)
                 throw new InvalidDataException("The undo copy changed after cleanup.");
             // The destination folder and every folder above it stay open through the rename, so none of them can be swapped for a junction.
             using (var folder = FileLease.OpenFolder(Path.GetDirectoryName(entry.Original.Path)!))
@@ -320,16 +459,10 @@ public sealed class FileCleanupEngine(Func<CleanupAuthority> currentAuthority)
             }
             Checkpoint();
             stored.RestoreMoved(entry.Original);
-            if (entry.Original.Directory) directories[entry.Original.Path] = (copy.Identity, true);
+            if (entry.Original.Directory) directories[entry.Original.Path] = copy.Identity;
             else if (!entry.Original.SameRestorableData(stored.Capture())) throw new InvalidDataException("Restored file data or permissions differ from the backup.");
         }
     }
-
-    private static bool DataChanged(FileSnapshot original, FileSnapshot current)
-        => original.Differences(current).Except(original.Directory ? ["permissions", "attributes", "last-write time"] : ["permissions", "attributes"]).Any();
-
-    private static bool ContentChanged(FileSnapshot original, FileSnapshot current)
-        => original.Differences(current).Except(["permissions", "attributes", "creation time", "last-write time"]).Any();
 
     private static FileCleanupJournal ReconcileApplied(string path, FileCleanupJournal journal)
     {
@@ -349,9 +482,9 @@ public sealed class FileCleanupEngine(Func<CleanupAuthority> currentAuthority)
         return journal;
     }
 
-    // Writes a copied leftover to its staging name beside the destination. The staging name comes from the undo copy's own name,
-    // so a staging file found there is this cleanup's: a complete one is kept and an unfinished one is replaced.
-    // The staging lease stays open until the rename, so a copy whose restored permissions don't let the app reopen it still goes back.
+    // Writes a copied leftover to its staging name beside the destination. Windows deletes a staging file the app stops with before it has
+    // the leftover's name, so a staging file found later is this restore's only if it has the saved identity and exactly the reviewed data.
+    // Anything else there is kept and reported.
     private static FileLease StageCopy(FileBackupEntry entry)
     {
         entry.RestoreStagingPath ??= Path.Combine(Path.GetDirectoryName(entry.Original.Path)!, ".roo-industries-restore-" + Path.GetFileName(entry.BackupPath)[BackupPrefix.Length..]);
@@ -364,19 +497,15 @@ public sealed class FileCleanupEngine(Func<CleanupAuthority> currentAuthority)
             try
             {
                 var snapshot = found.Capture();
-                if (snapshot.Directory) throw new InvalidDataException("A folder occupies this restore's staging name.");
-                if (entry.Original.SameRestorableData(snapshot))
-                {
-                    entry.RestoredIdentity = snapshot.Identity;
-                    entry.Status = "restoreIntent";
-                    kept = true;
-                    return found;
-                }
-                found.MarkDelete();
+                if (snapshot.Identity != entry.RestoredIdentity || !entry.Original.SameRestorableData(snapshot))
+                    throw new InvalidDataException("Something Restore didn't make is at " + entry.RestoreStagingPath + ", so it was left as is and this file wasn't put back.");
+                entry.Status = "restoreIntent";
+                kept = true;
+                return found;
             }
             finally { if (!kept) found.Dispose(); }
         }
-        var staging = FileLease.Create(entry.RestoreStagingPath, false);
+        var staging = FileLease.CreateUnkept(entry.RestoreStagingPath);
         var done = false;
         try
         {
@@ -388,20 +517,15 @@ public sealed class FileCleanupEngine(Func<CleanupAuthority> currentAuthority)
             done = true;
             return staging;
         }
-        finally
-        {
-            if (!done)
-            {
-                try { staging.MarkDelete(); }
-                finally { staging.Dispose(); }
-            }
-        }
+        finally { if (!done) staging.Dispose(); }
     }
 
     private void PlaceCopy(FileBackupEntry entry, FileLease staging)
     {
         if (staging.ObjectIdentity != entry.RestoredIdentity) throw new InvalidDataException("An unfinished restore file was replaced before it was put back.");
         staging.RenameToSibling(Path.GetFileName(entry.Original.Path));
+        // Kept from here on: it has the leftover's name and its identity is saved.
+        staging.Keep();
         Checkpoint();
         // Windows marks a renamed file for archiving, so the reviewed attributes and times go back on after the rename.
         staging.RestoreTimes(entry.Original);
@@ -409,16 +533,13 @@ public sealed class FileCleanupEngine(Func<CleanupAuthority> currentAuthority)
         entry.RestoreStagingPath = null;
     }
 
-    // Finishes a copy that took the leftover's name before its metadata went back on, asking only for the rights that needs.
-    private static void FinishCopy(FileBackupEntry entry, FileSnapshot current)
+    // Finishes a copy that took the leftover's name before its attributes and times went back on.
+    private static void FinishCopy(FileBackupEntry entry)
     {
-        entry.RestoreStagingPath = null;
-        if (entry.Original.SameRestorableData(current)) return;
-        var permissions = entry.Original.Differences(current).Contains("permissions");
-        using var own = permissions ? FileLease.OpenForRestore(entry.Original.Path) : FileLease.OpenForTimes(entry.Original.Path);
-        if (own.ObjectIdentity != entry.RestoredIdentity) throw new InvalidDataException("New or changed data occupies the restore destination.");
-        if (permissions) own.RestoreMetadata(entry.Original);
-        else own.RestoreTimes(entry.Original);
+        using var own = FileLease.OpenForTimes(entry.Original.Path);
+        var current = own.Capture();
+        if (current.Identity != entry.RestoredIdentity || !Recorded(entry.Original, current, true, null)) throw new InvalidDataException("This file changed while it was being put back, so it was left as is.");
+        own.RestoreTimes(entry.Original);
         if (!entry.Original.SameRestorableData(own.Capture())) throw new InvalidDataException("Restored file data or permissions differ from the backup.");
     }
 
@@ -471,7 +592,7 @@ public sealed class FileCleanupEngine(Func<CleanupAuthority> currentAuthority)
         return directory;
     }
 
-    // The folder a volume is reached through: a drive letter, a subst drive or a mounted folder.
+    // The root a volume is reached through: a drive letter or a subst drive.
     private static string VolumePath(string directory)
     {
         var path = new StringBuilder(32768);
@@ -479,9 +600,9 @@ public sealed class FileCleanupEngine(Func<CleanupAuthority> currentAuthority)
         return path.ToString();
     }
 
-    private static (byte[] File, byte[] Directory) StoreProtection(string directory)
+    private static FileStoreProtection StoreProtection(string directory)
     {
-        return (Probe(false), Probe(true));
+        return new(Probe(false), Probe(true));
         byte[] Probe(bool folder)
         {
             using var probe = FileLease.Create(Path.Combine(directory, "protection-probe-" + Guid.NewGuid().ToString("N")), folder);
@@ -505,15 +626,35 @@ public sealed class FileCleanupEngine(Func<CleanupAuthority> currentAuthority)
 
     public static void RequireSpace(IEnumerable<(FileCleanupPreview Plan, string JournalPath)> parts)
     {
-        // Recovery folders reached through different letters, subst drives or mounted folders share one budget when they are on one volume.
-        foreach (var store in parts.Select(part => (part.Plan, Directory: Existing(Path.GetDirectoryName(Path.GetFullPath(part.JournalPath))!))).GroupBy(part => StoreVolume(part.Directory)))
+        // Recovery folders reached through different drive letters or subst drives share one budget when they are on one volume.
+        foreach (var store in parts.Select(part => (part.Plan, part.JournalPath, Directory: Existing(Path.GetDirectoryName(Path.GetFullPath(part.JournalPath))!))).GroupBy(part => StoreVolume(part.Directory)))
         {
             var directory = store.First().Directory;
             var copies = store.SelectMany(part => part.Plan.Files.Where(file => Copied(file, store.Key))).ToArray();
             var cluster = Cluster(directory);
             RequireFree(directory, copies.Sum(file => Allocated(BackupBytes(file), cluster)) + (copies.Length == 0 ? 0 : Allocated(copies.Max(DataBytes), cluster)) +
-                store.Sum(part => Allocated(4 * JsonSerializer.SerializeToUtf8Bytes(part.Plan, OperationFiles.Json).LongLength, cluster)), copies);
+                store.Sum(part => JournalBytes(part.Plan, part.JournalPath, cluster)), copies);
         }
+    }
+
+    // Room for a cleanup's journal at its largest, used by both the space check before an app's other parts run and the one cleanup makes
+    // itself: every entry with an undo copy, its hash, a staging name, a restored identity, an error and a left-as-is note, plus the undo
+    // folder's permissions at their largest. Each save writes the new journal beside the old one before replacing it, so both fit at once.
+    private static long JournalBytes(FileCleanupPreview plan, string journalPath, long cluster)
+    {
+        var directory = Path.GetDirectoryName(Path.GetFullPath(journalPath))!;
+        var largest = new FileCleanupJournal
+        {
+            SchemaVersion = 1, PreviewPath = Path.GetFullPath(journalPath), ReviewHash = new string('0', 64), Preview = plan, Status = "needsReconciliation",
+            UpdatedAtUtc = DateTime.MaxValue, Protection = new(new byte[ushort.MaxValue], new byte[ushort.MaxValue]),
+            Entries = plan.Files.Select(file => new FileBackupEntry
+            {
+                Original = file, BackupPath = Path.Combine(directory, BackupPrefix + Guid.Empty.ToString("N")), Moved = true, BackupHash = new string('0', 64),
+                Status = "restoreIntent", Error = new string('0', 1024) + file.Path, RestoredIdentity = file.Identity, DirectoryMetadataRestored = true, LeftAsChanged = LeftAsIs,
+                RestoreStagingPath = Path.Combine(Path.GetDirectoryName(file.Path)!, ".roo-industries-restore-" + Guid.Empty.ToString("N")),
+            }).ToList(),
+        };
+        return 2 * Allocated(JsonSerializer.SerializeToUtf8Bytes(largest, OperationFiles.Json).LongLength, cluster);
     }
 
     private static long BackupBytes(FileSnapshot file) => file.Streams.Sum(stream => 20 + (stream.Name == "::$DATA" ? 0 : 2L * stream.Name.Length) + stream.Length) + 1024;
@@ -574,6 +715,8 @@ public sealed class FileCleanupEngine(Func<CleanupAuthority> currentAuthority)
         var original = OperationFiles.Read<FileCleanupPreview>(journal.PreviewPath, journal.ReviewHash);
         if (JsonSerializer.Serialize(original, OperationFiles.Json) != JsonSerializer.Serialize(journal.Preview, OperationFiles.Json) || journal.Entries.Count != original.Files.Length)
             throw new InvalidDataException("The recovery journal does not match the reviewed files.");
+        if (journal.Entries.Any(entry => entry.Moved) && journal.Protection is not { File.Length: > 0, Directory.Length: > 0 })
+            throw new InvalidDataException("The journal doesn't have the undo folder's permissions.");
         foreach (var entry in journal.Entries)
         {
             if (entry.Status is not ("pending" or "backedUp" or "deleteIntent" or "deleted" or "restoreIntent" or "restored"))

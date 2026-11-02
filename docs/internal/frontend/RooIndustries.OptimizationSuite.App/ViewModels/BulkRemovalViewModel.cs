@@ -497,6 +497,9 @@ public partial class BulkRemovalViewModel : ObservableObject
         string Name(CleanupBatchEntry entry) => state.Preview.Parts.Single(part => part.Preview.OperationId == entry.OperationId).Preview.DisplayName;
         foreach (var entry in state.Entries.Where(entry => entry.Error is not null)) Log(Name(entry) + ": " + entry.Error);
         FileSummary = string.Join("\n", state.Entries.Select(entry => Name(entry) + ": " + CleanupHistoryChoice.StatusLabel(entry.Status)));
+        var left = state.Entries.SelectMany(entry => entry.LeftAsChanged).ToArray();
+        if (left.Length > 0)
+            FileSummary += "\n\nThese changed after the cleanup, so Restore left them as they are:\n" + string.Join("\n", left);
         if (FileReviewReady)
             FileSummary += "\n\nOn the list:\n" + string.Join("\n\n", state.Preview.Parts.Select(part => part.Preview.DisplayName + "\n" + string.Join("\n", part.Preview.Selection.Select(item => item.Target))));
         RefreshCommands();
