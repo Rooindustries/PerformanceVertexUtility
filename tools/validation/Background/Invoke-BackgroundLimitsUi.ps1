@@ -25,7 +25,7 @@ $directory=Join-Path $OutRoot $Label
 if([IO.Directory]::Exists($directory)){throw 'Evidence directory exists; retained.'}
 $frames=Join-Path $directory 'frames';[IO.Directory]::CreateDirectory($frames)|Out-Null
 $utf8=[Text.UTF8Encoding]::new($false);$A=[Windows.Automation.AutomationElement];$TS=[Windows.Automation.TreeScope];$CT=[Windows.Automation.ControlType]
-$app=$null;$receipt=$null;$fixtures=@{};$processes=[ordered]@{};$stem=$null;$window=$null;$profilePath=$null;$profileBytes=$null;$frameCount=0;$clock=[Diagnostics.Stopwatch]::StartNew();$timeline=[Collections.Generic.List[object]]::new()
+$app=$null;$receipt=$null;$state=$null;$stateExisted=$false;$stateChecked=$false;$fixtures=@{};$processes=[ordered]@{};$stem=$null;$window=$null;$profilePath=$null;$profileBytes=$null;$frameCount=0;$clock=[Diagnostics.Stopwatch]::StartNew();$timeline=[Collections.Generic.List[object]]::new()
 function Save([string]$name,$value){[IO.File]::WriteAllText((Join-Path $directory $name),($value|ConvertTo-Json -Depth 30),$utf8)}
 function WaitFor([scriptblock]$probe,[double]$seconds,[string]$what){$deadline=[DateTime]::UtcNow.AddSeconds($seconds);while([DateTime]::UtcNow -lt $deadline){try{$v=&$probe}catch{$v=$null};if($v){return $v};Start-Sleep -Milliseconds 100};throw ('Timed out: '+$what)}
 function All{@($window.FindAll($TS::Descendants,[Windows.Automation.Condition]::TrueCondition))}
@@ -62,13 +62,22 @@ function Run-Button([string]$name,[string]$shot){
  $settle=[DateTime]::UtcNow.AddSeconds(2);while([DateTime]::UtcNow -lt $settle){Frame}
  [ordered]@{clickedMs=$clicked;resultMs=$done}
 }
+# The state folder was empty when the run began, so everything in it now came from this run's app.
+function Clear-RunState{
+ if(-not$stateChecked -or -not[IO.Directory]::Exists($state)){return}
+ foreach($item in @(Get-ChildItem -LiteralPath $state -Force)){Remove-Item -LiteralPath $item.FullName -Recurse -Force}
+ if(-not$stateExisted){[IO.Directory]::Delete($state)}
+ if([IO.Directory]::Exists($state) -and @(Get-ChildItem -LiteralPath $state -Force).Count){throw 'The app root backend state still holds this run''s files.'}
+ Save 'state-cleared.json' @{stateExisted=$stateExisted;empty=$true}
+}
 function Restore-Enabled{(WaitFor {$b=Button 'Restore background limits';if($b){@{enabled=[bool]$b.Current.IsEnabled}}} 15 'Restore background limits').enabled}
 try{
  Assert-NoUnownedAppProcess
  $exe=@(Get-ChildItem -LiteralPath (Join-Path $AppRoot 'docs\internal\frontend\RooIndustries.OptimizationSuite.App\bin') -Recurse -Filter 'RooIndustries.OptimizationSuite.App.exe')
  if($exe.Count -ne 1){throw 'Expected exactly one built app in the app root.'}
- $state=Join-Path $AppRoot 'backend\state'
- if([IO.Directory]::Exists($state) -and @(Get-ChildItem -LiteralPath $state -Force).Count){throw 'The app root backend state is not empty; retained.'}
+ $state=Join-Path $AppRoot 'backend\state';$stateExisted=[IO.Directory]::Exists($state)
+ if($stateExisted -and @(Get-ChildItem -LiteralPath $state -Force).Count){throw 'The app root backend state is not empty; retained.'}
+ $stateChecked=$true
  $stem='Pvu676Limits'+[Guid]::NewGuid().ToString('N').Substring(0,4)
  foreach($name in 'A','B','C'){$image=Join-Path $directory ($stem+$name+'.exe');Copy-Item "$env:SystemRoot\System32\PING.EXE" $image}
  Start-Fixture 'A'
@@ -128,5 +137,5 @@ try{
  throw
 }finally{
  try{if($app){Stop-OwnedValidationApp $app $receipt}}
- finally{try{$stopError=$null;foreach($owned in @($fixtures.Values)){try{Stop-OwnedProcess $owned}catch{if(-not$stopError){$stopError=$_}}};if($stopError){throw $stopError}}finally{if($profileBytes){[IO.File]::WriteAllBytes($profilePath,$profileBytes)}}}
+ finally{try{$stopError=$null;foreach($owned in @($fixtures.Values)){try{Stop-OwnedProcess $owned}catch{if(-not$stopError){$stopError=$_}}};if($stopError){throw $stopError}}finally{try{if($profileBytes){[IO.File]::WriteAllBytes($profilePath,$profileBytes)}}finally{Clear-RunState}}}
 }

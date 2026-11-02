@@ -187,19 +187,23 @@ function Invoke-GovernorActiveRestore {
     }
 
     $currentState = Get-RooIndustriesProcessControlState ([int](Get-RooIndustriesPropertyValue $snapshot 'processId' 0)) $null -ReadGpu:(Test-RooIndustriesEntryHasGpuControl $snapshot)
+    if (Close-RooIndustriesGovernorSettledControls $snapshot $currentState) { Write-RooIndustriesProcessGovernorJsonFile $BackupManifest $BackupPath }
     $restoreChanges = @(Get-RooIndustriesGovernorRestoreChanges $snapshot $currentState)
     $appliedRestoreControls = New-Object System.Collections.Generic.List[object]
     $restoreFailed = $false
-    # Each attempt reports what this app holds now, so a retry never lists a kept setting twice.
     $instance = [string](Get-RooIndustriesPropertyValue $snapshot 'processId' 0) + '|' + [string](Get-RooIndustriesPropertyValue $snapshot 'processStartTimeUtc' '')
-    for ($index = $script:GovernorKeptItems.Count - 1; $index -ge 0; $index--) {
-        if ([string]$script:GovernorKeptItems[$index].processId + '|' + [string]$script:GovernorKeptItems[$index].processStartTimeUtc -eq $instance) { $script:GovernorKeptItems.RemoveAt($index) }
-    }
     foreach ($change in $restoreChanges) {
         if([bool](Get-RooIndustriesPropertyValue $change 'blocked' $false)) {
             if (Test-RooIndustriesGovernorChangeLeftAsSet $change) {
+                # Kept as another program set it, and no longer this run's from here on.
+                Close-RooIndustriesGovernorControlOwnership $snapshot @([string]$change.control)
+                Write-RooIndustriesProcessGovernorJsonFile $BackupManifest $BackupPath
                 $kept = New-RooIndustriesLeftAsSetItem $snapshot ([pscustomobject]@{ control = $change.control; currentValue = $change.currentValue; appliedValue = Get-RooIndustriesPropertyValue $change 'appliedValue' $null; originalValue = $change.proposedValue })
                 $kept | Add-Member -NotePropertyName processStartTimeUtc -NotePropertyValue (Get-RooIndustriesPropertyValue $snapshot 'processStartTimeUtc' $null)
+                for ($index = $script:GovernorKeptItems.Count - 1; $index -ge 0; $index--) {
+                    $item = $script:GovernorKeptItems[$index]
+                    if ([string]$item.processId + '|' + [string]$item.processStartTimeUtc -eq $instance -and [string]$item.control -ceq [string]$change.control) { $script:GovernorKeptItems.RemoveAt($index) }
+                }
                 $script:GovernorKeptItems.Add($kept) | Out-Null
                 continue
             }
@@ -208,16 +212,13 @@ function Invoke-GovernorActiveRestore {
             continue
         }
         try {
-            Invoke-RooIndustriesProcessControlChange $candidate.process $change
+            Invoke-RooIndustriesGovernorControlRestore $candidate.process $snapshot $change $BackupManifest $BackupPath
             $appliedRestoreControls.Add($change) | Out-Null
         } catch {
             $restoreFailed = $true
             $Errors.Add((New-RooIndustriesIssue 'PROCESS_GOVERNOR_RESTORE_CONTROL_FAILED' $_.Exception.Message 'error' 'performance.governor' ([string](Get-RooIndustriesPropertyValue $snapshot 'processName' '')) $true 'Stop the session and retry restore if the process is still running.' $null)) | Out-Null
             continue
         }
-        # Saved at once, so Restore never treats a later value of this control as ours.
-        Complete-RooIndustriesGovernorRestoredControls $snapshot @($change)
-        Write-RooIndustriesProcessGovernorJsonFile $BackupManifest $BackupPath
     }
     $restoredState = Get-RooIndustriesProcessControlState ([int](Get-RooIndustriesPropertyValue $snapshot 'processId' 0)) $null -ReadGpu:(Test-RooIndustriesEntryHasGpuControl $snapshot)
     $restoreItem = New-GovernorRestoredItem $snapshot $restoredState @($appliedRestoreControls.ToArray()) $Reason $PollIndex

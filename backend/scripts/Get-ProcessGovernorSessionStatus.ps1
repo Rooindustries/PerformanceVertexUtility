@@ -11,11 +11,18 @@ $ErrorActionPreference = 'Stop'
 try {
     $resolvedStateRoot = Resolve-RooIndustriesProcessGovernorStateRoot $StateRoot
     $latestOnly = $false
+    $unreadableRuns = @()
+    $session = $null
     if ([string]::IsNullOrWhiteSpace($SessionId) -and [string]::IsNullOrWhiteSpace($SessionPath)) {
+        # Runs whose files can't be read stay pending and are named, but never block the runs Restore can read.
+        $unreadableRuns = @(Get-RooIndustriesProcessGovernorUnreadableSessions $resolvedStateRoot)
         $resolvedSessionPath = Get-RooIndustriesProcessGovernorHeldSession $resolvedStateRoot
         if ($null -eq $resolvedSessionPath) {
             $resolvedSessionPath = Get-RooIndustriesProcessGovernorLatestSessionFile $resolvedStateRoot
             $latestOnly = $true
+            if ($resolvedSessionPath -and (Test-Path -LiteralPath $resolvedSessionPath)) {
+                try { $session = Read-RooIndustriesProcessGovernorJson $resolvedSessionPath } catch { $resolvedSessionPath = $null }
+            }
         }
     } else {
         $resolvedSessionPath = Resolve-RooIndustriesProcessGovernorSessionFile $SessionId $SessionPath $StateRoot
@@ -47,6 +54,7 @@ try {
             skippedItems = @()
             restoredItems = @()
             activeRestraints = @()
+            unreadableRuns = $unreadableRuns
             runtimeEvidence = New-RooIndustriesProcessGovernorRuntimeEvidence -Session $null -StateRoot $resolvedStateRoot -SessionPath $resolvedSessionPath -BackupManifestPath $null
             latestLogs = @()
             warnings = @((New-RooIndustriesIssue 'PROCESS_GOVERNOR_SESSION_NOT_FOUND' 'No process governor session state was found.' 'warning' 'performance.governor' $resolvedStateRoot $false 'Start a confirmed session or provide a session path.' $null))
@@ -56,7 +64,7 @@ try {
         exit 0
     }
 
-    $session = Read-RooIndustriesProcessGovernorJson $resolvedSessionPath
+    if ($null -eq $session) { $session = Read-RooIndustriesProcessGovernorJson $resolvedSessionPath }
     $sessionDirectory = Split-Path $resolvedSessionPath -Parent
     $rawStatus = [string](Get-RooIndustriesPropertyValue $session 'sessionStatus' (Get-RooIndustriesPropertyValue $session 'status' 'completed'))
     $isRestorable = [bool](Get-RooIndustriesPropertyValue $session 'restorable' $false) -and -not $latestOnly
@@ -110,6 +118,7 @@ try {
         skippedItems = @(Get-RooIndustriesPropertyArray $session 'skippedItems')
         restoredItems = @(Get-RooIndustriesPropertyArray $session 'restoredItems')
         activeRestraints = @(Get-RooIndustriesPropertyArray $session 'activeRestraints')
+        unreadableRuns = $unreadableRuns
         runtimeEvidence = New-RooIndustriesProcessGovernorRuntimeEvidence -Session $session -StateRoot $resolvedStateRoot -SessionPath $resolvedSessionPath -BackupManifestPath (Get-RooIndustriesPropertyValue $session 'backupManifestPath' $null)
         latestLogs = @($latestLogs.ToArray())
         warnings = @(Get-RooIndustriesPropertyArray $session 'warnings')
