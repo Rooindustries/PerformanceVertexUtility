@@ -55,7 +55,7 @@ public sealed class FileCleanupEngine(Func<CleanupAuthority> currentAuthority)
             foreach (var entry in journal.Entries)
             {
                 var file = entry.Original;
-                var source = Hold(file, file.Identity.Volume == store, out var moved);
+                var source = Hold(file, store, out var moved);
                 held.Add(file.Path, source);
                 entry.Moved = moved;
                 if (!file.SameObjectAndContent(source.Capture())) throw new InvalidDataException("A file changed after review: " + file.Path);
@@ -141,11 +141,12 @@ public sealed class FileCleanupEngine(Func<CleanupAuthority> currentAuthority)
         using var lease = OperationFiles.Lock(journalPath);
         var journal = ReadJournal(journalPath);
         currentAuthority().Verify(journal.Preview.AppId, journal.Preview.ProviderIdentityHash);
-        var interrupted = journal.Status == "deleting";
-        if (!interrupted && journal.Entries.All(entry => entry.Status is "pending" or "backedUp")) return journal;
+        if (journal.Status == "deleting")
+            foreach (var entry in journal.Entries.Where(entry => entry.Status is "pending" or "backedUp")) entry.Status = "deleteIntent";
+        if (journal.Entries.All(entry => entry.Status is "pending" or "backedUp")) return journal;
         var conflicts = false;
         var directories = new Dictionary<string, (FileIdentity Identity, bool Own)>(StringComparer.OrdinalIgnoreCase);
-        foreach (var entry in journal.Entries.Where(entry => interrupted || entry.Status is "deleted" or "deleteIntent" or "restoreIntent" or "restored").OrderBy(entry => Depth(entry.Original.Path)))
+        foreach (var entry in journal.Entries.Where(entry => entry.Status is "deleted" or "deleteIntent" or "restoreIntent" or "restored").OrderBy(entry => Depth(entry.Original.Path)))
         {
             try
             {
@@ -218,15 +219,18 @@ public sealed class FileCleanupEngine(Func<CleanupAuthority> currentAuthority)
             try
             {
                 var (identity, own) = directories[entry.Original.Path];
-                using var directory = own ? FileLease.OpenForMove(entry.Original.Path) : FileLease.OpenForRestore(entry.Original.Path);
+                string[] differences;
+                using (var probe = FileLease.Open(entry.Original.Path)) differences = entry.Original.Differences(probe.Capture());
+                var timesOnly = differences.All(difference => difference is "attributes" or "creation time" or "last-write time");
+                using var directory = differences.Length == 0 ? FileLease.Open(entry.Original.Path) : timesOnly ? FileLease.OpenForTimes(entry.Original.Path)
+                    : own ? FileLease.OpenForMove(entry.Original.Path) : FileLease.OpenForRestore(entry.Original.Path);
                 var children = journal.Preview.Files.Where(file => string.Equals(Path.GetDirectoryName(file.Path), entry.Original.Path, StringComparison.OrdinalIgnoreCase)).Select(file => file.Path).Order(StringComparer.OrdinalIgnoreCase);
                 if (directory.Capture().Identity != identity || !directory.Children().SequenceEqual(children, StringComparer.OrdinalIgnoreCase))
                     throw new InvalidDataException("Directory contents changed during restoration; metadata was left unchanged.");
                 if (journal.Entries.Any(child => child.Original.Path != entry.Original.Path && Within(child.Original.Path, entry.Original.Path) && (child.Status != "restored" || child.Error is not null)))
                     throw new InvalidDataException("A directory still has unresolved child data; its metadata was left unchanged.");
-                if (!own) directory.RestoreMetadata(entry.Original);
-                else if (entry.Moved) directory.RestoreMoved(entry.Original);
-                else directory.RestoreTimes(entry.Original);
+                if (!timesOnly) { if (own) directory.RestoreMoved(entry.Original); else directory.RestoreMetadata(entry.Original); }
+                else if (differences.Length != 0) directory.RestoreTimes(entry.Original);
                 if (!entry.Original.SameRestorableData(directory.Capture())) throw new InvalidDataException("Restored directory metadata differs from the backup.");
                 entry.DirectoryMetadataRestored = true;
                 entry.Error = null;
@@ -285,7 +289,7 @@ public sealed class FileCleanupEngine(Func<CleanupAuthority> currentAuthority)
         var renamed = false;
         try
         {
-            try { staging = FileLease.Open(entry.RestoreStagingPath, writable: true); }
+            try { staging = FileLease.OpenForRename(entry.RestoreStagingPath); }
             catch (Win32Exception error) when (error.NativeErrorCode is 2 or 3)
             {
                 staging = FileLease.Create(entry.RestoreStagingPath, false);
@@ -295,6 +299,9 @@ public sealed class FileCleanupEngine(Func<CleanupAuthority> currentAuthority)
             if (!entry.Original.SameRestorableData(staging.Capture())) throw new InvalidDataException("An unfinished restore file needs review before retrying.");
             staging.RenameToSibling(Path.GetFileName(entry.Original.Path));
             renamed = true;
+            // Windows marks a renamed file for archiving, so the reviewed attributes and times go back on after the rename.
+            staging.RestoreTimes(entry.Original);
+            if (!entry.Original.SameRestorableData(staging.Capture())) throw new InvalidDataException("Restored file data or permissions differ from the backup.");
             entry.RestoreStagingPath = null;
         }
         finally
@@ -321,21 +328,27 @@ public sealed class FileCleanupEngine(Func<CleanupAuthority> currentAuthority)
         finally { restored.MarkDelete(); }
     }
 
-    private static FileLease Hold(FileSnapshot file, bool sameVolume, out bool moved)
+    private static FileLease Hold(FileSnapshot file, ulong store, out bool moved)
     {
-        moved = false;
-        if (sameVolume && new RawSecurityDescriptor(file.Security, 0).DiscretionaryAcl is not null)
-        {
-            try
-            {
-                var probe = FileLease.OpenForMove(file.Path);
-                moved = true;
-                if (!file.Directory) return probe;
-                probe.Dispose();
-            }
-            catch (Win32Exception error) when (error.NativeErrorCode == 5) { }
-        }
+        var probe = MoveLease(file, store);
+        moved = probe is not null;
+        if (probe is not null && !file.Directory) return probe;
+        probe?.Dispose();
         return FileLease.Open(file.Path, writable: !file.Directory);
+    }
+
+    private static FileLease? MoveLease(FileSnapshot file, ulong store)
+    {
+        if (file.Identity.Volume != store || new RawSecurityDescriptor(file.Security, 0).DiscretionaryAcl is null) return null;
+        try { return FileLease.OpenForMove(file.Path); }
+        catch (Win32Exception error) when (error.NativeErrorCode == 5) { return null; }
+    }
+
+    private static bool Copied(FileSnapshot file, ulong store)
+    {
+        // A missing or locked entry isn't counted here; Apply refuses it when it reopens every entry.
+        try { using var probe = MoveLease(file, store); return probe is null; }
+        catch (Exception error) when (error is Win32Exception or InvalidDataException) { return false; }
     }
 
     private static ulong StoreVolume(string directory)
@@ -375,7 +388,7 @@ public sealed class FileCleanupEngine(Func<CleanupAuthority> currentAuthority)
         {
             var directory = Path.GetDirectoryName(Path.GetFullPath(store.First().JournalPath))!;
             var volume = StoreVolume(directory);
-            var copies = store.SelectMany(part => part.Plan.Files.Where(file => file.Identity.Volume != volume)).ToArray();
+            var copies = store.SelectMany(part => part.Plan.Files.Where(file => Copied(file, volume))).ToArray();
             if (copies.Length == 0) continue;
             var cluster = Cluster(directory);
             RequireFree(directory, copies.Sum(file => Allocated(BackupBytes(file), cluster)) + Allocated(copies.Max(DataBytes), cluster) +
@@ -404,7 +417,7 @@ public sealed class FileCleanupEngine(Func<CleanupAuthority> currentAuthority)
         if (free >= need + reserve) return;
         var from = string.Join(", ", copies.Select(file => Path.GetPathRoot(file.Path)!.TrimEnd('\\')).Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase));
         throw new CleanupSpaceException("There isn't enough free space on " + drive + " to keep undo copies of the leftovers on " + from + ". Cleanup needs " + Size(need) + " there and keeps " +
-            Size(reserve) + " free for Windows, but " + drive + " has " + Size(free) + " free. Free up space on " + drive + " or pick fewer leftovers on other drives.");
+            Size(reserve) + " free for Windows, but " + drive + " has " + Size(free) + " free. Free up space on " + drive + " or pick fewer leftovers.");
     }
 
     private static string Size(long bytes) => bytes >= 1L << 30 ? (bytes / (double)(1L << 30)).ToString("0.0") + " GB" : Math.Max(1, (bytes + (1 << 20) - 1) >> 20) + " MB";

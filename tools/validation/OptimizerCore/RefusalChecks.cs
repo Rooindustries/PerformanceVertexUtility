@@ -10,7 +10,7 @@ static class RefusalChecks
     public static void Run(Action<bool, string> check, TestVolume volume)
     {
         var root = TestFixtures.InheritingRoot("explicit-refusal");
-        var far = Path.Combine(volume.Root, "roo-industries-explicit-refusal-" + Guid.NewGuid().ToString("N"));
+        var far = TestFixtures.InheritingFolder(Path.Combine(volume.Root, "roo-industries-explicit-refusal-" + Guid.NewGuid().ToString("N")));
         var source = Path.Combine(far, "App");
         var explicitOnly = Path.Combine(source, "explicit.txt");
         var ordinary = Path.Combine(source, "ordinary.txt");
