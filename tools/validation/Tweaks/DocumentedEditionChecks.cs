@@ -187,7 +187,7 @@ static class DocumentedEditionChecks
             foreach (var edition in new[] { "Core", "Professional" })
                 foreach (var (label, values) in originals)
                 {
-                    var path = Path.Combine(root, "personal-" + index + "-" + edition + "-" + label.Replace(' ', '-') + ".json"); var store = FileTweakStore.Create(path, 26100, edition);
+                    var path = Path.Combine(root, "personal-" + index + "-" + edition + "-from-" + label.Replace(' ', '-') + ".json"); var store = FileTweakStore.Create(path, 26100, edition);
                     var seeded = addresses.Select((address, slot) => values[slot % values.Length](address.ValueName!)).ToArray();
                     for (var slot = 0; slot < addresses.Length; slot++) Put(path, addresses[slot], seeded[slot]);
                     var keys = OperationFiles.Read<TweakFixture>(path).Keys.Count;

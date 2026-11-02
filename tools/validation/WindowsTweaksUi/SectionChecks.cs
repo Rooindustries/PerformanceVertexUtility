@@ -36,7 +36,7 @@ static class SectionChecks
             check(model.Rows.All(row => row.SectionId == section.Id) && model.Rows.Count == section.Count, section.Name + " shows only its own settings and an accurate count");
             foreach (var row in model.Rows) { if (!seen.Add(row.Id)) throw new InvalidOperationException("A setting appears in multiple sections"); allOptions[row.Id] = row.Choices.Skip(1).Select(choice => choice.Id).ToArray(); }
         }
-        check(seen.SetEquals(catalog.Settings.Select(setting => setting.Id)) && catalog.Settings.All(setting => allOptions[setting.Id].SequenceEqual(setting.Options.Select(option => option.Id))),
+        check(seen.SetEquals(catalog.Settings.Select(setting => setting.Id)) && catalog.Settings.All(setting => allOptions[setting.Id].SequenceEqual(setting.Options.Where(option => option.SameAs is null).Select(option => option.Id))),
             "Section membership preserves every original setting and option identity");
         model.SelectedSection = model.Sections.Single(section => section.Id == "network");
         check(model.Rows.Any(row => row.Id == "windows.06086057572c648a") && model.Rows.Any(row => row.Id == "windows.2dbe283afcf3f9a2"),

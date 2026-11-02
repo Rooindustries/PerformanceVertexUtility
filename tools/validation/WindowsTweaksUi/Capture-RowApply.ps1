@@ -190,6 +190,8 @@ try{
  (ById $window 'WindowsTweaksSearch').GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern).SetValue($Search)
  $before=WaitFor {$value=Current $window;if($value -and $value -notlike 'Checking*' -and $value -notin 'Not checked','Not read'){$value}} 240 'the row to finish loading'
  if(-not$ReadOnly){Check ($before -notin "Couldn't check",'Not available here') ('The row reads its value on this PC, saw: '+$before)}
+ # The page keeps every row's controls disabled until it finishes reading Windows features.
+ WaitFor {$switch=ById $window ($SettingId+'.select');$picker=ById $window ($SettingId+'.value');$switch -and $switch.Current.IsEnabled -and (-not$picker -or $picker.Current.IsOffscreen -or $picker.Current.IsEnabled)} 240 'the row to accept changes'|Out-Null
  [RooIndustriesRowApply]::SetWindowPos($hwnd,[IntPtr]::new(-1),0,0,0,0,0x0003)|Out-Null
  [RooIndustriesRowApply]::SetForegroundWindow($hwnd)|Out-Null
  Start-Sleep -Milliseconds 1500

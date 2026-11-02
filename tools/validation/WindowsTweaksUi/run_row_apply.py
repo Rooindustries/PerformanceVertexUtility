@@ -32,7 +32,8 @@ foreach($mode in @(__TWEAKS__)){
  if($LASTEXITCODE -ne 0){$failed+=$mode}
 }
 foreach($mode in @(__UI__)){
- $arguments=@('run','--project',(Join-Path $source 'tools\validation\WindowsTweaksUi\WindowsTweaksUi.csproj'),'--configuration','Release','--disable-build-servers','-p:UseSharedCompilation=false','--',$mode)
+ $arguments=@('run','--project',(Join-Path $source 'tools\validation\WindowsTweaksUi\WindowsTweaksUi.csproj'),'--configuration','Release','--disable-build-servers','-p:UseSharedCompilation=false','--')
+ if($mode -eq 'catalog'){$arguments+=$source}else{$arguments+=$mode}
  if($mode -eq '--policy-editions'){$arguments+=$source}
  & $dotnet @arguments 2>&1|ForEach-Object {[string]$_}
  'ROO_INDUSTRIES_CHECK ui '+$mode+' '+$LASTEXITCODE
@@ -75,7 +76,7 @@ def main():
     parser.add_argument('--parent', required=True, help='Existing admin-protected staging parent')
     parser.add_argument('--lease-minutes', type=float, default=40)
     parser.add_argument('--tweaks', default='--catalog-integration', help='Comma-separated Tweaks suite modes; empty skips them')
-    parser.add_argument('--ui', default='--policy-editions,--freshness', help='Comma-separated Windows settings page suite modes; empty skips them')
+    parser.add_argument('--ui', default='--policy-editions,--freshness', help='Comma-separated Windows settings page suite modes, "catalog" for the full suite against this checkout; empty skips them')
     parser.add_argument('--scenario', type=scenario, action='append', default=[], help='JSON object with the Capture-RowApply.ps1 parameters for one Apply and Undo run')
     args = parser.parse_args()
     args.out_dir.mkdir(parents=True, exist_ok=False)
