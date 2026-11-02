@@ -149,7 +149,11 @@ public sealed class ProtectedSessions
         string? final; bool link;
         try { using var file = File.OpenHandle(gamePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete); final = NativeFiles.FinalPath(file); link = new FileInfo(gamePath).LinkTarget is not null; }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException) { throw new InvalidDataException("Select an installed game executable.", error); }
-        if (final is null) return Path.GetFullPath(gamePath);
+        if (final is null)
+        {
+            if (link) throw new InvalidDataException("Windows can't tell which program " + Path.GetFileName(gamePath) + " opens. Pick the game's own exe.");
+            return Path.GetFullPath(gamePath);
+        }
         var resolved = final.StartsWith(@"\\?\UNC\", StringComparison.OrdinalIgnoreCase) ? @"\\" + final[8..] : NativeFiles.Normalize(final);
         if (!resolved.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("Select an installed game executable.");
         if (link && !string.Equals(Path.GetFileName(resolved), Path.GetFileName(gamePath), StringComparison.OrdinalIgnoreCase))
