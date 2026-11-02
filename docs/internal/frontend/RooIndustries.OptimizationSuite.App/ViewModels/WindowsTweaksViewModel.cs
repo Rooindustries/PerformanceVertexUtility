@@ -35,10 +35,18 @@ public partial class WindowsTweakRow : ObservableObject
     public string Topic => Presentation.Topic ?? Category;
     public string Icon => WindowsTweakPresentation.Icon(Definition);
     public bool IsNetwork => SectionId == "network";
-    public string Scope => Definition.Options.SelectMany(option => option.Controls ?? []).Any(control => control.Address.Kind == "timer-startup") ? "This user" : Definition.Options.SelectMany(option => option.Changes).FirstOrDefault()?.Address.Hive switch
+    public string Scope
     {
-        "CurrentUser" => "This user", "Users" => "Sign-in screen", "LocalMachine" => "Entire PC", _ => "This PC",
-    };
+        get
+        {
+            var options = Definition.Options.Where(option => !_resetIds.Contains(option.Id) && OfferedHere?.Contains(option.Id) != false).ToArray();
+            if (options.Length == 0) options = Definition.Options;
+            return options.SelectMany(option => option.Controls ?? []).Any(control => control.Address.Kind == "timer-startup") ? "This user" : options.SelectMany(option => option.Changes).FirstOrDefault()?.Address.Hive switch
+            {
+                "CurrentUser" => "This user", "Users" => "Sign-in screen", "LocalMachine" => "Entire PC", _ => "This PC",
+            };
+        }
+    }
     public string Context => Topic + " · " + Scope;
     public string Description => Presentation.Summary ?? Presentation.Description ?? "";
     public string Help => Presentation.Description ?? Definition.Description;
@@ -101,7 +109,7 @@ public partial class WindowsTweakRow : ObservableObject
             if (!_pendingOff) AppliedChoice = FindApplied(_observed);
             if (value.Id.Length > 0 && !_pendingOff && ActionChoices.Contains(value)) _action = value;
             else if (value.Id.Length == 0 && AppliedChoice is not null) _action = AppliedChoice;
-            SyncToggle(); NotifyPending(); OnPropertyChanged(nameof(Action)); OnPropertyChanged(nameof(ActionNote)); OnPropertyChanged(nameof(CanApplySelected)); OnPropertyChanged(nameof(ChoiceStatus));
+            UpdatePicker(); SyncToggle(); NotifyPending(); OnPropertyChanged(nameof(Action)); OnPropertyChanged(nameof(ActionNote)); OnPropertyChanged(nameof(CanApplySelected)); OnPropertyChanged(nameof(ChoiceStatus));
         }
     }
     [ObservableProperty]
@@ -161,12 +169,26 @@ public partial class WindowsTweakRow : ObservableObject
     public RelayCommand RetryCommand { get; }
     public string RetryAutomationId => Id + ".retry";
     public bool UnavailableHere => !CouldNotCheck && _observed is { } status && (status.Supported == false || status.Error is { } error && PcLacks(error) || _onlyDefaultHere);
-    public bool HasPendingChange => Selected.Id.Length > 0 && Selected != AppliedChoice;
-    public TweakChoice? RevertChoice => ActionChoices.FirstOrDefault(choice => _resetIds.Contains(choice.Id))
+    public bool HasPendingChange => Selected.Id.Length > 0 && Selected != AppliedChoice && !(_resetIds.Contains(Selected.Id) && _observed is { Supported: true, Error: null } status && status.ConfiguredChoices.Contains(Selected.Id));
+    public TweakChoice? RevertChoice => ActionChoices.FirstOrDefault(choice => _resetIds.Contains(choice.Id) && !HiddenHere(choice.Id))
         ?? (ActionChoices.Length == 2 && AppliedChoice is not null ? ActionChoices.First(choice => choice != AppliedChoice) : null);
     public string StateLabel => _pendingOff ? "Will turn off" : HasPendingChange ? "Will turn on" : IsApplied ? "On" : "Off";
     public bool HasToggle => ActionChoices.Length > 0;
-    public bool HasValuePicker => ActionChoices.Length > 1;
+    public TweakChoice[] PickerChoices => _pickerChoices;
+    private TweakChoice[] _pickerChoices;
+    public bool HasValuePicker => PickerChoices.Length > 1;
+    private TweakContext? _context;
+    private string[]? OfferedHere => _observed?.AvailableChoices ?? (_context is { } context ? Definition.Options.Where(option => TweakEngine.SupportsWindows(Definition, option, context)).Select(option => option.Id).ToArray() : null);
+    private bool HiddenHere(string id) => OfferedHere is { } available && Definition.Options.FirstOrDefault(option => option.Id == id) is { } option
+        && (Definition.Options.Any(other => other.Replaces == id && available.Contains(other.Id) && other.Availability is { Length: > 0 } gates && gates.All(gate => !gate.Editions.Contains("*")))
+            || !available.Contains(id) && option.Replaces is { } replaced && available.Contains(replaced));
+    private void UpdatePicker()
+    {
+        var shown = ActionChoices.Where(choice => choice == _action || choice == _selected || !HiddenHere(choice.Id)).ToArray();
+        if (shown.SequenceEqual(_pickerChoices)) return;
+        _pickerChoices = shown;
+        OnPropertyChanged(nameof(PickerChoices)); OnPropertyChanged(nameof(HasValuePicker)); OnPropertyChanged(nameof(ShowValuePicker)); OnPropertyChanged(nameof(ShowValueText)); OnPropertyChanged(nameof(Action));
+    }
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ShowValuePicker))]
     [NotifyPropertyChangedFor(nameof(ShowValueText))]
@@ -196,7 +218,7 @@ public partial class WindowsTweakRow : ObservableObject
     private void SyncToggle()
     {
         _syncingToggle = true;
-        ToggleOn = Selected.Id.Length > 0 ? !_pendingOff : IsApplied;
+        ToggleOn = HasPendingChange ? !_pendingOff : IsApplied;
         _syncingToggle = false;
     }
     private void NotifyPending()
@@ -218,6 +240,7 @@ public partial class WindowsTweakRow : ObservableObject
             new RelayCommand(() => showSetting(id)))).ToArray();
         Choices = [new("", "Keep current"), .. definition.Options.Where(option => option.SameAs is null).Select(option => new TweakChoice(option.Id, DisplayChoice(WindowsTweakPresentation.Choice(definition, option))))];
         ActionChoices = Choices.Skip(1).ToArray();
+        _pickerChoices = ActionChoices;
         _resetIds = definition.Options.Where(option => IsDefaultAction(option.Name) || IsDefaultAction(WindowsTweakPresentation.Choice(definition, option))).Select(option => option.Id).ToHashSet();
         _action = ActionChoices.FirstOrDefault(choice => !_resetIds.Contains(choice.Id)) ?? ActionChoices.First();
         _recommended = _action;
@@ -230,10 +253,12 @@ public partial class WindowsTweakRow : ObservableObject
     public void Observe(TweakSettingStatus? status, TweakContext? context = null)
     {
         _observed = status;
+        if (context is not null) _context = context;
+        OnPropertyChanged(nameof(Scope)); OnPropertyChanged(nameof(Context)); OnPropertyChanged(nameof(ScopeAndRefresh));
         AppliedChoice = FindApplied(status);
         _cannotRevert = false;
         if (AppliedChoice is not null && Selected.Id.Length == 0 && _action != AppliedChoice) { _action = AppliedChoice; OnPropertyChanged(nameof(Action)); OnPropertyChanged(nameof(ActionNote)); }
-        else if (AppliedChoice is null && Selected.Id.Length == 0 && !_actionPicked && _action == _recommended && status?.AvailableChoices is { } available && !available.Contains(_action.Id)
+        else if (AppliedChoice is null && Selected.Id.Length == 0 && !_actionPicked && _action == _recommended && OfferedHere is { } available && !available.Contains(_action.Id)
             && ActionChoices.FirstOrDefault(choice => available.Contains(choice.Id) && Definition.Options.Any(option => option.Id == choice.Id && option.Replaces == _action.Id)) is { } usable) { _action = usable; OnPropertyChanged(nameof(Action)); OnPropertyChanged(nameof(ActionNote)); }
         OnPropertyChanged(nameof(AppliedChoice)); OnPropertyChanged(nameof(IsApplied));
         Name = Presentation.Name ?? (status?.Controls?.FirstOrDefault() is { Address.Kind: "service", DisplayName: { } serviceName } && ReadableName(serviceName) ? serviceName : Definition.Name);
@@ -245,7 +270,7 @@ public partial class WindowsTweakRow : ObservableObject
             && actions.All(option => !TweakEngine.SupportsWindows(Definition, option, context));
         Current = status?.Error == TweakEngine.FeaturesPending ? "Checking…" : CouldNotCheck ? "Couldn't check" : status is null ? "Not read" : status.Error is not null || _onlyDefaultHere ? "Not available here"
             : unset ? "No override"
-            : status.ConfiguredChoices.Length > 0 ? string.Join(" / ", Choices.Where(choice => status.ConfiguredChoices.Contains(choice.Id)).Select(choice => choice.Name)) : "Custom value";
+            : status.ConfiguredChoices.Any(id => !HiddenHere(id)) ? string.Join(" / ", Choices.Where(choice => status.ConfiguredChoices.Contains(choice.Id) && !HiddenHere(choice.Id) && (!_resetIds.Contains(choice.Id) || AppliedChoice is null)).Select(choice => choice.Name)) : "Custom value";
         if (Current.Length == 0) Current = "Unknown value";
         if (status is { Error: null, Controls: [var control] } && control.Address.Kind == "timer") Current = control.Value.GetBoolean() ? "Active" : "Stopped";
         if (status is { Error: null, ConfiguredChoices.Length: 0, Controls: [{ Address.Kind: "service" } service] } && ServiceState(service) is { } state) Current = state;
@@ -269,7 +294,7 @@ public partial class WindowsTweakRow : ObservableObject
         else if (IsNetwork && status?.Error is { } error && !error.Contains("is not available with this Windows version", StringComparison.Ordinal)) Detail = !error.Contains("couldn't load its PowerShell commands", StringComparison.Ordinal) && (error.Contains("adapter", StringComparison.OrdinalIgnoreCase) || error.Contains("devices expose", StringComparison.OrdinalIgnoreCase))
             ? "The current adapter does not expose this option. You can save a choice for a compatible adapter." : "Windows could not read this preference. Refresh to try again.";
         OnPropertyChanged(nameof(CouldNotCheck)); OnPropertyChanged(nameof(CanRetry)); OnPropertyChanged(nameof(UnavailableHere));
-        SyncToggle(); NotifyPending(); OnPropertyChanged(nameof(CanApplySelected));
+        UpdatePicker(); SyncToggle(); NotifyPending(); OnPropertyChanged(nameof(CanApplySelected));
     }
 }
 public sealed record WindowsProfileChoice(string Id, string? Name = null)
@@ -688,8 +713,10 @@ public partial class WindowsTweaksViewModel : ObservableObject
             {
                 var ids = (state?.Profiles ?? []).Concat(_review.Plan.Profiles).SelectMany(profile => profile.Claims).Where(claim => claim.Target.Id == change.Before.Id).Select(claim => claim.SettingId).ToArray();
                 var row = _all.FirstOrDefault(item => ids.Contains(item.Id));
-                Changes.Add(new(row?.Name ?? change.Before.Address.ValueName ?? "Setting", DescribeSetting(row?.Definition, change.Before.Value), DescribeSetting(row?.Definition, change.After),
-                    row?.Scope ?? (change.Before.Address.Hive == "CurrentUser" ? "This user" : "Entire PC")));
+                var owner = row?.Definition.Options.Any(option => option.Changes.Length > 1) == true ? _all.FirstOrDefault(other => other != row && other.Definition.Options.All(option => option.Changes is [{ Address: var only }] &&
+                    only.Hive == change.Before.Address.Hive && string.Equals(only.KeyPath, change.Before.Address.KeyPath, StringComparison.OrdinalIgnoreCase) && string.Equals(only.ValueName, change.Before.Address.ValueName, StringComparison.OrdinalIgnoreCase))) : row;
+                Changes.Add(new((owner ?? row)?.Name ?? change.Before.Address.ValueName ?? "Setting", DescribeSetting((owner ?? row)?.Definition, change.Before.Value), DescribeSetting((owner ?? row)?.Definition, change.After),
+                    owner?.Scope ?? (change.Before.Address.Hive == "CurrentUser" ? "This user" : "Entire PC")));
             }
             foreach (var change in _review.Plan.Controls?.Changes ?? []) AddNativeChange(change, (state?.Profiles ?? []).Concat(_review.Plan.Profiles));
             Status = Changes.Count == 0 ? "Selected values already match" : Changes.Count == 1 ? "1 change ready to review" : Changes.Count + " changes ready to review";

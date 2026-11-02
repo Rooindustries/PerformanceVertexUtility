@@ -55758,6 +55758,54 @@
           ]
         },
         {
+          "id": "choice-1d1a5e2d6abcdb54",
+          "name": "Remove this override",
+          "changes": [
+            {
+              "address": {
+                "hive": "LocalMachine",
+                "view": "Registry64",
+                "keyPath": "SOFTWARE\\Policies\\Microsoft\\Windows\\CloudContent",
+                "kind": "value",
+                "valueName": "DisableSoftLanding"
+              },
+              "dword": null
+            },
+            {
+              "address": {
+                "hive": "CurrentUser",
+                "view": "Registry64",
+                "keyPath": "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager",
+                "kind": "value",
+                "valueName": "SubscribedContent-338389Enabled"
+              },
+              "dword": null
+            },
+            {
+              "address": {
+                "hive": "CurrentUser",
+                "view": "Registry64",
+                "keyPath": "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager",
+                "kind": "value",
+                "valueName": "SoftLandingEnabled"
+              },
+              "dword": 1
+            }
+          ],
+          "replaces": "choice-c4697634bc8964cb",
+          "availability": [
+            {
+              "minimumBuild": 10240,
+              "maximumBuild": 26200,
+              "editions": [
+                "Core*",
+                "Professional*",
+                "Cloud*"
+              ]
+            }
+          ]
+        },
+        {
           "id": "choice-6b253977ea5987f3",
           "name": "On (1)",
           "changes": [
@@ -55781,6 +55829,44 @@
                 "Education*",
                 "IoTEnterprise*",
                 "Server*"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "choice-5acd4712cf8e9da5",
+          "name": "On for this user",
+          "changes": [
+            {
+              "address": {
+                "hive": "CurrentUser",
+                "view": "Registry64",
+                "keyPath": "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager",
+                "kind": "value",
+                "valueName": "SubscribedContent-338389Enabled"
+              },
+              "dword": 0
+            },
+            {
+              "address": {
+                "hive": "CurrentUser",
+                "view": "Registry64",
+                "keyPath": "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager",
+                "kind": "value",
+                "valueName": "SoftLandingEnabled"
+              },
+              "dword": 0
+            }
+          ],
+          "replaces": "choice-6b253977ea5987f3",
+          "availability": [
+            {
+              "minimumBuild": 10240,
+              "maximumBuild": 26200,
+              "editions": [
+                "Core*",
+                "Professional*",
+                "Cloud*"
               ]
             }
           ]
@@ -75411,10 +75497,14 @@
           ],
           "availability": [
             {
-              "minimumBuild": 10240,
+              "minimumBuild": 14393,
               "maximumBuild": 26200,
               "editions": [
-                "*"
+                "Professional*",
+                "Education*",
+                "Enterprise*",
+                "IoTEnterprise*",
+                "Server*"
               ]
             }
           ]
@@ -75483,10 +75573,14 @@
           ],
           "availability": [
             {
-              "minimumBuild": 10240,
+              "minimumBuild": 14393,
               "maximumBuild": 26200,
               "editions": [
-                "*"
+                "Professional*",
+                "Education*",
+                "Enterprise*",
+                "IoTEnterprise*",
+                "Server*"
               ]
             }
           ]
@@ -77519,10 +77613,14 @@
           ],
           "availability": [
             {
-              "minimumBuild": 10240,
+              "minimumBuild": 17134,
               "maximumBuild": 26200,
               "editions": [
-                "*"
+                "Professional*",
+                "Education*",
+                "Enterprise*",
+                "IoTEnterprise*",
+                "Server*"
               ]
             }
           ]
@@ -81882,6 +81980,20 @@
         {
           "settingId": "windows.89bbc1696582864f",
           "optionId": "choice-959723ea7b62f95c"
+        }
+      ],
+      "optionalSelections": [
+        {
+          "settingId": "windows.cd3a5c8c22ddf9f4",
+          "optionId": "choice-6b253977ea5987f3"
+        },
+        {
+          "settingId": "windows.4adc092144059c89",
+          "optionId": "choice-73b7a12647b4b7e2"
+        },
+        {
+          "settingId": "windows.3485f5f04d4517e9",
+          "optionId": "choice-6b253977ea5987f3"
         }
       ]
     },

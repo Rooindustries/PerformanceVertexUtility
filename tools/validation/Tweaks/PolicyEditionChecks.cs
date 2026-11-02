@@ -2,8 +2,10 @@ using RooIndustries.Optimizer;
 
 static class PolicyEditionChecks
 {
-    public static void Run(string root, TweakCatalog catalog, Action<bool, string> check, Action<Action, string> reject)
+    public static void Run(string root, string repo, TweakCatalog catalog, Action<bool, string> check, Action<Action, string> reject)
     {
+        var (known, policies) = DocumentedEditionChecks.Load(repo);
+        var honored = policies.Single(policy => policy.ValueName == "DisableWindowsConsumerFeatures").Editions;
         var definition = catalog.Settings.Single(setting => setting.Id == "windows.a8268996c3eb9072");
         var blocked = definition.Options.Single(option => option.Changes.Single().Dword == 1);
         var remove = definition.Options.Single(option => option.Changes.Single().Dword is null);
@@ -29,12 +31,12 @@ static class PolicyEditionChecks
             check(engine.Apply(review, OperationFiles.HashFile(review)).Replayed, "Policy edition fixture apply can be replayed without a second change");
             return result;
         }
-        foreach (var edition in new[] { "Professional", "Core", "CoreN", "CoreCountrySpecific", "CoreSingleLanguage", "ProfessionalN", "ProfessionalEducation", "ProfessionalEducationN", "ProfessionalWorkstation", "ProfessionalWorkstationN", "ProfessionalSingleLanguage", "Enterprise", "EnterpriseS", "EnterpriseN", "EnterpriseSN", "EnterpriseEval", "EnterpriseNEval", "EnterpriseSEval", "EnterpriseSNEval", "EnterpriseG", "EnterpriseGN", "Education", "EducationN", "IoTEnterprise", "IoTEnterpriseS", "ServerRdsh", "ServerStandard", "ServerDatacenter", "ServerStandardEval", "ServerDatacenterEval" })
+        foreach (var edition in known)
         {
             var build = edition.StartsWith("Server") && edition != "ServerRdsh" ? 20348 : 26100;
             var path = Path.Combine(root, "consumer-" + edition + ".json"); var store = FileTweakStore.Create(path, build, edition); Seed(path, 1);
             var engine = new TweakEngine(subset, store); var status = engine.Detect().Settings.Single();
-            var supported = edition.StartsWith("Enterprise") || edition.StartsWith("Education") || edition.StartsWith("IoTEnterprise") || edition.StartsWith("Server");
+            var supported = DocumentedEditionChecks.Allowed(edition, honored);
             check(status.Supported && status.Error is null && status.AvailableChoices!.Contains(remove.Id), "Consumer override removal stays available on " + edition);
             check(status.AvailableChoices!.Contains(blocked.Id) == supported, "Consumer blocking follows the registry policy's edition support on " + edition);
             check(status.ConfiguredChoices.Contains(blocked.Id) == supported && status.Observations.Single().Value!.Bytes.SequenceEqual(BitConverter.GetBytes(1u)), "Stored consumer blocking is an applicable current choice only on supported editions: " + edition);

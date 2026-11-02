@@ -7,7 +7,7 @@
         <DataTemplate x:Key="SettingDetailsTemplate" x:DataType="vm:WindowsTweakRow">
             <StackPanel Spacing="8" MaxWidth="350">
                 <TextBlock Text="{x:Bind Name, Mode=OneWay}" FontWeight="SemiBold" TextWrapping="Wrap"/>
-                <TextBlock Text="{x:Bind Context}" FontSize="12" Foreground="{StaticResource RooIndustriesTextMutedBrush}"/>
+                <TextBlock Text="{x:Bind Context, Mode=OneWay}" FontSize="12" Foreground="{StaticResource RooIndustriesTextMutedBrush}"/>
                 <TextBlock Text="{x:Bind Help}" TextWrapping="Wrap"/>
                 <TextBlock Text="{x:Bind Detail, Mode=OneWay}" TextWrapping="Wrap" Visibility="{x:Bind Detail, Mode=OneWay, Converter={StaticResource StringToVisibility}}"/>
                 <TextBlock Text="{x:Bind Refresh}" TextWrapping="Wrap" Visibility="{x:Bind Refresh, Converter={StaticResource StringToVisibility}}"/>
@@ -118,7 +118,7 @@
                             <StackPanel Spacing="4">
                                 <TextBlock Text="{x:Bind Name, Mode=OneWay}" FontWeight="SemiBold" TextWrapping="Wrap" VerticalAlignment="Center"/>
                                 <TextBlock Text="{x:Bind Description}" FontSize="12" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextSecondaryBrush}" Visibility="{x:Bind Description, Converter={StaticResource StringToVisibility}}"/>
-                                <TextBlock Text="{x:Bind ScopeAndRefresh}" Visibility="{x:Bind ShowDetails, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" TextWrapping="Wrap" FontSize="11" Foreground="{StaticResource RooIndustriesTextMutedBrush}"/>
+                                <TextBlock Text="{x:Bind ScopeAndRefresh, Mode=OneWay}" Visibility="{x:Bind ShowDetails, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" TextWrapping="Wrap" FontSize="11" Foreground="{StaticResource RooIndustriesTextMutedBrush}"/>
                                 <TextBlock Text="{x:Bind Detail, Mode=OneWay}" FontSize="12" TextWrapping="Wrap" Foreground="{StaticResource RooIndustriesTextMutedBrush}" Visibility="{x:Bind Detail, Mode=OneWay, Converter={StaticResource StringToVisibility}}"/>
                             </StackPanel>
                             <Button Grid.Column="1" VerticalAlignment="Center" MinHeight="28" MinWidth="28" Padding="5" ToolTipService.ToolTip="Setting details" Background="Transparent" BorderThickness="0" AutomationProperties.AutomationId="{x:Bind DetailsAutomationId}" AutomationProperties.Name="{x:Bind DetailsAccessibleName, Mode=OneWay}" AutomationProperties.HelpText="Setting details">
@@ -136,7 +136,7 @@
                             <TextBlock x:Name="RowActionLabel" Text="CHANGE TO" Visibility="Collapsed" Style="{StaticResource PanelLabelTextBlockStyle}"/>
                             <Grid x:Name="ActionControls" ColumnSpacing="10" SizeChanged="ActionControlsSizeChanged">
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="44"/></Grid.ColumnDefinitions>
-                            <ComboBox Visibility="{x:Bind ShowValuePicker, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" ItemsSource="{x:Bind ActionChoices}" SelectedItem="{x:Bind Action, Mode=TwoWay}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" VerticalAlignment="Center" Padding="{ThemeResource ComboBoxPadding}" ItemContainerStyle="{StaticResource SettingChoiceItemStyle}" AutomationProperties.AutomationId="{x:Bind ActionAutomationId}" AutomationProperties.Name="{x:Bind ActionAccessibleName, Mode=OneWay}" AutomationProperties.HelpText="{x:Bind Scope}">
+                            <ComboBox Visibility="{x:Bind ShowValuePicker, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" ItemsSource="{x:Bind PickerChoices, Mode=OneWay}" SelectedItem="{x:Bind Action, Mode=TwoWay}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" VerticalAlignment="Center" Padding="{ThemeResource ComboBoxPadding}" ItemContainerStyle="{StaticResource SettingChoiceItemStyle}" AutomationProperties.AutomationId="{x:Bind ActionAutomationId}" AutomationProperties.Name="{x:Bind ActionAccessibleName, Mode=OneWay}" AutomationProperties.HelpText="{x:Bind Scope, Mode=OneWay}">
                                 <ComboBox.ItemTemplate><DataTemplate x:DataType="vm:TweakChoice"><TextBlock Text="{x:Bind Name}" TextWrapping="Wrap" HorizontalAlignment="Stretch" TextAlignment="Left"/></DataTemplate></ComboBox.ItemTemplate>
                                 <ToolTipService.ToolTip><StackPanel Spacing="6" MaxWidth="420"><TextBlock Text="{x:Bind Help}" TextWrapping="Wrap"/><TextBlock Text="{x:Bind ActionNote, Mode=OneWay}" TextWrapping="Wrap" Visibility="{x:Bind ActionNote, Mode=OneWay, Converter={StaticResource StringToVisibility}}"/><TextBlock Text="{x:Bind Sources}" TextWrapping="Wrap"/></StackPanel></ToolTipService.ToolTip>
                             </ComboBox>
