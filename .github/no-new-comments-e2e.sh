@@ -308,12 +308,17 @@ put src/lic.js <<'EOF'
 const re = /\/\/ not a comment/g;
 const url = "https://example.com/#top";
 const t = `a // b ${"/* c */"} d https://*.example.com`;
+const shown = `Display this literal: /* placeholder */`;
+const help = `
+  // two slashes start a path segment here
+  ${t}
+`;
 // prettier-ignore
 const m = [1,0,
            0,1];
 const lazy = () => import(/* @vite-ignore */ url);
 const Link = () => <p>See https://example.com for more</p>;
-export { re, t, m, lazy, Link };
+export { re, t, shown, help, m, lazy, Link };
 EOF
 put src/d.ts <<'EOF'
 // @ts-expect-error the old type is wrong

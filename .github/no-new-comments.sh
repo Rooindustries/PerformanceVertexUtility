@@ -116,7 +116,7 @@ lex() {
 function out(ln, s, k) { if (k == "x") return; seen[ln] = 1; txt[ln] = txt[ln] s; if (k == "d") kind[ln] = "d"; if (ln > last) last = ln }
 function open_str(q, e, t) { st = "str"; sq = q; sesc = e; sterm = t }
 function stmt_start(pre) { sub(/[rRbBuUfF]+$/, "", pre); return pre ~ /^[ \t]*$/ && depth == 0 && !cont }
-BEGIN { st = "code"; f = lang; yb = 0; depth = 0; cont = 0; tsp = 0; bd = 0; lastsig = ""; fc = 0 }
+BEGIN { st = "code"; f = lang; yb = 0; depth = 0; cont = 0; tsp = 0; bd = 0; lastsig = ""; fc = 0; te = 0 }
 {
   line = $0; sub(/\r$/, "", line); n = length(line); i = 1
   if (NR == 1 && substr(line, 1, 2) == "#!") next
@@ -194,10 +194,10 @@ BEGIN { st = "code"; f = lang; yb = 0; depth = 0; cont = 0; tsp = 0; bd = 0; las
     }
     if (st == "tmpl") {
       if (c == "\\") { i += 2; continue }
-      if (c == "`") { st = "code"; lastsig = ")"; i++; continue }
-      if (c2 == "${") { tsp++; tstack[tsp] = bd; st = "code"; i += 2; continue }
-      if (c2 == "/*" && (i == 1 || substr(line, i - 1, 1) ~ /[ \t]/)) { st = "bc"; bce = "*/"; bcret = "tmpl"; out(NR, c2, "c"); i += 2; continue }
-      if (c2 == "//" && substr(line, 1, i - 1) ~ /^[ \t]*$/) {
+      if (c == "`") { st = "code"; te = 0; lastsig = ")"; i++; continue }
+      if (c2 == "${") { tsp++; tstack[tsp] = bd; testack[tsp] = te; st = "code"; i += 2; continue }
+      if (te && c2 == "/*" && (i == 1 || substr(line, i - 1, 1) ~ /[ \t]/)) { st = "bc"; bce = "*/"; bcret = "tmpl"; out(NR, c2, "c"); i += 2; continue }
+      if (te && c2 == "//" && substr(line, 1, i - 1) ~ /^[ \t]*$/) {
         j = index(substr(line, i), "`")
         if (!j) { out(NR, substr(line, i), "c"); break }
         out(NR, substr(line, i, j - 1), "c"); i += j - 1; continue
@@ -222,10 +222,14 @@ BEGIN { st = "code"; f = lang; yb = 0; depth = 0; cont = 0; tsp = 0; bd = 0; las
       if (g == "c" && c3 == "\"\"\"") { open_str("", "", "\"\"\""); i += 3; continue }
       if (g == "c" && c2 == "@\"") { open_str("\"", "", ""); vstr = 1; i += 2; continue }
       if (c == "\"" || c == "\047") { open_str(c, (g == "sql" ? "" : "\\"), ""); i++; continue }
-      if (g == "js" && c == "`") { st = "tmpl"; i++; continue }
+      if (g == "js" && c == "`") {
+        pre = substr(line, 1, i - 1)
+        te = pre ~ /\/\*[ \t]*(glsl|wgsl|html|css|sql|graphql|gql|js|ts)[ \t]*\*\/[ \t]*$/ || pre ~ /(^|[^A-Za-z0-9_$.])(glsl|wgsl|html|css|sql|graphql|gql)[ \t]*$/
+        st = "tmpl"; i++; continue
+      }
       if (g == "js" && c == "{") { bd++; lastsig = c; i++; continue }
       if (g == "js" && c == "}") {
-        if (tsp > 0 && bd == tstack[tsp]) { tsp--; st = "tmpl"; i++; continue }
+        if (tsp > 0 && bd == tstack[tsp]) { te = testack[tsp]; tsp--; st = "tmpl"; i++; continue }
         bd--; lastsig = c; i++; continue
       }
       if (g == "js" && c == "/") {
