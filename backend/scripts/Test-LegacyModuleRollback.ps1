@@ -2096,7 +2096,7 @@ try {
             $again=Invoke-RollbackModule
             Assert ($again.success -and $again.restoredServices -eq 0 -and @($again.alreadyAtOriginal|Where-Object {$_.type -eq 'dependent'}).Count -eq 2) 'Repeated real-service Undo leaves both running dependents at their original state'
             Stop-Service -Name $dependent -Force
-            $replayed=& $HarnessPath -Action RollbackModule -ModuleId fixture -ManifestPath $servicesManifest -DataRoot $DataRoot -BackupPath $BackupPath -ConfirmApply
+            $replayed=& { . $HarnessPath -Action RollbackModule -ModuleId fixture -ManifestPath $servicesManifest -DataRoot $DataRoot -BackupPath $BackupPath -ConfirmApply }
             Assert ($replayed.success -and $replayed.restoredServices -eq 0 -and @($replayed.leftAsChanged|Where-Object {$_.type -eq 'dependent'}).Count -eq 2 -and (Get-ProbeState) -ceq 'Automatic/Running Manual/Stopped Manual/Stopped') 'Repeated Undo preserves both real dependents stopped externally after restoration'
 
             New-Service -Name $refusing[0] -BinaryPathName ('"'+$exe+'"') -StartupType Automatic -DisplayName 'Roo Industries test probe' | Out-Null
@@ -2473,7 +2473,7 @@ public static class RooIndustriesLegacyFixtureRaw {
                 $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($subkey)
                 try { Assert (-not $result.success -and $result.failures[0].phase -ceq 'preflight' -and $key.GetValue('First') -eq 2 -and $key.GetValue('Second') -eq 2) 'Real-registry preflight failure leaves every value untouched' } finally { $key.Dispose() }
                 $cliFailed=$false
-                try { & $HarnessPath -Action RollbackModule -ModuleId fixture -ManifestPath $fixtureManifest -DataRoot $tempRoot -BackupPath $BackupPath -ConfirmApply | Out-Null } catch { $cliFailed=$_.Exception.Data['RollbackResult'].success -eq $false }
+                try { & { . $HarnessPath -Action RollbackModule -ModuleId fixture -ManifestPath $fixtureManifest -DataRoot $tempRoot -BackupPath $BackupPath -ConfirmApply } | Out-Null } catch { $cliFailed=$_.Exception.Data['RollbackResult'].success -eq $false }
                 Assert $cliFailed 'The RollbackModule CLI exposes the failed result and raises an error'
                 $entries[1].kind='DWord';$entries[1].oldValue=0
                 Write-JsonFile @{moduleId='fixture';registry=$entries;services=@()} $BackupPath
@@ -2493,7 +2493,7 @@ public static class RooIndustriesLegacyFixtureRaw {
             & $HarnessPath -Action RollbackModule -ModuleId fixture -ManifestPath $fixtureManifest -DataRoot $tempRoot -BackupPath $BackupPath | Out-Null
             $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($subkey)
             try { Assert ($key.GetValue('Value') -eq 2) 'The RollbackModule CLI defaults to preview' } finally { $key.Dispose() }
-            & $HarnessPath -Action RollbackModule -ModuleId fixture -ManifestPath $fixtureManifest -DataRoot $tempRoot -BackupPath $BackupPath -ConfirmApply | Out-Null
+            & { . $HarnessPath -Action RollbackModule -ModuleId fixture -ManifestPath $fixtureManifest -DataRoot $tempRoot -BackupPath $BackupPath -ConfirmApply } | Out-Null
             $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($subkey)
             try { Assert ($key.GetValue('Value') -eq 1) 'The RollbackModule CLI restores the explicit backup only when confirmed' } finally { $key.Dispose() }
             & {
@@ -2511,7 +2511,7 @@ public static class RooIndustriesLegacyFixtureRaw {
                 $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($subkey,$true)
                 try { $key.SetValue('First',1,[Microsoft.Win32.RegistryValueKind]::DWord);$key.SetValue('Value','Original',[Microsoft.Win32.RegistryValueKind]::String) } finally { $key.Dispose() }
                 $refused=$null
-                try { & $HarnessPath @cliArgs -ConfirmApply | Out-Null } catch { $refused=$_.Exception.Message }
+                try { & { . $HarnessPath @cliArgs -ConfirmApply } | Out-Null } catch { $refused=$_.Exception.Message }
                 $state=Get-CliState
                 Assert ($refused -like '*-PreviewPath*' -and $state.first -eq 1 -and $state.value -ceq 'Original' -and $state.backups -eq 0) 'The ApplyModule CLI refuses a confirmed apply without a reviewed preview'
                 $preview=& $HarnessPath @cliArgs
@@ -2520,7 +2520,7 @@ public static class RooIndustriesLegacyFixtureRaw {
                 $manifest.modules[0].registryValues[1].data='Three'
                 Write-JsonFile $manifest $cliManifest
                 $refused=$null
-                try { & $HarnessPath @cliArgs -ConfirmApply -PreviewPath $preview.previewPath | Out-Null } catch { $refused=$_.Exception.Message }
+                try { & { . $HarnessPath @cliArgs -ConfirmApply -PreviewPath $preview.previewPath } | Out-Null } catch { $refused=$_.Exception.Message }
                 Write-Output ('CLI_STALE_PREVIEW_REFUSAL '+(ConvertTo-Json -InputObject $refused -Compress))
                 $state=Get-CliState
                 Assert ($refused -like ('*'+$regPath+'\Value: REG_SZ Two -> REG_SZ Three*') -and $state.first -eq 1 -and $state.value -ceq 'Original' -and $state.backups -eq 0) 'The ApplyModule CLI refuses and names a manifest edit made after the preview'
@@ -2532,14 +2532,14 @@ public static class RooIndustriesLegacyFixtureRaw {
                     $editedPath=Join-Path $tempRoot 'cli-edited-preview.json'
                     Write-JsonFile $edited $editedPath
                     $refused=$null
-                    try { & $HarnessPath @cliArgs -ConfirmApply -PreviewPath $editedPath | Out-Null } catch { $refused=$_.Exception.Message }
+                    try { & { . $HarnessPath @cliArgs -ConfirmApply -PreviewPath $editedPath } | Out-Null } catch { $refused=$_.Exception.Message }
                     $state=Get-CliState
                     Assert ($refused -like ('*preview '+$representation+'*') -and $state.first -eq 1 -and $state.value -ceq 'Original' -and $state.backups -eq 0) ('The ApplyModule CLI refuses edited preview '+$representation+' before any registry write or backup')
                 }
-                $applied=& $HarnessPath @cliArgs -ConfirmApply -PreviewPath $preview.previewPath
+                $applied=& { . $HarnessPath @cliArgs -ConfirmApply -PreviewPath $preview.previewPath }
                 $state=Get-CliState
                 Assert ($state.first -eq 2 -and $state.firstKind -ceq 'DWord' -and $state.value -ceq 'Two' -and $state.valueKind -ceq 'String' -and $applied.previewHash -ceq $preview.previewHash -and $state.backups -eq 1) 'The ApplyModule CLI applies the exact reviewed plan'
-                & $HarnessPath -Action RollbackModule -ModuleId fixture -ManifestPath $cliManifest -DataRoot $cliRoot -BackupPath $applied.backupPath -ConfirmApply | Out-Null
+                & { . $HarnessPath -Action RollbackModule -ModuleId fixture -ManifestPath $cliManifest -DataRoot $cliRoot -BackupPath $applied.backupPath -ConfirmApply } | Out-Null
                 $state=Get-CliState
                 Assert ($state.first -eq 1 -and $state.value -ceq 'Original' -and $state.valueKind -ceq 'String') 'The ApplyModule CLI apply undoes to the exact originals'
                 $manifest.modules[0].registryValues[1].type='REG_EXPAND_SZ'
@@ -2548,7 +2548,7 @@ public static class RooIndustriesLegacyFixtureRaw {
                 $previewRefused=$null
                 try { & $HarnessPath @cliArgs | Out-Null } catch { $previewRefused=$_.Exception.Message }
                 $refused=$null
-                try { & $HarnessPath @cliArgs -ConfirmApply -PreviewPath $preview.previewPath | Out-Null } catch { $refused=$_.Exception.Message }
+                try { & { . $HarnessPath @cliArgs -ConfirmApply -PreviewPath $preview.previewPath } | Out-Null } catch { $refused=$_.Exception.Message }
                 Write-Output ('CLI_UNSUPPORTED_TYPE_REFUSAL '+(ConvertTo-Json -InputObject $refused -Compress))
                 $state=Get-CliState
                 $expected="*Unsupported registry type 'REG_EXPAND_SZ' for $regPath\Value*"
