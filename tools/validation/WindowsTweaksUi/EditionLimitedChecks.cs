@@ -155,7 +155,7 @@ static class EditionLimitedChecks
             await model.ReviewCommand.ExecuteAsync(null); ResetLines(model, "switch-off on " + edition);
             model.Approved = true; await model.ApplyCommand.ExecuteAsync(null);
             row = model.Rows.Single(item => item.Id == tips.Id);
-            check(Reset(fixture) && !row.IsApplied && row.Current == "Use Windows default", row.Name + " switched off puts this user's Settings switches back as Windows keeps them: " + edition);
+            check(Reset(fixture) && !row.IsApplied && row.Current == "Use Windows default", row.Name + " switched off puts this user's Settings switches back as Windows keeps them: " + edition + ": switch " + row.ToggleOn + ", selected " + row.Selected.Id + ", state " + row.StateLabel);
             row.Selected = row.Choices.Single(choice => choice.Id == personal.Id);
             await model.ReviewCommand.ExecuteAsync(null); model.Approved = true; await model.ApplyCommand.ExecuteAsync(null);
             check(Present(0), row.Name + " applies again after being switched off: " + edition);
@@ -200,7 +200,7 @@ static class EditionLimitedChecks
             model.Approved = true; await model.ApplyCommand.ExecuteAsync(null);
             row = model.Rows.Single(item => item.Id == tips.Id);
             check(Reset(fixture) && fixture.Windows.Read(tipsAddress).Value is null && row is { Current: "Use Windows default", ToggleOn: false, IsApplied: false },
-                row.Name + " switched off turns tips back on for this user after they were turned off in Settings: " + edition);
+                row.Name + " switched off turns tips back on for this user after they were turned off in Settings: " + edition + ": reset " + Reset(fixture) + ", current " + row.Current + ", switch " + row.ToggleOn + ", applied " + row.IsApplied + ", selected " + row.Selected.Id + ", state " + row.StateLabel);
             await model.ReviewRestoreCommand.ExecuteAsync(null); model.Approved = true; await model.ApplyCommand.ExecuteAsync(null);
             check(Switches(fixture, 0) && fixture.Windows.ReadState()!.Profiles.Length == 0, "Undo puts this user's own Settings switches back off: " + edition);
         }

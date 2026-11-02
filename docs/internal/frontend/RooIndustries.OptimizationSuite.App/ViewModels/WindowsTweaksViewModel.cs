@@ -169,7 +169,7 @@ public partial class WindowsTweakRow : ObservableObject
     public RelayCommand RetryCommand { get; }
     public string RetryAutomationId => Id + ".retry";
     public bool UnavailableHere => !CouldNotCheck && _observed is { } status && (status.Supported == false || status.Error is { } error && PcLacks(error) || _onlyDefaultHere);
-    public bool HasPendingChange => Selected.Id.Length > 0 && Selected != AppliedChoice;
+    public bool HasPendingChange => Selected.Id.Length > 0 && Selected != AppliedChoice && !(_resetIds.Contains(Selected.Id) && _observed is { Supported: true, Error: null } status && status.ConfiguredChoices.Contains(Selected.Id));
     public TweakChoice? RevertChoice => ActionChoices.FirstOrDefault(choice => _resetIds.Contains(choice.Id) && !HiddenHere(choice.Id))
         ?? (ActionChoices.Length == 2 && AppliedChoice is not null ? ActionChoices.First(choice => choice != AppliedChoice) : null);
     public string StateLabel => _pendingOff ? "Will turn off" : HasPendingChange ? "Will turn on" : IsApplied ? "On" : "Off";
@@ -218,7 +218,7 @@ public partial class WindowsTweakRow : ObservableObject
     private void SyncToggle()
     {
         _syncingToggle = true;
-        ToggleOn = Selected.Id.Length > 0 ? !_pendingOff : IsApplied;
+        ToggleOn = HasPendingChange ? !_pendingOff : IsApplied;
         _syncingToggle = false;
     }
     private void NotifyPending()
