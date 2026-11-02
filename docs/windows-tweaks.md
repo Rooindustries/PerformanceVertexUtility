@@ -28,7 +28,8 @@ has taken effect in a running app or improved gaming performance.
 
 `backend/catalogs/windows-policy-editions.json` records Microsoft's registry-policy
 edition limits. The compiler applies them after combining all sources, so a
-wildcard from another source cannot bypass a limit. Home, Pro, Windows 10 S and Windows 11 SE editions no
+wildcard from another source cannot bypass a limit. The legacy harness
+(`LeanClientOptimizer.ps1`) skips the same values on the same editions. Home, Pro, Windows 10 S and Windows 11 SE editions no
 longer offer **Consumer suggestions and promotions: Blocked** or **Windows spotlight**
 turned off, or Windows diagnostic data **Off** (value 0).
 Enterprise, Education, IoT Enterprise and Server retain them. A limit can name one
