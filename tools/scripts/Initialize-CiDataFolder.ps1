@@ -1,7 +1,8 @@
 param([string]$DotNetPath = $env:ROO_INDUSTRIES_DOTNET_EXE)
 $ErrorActionPreference = 'Stop'
-if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_ENVIRONMENT -ne 'github-hosted' -or [string]::IsNullOrWhiteSpace($env:RUNNER_TEMP)) {
-    throw 'This script protects the app data folder only on disposable GitHub-hosted runners.'
+$disposableRunner = $env:RUNNER_ENVIRONMENT -eq 'github-hosted' -or $env:RUNNER_NAME -like 'blacksmith-*'
+if ($env:GITHUB_ACTIONS -ne 'true' -or -not $disposableRunner -or [string]::IsNullOrWhiteSpace($env:RUNNER_TEMP)) {
+    throw 'This script protects the app data folder only on disposable GitHub-hosted or Blacksmith runners.'
 }
 if ([string]::IsNullOrWhiteSpace($DotNetPath)) { $DotNetPath = (Get-Command dotnet.exe -ErrorAction Stop).Source }
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
