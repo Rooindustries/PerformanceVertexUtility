@@ -6,7 +6,19 @@ param(
     [string]$BaseHarnessSha256 = $env:ROO_INDUSTRIES_LEGACY_BASE_HARNESS_SHA256
 )
 $ErrorActionPreference = 'Stop'
-$RooIndustriesTestChangeLock = 'Global\RooIndustries.LeanClientOptimizer.Changes.Test.' + [guid]::NewGuid().ToString('N')
+# Each suite run takes the harness's own Enter-ChangeLock under a lock name of its own, so suites and real harness runs on one PC
+# don't wait on each other. The alias that selects it is set only inside the suite's own scopes and child processes.
+$testChangeLock = 'Global\RooIndustries.LeanClientOptimizer.Changes.Test.' + [guid]::NewGuid().ToString('N')
+$lockFunction = [Management.Automation.Language.Parser]::ParseFile((Resolve-Path -LiteralPath $HarnessPath).ProviderPath, [ref]$null, [ref]$null).Find({ param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq 'Enter-ChangeLock' }, $true)
+$lockName = $lockFunction.Body.Find({ param($node) $node -is [Management.Automation.Language.InvokeMemberExpressionAst] -and $node.Expression.TypeName.FullName -eq 'Threading.Mutex' }, $true).Arguments[1]
+$lockBody = $lockFunction.Body.Extent.Text
+$lockStart = $lockName.Extent.StartOffset - $lockFunction.Body.Extent.StartOffset
+$lockEnd = $lockName.Extent.EndOffset - $lockFunction.Body.Extent.StartOffset
+${function:Enter-TestChangeLock} = [scriptblock]::Create($lockBody.Substring(1, $lockStart - 1) + "'" + $testChangeLock + "'" + $lockBody.Substring($lockEnd, $lockBody.Length - $lockEnd - 1))
+function Invoke-HarnessWithTestLock {
+    Set-Alias Enter-ChangeLock Enter-TestChangeLock
+    . $HarnessPath @args
+}
 $tempRoot = Join-Path ([IO.Path]::GetFullPath([IO.Path]::GetTempPath())) ('roo-industries-legacy-rollback-' + [guid]::NewGuid().ToString('N'))
 function Assert([bool]$Condition, [string]$Message) {
     if (-not $Condition) { throw $Message }
@@ -156,6 +168,7 @@ try {
         id = 'fixture'; name = 'Fixture'; registryValues = @(@{ path = 'HKCU\Fixture'; name = 'Value'; type = 'REG_DWORD'; data = 2 }); services = @()
     }) } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $fixtureManifest -Encoding UTF8
     if ($Scenario -in 'All','SnapshotSafety') { & {
+        Set-Alias Enter-ChangeLock Enter-TestChangeLock
         . $HarnessPath -Action ListModules -ManifestPath $fixtureManifest -DataRoot $tempRoot -ModuleId 'fixture' | Out-Null
         $ManifestPath=Join-Path $tempRoot 'snapshot-manifest.json'
         $manifest=Get-Content $fixtureManifest -Raw|ConvertFrom-Json
@@ -288,6 +301,7 @@ try {
         Assert (@($lateRows|Where-Object {-not $_.outcomeSafe -or -not $_.retrySafe -or $_.registryWrites -ne 1 -or $_.first -ne 1 -or $_.expectedBytes -cne $_.afterBytes -or $_.afterBytes -cne $_.afterRetryBytes -or -not $_.backupUnchanged}).Count -eq 0) 'Runtime physical-layout drift continues independent undo while late read failures retain truthful partial and retry results'
     } }
     if ($Scenario -in 'All','Recovery') { & {
+        Set-Alias Enter-ChangeLock Enter-TestChangeLock
         . $HarnessPath -Action ListModules -ManifestPath $fixtureManifest -DataRoot $tempRoot -ModuleId 'fixture' | Out-Null
         $sourceServiceReader=${function:Get-ServiceSnapshot}
         $sourceServiceRestorer=${function:Restore-ServiceSnapshot}
@@ -787,7 +801,7 @@ try {
                     }.GetNewClosure()
                     $emitted=New-Object System.Collections.Generic.List[object]
                     $caught=$null
-                    try { & { . $HarnessPath -Action RollbackModule -ModuleId fixture -ManifestPath $fixtureManifest -DataRoot $DataRoot -BackupPath $BackupPath -ConfirmApply } | ForEach-Object {$emitted.Add($_) | Out-Null} } catch { $caught=$_.Exception }
+                    try { Invoke-HarnessWithTestLock -Action RollbackModule -ModuleId fixture -ManifestPath $fixtureManifest -DataRoot $DataRoot -BackupPath $BackupPath -ConfirmApply | ForEach-Object {$emitted.Add($_) | Out-Null} } catch { $caught=$_.Exception }
                     $detail=if ($caught) {$caught.Data['RollbackResult']} else {$null}
                     $safe=$null -ne $caught -and $caught -is [InvalidOperationException] -and $emitted.Count -eq 1 -and -not $emitted[0].success -and $emitted[0].partial -and $emitted[0].restoredServices -eq 0 -and $emitted[0].failures[0].mayHaveChanged -and $null -ne $detail -and -not $detail.success -and $detail.backupPath -ceq $operation.path
                     $rows.Add([pscustomobject]@{family='cli';producerSafe=$operation.producerSafe;outcomeSafe=$safe;thrown=($null -ne $caught);exceptionType=$(if($caught){$caught.GetType().FullName}else{$null});emitted=@($emitted.ToArray());detail=$detail;calls=@($script:runtimeCalls.ToArray());backupUnchanged=(Test-RuntimeBackup $operation);native=$false}) | Out-Null
@@ -806,6 +820,7 @@ try {
         } }
     } }
     if ($Scenario -in 'All','Selection','Drift') { & {
+        Set-Alias Enter-ChangeLock Enter-TestChangeLock
         . $HarnessPath -Action ListModules -ManifestPath $fixtureManifest -DataRoot $tempRoot -ModuleId 'fixture' | Out-Null
         if ($Scenario -ne 'Selection') { & {
             function Open-RegistryKey {
@@ -970,6 +985,7 @@ try {
         }
     } }
     if ($Scenario -in 'All','PreviewBinding') { & {
+        Set-Alias Enter-ChangeLock Enter-TestChangeLock
         . $HarnessPath -Action ListModules -ManifestPath $fixtureManifest -DataRoot $tempRoot -ModuleId 'fixture' | Out-Null
         $ManifestPath=Join-Path $tempRoot 'binding-manifest.json'
         $bindingFailures=New-Object System.Collections.Generic.List[string]
@@ -1244,6 +1260,7 @@ try {
         Assert ($bindingFailures.Count -eq 0) ('Every preview-binding case holds ('+$bindingFailures.Count+' failed)')
     } }
     if ($Scenario -in 'All','Dependents') { & {
+        Set-Alias Enter-ChangeLock Enter-TestChangeLock
         . $HarnessPath -Action ListModules -ManifestPath $fixtureManifest -DataRoot $tempRoot -ModuleId 'fixture' | Out-Null
         $ManifestPath=Join-Path $tempRoot 'dependents-manifest.json'
         $dependentFailures=New-Object System.Collections.Generic.List[string]
@@ -1302,15 +1319,15 @@ try {
         function Get-FakeStatus { (@('Probe','ProbeDep','ProbeDepChild','ProbeIdle')|ForEach-Object {$_+'='+$script:fakeServices[$_].startup+'/'+$script:fakeServices[$_].status}) -join ' ' }
         $processScript=Join-Path $tempRoot 'dependent-process.ps1'
         $processBody=@'
-param($Harness,$ChangeLock,$FixtureManifest,$Root,$Backup,$State,$Result,[switch]$Interrupt,[switch]$CompletionInterrupt,[ValidateSet('None','BeforeRead','AfterRead','AfterCompletion')][string]$Barrier='None',[switch]$Latest)
+param($Harness,$FixtureManifest,$Root,$Backup,$State,$Result,[switch]$Interrupt,[switch]$CompletionInterrupt,[ValidateSet('None','BeforeRead','AfterRead','AfterCompletion')][string]$Barrier='None',[switch]$Latest)
 $ErrorActionPreference='Stop'
-$RooIndustriesTestChangeLock=$ChangeLock
+Set-Alias Enter-ChangeLock Enter-TestChangeLock
 . $Harness -Action ListModules -ManifestPath $FixtureManifest -DataRoot $Root -ModuleId fixture | Out-Null
 $script:fakeServices=Import-Clixml -LiteralPath $State
 $script:serviceCalls=New-Object System.Collections.Generic.List[string]
 $script:failStart=$null
 '@
-        foreach ($name in 'Get-FakeDependents','Get-Service','Get-CimInstance','Set-Service','Stop-Service','Start-Service') {
+        foreach ($name in 'Enter-TestChangeLock','Get-FakeDependents','Get-Service','Get-CimInstance','Set-Service','Stop-Service','Start-Service') {
             $processBody+="`nfunction $name {`n"+(Get-Item ('function:'+ $name)).Definition+"`n}`n"
         }
         $processBody+=@'
@@ -1383,7 +1400,7 @@ if (-not $restored.success) { exit 1 }
             $result=Join-Path $DataRoot 'process-result.json'
             $script:fakeServices | Export-Clixml -LiteralPath $state
             $exe=[Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
-            $arguments='-NoProfile -File "'+$processScript+'" -Harness "'+$HarnessPath+'" -ChangeLock "'+$RooIndustriesTestChangeLock+'" -FixtureManifest "'+$ManifestPath+'" -Root "'+$DataRoot+'" -Backup "'+$BackupPath+'" -State "'+$state+'" -Result "'+$result+'"'
+            $arguments='-NoProfile -File "'+$processScript+'" -Harness "'+$HarnessPath+'" -FixtureManifest "'+$ManifestPath+'" -Root "'+$DataRoot+'" -Backup "'+$BackupPath+'" -State "'+$state+'" -Result "'+$result+'"'
             if ($Interrupt) { $arguments+=' -Interrupt' }
             if ($CompletionInterrupt) { $arguments+=' -CompletionInterrupt' }
             $process=Start-Process -FilePath $exe -ArgumentList $arguments -Wait -PassThru -NoNewWindow
@@ -1403,7 +1420,7 @@ if (-not $restored.success) { exit 1 }
             $firstResult=Join-Path $DataRoot 'first-result.json'
             $secondResult=Join-Path $DataRoot 'second-result.json'
             $script:fakeServices|Export-Clixml -LiteralPath $state
-            $arguments='-NoProfile -File "'+$processScript+'" -Harness "'+$HarnessPath+'" -ChangeLock "'+$RooIndustriesTestChangeLock+'" -FixtureManifest "'+$ManifestPath+'" -Root "'+$DataRoot+'" -Backup "'+$BackupPath+'" -State "'+$state+'"'
+            $arguments='-NoProfile -File "'+$processScript+'" -Harness "'+$HarnessPath+'" -FixtureManifest "'+$ManifestPath+'" -Root "'+$DataRoot+'" -Backup "'+$BackupPath+'" -State "'+$state+'"'
             $first=Start-DependentProcess ($arguments+' -Result "'+$firstResult+'" -Barrier BeforeRead')
             $second=$null
             try {
@@ -1483,7 +1500,7 @@ if (-not $restored.success) { exit 1 }
             $result=Join-Path $DataRoot 'crash-result.json'
             $script:fakeServices|Export-Clixml -LiteralPath $state
             $exe=[Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
-            $arguments='-NoProfile -File "'+$processScript+'" -Harness "'+$HarnessPath+'" -ChangeLock "'+$RooIndustriesTestChangeLock+'" -FixtureManifest "'+$ManifestPath+'" -Root "'+$DataRoot+'" -Backup "'+$BackupPath+'" -State "'+$state+'"'
+            $arguments='-NoProfile -File "'+$processScript+'" -Harness "'+$HarnessPath+'" -FixtureManifest "'+$ManifestPath+'" -Root "'+$DataRoot+'" -Backup "'+$BackupPath+'" -State "'+$state+'"'
             $process=Start-DependentProcess ($arguments+' -Result "'+$result+'" -Barrier AfterCompletion')
             try {
                 $clock=[Diagnostics.Stopwatch]::StartNew()
@@ -1810,7 +1827,7 @@ if (-not $restored.success) { exit 1 }
                     $result=Join-Path $DataRoot 'apply-race-result.json'
                     $script:fakeServices|Export-Clixml -LiteralPath $state
                     $exe=[Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
-                    $arguments='-NoProfile -File "'+$processScript+'" -Harness "'+$HarnessPath+'" -ChangeLock "'+$RooIndustriesTestChangeLock+'" -FixtureManifest "'+$ManifestPath+'" -Root "'+$DataRoot+'" -Backup "'+$Path+'" -State "'+$state+'" -Result "'+$result+'"'
+                    $arguments='-NoProfile -File "'+$processScript+'" -Harness "'+$HarnessPath+'" -FixtureManifest "'+$ManifestPath+'" -Root "'+$DataRoot+'" -Backup "'+$Path+'" -State "'+$state+'" -Result "'+$result+'"'
                     if ($Latest) { $arguments+=' -Latest' }
                     $published=(Get-FileHash -LiteralPath $Path).Hash
                     $early=Start-Process -FilePath $exe -ArgumentList $arguments -Wait -PassThru -NoNewWindow
@@ -1977,45 +1994,83 @@ if (-not $restored.success) { exit 1 }
         $ready=Join-Path $tempRoot 'change-lock.ready'
         $release=Join-Path $tempRoot 'change-lock.release'
         Set-Content -LiteralPath $holder -Encoding UTF8 -Value @'
-param($Name,$Ready,$Release)
-$lock=[Threading.Mutex]::new($false,$Name)
+param($Ready,$Release)
+$lock=[Threading.Mutex]::new($false,'Global\RooIndustries.LeanClientOptimizer.Changes')
 [void]$lock.WaitOne()
 try {
     [IO.File]::WriteAllText($Ready,'ready')
     $clock=[Diagnostics.Stopwatch]::StartNew()
-    while (-not (Test-Path -LiteralPath $Release) -and $clock.Elapsed.TotalSeconds -lt 60) { Start-Sleep -Milliseconds 50 }
+    while (-not (Test-Path -LiteralPath $Release) -and $clock.Elapsed.TotalSeconds -lt 120) { Start-Sleep -Milliseconds 50 }
 } finally { $lock.ReleaseMutex(); $lock.Dispose() }
 '@
-        $start=[Diagnostics.ProcessStartInfo]::new([Diagnostics.Process]::GetCurrentProcess().MainModule.FileName,('-NoProfile -File "'+$holder+'" -Name "'+$RooIndustriesTestChangeLock+'" -Ready "'+$ready+'" -Release "'+$release+'"'))
+        $lockRoot=Join-Path $tempRoot 'change-lock'
+        $lockManifest=Join-Path $tempRoot 'change-lock-manifest.json'
+        @{protected=@{services=@();registryPathPatterns=@()};modules=@(@{id='fixture';name='Fixture';registryValues=@();services=@()})}|ConvertTo-Json -Depth 8|Set-Content -LiteralPath $lockManifest -Encoding UTF8
+        $exe=[Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
+        $preview=& $HarnessPath -Action ApplyModule -ModuleId fixture -ManifestPath $lockManifest -DataRoot $lockRoot
+        $runs=@{
+            Apply=@{Action='ApplyModule';ModuleId='fixture';ManifestPath=$lockManifest;DataRoot=$lockRoot;PreviewPath=$preview.previewPath}
+            Undo=@{Action='RollbackModule';ModuleId='fixture';ManifestPath=$lockManifest;DataRoot=$lockRoot}
+        }
+        $busy='Another confirmed Apply or Undo is running on this PC. Wait for it to finish, then try again. Nothing was changed.'
+        $start=[Diagnostics.ProcessStartInfo]::new($exe,('-NoProfile -File "'+$holder+'" -Ready "'+$ready+'" -Release "'+$release+'"'))
         $start.UseShellExecute=$false
         $process=[Diagnostics.Process]::Start($start)
         try {
             $clock=[Diagnostics.Stopwatch]::StartNew()
             while (-not (Test-Path -LiteralPath $ready)) {
-                if ($process.HasExited -or $clock.Elapsed.TotalSeconds -gt 30) { throw 'The test change lock holder did not start' }
+                if ($process.HasExited -or $clock.Elapsed.TotalSeconds -gt 30) { throw 'The machine-wide change lock holder did not start' }
                 Start-Sleep -Milliseconds 50
             }
-            $emptyRoot=Join-Path $tempRoot ('change-lock-'+[guid]::NewGuid().ToString('N'))
-            $loaded=$null
-            try { & { . $HarnessPath -Action RollbackModule -ModuleId fixture -ManifestPath $fixtureManifest -DataRoot $emptyRoot -ConfirmApply } } catch { $loaded=$_.Exception.Message }
-            Assert ($loaded -like '*Apply or Undo is running*') 'A suite that loads the harness waits on its own test change lock'
+            $scoped=$null
+            $undoArgs=$runs.Undo
+            try { Invoke-HarnessWithTestLock @undoArgs -ConfirmApply | Out-Null } catch { $scoped=$_.Exception.Message }
+            Assert ($scoped -like 'No backups found*') ('A suite-loaded Undo uses its own change lock and does not wait on the machine-wide one ('+$scoped+')')
+            Assert (-not (Test-Path -LiteralPath alias:Enter-ChangeLock)) 'Loading the harness with the test lock leaves no lock override behind'
+            $session=Join-Path $tempRoot 'change-lock-session.ps1'
+            Set-Content -LiteralPath $session -Encoding UTF8 -Value @'
+param($SuitePath,$Harness,$LockManifest,$LockRoot)
+$ErrorActionPreference='Stop'
+$suiteError=$null
+# Without a base harness receipt the comparison refuses right after the suite's own setup, so the suite returns quickly.
+try { . $SuitePath -HarnessPath $Harness -Scenario ApplyComparison -BaseHarnessPath '' | Out-Null } catch { $suiteError=$_.Exception.Message }
+$undoError=$null
+try { . $Harness -Action RollbackModule -ModuleId fixture -ManifestPath $LockManifest -DataRoot $LockRoot -ConfirmApply | Out-Null } catch { $undoError=$_.Exception.Message }
+ConvertTo-Json -Compress -InputObject @{suite=$suiteError;alias=(Test-Path -LiteralPath alias:Enter-ChangeLock);undo=$undoError}
+'@
+            $sessionOutput=& $exe -NoProfile -File $session -SuitePath $PSCommandPath -Harness $HarnessPath -LockManifest $lockManifest -LockRoot $lockRoot
+            $dotted=($sessionOutput|Select-Object -Last 1)|ConvertFrom-Json
+            Assert ($dotted.suite -in 'The base/new apply comparison requires Windows.','The exact base harness source receipt is required.' -and -not $dotted.alias -and $dotted.undo -ceq $busy) ('A dot-sourced Undo after a dot-sourced suite run uses the machine-wide change lock ('+($sessionOutput -join ' ')+')')
+            foreach ($name in 'Apply','Undo') {
+                $arguments=(@($runs[$name].GetEnumerator()|ForEach-Object {'-'+$_.Key+' "'+$_.Value+'"'})+'-ConfirmApply') -join ' '
+                $run=[Diagnostics.ProcessStartInfo]::new($exe,('-NoProfile -File "'+$HarnessPath+'" '+$arguments))
+                $run.UseShellExecute=$false
+                $run.RedirectStandardOutput=$true
+                $run.RedirectStandardError=$true
+                $child=[Diagnostics.Process]::Start($run)
+                try {
+                    $output=$child.StandardOutput.ReadToEndAsync()
+                    $errors=$child.StandardError.ReadToEnd()
+                    $child.WaitForExit()
+                    $exit=$child.ExitCode
+                } finally { $child.Dispose() }
+                $fileRefused=$exit -ne 0 -and ($errors -replace "\x1b\[[0-9;]*m",'' -replace '[^A-Za-z]','') -clike ('*'+($busy -replace '[^A-Za-z]','')+'*') -and $errors -notlike '*No backups found*'
+                if (-not $fileRefused) { Write-Host ('-File run exited '+$exit+': '+$errors+$output.Result) }
+                Assert $fileRefused ('A confirmed '+$name+' started with -File refuses while another process holds the machine-wide change lock')
+                $refused=$null
+                $hashArgs=$runs[$name]
+                try { & $HarnessPath @hashArgs -ConfirmApply | Out-Null } catch { $refused=$_.Exception.Message }
+                Assert ($refused -ceq $busy) ('A confirmed '+$name+' started with & refuses while another process holds the machine-wide change lock ('+$refused+')')
+            }
+            Assert (-not (Test-Path -LiteralPath (Join-Path $lockRoot 'backups'))) 'A refused confirmed Apply or Undo creates no backup'
         } finally {
             [IO.File]::WriteAllText($release,'release')
             if (-not $process.WaitForExit(30000)) { $process.Kill() }
             $process.Dispose()
         }
-        & {
-            # No lock can be opened under a name this long, so only a run that ignores it reaches the machine-wide lock, free or held by a real run.
-            $RooIndustriesTestChangeLock='Global\RooIndustries.LeanClientOptimizer.Changes.Test.'+('x'*300)
-            $unusable=$null
-            try { & { . $HarnessPath -Action RollbackModule -ModuleId fixture -ManifestPath $fixtureManifest -DataRoot $emptyRoot -ConfirmApply } } catch { $unusable=$_.Exception.Message }
-            Assert ($unusable -and $unusable -notlike 'No backups found*' -and $unusable -notlike '*Apply or Undo is running*') ('A suite that loads the harness cannot open a test change lock name that is too long ('+$unusable+')')
-            $invoked=$null
-            try { & $HarnessPath -Action RollbackModule -ModuleId fixture -ManifestPath $fixtureManifest -DataRoot $emptyRoot -ConfirmApply } catch { $invoked=$_.Exception.Message }
-            Assert ($invoked -like 'No backups found*' -or $invoked -like '*Apply or Undo is running*') ('A normal harness run ignores the test lock name and uses the machine-wide change lock ('+$invoked+')')
-        }
     } }
     if ($Scenario -in 'All','BackupWrite') { & {
+        Set-Alias Enter-ChangeLock Enter-TestChangeLock
         . $HarnessPath -Action ListModules -ManifestPath $fixtureManifest -DataRoot $tempRoot -ModuleId 'fixture' | Out-Null
         $writeFailures=New-Object System.Collections.Generic.List[string]
         function Test-WriteCase([bool]$Condition,[string]$Message) {
@@ -2077,6 +2132,7 @@ try {
             Assert ((Get-ProbeState) -ceq 'Automatic/Running Manual/Running Manual/Running') 'The disposable probe service and its two-level dependents are running'
             $servicesManifest=Join-Path $tempRoot 'services-manifest.json'
             @{protected=@{services=@();registryPathPatterns=@()};modules=@(@{id='fixture';name='Fixture';registryValues=@();services=@(@{name=$probe;startup='Disabled';targetState='Stopped'})})} | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $servicesManifest -Encoding UTF8
+            Set-Alias Enter-ChangeLock Enter-TestChangeLock
             . $HarnessPath -Action ListModules -ManifestPath $servicesManifest -DataRoot (Join-Path $tempRoot 'services') -ModuleId 'fixture' | Out-Null
             function Get-BenchmarkSnapshot { param($Label) @{label=$Label} }
             function Invoke-SmokeTest { [pscustomobject]@{pass=$true} }
@@ -2096,7 +2152,7 @@ try {
             $again=Invoke-RollbackModule
             Assert ($again.success -and $again.restoredServices -eq 0 -and @($again.alreadyAtOriginal|Where-Object {$_.type -eq 'dependent'}).Count -eq 2) 'Repeated real-service Undo leaves both running dependents at their original state'
             Stop-Service -Name $dependent -Force
-            $replayed=& { . $HarnessPath -Action RollbackModule -ModuleId fixture -ManifestPath $servicesManifest -DataRoot $DataRoot -BackupPath $BackupPath -ConfirmApply }
+            $replayed=Invoke-HarnessWithTestLock -Action RollbackModule -ModuleId fixture -ManifestPath $servicesManifest -DataRoot $DataRoot -BackupPath $BackupPath -ConfirmApply
             Assert ($replayed.success -and $replayed.restoredServices -eq 0 -and @($replayed.leftAsChanged|Where-Object {$_.type -eq 'dependent'}).Count -eq 2 -and (Get-ProbeState) -ceq 'Automatic/Running Manual/Stopped Manual/Stopped') 'Repeated Undo preserves both real dependents stopped externally after restoration'
 
             New-Service -Name $refusing[0] -BinaryPathName ('"'+$exe+'"') -StartupType Automatic -DisplayName 'Roo Industries test probe' | Out-Null
@@ -2141,6 +2197,7 @@ try {
             @{ protected=@{services=@();registryPathPatterns=@()}; modules=@(@{
                 id='fixture';name='Fixture';registryValues=@(@{path=$regPath;name='Value';type='REG_DWORD';data=2});services=@()
             }) } | ConvertTo-Json -Depth 8 | Set-Content $fixtureManifest
+            Set-Alias Enter-ChangeLock Enter-TestChangeLock
             . $HarnessPath -Action ListModules -ManifestPath $fixtureManifest -DataRoot $tempRoot -ModuleId 'fixture' | Out-Null
             function Get-BenchmarkSnapshot { param($Label) @{label=$Label} }
             function Invoke-SmokeTest { @() }
@@ -2473,7 +2530,7 @@ public static class RooIndustriesLegacyFixtureRaw {
                 $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($subkey)
                 try { Assert (-not $result.success -and $result.failures[0].phase -ceq 'preflight' -and $key.GetValue('First') -eq 2 -and $key.GetValue('Second') -eq 2) 'Real-registry preflight failure leaves every value untouched' } finally { $key.Dispose() }
                 $cliFailed=$false
-                try { & { . $HarnessPath -Action RollbackModule -ModuleId fixture -ManifestPath $fixtureManifest -DataRoot $tempRoot -BackupPath $BackupPath -ConfirmApply } | Out-Null } catch { $cliFailed=$_.Exception.Data['RollbackResult'].success -eq $false }
+                try { Invoke-HarnessWithTestLock -Action RollbackModule -ModuleId fixture -ManifestPath $fixtureManifest -DataRoot $tempRoot -BackupPath $BackupPath -ConfirmApply | Out-Null } catch { $cliFailed=$_.Exception.Data['RollbackResult'].success -eq $false }
                 Assert $cliFailed 'The RollbackModule CLI exposes the failed result and raises an error'
                 $entries[1].kind='DWord';$entries[1].oldValue=0
                 Write-JsonFile @{moduleId='fixture';registry=$entries;services=@()} $BackupPath
@@ -2493,7 +2550,7 @@ public static class RooIndustriesLegacyFixtureRaw {
             & $HarnessPath -Action RollbackModule -ModuleId fixture -ManifestPath $fixtureManifest -DataRoot $tempRoot -BackupPath $BackupPath | Out-Null
             $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($subkey)
             try { Assert ($key.GetValue('Value') -eq 2) 'The RollbackModule CLI defaults to preview' } finally { $key.Dispose() }
-            & { . $HarnessPath -Action RollbackModule -ModuleId fixture -ManifestPath $fixtureManifest -DataRoot $tempRoot -BackupPath $BackupPath -ConfirmApply } | Out-Null
+            Invoke-HarnessWithTestLock -Action RollbackModule -ModuleId fixture -ManifestPath $fixtureManifest -DataRoot $tempRoot -BackupPath $BackupPath -ConfirmApply | Out-Null
             $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($subkey)
             try { Assert ($key.GetValue('Value') -eq 1) 'The RollbackModule CLI restores the explicit backup only when confirmed' } finally { $key.Dispose() }
             & {
@@ -2511,7 +2568,7 @@ public static class RooIndustriesLegacyFixtureRaw {
                 $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($subkey,$true)
                 try { $key.SetValue('First',1,[Microsoft.Win32.RegistryValueKind]::DWord);$key.SetValue('Value','Original',[Microsoft.Win32.RegistryValueKind]::String) } finally { $key.Dispose() }
                 $refused=$null
-                try { & { . $HarnessPath @cliArgs -ConfirmApply } | Out-Null } catch { $refused=$_.Exception.Message }
+                try { Invoke-HarnessWithTestLock @cliArgs -ConfirmApply | Out-Null } catch { $refused=$_.Exception.Message }
                 $state=Get-CliState
                 Assert ($refused -like '*-PreviewPath*' -and $state.first -eq 1 -and $state.value -ceq 'Original' -and $state.backups -eq 0) 'The ApplyModule CLI refuses a confirmed apply without a reviewed preview'
                 $preview=& $HarnessPath @cliArgs
@@ -2520,7 +2577,7 @@ public static class RooIndustriesLegacyFixtureRaw {
                 $manifest.modules[0].registryValues[1].data='Three'
                 Write-JsonFile $manifest $cliManifest
                 $refused=$null
-                try { & { . $HarnessPath @cliArgs -ConfirmApply -PreviewPath $preview.previewPath } | Out-Null } catch { $refused=$_.Exception.Message }
+                try { Invoke-HarnessWithTestLock @cliArgs -ConfirmApply -PreviewPath $preview.previewPath | Out-Null } catch { $refused=$_.Exception.Message }
                 Write-Output ('CLI_STALE_PREVIEW_REFUSAL '+(ConvertTo-Json -InputObject $refused -Compress))
                 $state=Get-CliState
                 Assert ($refused -like ('*'+$regPath+'\Value: REG_SZ Two -> REG_SZ Three*') -and $state.first -eq 1 -and $state.value -ceq 'Original' -and $state.backups -eq 0) 'The ApplyModule CLI refuses and names a manifest edit made after the preview'
@@ -2532,14 +2589,14 @@ public static class RooIndustriesLegacyFixtureRaw {
                     $editedPath=Join-Path $tempRoot 'cli-edited-preview.json'
                     Write-JsonFile $edited $editedPath
                     $refused=$null
-                    try { & { . $HarnessPath @cliArgs -ConfirmApply -PreviewPath $editedPath } | Out-Null } catch { $refused=$_.Exception.Message }
+                    try { Invoke-HarnessWithTestLock @cliArgs -ConfirmApply -PreviewPath $editedPath | Out-Null } catch { $refused=$_.Exception.Message }
                     $state=Get-CliState
                     Assert ($refused -like ('*preview '+$representation+'*') -and $state.first -eq 1 -and $state.value -ceq 'Original' -and $state.backups -eq 0) ('The ApplyModule CLI refuses edited preview '+$representation+' before any registry write or backup')
                 }
-                $applied=& { . $HarnessPath @cliArgs -ConfirmApply -PreviewPath $preview.previewPath }
+                $applied=Invoke-HarnessWithTestLock @cliArgs -ConfirmApply -PreviewPath $preview.previewPath
                 $state=Get-CliState
                 Assert ($state.first -eq 2 -and $state.firstKind -ceq 'DWord' -and $state.value -ceq 'Two' -and $state.valueKind -ceq 'String' -and $applied.previewHash -ceq $preview.previewHash -and $state.backups -eq 1) 'The ApplyModule CLI applies the exact reviewed plan'
-                & { . $HarnessPath -Action RollbackModule -ModuleId fixture -ManifestPath $cliManifest -DataRoot $cliRoot -BackupPath $applied.backupPath -ConfirmApply } | Out-Null
+                Invoke-HarnessWithTestLock -Action RollbackModule -ModuleId fixture -ManifestPath $cliManifest -DataRoot $cliRoot -BackupPath $applied.backupPath -ConfirmApply | Out-Null
                 $state=Get-CliState
                 Assert ($state.first -eq 1 -and $state.value -ceq 'Original' -and $state.valueKind -ceq 'String') 'The ApplyModule CLI apply undoes to the exact originals'
                 $manifest.modules[0].registryValues[1].type='REG_EXPAND_SZ'
@@ -2548,7 +2605,7 @@ public static class RooIndustriesLegacyFixtureRaw {
                 $previewRefused=$null
                 try { & $HarnessPath @cliArgs | Out-Null } catch { $previewRefused=$_.Exception.Message }
                 $refused=$null
-                try { & { . $HarnessPath @cliArgs -ConfirmApply -PreviewPath $preview.previewPath } | Out-Null } catch { $refused=$_.Exception.Message }
+                try { Invoke-HarnessWithTestLock @cliArgs -ConfirmApply -PreviewPath $preview.previewPath | Out-Null } catch { $refused=$_.Exception.Message }
                 Write-Output ('CLI_UNSUPPORTED_TYPE_REFUSAL '+(ConvertTo-Json -InputObject $refused -Compress))
                 $state=Get-CliState
                 $expected="*Unsupported registry type 'REG_EXPAND_SZ' for $regPath\Value*"
@@ -2696,6 +2753,7 @@ public static class RooIndustriesLegacyFixtureRaw {
                     $comparisonManifest=Join-Path $tempRoot 'apply-comparison-manifest.json'
                     @{protected=@{services=@();registryPathPatterns=@()};modules=@(@{id='fixture';name='Fixture';registryValues=@(@{path=$comparisonPath;name='Value';type='REG_DWORD';data=$desired});services=@()})}|ConvertTo-Json -Depth 8|Set-Content $comparisonManifest
                     $candidate=if ($flavor -eq 'base') {$BaseHarnessPath} else {$HarnessPath}
+                    Set-Alias Enter-ChangeLock Enter-TestChangeLock
                     . $candidate -Action ListModules -ManifestPath $comparisonManifest -DataRoot (Join-Path $tempRoot ('compare-'+$flavor)) -ModuleId fixture | Out-Null
                     function Get-BenchmarkSnapshot { param($Label) @{label=$Label} }
                     function Invoke-SmokeTest { @() }
@@ -2711,7 +2769,7 @@ public static class RooIndustriesLegacyFixtureRaw {
                     $rows.Add([pscustomobject]@{case=$case;flavor=$flavor;error=$failure;exists=$exists;kind=$kind;data=$data})
                     if ($flavor -eq 'new') { Assert ($null -eq $failure -and $kind -ceq 'DWord' -and $data -ceq ([string]$desired)) ('New apply writes exact DWORD data for '+$case) }
                     elseif ($case -eq 'existing String') { Assert ($null -eq $failure -and $kind -cin @('String','DWord') -and $data -ceq '2') 'The actual base existing String outcome is captured' }
-                    else { Assert (($null -eq $failure -and $kind -ceq 'DWord' -and $data -ceq '4294967295') -or ($failure -and (($case -eq 'absent UInt32 max' -and -not $exists) -or ($case -eq 'present UInt32 max' -and $kind -ceq 'DWord' -and $data -ceq '4294967295')))) ('Actual base UInt32-max outcome is captured for '+$case) }
+                    else { Assert ($null -eq $failure -and $kind -ceq 'DWord' -and $data -ceq '4294967295') ('The actual base writes the exact UInt32-max DWORD for '+$case) }
                 } }
             }
             Write-Output ('BASE_NEW_APPLY_FIXTURE_JSON '+(ConvertTo-Json -InputObject @{baseHarnessSha256=$BaseHarnessSha256;results=@($rows.ToArray())} -Depth 6 -Compress))

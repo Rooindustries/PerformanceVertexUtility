@@ -92,7 +92,7 @@ Run individual regressions with `-TestName`:
 .\tools\scripts\Test-Baseline.ps1 -TestName Test-LegacyModuleRollback.ps1,Test-UninstallCleanupApplyPackage.ps1
 ```
 
-The legacy rollback suite also has a fixture-only base/new apply comparison. Supply the harness from your change's base branch (for example `git show origin/main:LeanClientOptimizer.ps1`), exported to an owned folder, and its SHA-256. On a disposable HKCU key it records what the base does with an absent or present UInt32-max DWORD and with an existing String value (harnesses before PR #78 keep it a String, later ones rewrite it as a DWORD), and requires the new harness to write exact DWORD data in all three cases:
+The legacy rollback suite also has a fixture-only base/new apply comparison. Supply the harness from your change's base branch (for example `git show origin/main:LeanClientOptimizer.ps1`), exported to an owned folder, and its SHA-256. On a disposable HKCU key it records what the base does with an absent or present UInt32-max DWORD and with an existing String value. The base must write the exact UInt32-max DWORD without an error, and its existing String may stay a String (harnesses before PR #78) or become the exact DWORD (later ones). The new harness must write exact DWORD data in all three cases:
 
 ```powershell
 .\backend\scripts\Test-LegacyModuleRollback.ps1 -Scenario ApplyComparison -BaseHarnessPath C:\OwnedFixture\base.ps1 -BaseHarnessSha256 <sha256>
@@ -100,7 +100,7 @@ The legacy rollback suite also has a fixture-only base/new apply comparison. Sup
 
 Set `ROO_INDUSTRIES_LEGACY_BASE_HARNESS` and `ROO_INDUSTRIES_LEGACY_BASE_HARNESS_SHA256` to include that comparison in the suite's `All` scenario through `Test-Baseline.ps1`. The comparison removes its fixture in `finally` and never changes real services.
 
-The legacy rollback suite loads the harness with its own change lock for each run, so several suites on one PC, or a suite next to a real harness run, don't wait on each other. Two calls still use the one machine-wide lock on purpose: `-Scenario ChangeLock` starts the harness with `&` to check that a normal run (`-File` or `&`) never picks up the test lock, and accepts that run being refused while a real harness run holds the lock; and `ApplyComparison` with a base harness from before the test lock was added runs that base half under the machine-wide lock, so it can wait on a real harness run.
+The legacy rollback suite runs the harness's own change lock code under a lock name of its own for each run, so several suites on one PC, or a suite next to a real harness run, don't wait on each other. It switches the name only inside its own scopes and child processes, so the switch never outlives the suite, even when the suite is dot-sourced. The harness itself always uses the machine-wide lock. `-Scenario ChangeLock` holds that lock in another process and checks that a confirmed Apply and Undo started with `-File` or `&` both refuse as busy, while a suite-loaded Undo in the same session does not wait on it.
 
 From Linux, configure a Windows SSH alias with its own authorized key and use the direct helper:
 
