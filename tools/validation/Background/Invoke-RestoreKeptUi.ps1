@@ -59,7 +59,7 @@ function HostCall([string]$action,[hashtable]$fields){
  }finally{Stop-OwnedProcess $owned}
 }
 function Read-Fixture($p){$p.Refresh();[ordered]@{priorityClass=[string]$p.PriorityClass;affinityMask=$p.ProcessorAffinity.ToInt64()}}
-trap{if(-not[IO.File]::Exists((Join-Path $directory 'failure.json'))){Save 'failure.json' @{error=$_.Exception.Message;stack=$_.ScriptStackTrace}};break}
+try{
 try{
  Assert-NoUnownedAppProcess
  $exe=@(Get-ChildItem -LiteralPath (Join-Path $AppRoot 'docs\internal\frontend\RooIndustries.OptimizationSuite.App\bin') -Recurse -Filter 'RooIndustries.OptimizationSuite.App.exe')
@@ -155,4 +155,5 @@ try{
   }
  }
 }
+}catch{if(-not[IO.File]::Exists((Join-Path $directory 'failure.json'))){Save 'failure.json' @{error=$_.Exception.Message;stack=$_.ScriptStackTrace}};throw}
 Save 'done.json' @{passed=$true;label=$Label}
