@@ -167,7 +167,7 @@ public sealed class FileCleanupEngine(Func<CleanupAuthority> currentAuthority)
                 try
                 {
                     // A finished entry belongs to the user again; anything changed on it since is theirs.
-                    if (Finished(entry)) { entry.LeftAsChanged = ChangedSinceRestore(entry) ? LeftAsIs : null; continue; }
+                    if (Finished(entry)) { entry.LeftAsChanged = ChangedSinceRestore(entry) switch { true => LeftAsIs, false => null, null => entry.LeftAsChanged }; continue; }
                     FileLease? existing = null;
                     try { existing = FileLease.Open(entry.Original.Path); }
                     catch (Win32Exception error) when (error.NativeErrorCode is 2 or 3) { }
@@ -293,10 +293,13 @@ public sealed class FileCleanupEngine(Func<CleanupAuthority> currentAuthority)
 
     private static bool Finished(FileBackupEntry entry) => entry.Status == "restored" && entry.Error is null && (!entry.Original.Directory || entry.DirectoryMetadataRestored);
 
-    private static bool ChangedSinceRestore(FileBackupEntry entry)
+    // Null when the entry can't be read right now (another program has it open, or it denies reading), so nothing is claimed about it.
+    private static bool? ChangedSinceRestore(FileBackupEntry entry)
     {
         try { using var probe = FileLease.Open(entry.Original.Path); return !entry.Original.SameRestorableData(probe.Capture()); }
-        catch (Exception error) when (error is Win32Exception or InvalidDataException) { return true; }
+        catch (Win32Exception error) when (error.NativeErrorCode is 2 or 3) { return true; }
+        catch (InvalidDataException) { return true; }
+        catch (Win32Exception) { return null; }
     }
 
     private void RestoreMovedEntry(FileBackupEntry entry, Dictionary<string, (FileIdentity Identity, bool Own)> directories)
