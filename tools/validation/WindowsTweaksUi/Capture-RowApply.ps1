@@ -111,14 +111,6 @@ $values=@(foreach($change in $option[0].changes){
  $expected=if($change.value){[ordered]@{keyExists=$true;exists=$true;type=[int]$change.value.type;data=[string]$change.value.bytes}}elseif($null -ne $change.dword){[ordered]@{keyExists=$true;exists=$true;type=4;data=[Convert]::ToBase64String([BitConverter]::GetBytes([uint32]$change.dword))}}else{[ordered]@{keyExists=$true;exists=$false;type=$null;data=$null}}
  [pscustomobject]@{address=$change.address;expected=$expected}
 })
-if($TurnOff){
- $windows=Get-ItemProperty -LiteralPath 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion'
- $build=[int]$windows.CurrentBuildNumber;$edition=[string]$windows.EditionID
- function Offered($Candidate){$gates=if($Candidate.availability){@($Candidate.availability)}else{@([pscustomobject]@{minimumBuild=$definition[0].minimumBuild;maximumBuild=$definition[0].maximumBuild;editions=$definition[0].editions})};@($gates|Where-Object {$build -ge $_.minimumBuild -and $build -le $_.maximumBuild -and @($_.editions|Where-Object {$edition -like $_}).Count}).Count -gt 0}
- $resets=@($definition[0].options|Where-Object {$_.name -in 'Remove this override','Windows default','Use Windows default','Not configured','source-default','Return to previous plan','Remove boot override' -and (Offered $_)})
- $resets=@($resets|Where-Object {$id=$_.id;-not@($definition[0].options|Where-Object {$_.replaces -ceq $id -and (Offered $_) -and -not@($_.availability|ForEach-Object {$_.editions}|Where-Object {$_ -eq '*'}).Count}).Count})
- if(-not$resets.Count -or $resets[0].id -cne $option[0].id){throw ('Switching this row off on '+$edition+' picks '+$(if($resets.Count){$resets[0].id}else{'no Windows default'})+', not '+$option[0].id)}
-}
 $seeds=@{}
 foreach($part in @($Seed.Split(';')|ForEach-Object {$_.Trim()}|Where-Object {$_})){
  $name,$spec=$part.Split('=',2)
@@ -133,16 +125,46 @@ foreach($part in @($Seed.Split(';')|ForEach-Object {$_.Trim()}|Where-Object {$_}
 $dotnet=@((Join-Path $env:LOCALAPPDATA 'Microsoft\dotnet\dotnet.exe'),(Join-Path $env:USERPROFILE '.dotnet\dotnet.exe'),(Join-Path $env:ProgramFiles 'dotnet\dotnet.exe')|Where-Object {Test-Path -LiteralPath $_ -PathType Leaf}|Where-Object {@(& $_ --list-sdks 2>$null).Count}|Select-Object -First 1)
 if(-not$dotnet){throw 'No .NET SDK was found for the test build.'}
 $dotnet=$dotnet[0]
-$parent='Software\RooIndustriesTweakTests';$fixture=$parent+'\'+[Guid]::NewGuid().ToString('N');$recovery=$fixture+'\Recovery'
+$parent='Software\RooIndustriesTweakTests';$fixture=$parent+'\'+[Guid]::NewGuid().ToString('N');$recovery=$fixture+'\Recovery';$journal=$parent+'\RowApplyRecovery'
+# The journal outlives this run: it holds each value's original kind and bytes, the last value this capture or the app wrote, and a write that may have happened.
+# A later run restores a value only while it still reads as one of those writes; anything else was changed by another program and is left as it is.
+function State($Item){if($null -eq $Item){return $null};[ordered]@{exists=[bool]$Item.exists;type=$(if($Item.exists){[int]$Item.type}else{$null});data=$(if($Item.exists){[string]$Item.data}else{$null})}}
+function SaveJournal{$key=[Microsoft.Win32.Registry]::CurrentUser.CreateSubKey($journal);try{$key.SetValue('Record',(ConvertTo-Json -InputObject $record -Depth 6 -Compress),[Microsoft.Win32.RegistryValueKind]::String)}finally{$key.Dispose()}}
+function Mark($Entry,$Target,[switch]$Done){if($Done){$Entry.written=State $Target;$Entry.pending=$null}else{$Entry.pending=State $Target}}
+function Recover($Record){
+ $result=[ordered]@{restored=@();conflicts=@();errors=@()}
+ foreach($entry in @($Record.values)){try{
+  $now=ReadValue $entry
+  if(Same $now $entry.original){continue}
+  if(@(@($entry.written,$entry.pending)|Where-Object {$_ -and (Same $now $_)}).Count){WriteValue $entry $entry.original;if(-not(Same (ReadValue $entry) $entry.original)){throw 'the restored value does not read back'};$result.restored+=@($entry.valueName+' back to '+(Describe $entry.original))}
+  else{$result.conflicts+=@($entry.valueName+' was changed by something else to '+(Describe $now)+'; left as it is')}
+ }catch{$result.errors+=@($entry.valueName+': '+$_.Exception.Message)}}
+ return $result
+}
+function DropJournal([bool]$OwnsParent){
+ if(Test-Path -LiteralPath ('HKCU:\'+$journal)){Remove-Item -LiteralPath ('HKCU:\'+$journal) -Force}
+ if($OwnsParent -and (Test-Path -LiteralPath ('HKCU:\'+$parent))){$left=Get-Item -LiteralPath ('HKCU:\'+$parent);if($left.SubKeyCount -eq 0 -and $left.ValueCount -eq 0){Remove-Item -LiteralPath ('HKCU:\'+$parent) -Force}}
+}
 $parentExisted=Test-Path -LiteralPath ('HKCU:\'+$parent)
 $originals=@{}
-$owned=@{}
+$record=$null
 $app=$null;$status='fail';$evidence.restored=$false
 try{
  if(@(Get-Process -Name 'RooIndustries.OptimizationSuite.App' -ErrorAction SilentlyContinue).Count){throw 'The Suite is already open; this capture does not take over another window.'}
+ $previous=Get-ItemProperty -LiteralPath ('HKCU:\'+$journal) -Name 'Record' -ErrorAction SilentlyContinue
+ if($previous){
+  $left=ConvertFrom-Json $previous.Record
+  $evidence.previousRun=Recover $left
+  if($evidence.previousRun.errors.Count){throw ('A stopped capture left values this run could not restore: '+($evidence.previousRun.errors -join '; '))}
+  $parentExisted=[bool]$left.parentExisted
+  DropJournal $false
+ }
  foreach($value in $values){$state=ReadValue $value.address;$seed=$seeds[$value.address.valueName.ToUpperInvariant()];if(-not$state.keyExists -and ($value.expected.exists -or ($seed -and $seed.exists))){throw ('The key this choice writes is missing: '+$value.address.keyPath)};$originals[$value.address.valueName.ToUpperInvariant()]=$state}
  $evidence.values=@($values|ForEach-Object {[ordered]@{hive=$_.address.hive;keyPath=$_.address.keyPath;valueName=$_.address.valueName;expected=(Describe $_.expected)}})
- foreach($value in $values){$key=$value.address.valueName.ToUpperInvariant();$owned[$key]=@($value.expected)+@($seeds[$key]|Where-Object {$_});if($seeds.ContainsKey($key)){WriteValue $value.address $seeds[$key]}}
+ $record=[ordered]@{parentExisted=$parentExisted;values=@(foreach($value in $values){[ordered]@{hive=$value.address.hive;keyPath=$value.address.keyPath;valueName=$value.address.valueName;original=(State $originals[$value.address.valueName.ToUpperInvariant()]);written=$null;pending=$null}})}
+ $entries=@{};foreach($entry in $record.values){$entries[$entry.valueName.ToUpperInvariant()]=$entry}
+ SaveJournal
+ foreach($value in $values){$key=$value.address.valueName.ToUpperInvariant();if($seeds.ContainsKey($key)){Mark $entries[$key] $seeds[$key];SaveJournal;WriteValue $value.address $seeds[$key];Mark $entries[$key] $seeds[$key] -Done;SaveJournal}}
  $seeded=Snapshot 'seeded';RegQuery 'seeded'
  foreach($value in $values){$key=$value.address.valueName.ToUpperInvariant();if($seeds.ContainsKey($key)){Check (Same $seeded[$value.address.valueName].state $seeds[$key]) ('Seeded '+$value.address.valueName+' reads back as '+(Describe $seeds[$key]))}}
  if($SettingsRestored){Check ((SettingsToggle 'seeded') -eq $SettingsRestored) ('Windows Settings shows '+$SettingsToggle+' '+$SettingsRestored+' before the change')}
@@ -191,6 +213,7 @@ try{
  $evidence.reviewApply=[ordered]@{status=(Status $window);lines=@(ReviewLines $window)}
  Shot $window 'review-apply'
  $approval.GetCurrentPattern([Windows.Automation.TogglePattern]::Pattern).Toggle()
+ foreach($value in $values){Mark $entries[$value.address.valueName.ToUpperInvariant()] $value.expected};SaveJournal
  (ById $window 'WindowsTweaksApply').GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
  $applied=WaitFor {$text=Status $window;if($text -in 'Windows settings saved','Profile saved' -or $text -like '*attention*' -or $text -like '*not confirmed*' -or $text -like '*failed*'){$text}} 180 'Apply to finish'
  Check ($applied -eq 'Windows settings saved') ('Apply finishes with Windows settings saved, saw: '+$applied)
@@ -200,6 +223,7 @@ try{
  Shot $window 'applied'
  $after=Snapshot 'applied';RegQuery 'applied'
  foreach($value in $values){Check (Same $after[$value.address.valueName].state $value.expected) ('Windows reads '+$value.address.valueName+' as '+(Describe $value.expected)+' after Apply')}
+ foreach($value in $values){Mark $entries[$value.address.valueName.ToUpperInvariant()] $value.expected -Done};SaveJournal
  Start-Sleep -Seconds 10
  $held=Snapshot 'held'
  foreach($value in $values){Check (Same $held[$value.address.valueName].state $value.expected) ($value.address.valueName+' still reads '+(Describe $value.expected)+' ten seconds later')}
@@ -213,6 +237,7 @@ try{
  $evidence.reviewUndo=[ordered]@{status=(Status $window);lines=@(ReviewLines $window)}
  Shot $window 'review-undo'
  $approval.GetCurrentPattern([Windows.Automation.TogglePattern]::Pattern).Toggle()
+ foreach($value in $values){Mark $entries[$value.address.valueName.ToUpperInvariant()] $seeded[$value.address.valueName].state};SaveJournal
  (ById $window 'WindowsTweaksApply').GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
  $undone=WaitFor {$text=Status $window;if($text -in 'Windows settings saved','Profile saved','Saved choices removed' -or $text -like '*attention*' -or $text -like '*not confirmed*' -or $text -like '*failed*'){$text}} 180 'Undo to finish'
  Check ($undone -eq 'Windows settings saved') ('Undo finishes with Windows settings saved, saw: '+$undone)
@@ -223,6 +248,7 @@ try{
  Check (-not$evidence.undone.undoAvailable) 'Nothing is left to undo after Undo'
  $back=Snapshot 'undone';RegQuery 'undone'
  foreach($value in $values){Check (Same $back[$value.address.valueName].state $seeded[$value.address.valueName].state) ('Undo puts '+$value.address.valueName+' back to '+$seeded[$value.address.valueName].text)}
+ foreach($value in $values){Mark $entries[$value.address.valueName.ToUpperInvariant()] $seeded[$value.address.valueName].state -Done};SaveJournal
  [RooIndustriesRowApply]::SetWindowPos($hwnd,[IntPtr]::new(-2),0,0,0,0,0x0003)|Out-Null
  if($SettingsRestored){Check ((SettingsToggle 'undone') -eq $SettingsRestored) ('Windows Settings shows '+$SettingsToggle+' '+$SettingsRestored+' after Undo')}
  $window.GetCurrentPattern([Windows.Automation.WindowPattern]::Pattern).Close()
@@ -237,20 +263,15 @@ try{
   $deadline=[DateTime]::UtcNow.AddSeconds(90)
   do{$left=@(Get-CimInstance Win32_Process|Where-Object {$_.ProcessId -ne $PID -and (($_.ExecutablePath -and $_.ExecutablePath.StartsWith($Source+'\',[StringComparison]::OrdinalIgnoreCase)) -or ($_.CommandLine -and $_.CommandLine.IndexOf($Source,[StringComparison]::OrdinalIgnoreCase) -ge 0))});if($left.Count){Start-Sleep -Seconds 2}}while($left.Count -and [DateTime]::UtcNow -lt $deadline)
   $evidence.leftoverProcesses=@($left|ForEach-Object {$_.Name+' '+$_.ProcessId})
-  $evidence.restoreConflicts=@()
-  $evidence.restoreErrors=@(foreach($value in $values){$key=$value.address.valueName.ToUpperInvariant();try{
-   if(-not$originals.ContainsKey($key)){continue}
-   $now=ReadValue $value.address
-   if(Same $now $originals[$key]){continue}
-   if(@($owned[$key]|Where-Object {Same $now $_}).Count){WriteValue $value.address $originals[$key]}else{$evidence.restoreConflicts+=@($value.address.valueName+' was changed by something else to '+(Describe $now)+'; left as it is')}
-  }catch{$value.address.valueName+': '+$_.Exception.Message}})
-  $evidence.restored=$evidence.restoreConflicts.Count -eq 0 -and @($values|Where-Object {$originals.ContainsKey($_.address.valueName.ToUpperInvariant()) -and -not(Same (ReadValue $_.address) $originals[$_.address.valueName.ToUpperInvariant()])}).Count -eq 0
+  $evidence.restoreConflicts=@();$evidence.restoreErrors=@()
+  if($record){$cleanup=Recover $record;$evidence.restoreConflicts=@($cleanup.conflicts);$evidence.restoreErrors=@($cleanup.errors);$evidence.restoredByCleanup=@($cleanup.restored)}
+  $evidence.restored=$null -ne $record -and $evidence.restoreConflicts.Count -eq 0 -and $evidence.restoreErrors.Count -eq 0 -and @($record.values|Where-Object {-not(Same (ReadValue $_) $_.original)}).Count -eq 0
   $evidence.originals=[ordered]@{};foreach($value in $values){$key=$value.address.valueName.ToUpperInvariant();if($originals.ContainsKey($key)){$evidence.originals[$value.address.valueName]=Describe $originals[$key]}}
   if(Test-Path -LiteralPath ('HKCU:\'+$fixture)){Remove-Item -LiteralPath ('HKCU:\'+$fixture) -Recurse -Force}
-  if(-not$parentExisted -and (Test-Path -LiteralPath ('HKCU:\'+$parent))){$left=Get-Item -LiteralPath ('HKCU:\'+$parent);if($left.SubKeyCount -eq 0 -and $left.ValueCount -eq 0){Remove-Item -LiteralPath ('HKCU:\'+$parent) -Force}}
+  if($record -and -not$evidence.restoreErrors.Count){DropJournal (-not$parentExisted)}
   $evidence.fixtureRemoved=-not(Test-Path -LiteralPath ('HKCU:\'+$fixture))
  }catch{$status='fail';$evidence.cleanupError=$_.Exception.Message;throw}finally{
-  if(-not$evidence.restored -or $evidence.restoreErrors.Count -or -not$evidence.fixtureRemoved -or $evidence.leftoverProcesses.Count){$status='fail'}
+  if(-not$evidence.restored -or $evidence.restoreErrors.Count -or ($evidence.previousRun -and $evidence.previousRun.conflicts.Count) -or -not$evidence.fixtureRemoved -or $evidence.leftoverProcesses.Count){$status='fail'}
   $evidence.status=$status
   Write-HarnessResult $directory 'capture.json' $evidence|Out-Null
   Write-Output ('ROO_INDUSTRIES_ROW_APPLY '+$status+' '+$directory)
