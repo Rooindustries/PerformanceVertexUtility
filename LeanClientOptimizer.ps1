@@ -639,6 +639,24 @@ function Get-ModuleById {
     return $module
 }
 
+function Read-PolicyEditions {
+    try { $limits = Get-Content -LiteralPath $PolicyEditionsPath -Raw -ErrorAction Stop | ConvertFrom-Json } catch { throw "Cannot read the Windows edition limits in $PolicyEditionsPath`: $($_.Exception.Message) Nothing was changed." }
+    $policies = if ($limits -is [System.Management.Automation.PSCustomObject] -and $limits.PSObject.Properties['policies']) { $limits.policies } else { $null }
+    if ($policies -isnot [array] -or $policies.Count -eq 0) { throw "The Windows edition limits in $PolicyEditionsPath have no policies list. Nothing was changed." }
+    $number = 1
+    foreach ($policy in $policies) {
+        $valid = $policy -is [System.Management.Automation.PSCustomObject] -and $policy.hive -is [string] -and $policy.hive -in 'LocalMachine','CurrentUser','Users','ClassesRoot'
+        foreach ($field in 'keyPath','valueName') { $valid = $valid -and $policy.$field -is [string] -and -not [string]::IsNullOrWhiteSpace($policy.$field) }
+        $valid = $valid -and $policy.editions -is [array] -and $policy.editions.Count -gt 0 -and @($policy.editions | Where-Object { $_ -isnot [string] -or [string]::IsNullOrWhiteSpace($_) }).Count -eq 0
+        foreach ($field in @{ name='minimumBuild'; max=[int]::MaxValue }, @{ name='dword'; max=[uint32]::MaxValue }) {
+            if ($valid -and $policy.PSObject.Properties[$field.name]) { $value = $policy.($field.name); $valid = ($value -is [int] -or $value -is [long]) -and $value -ge 0 -and $value -le $field.max }
+        }
+        if (-not $valid) { throw "Policy $number in the Windows edition limits in $PolicyEditionsPath needs a known hive, a keyPath, a valueName, a list of editions, and whole numbers for minimumBuild and dword when given. Nothing was changed." }
+        $number++
+    }
+    return $policies
+}
+
 function Get-PcEdition {
     $machine = [Microsoft.Win32.RegistryKey]::OpenBaseKey([Microsoft.Win32.RegistryHive]::LocalMachine, [Microsoft.Win32.RegistryView]::Registry64)
     try {
@@ -676,7 +694,7 @@ function Get-ModulePlan {
     $plan = New-Object System.Collections.Generic.List[object]
     $policies = @()
     if (@($Module.registryValues).Count -gt 0) {
-        try { $policies = @((Get-Content -LiteralPath $PolicyEditionsPath -Raw -ErrorAction Stop | ConvertFrom-Json).policies) } catch { throw "Cannot read the Windows edition limits in $PolicyEditionsPath`: $($_.Exception.Message) Nothing was changed." }
+        $policies = @(Read-PolicyEditions)
     }
     $windows = $null
     foreach ($rv in @($Module.registryValues)) {

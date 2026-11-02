@@ -2816,6 +2816,41 @@ public static class RooIndustriesLegacyFixtureRaw {
         try { Invoke-ApplyModule|Out-Null } catch { $message=$_.Exception.Message }
         Assert ($null -ne $message -and $message.Contains('DisableSoftLanding: REG_DWORD 1 -> skipped: Windows ignores this policy on the Professional edition.') -and $message.Contains('Nothing was changed') -and $script:editionWrites.Count -eq 0 -and -not (Test-Path -LiteralPath (Join-Path $DataRoot 'backups'))) 'An Enterprise preview applied after the PC became Pro is refused before any backup or write and names the skip'
 
+        $realEditions=$PolicyEditionsPath
+        $brokenEditions=Join-Path $tempRoot 'broken-editions.json'
+        $entry='"hive":"LocalMachine","keyPath":"SOFTWARE\\Policies\\Microsoft\\Windows\\CloudContent","valueName":"DisableSoftLanding"'
+        foreach ($case in @(
+            @{name='a missing file';json=$null},@{name='an empty file';json=''},@{name='null';json='null'},@{name='{}';json='{}'},
+            @{name='a misspelled policies key';json='{"polices":[{'+$entry+',"editions":["Enterprise*"]}]}'},
+            @{name='{"policies":null}';json='{"policies":null}'},@{name='{"policies":{}}';json='{"policies":{}}'},@{name='{"policies":[]}';json='{"policies":[]}'},
+            @{name='an entry that is not an object';json='{"policies":["DisableSoftLanding"]}'},
+            @{name='an entry without editions';json='{"policies":[{'+$entry+'}]}'},
+            @{name='an entry with a misspelled editions key';json='{"policies":[{'+$entry+',"edition":["Enterprise*"]}]}'},
+            @{name='an empty editions list';json='{"policies":[{'+$entry+',"editions":[]}]}'},
+            @{name='editions as one text';json='{"policies":[{'+$entry+',"editions":"Enterprise*"}]}'},
+            @{name='an edition that is not text';json='{"policies":[{'+$entry+',"editions":["Enterprise*",1]}]}'},
+            @{name='a misspelled hive key';json='{"policies":[{"hiv":"LocalMachine","keyPath":"SOFTWARE\\Policies\\Microsoft\\Windows\\CloudContent","valueName":"DisableSoftLanding","editions":["Enterprise*"]}]}'},
+            @{name='an unknown hive';json='{"policies":[{"hive":"LocalMachin","keyPath":"SOFTWARE\\Policies\\Microsoft\\Windows\\CloudContent","valueName":"DisableSoftLanding","editions":["Enterprise*"]}]}'},
+            @{name='a missing keyPath';json='{"policies":[{"hive":"LocalMachine","valueName":"DisableSoftLanding","editions":["Enterprise*"]}]}'},
+            @{name='a missing valueName';json='{"policies":[{"hive":"LocalMachine","keyPath":"SOFTWARE\\Policies\\Microsoft\\Windows\\CloudContent","editions":["Enterprise*"]}]}'},
+            @{name='minimumBuild as text';json='{"policies":[{'+$entry+',"editions":["Enterprise*"],"minimumBuild":"14393"}]}'},
+            @{name='a fractional minimumBuild';json='{"policies":[{'+$entry+',"editions":["Enterprise*"],"minimumBuild":14393.5}]}'},
+            @{name='dword as text';json='{"policies":[{'+$entry+',"editions":["Enterprise*"],"dword":"1"}]}'}
+        )) {
+            $DataRoot=Reset-EditionFixture 'Professional'
+            $PolicyEditionsPath=$realEditions
+            $ConfirmApply=$false
+            $PreviewPath=(Invoke-ApplyModule).previewPath
+            $files=@(Get-ChildItem -LiteralPath $DataRoot -Recurse -File).Count
+            if ($null -eq $case.json) { $PolicyEditionsPath=Join-Path $tempRoot 'missing-editions.json' } else { [IO.File]::WriteAllText($brokenEditions,$case.json); $PolicyEditionsPath=$brokenEditions }
+            foreach ($ConfirmApply in $false,$true) {
+                $message=$null
+                try { Invoke-ApplyModule|Out-Null } catch { $message=$_.Exception.Message }
+                Assert ($null -ne $message -and $message.Contains('Windows edition limits') -and $message.EndsWith('Nothing was changed.') -and $script:editionWrites.Count -eq 0 -and @(Get-ChildItem -LiteralPath $DataRoot -Recurse -File).Count -eq $files) ($(if ($ConfirmApply) {'A confirmed apply'} else {'A preview'})+' with '+$case.name+' as the edition limits is refused before anything is written')
+            }
+        }
+        $PolicyEditionsPath=$realEditions
+
         $ConfirmApply=$false
         foreach ($case in @(
             @{edition='Education';skipped=''},@{edition='EducationN';skipped=''},@{edition='EnterpriseS';skipped=''},@{edition='EnterpriseEval';skipped=''},
