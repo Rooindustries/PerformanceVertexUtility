@@ -964,7 +964,7 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
             {
                 if (ExtractString(item, "outcome") == "alreadyClosed" || ExtractString(item, "reason") is not { Length: > 0 } reason) continue;
                 var game = ExtractString(item, "processName") is { Length: > 0 } name ? name : "The game";
-                foreach (var part in Regex.Split(reason, @"; (?=\w+: )"))
+                foreach (var part in Regex.Split(PageWords(reason, profile: false), @"; (?=\w+: )"))
                 {
                     var match = Regex.Match(part, @"^(priorityClass|affinityMask|ioPriority|memoryPriority|gpuPriority): (.+)$");
                     if (!match.Success)
