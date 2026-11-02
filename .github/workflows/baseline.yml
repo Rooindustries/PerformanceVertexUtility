@@ -70,7 +70,7 @@ jobs:
             arguments: -ExcludeTestName Test-GovernorScenarios.ps1 -ShardCount 2 -ShardIndex 0 -BuildFrontend
           - shard: suites-2
             arguments: -ExcludeTestName Test-GovernorScenarios.ps1 -ShardCount 2 -ShardIndex 1
-    runs-on: windows-2025
+    runs-on: blacksmith-4vcpu-windows-2025
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
