@@ -106,9 +106,26 @@ try {
     $run.Game.PriorityClass = 'High'
     $failed = Status $run -Recover
     Check ($failed.failed -and $failed.restorable -and (Priority $run.Game) -eq 'High' -and @($failed.errors | Where-Object code -eq 'GAME_TUNE_RECOVERY_NEEDS_ATTENTION').Count -eq 1) 'Recovery preserves another program value and retains the backup with a clear error'
+    $game = [string](Read-RooIndustriesJsonFile (Read-RooIndustriesJsonFile $run.Path).backupManifestPath).snapshots[0].processName
+    $foreign = 'Another program changed it, so recovery left it alone and kept the backup. Restore keeps that program''s value and finishes.'
+    Check ([string]@($failed.errors | Where-Object code -eq 'GAME_TUNE_RECOVERY_NEEDS_ATTENTION')[0].message -ceq ('CPU priority for ' + $game + ': ' + $foreign) -and @($failed.skippedItems).Count -eq 1 -and [string]$failed.skippedItems[0].reason -ceq ('priorityClass: ' + $foreign)) 'Recovery names the setting another program holds and what Restore does next'
     $run.Game.PriorityClass = 'AboveNormal'
     $again = Status $run -Recover
     Check ($again.failed -and (Priority $run.Game) -eq 'AboveNormal') 'A failed recovery does not retry on later refreshes'
+    Finish $run
+
+    $run = Interrupted 'pending-foreign'
+    Stop-RooIndustriesValidationProcess $run.Controller
+    $backupPath = [string](Read-RooIndustriesJsonFile $run.Path).backupManifestPath
+    $backup = Read-RooIndustriesJsonFile $backupPath
+    foreach ($change in @($backup.snapshots | ForEach-Object { $_.controlChanges })) { $change.outcome = 'pending' }
+    Write-RooIndustriesGameTuneJsonFile $backup $backupPath
+    $run.Game.PriorityClass = 'High'
+    $failed = Status $run -Recover
+    $game = [string]$backup.snapshots[0].processName
+    Check ($failed.failed -and $failed.restorable -and (Priority $run.Game) -eq 'High' -and [string]@($failed.errors | Where-Object code -eq 'GAME_TUNE_RECOVERY_NEEDS_ATTENTION')[0].message -ceq ('CPU priority for ' + $game + ': ' + $script:RooIndustriesUnprovenWrite) -and @($failed.skippedItems).Count -eq 1 -and [string]$failed.skippedItems[0].reason -ceq ('priorityClass: ' + $script:RooIndustriesUnprovenWrite)) 'Recovery names a pending setting another program holds and leaves it alone'
+    $again = Status $run -Recover
+    Check ($again.failed -and $again.restorable -and (Priority $run.Game) -eq 'High') 'A refused pending recovery does not retry on later refreshes'
     Finish $run
 
     $run = Interrupted 'owner-id-reused'

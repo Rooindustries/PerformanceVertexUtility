@@ -1159,6 +1159,7 @@ $script:RooIndustriesLeftAsSetChangedBack = 'Undo couldn''t confirm another prog
 $script:RooIndustriesProcessOperationManaged = 'Another saved change still uses this control. Undo that change first, then try again.'
 $script:RooIndustriesUnprovenWrite = 'Undo couldn''t confirm it set this value, so it was left alone. It resets when that app restarts.'
 $script:RooIndustriesGovernorBusy = 'Background limits were busy, so this setting was left alone. Try again in a moment.'
+$script:RooIndustriesRecoveryLeftForeign = 'Another program changed it, so recovery left it alone and kept the backup. Restore keeps that program''s value and finishes.'
 
 function Get-RooIndustriesRestoreControlOwnershipReason {
     param([System.Diagnostics.Process]$Process, [string]$Control, [switch]$ForPreview)
@@ -1530,13 +1531,17 @@ function New-RooIndustriesLeftAsSetItem {
     }
 }
 
+function Get-RooIndustriesControlLabel {
+    param([string]$Control)
+    switch ($Control) { 'priorityClass' { 'CPU priority' } 'affinityMask' { 'CPU affinity' } 'ioPriority' { 'I/O priority' } 'memoryPriority' { 'memory priority' } 'gpuPriority' { 'GPU priority' } default { $Control } }
+}
+
 function Format-RooIndustriesLeftAsSetText {
     param([object[]]$Items)
     $items = @(Get-RooIndustriesArray $Items)
     if ($items.Count -eq 0) { return '' }
     $names = $items | ForEach-Object {
-        $label = switch ([string]$_.control) { 'priorityClass' { 'CPU priority' } 'affinityMask' { 'CPU affinity' } 'ioPriority' { 'I/O priority' } 'memoryPriority' { 'memory priority' } 'gpuPriority' { 'GPU priority' } default { [string]$_.control } }
-        [string]$_.processName + ' ' + $label + ' (' + [string]$_.currentValue + ')'
+        [string]$_.processName + ' ' + (Get-RooIndustriesControlLabel ([string]$_.control)) + ' (' + [string]$_.currentValue + ')'
     }
     return ' Left as another program set it: ' + ($names -join ', ') + '.'
 }
