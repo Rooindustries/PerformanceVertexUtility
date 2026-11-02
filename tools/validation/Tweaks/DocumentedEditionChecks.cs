@@ -1,19 +1,27 @@
+using System.Text.Json;
 using RooIndustries.Optimizer;
 
 static class DocumentedEditionChecks
 {
-    static readonly string[] Editions = ["Core", "CoreN", "CoreCountrySpecific", "CoreSingleLanguage", "Professional", "ProfessionalN", "ProfessionalEducation", "ProfessionalWorkstation", "CloudEdition",
-        "Enterprise", "EnterpriseS", "EnterpriseEval", "EnterpriseG", "Education", "EducationN", "IoTEnterprise", "IoTEnterpriseS", "ServerRdsh", "ServerStandard", "ServerDatacenter", "ServerTurbine"];
+    public sealed record Policy(string Hive, string KeyPath, string ValueName, uint? Dword, string[] Editions, int MinimumBuild, uint? EquivalentDword, string? EquivalentName);
 
-    public static void Run(string root, TweakCatalog catalog, Action<bool, string> check, Action<Action, string> reject)
+    public static (string[] Known, Policy[] Policies) Load(string repo)
     {
-        var limited = new (string Name, string KeyPath, string ValueName, uint Value, bool Required)[]
-        {
-            ("Diagnostic data off", @"SOFTWARE\Policies\Microsoft\Windows\DataCollection", "AllowTelemetry", 0, true),
-            ("Diagnostic data off in the Settings value", @"SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\DataCollection", "AllowTelemetry", 0, true),
-            ("Windows tips off", @"SOFTWARE\Policies\Microsoft\Windows\CloudContent", "DisableSoftLanding", 1, false),
-            ("Windows spotlight off", @"SOFTWARE\Policies\Microsoft\Windows\CloudContent", "DisableWindowsSpotlightFeatures", 1, false),
-        };
+        using var document = JsonDocument.Parse(File.ReadAllText(Path.Combine(repo, "backend", "catalogs", "windows-policy-editions.json")));
+        var root = document.RootElement;
+        static string[] Strings(JsonElement array) => array.EnumerateArray().Select(item => item.GetString()!).ToArray();
+        return (Strings(root.GetProperty("knownEditions")), root.GetProperty("policies").EnumerateArray().Select(policy => new Policy(policy.GetProperty("hive").GetString()!, policy.GetProperty("keyPath").GetString()!,
+            policy.GetProperty("valueName").GetString()!, policy.TryGetProperty("dword", out var dword) ? dword.GetUInt32() : null, Strings(policy.GetProperty("editions")),
+            policy.TryGetProperty("minimumBuild", out var build) ? build.GetInt32() : 0,
+            policy.TryGetProperty("equivalentChoice", out var equivalent) && equivalent.TryGetProperty("dword", out var same) ? same.GetUInt32() : null,
+            policy.TryGetProperty("equivalentChoice", out var named) ? named.GetProperty("name").GetString() : null)).ToArray());
+    }
+
+    public static bool Allowed(string edition, IEnumerable<string> patterns) => patterns.Any(pattern => pattern.EndsWith('*') ? edition.StartsWith(pattern[..^1], StringComparison.OrdinalIgnoreCase) : string.Equals(edition, pattern, StringComparison.OrdinalIgnoreCase));
+
+    public static void Run(string root, string repo, TweakCatalog catalog, Action<bool, string> check, Action<Action, string> reject)
+    {
+        var (Editions, policies) = Load(repo);
         void Seed(string path, RegistryAddress address, uint value)
         {
             var fixture = OperationFiles.Read<TweakFixture>(path);
@@ -34,30 +42,32 @@ static class DocumentedEditionChecks
             check(engine.Apply(review, OperationFiles.HashFile(review)).Replayed, "A documented edition fixture apply can be replayed without a second change");
         }
         var gated = new HashSet<TweakSelection>();
-        for (var index = 0; index < limited.Length; index++)
+        for (var index = 0; index < policies.Length; index++)
         {
-            var (name, keyPath, valueName, value, required) = limited[index];
-            bool Same(TweakAssignment change) => change.Address.Hive == "LocalMachine" && string.Equals(change.Address.KeyPath, keyPath, StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(change.Address.ValueName, valueName, StringComparison.OrdinalIgnoreCase);
-            var definitions = catalog.Settings.Where(setting => setting.Options.Any(option => option.Changes is [var change] && Same(change) && change.Dword == value)).ToArray();
+            var policy = policies[index];
+            bool Same(TweakAssignment change) => change.Address.Hive == policy.Hive && string.Equals(change.Address.KeyPath, policy.KeyPath, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(change.Address.ValueName, policy.ValueName, StringComparison.OrdinalIgnoreCase);
+            var definitions = catalog.Settings.Where(setting => setting.Options.Any(option => option.Changes is [var change] && Same(change) && change.Dword is { } written && (policy.Dword ?? written) == written)).ToArray();
+            var name = policy.ValueName + (policy.Dword is { } limitedValue ? " " + limitedValue : "");
             check(definitions.Length == 1, name + " has exactly one catalog setting");
             var definition = definitions[0];
-            var limitedOption = definition.Options.Single(option => option.Changes is [{ } change] && change.Dword == value);
+            var limitedOption = definition.Options.Single(option => option.Changes is [{ } change] && Same(change) && change.Dword is { } written && (policy.Dword ?? written) == written);
+            var value = limitedOption.Changes.Single().Dword!.Value;
             var remove = definition.Options.Single(option => option.Changes is [{ Dword: null, Value: null, Token: null, Bits: null, Formula: null }]);
-            var equivalent = required ? definition.Options.SingleOrDefault(option => option.Changes is [{ Dword: 1 }]) : null;
-            check(!required || equivalent is { Name: "Required diagnostic data" }, name + " has a Required diagnostic data choice for the editions that ignore it");
+            var equivalent = policy.EquivalentDword is { } equivalentValue ? definition.Options.SingleOrDefault(option => option.Changes is [{ } change] && change.Dword == equivalentValue) : null;
+            check(policy.EquivalentDword is null || equivalent is not null && equivalent.Name == policy.EquivalentName, name + " has a " + policy.EquivalentName + " choice for the editions that ignore it");
             var address = limitedOption.Changes.Single().Address;
             var selected = new TweakSelection(definition.Id, limitedOption.Id);
             gated.Add(selected);
             var subset = catalog with { Settings = [definition], Presets = [], Incompatible = null };
-            foreach (var edition in Editions)
+            var older = policy.MinimumBuild > definition.MinimumBuild ? new[] { ("Professional", policy.MinimumBuild - 1), ("Enterprise", policy.MinimumBuild - 1) } : [];
+            foreach (var (edition, build) in Editions.Select(edition => (edition, edition.StartsWith("Server", StringComparison.Ordinal) && edition != "ServerRdsh" ? 20348 : 26100)).Concat(older))
             {
-                var build = edition.StartsWith("Server", StringComparison.Ordinal) && edition != "ServerRdsh" ? 20348 : 26100;
-                var path = Path.Combine(root, "documented-" + index + "-" + edition + ".json"); var store = FileTweakStore.Create(path, build, edition);
+                var path = Path.Combine(root, "documented-" + index + "-" + edition + "-" + build + ".json"); var store = FileTweakStore.Create(path, build, edition);
                 var engine = new TweakEngine(subset, store); var status = engine.Detect().Settings.Single();
-                var supported = new[] { "Enterprise", "Education", "IoTEnterprise", "Server" }.Any(family => edition.StartsWith(family, StringComparison.Ordinal));
+                var supported = Allowed(edition, policy.Editions) && build >= policy.MinimumBuild;
                 check(status.Supported && status.Error is null && status.AvailableChoices!.Contains(remove.Id), name + ": removing the override stays available on " + edition);
-                check(status.AvailableChoices!.Contains(limitedOption.Id) == supported, name + " is offered only where Windows honors it: " + edition);
+                check(status.AvailableChoices!.Contains(limitedOption.Id) == supported, name + " is offered only where Windows honors it: " + edition + " build " + build);
                 if (equivalent is not null) check(status.AvailableChoices!.Contains(equivalent.Id), "Required diagnostic data is offered on " + edition);
                 if (!supported)
                 {
@@ -71,7 +81,7 @@ static class DocumentedEditionChecks
                 Apply(engine, engine.Preview("documented", []));
                 check(store.Read(address).Value is null && store.ReadState()!.Profiles.Length == 0, name + ": undo removes " + choice.Name + " again on " + edition);
             }
-            foreach (var edition in new[] { "Core", "Professional" })
+            foreach (var edition in new[] { "Core", "Professional", "CloudEdition" }.Where(edition => !Allowed(edition, policy.Editions)))
             {
                 var path = Path.Combine(root, "documented-" + index + "-old-" + edition + ".json"); var store = FileTweakStore.Create(path, 26100, edition);
                 var original = value == 0 ? 3u : 0u;
@@ -132,7 +142,7 @@ static class DocumentedEditionChecks
                 var build = edition.StartsWith("Server", StringComparison.Ordinal) && edition != "ServerRdsh" ? 20348 : 26100;
                 var path = Path.Combine(root, "personal-" + index + "-" + edition + ".json"); var store = FileTweakStore.Create(path, build, edition);
                 var engine = new TweakEngine(subset, store); var status = engine.Detect().Settings.Single();
-                var policyHere = new[] { "Enterprise", "Education", "IoTEnterprise", "Server" }.Any(family => edition.StartsWith(family, StringComparison.Ordinal));
+                var policyHere = Allowed(edition, policies.Single(item => item.ValueName == valueName).Editions);
                 check(status.Supported && status.Error is null && status.AvailableChoices!.Contains(user.Id) == !policyHere && status.AvailableChoices!.Contains(policy.Id) == policyHere,
                     name + ": exactly one way to turn it off is offered on " + edition);
                 check(status.Observations.Select(read => read.Address).ToHashSet().SetEquals(policyHere ? [policyAddress] : [policyAddress, .. addresses]),

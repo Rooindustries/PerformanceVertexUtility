@@ -186,7 +186,8 @@ def apply_policy_editions(catalog):
                         equivalents.append((setting, option, change, policy['equivalentChoice']))
                     for gate in gates:
                         gate['editions'] = policy['editions'] if '*' in gate['editions'] else sorted(edition for edition in gate['editions'] if any(edition.casefold().startswith(allowed[:-1].casefold()) if allowed.endswith('*') else edition.casefold() == allowed.casefold() for allowed in policy['editions']))
-                    gates = [gate for gate in gates if gate['editions']]
+                        gate['minimumBuild'] = max(gate['minimumBuild'], policy.get('minimumBuild', 0))
+                    gates = [gate for gate in gates if gate['editions'] and gate['minimumBuild'] <= gate['maximumBuild']]
             if matched:
                 if not gates:
                     raise ValueError('A registry policy edition constraint excludes every source gate: ' + setting['id'] + '/' + option['id'])

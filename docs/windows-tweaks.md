@@ -65,10 +65,22 @@ left out of the row's reading on that PC. When removing an override is the only 
 and nothing is set, the Windows settings page shows the row as
 **Not available here**, without Retry, and hides it in simple mode.
 
-The lock screen policy, third-party spotlight suggestions and Windows Update
-deferral keep their existing availability. Microsoft's current references list
-Pro for the first two, and the Windows Update page describes which editions the
-service is offered on rather than stating that Home ignores the registry policy.
+Feature update deferral (`DeferFeatureUpdates` and `DeferFeatureUpdatesPeriodInDays`)
+and the target version (`TargetReleaseVersion`) are Windows Update client policies.
+Microsoft offers those only on Pro, Education, Enterprise and IoT Enterprise, and the
+Update CSP lists the same editions from build 14393 for the deferral and build 17134
+for the target version, Windows 11 included. Home, Windows 10 S and Windows 11 SE,
+and older builds, show these rows as **Not available here**; Server keeps them. A
+policy's `minimumBuild` raises each gate of the limited choice to that build. So the
+**FSOS-X Dash · Windows Update · disabled** preset skips those three settings where
+Windows ignores them.
+
+The lock screen policy is listed under `unlimited` with its reference: the CSP lists
+Pro with no edition note, so every edition keeps it. Third-party spotlight
+suggestions keep their existing availability; Microsoft's current reference lists Pro.
+Every limited policy names either its `equivalentChoice` or, in `noEquivalent`, why
+none exists. `knownEditions` is the list of Windows edition IDs that
+`check_windows_tweaks.py` and the native edition checks test every policy against.
 
 Edition gates match exact edition IDs, `*` for every edition, or a trailing `*`
 for a family, such as `Enterprise*` or `Server*`. This keeps evaluation, LTSC,

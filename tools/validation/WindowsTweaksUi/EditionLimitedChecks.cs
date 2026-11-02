@@ -94,6 +94,8 @@ static class EditionLimitedChecks
             unread.Observe(new TweakSettingStatus(tips.Id, tips.Name, false, [], [], "Windows could not read this setting."), new(new("FIXTURE-PC", "S-1-5-21-1-2-3-1001"), "fixture:unread", 26100, edition));
             check(unread.PickerChoices.Select(choice => choice.Id).SequenceEqual(edition == "Core" ? [homeReset!, personal!.Id] : [remove, tipsPolicy]),
                 tips.Name + " lists only the choices this Windows edition can use even when the read fails: " + edition + ": " + string.Join(", ", unread.PickerChoices.Select(choice => choice.Name)));
+            check(unread.Action.Id == (edition == "Core" ? personal!.Id : tipsPolicy) && unread.Scope == (edition == "Core" ? "This user" : "Entire PC"),
+                tips.Name + " starts on the choice and scope this Windows edition can use even when the read fails: " + edition + ": " + unread.Action.Name + " · " + unread.Scope);
         }
         var held = new Fixture(Path.Combine(root, "edition-held"), subset, 26100, "Core") { Missing = false };
         var tipsAddress = tips.Options.Single(option => option.Id == tipsPolicy).Changes.Single().Address;
@@ -103,9 +105,12 @@ static class EditionLimitedChecks
         check(!heldRow.UnavailableHere && heldRow.Current.StartsWith("Custom value", StringComparison.Ordinal) && heldRow.CanApplyChoice(homeReset!), "Home keeps an existing tips override visible with Use Windows default available");
         heldRow.Selected = heldRow.Choices.Single(choice => choice.Id == homeReset);
         await heldModel.ReviewCommand.ExecuteAsync(null); heldModel.Approved = true; await heldModel.ApplyCommand.ExecuteAsync(null);
-        check(held.Windows.Read(tipsAddress).Value is null && heldModel.Rows.Single(item => item.Id == tips.Id) is { UnavailableHere: false, Current: "No override" }, "Home can clear an existing tips override, and the row then reads No override");
+        bool HeldSwitches(uint? softLanding) => personal!.Changes.All(change => held.Windows.Read(change.Address).Value is var data &&
+            (change.Address.ValueName == "SoftLandingEnabled" && softLanding is { } number ? data is { Type: 4 } && data.Bytes.SequenceEqual(BitConverter.GetBytes(number)) : data is null));
+        check(held.Windows.Read(tipsAddress).Value is null && HeldSwitches(1) && heldModel.Rows.Single(item => item.Id == tips.Id) is { UnavailableHere: false, Current: "Use Windows default" },
+            "Home can clear an existing tips override; this user's switches are left as a new profile has them and the row reads Use Windows default");
         await heldModel.ReviewRestoreCommand.ExecuteAsync(null); heldModel.Approved = true; await heldModel.ApplyCommand.ExecuteAsync(null);
-        check(held.Windows.Read(tipsAddress).Value!.Bytes.SequenceEqual(BitConverter.GetBytes(1u)) && held.Windows.ReadState()!.Profiles.Length == 0, "Undo puts the exact earlier tips override back on Home");
+        check(held.Windows.Read(tipsAddress).Value!.Bytes.SequenceEqual(BitConverter.GetBytes(1u)) && HeldSwitches(null) && held.Windows.ReadState()!.Profiles.Length == 0, "Undo puts the exact earlier tips override back on Home and removes the switch values it wrote");
         var personalAddresses = personal!.Changes.Select(change => change.Address).ToArray();
         var owners = personalAddresses.Select(target => catalog.Settings.Single(setting => setting.Id != tips.Id && setting.Options.All(option => option.Changes is [{ Address: var only }] && only.Hive == target.Hive &&
             string.Equals(only.KeyPath, target.KeyPath, StringComparison.OrdinalIgnoreCase) && string.Equals(only.ValueName, target.ValueName, StringComparison.OrdinalIgnoreCase)))).ToArray();
@@ -193,6 +198,19 @@ static class EditionLimitedChecks
             SeedSwitches(folder, personalAddresses.Select(target => string.Equals(target.ValueName, "SubscribedContent-338389Enabled", StringComparison.OrdinalIgnoreCase) ? 0u : 1u).ToArray());
             var model = await Load(fixture); model.ShowAdvanced = true;
             check(model.Rows.Single(item => item.Id == tips.Id) is { Current: "Custom value", IsApplied: false }, "Windows tips reads Custom value, not Use Windows default, when only one Settings switch is off on Home");
+        }
+        var updates = new[] { "DeferFeatureUpdates", "DeferFeatureUpdatesPeriodInDays", "TargetReleaseVersion" }.Select(name => Find(@"SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate", name)).ToArray();
+        foreach (var (edition, build, honored) in new[] { ("Core", 26100, false), ("CloudEdition", 26100, false), ("Professional", 26100, true), ("Enterprise", 26100, true), ("Professional", 14392, false) })
+        {
+            var model = await Load(new Fixture(Path.Combine(root, "edition-updates-" + edition + "-" + build), catalog with { Settings = updates, Presets = [], Incompatible = null }, build, edition) { Missing = false });
+            model.ShowAdvanced = true;
+            foreach (var definition in updates)
+            {
+                var row = model.Rows.Single(item => item.Id == definition.Id);
+                var policy = definition.Options.Single(option => option.Changes is [{ Dword: not null }]).Id;
+                check(row.UnavailableHere == !honored && !row.CanRetry && row.Current == (honored ? "No override" : "Not available here") && row.CanApplyChoice(policy) == honored,
+                    row.Name + " reads Not available here, without Retry, only where Windows Update client policies don't work: " + edition + " build " + build + ": " + row.Current);
+            }
         }
         var pro = new Fixture(Path.Combine(root, "edition-required"), subset, 26100, "Professional") { Missing = false };
         var proModel = await Load(pro); proModel.ShowAdvanced = true;

@@ -75497,10 +75497,14 @@
           ],
           "availability": [
             {
-              "minimumBuild": 10240,
+              "minimumBuild": 14393,
               "maximumBuild": 26200,
               "editions": [
-                "*"
+                "Professional*",
+                "Education*",
+                "Enterprise*",
+                "IoTEnterprise*",
+                "Server*"
               ]
             }
           ]
@@ -75569,10 +75573,14 @@
           ],
           "availability": [
             {
-              "minimumBuild": 10240,
+              "minimumBuild": 14393,
               "maximumBuild": 26200,
               "editions": [
-                "*"
+                "Professional*",
+                "Education*",
+                "Enterprise*",
+                "IoTEnterprise*",
+                "Server*"
               ]
             }
           ]
@@ -77605,10 +77613,14 @@
           ],
           "availability": [
             {
-              "minimumBuild": 10240,
+              "minimumBuild": 17134,
               "maximumBuild": 26200,
               "editions": [
-                "*"
+                "Professional*",
+                "Education*",
+                "Enterprise*",
+                "IoTEnterprise*",
+                "Server*"
               ]
             }
           ]
@@ -81968,6 +81980,20 @@
         {
           "settingId": "windows.89bbc1696582864f",
           "optionId": "choice-959723ea7b62f95c"
+        }
+      ],
+      "optionalSelections": [
+        {
+          "settingId": "windows.cd3a5c8c22ddf9f4",
+          "optionId": "choice-6b253977ea5987f3"
+        },
+        {
+          "settingId": "windows.4adc092144059c89",
+          "optionId": "choice-73b7a12647b4b7e2"
+        },
+        {
+          "settingId": "windows.3485f5f04d4517e9",
+          "optionId": "choice-6b253977ea5987f3"
         }
       ]
     },

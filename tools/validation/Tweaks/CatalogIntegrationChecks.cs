@@ -4,10 +4,10 @@ using RooIndustries.Optimizer;
 
 static class CatalogIntegrationChecks
 {
-    public static void Run(string root, TweakCatalog catalog, Action<bool, string> check, Action<Action, string> reject)
+    public static void Run(string root, string repo, TweakCatalog catalog, Action<bool, string> check, Action<Action, string> reject)
     {
-        PolicyEditionChecks.Run(root, catalog, check, reject);
-        DocumentedEditionChecks.Run(root, catalog, check, reject);
+        PolicyEditionChecks.Run(root, repo, catalog, check, reject);
+        DocumentedEditionChecks.Run(root, repo, catalog, check, reject);
         var document = JsonDocument.Parse("""
         {"switches":{
           "extensions":{"Type":"Registry","Header":"File extensions","Params":{"Section":"User","Path":"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced","Name":"HideFileExt","ValueOn":"1","ValueOff":"0","ValueKind":"DWord"}},
