@@ -131,7 +131,7 @@ try{
  if($after.affinityMask -ne $before.affinityMask){throw ('Restore did not return the affinity it changed: '+$after.affinityMask)}
  if($Scenario -eq 'saved-change'){
   if($after.priorityClass -ne 'High'){throw ('Restore overwrote the priority the saved one-time change holds: '+$after.priorityClass)}
-  if($result -notcontains 'Game restore needs attention' -or $detail -notmatch ([regex]::Escape($process.ProcessName)+'(\.exe)? \(CPU priority\): Another saved change still uses this control\.')){throw 'The restore result does not name the setting another saved change holds.'}
+  if($result -notcontains 'Game restore needs attention' -or $detail -notmatch ([regex]::Escape($process.ProcessName)+'(\.exe)? \(CPU priority\): Another saved change still uses this control\. Restore that change first, then try again\.')){throw 'The restore result does not name the setting another saved change holds.'}
   if($detail -match 'Undo that change first|Run Undo again|Undo couldn'){throw ('The Game priority card uses Undo wording on a page whose button says Restore: '+$detail)}
  }else{
   if($after.priorityClass -ne 'BelowNormal'){throw ('Restore overwrote the priority another program set: '+$after.priorityClass)}
