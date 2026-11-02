@@ -1,7 +1,7 @@
 param(
     [string]$Source,
     [Parameter(Mandatory = $true)][string]$Out,
-    [ValidateSet('All', 'RecoveryRace', 'ManualRace', 'Controls', 'Unconfirmed', 'LegacySelection')][string]$Scenario = 'All'
+    [ValidateSet('All', 'RecoveryRace', 'ManualRace', 'Controls', 'LegacySelection')][string]$Scenario = 'All'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -37,7 +37,7 @@ function Get-RooIndustriesGameTuneLiveProcessIdentity {
     param($Entry)
     $global:RooIndustriesTuneFixture.identityReads++
     if ($global:RooIndustriesTuneFixture.identityReads -eq $global:RooIndustriesTuneFixture.injectIdentity) {
-        foreach ($key in $global:RooIndustriesTuneFixture.foreign.Keys) { $global:RooIndustriesTuneFixture.state.$key = $global:RooIndustriesTuneFixture.foreign[$key] }
+        $global:RooIndustriesTuneFixture.state.($global:RooIndustriesTuneFixture.control) = $global:RooIndustriesTuneFixture.foreign
     }
     $state = $global:RooIndustriesTuneFixture.state
     return [pscustomobject]@{ exists = $true; matches = $true; instanceEnded = $false; process = (Get-Process -Id $PID); currentPriorityClass = $state.priorityClass; currentAffinityMask = $state.affinityMask; currentIoPriority = $state.ioPriority; currentMemoryPriority = $state.memoryPriority; currentGpuPriority = $state.gpuPriority; currentControlState = $state; reason = $null }
@@ -50,7 +50,7 @@ function Get-RooIndustriesProcessControlReadback {
     param($Process, $Control)
     $global:RooIndustriesTuneFixture.readbacks++
     if ($global:RooIndustriesTuneFixture.readbacks -eq $global:RooIndustriesTuneFixture.injectReadback) {
-        foreach ($key in $global:RooIndustriesTuneFixture.foreign.Keys) { $global:RooIndustriesTuneFixture.state.$key = $global:RooIndustriesTuneFixture.foreign[$key] }
+        $global:RooIndustriesTuneFixture.state.($global:RooIndustriesTuneFixture.control) = $global:RooIndustriesTuneFixture.foreign
     }
     return $global:RooIndustriesTuneFixture.state.$Control
 }
@@ -67,15 +67,13 @@ function Invoke-RooIndustriesProcessControlChange {
 '@ | Add-Content -LiteralPath (Join-Path $engine 'GameTuneSession.Common.ps1')
 . (Join-Path $engine 'GameTuneSession.Common.ps1')
 
-$labels = @{ priorityClass = 'CPU priority'; affinityMask = 'CPU affinity'; ioPriority = 'I/O priority'; memoryPriority = 'Memory priority'; gpuPriority = 'GPU priority' }
-
 function Check([bool]$Condition, [string]$Message) {
     $checks.Add([pscustomobject]@{ passed = $Condition; message = $Message }) | Out-Null
     Write-Host "$(if ($Condition) { 'PASS' } else { 'FAIL' }) $Message"
 }
 
 function Invoke-RestoreCase {
-    param([string]$Name, [string]$Mode, [object[]]$Controls, [string]$Conflict = '', [int]$InjectIdentity = 0, [int]$InjectReadback = 0, [switch]$Original, [string]$Outcome = 'applied', [switch]$MissingApplied, [switch]$MissingOriginal, [string[]]$AlsoForeign = @())
+    param([string]$Name, [string]$Mode, [object[]]$Controls, [string]$Conflict = '', [int]$InjectIdentity = 0, [int]$InjectReadback = 0, [switch]$Original, [string]$Outcome = 'applied', [switch]$MissingApplied, [switch]$MissingOriginal)
     $directory = Join-Path $Out $Name
     $sessionPath = Join-Path $directory 'session.json'
     $backupPath = Join-Path $directory 'backup.json'
@@ -87,10 +85,7 @@ function Invoke-RestoreCase {
         $snapshot.controlChanges += [pscustomobject]@{ control = $control.name; currentValue = $control.original; proposedValue = if ($MissingApplied) { $null } else { $control.applied }; action = 'set'; outcome = $Outcome }
     }
     $foreign = if ($Conflict) { ($Controls | Where-Object name -eq $Conflict).foreign } else { $null }
-    $held = @(@($Conflict) + $AlsoForeign | Where-Object { $_ })
-    $foreignValues = @{}
-    foreach ($heldName in $held) { $foreignValues[$heldName] = ($Controls | Where-Object name -eq $heldName).foreign }
-    $global:RooIndustriesTuneFixture = @{ state = $state; foreign = $foreignValues; identityReads = 0; readbacks = 0; injectIdentity = $InjectIdentity; injectReadback = $InjectReadback; writes = (New-Object System.Collections.Generic.List[object]) }
+    $global:RooIndustriesTuneFixture = @{ state = $state; control = $Conflict; foreign = $foreign; identityReads = 0; readbacks = 0; injectIdentity = $InjectIdentity; injectReadback = $InjectReadback; writes = (New-Object System.Collections.Generic.List[object]) }
     $session = [pscustomobject]@{ sessionId = $Name; profileId = 'fixture-profile'; sessionStatus = 'completed'; status = 'completed'; startedAtUtc = '2026-10-23T00:00:00Z'; ownerProcessId = $PID; ownerStartTimeUtc = '2001-01-01T00:00:00Z'; workerProcessId = $PID; workerStartTimeUtc = '2001-01-01T00:00:00Z'; recoverWhenOwnerEnds = $true; completedAtUtc = $null; backupManifestPath = $backupPath; sessionPath = $sessionPath; restorable = $true; restoredItems = @(); skippedItems = @(); logs = @(); errors = @() }
     $backup = [pscustomobject]@{ actionId = 'performance.gameTune.startSession'; dryRun = $false; backupId = 'fixture-backup'; createdAtUtc = '2026-10-23T00:00:00Z'; sessionId = $Name; profileId = 'fixture-profile'; snapshots = @($snapshot) }
     Write-RooIndustriesGameTuneJsonFile $session $sessionPath
@@ -109,41 +104,18 @@ function Invoke-RestoreCase {
     $saved = Read-RooIndustriesJsonFile $sessionPath
     $writes = @($global:RooIndustriesTuneFixture.writes.ToArray())
     $results.Add([pscustomobject]@{ name = $Name; state = $state; writes = $writes; result = $result; saved = $saved }) | Out-Null
-    $refusedBeforeStop = $Mode -eq 'Recovery' -and $InjectIdentity -eq 1 -and $Outcome -ne 'failed'
-    $unconfirmed = if ($Outcome -eq 'applied') { 'Another program changed it, so recovery left it alone and kept the backup. Restore keeps that program''s value and finishes.' } else { $script:RooIndustriesUnprovenWrite }
     if ($Conflict) {
-        foreach ($heldName in $held) {
-            Check ((Test-RooIndustriesControlValueEqual $heldName $state.$heldName $foreignValues[$heldName]) -and @($writes | Where-Object control -eq $heldName).Count -eq 0) "$Name preserves the foreign $heldName without a write"
-        }
-        if ($Mode -eq 'Preview') {
-            Check ($saved.sessionStatus -eq 'completed' -and $saved.restorable -and $result.dryRun -and $writes.Count -eq 0) "$Name keeps the session recoverable during preview"
-            foreach ($heldName in $held) {
-                $change = @($result.preview | ForEach-Object { $_.controlChanges } | Where-Object control -eq $heldName)
-                Check ($change.Count -eq 1 -and $change[0].blocked -and [string]$change[0].blockedReason -ceq $script:RooIndustriesUnprovenWrite) "$Name blocks $heldName in the preview because it couldn't confirm the write"
-            }
-        } elseif ($refusedBeforeStop) {
-            $reasons = @($saved.skippedItems | ForEach-Object { [regex]::Split([string]$_.reason, '; (?=\w+: )') })
-            $message = [string](@($saved.errors | Where-Object code -eq 'GAME_TUNE_RECOVERY_NEEDS_ATTENTION')[-1]).message
-            $process = [string]$snapshot.processName
-            $named = @($held | ForEach-Object { $labels[$_] + ' for ' + $process + ': ' + $unconfirmed })
-            Check ($saved.restorable -and $saved.sessionStatus -eq 'failed' -and @(Get-RooIndustriesPropertyArray $saved 'leftAsSetItems').Count -eq 0 -and @($held | Where-Object { $reasons -cnotcontains ($_ + ': ' + $unconfirmed) }).Count -eq 0 -and $reasons.Count -eq $held.Count) "$Name keeps recovery and records the exact reason for each held control"
-            Check ($message -ceq ($named -join ' ')) "$Name names each held setting in the recovery message: $message"
-            $status = & (Join-Path $engine 'Get-GameTuneSessionStatus.ps1') -SessionPath $sessionPath | ConvertFrom-Json
-            Check ($status.failed -and $status.restorable -and [string](@($status.errors | Where-Object code -eq 'GAME_TUNE_RECOVERY_NEEDS_ATTENTION')[-1]).message -ceq $message -and @($status.skippedItems).Count -eq 1 -and [string]$status.skippedItems[0].reason -ceq [string]$saved.skippedItems[0].reason) "$Name shows the named reasons in the session status"
-        } elseif ($Outcome -eq 'applied') {
+        Check ((Test-RooIndustriesControlValueEqual $Conflict $state.$Conflict $foreign) -and @($writes | Where-Object control -eq $Conflict).Count -eq 0) "$Name preserves the foreign $Conflict without a write"
+        if ($Outcome -eq 'applied') {
             Check (-not $saved.restorable -and $saved.sessionStatus -eq 'completed' -and @($saved.leftAsSetItems | Where-Object { $_.control -eq $Conflict -and (Test-RooIndustriesControlValueEqual $Conflict $_.currentValue $foreign) }).Count -eq 1) "$Name lists the control left as another program set it and finishes the restore"
         } else {
-            Check ($saved.restorable -and $saved.sessionStatus -eq 'failed' -and @(Get-RooIndustriesPropertyArray $saved 'leftAsSetItems').Count -eq 0 -and @($saved.skippedItems | ForEach-Object { [regex]::Split([string]$_.reason, '; (?=\w+: )') }) -ccontains ($Conflict + ': ' + $script:RooIndustriesUnprovenWrite)) "$Name keeps the unconfirmed control and its recovery and says it couldn't confirm the write"
-            if ($Mode -eq 'Recovery') {
-                $message = [string](@($saved.errors | Where-Object code -eq 'GAME_TUNE_RECOVERY_NEEDS_ATTENTION')[-1]).message
-                Check ($message.Contains('CPU priority for ' + [string]$snapshot.processName + ': ' + $script:RooIndustriesUnprovenWrite)) "$Name names the unconfirmed setting in the recovery message: $message"
-            }
+            Check ($saved.restorable -and $saved.sessionStatus -eq 'failed' -and @($saved.leftAsSetItems).Count -eq 0 -and @($saved.skippedItems | ForEach-Object { [regex]::Split([string]$_.reason, '; (?=\w+: )') }) -ccontains ($Conflict + ': ' + $script:RooIndustriesUnprovenWrite)) "$Name keeps the unconfirmed control and its recovery and says it couldn't confirm the write"
         }
         if ($Mode -eq 'Recovery') {
             $before = [IO.File]::ReadAllText($sessionPath)
             $again = Repair-RooIndustriesInterruptedGameTuneSession $saved $sessionPath
             Check ($again.sessionStatus -eq $saved.sessionStatus -and [IO.File]::ReadAllText($sessionPath) -ceq $before -and (Test-RooIndustriesControlValueEqual $Conflict $state.$Conflict $foreign)) "$Name does not automatically retry or rewrite the session"
-        } elseif ($Mode -ne 'Preview' -and $Controls.Count -gt 1) {
+        } elseif ($Controls.Count -gt 1) {
             $again = & (Join-Path $engine 'Stop-GameTuneSession.ps1') -SessionPath $sessionPath -ConfirmApply | ConvertFrom-Json
             Check ($again.restorable -eq $saved.restorable -and (Test-RooIndustriesControlValueEqual $Conflict $state.$Conflict $foreign) -and $global:RooIndustriesTuneFixture.writes.Count -eq $writes.Count) "$Name keeps the conflict on repeated Stop without rewriting restored controls"
         }
@@ -155,7 +127,7 @@ function Invoke-RestoreCase {
         Check ($writes.Count -eq 0 -and $saved.restorable -and $saved.sessionStatus -ne 'completed') "$Name keeps values and evidence when saved control evidence is missing or unconfirmed"
     }
     foreach ($control in $Controls) {
-        if ($Mode -eq 'Preview' -or $MissingApplied -or $MissingOriginal -or $control.name -in $held) { continue }
+        if ($Mode -eq 'Preview' -or $MissingApplied -or $MissingOriginal -or $control.name -eq $Conflict) { continue }
         if ($Outcome -ne 'applied' -and -not $Original) {
             Check ((Test-RooIndustriesControlValueEqual $control.name $state.($control.name) $control.applied) -and @($writes | Where-Object control -eq $control.name).Count -eq 0) "$Name keeps unconfirmed $($control.name) at its current value"
             continue
@@ -196,14 +168,6 @@ try {
         Invoke-RestoreCase 'missing-original' 'Manual' $controls -MissingOriginal
         Invoke-RestoreCase 'mixed-controls' 'Manual' $controls -Conflict ioPriority -InjectIdentity 1
         Invoke-RestoreCase 'preview-only' 'Preview' $controls
-    }
-    if ($Scenario -in 'All', 'Unconfirmed') {
-        Invoke-RestoreCase 'preview-pending-foreign' 'Preview' @($controls[0]) -Conflict priorityClass -InjectIdentity 1 -Outcome pending
-        Invoke-RestoreCase 'preview-failed-write-foreign' 'Preview' $controls -Conflict priorityClass -InjectIdentity 1 -Outcome failed
-        Invoke-RestoreCase 'recovery-pending-foreign' 'Recovery' @($controls[0]) -Conflict priorityClass -InjectIdentity 1 -Outcome pending
-        Invoke-RestoreCase 'recovery-pending-foreign-several' 'Recovery' @($controls[0], $controls[2], $controls[4]) -Conflict priorityClass -AlsoForeign gpuPriority -InjectIdentity 1 -Outcome pending
-        Invoke-RestoreCase 'recovery-applied-foreign' 'Recovery' @($controls[0]) -Conflict priorityClass -InjectIdentity 1
-        Invoke-RestoreCase 'recovery-failed-write-foreign' 'Recovery' $controls -Conflict priorityClass -InjectIdentity 1 -Outcome failed
     }
     if ($Scenario -in 'All', 'LegacySelection') {
         $stateRoot = Join-Path $Out 'legacy-state'

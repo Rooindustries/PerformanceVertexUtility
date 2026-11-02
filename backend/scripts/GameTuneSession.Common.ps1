@@ -298,6 +298,12 @@ function New-RooIndustriesGameTuneResult {
     }
 }
 
+function ConvertTo-RooIndustriesGameTuneRestoreWords {
+    param([string]$Reason)
+    if ($Reason -ceq $script:RooIndustriesGovernorManaged) { return $script:RooIndustriesRestoreGovernorManaged }
+    return $Reason.Replace('Undo couldn''t confirm', 'Restore couldn''t confirm').Replace('Run Undo again.', 'Restore again once that app closes.').Replace('It resets when that app restarts.', 'It resets when that app restarts; then Restore again.').Replace('Undo that change first', 'Restore that change first')
+}
+
 function Format-RooIndustriesGameTuneSkipText {
     param([object[]]$Items)
     $parts = foreach ($item in @(Get-RooIndustriesArray $Items)) {
@@ -306,7 +312,7 @@ function Format-RooIndustriesGameTuneSkipText {
         foreach ($part in [regex]::Split([string](Get-RooIndustriesPropertyValue $item 'reason' ''), '; (?=\w+: )')) {
             if ([string]::IsNullOrWhiteSpace($part)) { continue }
             $match = [regex]::Match($part, '^(priorityClass|affinityMask|ioPriority|memoryPriority|gpuPriority): (.+)$')
-            $text = if ($match.Success) { (Get-RooIndustriesControlLabel $match.Groups[1].Value) + ' for ' + $name + ': ' + $match.Groups[2].Value } else { $name + ': ' + $part }
+            $text = if ($match.Success) { (Get-RooIndustriesControlLabel $match.Groups[1].Value) + ' for ' + $name + ': ' + (ConvertTo-RooIndustriesGameTuneRestoreWords $match.Groups[2].Value) } else { $name + ': ' + (ConvertTo-RooIndustriesGameTuneRestoreWords $part) }
             $text.Substring(0, 1).ToUpperInvariant() + $text.Substring(1)
         }
     }
@@ -367,25 +373,32 @@ function Repair-RooIndustriesInterruptedGameTuneSession {
                 if ([string](Get-RooIndustriesPropertyValue $backup 'sessionId' '') -cne [string](Get-RooIndustriesPropertyValue $Session 'sessionId' '') -or
                     [string](Get-RooIndustriesPropertyValue $backup 'profileId' '') -cne [string](Get-RooIndustriesPropertyValue $Session 'profileId' '')) { throw 'The interrupted session and backup do not match.' }
                 $held = New-Object System.Collections.Generic.List[object]
+                $problems = New-Object System.Collections.Generic.List[string]
                 foreach ($snapshot in @(Get-RooIndustriesPropertyArray $backup 'snapshots')) {
-                    $identity = Get-RooIndustriesGameTuneLiveProcessIdentity $snapshot
-                    if ($identity.instanceEnded) { continue }
-                    if (-not $identity.exists -or -not $identity.matches) { throw 'A saved app identity could not be checked. Its values were kept.' }
-                    if ($null -eq $snapshot.PSObject.Properties['controlChanges']) { throw 'The interrupted session has no record of the controls it changed.' }
                     $reasons = New-Object System.Collections.Generic.List[string]
-                    foreach ($change in @(Get-RooIndustriesPropertyArray $snapshot 'controlChanges')) {
-                        if ([string](Get-RooIndustriesPropertyValue $change 'outcome' '') -eq 'failed') { continue }
-                        $control = [string](Get-RooIndustriesPropertyValue $change 'control' '')
-                        $current = Get-RooIndustriesControlStateValue $identity.currentControlState $control
-                        $originalField = switch ($control) { 'priorityClass' { 'originalPriorityClass' }; 'affinityMask' { 'originalAffinityMask' }; 'ioPriority' { 'originalIoPriority' }; 'memoryPriority' { 'originalMemoryPriority' }; 'gpuPriority' { 'originalGpuPriority' }; default { throw 'The saved session contains an unknown control.' } }
-                        if ($null -eq (Get-RooIndustriesPropertyValue $snapshot $originalField $null) -or $null -eq (Get-RooIndustriesPropertyValue $change 'proposedValue' $null)) { throw 'The saved session has an incomplete control backup.' }
-                        $reason = if (Test-RooIndustriesGovernorOwnsControl $identity.process $control) {
-                            $script:RooIndustriesGovernorManaged
-                        } elseif (-not (Test-RooIndustriesControlValueEqual $control $current (Get-RooIndustriesPropertyValue $snapshot $originalField $null)) -and
-                            -not (Test-RooIndustriesControlValueEqual $control $current (Get-RooIndustriesPropertyValue $change 'proposedValue' $null))) {
-                            if ((Get-RooIndustriesAppliedControlValue $snapshot $control).verified) { $script:RooIndustriesRecoveryLeftForeign } else { $script:RooIndustriesUnprovenWrite }
-                        } else { $null }
-                        if ($null -ne $reason -and -not $reasons.Contains($control + ': ' + $reason)) { $reasons.Add($control + ': ' + $reason) | Out-Null }
+                    try {
+                        $identity = Get-RooIndustriesGameTuneLiveProcessIdentity $snapshot
+                        if ($identity.instanceEnded) { continue }
+                        if (-not $identity.exists -or -not $identity.matches) { throw 'A saved app identity could not be checked. Its values were kept.' }
+                        if ($null -eq $snapshot.PSObject.Properties['controlChanges']) { throw 'The interrupted session has no record of the controls it changed.' }
+                        foreach ($change in @(Get-RooIndustriesPropertyArray $snapshot 'controlChanges')) {
+                            if ([string](Get-RooIndustriesPropertyValue $change 'outcome' '') -eq 'failed') { continue }
+                            $control = [string](Get-RooIndustriesPropertyValue $change 'control' '')
+                            $current = Get-RooIndustriesControlStateValue $identity.currentControlState $control
+                            $originalField = switch ($control) { 'priorityClass' { 'originalPriorityClass' }; 'affinityMask' { 'originalAffinityMask' }; 'ioPriority' { 'originalIoPriority' }; 'memoryPriority' { 'originalMemoryPriority' }; 'gpuPriority' { 'originalGpuPriority' }; default { throw 'The saved session contains an unknown control.' } }
+                            if ($null -eq (Get-RooIndustriesPropertyValue $snapshot $originalField $null) -or $null -eq (Get-RooIndustriesPropertyValue $change 'proposedValue' $null)) { throw 'The saved session has an incomplete control backup.' }
+                            $reason = if (Test-RooIndustriesGovernorOwnsControl $identity.process $control) {
+                                $script:RooIndustriesGovernorManaged
+                            } elseif ([string]::IsNullOrWhiteSpace([string]$current)) {
+                                $script:RooIndustriesRecoveryUnreadable
+                            } elseif (-not (Test-RooIndustriesControlValueEqual $control $current (Get-RooIndustriesPropertyValue $snapshot $originalField $null)) -and
+                                -not (Test-RooIndustriesControlValueEqual $control $current (Get-RooIndustriesPropertyValue $change 'proposedValue' $null))) {
+                                if ((Get-RooIndustriesAppliedControlValue $snapshot $control).verified) { $script:RooIndustriesRecoveryLeftForeign } else { $script:RooIndustriesUnprovenWrite }
+                            } else { $null }
+                            if ($null -ne $reason -and -not $reasons.Contains($control + ': ' + $reason)) { $reasons.Add($control + ': ' + $reason) | Out-Null }
+                        }
+                    } catch {
+                        if (-not $problems.Contains($_.Exception.Message)) { $problems.Add($_.Exception.Message) | Out-Null }
                     }
                     if ($reasons.Count -gt 0) {
                         $held.Add([pscustomobject]@{
@@ -396,9 +409,9 @@ function Repair-RooIndustriesInterruptedGameTuneSession {
                         }) | Out-Null
                     }
                 }
-                if ($held.Count -gt 0) {
-                    $Session | Add-Member -NotePropertyName skippedItems -NotePropertyValue @($held.ToArray()) -Force
-                    throw (Format-RooIndustriesGameTuneSkipText @($held.ToArray()))
+                if ($held.Count -gt 0 -or $problems.Count -gt 0) {
+                    if ($held.Count -gt 0) { $Session | Add-Member -NotePropertyName skippedItems -NotePropertyValue @($held.ToArray()) -Force }
+                    throw ((@((Format-RooIndustriesGameTuneSkipText @($held.ToArray()))) + @($problems.ToArray()) | Where-Object { $_ }) -join ' ')
                 }
                 $restore = & (Join-Path $PSScriptRoot 'Stop-GameTuneSession.ps1') -SessionPath $SessionPath -ConfirmApply | ConvertFrom-Json
                 $Session = Read-RooIndustriesJsonFile $SessionPath
