@@ -27,9 +27,9 @@ try{
  if($LASTEXITCODE -ne 0){throw 'Protected-session validation failed'}
 }finally{
  if($server){
-  if(-not $server.Running -and (Get-Service LanmanServer).Status -ne 'Stopped'){Stop-Service LanmanServer -Force}
   $type=if($server.Start -eq 2 -and $server.Delayed -eq 1){'delayed-auto'}else{$startNames[$server.Start]}
   & sc.exe config LanmanServer start= $type|Out-Null
+  if(-not $server.Running -and (Get-Service LanmanServer).Status -ne 'Stopped'){Stop-Service LanmanServer -Force}
   $after=Get-ItemProperty -LiteralPath $key
   $afterDelayed=[int]$(if($null -ne $after.DelayedAutostart){$after.DelayedAutostart}else{0})
   if([int]$after.Start -ne $server.Start -or ($server.Start -eq 2 -and $afterDelayed -ne $server.Delayed) -or ((Get-Service LanmanServer).Status -eq 'Running') -ne $server.Running){throw 'File sharing was not put back to its start type and state.'}
