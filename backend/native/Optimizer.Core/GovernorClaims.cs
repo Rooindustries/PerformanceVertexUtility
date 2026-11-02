@@ -359,7 +359,8 @@ internal static class GovernorClaims
         var checks = new Dictionary<string, Check>(StringComparer.Ordinal);
         if (Child(snapshot, "controlChanges") is { ValueKind: JsonValueKind.Array or JsonValueKind.Object })
         {
-            foreach (var change in Items(snapshot, "controlChanges").Where(change => Child(change, "blocked")?.ValueKind != JsonValueKind.True))
+            // A control Background limits already put back no longer belongs to it.
+            foreach (var change in Items(snapshot, "controlChanges").Where(change => Child(change, "blocked")?.ValueKind != JsonValueKind.True && Present(Child(change, "restoredAtUtc")) is null))
                 if (Field(Text(change, "control")) is { } field) checks[field] = new(field, Original(snapshot, field), Present(Child(change, "proposedValue")) ?? Applied(snapshot, field));
         }
         else

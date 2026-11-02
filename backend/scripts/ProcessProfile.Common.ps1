@@ -1541,6 +1541,38 @@ function Format-RooIndustriesLeftAsSetText {
     return ' Left as another program set it: ' + ($names -join ', ') + '.'
 }
 
+# Writes one process control. Restoring allows the original values the restore allow-lists accept.
+function Set-RooIndustriesProcessControlValue {
+    param([System.Diagnostics.Process]$Process, [string]$Control, [object]$Value, [switch]$Restoring)
+    switch ($Control) {
+        'priorityClass' {
+            $priority = [string]$Value
+            if (-not (Test-RooIndustriesPriorityAllowed $priority -Restoring:$Restoring)) { throw "Priority class '$priority' is outside the allow-list." }
+            $Process.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::$priority
+        }
+        'affinityMask' {
+            if (-not (Test-RooIndustriesAffinityMaskAllowed $Value)) { throw "Affinity mask '$Value' is invalid." }
+            $Process.ProcessorAffinity = [IntPtr]([int64]$Value)
+        }
+        'ioPriority' {
+            $priority = [string]$Value
+            if (-not (Test-RooIndustriesIoPriorityAllowed $priority -Restoring:$Restoring)) { throw "I/O priority '$priority' is outside the allow-list." }
+            Set-RooIndustriesProcessIoPriority $Process $priority -Restoring:$Restoring
+        }
+        'gpuPriority' {
+            $priority = [string]$Value
+            if (-not (Test-RooIndustriesGpuPriorityAllowed $priority)) { throw "GPU priority '$priority' is outside the allow-list." }
+            Set-RooIndustriesProcessGpuPriority $Process $priority
+        }
+        'memoryPriority' {
+            Set-RooIndustriesProcessMemoryPriority $Process $Value
+        }
+        default {
+            throw "Unsupported process control '$Control'."
+        }
+    }
+}
+
 function Invoke-RooIndustriesProcessControlChange {
     param(
         [System.Diagnostics.Process]$Process,
@@ -1557,33 +1589,8 @@ function Invoke-RooIndustriesProcessControlChange {
             $directionReason = Get-RooIndustriesPriorityDirectionReason $Change (Get-RooIndustriesProcessControlReadback $Process $control)
             if ($directionReason) { throw $directionReason }
         }
-        switch ($control) {
-            'priorityClass' {
-                $priority = [string]$value
-                if (-not (Test-RooIndustriesPriorityAllowed $priority -Restoring:($action -eq 'restorePriority'))) { throw "Priority class '$priority' is outside the allow-list." }
-                $Process.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::$priority
-            }
-            'affinityMask' {
-                if (-not (Test-RooIndustriesAffinityMaskAllowed $value)) { throw "Affinity mask '$value' is invalid." }
-                $Process.ProcessorAffinity = [IntPtr]([int64]$value)
-            }
-            'ioPriority' {
-                $priority = [string]$value
-                if (-not (Test-RooIndustriesIoPriorityAllowed $priority -Restoring:($action -eq 'restoreIoPriority'))) { throw "I/O priority '$priority' is outside the allow-list." }
-                Set-RooIndustriesProcessIoPriority $Process $priority -Restoring:($action -eq 'restoreIoPriority')
-            }
-            'gpuPriority' {
-                $priority = [string]$value
-                if (-not (Test-RooIndustriesGpuPriorityAllowed $priority)) { throw "GPU priority '$priority' is outside the allow-list." }
-                Set-RooIndustriesProcessGpuPriority $Process $priority
-            }
-            'memoryPriority' {
-                Set-RooIndustriesProcessMemoryPriority $Process $value
-            }
-            default {
-                throw "Unsupported process control '$control'."
-            }
-        }
+        $restoring = ($control -eq 'priorityClass' -and $action -eq 'restorePriority') -or ($control -eq 'ioPriority' -and $action -eq 'restoreIoPriority')
+        Set-RooIndustriesProcessControlValue $Process $control $value -Restoring:$restoring
         $actual = Get-RooIndustriesProcessControlReadback $Process $control
         if (-not (Test-RooIndustriesControlValueEqual $control $actual $value)) { throw "Windows kept a different value for $control (requested $value, read back $actual)." }
         $Change.outcome = 'applied'
