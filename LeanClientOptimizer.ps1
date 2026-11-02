@@ -641,8 +641,8 @@ function Get-ModuleById {
 
 function Read-PolicyEditions {
     try { $limits = Get-Content -LiteralPath $PolicyEditionsPath -Raw -ErrorAction Stop | ConvertFrom-Json } catch { throw "Cannot read the Windows edition limits in $PolicyEditionsPath`: $($_.Exception.Message) Nothing was changed." }
-    $policies = if ($limits -is [System.Management.Automation.PSCustomObject] -and $limits.PSObject.Properties['policies']) { $limits.policies } else { $null }
-    if ($policies -isnot [array] -or $policies.Count -eq 0) { throw "The Windows edition limits in $PolicyEditionsPath have no policies list. Nothing was changed." }
+    $policies = if ($limits -is [System.Management.Automation.PSCustomObject] -and $limits.PSObject.Properties['policies'] -and $limits.policies -is [array]) { ,$limits.policies } else { $null }
+    if ($null -eq $policies -or $policies.Count -eq 0) { throw "The Windows edition limits in $PolicyEditionsPath have no policies list. Nothing was changed." }
     $number = 1
     foreach ($policy in $policies) {
         $valid = $policy -is [System.Management.Automation.PSCustomObject] -and $policy.hive -is [string] -and $policy.hive -in 'LocalMachine','CurrentUser','Users','ClassesRoot'

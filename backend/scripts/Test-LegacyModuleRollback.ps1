@@ -2819,23 +2819,24 @@ public static class RooIndustriesLegacyFixtureRaw {
         $realEditions=$PolicyEditionsPath
         $brokenEditions=Join-Path $tempRoot 'broken-editions.json'
         $entry='"hive":"LocalMachine","keyPath":"SOFTWARE\\Policies\\Microsoft\\Windows\\CloudContent","valueName":"DisableSoftLanding"'
+        $good='{'+$entry+',"editions":["Enterprise*"]}'
         foreach ($case in @(
-            @{name='a missing file';json=$null},@{name='an empty file';json=''},@{name='null';json='null'},@{name='{}';json='{}'},
-            @{name='a misspelled policies key';json='{"polices":[{'+$entry+',"editions":["Enterprise*"]}]}'},
-            @{name='{"policies":null}';json='{"policies":null}'},@{name='{"policies":{}}';json='{"policies":{}}'},@{name='{"policies":[]}';json='{"policies":[]}'},
-            @{name='an entry that is not an object';json='{"policies":["DisableSoftLanding"]}'},
-            @{name='an entry without editions';json='{"policies":[{'+$entry+'}]}'},
-            @{name='an entry with a misspelled editions key';json='{"policies":[{'+$entry+',"edition":["Enterprise*"]}]}'},
-            @{name='an empty editions list';json='{"policies":[{'+$entry+',"editions":[]}]}'},
-            @{name='editions as one text';json='{"policies":[{'+$entry+',"editions":"Enterprise*"}]}'},
-            @{name='an edition that is not text';json='{"policies":[{'+$entry+',"editions":["Enterprise*",1]}]}'},
-            @{name='a misspelled hive key';json='{"policies":[{"hiv":"LocalMachine","keyPath":"SOFTWARE\\Policies\\Microsoft\\Windows\\CloudContent","valueName":"DisableSoftLanding","editions":["Enterprise*"]}]}'},
-            @{name='an unknown hive';json='{"policies":[{"hive":"LocalMachin","keyPath":"SOFTWARE\\Policies\\Microsoft\\Windows\\CloudContent","valueName":"DisableSoftLanding","editions":["Enterprise*"]}]}'},
-            @{name='a missing keyPath';json='{"policies":[{"hive":"LocalMachine","valueName":"DisableSoftLanding","editions":["Enterprise*"]}]}'},
-            @{name='a missing valueName';json='{"policies":[{"hive":"LocalMachine","keyPath":"SOFTWARE\\Policies\\Microsoft\\Windows\\CloudContent","editions":["Enterprise*"]}]}'},
-            @{name='minimumBuild as text';json='{"policies":[{'+$entry+',"editions":["Enterprise*"],"minimumBuild":"14393"}]}'},
-            @{name='a fractional minimumBuild';json='{"policies":[{'+$entry+',"editions":["Enterprise*"],"minimumBuild":14393.5}]}'},
-            @{name='dword as text';json='{"policies":[{'+$entry+',"editions":["Enterprise*"],"dword":"1"}]}'}
+            @{name='a missing file';json=$null;reason='Cannot read'},@{name='an empty file';json='';reason='no policies list'},@{name='null';json='null';reason='no policies list'},@{name='{}';json='{}';reason='no policies list'},
+            @{name='a misspelled policies key';json='{"polices":['+$good+']}';reason='no policies list'},
+            @{name='{"policies":null}';json='{"policies":null}';reason='no policies list'},@{name='{"policies":{}}';json='{"policies":{}}';reason='no policies list'},@{name='{"policies":[]}';json='{"policies":[]}';reason='no policies list'},
+            @{name='an entry that is not an object';json='{"policies":['+$good+',"DisableSoftLanding"]}';reason='Policy 2'},
+            @{name='an entry without editions';json='{"policies":['+$good+',{'+$entry+'}]}';reason='Policy 2'},
+            @{name='an entry with a misspelled editions key';json='{"policies":['+$good+',{'+$entry+',"edition":["Enterprise*"]}]}';reason='Policy 2'},
+            @{name='an empty editions list';json='{"policies":['+$good+',{'+$entry+',"editions":[]}]}';reason='Policy 2'},
+            @{name='editions as one text';json='{"policies":['+$good+',{'+$entry+',"editions":"Enterprise*"}]}';reason='Policy 2'},
+            @{name='an edition that is not text';json='{"policies":['+$good+',{'+$entry+',"editions":["Enterprise*",1]}]}';reason='Policy 2'},
+            @{name='a misspelled hive key';json='{"policies":['+$good+',{"hiv":"LocalMachine","keyPath":"SOFTWARE\\Policies\\Microsoft\\Windows\\CloudContent","valueName":"DisableSoftLanding","editions":["Enterprise*"]}]}';reason='Policy 2'},
+            @{name='an unknown hive';json='{"policies":['+$good+',{"hive":"LocalMachin","keyPath":"SOFTWARE\\Policies\\Microsoft\\Windows\\CloudContent","valueName":"DisableSoftLanding","editions":["Enterprise*"]}]}';reason='Policy 2'},
+            @{name='a missing keyPath';json='{"policies":['+$good+',{"hive":"LocalMachine","valueName":"DisableSoftLanding","editions":["Enterprise*"]}]}';reason='Policy 2'},
+            @{name='a missing valueName';json='{"policies":['+$good+',{"hive":"LocalMachine","keyPath":"SOFTWARE\\Policies\\Microsoft\\Windows\\CloudContent","editions":["Enterprise*"]}]}';reason='Policy 2'},
+            @{name='minimumBuild as text';json='{"policies":['+$good+',{'+$entry+',"editions":["Enterprise*"],"minimumBuild":"14393"}]}';reason='Policy 2'},
+            @{name='a fractional minimumBuild';json='{"policies":['+$good+',{'+$entry+',"editions":["Enterprise*"],"minimumBuild":14393.5}]}';reason='Policy 2'},
+            @{name='dword as text';json='{"policies":['+$good+',{'+$entry+',"editions":["Enterprise*"],"dword":"1"}]}';reason='Policy 2'}
         )) {
             $DataRoot=Reset-EditionFixture 'Professional'
             $PolicyEditionsPath=$realEditions
@@ -2846,9 +2847,15 @@ public static class RooIndustriesLegacyFixtureRaw {
             foreach ($ConfirmApply in $false,$true) {
                 $message=$null
                 try { Invoke-ApplyModule|Out-Null } catch { $message=$_.Exception.Message }
-                Assert ($null -ne $message -and $message.Contains('Windows edition limits') -and $message.EndsWith('Nothing was changed.') -and $script:editionWrites.Count -eq 0 -and @(Get-ChildItem -LiteralPath $DataRoot -Recurse -File).Count -eq $files) ($(if ($ConfirmApply) {'A confirmed apply'} else {'A preview'})+' with '+$case.name+' as the edition limits is refused before anything is written')
+                Assert ($null -ne $message -and $message.Contains('Windows edition limits') -and $message.Contains($case.reason) -and $message.EndsWith('Nothing was changed.') -and $script:editionWrites.Count -eq 0 -and @(Get-ChildItem -LiteralPath $DataRoot -Recurse -File).Count -eq $files) ($(if ($ConfirmApply) {'A confirmed apply'} else {'A preview'})+' with '+$case.name+' as the edition limits is refused before anything is written')
             }
         }
+        $DataRoot=Reset-EditionFixture 'Professional'
+        [IO.File]::WriteAllText($brokenEditions,'{"policies":['+$good+']}');$PolicyEditionsPath=$brokenEditions
+        $ConfirmApply=$false
+        $oneResult=$null;$oneError=$null
+        try { $oneResult=Invoke-ApplyModule } catch { $oneError=$_.Exception.Message }
+        Assert ($null -eq $oneError -and (Get-Skipped $oneResult.plan) -ceq 'DisableSoftLanding') ('A valid edition limits file with one policy previews and skips that policy on Pro, saw: '+$oneError)
         $PolicyEditionsPath=$realEditions
 
         $ConfirmApply=$false
