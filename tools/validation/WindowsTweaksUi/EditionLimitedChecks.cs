@@ -173,6 +173,18 @@ static class EditionLimitedChecks
             check(enterprise.Rows.Single(item => item.Id == tips.Id) is { UnavailableHere: false, Current: "No override" } enterpriseRow && enterpriseRow.Action.Id == tipsPolicy,
                 "Enterprise ignores this user's Settings switches, which only Home and Pro use, and reads No override with the policy choice ready");
         }
+        {
+            var folder = Path.Combine(root, "edition-tips-Enterprise-damaged");
+            var damaged = new Fixture(folder, subset with { Settings = [.. subset.Settings, .. owners] }, 26100, "Enterprise") { Missing = false };
+            SeedSwitches(folder, 1);
+            var state = OperationFiles.Read<TweakFixture>(Path.Combine(folder, "windows.json"));
+            var target = personalAddresses.Single(address => address.ValueName == "SoftLandingEnabled");
+            state.Keys[(@"\REGISTRY\USER\" + state.Context.Owner.UserSid + @"\" + target.KeyPath).ToUpperInvariant()].Values[target.ValueName!.ToUpperInvariant()] = new(target.ValueName!, 4, [1, 0, 0]);
+            OperationFiles.Write(Path.Combine(folder, "windows.json"), state);
+            var enterprise = await Load(damaged); enterprise.ShowAdvanced = true;
+            check(enterprise.Rows.Single(item => item.Id == tips.Id) is { CouldNotCheck: false, CanRetry: false, UnavailableHere: false, Current: "No override" } row && row.Action.Id == tipsPolicy,
+                "A damaged per-user tips switch, which Enterprise doesn't use, doesn't make the policy row Couldn't check on Enterprise");
+        }
         foreach (var edition in new[] { "Core", "Professional" })
         {
             var folder = Path.Combine(root, "edition-tips-off-" + edition);

@@ -222,6 +222,14 @@ static class DocumentedEditionChecks
                 Apply(engine, engine.Preview("personal", []));
                 check(addresses.All(address => Dword(upgraded, address) == 1) && upgraded.ReadState()!.Profiles.Length == 0, name + ": Undo after an upgrade to Enterprise restores the exact switches");
             }
+            foreach (var (edition, used) in new[] { ("Enterprise", false), ("Professional", true) })
+            {
+                var path = Path.Combine(root, "personal-" + index + "-malformed-" + edition + ".json"); FileTweakStore.Create(path, 26100, edition);
+                Put(path, addresses[^1], new(addresses[^1].ValueName!, 4, [1, 0, 0]));
+                var status = new TweakEngine(subset, new FileTweakStore(path)).Detect().Settings.Single();
+                check(used ? status.Error is not null : status.Error is null && status.Supported && status.AvailableChoices!.Contains(policy.Id),
+                    name + (used ? ": a damaged per-user switch is reported where the row uses it, on " : ": a damaged per-user switch, which this edition doesn't use, doesn't stop the row reading on ") + edition + ": " + status.Error);
+            }
             foreach (var address in addresses)
             {
                 var row = catalog.Settings.Single(setting => setting.Id != definition.Id && setting.Options.Any(option => option.Changes is [{ Address: var other }] && other.Hive == "CurrentUser" &&
