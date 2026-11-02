@@ -1160,6 +1160,8 @@ $script:RooIndustriesProcessOperationManaged = 'Another saved change still uses 
 $script:RooIndustriesUnprovenWrite = 'Undo couldn''t confirm it set this value, so it was left alone. It resets when that app restarts.'
 $script:RooIndustriesGovernorBusy = 'Background limits were busy, so this setting was left alone. Try again in a moment.'
 $script:RooIndustriesRecoveryLeftForeign = 'Another program changed it, so recovery left it alone and kept the backup. Restore keeps that program''s value and finishes.'
+$script:RooIndustriesRecoveryUnreadable = 'Windows couldn''t read it, so recovery left it alone and kept the backup. Restore stays available; try it again later.'
+$script:RooIndustriesRestoreGovernorManaged = 'A Governor rule controls it. Turn that rule off on the Processes tab, then Restore again.'
 
 function Get-RooIndustriesRestoreControlOwnershipReason {
     param([System.Diagnostics.Process]$Process, [string]$Control, [switch]$ForPreview)

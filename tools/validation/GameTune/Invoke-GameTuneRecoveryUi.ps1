@@ -1,4 +1,4 @@
-param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutRoot,[Parameter(Mandatory)][string]$AppExe)
+param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutRoot,[Parameter(Mandatory)][string]$AppExe,[ValidateSet('Held','Governor')][string]$Scenario='Held')
 $ErrorActionPreference='Stop'
 if(-not$env:DOTNET_ROOT -and [IO.Directory]::Exists((Join-Path $env:USERPROFILE '.dotnet'))){$env:DOTNET_ROOT=Join-Path $env:USERPROFILE '.dotnet';$env:DOTNET_ROOT_X64=$env:DOTNET_ROOT}
 . (Join-Path $Source 'tools\validation\LoadTimes\CleanupOwnership.Common.ps1')
@@ -19,7 +19,8 @@ $A=[Windows.Automation.AutomationElement];$TS=[Windows.Automation.TreeScope];$CT
 $scripts=Join-Path $Source 'backend\scripts'
 $stateRoot=Join-Path $Source 'backend\state'
 $sessions=Join-Path $stateRoot 'game-tune-sessions'
-$expected="cs2.exe (CPU priority): Restore couldn't confirm it set this value, so it was left alone. It resets when that app restarts; then Restore again."
+$expected=if($Scenario -eq 'Governor'){"cs2.exe (CPU priority): A Governor rule controls it. Turn that rule off on the Processes tab, then Restore again."}else{"cs2.exe (CPU priority): Restore couldn't confirm it set this value, so it was left alone. It resets when that app restarts; then Restore again."}
+$kept=if($Scenario -eq 'Governor'){'AboveNormal'}else{'High'}
 $owned=[Collections.Generic.List[object]]::new();$app=$null;$receipt=$null;$window=$null;$ownsState=$false;$backendRoot=$env:ROO_INDUSTRIES_BACKEND_ROOT
 function Save([string]$name,$value){[IO.File]::WriteAllText((Join-Path $OutRoot $name),($value|ConvertTo-Json -Depth 20),$utf8)}
 function WaitFor([scriptblock]$probe,[double]$seconds,[string]$what){$deadline=[DateTime]::UtcNow.AddSeconds($seconds);while([DateTime]::UtcNow -lt $deadline){try{$v=&$probe}catch{$v=$null};if($v){return $v};Start-Sleep -Milliseconds 100};throw ('Timed out: '+$what)}
@@ -40,21 +41,29 @@ try {
  $exe=Join-Path $probeDir 'cs2.exe';Copy-Item "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" $exe
  $game=Start-Process $exe -ArgumentList '-NoProfile','-WindowStyle','Hidden','-Command','Start-Sleep -Seconds 900' -WindowStyle Hidden -PassThru;$owned.Add((New-OwnedProcess $game))
  Start-Sleep -Milliseconds 800;$game.PriorityClass='Normal'
- $profile=Join-Path $OutRoot 'profile.json';$reviewPath=Join-Path $OutRoot 'review.json'
- Write-RooIndustriesOperationJson ([pscustomobject]@{schemaVersion=1;profileId='recovery-ui-probe';name='Recovery UI probe';profileKind='process-controls';foregroundGame=@{ruleId='recovery-ui-game';processNames=@('cs2.exe');priorityClass='AboveNormal';reason='Disposable recovery probe.'};protectedCatalogPath=(Join-Path $Source 'backend\profiles\protected-processes.json');targetGames=@();rules=@();safeCandidates=@();protectedCompanions=@();protectedPreviewProcessNames=@()}) $profile
- $review=& (Join-Path $scripts 'Start-GameTuneSession.ps1') -ProfilePath $profile -PollIntervalSeconds 1 -MaxDurationSeconds 1|ConvertFrom-Json
+ $profilePath=Join-Path $OutRoot 'profile.json';$reviewPath=Join-Path $OutRoot 'review.json'
+ Write-RooIndustriesOperationJson ([pscustomobject]@{schemaVersion=1;profileId='recovery-ui-probe';name='Recovery UI probe';profileKind='process-controls';foregroundGame=@{ruleId='recovery-ui-game';processNames=@('cs2.exe');priorityClass='AboveNormal';reason='Disposable recovery probe.'};protectedCatalogPath=(Join-Path $Source 'backend\profiles\protected-processes.json');targetGames=@();rules=@();safeCandidates=@();protectedCompanions=@();protectedPreviewProcessNames=@()}) $profilePath
+ $review=& (Join-Path $scripts 'Start-GameTuneSession.ps1') -ProfilePath $profilePath -PollIntervalSeconds 1 -MaxDurationSeconds 1|ConvertFrom-Json
  if($null -eq $review.review){throw 'The disposable profile produced no review'}
  Write-RooIndustriesOperationJson $review.review $reviewPath
- $command="& '$($scripts.Replace("'","''"))\Start-GameTuneSession.ps1' -ProfilePath '$($profile.Replace("'","''"))' -PollIntervalSeconds 1 -MaxDurationSeconds 600 -ReviewPath '$($reviewPath.Replace("'","''"))' -ReviewSha256 '$((Get-FileHash $reviewPath).Hash)' -ConfirmApply"
+ $command="& '$($scripts.Replace("'","''"))\Start-GameTuneSession.ps1' -ProfilePath '$($profilePath.Replace("'","''"))' -PollIntervalSeconds 1 -MaxDurationSeconds 600 -ReviewPath '$($reviewPath.Replace("'","''"))' -ReviewSha256 '$((Get-FileHash $reviewPath).Hash)' -ConfirmApply"
  $controller=Start-Process "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -ArgumentList '-NoProfile','-EncodedCommand',([Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))) -WindowStyle Hidden -PassThru
  $controllerReceipt=New-OwnedProcess $controller;$owned.Add($controllerReceipt)
  $sessionPath=WaitFor {$path=Get-RooIndustriesGameTuneLatestSessionFile $sessions;if($path -and (Priority $game) -eq 'AboveNormal'){$path}} 60 'tuned session'
  $backupPath=WaitFor {$b=[string](Read-RooIndustriesJsonFile $sessionPath).backupManifestPath;if($b -and (Test-Path -LiteralPath $b) -and @((Read-RooIndustriesJsonFile $b).snapshots|ForEach-Object {$_.controlChanges}|Where-Object outcome -eq 'applied').Count){$b}} 60 'saved backup'
  Stop-OwnedProcess $controllerReceipt
  $backup=Read-RooIndustriesJsonFile $backupPath
- foreach($change in @($backup.snapshots|ForEach-Object {$_.controlChanges})){$change.outcome='pending'}
- Write-RooIndustriesGameTuneJsonFile $backup $backupPath
- $game.PriorityClass='High'
+ if($Scenario -eq 'Governor'){
+  $snapshot=$backup.snapshots[0];$session=Read-RooIndustriesJsonFile $sessionPath
+  $item=[pscustomobject]@{processId=$snapshot.processId;processName=$snapshot.processName;reason='priorityClass: '+$script:RooIndustriesGovernorManaged;skippedAtUtc=Get-RooIndustriesUtcStamp}
+  $session.sessionStatus='failed';$session.status='failed';$session.completedAtUtc=Get-RooIndustriesUtcStamp;$session|Add-Member skippedItems @($item) -Force
+  $session.errors=@($session.errors)+@((New-RooIndustriesIssue 'GAME_TUNE_RECOVERY_NEEDS_ATTENTION' (Format-RooIndustriesGameTuneSkipText @($item)) 'error' 'performance.gameTune' $sessionPath $false 'Review the saved session before restoring.' $null))
+  Write-RooIndustriesGameTuneJsonFile $session $sessionPath
+ }else{
+  foreach($change in @($backup.snapshots|ForEach-Object {$_.controlChanges})){$change.outcome='pending'}
+  Write-RooIndustriesGameTuneJsonFile $backup $backupPath
+  $game.PriorityClass='High'
+ }
  $env:ROO_INDUSTRIES_BACKEND_ROOT=$Source
  $app=Start-Process $AppExe -PassThru;$receipt=New-OwnedProcess $app;Save 'owned-app.json' $receipt.Identity
  $window=WaitFor {$A::RootElement.FindFirst($TS::Children,[Windows.Automation.PropertyCondition]::new($A::ProcessIdProperty,$app.Id))} 120 'app window'
@@ -67,11 +76,11 @@ try {
  $card=WaitFor {$c=Card;if($c -and $c.status -notlike 'Checking*' -and $c.status -ne 'No active game priorities'){$c}} 120 'game card settled'
  $restore=Button 'Restore game priority';if($restore){try{$restore.GetCurrentPattern([Windows.Automation.ScrollItemPattern]::Pattern).ScrollIntoView()}catch{}}
  Start-Sleep -Seconds 2
- Shot '01-recovery'
+ Shot $Scenario.ToLowerInvariant()
  $card=Card;$session=Read-RooIndustriesJsonFile $sessionPath
- $named=$card.status -eq 'Needs attention' -and $card.detail -ceq $expected -and (Priority $game) -eq 'High' -and [bool]$session.restorable -and $session.sessionStatus -eq 'failed'
- Save 'result.json' @{machine=$env:COMPUTERNAME;card=$card;expected=$expected;gamePriority=(Priority $game);sessionStatus=$session.sessionStatus;restorable=$session.restorable;errors=@($session.errors|ForEach-Object {$_.message});skipped=@($session.skippedItems|ForEach-Object {$_.reason});named=$named}
- if(-not$named){throw ('The Game priority card did not name the held setting: '+$card.status+' / '+$card.detail)}
+ $named=$card.status -eq 'Needs attention' -and $card.detail -ceq $expected -and (Priority $game) -eq $kept -and [bool]$session.restorable -and $session.sessionStatus -eq 'failed'
+ Save 'result.json' @{machine=$env:COMPUTERNAME;scenario=$Scenario;card=$card;expected=$expected;gamePriority=(Priority $game);sessionStatus=$session.sessionStatus;restorable=$session.restorable;errors=@($session.errors|ForEach-Object {$_.message});skipped=@($session.skippedItems|ForEach-Object {$_.reason});named=$named}
+ if(-not$named){throw ('The Game priority card did not name the setting: '+$card.status+' / '+$card.detail)}
 } catch {
  Save 'failure.json' @{error=$_.Exception.Message;stack=$_.ScriptStackTrace}
  if($window){try{Shot 'failure'}catch{}}
@@ -81,5 +90,7 @@ try {
  foreach($o in $owned){Stop-OwnedProcess $o}
  $env:ROO_INDUSTRIES_BACKEND_ROOT=$backendRoot
  if($ownsState -and (Test-Path -LiteralPath $sessions)){Remove-Item -LiteralPath $sessions -Recurse -Force}
- Save 'cleanup.json' @{appStopped=if($app){$app.HasExited}else{$true};probesExited=@($owned|ForEach-Object {$_.process.HasExited});stateEmpty=(@(Get-ChildItem -LiteralPath $stateRoot -Recurse -File -ErrorAction SilentlyContinue).Count -eq 0)}
+ $stateEmpty=@(Get-ChildItem -LiteralPath $stateRoot -Recurse -File -ErrorAction SilentlyContinue).Count -eq 0
+ Save 'cleanup.json' @{appStopped=if($app){$app.HasExited}else{$true};probesExited=@($owned|ForEach-Object {$_.process.HasExited});stateEmpty=$stateEmpty}
 }
+if(-not$stateEmpty){throw 'The app left files in its backend state after the check'}
