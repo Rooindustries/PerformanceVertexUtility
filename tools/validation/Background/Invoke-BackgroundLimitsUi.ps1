@@ -134,6 +134,8 @@ try{
 }catch{
  Save 'failure.json' @{error=$_.Exception.Message;stack=$_.ScriptStackTrace}
  if($window){try{Capture (Join-Path $directory 'failure.png')}catch{}}
+ # The runs' saved files show what Restore decided; keep a copy before the app's state is cleared.
+ if($stateChecked -and [IO.Directory]::Exists($state)){try{Copy-Item -LiteralPath $state -Destination (Join-Path $directory 'state-at-failure') -Recurse}catch{}}
  throw
 }finally{
  try{if($app){Stop-OwnedValidationApp $app $receipt}}

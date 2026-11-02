@@ -42,6 +42,10 @@ try {
     $probe.Refresh()
     Assert (@($fallback.preview).Count -eq 1 -and @($fallback.restoredItems).Count -eq 0 -and $probe.PriorityClass -eq 'High' -and $probe.ProcessorAffinity.ToInt64() -eq $lowBit) 'PowerShell governor restore also preserves external and unowned controls'
     $probe.PriorityClass='BelowNormal'
+    $kept=Read-Result (& (Join-Path $PSScriptRoot 'Stop-ProcessGovernorSession.ps1') -BackupPath $backup -StateRoot $stateRoot -ConfirmApply)
+    $probe.Refresh()
+    Assert (@($kept.restoredItems).Count -eq 0 -and $probe.PriorityClass -eq 'BelowNormal') 'PowerShell governor restore never takes back a priority it left as another program set it, even at the lowered value'
+    @{actionId='performance.governor.startSession';dryRun=$false;sessionId='native-restore-ownership';profileId='native-restore-ownership';snapshots=@($snapshot)}|ConvertTo-Json -Depth 12|Set-Content $backup -Encoding UTF8
     $fallback=Read-Result (& (Join-Path $PSScriptRoot 'Stop-ProcessGovernorSession.ps1') -BackupPath $backup -StateRoot $stateRoot -ConfirmApply)
     $probe.Refresh()
     Assert ($fallback.status -eq 'completed' -and @($fallback.restoredItems).Count -eq 1 -and $probe.PriorityClass -eq 'Normal' -and $probe.ProcessorAffinity.ToInt64() -eq $lowBit) 'PowerShell governor restores its recorded priority without overwriting unrelated affinity'

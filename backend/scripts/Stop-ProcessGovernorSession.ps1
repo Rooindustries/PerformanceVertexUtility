@@ -22,25 +22,11 @@ function New-GovernorAlreadyClosedItem {
     }
 }
 
-# A control another program changed is left as that program set it, and from then on it is no longer
-# this run's: its ownership is saved as closed before Restore moves on.
-function Get-GovernorKeptControl {
-    param([object]$Entry,[System.Diagnostics.Process]$Process,[string]$Control,[object]$Applied,[object]$Original,[object]$Snapshot,[object]$Backup,[string]$BackupPath)
-    try { $now = Get-RooIndustriesProcessControlReadback $Process $Control } catch { return $null }
-    if ([string]::IsNullOrWhiteSpace([string]$now) -or (Test-RooIndustriesControlValueEqual $Control $now $Applied)) { return $null }
-    $newer = Get-RooIndustriesProcessGovernorNewerRunReason $script:GovernorSessionDirectory $Entry $Control
-    if (-not [string]::IsNullOrWhiteSpace($newer)) { return $newer }
-    $owner = Get-RooIndustriesRestoreControlOwnershipReason $Process $Control
-    if (-not [string]::IsNullOrWhiteSpace($owner)) { return $owner }
-    Close-RooIndustriesGovernorControlOwnership $Snapshot @($Control)
-    Write-RooIndustriesProcessGovernorJsonFile $Backup $BackupPath
-    return New-RooIndustriesLeftAsSetItem $Entry ([pscustomobject]@{ control = $Control; currentValue = $now; appliedValue = $Applied; originalValue = $Original })
-}
-
 function New-GovernorRestorePreview {
     param(
         [object]$Snapshot,
-        [object]$Candidate
+        [object]$Candidate,
+        [object[]]$NewerRuns
     )
     $processId = [int](Get-RooIndustriesPropertyValue $Snapshot 'processId' 0)
     $processName = [string](Get-RooIndustriesPropertyValue $Snapshot 'processName' '')
@@ -63,7 +49,7 @@ function New-GovernorRestorePreview {
     } else {
         $Candidate.currentControlState
     }
-    $selectedChanges = if ($blocked) { @() } else { @(Get-RooIndustriesGovernorRestoreChanges $Snapshot $currentState) }
+    $selectedChanges = if ($blocked) { @() } else { @(Get-RooIndustriesGovernorRestoreChanges $Snapshot $currentState $NewerRuns) }
     $controlChanges = @($selectedChanges)
     if (-not $blocked) {
         $held = @($controlChanges | Where-Object { $_.blocked })
@@ -177,14 +163,14 @@ try {
             if ([string]::IsNullOrWhiteSpace($resolvedSessionPath) -or -not (Test-Path -LiteralPath $resolvedSessionPath)) {
                 throw 'The selected process governor session file was not found.'
             }
-            $session = Read-RooIndustriesProcessGovernorJson $resolvedSessionPath
+            $session = Read-RooIndustriesProcessGovernorSession $resolvedSessionPath
         }
         if ([string]::IsNullOrWhiteSpace($BackupPath)) {
             if ($null -eq $session) {
                 $resolvedSessionPath = Resolve-RooIndustriesProcessGovernorSessionFile $SessionId $SessionPath $StateRoot
             }
             if ($resolvedSessionPath -and (Test-Path -LiteralPath $resolvedSessionPath)) {
-                if ($null -eq $session) { $session = Read-RooIndustriesProcessGovernorJson $resolvedSessionPath }
+                if ($null -eq $session) { $session = Read-RooIndustriesProcessGovernorSession $resolvedSessionPath }
                 $BackupPath = [string](Get-RooIndustriesPropertyValue $session 'backupManifestPath' '')
             }
         }
@@ -192,7 +178,7 @@ try {
             throw 'No process governor backup path was provided or found for the selected session.'
         }
         $resolvedBackupPath = Resolve-RooIndustriesPath $BackupPath $BackupPath
-        $backup = Read-RooIndustriesProcessGovernorJson $resolvedBackupPath
+        $backup = Read-RooIndustriesProcessGovernorBackup $resolvedBackupPath
         $backupDryRun = Get-RooIndustriesPropertyValue $backup 'dryRun' $null
         if ([string](Get-RooIndustriesPropertyValue $backup 'actionId' '') -cne 'performance.governor.startSession' -or $backupDryRun -isnot [bool] -or $backupDryRun) {
             throw 'The process governor backup is not a confirmed backup for this session type.'
@@ -209,7 +195,7 @@ try {
             $candidateSessionPath = Resolve-RooIndustriesProcessGovernorSessionFile $sessionIdValue '' $StateRoot
             if ($candidateSessionPath -and (Test-Path -LiteralPath $candidateSessionPath)) {
                 $resolvedSessionPath = $candidateSessionPath
-                $session = Read-RooIndustriesProcessGovernorJson $resolvedSessionPath
+                $session = Read-RooIndustriesProcessGovernorSession $resolvedSessionPath
             }
         }
         if ($null -ne $session) {
@@ -225,36 +211,32 @@ try {
         }
         $startedAtUtc = Get-RooIndustriesUtcStamp
         $script:GovernorSessionDirectory = Split-Path $(if ($resolvedSessionPath) { $resolvedSessionPath } else { $resolvedBackupPath }) -Parent
-
-        $preview = New-Object System.Collections.Generic.List[object]
-        $previewSnapshots = New-Object System.Collections.Generic.List[object]
-        foreach ($snapshot in @(Get-RooIndustriesProcessGovernorLatestSnapshots $backup)) {
-            $preview.Add((New-GovernorRestorePreview $snapshot (Get-RooIndustriesProcessGovernorSnapshotIdentity $snapshot))) | Out-Null
-            $previewSnapshots.Add($snapshot) | Out-Null
-        }
+        $governorStateRoot = Split-Path $script:GovernorSessionDirectory -Parent
+        $sessionCreatedAtUtc = (Get-Item -LiteralPath $script:GovernorSessionDirectory).CreationTimeUtc
 
         $changed = New-Object System.Collections.Generic.List[object]
         $skipped = New-Object System.Collections.Generic.List[object]
         $alreadyClosed = New-Object System.Collections.Generic.List[object]
         $restored = New-Object System.Collections.Generic.List[object]
         $leftAsSet = New-Object System.Collections.Generic.List[object]
+        # Settings left alone that Restore can't act on until that app restarts or a newer run's files read again.
+        $pending = New-Object System.Collections.Generic.List[object]
+        $settledElsewhere = @()
+        if ($ConfirmApply) {
+            $settledElsewhere = @(Invoke-RooIndustriesProcessGovernorSettleRuns $governorStateRoot $resolvedBackupPath)
+        }
+        $newerRuns = @(Get-RooIndustriesProcessGovernorRestorableSessions $governorStateRoot $sessionCreatedAtUtc)
+
+        $preview = New-Object System.Collections.Generic.List[object]
+        $previewSnapshots = New-Object System.Collections.Generic.List[object]
+        foreach ($snapshot in @(Get-RooIndustriesProcessGovernorLatestSnapshots $backup)) {
+            $preview.Add((New-GovernorRestorePreview $snapshot (Get-RooIndustriesProcessGovernorSnapshotIdentity $snapshot) $newerRuns)) | Out-Null
+            $previewSnapshots.Add($snapshot) | Out-Null
+        }
+
         if ($ConfirmApply) {
             for ($index = 0; $index -lt $preview.Count; $index++) {
                 $entry = $preview[$index]
-                if ([bool](Get-RooIndustriesPropertyValue $entry 'blocked' $false)) {
-                    if (@(Get-RooIndustriesPropertyArray $entry 'reasonCodes') -contains 'PROCESS_GOVERNOR_ALREADY_CLOSED') {
-                        $alreadyClosed.Add((New-GovernorAlreadyClosedItem $entry)) | Out-Null
-                        continue
-                    }
-                    $skip = [pscustomobject]@{
-                        processId = Get-RooIndustriesPropertyValue $entry 'processId' 0
-                        processName = Get-RooIndustriesPropertyValue $entry 'processName' ''
-                        reason = Get-RooIndustriesPropertyValue $entry 'blockedReason' 'Restore entry is blocked.'
-                        skippedAtUtc = Get-RooIndustriesUtcStamp
-                    }
-                    $skipped.Add($skip) | Out-Null
-                    continue
-                }
                 $processId = [int](Get-RooIndustriesPropertyValue $entry 'processId' 0)
                 $identity = Get-RooIndustriesProcessGovernorLiveIdentity $entry
                 if (-not $identity.exists -or -not $identity.matches) {
@@ -272,48 +254,20 @@ try {
                 }
                 $live = $identity.process
                 $snapshot = $previewSnapshots[$index]
-                $entrySkipStart = $skipped.Count
                 $entryLeftStart = $leftAsSet.Count
-                if (Close-RooIndustriesGovernorSettledControls $snapshot (Get-RooIndustriesProcessControlState $processId $null -Process $live -ReadGpu:(Test-RooIndustriesEntryHasGpuControl $snapshot))) {
-                    Write-RooIndustriesProcessGovernorJsonFile $backup $resolvedBackupPath
-                }
-                foreach ($control in @(Get-RooIndustriesPreviewControlChanges $entry | Where-Object { $_.blocked })) {
-                    $reason = $control.blockedReason
-                    if (Test-RooIndustriesGovernorChangeLeftAsSet $control) {
-                        $kept = Get-GovernorKeptControl $entry $live ([string]$control.control) (Get-RooIndustriesPropertyValue $control 'appliedValue' $null) $control.proposedValue $snapshot $backup $resolvedBackupPath
-                        if ($kept -is [string]) { $reason = $kept }
-                        elseif ($null -ne $kept) { $leftAsSet.Add($kept) | Out-Null; continue }
-                    }
-                    $skipped.Add([pscustomobject]@{ processId = $processId; processName = $entry.processName; control = $control.control; reason = $reason; skippedAtUtc = Get-RooIndustriesUtcStamp }) | Out-Null
-                }
-                $entryControlChanges = @(Get-RooIndustriesGovernorApplicableControlChanges @(Get-RooIndustriesPreviewControlChanges $entry))
-                if ($entryControlChanges.Count -eq 0) { continue }
+                $entryPendingStart = $pending.Count
                 $appliedControls = New-Object System.Collections.Generic.List[object]
                 $failedControls = New-Object System.Collections.Generic.List[string]
-                foreach ($change in $entryControlChanges) {
-                    $name = [string](Get-RooIndustriesPropertyValue $change 'control' '')
-                    $newer = Get-RooIndustriesProcessGovernorNewerRunReason $script:GovernorSessionDirectory $entry $name
-                    if (-not [string]::IsNullOrWhiteSpace($newer)) {
-                        $failedControls.Add($name + ': ' + $newer) | Out-Null
-                        continue
-                    }
-                    $owner = Get-RooIndustriesRestoreControlOwnershipReason $live $name
-                    if (-not [string]::IsNullOrWhiteSpace($owner)) {
-                        $failedControls.Add($name + ': ' + $owner) | Out-Null
-                        continue
-                    }
-                    try {
-                        Invoke-RooIndustriesGovernorControlRestore $live $snapshot $change $backup $resolvedBackupPath
-                        $appliedControls.Add($change) | Out-Null
-                    } catch {
-                        $failure = $_.Exception.Message
-                        if ($failure -ceq $script:RooIndustriesChangedExternally) {
-                            $kept = Get-GovernorKeptControl $entry $live $name (Get-RooIndustriesPropertyValue $change 'currentValue' $null) $change.proposedValue $snapshot $backup $resolvedBackupPath
-                            if ($kept -is [string]) { $failure = $kept }
-                            elseif ($null -ne $kept) { $leftAsSet.Add($kept) | Out-Null; continue }
-                        }
-                        $failedControls.Add("$([string](Get-RooIndustriesPropertyValue $change 'control' 'unknown')): $failure") | Out-Null
-                        continue
+                # Each step reads the saved record and the live value again, so nothing previewed earlier writes.
+                foreach ($step in @(Invoke-RooIndustriesGovernorSnapshotSteps $backup $resolvedBackupPath $snapshot $live $newerRuns)) {
+                    if ($step.kind -eq 'restored') {
+                        $appliedControls.Add((New-RooIndustriesControlChange $step.control $step.currentValue $step.originalValue 'restore' 'Restored the original value.')) | Out-Null
+                    } elseif ($step.kind -eq 'release') {
+                        if ($step.because -eq 'leftAsSet') { $leftAsSet.Add((New-RooIndustriesGovernorKeptItem $snapshot $step)) | Out-Null }
+                    } elseif ($step.holds) {
+                        $failedControls.Add($step.control + ': ' + $step.reason) | Out-Null
+                    } else {
+                        $pending.Add([pscustomobject]@{ processId = $processId; processName = $entry.processName; control = $step.control; reason = $step.reason; skippedAtUtc = Get-RooIndustriesUtcStamp }) | Out-Null
                     }
                 }
                 if ($appliedControls.Count -gt 0) {
@@ -334,13 +288,13 @@ try {
                     $changed.Add($restoreItem) | Out-Null
                 }
                 $exitedDuringRestore = $false
-                if ($failedControls.Count -gt 0 -or $skipped.Count -gt $entrySkipStart) {
+                if ($failedControls.Count -gt 0 -or $pending.Count -gt $entryPendingStart) {
                     try { $exitedDuringRestore = $live.HasExited } catch { $exitedDuringRestore = $false }
                 }
                 if ($exitedDuringRestore) {
-                    while ($skipped.Count -gt $entrySkipStart) { $skipped.RemoveAt($skipped.Count - 1) }
+                    while ($pending.Count -gt $entryPendingStart) { $pending.RemoveAt($pending.Count - 1) }
                     while ($leftAsSet.Count -gt $entryLeftStart) { $leftAsSet.RemoveAt($leftAsSet.Count - 1) }
-                    if ($failedControls.Count -gt 0) { $alreadyClosed.Add((New-GovernorAlreadyClosedItem $entry)) | Out-Null }
+                    $alreadyClosed.Add((New-GovernorAlreadyClosedItem $entry)) | Out-Null
                     continue
                 }
                 if ($failedControls.Count -gt 0) {
@@ -378,15 +332,17 @@ try {
             'preview'
         }
         $sessionStatus = if ($status -eq 'partial') { 'completed' } else { $status }
+        # The run keeps its backup while any setting is still its own, even one Restore can't act on yet.
+        $keepsBackup = ($status -in @('partial', 'failed') -or $pending.Count -gt 0 -or $leftAsSet.Count -gt 0)
         $warnings = New-Object System.Collections.Generic.List[object]
         if (-not $ConfirmApply) {
             $warnings.Add((New-RooIndustriesIssue 'PROCESS_GOVERNOR_RESTORE_PREVIEW_ONLY' 'Governor restore preview did not change any process because -ConfirmApply was omitted.' 'info' 'performance.governor' $resolvedBackupPath $false 'Rerun with -ConfirmApply only after reviewing the restore preview.' $null)) | Out-Null
         }
         $closedText = if ($alreadyClosed.Count -gt 0) { ' Already closed or restarted, so nothing remained to restore: ' + (($alreadyClosed | ForEach-Object { $_.processName + ' (PID ' + $_.processId + ')' }) -join ', ') + '.' } else { '' }
-        $skippedOut = @($skipped.ToArray()) + @($alreadyClosed.ToArray())
-        $leftOut = @($leftAsSet.ToArray())
+        $skippedOut = @($skipped.ToArray()) + @($pending.ToArray()) + @($alreadyClosed.ToArray())
+        $leftOut = @($leftAsSet.ToArray()) + @($settledElsewhere)
         $summary = if ($ConfirmApply) {
-            "Process governor restore completed with $($restored.Count) restored item(s) and $($skipped.Count) skipped item(s)." + $closedText + (Format-RooIndustriesLeftAsSetText $leftOut)
+            "Process governor restore completed with $($restored.Count) restored item(s) and $($skipped.Count + $pending.Count) skipped item(s)." + $closedText + (Format-RooIndustriesLeftAsSetText $leftOut)
         } else {
             'Process governor restore preview completed. No process changes were applied.'
         }
@@ -417,7 +373,7 @@ try {
             completedAtUtc = Get-RooIndustriesUtcStamp
             sessionPath = $resolvedSessionPath
             backupManifestPath = $resolvedBackupPath
-            restorable = (-not $ConfirmApply -or $status -in @('partial', 'failed') -or $leftOut.Count -gt 0)
+            restorable = (-not $ConfirmApply -or $keepsBackup)
             preview = @($preview.ToArray())
             changedItems = @($changed.ToArray())
             skippedItems = $skippedOut
@@ -431,10 +387,10 @@ try {
         }
 
         if ($ConfirmApply -and $resolvedSessionPath -and (Test-Path -LiteralPath $resolvedSessionPath)) {
-            $session = Read-RooIndustriesProcessGovernorJson $resolvedSessionPath
+            $session = Read-RooIndustriesProcessGovernorSession $resolvedSessionPath
             $session.sessionStatus = $sessionStatus
             $session.status = $sessionStatus
-            $session.restorable = ($status -in @('partial', 'failed') -or $leftOut.Count -gt 0)
+            $session.restorable = $keepsBackup
             $session.activeRestraints = @()
             $session.restoredItems = @($restored.ToArray())
             $session.skippedItems = $skippedOut

@@ -21,7 +21,7 @@ try {
             $resolvedSessionPath = Get-RooIndustriesProcessGovernorLatestSessionFile $resolvedStateRoot
             $latestOnly = $true
             if ($resolvedSessionPath -and (Test-Path -LiteralPath $resolvedSessionPath)) {
-                try { $session = Read-RooIndustriesProcessGovernorJson $resolvedSessionPath } catch { $resolvedSessionPath = $null }
+                try { $session = Read-RooIndustriesProcessGovernorSession $resolvedSessionPath } catch { $resolvedSessionPath = $null }
             }
         }
     } else {
@@ -64,7 +64,7 @@ try {
         exit 0
     }
 
-    if ($null -eq $session) { $session = Read-RooIndustriesProcessGovernorJson $resolvedSessionPath }
+    if ($null -eq $session) { $session = Read-RooIndustriesProcessGovernorSession $resolvedSessionPath }
     $sessionDirectory = Split-Path $resolvedSessionPath -Parent
     $rawStatus = [string](Get-RooIndustriesPropertyValue $session 'sessionStatus' (Get-RooIndustriesPropertyValue $session 'status' 'completed'))
     $isRestorable = [bool](Get-RooIndustriesPropertyValue $session 'restorable' $false) -and -not $latestOnly
