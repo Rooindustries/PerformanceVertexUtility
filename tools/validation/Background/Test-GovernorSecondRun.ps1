@@ -132,13 +132,17 @@ try{
  $undo=Stop-Limits 'same-control-undo-older' $older
  Case (Test-Original 'LimitsFixtureD') 'Restoring the older run then returns the exact original controls'
 
- $older=Start-Limits 'order-older' $quickD 3 1;$newer=Start-Limits 'order-newer' $different 3 1
+ $older=Start-Limits 'order-older' $quickD 3 1;$loweredMemory=(Read-Probe 'LimitsFixtureD').memoryPriority;$newer=Start-Limits 'order-newer' $different 3 1
  $undo=Stop-Limits 'order-undo-older-first' $older
  Case ($undo.restorable -and (Read-Probe 'LimitsFixtureD').priorityClass -eq 'Idle' -and ($undo.skippedItems|ConvertTo-Json -Depth 10) -match 'A newer Background limits run still holds this setting') 'Restoring an older run first keeps it open while a newer run holds the same setting'
+ Case ($loweredMemory -ne 5 -and (Read-Probe 'LimitsFixtureD').memoryPriority -eq 5) 'That older Restore already puts back the memory priority no newer run holds'
+ [RooIndustriesBackgroundOracle]::SetMemory($probes['LimitsFixtureD'],$loweredMemory);Save 'order-memory-by-other-program' (Read-Probe 'LimitsFixtureD')
  $undo=Stop-Limits 'order-undo-newer' $newer
  Case ((Read-Probe 'LimitsFixtureD').priorityClass -eq 'BelowNormal') 'The newer run then returns the older run''s value'
- $undo=Stop-Limits 'order-undo-older' $older
- Case ((Test-Original 'LimitsFixtureD') -and -not$undo.restorable) 'The older run then returns the exact original and closes'
+ $undo=Stop-Limits 'order-undo-older' $older;$value=Read-Probe 'LimitsFixtureD'
+ Case ($value.priorityClass -eq 'Normal' -and $value.ioPriority -eq 2 -and -not$undo.restorable) 'The older run then returns the exact original and closes'
+ Case ($value.memoryPriority -eq $loweredMemory) 'A memory priority another program set after Restore put it back stays as that program set it, even at the lowered value'
+ Reset-Probe 'LimitsFixtureD'
 
  $older=Start-Limits 'covered-older' $quickD 3 1;$probes['LimitsFixtureD'].PriorityClass='High';$newer=Start-Limits 'covered-newer' $quickD 3 1
  $undo=Stop-Limits 'covered-undo-older-first' $older
@@ -222,10 +226,13 @@ try{
  if(-not$worker.WaitForExit(90000)){throw 'The kept-probe governor worker did not finish'}
  $keptResult=Get-Content -Raw $keptOutput|ConvertFrom-Json;$keptNow=Read-Probe $keptName
  Case ($keptResult.restorable -and $keptResult.status -eq 'completed' -and @($keptResult.activeRestraints).Count -eq 0 -and @($keptResult.result.leftAsSetItems).Count -eq 1 -and $keptResult.result.summary -match 'Left as another program set it: ' -and $keptNow.priorityClass -eq 'AboveNormal' -and $keptNow.ioPriority -eq 2 -and $keptNow.memoryPriority -eq 5) 'When the watch puts a calm app back, it keeps and names a value another program set, finishes normally and keeps the run''s backup'
+ [RooIndustriesBackgroundOracle]::SetIo($probes[$keptName],$keptLowered.ioPriority);Save 'kept-watch-io-by-other-program' (Read-Probe $keptName)
+ Case (-not (Get-Status 'kept-watch-io-status').restorable) 'An I/O priority the watch put back is not offered for Restore when another program later picks the lowered value'
  $probes[$keptName].PriorityClass=$keptLowered.priorityClass
  Case ((Get-Status 'kept-watch-status').sessionId -eq $keptResult.sessionId) 'When the lowered value comes back, status offers that run''s Restore again'
- $undo=Stop-Limits 'kept-watch-undo' $keptResult
- Case ((Test-Original $keptName) -and -not$undo.restorable) 'That Restore returns the exact original'
+ $undo=Stop-Limits 'kept-watch-undo' $keptResult;$keptNow=Read-Probe $keptName
+ Case ($keptNow.priorityClass -eq 'Normal' -and $keptNow.memoryPriority -eq 5 -and -not$undo.restorable) 'That Restore returns the exact original CPU priority'
+ Case ($keptNow.ioPriority -eq $keptLowered.ioPriority) 'That Restore leaves the I/O priority another program set after the watch put it back'
  Save 'done' @{passed=($failures.Count -eq 0);failures=@($failures)}
  if($failures.Count){throw ('Background limits second-run checks failed: '+($failures -join '; '))}
 } catch {Save 'failure' @{error=$_.Exception.ToString();stack=$_.ScriptStackTrace};throw}

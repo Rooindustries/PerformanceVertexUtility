@@ -25,7 +25,7 @@ $directory=Join-Path $OutRoot $Label
 if([IO.Directory]::Exists($directory)){throw 'Evidence directory exists; retained.'}
 $frames=Join-Path $directory 'frames';[IO.Directory]::CreateDirectory($frames)|Out-Null
 $utf8=[Text.UTF8Encoding]::new($false);$A=[Windows.Automation.AutomationElement];$TS=[Windows.Automation.TreeScope];$CT=[Windows.Automation.ControlType]
-$app=$null;$receipt=$null;$fixture=$null;$process=$null;$window=$null;$profilePath=$null;$profileBytes=$null;$frameCount=0;$clock=[Diagnostics.Stopwatch]::StartNew();$timeline=[Collections.Generic.List[object]]::new()
+$app=$null;$receipt=$null;$fixtures=@{};$processes=[ordered]@{};$stem=$null;$window=$null;$profilePath=$null;$profileBytes=$null;$frameCount=0;$clock=[Diagnostics.Stopwatch]::StartNew();$timeline=[Collections.Generic.List[object]]::new()
 function Save([string]$name,$value){[IO.File]::WriteAllText((Join-Path $directory $name),($value|ConvertTo-Json -Depth 30),$utf8)}
 function WaitFor([scriptblock]$probe,[double]$seconds,[string]$what){$deadline=[DateTime]::UtcNow.AddSeconds($seconds);while([DateTime]::UtcNow -lt $deadline){try{$v=&$probe}catch{$v=$null};if($v){return $v};Start-Sleep -Milliseconds 100};throw ('Timed out: '+$what)}
 function All{@($window.FindAll($TS::Descendants,[Windows.Automation.Condition]::TrueCondition))}
@@ -46,8 +46,10 @@ function Shot([string]$name){Save ($name+'-text.json') (Card);Capture (Join-Path
 function Frame{$path=Join-Path $frames ('{0:D4}.png' -f ($script:frameCount+1));try{Capture $path}catch{return};$script:frameCount++;$timeline.Add(@{frame=$script:frameCount;ms=$clock.ElapsedMilliseconds})|Out-Null}
 function Card{WaitFor {$texts=@(Texts);$index=[Array]::IndexOf($texts,'Background limits');if($index -ge 0 -and $texts.Count -ge $index+3){,@($texts[$index+1],$texts[$index+2])}} 15 'Background limits card'}
 function Idle{(Card)[0] -cnotin @('Watching background load','Restoring background limits','Running now')}
-function Read-Fixture{$process.Refresh();[ordered]@{priorityClass=[string]$process.PriorityClass;ioPriority=[RooIndustriesBackgroundOracle]::Io($process);memoryPriority=[RooIndustriesBackgroundOracle]::Memory($process)}}
+function Start-Fixture([string]$name){$p=Start-Process (Join-Path $directory ($stem+$name+'.exe')) -ArgumentList '-t 127.0.0.1' -WindowStyle Hidden -PassThru;$script:fixtures[$name]=New-OwnedProcess $p;$script:processes[$name]=$p;$p.PriorityClass='Normal';[RooIndustriesBackgroundOracle]::SetIo($p,2);[RooIndustriesBackgroundOracle]::SetMemory($p,5)}
+function Read-Fixture([string]$name){$p=$processes[$name];$p.Refresh();[ordered]@{priorityClass=[string]$p.PriorityClass;ioPriority=[RooIndustriesBackgroundOracle]::Io($p);memoryPriority=[RooIndustriesBackgroundOracle]::Memory($p)}}
 function Test-Original($value){$value.priorityClass -eq 'Normal' -and $value.ioPriority -eq 2 -and $value.memoryPriority -eq 5}
+function Test-Lowered($value){$value.priorityClass -eq 'BelowNormal' -and $value.ioPriority -ne 2 -and $value.memoryPriority -ne 5}
 function Run-Button([string]$name,[string]$shot){
  $button=WaitFor {$b=Button $name;if($b -and $b.Current.IsEnabled){$b}} 60 ($name+' enabled')
  for($i=0;$i -lt 8;$i++){Frame;Start-Sleep -Milliseconds 60}
@@ -67,13 +69,13 @@ try{
  if($exe.Count -ne 1){throw 'Expected exactly one built app in the app root.'}
  $state=Join-Path $AppRoot 'backend\state'
  if([IO.Directory]::Exists($state) -and @(Get-ChildItem -LiteralPath $state -Force).Count){throw 'The app root backend state is not empty; retained.'}
- $image=Join-Path $directory ('Pvu676Limits'+[Guid]::NewGuid().ToString('N').Substring(0,4)+'.exe');Copy-Item "$env:SystemRoot\System32\PING.EXE" $image
- $process=Start-Process $image -ArgumentList '-t 127.0.0.1' -WindowStyle Hidden -PassThru;$fixture=New-OwnedProcess $process
- $process.PriorityClass='Normal';[RooIndustriesBackgroundOracle]::SetIo($process,2);[RooIndustriesBackgroundOracle]::SetMemory($process,5)
- $original=Read-Fixture
+ $stem='Pvu676Limits'+[Guid]::NewGuid().ToString('N').Substring(0,4)
+ foreach($name in 'A','B','C'){$image=Join-Path $directory ($stem+$name+'.exe');Copy-Item "$env:SystemRoot\System32\PING.EXE" $image}
+ Start-Fixture 'A'
+ $original=Read-Fixture 'A'
  $profilePath=Join-Path $AppRoot 'backend\profiles\probalance-governor.profile.json';$profileBytes=[IO.File]::ReadAllBytes($profilePath)
  $profile=[Text.Encoding]::UTF8.GetString($profileBytes).TrimStart([char]0xfeff)|ConvertFrom-Json
- $profile.governor.candidateSelectors=@([pscustomobject]@{ruleId='background-limits-ui';enabled=$true;match=@{processNames=@($process.ProcessName+'.exe')}})
+ $profile.governor.candidateSelectors=@([pscustomobject]@{ruleId='background-limits-ui';enabled=$true;match=@{processNames=@('A','B','C'|ForEach-Object {$stem+$_+'.exe'})}})
  $profile.governor.thresholds.totalCpuPressureThresholdPercent=0;$profile.governor.thresholds.perProcessCpuThresholdPercent=0
  $profile.governor.thresholds.minimumRestraintSeconds=600
  Save 'profile.json' $profile;[IO.File]::WriteAllText($profilePath,($profile|ConvertTo-Json -Depth 40),$utf8)
@@ -99,20 +101,26 @@ try{
  $start=WaitFor {$b=Button 'Start background limits';if($b -and $b.Current.IsEnabled){$b}} 90 'Start background limits enabled'
  try{$start.GetCurrentPattern([Windows.Automation.ScrollItemPattern]::Pattern).ScrollIntoView()}catch{}
  Start-Sleep -Milliseconds 800;Shot 'ready'
- $first=Run-Button 'Start background limits' 'first-running';Shot 'first-result';$firstCard=Card;$lowered=Read-Fixture;$firstRestore=Restore-Enabled
- if($lowered.priorityClass -ne 'BelowNormal' -or -not$firstRestore){throw ('The first Start did not leave the fixture lowered with Restore: '+$lowered.priorityClass+' restore '+$firstRestore)}
- $second=Run-Button 'Start background limits' $null;Shot 'second-result';$afterSecond=Read-Fixture;$secondRestore=Restore-Enabled;$secondCard=Card
+ $first=Run-Button 'Start background limits' 'first-running';Shot 'first-result';$firstCard=Card;$lowered=Read-Fixture 'A';$firstRestore=Restore-Enabled
+ if(-not(Test-Lowered $lowered) -or -not$firstRestore){throw ('The first Start did not leave the fixture lowered with Restore: '+($lowered|ConvertTo-Json -Compress)+' restore '+$firstRestore)}
+ Start-Fixture 'B';Start-Fixture 'C'
+ $second=Run-Button 'Start background limits' $null;Shot 'second-result';$afterSecond=[ordered]@{A=Read-Fixture 'A';B=Read-Fixture 'B';C=Read-Fixture 'C'};$secondRestore=Restore-Enabled;$secondCard=Card
+ # Another program raises one app the second run lowered; Restore must keep that value and say so.
+ $processes['C'].PriorityClass='AboveNormal';$changedByOther=Read-Fixture 'C'
  $restored=$null;$third=$null;$restoreCard=$null
- if($secondRestore){$third=Run-Button 'Restore background limits' $null;Shot 'restore-result';$restored=Read-Fixture;$restoreCard=Card}
- Save 'observed.json' ([ordered]@{label=$Label;fixture=$process.ProcessName+'.exe';original=$original;firstStart=$first;lowered=$lowered;restoreAfterFirst=$firstRestore;secondStart=$second;afterSecond=$afterSecond;restoreAfterSecond=$secondRestore;secondCard=$secondCard;restore=$third;restored=$restored;restoreCard=$restoreCard;frames=$timeline})
- if($afterSecond.priorityClass -ne 'BelowNormal'){throw ('The second Start changed the lowered fixture: '+$afterSecond.priorityClass)}
+ if($secondRestore){$third=Run-Button 'Restore background limits' $null;Shot 'restore-result';$restored=[ordered]@{A=Read-Fixture 'A';B=Read-Fixture 'B';C=Read-Fixture 'C'};$restoreCard=Card}
+ Save 'observed.json' ([ordered]@{label=$Label;fixtures=@($processes.Values|ForEach-Object {$_.ProcessName+'.exe'});original=$original;firstStart=$first;lowered=$lowered;restoreAfterFirst=$firstRestore;secondStart=$second;afterSecond=$afterSecond;restoreAfterSecond=$secondRestore;secondCard=$secondCard;changedByOther=$changedByOther;restore=$third;restored=$restored;restoreCard=$restoreCard;frames=$timeline})
+ if(-not(Test-Lowered $afterSecond.A)){throw ('The second Start changed the earlier lowered fixture: '+($afterSecond.A|ConvertTo-Json -Compress))}
+ if(-not(Test-Lowered $afterSecond.B) -or -not(Test-Lowered $afterSecond.C)){throw ('The second Start did not lower the new fixtures: '+($afterSecond|ConvertTo-Json -Compress))}
  if(-not$secondRestore){throw 'Restore disappeared after the second Start while the fixture stayed lowered.'}
  if(($secondCard -join "`n") -match 'Another Background limits run is still going'){throw 'The second Start was turned away instead of running again.'}
  foreach($card in @($firstCard,$secondCard)){
   $repeated=@(@(($card[1]) -split "`n")|Where-Object {$_ -match '^\S+\.exe: ' -and -not $_.Contains([string][char]0x2192)}|ForEach-Object {($_ -split ': ',2)[0]}|Group-Object|Where-Object Count -gt 1)
   if($repeated.Count){throw ('The card lists a skipped app more than once: '+(@($repeated|ForEach-Object Name) -join ', '))}
  }
- if(-not(Test-Original $restored) -or $restoreCard -notcontains 'Background limits restored'){throw ('Restore did not put the fixture back exactly: '+($restored|ConvertTo-Json -Compress))}
+ if(-not(Test-Original $restored.A) -or -not(Test-Original $restored.B) -or $restoreCard -notcontains 'Background limits restored'){throw ('Restore did not put both runs'' fixtures back exactly: '+($restored|ConvertTo-Json -Compress))}
+ if($restored.C.priorityClass -ne 'AboveNormal' -or $restored.C.ioPriority -ne 2 -or $restored.C.memoryPriority -ne 5){throw ('Restore did not keep the value another program set and restore the rest: '+($restored.C|ConvertTo-Json -Compress))}
+ if(($restoreCard[1]) -notmatch ('Left as another program set it: '+[regex]::Escape($processes['C'].ProcessName)+'(\.exe)? CPU priority \(AboveNormal\)')){throw ('The card does not name the value Restore kept: '+$restoreCard[1])}
  Save 'done.json' @{passed=$true;label=$Label}
 }catch{
  Save 'failure.json' @{error=$_.Exception.Message;stack=$_.ScriptStackTrace}
@@ -120,5 +128,5 @@ try{
  throw
 }finally{
  try{if($app){Stop-OwnedValidationApp $app $receipt}}
- finally{try{if($fixture){Stop-OwnedProcess $fixture}}finally{if($profileBytes){[IO.File]::WriteAllBytes($profilePath,$profileBytes)}}}
+ finally{try{$stopError=$null;foreach($owned in @($fixtures.Values)){try{Stop-OwnedProcess $owned}catch{if(-not$stopError){$stopError=$_}}};if($stopError){throw $stopError}}finally{if($profileBytes){[IO.File]::WriteAllBytes($profilePath,$profileBytes)}}}
 }

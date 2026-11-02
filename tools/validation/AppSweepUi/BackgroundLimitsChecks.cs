@@ -153,6 +153,9 @@ static class BackgroundLimitsChecks
             await stale.RestoreGovernorCommand.ExecuteAsync(null);
             Case(requests.SequenceEqual(new[] { second.SessionId, first.SessionId }) && !stale.GovernorRestoreAvailable,
                 "Restore starts from the newest holding run even when the page remembered an older one, and a run that only kept another program's values lets the walk continue");
+            Case(stale.GovernorDetail.Contains("Left as another program set it: Fixture.exe CPU priority (AboveNormal).", StringComparison.Ordinal)
+                    && stale.GovernorDetail.Contains("Process governor restore completed with 1 restored item(s)", StringComparison.Ordinal),
+                "One Restore shows what every run did, so the older run's result keeps the newer run's kept settings on the card: " + stale.GovernorDetail);
 
             requests.Clear();
             App.Live.GovernorStatusText = Status(second);
@@ -261,6 +264,37 @@ static class BackgroundLimitsChecks
             await stacked.RestoreGovernorCommand.ExecuteAsync(null);
             Case(requests.SequenceEqual(new[] { second.SessionId, first.SessionId }) && !stacked.GovernorRestoreAvailable,
                 "Retry after a failed status read finds the older run without replaying the closed newer run");
+
+            foreach (var (lostResponse, statusFails) in new[] { (true, false), (false, false), (true, true) })
+            {
+                Write(root, "first");
+                Write(root, "second");
+                var persisted = new PerformanceProfilesViewModel();
+                App.Live.GovernorStatusText = Status(second);
+                await persisted.ReloadAsync();
+                requests.Clear();
+                App.Live.GovernorRestoreHandler = (id, path, backup) =>
+                {
+                    requests.Add(id);
+                    if (id != second.SessionId)
+                    {
+                        App.Live.GovernorStatusText = Status(null);
+                        return new(Restored(first), null);
+                    }
+                    File.WriteAllText(second.SessionPath, File.ReadAllText(second.SessionPath).Replace("\"restorable\":true", "\"restorable\":false", StringComparison.Ordinal));
+                    App.Live.GovernorStatusText = Status(first);
+                    if (statusFails) App.Live.GovernorStatusError = "Status read interrupted.";
+                    return lostResponse ? new(null, "Timed out.") : new(Restored(second).Replace("\"status\":\"completed\"", "\"status\":\"partial\"", StringComparison.Ordinal), null);
+                };
+                var label = (lostResponse ? "a lost response" : "an unconfirmed result") + (statusFails ? " and a failed status read" : "");
+                await persisted.RestoreGovernorCommand.ExecuteAsync(null);
+                Case(persisted.GovernorRestoreAvailable && requests.SequenceEqual(new[] { second.SessionId }),
+                    "After the newest restore is saved, " + label + " keeps Restore while an older run still holds an app");
+                App.Live.GovernorStatusError = null;
+                await persisted.RestoreGovernorCommand.ExecuteAsync(null);
+                Case(requests.SequenceEqual(new[] { second.SessionId, first.SessionId }) && !persisted.GovernorRestoreAvailable,
+                    "Retry after " + label + " restores the older run without replaying the saved newer restore");
+            }
         }
         finally
         {

@@ -146,7 +146,9 @@ function Invoke-GovernorActiveRestore {
         [System.Collections.Generic.List[object]]$Errors,
         [int]$PollIndex,
         [string]$Reason,
-        [datetime]$Now
+        [datetime]$Now,
+        [object]$BackupManifest,
+        [string]$BackupPath
     )
     $restrainedAt = [datetime](Get-RooIndustriesPropertyValue $Active 'restrainedAtLocal' $Now)
     $minimumElapsed = (($Now - $restrainedAt).TotalSeconds -ge [double]$Config.minimumRestraintSeconds)
@@ -188,10 +190,17 @@ function Invoke-GovernorActiveRestore {
     $restoreChanges = @(Get-RooIndustriesGovernorRestoreChanges $snapshot $currentState)
     $appliedRestoreControls = New-Object System.Collections.Generic.List[object]
     $restoreFailed = $false
+    # Each attempt reports what this app holds now, so a retry never lists a kept setting twice.
+    $instance = [string](Get-RooIndustriesPropertyValue $snapshot 'processId' 0) + '|' + [string](Get-RooIndustriesPropertyValue $snapshot 'processStartTimeUtc' '')
+    for ($index = $script:GovernorKeptItems.Count - 1; $index -ge 0; $index--) {
+        if ([string]$script:GovernorKeptItems[$index].processId + '|' + [string]$script:GovernorKeptItems[$index].processStartTimeUtc -eq $instance) { $script:GovernorKeptItems.RemoveAt($index) }
+    }
     foreach ($change in $restoreChanges) {
         if([bool](Get-RooIndustriesPropertyValue $change 'blocked' $false)) {
             if (Test-RooIndustriesGovernorChangeLeftAsSet $change) {
-                $script:GovernorKeptItems.Add((New-RooIndustriesLeftAsSetItem $snapshot ([pscustomobject]@{ control = $change.control; currentValue = $change.currentValue; appliedValue = Get-RooIndustriesPropertyValue $change 'appliedValue' $null; originalValue = $change.proposedValue }))) | Out-Null
+                $kept = New-RooIndustriesLeftAsSetItem $snapshot ([pscustomobject]@{ control = $change.control; currentValue = $change.currentValue; appliedValue = Get-RooIndustriesPropertyValue $change 'appliedValue' $null; originalValue = $change.proposedValue })
+                $kept | Add-Member -NotePropertyName processStartTimeUtc -NotePropertyValue (Get-RooIndustriesPropertyValue $snapshot 'processStartTimeUtc' $null)
+                $script:GovernorKeptItems.Add($kept) | Out-Null
                 continue
             }
             $restoreFailed = $true
@@ -204,7 +213,11 @@ function Invoke-GovernorActiveRestore {
         } catch {
             $restoreFailed = $true
             $Errors.Add((New-RooIndustriesIssue 'PROCESS_GOVERNOR_RESTORE_CONTROL_FAILED' $_.Exception.Message 'error' 'performance.governor' ([string](Get-RooIndustriesPropertyValue $snapshot 'processName' '')) $true 'Stop the session and retry restore if the process is still running.' $null)) | Out-Null
+            continue
         }
+        # Saved at once, so Restore never treats a later value of this control as ours.
+        Complete-RooIndustriesGovernorRestoredControls $snapshot @($change)
+        Write-RooIndustriesProcessGovernorJsonFile $BackupManifest $BackupPath
     }
     $restoredState = Get-RooIndustriesProcessControlState ([int](Get-RooIndustriesPropertyValue $snapshot 'processId' 0)) $null -ReadGpu:(Test-RooIndustriesEntryHasGpuControl $snapshot)
     $restoreItem = New-GovernorRestoredItem $snapshot $restoredState @($appliedRestoreControls.ToArray()) $Reason $PollIndex
@@ -476,7 +489,9 @@ try {
                                 -Errors $errors `
                                 -PollIndex $pollIndex `
                                 -Reason 'Process CPU usage stayed below restore threshold after minimum restraint duration.' `
-                                -Now $now | Out-Null
+                                -Now $now `
+                                -BackupManifest $backupManifest `
+                                -BackupPath $backupPath | Out-Null
                             continue
                         }
 
@@ -667,7 +682,9 @@ try {
                         -Errors $errors `
                         -PollIndex $finalPollIndex `
                         -Reason 'Process CPU usage stayed below restore threshold in the final calm sample.' `
-                        -Now $finalNow | Out-Null
+                        -Now $finalNow `
+                        -BackupManifest $backupManifest `
+                        -BackupPath $backupPath | Out-Null
                 } else {
                     $active = $activeRestraints[$key]
                     $skip = [pscustomobject]@{

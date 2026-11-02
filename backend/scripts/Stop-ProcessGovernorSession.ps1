@@ -55,49 +55,26 @@ function New-GovernorRestorePreview {
     } else {
         'Restore original process controls from process governor backup.'
     }
-    $controlChanges = New-Object System.Collections.Generic.List[object]
     $currentState = if ($blocked) {
         [pscustomobject]@{ priorityClass = $null; affinityMask = $null; ioPriority = $null; memoryPriority = $null; memoryPriorityAvailable = $false; gpuPriority = $null; gpuPriorityAvailable = $false }
     } else {
         $Candidate.currentControlState
     }
+    $selectedChanges = if ($blocked) { @() } else { @(Get-RooIndustriesGovernorRestoreChanges $Snapshot $currentState) }
+    $controlChanges = @($selectedChanges)
     if (-not $blocked) {
-        if (-not [string]::IsNullOrWhiteSpace([string]$originalPriority) -and (Test-RooIndustriesPriorityAllowed ([string]$originalPriority) -Restoring) -and [string](Get-RooIndustriesPropertyValue $currentState 'priorityClass' $null) -ne [string]$originalPriority) {
-            $controlChanges.Add((New-RooIndustriesControlChange 'priorityClass' (Get-RooIndustriesPropertyValue $currentState 'priorityClass' $null) $originalPriority 'restorePriority' 'Restore original process priority after governor restraint.')) | Out-Null
-        }
-        if ($null -ne $originalAffinity -and -not [string]::IsNullOrWhiteSpace([string]$originalAffinity) -and (Test-RooIndustriesAffinityMaskAllowed $originalAffinity) -and [string](Get-RooIndustriesPropertyValue $currentState 'affinityMask' $null) -ne [string]$originalAffinity) {
-            $controlChanges.Add((New-RooIndustriesControlChange 'affinityMask' (Get-RooIndustriesPropertyValue $currentState 'affinityMask' $null) ([int64]$originalAffinity) 'restoreAffinity' 'Restore original CPU affinity after governor restraint.')) | Out-Null
-        }
-        if (-not [string]::IsNullOrWhiteSpace([string]$originalIoPriority) -and (Test-RooIndustriesIoPriorityAllowed ([string]$originalIoPriority) -Restoring) -and [string](Get-RooIndustriesPropertyValue $currentState 'ioPriority' $null) -ne [string]$originalIoPriority) {
-            $controlChanges.Add((New-RooIndustriesControlChange 'ioPriority' (Get-RooIndustriesPropertyValue $currentState 'ioPriority' $null) $originalIoPriority 'restoreIoPriority' 'Restore original I/O priority after governor restraint.')) | Out-Null
-        }
-        if (-not [string]::IsNullOrWhiteSpace([string]$originalMemoryPriority) -and (Test-RooIndustriesMemoryPriorityAllowed ([string]$originalMemoryPriority)) -and [string](Get-RooIndustriesPropertyValue $currentState 'memoryPriority' $null) -ne [string]$originalMemoryPriority) {
-            $controlChanges.Add((New-RooIndustriesControlChange 'memoryPriority' (Get-RooIndustriesPropertyValue $currentState 'memoryPriority' $null) $originalMemoryPriority 'restoreMemoryPriority' 'Restore original memory priority after governor restraint.')) | Out-Null
-        }
-        if (-not [string]::IsNullOrWhiteSpace([string]$originalGpuPriority) -and (Test-RooIndustriesGpuPriorityAllowed ([string]$originalGpuPriority)) -and [string](Get-RooIndustriesPropertyValue $currentState 'gpuPriority' $null) -ne [string]$originalGpuPriority) {
-            if ([bool](Get-RooIndustriesPropertyValue $currentState 'gpuPriorityAvailable' $false)) {
-                $controlChanges.Add((New-RooIndustriesControlChange 'gpuPriority' (Get-RooIndustriesPropertyValue $currentState 'gpuPriority' $null) $originalGpuPriority 'restoreGpuPriority' 'Restore original GPU scheduling priority after governor restraint.')) | Out-Null
-            } else {
-                $reason = 'GPU scheduling priority is unavailable for this restore target.'
-                $controlChanges.Add((New-RooIndustriesControlChange 'gpuPriority' (Get-RooIndustriesPropertyValue $currentState 'gpuPriority' $null) $originalGpuPriority 'restoreGpuPriority' 'GPU scheduling priority is unavailable for this restore target.' $true $reason)) | Out-Null
-            }
-        }
-        if ($controlChanges.Count -eq 0) {
-            $reason = 'Process already matches the process governor backup.'
-        }
+        $held = @($controlChanges | Where-Object { $_.blocked })
+        if ($controlChanges.Count -eq 0) { $reason = 'Process already matches the process governor backup.' }
+        elseif (@($held | Where-Object { [string]$_.blockedReason -ceq $script:RooIndustriesChangedExternally }).Count -gt 0) { $reason = 'A recorded control changed externally; its current value was preserved.' }
+        elseif ($held.Count -gt 0) { $reason = [string]$held[0].blockedReason }
     }
-    $selectedChanges=@(Select-RooIndustriesGovernorOwnedRestoreChanges $Snapshot @($controlChanges.ToArray()))
-    $controlChanges.Clear()
-    foreach($change in $selectedChanges){$controlChanges.Add($change)|Out-Null}
-    $blocked=(-not $Candidate.exists) -or (-not $Candidate.matches)
-    if(@($selectedChanges|Where-Object {$_.blocked}).Count -gt 0){$reason='A recorded control changed externally; its current value was preserved.'}
     $selectedControls=@($selectedChanges|ForEach-Object {$_.control})
     if($selectedControls -notcontains 'priorityClass'){$originalPriority=Get-RooIndustriesPropertyValue $currentState 'priorityClass' $null}
     if($selectedControls -notcontains 'affinityMask'){$originalAffinity=Get-RooIndustriesPropertyValue $currentState 'affinityMask' $null}
     if($selectedControls -notcontains 'ioPriority'){$originalIoPriority=Get-RooIndustriesPropertyValue $currentState 'ioPriority' $null}
     if($selectedControls -notcontains 'memoryPriority'){$originalMemoryPriority=Get-RooIndustriesPropertyValue $currentState 'memoryPriority' $null}
     if($selectedControls -notcontains 'gpuPriority'){$originalGpuPriority=Get-RooIndustriesPropertyValue $currentState 'gpuPriority' $null}
-    $applicableControlChanges = @(Get-RooIndustriesGovernorApplicableControlChanges @($controlChanges.ToArray()))
+    $applicableControlChanges = @(Get-RooIndustriesGovernorApplicableControlChanges $controlChanges)
     $proposedAction = if ($blocked -or $applicableControlChanges.Count -eq 0) { 'noChange' } elseif ($applicableControlChanges.Count -eq 1 -and [string](Get-RooIndustriesPropertyValue $applicableControlChanges[0] 'control' '') -eq 'priorityClass') { 'restorePriority' } else { 'restoreProcessControls' }
     return [pscustomobject]@{
         previewId = ("process-governor-restore-$processName-$processId").ToLowerInvariant() -replace '[^a-z0-9\-]+', '-'
@@ -121,7 +98,7 @@ function New-GovernorRestorePreview {
         gpuPriorityAvailable = Get-RooIndustriesPropertyValue $currentState 'gpuPriorityAvailable' $false
         gpuPriorityStatus = Get-RooIndustriesPropertyValue $currentState 'gpuPriorityStatus' $null
         proposedAction = $proposedAction
-        controlChanges = @($controlChanges.ToArray())
+        controlChanges = $controlChanges
         ruleId = [string](Get-RooIndustriesPropertyValue $Snapshot 'ruleId' '')
         reason = $reason
         reasonCodes = if ($ended) { @('PROCESS_GOVERNOR_ALREADY_CLOSED') } elseif ($blocked) { @('PROCESS_GOVERNOR_RESTORE_SKIPPED') } else { @('PROCESS_GOVERNOR_RESTORE') }
@@ -247,8 +224,10 @@ try {
         $script:GovernorSessionDirectory = Split-Path $(if ($resolvedSessionPath) { $resolvedSessionPath } else { $resolvedBackupPath }) -Parent
 
         $preview = New-Object System.Collections.Generic.List[object]
+        $previewSnapshots = New-Object System.Collections.Generic.List[object]
         foreach ($snapshot in @(Get-RooIndustriesProcessGovernorLatestSnapshots $backup)) {
             $preview.Add((New-GovernorRestorePreview $snapshot (Get-RooIndustriesProcessGovernorSnapshotIdentity $snapshot))) | Out-Null
+            $previewSnapshots.Add($snapshot) | Out-Null
         }
 
         $changed = New-Object System.Collections.Generic.List[object]
@@ -257,7 +236,8 @@ try {
         $restored = New-Object System.Collections.Generic.List[object]
         $leftAsSet = New-Object System.Collections.Generic.List[object]
         if ($ConfirmApply) {
-            foreach ($entry in @($preview.ToArray())) {
+            for ($index = 0; $index -lt $preview.Count; $index++) {
+                $entry = $preview[$index]
                 if ([bool](Get-RooIndustriesPropertyValue $entry 'blocked' $false)) {
                     if (@(Get-RooIndustriesPropertyArray $entry 'reasonCodes') -contains 'PROCESS_GOVERNOR_ALREADY_CLOSED') {
                         $alreadyClosed.Add((New-GovernorAlreadyClosedItem $entry)) | Out-Null
@@ -325,7 +305,11 @@ try {
                             elseif ($null -ne $kept) { $leftAsSet.Add($kept) | Out-Null; continue }
                         }
                         $failedControls.Add("$([string](Get-RooIndustriesPropertyValue $change 'control' 'unknown')): $failure") | Out-Null
+                        continue
                     }
+                    # Saved at once, so a later Restore never treats another program's value of this control as ours.
+                    Complete-RooIndustriesGovernorRestoredControls $previewSnapshots[$index] @($change)
+                    Write-RooIndustriesProcessGovernorJsonFile $backup $resolvedBackupPath
                 }
                 if ($appliedControls.Count -gt 0) {
                     $afterControls = Get-RooIndustriesProcessControlState $processId $null -ReadGpu:(Test-RooIndustriesEntryHasGpuControl $entry)
