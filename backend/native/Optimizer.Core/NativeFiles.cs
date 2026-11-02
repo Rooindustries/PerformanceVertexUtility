@@ -58,6 +58,14 @@ internal static class NativeFiles
     // Follows links, and asks only for what naming the file needs, so a share that refuses reading still answers.
     public static SafeFileHandle OpenTarget(string path) => Open(path, ReadAttributes | Synchronize, ShareAll, BackupSemantics);
 
+    // A share that won't name a file still opened it by its network path, the path Windows reports for a program started from there.
+    public static string? NetworkPath(SafeFileHandle handle, string path)
+    {
+        if (GetFileType(handle) != 1) return null;
+        path = Plain(path);
+        return path.StartsWith(@"\\", StringComparison.Ordinal) && !path.StartsWith(@"\\.\", StringComparison.Ordinal) && !path.StartsWith(@"\\?\", StringComparison.Ordinal) ? Path.GetFullPath(path) : UniversalPath(path);
+    }
+
     public static string? UniversalPath(string path)
     {
         if (path.Length < 3 || !char.IsAsciiLetter(path[0]) || path[1] != ':' || path[2] != '\\' || GetDriveType(path[..3]) != 4) return null;
@@ -193,6 +201,11 @@ internal static class NativeFiles
             base.Dispose(disposing);
         }
     }
+
+    // The same path without its \\?\ prefix, so \\?\C:\... and \\?\UNC\server\share\... compare equal to C:\... and \\server\share\.... Links aren't followed.
+    public static string Plain(string path)
+        => path.StartsWith(@"\\?\UNC\", StringComparison.OrdinalIgnoreCase) ? @"\\" + path[8..]
+            : path.Length >= 7 && path.StartsWith(@"\\?\", StringComparison.Ordinal) && char.IsAsciiLetter(path[4]) && path[5] == ':' && path[6] == '\\' ? path[4..] : path;
 
     public static string Normalize(string path) => path.StartsWith(@"\\?\", StringComparison.Ordinal) && !path.StartsWith(@"\\?\UNC\", StringComparison.OrdinalIgnoreCase) ? path[4..] : path;
 
@@ -366,6 +379,8 @@ internal static class NativeFiles
     private static extern uint GetFinalPathNameByHandle(SafeFileHandle handle, StringBuilder path, uint length, uint flags);
     [DllImport("kernel32.dll", EntryPoint = "QueryDosDeviceW", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern uint QueryDosDevice(string name, StringBuilder target, uint length);
+    [DllImport("kernel32.dll")]
+    private static extern uint GetFileType(SafeFileHandle handle);
     [DllImport("kernel32.dll", EntryPoint = "GetDriveTypeW", CharSet = CharSet.Unicode)]
     private static extern uint GetDriveType(string root);
     [DllImport("mpr.dll", EntryPoint = "WNetGetUniversalNameW", CharSet = CharSet.Unicode)]

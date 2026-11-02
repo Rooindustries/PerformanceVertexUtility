@@ -50,6 +50,8 @@ int Tool(string program,string? arguments,params string[] values)=>Shell(program
 int Junction(string link,string target){if(link.Contains('"')||target.Contains('"'))throw new ArgumentException("A junction path can't contain quotes.");return Tool("cmd.exe","/d /c mklink /J \""+link+"\" \""+target+"\"");}
 int Net(params string[] values)=>Tool("net.exe",null,values);
 int FileLink(string link,string target){if(link.Contains('"')||target.Contains('"'))throw new ArgumentException("A link path can't contain quotes.");return Tool("cmd.exe","/d /c mklink \""+link+"\" \""+target+"\"");}
+// The app reviews a game through its helper, which resolves the pick before the review resolves it again.
+ProtectedSessionPreview HostPreview(int launcherId,string picked){var output=Path.Combine(root,"host-"+Guid.NewGuid().ToString("N")[..12]+".preview.json");var info=new ProcessStartInfo(dotnet){UseShellExecute=false,CreateNoWindow=true,RedirectStandardInput=true,RedirectStandardOutput=true,RedirectStandardError=true};foreach(var value in new[]{Path.Combine(repo,"backend","bin","optimizer","Optimizer.Host.dll"),"protected-session-preview","-"})info.ArgumentList.Add(value);using var host=Process.Start(info)!;host.StandardInput.Write(JsonSerializer.Serialize(new{schemaVersion=1,repoRoot=repo,processId=launcherId,gamePath=picked,controls=Wanted(),acceptLauncherScope=true,outputPath=output,policyRoot=Path.Combine(root,"process-rules")},OperationFiles.Json));host.StandardInput.Close();var errors=host.StandardError.ReadToEndAsync();var text=host.StandardOutput.ReadToEnd();host.WaitForExit();if(host.ExitCode!=0)throw new InvalidOperationException("The app's helper refused the review of "+picked+": "+text+errors.Result);return OperationFiles.Read<ProtectedSessionPreview>(output);}
 string? Refusal(string picked){try{session.Preview(launcher!.Id,picked,Wanted(),true);return null;}catch(InvalidDataException error){return error.Message;}}
 ProtectedSessionState State(string target)=>session.Status(target).State??throw new Exception("Session state missing");
 Process Launch(int number,string? launcherRoot=null,string? executable=null,string? launchPath=null){var gameRoot=Path.Combine(root,"game-"+number);Directory.CreateDirectory(gameRoot);OperationFiles.Write(Path.Combine(launcherRoot??root,"launch.json"),launchPath is null?new{root=gameRoot,mode=hardwareGpu?"gpu":"none"}:(object)new{root=gameRoot,mode=hardwareGpu?"gpu":"none",exe=launchPath});Until(()=>File.Exists(Path.Combine(gameRoot,"ready.json")),"Game fixture did not start");var data=OperationFiles.Read<JsonElement>(Path.Combine(gameRoot,"ready.json"));var game=Process.GetProcessById(data.GetProperty("pid").GetInt32());_ = game.Handle;var identity=FixtureProcess.Ready(Path.Combine(gameRoot,"ready.json"),executable??gamePath,["--game",gameRoot,hardwareGpu?"gpu":"none"],true,evidence);if(FixtureProcess.Created(game)!=identity.Creation){identity.Dispose();game.Dispose();throw new InvalidDataException("Fixture game handle identity mismatch.");}ownedProcesses.Add(game,identity);return game;}
@@ -169,8 +171,8 @@ try{
   File.WriteAllText(Path.Combine(root,"game-6","stop"),"");CheckGame(game,6);
  }
  worker.Dispose();worker=null;
- // The Server service shares the game's folder; the test never starts it, so a PC with file sharing off skips this part.
- if(!Shell("sc.exe",null,"query","LanmanServer").Output.Contains("RUNNING",StringComparison.Ordinal))Console.WriteLine("SKIP A game picked through a mapped network drive (file sharing, the Server service, is off on this PC)");
+ // The Server service shares the game's folder. Only the wrapper's -StartFileSharing starts it, so by default a PC with file sharing off skips this part.
+ if(!Shell("sc.exe",null,"query","LanmanServer").Output.Contains("RUNNING",StringComparison.Ordinal))Console.WriteLine("SKIP A game picked through a mapped network drive (file sharing, the Server service, is off on this PC; run with -StartFileSharing to include it)");
  else{
   var shareName="RooIndustriesGame"+Guid.NewGuid().ToString("N")[..12];
   Check(Net("share",shareName+"="+bin.TrimEnd('\\'),"/GRANT:"+System.Security.Principal.WindowsIdentity.GetCurrent().Name+",READ")==0,"The game's folder is shared, for this Windows account only, for the mapped-drive pick");sharedFolder=shareName;
@@ -183,6 +185,17 @@ try{
   var mappedOriginal=(Affinity:Oracle.Affinity(mappedLauncher),Io:Oracle.Io(mappedLauncher),Memory:Oracle.Memory(mappedLauncher));
   var mappedPreview=Path.Combine(root,"mapped.preview.json");OperationFiles.Write(mappedPreview,session.Preview(mappedLauncher.Id,Path.Combine(mappedDrive+@"\",Path.GetFileName(gamePath)),Wanted(),true));
   Check(string.Equals(OperationFiles.Read<ProtectedSessionPreview>(mappedPreview).GamePath,Path.Combine(share,Path.GetFileName(gamePath)),StringComparison.OrdinalIgnoreCase),"The mapped-drive pick is reviewed at the share's network path");
+  // The network path is the game's final form: the helper, the review and the saved settings all name the game by it, however it was picked or spelled.
+  var unc=Path.Combine(share,Path.GetFileName(gamePath));var longUnc=@"\\?\UNC\"+unc[2..];
+  Check(new[]{Path.Combine(mappedDrive+@"\",Path.GetFileName(gamePath)),unc,longUnc}.All(pick=>string.Equals(HostPreview(mappedLauncher.Id,pick).GamePath,unc,StringComparison.OrdinalIgnoreCase)),"The app reviews the game at the share's network path whether it's picked through the mapped drive or the network path, in either spelling");
+  var mappedSaved=OperationFiles.Read<ProtectedSessionPreview>(mappedPreview);
+  Check(ProtectedSessions.ProfileMismatch(mappedSaved,HostPreview(mappedLauncher.Id,mappedSaved.GamePath)) is null,"Saved settings for the mapped-drive game turn on again: a fresh review of the saved network path matches them");
+  Check(ProtectedSessions.ProfileMismatch(mappedSaved with{GamePath=longUnc},HostPreview(mappedLauncher.Id,longUnc)) is null,"Settings an earlier version saved with the \\\\?\\UNC spelling of the network path still turn on");
+  // A named pipe reached through the network path opens like a file but isn't one, so it is still refused.
+  var remotePipe="RooIndustriesUnnamed"+Guid.NewGuid().ToString("N")[..12]+".exe";
+  using(var pipe=new System.IO.Pipes.NamedPipeServerStream(remotePipe,System.IO.Pipes.PipeDirection.InOut,1,System.IO.Pipes.PipeTransmissionMode.Byte,System.IO.Pipes.PipeOptions.Asynchronous)){
+   Check(Refusal(@"\\localhost\pipe\"+remotePipe)==$"Windows can't tell where {remotePipe} is really stored, so a session couldn't recognize the game when it starts. Pick the game from the drive or folder it's installed in.","A named pipe picked through its network path is refused in plain words");
+  }
   var mappedRootSession=Path.Combine(root,"session5");worker=Run(mappedPreview,mappedRootSession);Until(()=>File.Exists(Path.Combine(mappedRootSession,"session.json"))&&State(mappedRootSession).Status=="armed","Mapped-drive session did not arm");
   using(var game=Launch(7,mappedRoot,Path.Combine(share,Path.GetFileName(gamePath)),Path.Combine(mappedDrive+@"\",Path.GetFileName(gamePath)))){
    Until(()=>State(mappedRootSession).Status=="active","A game picked through a mapped drive was not followed when its launcher started it",30);
@@ -194,6 +207,8 @@ try{
   }
   File.WriteAllText(Path.Combine(mappedRoot,"stop-launcher"),"");Check(mappedLauncher.WaitForExit(15000),"The launcher on the mapped drive exits");
  }
+ var junctionSaved=OperationFiles.Read<ProtectedSessionPreview>(junctionPreview);
+ Check(ProtectedSessions.ProfileMismatch(junctionSaved with{GamePath=@"\\?\"+gamePath},HostPreview(launcher.Id,@"\\?\"+gamePath)) is null,"Settings an earlier version saved with the \\\\?\\ spelling of the game's path still turn on");
  var renamed=Path.Combine(root,"RenamedGame.exe");Check(FileLink(renamed,gamePath)==0,"A file link with another name points at the game");files.Add(renamed);
  Check(Refusal(renamed)==$"RenamedGame.exe is a shortcut to {Path.GetFileName(gamePath)}. Pick {Path.GetFileName(gamePath)} itself.","A game file that is a link to a file with another name is refused in plain words");
  var notGame=Path.Combine(root,"NotAGame.exe");Check(FileLink(notGame,Path.Combine(bin,Path.GetFileNameWithoutExtension(gamePath)+".dll"))==0,"A file link named like a game points at a library");files.Add(notGame);

@@ -228,7 +228,7 @@ try{
  WaitFor {(Text 'GameSessionProfileStatus') -like 'Not turned on this time*'} 120 'the saved settings row to ask for a fresh review'|Out-Null
  Start-Sleep -Seconds 1
  $review=Step 'link-review' @{row=(Text 'GameSessionProfileStatus');status=(Text 'GameSessionStatus');launchPriorities=(Test-Path -LiteralPath $ifeo)}
- Expect 'link-review' ($review.row -ceq ('Not turned on this time. These settings were saved for '+$legacyGame+', which now leads to '+$realGame+' through a folder link or network drive. Turn these off and set the game up again.')) 'the row says where the saved path leads and how to set the game up again'
+ Expect 'link-review' ($review.row -ceq ('Not turned on this time. These settings were saved for '+$legacyGame+', but Windows now finds the game at '+$realGame+'. Turn these off and set the game up again.')) 'the row says where Windows now finds the game and how to set it up again'
  Expect 'link-review' (-not $review.launchPriorities) 'settings that need a fresh review change nothing'
  Invoke (WaitFor {Enabled 'GameSessionProfileOff'} 30 'Turn off and restore')
  WaitFor {-not(ById 'GameSessionProfileStatus') -and (Text 'GameSessionStatus') -like 'Saved settings turned off*'} 60 'the saved settings to turn off'|Out-Null

@@ -151,12 +151,12 @@ public sealed class ProtectedSessions
         {
             using var file = NativeFiles.OpenTarget(gamePath);
             var final = NativeFiles.FinalPath(file);
-            resolved = final is null ? NativeFiles.UniversalPath(gamePath) : final.StartsWith(@"\\?\UNC\", StringComparison.OrdinalIgnoreCase) ? @"\\" + final[8..] : NativeFiles.Normalize(final);
+            resolved = final is null ? NativeFiles.NetworkPath(file, gamePath) : NativeFiles.Plain(final);
             if (resolved is not null)
             {
                 if (NativeFiles.Info(file).IsDirectory) throw new InvalidDataException("Select an installed game executable.");
                 link = new FileInfo(gamePath).LinkTarget is not null;
-                // A drive's network name doesn't follow a link to another file.
+                // A network name doesn't follow a link to another file.
                 if (link && final is null) resolved = null;
             }
         }
@@ -190,8 +190,8 @@ public sealed class ProtectedSessions
         if (fresh.SchemaVersion != saved.SchemaVersion || fresh.Owner != saved.Owner) return "It was set up by another Windows account.";
         if (!string.Equals(fresh.Launcher.ExecutablePath, saved.Launcher.ExecutablePath, StringComparison.OrdinalIgnoreCase) || fresh.LauncherHash != saved.LauncherHash)
             return "The launcher was updated or changed since you saved these settings.";
-        if (!string.Equals(fresh.GamePath, saved.GamePath, StringComparison.OrdinalIgnoreCase))
-            return "These settings were saved for " + saved.GamePath + ", which now leads to " + fresh.GamePath + " through a folder link or network drive.";
+        if (!string.Equals(NativeFiles.Plain(fresh.GamePath), NativeFiles.Plain(saved.GamePath), StringComparison.OrdinalIgnoreCase))
+            return "These settings were saved for " + saved.GamePath + ", but Windows now finds the game at " + fresh.GamePath + ".";
         if (fresh.GameHash != saved.GameHash || fresh.GameLength != saved.GameLength || fresh.GameModifiedAtUtc != saved.GameModifiedAtUtc)
             return "The game changed since you saved these settings.";
         if (fresh.TopologyHash != saved.TopologyHash || !ProcessTarget.Equivalent("affinity", Value(fresh.OriginalAffinity), Value(saved.OriginalAffinity)))

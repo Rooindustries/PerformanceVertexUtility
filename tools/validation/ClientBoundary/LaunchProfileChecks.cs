@@ -569,11 +569,28 @@ static class LaunchProfileChecks
                 await CloseLauncher(reopenedLauncher);
                 await Until(async () => (await Sessions()).All(entry => GameSessionDisplay.Restored(entry.Worker)), "Closing the launcher did not end the re-armed junction session.");
 
-                // An earlier version saved the junction path itself. Those settings were reviewed for a path, not for whatever it leads to now.
                 var savedPreview = Path.Combine(aliasSaved.Root, "reviewed-preview.json");
-                OperationFiles.Write(savedPreview, OperationFiles.Read<ProtectedSessionPreview>(savedPreview) with { GamePath = aliasGame });
                 var profileFile = Path.Combine(aliasSaved.Root, "profile.json");
-                OperationFiles.Write(profileFile, OperationFiles.Read<LaunchProfile>(profileFile) with { ReviewHash = OperationFiles.HashFile(savedPreview) });
+                void SavedAs(string path)
+                {
+                    OperationFiles.Write(savedPreview, OperationFiles.Read<ProtectedSessionPreview>(savedPreview) with { GamePath = path });
+                    OperationFiles.Write(profileFile, OperationFiles.Read<LaunchProfile>(profileFile) with { ReviewHash = OperationFiles.HashFile(savedPreview) });
+                }
+                // An earlier version could save the game's own path with a \\?\ prefix. It names the same file, so those settings keep turning on.
+                SavedAs(@"\\?\" + gamePath);
+                var prefixedLauncher = await OpenLauncher();
+                var prefixed = await ArmedFor(App(), prefixedLauncher);
+                Check(prefixed.ProfileId == aliasSaved.Profile.ProfileId && string.Equals(prefixed.Worker.State!.Preview.GamePath, gamePath, StringComparison.OrdinalIgnoreCase),
+                    "Settings an earlier version saved with a \\\\?\\ path turn on again for the restarted launcher, at the game's path");
+                var prefixedGame = await Game(prefixedLauncher);
+                await Until(async () => (await App().ReadGameSessionAsync(prefixed.SessionRoot)).State?.Status == "active", "The game under settings saved with a \\\\?\\ path was not followed.");
+                Check(Affinity(prefixedGame) == core && prefixedGame.PriorityClass == ProcessPriorityClass.AboveNormal, "The next game start gets the settings saved with a \\\\?\\ path");
+                EndGame(prefixedGame);
+                await CloseLauncher(prefixedLauncher);
+                await Until(async () => (await Sessions()).All(entry => GameSessionDisplay.Restored(entry.Worker)), "Closing the launcher did not end the session for settings saved with a \\\\?\\ path.");
+
+                // An earlier version saved the junction path itself. Those settings were reviewed for a path, not for whatever it leads to now.
+                SavedAs(aliasGame);
                 async Task<LaunchProfileEntry> NeedsReview(Process launcher, string message)
                 {
                     var app = App();
@@ -582,9 +599,9 @@ static class LaunchProfileChecks
                 }
                 var legacyLauncher = await OpenLauncher();
                 var legacy = await NeedsReview(legacyLauncher, "Settings an earlier version saved through a junction were not sent back for review.");
-                Check(legacy.State!.Message == "These settings were saved for " + aliasGame + ", which now leads to " + gamePath + " through a folder link or network drive." &&
+                Check(legacy.State!.Message == "These settings were saved for " + aliasGame + ", but Windows now finds the game at " + gamePath + "." &&
                     OptimizerService.DescribeLaunchProfile(legacy) == "Not turned on this time. " + legacy.State.Message + " Turn these off and set the game up again.",
-                    "Settings an earlier version saved through a junction ask for a fresh review, saying where the saved path leads");
+                    "Settings an earlier version saved through a junction ask for a fresh review, saying where Windows now finds the game");
                 Check((await Sessions()).All(entry => GameSessionDisplay.Restored(entry.Worker)) && NoLaunchPolicy() && Affinity(legacyLauncher) == original,
                     "Settings that need a fresh review change nothing for the launcher or the game");
                 await CloseLauncher(legacyLauncher);
@@ -593,7 +610,7 @@ static class LaunchProfileChecks
                 Check(Junction(linked, other) == 0, "The junction now leads to an identical copy of the game in another folder");
                 var retargetedLauncher = await OpenLauncher();
                 var retargeted = await NeedsReview(retargetedLauncher, "Settings saved through a junction turned on after the junction was pointed at another folder.");
-                Check(retargeted.State!.Message!.EndsWith(Path.Combine(Path.GetFileName(other), Path.GetFileName(gamePath)) + " through a folder link or network drive.", StringComparison.OrdinalIgnoreCase) &&
+                Check(retargeted.State!.Message!.EndsWith(Path.Combine(Path.GetFileName(other), Path.GetFileName(gamePath)) + ".", StringComparison.OrdinalIgnoreCase) &&
                     (await Sessions()).All(entry => GameSessionDisplay.Restored(entry.Worker)) && NoLaunchPolicy() && Affinity(retargetedLauncher) == original,
                     "Settings saved through a junction don't turn on for an identical copy the junction was pointed at later");
                 Check(await App().DisableLaunchProfileAsync((await Profile()).Root) is null && (await Sessions()).All(entry => GameSessionDisplay.Restored(entry.Worker)) && NoLaunchPolicy() && Affinity(retargetedLauncher) == original,
