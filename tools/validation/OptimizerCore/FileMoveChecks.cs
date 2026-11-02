@@ -303,7 +303,10 @@ static class FileMoveChecks
         File.SetAttributes(copied, FileAttributes.Hidden | FileAttributes.ReadOnly);
         var notesChanged = Snapshot(notes);
         var copiedChanged = Snapshot(copied);
-        var retried = plan.Engine.Restore(plan.Journal);
+        FileCleanupJournal retried;
+        // A restored file the user didn't change is open in another program during the retry; that isn't a change.
+        using (new FileStream(Path.Combine(remote, "readme.txt"), FileMode.Open, FileAccess.Read, FileShare.None))
+            retried = plan.Engine.Restore(plan.Journal);
         if (retried.Status != "restored") Console.WriteLine("  later-change retry " + retried.Status + " " + string.Join(" | ", retried.Entries.Where(entry => entry.Error is not null).Select(entry => entry.Original.Path + ": " + entry.Error)));
         var notesNow = Snapshot(notes);
         var copiedNow = Snapshot(copied);
