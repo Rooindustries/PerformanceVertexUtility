@@ -115,6 +115,14 @@ mkdir -p tool && printf '\357\273\277%s\n' '# a plain note' 'Write-Output 1' >to
 commit "feat: add a script with a BOM"
 expect "tool/note.ps1:1: adds a comment" "a comment on line 1 after a BOM fails"
 
+case_branch issentries
+put inst/files.iss <<'EOF'
+Source: "https://example.com/a.zip"; DestDir: "{app}"; Flags: external
+Name: "{group}\Roo"; Filename: "{app}\roo.exe"
+EOF
+commit "feat: add installer entries"
+expect pass "quoted installer entry values in a headerless include pass"
+
 case_branch issok
 put inst/b.iss <<'EOF'
 [Setup]

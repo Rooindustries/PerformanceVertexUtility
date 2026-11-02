@@ -157,7 +157,7 @@ BEGIN { st = "code"; f = lang; yb = 0; depth = 0; cont = 0; tsp = 0; bd = 0; las
     }
     if (!icode && !ib) { if (line ~ /^[ \t]*(;|\/\/)/) out(NR, line, "c"); next }
     if (ib) out(NR, "", "c")
-    iq = 0
+    iq = ""
     while (i <= n) {
       c = substr(line, i, 1); c2 = substr(line, i, 2)
       if (ib) {
@@ -165,8 +165,8 @@ BEGIN { st = "code"; f = lang; yb = 0; depth = 0; cont = 0; tsp = 0; bd = 0; las
         else { out(NR, c, "c"); i++ }
         continue
       }
-      if (iq) { if (c == "\047") iq = 0; i++; continue }
-      if (c == "\047") { iq = 1; i++; continue }
+      if (iq != "") { if (c == iq) iq = ""; i++; continue }
+      if (c == "\047" || c == "\"") { iq = c; i++; continue }
       if (c2 == "{#") { j = index(substr(line, i), "}"); i += j ? j : n; continue }
       if (c2 == "//") { out(NR, substr(line, i), "c"); break }
       if (c2 == "(*") { ib = 1; ibe = "*)"; out(NR, c2, "c"); i += 2; continue }
