@@ -18,6 +18,7 @@
   {"file": "tools/validation/Tweaks/Test-BootMarkerFixture.ps1", "target": "'BootMarker'", "reason": "The test requires BootMarker to be absent at start and removes the one it created only while the snapshot still matches its receipt."},
   {"file": "tools/validation/Tweaks/FeatureRestartChecks.cs", "target": "Parent", "reason": "Removed only when the parent did not exist before the fixture and has no subkeys or values left."},
   {"file": "tools/validation/WindowsTweaksUi/Capture-RestartCheck.ps1", "target": "('HKCU:\\'+$parent)", "reason": "Removed only when the parent did not exist before the capture and has no subkeys or values left."},
+  {"file": "tools/validation/WindowsTweaksUi/Capture-RowApply.ps1", "target": "('HKCU:\\'+$parent)", "reason": "Removed only when the parent did not exist before the capture and has no subkeys or values left."},
   {"file": "tools/validation/Tweaks/KillApplyChecks.cs", "target": "ServiceName", "reason": "The fixture refuses to start when the service exists and deletes it only after its own creation succeeded."},
   {"file": "tools/validation/Tweaks/KillApplyChecks.cs", "target": "Root", "reason": "The fixture refuses to start when its registry root exists."},
   {"file": "tools/validation/Tweaks/KillApplyChecks.cs", "target": "@\"Software\\RooIndustriesTweakTests\"", "reason": "Removed only when the parent did not exist before the fixture and is empty."},

@@ -193,11 +193,23 @@ def apply_policy_editions(catalog):
                 option['availability'] = gates
                 constrained.add((setting['id'], option['id']))
     for setting, limited, change, equivalent in equivalents:
-        replacement = {'address': change['address'], 'dword': equivalent['dword']}
-        if any(option['changes'] == [replacement] for option in setting['options']):
+        if 'changes' in equivalent:
+            replacement = [{'address': {'hive': item['hive'], 'view': 'Registry64', 'keyPath': item['keyPath'], 'kind': 'value', 'valueName': item['valueName']}, 'dword': item['dword']} for item in equivalent['changes']]
+            identifier = digest(replacement)
+        else:
+            replacement = [{'address': change['address'], 'dword': equivalent['dword']}]
+            identifier = digest(desired(replacement[0]))
+        if any(option['changes'] == replacement for option in setting['options']):
             continue
-        setting['options'].insert(setting['options'].index(limited) + 1, {'id': 'choice-' + digest(desired(replacement)), 'name': equivalent['name'], 'changes': [replacement], 'replaces': limited['id'],
-                                   'availability': [{'minimumBuild': setting['minimumBuild'], 'maximumBuild': setting['maximumBuild'], 'editions': ['*']}]})
+        gates = [{'minimumBuild': setting['minimumBuild'], 'maximumBuild': setting['maximumBuild'], 'editions': equivalent.get('editions', ['*'])}]
+        setting['options'].insert(setting['options'].index(limited) + 1, {'id': 'choice-' + identifier, 'name': equivalent['name'], 'changes': replacement, 'replaces': limited['id'], 'availability': copy.deepcopy(gates)})
+        if 'changes' not in equivalent:
+            continue
+        remover = next((option for option in setting['options'] if option['changes'] == [{'address': change['address'], 'dword': None}]), None)
+        if remover is None:
+            raise ValueError('A per-user equivalent needs the row to have a choice that removes the policy: ' + setting['id'])
+        reset = [{'address': change['address'], 'dword': None}] + [{'address': item['address'], 'dword': declared.get('windowsDefault')} for item, declared in zip(replacement, equivalent['changes'])]
+        setting['options'].insert(setting['options'].index(remover) + 1, {'id': 'choice-' + digest(reset), 'name': remover['name'], 'changes': reset, 'replaces': remover['id'], 'availability': copy.deepcopy(gates)})
     for preset in catalog['presets']:
         optional = [item for item in preset['selections'] if (item['settingId'], item['optionId']) in constrained]
         if optional and not preset.get('availableOnly', False):

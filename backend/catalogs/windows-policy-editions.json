@@ -71,6 +71,35 @@
       "additionalReferences": [
         "https://learn.microsoft.com/en-us/windows/client-management/mdm/policy-csp-experience#allowwindowstips"
       ],
+      "equivalentChoice": {
+        "name": "On for this user",
+        "editions": [
+          "Core*", "Professional*", "Cloud*"
+        ],
+        "changes": [
+          {
+            "hive": "CurrentUser",
+            "keyPath": "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager",
+            "valueName": "SubscribedContent-338389Enabled",
+            "dword": 0
+          },
+          {
+            "hive": "CurrentUser",
+            "keyPath": "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager",
+            "valueName": "SoftLandingEnabled",
+            "dword": 0,
+            "windowsDefault": 1
+          }
+        ],
+        "windowsDefaultEvidence": "A new user profile on Windows 11 Pro 25H2 (build 26200) starts with SoftLandingEnabled as REG_DWORD 1 and without SubscribedContent-338389Enabled; read-only read of a copy of the Default user profile on the test PC, 2026-10-25. Use Windows default writes 1 back to the first and removes the second, so the user's key matches a new profile.",
+        "reference": "https://support.microsoft.com/en-us/windows/notifications-and-do-not-disturb-in-windows-feeca47f-0baf-5680-16f0-8801db1a8466",
+        "quote": "Get tips and suggestions when using Windows",
+        "additionalReferences": [
+          "https://learn.microsoft.com/en-us/windows/privacy/manage-connections-from-windows-operating-system-components-to-microsoft-services#25-personalized-experiences",
+          "https://dl5.oo-software.com/files/ooshutup10/OOSU10.exe"
+        ],
+        "reason": "Home and Pro turn tips off with the user's own Settings switch, which Microsoft keeps outside the policy: \"This excludes how individual experiences (e.g., Windows Spotlight) can be controlled by users in Windows Settings.\" The switch is stored in these two ContentDeliveryManager values (O&O ShutUp10 P066 and M005). Undo restores each value exactly."
+      },
       "reason": "Windows tips are part of Windows spotlight. The Experience CSP maps \"Do not show Windows tips\" to this value and lists Enterprise, Education and IoT Enterprise, not Pro. The client docs don't cover Windows Server, so it keeps its existing availability. Removing the override remains available everywhere."
     },
     {

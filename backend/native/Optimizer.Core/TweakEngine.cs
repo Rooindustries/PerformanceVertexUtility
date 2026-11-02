@@ -79,9 +79,11 @@ public sealed class TweakEngine
                 {
                     if (failure is not null) throw failure;
                     var controls = definition.Options.SelectMany(option => option.Controls ?? []).Select(change => change.Address).Distinct().ToDictionary(address => address, InspectControl);
-                    var reads = readings.Values.DistinctBy(read => read.Id).ToArray();
-                    if (readings.Values.Any(read => !read.Same(reads.Single(item => item.Id == read.Id)))) throw new InvalidDataException("A setting changed while being read.");
+                    var all = readings.Values.DistinctBy(read => read.Id).ToArray();
+                    if (readings.Values.Any(read => !read.Same(all.Single(item => item.Id == read.Id)))) throw new InvalidDataException("A setting changed while being read.");
                     var available = definition.Options.Where(option => Supported(option) && (option.Controls ?? []).All(control => controls[control.Address].Allows(control.Value))).Select(option => option.Id).ToArray();
+                    var usable = resolvedOptions.Where(option => available.Contains(option.Id)).SelectMany(option => option.Changes).Select(change => change.Address).ToHashSet();
+                    var reads = available.Length == 0 ? all : readings.Where(pair => usable.Contains(pair.Key)).Select(pair => pair.Value).DistinctBy(read => read.Id).ToArray();
                     var matches = resolvedOptions.Where(option => supported && available.Contains(option.Id) && option.Changes.All(change => TweakComposition.Matches(new(definition.Id, option.Id, readings[change.Address], Desired(change), change.Token, change.Bits), readings[change.Address].Value)) && (option.Controls ?? []).All(change => (change.Address.Kind != "windows-features" || controls[change.Address].Allows(change.Value)) && ControlComposition.Matches(new(definition.Id, option.Id, controls[change.Address], controls[change.Address].Expand(change.Value, allowPending: true), change.Patch), controls[change.Address].Value))).Select(option => option.Id).ToArray();
                     supported &= available.Length > 0;
                     return new TweakSettingStatus(definition.Id, definition.Name, supported, matches, reads, supported ? null : "No choice applies to this Windows version, edition or installed product.", available, controls.Values.ToArray());
@@ -208,7 +210,7 @@ public sealed class TweakEngine
         foreach (var group in wanted.Values)
         {
             foreach (var claim in group) claim.Target.Validate();
-            Compose(profiles, profileId, group, profile => profile.Claims, TweakComposition.Check, claim => claim.SettingId);
+            Compose(profiles, profileId, group, profile => profile.Claims, claims => TweakComposition.Check(claims, id => _catalog.Settings.FirstOrDefault(definition => definition.Id == id)?.Name ?? id), claim => claim.SettingId);
         }
         foreach (var group in profiles.SelectMany(profile => profile.Controls ?? []).GroupBy(claim => claim.Target.Id, StringComparer.Ordinal))
             Compose(profiles, profileId, group.ToArray(), profile => profile.Controls ?? [], ControlComposition.Check, claim => claim.SettingId);

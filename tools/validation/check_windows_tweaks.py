@@ -47,12 +47,100 @@ def policy_gate_failures(catalog, policies):
                 if any(not edition_allowed(edition, policy['editions']) for gate in gates for edition in gate['editions']):
                     failures.append('A choice Windows ignores on some editions is offered there: ' + setting['id'] + '/' + option['id'])
                 equivalent = policy.get('equivalentChoice')
-                if equivalent and not any(
-                    [change['address'] for change in other['changes']] == [option['changes'][0]['address']] and other['changes'][0].get('dword') == equivalent['dword'] and
-                    any('*' in gate['editions'] for gate in other.get('availability', [{'editions': setting['editions']}]))
-                    for other in setting['options']
+                if not equivalent:
+                    continue
+                editions = sorted(equivalent.get('editions', ['*']))
+                if not any(
+                    (any('*' in gate['editions'] for gate in other.get('availability', [{'editions': setting['editions']}])) if editions == ['*']
+                     else sorted({edition for gate in other.get('availability', [{'editions': setting['editions']}]) for edition in gate['editions']}) == editions)
+                    for other in replacements(setting, option, policy)
                 ):
                     failures.append('Editions without ' + option['name'] + ' need the documented equivalent choice: ' + setting['id'])
+    return failures
+
+
+def writes(address, dword):
+    return tuple(address.get(field, '').casefold() for field in ('hive', 'keyPath', 'valueName')) + (dword,)
+
+
+def replacements(setting, option, policy):
+    equivalent = policy.get('equivalentChoice')
+    if not equivalent:
+        return []
+    wanted = sorted(writes(item, item['dword']) for item in equivalent['changes']) if 'changes' in equivalent else [writes(option['changes'][0]['address'], equivalent['dword'])]
+    return [other for other in setting['options']
+            if other.get('replaces') == option['id'] and sorted(writes(change['address'], change.get('dword')) for change in other['changes']) == wanted]
+
+
+EVERY_EDITION = ('Core', 'CoreN', 'CoreCountrySpecific', 'CoreSingleLanguage', 'Professional', 'ProfessionalN', 'ProfessionalEducation', 'ProfessionalEducationN', 'ProfessionalWorkstation',
+                 'ProfessionalWorkstationN', 'Cloud', 'CloudN', 'CloudEdition', 'CloudEditionN', 'Enterprise', 'EnterpriseS', 'EnterpriseEval', 'EnterpriseG', 'Education', 'EducationN',
+                 'IoTEnterprise', 'IoTEnterpriseS', 'ServerRdsh', 'ServerStandard', 'ServerDatacenter', 'ServerTurbine')
+
+
+def equivalent_edition_failures(policies):
+    failures = []
+    for policy in policies:
+        editions = policy.get('equivalentChoice', {}).get('editions')
+        if editions is not None:
+            failures.extend('The policy or its equivalent choice must cover ' + edition + ' exactly once: ' + policy['valueName']
+                            for edition in EVERY_EDITION if edition_allowed(edition, policy['editions']) == edition_allowed(edition, editions))
+    return failures
+
+
+def per_user_reset_failures(catalog, policies):
+    failures = []
+    for setting in catalog['settings']:
+        for option in setting['options']:
+            for policy in policies:
+                equivalent = policy.get('equivalentChoice', {})
+                if 'changes' not in equivalent or not any(policy_matches(change, policy) for change in option['changes']):
+                    continue
+                if any(item.get('windowsDefault') is not None for item in equivalent['changes']) and not equivalent.get('windowsDefaultEvidence'):
+                    failures.append('A value Windows keeps needs the read that shows it: ' + policy['valueName'])
+                wanted = sorted([writes(option['changes'][0]['address'], None)] + [writes(item, item.get('windowsDefault')) for item in equivalent['changes']])
+                if not any(other.get('replaces') and sorted(writes(change['address'], change.get('dword')) for change in other['changes']) == wanted and
+                           sorted({edition for gate in other.get('availability', [{'editions': setting['editions']}]) for edition in gate['editions']}) == sorted(equivalent.get('editions', ['*']))
+                           for other in setting['options']):
+                    failures.append('Editions with ' + equivalent['name'] + ' need a Use Windows default that removes the policy and puts back what Windows keeps: ' + setting['id'])
+    return failures
+
+
+RESET_NAMES = {'Remove this override', 'Windows default', 'Use Windows default', 'Not configured', 'source-default', 'Return to previous plan', 'Remove boot override'}
+
+
+def reset_coverage_failures(catalog):
+    failures = []
+    for setting in catalog['settings']:
+        for edition in EVERY_EDITION:
+            if not edition_allowed(edition, setting['editions']):
+                continue
+            offered = [option for option in setting['options'] if any(edition_allowed(edition, gate['editions']) for gate in option.get('availability', [{'editions': setting['editions']}]))]
+            resets = [option for option in offered if option['name'] in RESET_NAMES]
+            written = {writes(change['address'], None) for option in offered for change in option['changes']}
+            covering = [option for option in resets if {writes(change['address'], None) for change in option['changes']} >= written]
+            if resets and (not covering or any(option not in covering and not any(other.get('replaces') == option['id'] for other in covering) for option in resets)):
+                failures.append('On ' + edition + ', Use Windows default must clear every value the choices offered there write: ' + setting['id'])
+                break
+    return failures
+
+
+HOME_AND_PRO = ('Core', 'CoreSingleLanguage', 'Professional', 'ProfessionalWorkstation', 'CloudEdition')
+HOME_AND_PRO_GAPS = {'DisableWindowsConsumerFeatures', 'DisableWindowsSpotlightFeatures'}
+
+
+def home_and_pro_failures(catalog, policies, gaps):
+    failures = []
+    for setting in catalog['settings']:
+        for option in setting['options']:
+            for policy in policies:
+                if policy['valueName'] in gaps or not any(policy_matches(change, policy) for change in option['changes']):
+                    continue
+                for edition in HOME_AND_PRO:
+                    if not edition_allowed(edition, policy['editions']) and not any(
+                        any(edition_allowed(edition, gate['editions']) for gate in other.get('availability', [{'editions': setting['editions']}]))
+                        for other in replacements(setting, option, policy)
+                    ):
+                        failures.append('Windows ignores ' + policy['valueName'] + ' on ' + edition + ' and the row has no choice that works there instead: ' + setting['id'] + '/' + option['id'])
     return failures
 
 
@@ -106,7 +194,7 @@ def check(root):
     def gated(editions, extra=()):
         options = [{'id': 'off', 'name': 'Off', 'changes': [{'address': address, 'dword': 0}], 'availability': [{'editions': editions}]}, *extra]
         return {'settings': [{'id': 'fixture', 'editions': ['*'], 'options': options}]}
-    required = {'id': 'required', 'name': 'Required', 'changes': [{'address': address, 'dword': 1}], 'availability': [{'editions': ['*']}]}
+    required = {'id': 'required', 'name': 'Required', 'changes': [{'address': address, 'dword': 1}], 'replaces': 'off', 'availability': [{'editions': ['*']}]}
     if not policy_gate_failures(gated(['*'], [required]), [policy]):
         failures.append('Policy edition check must reject a limited value offered on every edition.')
     if not policy_gate_failures(gated(['Enterprise', 'Professional'], [required]), [policy]):
@@ -117,6 +205,83 @@ def check(root):
         failures.append('Policy edition check must require the documented equivalent choice on other editions.')
     if policy_gate_failures(gated(['Enterprise'], [required, {'id': 'full', 'name': 'Full', 'changes': [{'address': address, 'dword': 3}], 'availability': [{'editions': ['*']}]}, {'id': 'remove', 'name': 'Remove', 'changes': [{'address': address, 'dword': None}]}]), [policy]):
         failures.append('Policy edition check must leave other values and override removal on every edition.')
+    if not policy_gate_failures(gated(['Enterprise'], [dict(required, replaces=None), dict(required, id='linked', changes=[{'address': address, 'dword': 3}])]), [policy]):
+        failures.append('Policy edition check must require the equivalent value on the choice that replaces the limited one.')
+    failures.extend(home_and_pro_failures(catalog, policy_editions['policies'], HOME_AND_PRO_GAPS))
+    replacement = dict(required, replaces='off', availability=[{'editions': ['Core*', 'Professional*', 'Cloud*']}])
+    if not home_and_pro_failures(gated(['Enterprise']), [policy], set()):
+        failures.append('Home and Pro check must reject a limited row with nothing that works on Home and Pro.')
+    if home_and_pro_failures(gated(['Enterprise']), [policy], {'Level'}):
+        failures.append('Home and Pro check must skip a listed known gap.')
+    if home_and_pro_failures(gated(['Enterprise'], [replacement]), [policy], set()):
+        failures.append('Home and Pro check must accept a choice that replaces the limited one on Home and Pro.')
+    if not home_and_pro_failures(gated(['Enterprise'], [dict(replacement, replaces=None)]), [policy], set()):
+        failures.append('Home and Pro check must require the working choice to replace the limited one.')
+    if not home_and_pro_failures(gated(['Enterprise'], [dict(replacement, availability=[{'editions': ['Core*', 'Professional*']}])]), [policy], set()):
+        failures.append('Home and Pro check must cover Windows 11 SE too.')
+    if not home_and_pro_failures(gated(['Enterprise'], [dict(replacement, changes=[{'address': address, 'dword': 3}])]), [policy], set()):
+        failures.append('Home and Pro check must require the replacing choice to write the documented equivalent.')
+    if not home_and_pro_failures(gated(['Enterprise'], [replacement]), [{key: value for key, value in policy.items() if key != 'equivalentChoice'}], set()):
+        failures.append('Home and Pro check must require a documented equivalent for a limited policy outside the listed gaps.')
+    personal = {'hive': 'LocalMachine', 'keyPath': 'Fixture', 'valueName': 'Tips', 'dword': 1, 'editions': ['Enterprise*'],
+                'equivalentChoice': {'name': 'On for this user', 'editions': ['Core*', 'Professional*'],
+                                     'changes': [{'hive': 'CurrentUser', 'keyPath': 'Fixture', 'valueName': name, 'dword': 0} for name in ('First', 'Second')]}}
+    tips = {'hive': 'LocalMachine', 'keyPath': 'fixture', 'valueName': 'tips'}
+    def switches(editions, names=('First', 'Second'), dword=0, replaces='on', identifier='personal'):
+        return {'id': identifier, 'name': 'On for this user', 'changes': [{'address': {'hive': 'CurrentUser', 'keyPath': 'fixture', 'valueName': name}, 'dword': dword} for name in names],
+                'replaces': replaces, 'availability': [{'editions': editions}]}
+    def limited_tips(*extra):
+        return {'settings': [{'id': 'fixture', 'editions': ['*'], 'options': [{'id': 'on', 'name': 'On', 'changes': [{'address': tips, 'dword': 1}], 'availability': [{'editions': ['Enterprise*']}]}, *extra]}]}
+    if not policy_gate_failures(limited_tips(), [personal]):
+        failures.append('Policy edition check must require the per-user equivalent choice on other editions.')
+    if policy_gate_failures(limited_tips(switches(['Core*', 'Professional*'])), [personal]):
+        failures.append('Policy edition check must accept the per-user equivalent choice on its editions.')
+    if not policy_gate_failures(limited_tips(switches(['*'])), [personal]):
+        failures.append('Policy edition check must reject a per-user equivalent offered where the policy works.')
+    if not policy_gate_failures(limited_tips(switches(['Core*', 'Professional*'], ('First',))), [personal]):
+        failures.append('Policy edition check must require every per-user switch.')
+    if not policy_gate_failures(limited_tips(switches(['Core*', 'Professional*'], dword=1)), [personal]):
+        failures.append('Policy edition check must require the per-user switches turned off.')
+    if not policy_gate_failures(limited_tips(switches(['Core*', 'Professional*'], replaces=None), switches(['Core*', 'Professional*'], dword=1, identifier='linked')), [personal]):
+        failures.append('Policy edition check must require the per-user switches on the choice that replaces the limited one.')
+    failures.extend(equivalent_edition_failures(policy_editions['policies']))
+    if not equivalent_edition_failures([personal]):
+        failures.append('Equivalent edition check must reject a choice that leaves Windows 11 SE with neither way.')
+    if not equivalent_edition_failures([dict(personal, equivalentChoice=dict(personal['equivalentChoice'], editions=['*']))]):
+        failures.append('Equivalent edition check must reject a choice offered where the policy works.')
+    if equivalent_edition_failures([dict(personal, editions=['Enterprise*', 'Education*', 'IoTEnterprise*', 'Server*'], equivalentChoice=dict(personal['equivalentChoice'], editions=['Core*', 'Professional*', 'Cloud*']))]):
+        failures.append('Equivalent edition check must accept a policy and choice that split every edition.')
+    if not equivalent_edition_failures([dict(personal, editions=['Enterprise*', 'Education*', 'IoTEnterprise*', 'Server*'], equivalentChoice=dict(personal['equivalentChoice'], editions=['Core*', 'Professional*', 'Cloud*', 'ServerRdsh']))]):
+        failures.append('Equivalent edition check must reject a choice that overlaps the policy on Enterprise multi-session.')
+    failures.extend(reset_coverage_failures(catalog))
+    failures.extend(per_user_reset_failures(catalog, policy_editions['policies']))
+    kept = dict(personal, equivalentChoice=dict(personal['equivalentChoice'], windowsDefaultEvidence='fixture read',
+                                                changes=[personal['equivalentChoice']['changes'][0], dict(personal['equivalentChoice']['changes'][1], windowsDefault=1)]))
+    def reset_row(second, replaces='remove'):
+        return {'id': 'personal-remove', 'name': 'Remove this override', 'replaces': replaces, 'availability': [{'editions': ['Core*', 'Professional*']}],
+                'changes': [{'address': tips, 'dword': None}, {'address': {'hive': 'CurrentUser', 'keyPath': 'fixture', 'valueName': 'First'}, 'dword': None},
+                            {'address': {'hive': 'CurrentUser', 'keyPath': 'fixture', 'valueName': 'Second'}, 'dword': second}]}
+    if per_user_reset_failures(limited_tips(switches(['Core*', 'Professional*']), reset_row(1)), [kept]):
+        failures.append('Per-user reset check must accept a reset that writes back the value Windows keeps.')
+    if not per_user_reset_failures(limited_tips(switches(['Core*', 'Professional*']), reset_row(None)), [kept]):
+        failures.append('Per-user reset check must reject a reset that deletes a value Windows keeps.')
+    if not per_user_reset_failures(limited_tips(switches(['Core*', 'Professional*']), reset_row(1, None)), [kept]):
+        failures.append('Per-user reset check must require the reset to replace the policy-only one.')
+    if not per_user_reset_failures(limited_tips(switches(['Core*', 'Professional*']), reset_row(1)), [dict(kept, equivalentChoice=dict(kept['equivalentChoice'], windowsDefaultEvidence=''))]):
+        failures.append('Per-user reset check must require the read that shows a value Windows keeps.')
+    policy_off = {'address': tips, 'dword': None}
+    switches_off = [{'address': {'hive': 'CurrentUser', 'keyPath': 'fixture', 'valueName': name}, 'dword': None} for name in ('First', 'Second')]
+    def resettable(*extra):
+        return {'settings': [{'id': 'fixture', 'editions': ['*'], 'options': [{'id': 'remove', 'name': 'Remove this override', 'changes': [policy_off]}, *extra]}]}
+    personal_choice = switches(['Core*', 'Professional*'])
+    if not reset_coverage_failures(resettable(personal_choice)):
+        failures.append('Reset coverage check must reject a Windows default that leaves a Home and Pro choice in place.')
+    if reset_coverage_failures(resettable(personal_choice, {'id': 'personal-remove', 'name': 'Remove this override', 'changes': [policy_off, *switches_off], 'replaces': 'remove', 'availability': [{'editions': ['Core*', 'Professional*']}]})):
+        failures.append('Reset coverage check must accept a Home and Pro Windows default that replaces the policy-only one.')
+    if not reset_coverage_failures(resettable(personal_choice, {'id': 'personal-remove', 'name': 'Remove this override', 'changes': [policy_off, *switches_off], 'availability': [{'editions': ['Core*', 'Professional*']}]})):
+        failures.append('Reset coverage check must reject a narrower Windows default that nothing replaces.')
+    if reset_coverage_failures(resettable({'id': 'on', 'name': 'On', 'changes': [{'address': tips, 'dword': 1}]})):
+        failures.append('Reset coverage check must accept a Windows default that clears the value the row writes.')
     windows_defaults = json.loads((root / 'backend/catalogs/windows-default-values.json').read_text())['values']
     failures.extend(windows_default_failures(catalog, windows_defaults))
     kept = {'hive': 'LocalMachine', 'keyPath': 'Fixture', 'valueName': 'value', 'dword': 0}

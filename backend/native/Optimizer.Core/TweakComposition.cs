@@ -51,12 +51,12 @@ public static class TweakComposition
         if (value.Type != 4 || value.Bytes.Length != 4) throw new InvalidDataException("This setting requires a registry DWORD.");
         return BitConverter.ToUInt32(value.Bytes);
     }
-    public static void Check(IEnumerable<TweakClaim> claims)
+    public static void Check(IEnumerable<TweakClaim> claims, Func<string, string>? name = null)
     {
         var rows = claims.ToArray();
         var whole = rows.Where(Whole).ToArray();
         if (whole.Length > 0 && rows.Length != whole.Length) throw new InvalidDataException("A whole-value setting conflicts with a field-level setting.");
-        if (whole.Any(row => !TweakRead.SameValue(row.Desired, whole[0].Desired))) throw new InvalidDataException("Conflicting choices for one Windows setting: " + string.Join(", ", rows.Select(row => row.SettingId).Distinct()));
+        if (whole.Any(row => !TweakRead.SameValue(row.Desired, whole[0].Desired))) throw new InvalidDataException("Conflicting choices for one Windows setting: " + string.Join(", ", rows.Select(row => row.SettingId).Distinct().Select(id => name?.Invoke(id) ?? id)));
         if (rows.Any(row => row.Token is not null) && rows.Any(row => row.Bits is not null)) throw new InvalidDataException("String and DWORD fields cannot share a value.");
         foreach (var field in rows.Where(row => row.Token is not null).GroupBy(row => row.Token!.Name, StringComparer.OrdinalIgnoreCase))
             if (field.Select(row => row.Token!.Value).Distinct().Count() > 1) throw new InvalidDataException("Conflicting choices for setting field: " + field.Key);

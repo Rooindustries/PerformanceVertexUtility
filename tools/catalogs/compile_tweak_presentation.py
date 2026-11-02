@@ -34,6 +34,8 @@ WINDOWS_DEFAULTS = {
     ('SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters\\Interfaces', 'NameServer'): '',
     ('SYSTEM\\CurrentControlSet\\Control', 'SvcHostSplitThresholdInKB'): 0x380000,
     ('.Default\\Control Panel\\Keyboard', 'InitialKeyboardIndicators'): '2147483648',
+    ('SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager', 'SubscribedContent-338389Enabled'): 1,
+    ('SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager', 'SoftLandingEnabled'): 1,
 }
 BUILT_IN_DOH = {'1.1.1.1', '1.0.0.1', '2606:4700:4700::1111', '2606:4700:4700::1001', '8.8.8.8', '8.8.4.4', '2001:4860:4860::8888', '2001:4860:4860::8844', '9.9.9.9', '149.112.112.112', '2620:fe::fe', '2620:fe::9'}
 EXPLOIT = ' (exploit protection)'
@@ -161,8 +163,10 @@ def compile_presentation():
             entry.update(section='network', name=name, description='Protect this type of connection. Turning the firewall off reduces its protection; organization rules may take precedence.', topic='Firewall')
         if kind == 'firewall-blocklist':
             entry.update(section='network', description='Block a saved list of connections. The list is dated 2022 and may interrupt Microsoft services; it does not cover every current address.', topic='Firewall')
-        if (address.get('keyPath'), value_name) in WINDOWS_DEFAULTS:
-            entry['defaults'] = {value_name: WINDOWS_DEFAULTS[(address['keyPath'], value_name)]}
+        defaults = {item['address']['valueName']: WINDOWS_DEFAULTS[(item['address']['keyPath'], item['address']['valueName'])] for option in setting['options'] for item in option['changes']
+                    if (item['address'].get('keyPath'), item['address'].get('valueName')) in WINDOWS_DEFAULTS}
+        if defaults:
+            entry['defaults'] = defaults
         if kind == 'dns-over-https' and address['target'] in BUILT_IN_DOH:
             entry['defaults'] = {prop: dict(change['value'], autoUpgrade=False)}
         if entry['section'] == 'network' and not entry.get('description'):

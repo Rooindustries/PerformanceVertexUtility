@@ -2968,7 +2968,11 @@
     "section": "windows"
   },
   "windows.d09ccd0fee309f49": {
-    "section": "windows"
+    "section": "windows",
+    "defaults": {
+      "SubscribedContent-338389Enabled": 1,
+      "SoftLandingEnabled": 1
+    }
   },
   "windows.96a972dd72c00333": {
     "section": "debloat"
@@ -2998,7 +3002,10 @@
     "section": "debloat"
   },
   "windows.8e26b01782e8e151": {
-    "section": "debloat"
+    "section": "debloat",
+    "defaults": {
+      "SoftLandingEnabled": 1
+    }
   },
   "windows.e07cb76c6341674f": {
     "section": "debloat"
@@ -3031,7 +3038,10 @@
     "section": "debloat"
   },
   "windows.4712976559ce2855": {
-    "section": "debloat"
+    "section": "debloat",
+    "defaults": {
+      "SubscribedContent-338389Enabled": 1
+    }
   },
   "windows.3d5015d72a6c3cd9": {
     "section": "debloat"
