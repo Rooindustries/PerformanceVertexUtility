@@ -51,13 +51,18 @@ static class RefusalChecks
         check(!Directory.Exists(root) && !Directory.Exists(far), "Refusal validation removes its fixture");
     }
 
-    static string Sddl(string path)
+    internal static string Sddl(string path)
     {
         using var handle = Open(path, 0x20000);
         GetKernelObjectSecurity(handle, 7, null, 0, out var needed);
         var bytes = new byte[needed];
         if (!GetKernelObjectSecurity(handle, 7, bytes, needed, out _)) throw new Win32Exception(Marshal.GetLastWin32Error());
-        if (!ConvertSecurityDescriptorToStringSecurityDescriptor(bytes, 1, 7, out var text, out _)) throw new Win32Exception(Marshal.GetLastWin32Error());
+        return Sddl(bytes, 7);
+    }
+
+    internal static string Sddl(byte[] bytes, uint information)
+    {
+        if (!ConvertSecurityDescriptorToStringSecurityDescriptor(bytes, 1, information, out var text, out _)) throw new Win32Exception(Marshal.GetLastWin32Error());
         try { return Marshal.PtrToStringUni(text) ?? ""; } finally { LocalFree(text); }
     }
 

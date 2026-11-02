@@ -56,6 +56,58 @@ static class BulkRemovalChecks
         }
     }
 
+    // An app refused because a file is in use pauses the cleanup, and the page names the file and says what to do instead of calling the
+    // cleanup stopped partway. A restore that couldn't put a leftover back names it and says why.
+    static async Task PausedAsync(Action<bool, string> check)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "roo-industries-cleanup-paused-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var operations = App.Operations;
+        try
+        {
+            ApplicationCleanupPreview Part(string name) => new()
+            {
+                SchemaVersion = 1, Owner = OperationOwner.Current(), OperationId = Guid.NewGuid().ToString("N"), Source = Path.Combine(root, "queue.json"),
+                AppId = "registry:" + name, DisplayName = name, ProviderIdentityHash = new string('A', 64), InventoryHash = new string('B', 64),
+                Selection = [], Registry = null, Files = new(Path.Combine(root, name + "-files-preview.json"), new string('C', 64), Path.Combine(root, name + "-files-journal.json")),
+            };
+            var editor = Part("Roo Industries Fixture Editor");
+            var viewer = Part("Roo Industries Fixture Viewer");
+            var plan = new CleanupBatchPreview
+            {
+                SchemaVersion = 1, BatchId = Guid.NewGuid().ToString("N"), Owner = OperationOwner.Current(),
+                Parts = [new(editor, new(Path.Combine(root, "editor.json"), new string('D', 64), Path.Combine(root, "editor-journal.json"))), new(viewer, new(Path.Combine(root, "viewer.json"), new string('D', 64), Path.Combine(root, "viewer-journal.json")))],
+            };
+            CleanupBatchSession Session(string status, bool restoring, params CleanupBatchEntry[] entries) => new(new(plan, Path.Combine(root, "batch-preview.json"), new string('E', 64), Path.Combine(root, "batch-journal.json")), new CleanupBatchJournal
+            {
+                SchemaVersion = 1, PreviewPath = Path.Combine(root, "batch-preview.json"), ReviewHash = new string('E', 64), Preview = plan, RestoreStarted = restoring,
+                Status = status, UpdatedAtUtc = DateTime.UtcNow, Entries = entries.ToList(),
+            });
+            const string busy = @"C:\Games\Roo Industries Fixture Viewer\settings.ini is open in another program. Close it, then run cleanup again.";
+            operations.CleanupHistory = [Session("paused", false, new() { OperationId = editor.OperationId, Status = "applied" }, new() { OperationId = viewer.OperationId, Status = "refused", Error = busy })];
+            var model = new BulkRemovalViewModel();
+            await model.InitializeAsync();
+            check(model.FileStatus == "Cleanup paused at Roo Industries Fixture Viewer. Nothing was changed for it." &&
+                model.FileSummary.Contains("Roo Industries Fixture Viewer: Not changed. " + busy, StringComparison.Ordinal) &&
+                model.FileSummary.Contains("Press Resume cleanup to carry on from Roo Industries Fixture Viewer.", StringComparison.Ordinal) &&
+                !model.FileSummary.Contains("Stopped partway", StringComparison.Ordinal) && model.CleanupApplyLabel == "Resume cleanup",
+                "An app refused because a file is in use pauses the cleanup, and the page names the file, says nothing changed for that app and offers Resume cleanup: " +
+                model.FileStatus + " / " + model.FileSummary.Replace("\n", " / "));
+            const string missed = @"C:\Games\Roo Industries Fixture Editor\cache.bin: Something else is there now, so it was left as is and the leftover wasn't put back.";
+            operations.CleanupHistory = [Session("needsReconciliation", true, new() { OperationId = editor.OperationId, Status = "needsReconciliation", NotRestored = [missed] }, new() { OperationId = viewer.OperationId, Status = "refused", Error = busy })];
+            var reopened = new BulkRemovalViewModel();
+            await reopened.InitializeAsync();
+            check(reopened.FileStatus == "Restore couldn't put everything back. Press Restore this cleanup to try again." &&
+                reopened.FileSummary.Contains("These couldn't be put back:\n" + missed, StringComparison.Ordinal) && !reopened.FileSummary.Contains("Press Resume cleanup", StringComparison.Ordinal),
+                "A restore that couldn't put a leftover back names it on the page and says why: " + reopened.FileStatus + " / " + reopened.FileSummary.Replace("\n", " / "));
+        }
+        finally
+        {
+            operations.CleanupHistory = [];
+            Directory.Delete(root, true);
+        }
+    }
+
     public static async Task RunAsync(Action<bool, string> check)
     {
         App.Live.InstalledApps = new InstalledAppInventory
@@ -65,6 +117,7 @@ static class BulkRemovalChecks
         };
         App.Live.LastError = null;
         await LeftAsChangedAsync(check);
+        await PausedAsync(check);
         BulkRemovalJournal Journal(string status, params (string AppId, string State, bool Absent)[] entries) => new()
         {
             Status = status,

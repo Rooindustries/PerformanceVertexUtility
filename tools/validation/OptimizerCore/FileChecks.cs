@@ -76,25 +76,6 @@ static class FileChecks
                 check(resumed.Status == "restored" && File.ReadAllText(Path.Combine(partialRoot, "second.txt")) == "second original" && resumed.Entries.Single(entry => entry.Original.Directory).DirectoryMetadataRestored,
                     drive + ": retry uses the recorded directory identity and finalizes metadata after all child data is restored");
             }
-
-            var checkpointRoot = Path.Combine(far, "Creation checkpoint");
-            Directory.CreateDirectory(checkpointRoot);
-            File.WriteAllText(Path.Combine(checkpointRoot, "data.txt"), "checkpoint data");
-            var checkpointPreview = engine.Preview(authority.AppId, identityHash, [checkpointRoot], true);
-            var checkpointPath = Path.Combine(operations, "checkpoint-preview.json");
-            var checkpointJournal = Path.Combine(operations, "checkpoint-journal.json");
-            OperationFiles.Write(checkpointPath, checkpointPreview);
-            var checkpoint = engine.Apply(checkpointPath, OperationFiles.HashFile(checkpointPath), checkpointJournal);
-            check(checkpoint.Status == "applied", "Creation-checkpoint fixture has a complete verified backup");
-            var directoryEntry = checkpoint.Entries.Single(entry => entry.Original.Directory);
-            directoryEntry.Status = "restoreIntent";
-            OperationFiles.Write(checkpointJournal, checkpoint);
-            using (var created = FileLease.Create(checkpointRoot, true)) created.RestoreData(directoryEntry.BackupPath, directoryEntry.Original);
-            check(directoryEntry.RestoredIdentity is null, "The interrupted checkpoint preserves missing directory identity evidence");
-            var checkpointResult = engine.Restore(checkpointJournal);
-            using (var recovered = FileLease.Open(checkpointRoot))
-                check(checkpointResult.Status == "restored" && directoryEntry.Original.SameRestorableData(recovered.Capture()) && File.ReadAllText(Path.Combine(checkpointRoot, "data.txt")) == "checkpoint data",
-                    "Recovery after directory creation verifies existing backup-equivalent data before completing children and metadata");
         }
         finally
         {

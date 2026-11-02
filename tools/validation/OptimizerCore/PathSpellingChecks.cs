@@ -284,15 +284,16 @@ static class PathSpellingChecks
                 var registryFinal = Race(3, () => Apply(finalRegistry));
                 var registryJournal = OperationFiles.Read<RegistryCleanupJournal>(finalRegistry.Plan.Registry!.JournalPath);
                 var fileFinal = Race(3, () => Apply(finalFiles));
-                var fileJournal = OperationFiles.Read<FileCleanupJournal>(finalFiles.Plan.Files!.JournalPath);
+                var fileJournal = finalFiles.Plan.Files!.JournalPath;
+                var fileCopies = Directory.EnumerateFiles(Path.GetDirectoryName(fileJournal)!, "file-backup-*").Count();
                 Measure("finalCheck", new { Registry = new { registryFinal.Races, registryFinal.Result.Status, Part = registryJournal.Status, registryJournal.Error, Backup = File.Exists(registryJournal.BackupPath) },
-                    Files = new { fileFinal.Races, fileFinal.Result.Status, Part = fileJournal.Status, Entries = fileJournal.Entries.Select(entry => entry.Status + ":" + entry.Error).ToArray() } });
+                    Files = new { fileFinal.Races, fileFinal.Result.Status, fileFinal.Result.Errors, Journal = File.Exists(fileJournal), Copies = fileCopies } });
                 check(registryFinal.Races == 1 && registryFinal.Result.Status == "needsReconciliation" && registryJournal.Status == "needsReconciliation" &&
                     registryJournal.Error == Refusal + key.Target && File.Exists(registryJournal.BackupPath) && ReceiptAbsent(finalRegistry.Plan) && State() == before,
                     mode + ": the race at the final check after the registry backup keeps the key and value and commits nothing");
-                check(fileFinal.Races == 1 && fileFinal.Result.Status == "needsReconciliation" && fileJournal.Status == "needsReconciliation" &&
-                    fileJournal.Entries.All(entry => entry.Status == "pending") && fileJournal.Entries.Any(entry => entry.Error == Refusal + folder.Target) && File.ReadAllText(data) == "fixture",
-                    mode + ": the race at the final check after the file backup keeps the folder");
+                check(fileFinal.Races == 1 && fileFinal.Result.Status == "needsReconciliation" && fileFinal.Result.Errors.SequenceEqual([Refusal + folder.Target]) &&
+                    !File.Exists(fileJournal) && fileCopies == 0 && File.ReadAllText(data) == "fixture",
+                    mode + ": the race at the final check after the file backup keeps the folder and leaves no undo copy or file journal");
 
                 var restoreReview = Review("restore", key, value, folder);
                 var restoreJournal = Path.Combine(Path.GetDirectoryName(restoreReview.Review)!, "journal.json");
