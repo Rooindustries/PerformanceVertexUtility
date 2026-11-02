@@ -109,9 +109,7 @@ public sealed class ProtectedSessions
     public ProtectedSessionPreview Preview(int launcherId, string gamePath, Dictionary<string, JsonElement> desired, bool acceptLauncherScope)
     {
         if (!acceptLauncherScope) throw new InvalidDataException("Review the scope: job limits and launcher defaults also affect other new launcher descendants.");
-        if (!Path.IsPathFullyQualified(gamePath) || !File.Exists(gamePath) || !gamePath.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
-            throw new InvalidDataException("Select an installed game executable.");
-        gamePath = Path.GetFullPath(gamePath);
+        gamePath = GameFile(gamePath);
         ValidateControls(desired);
         ProcessTarget launcher;
         try { launcher = new ProcessTarget(launcherId); }
@@ -145,6 +143,32 @@ public sealed class ProtectedSessions
         };
     }
 
+    public static string GameFile(string gamePath)
+    {
+        if (!Path.IsPathFullyQualified(gamePath) || !gamePath.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("Select an installed game executable.");
+        string? resolved; var link = false;
+        try
+        {
+            using var file = NativeFiles.OpenTarget(gamePath);
+            var final = NativeFiles.FinalPath(file);
+            resolved = final is null ? NativeFiles.NetworkPath(file, gamePath) : NativeFiles.Plain(final);
+            if (resolved is not null)
+            {
+                if (NativeFiles.Info(file).IsDirectory) throw new InvalidDataException("Select an installed game executable.");
+                link = new FileInfo(gamePath).LinkTarget is not null;
+                // A network name doesn't follow a link to another file.
+                if (link && final is null) resolved = null;
+            }
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException) { throw new InvalidDataException("Select an installed game executable.", error); }
+        if (resolved is null)
+            throw new InvalidDataException("Windows can't tell where " + Path.GetFileName(gamePath) + " is really stored, so a session couldn't recognize the game when it starts. Pick the game from the drive or folder it's installed in.");
+        if (!resolved.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("Select an installed game executable.");
+        if (link && !string.Equals(Path.GetFileName(resolved), Path.GetFileName(gamePath), StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException(Path.GetFileName(gamePath) + " is a shortcut to " + Path.GetFileName(resolved) + ". Pick " + Path.GetFileName(resolved) + " itself.");
+        return resolved;
+    }
+
     internal static void ValidateControls(Dictionary<string, JsonElement> desired)
     {
         if (desired.Count == 0 || desired.Keys.Any(name => !StartupFields.Concat(NativeFields).Append("affinity").Contains(name)))
@@ -166,7 +190,9 @@ public sealed class ProtectedSessions
         if (fresh.SchemaVersion != saved.SchemaVersion || fresh.Owner != saved.Owner) return "It was set up by another Windows account.";
         if (!string.Equals(fresh.Launcher.ExecutablePath, saved.Launcher.ExecutablePath, StringComparison.OrdinalIgnoreCase) || fresh.LauncherHash != saved.LauncherHash)
             return "The launcher was updated or changed since you saved these settings.";
-        if (!string.Equals(fresh.GamePath, saved.GamePath, StringComparison.OrdinalIgnoreCase) || fresh.GameHash != saved.GameHash || fresh.GameLength != saved.GameLength || fresh.GameModifiedAtUtc != saved.GameModifiedAtUtc)
+        if (!string.Equals(NativeFiles.Plain(fresh.GamePath), NativeFiles.Plain(saved.GamePath), StringComparison.OrdinalIgnoreCase))
+            return "These settings were saved for " + saved.GamePath + ", but Windows now finds the game at " + fresh.GamePath + ".";
+        if (fresh.GameHash != saved.GameHash || fresh.GameLength != saved.GameLength || fresh.GameModifiedAtUtc != saved.GameModifiedAtUtc)
             return "The game changed since you saved these settings.";
         if (fresh.TopologyHash != saved.TopologyHash || !ProcessTarget.Equivalent("affinity", Value(fresh.OriginalAffinity), Value(saved.OriginalAffinity)))
             return "The CPU or the launcher's cores changed since you saved these settings.";
