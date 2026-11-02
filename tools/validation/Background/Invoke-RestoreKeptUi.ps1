@@ -144,9 +144,10 @@ try{
 }finally{
  try{if($app){Stop-OwnedValidationApp $app $receipt}}
  finally{
-  try{if($journal -and [IO.File]::Exists($journal)){HostCall 'process-restore' @{journalPath=$journal;acceptEarlierVersion=$true}|Out-Null};$journalRestored=$true}
+  try{if($journal -and [IO.File]::Exists($journal)){$restoredJournal=HostCall 'process-restore' @{journalPath=$journal;acceptEarlierVersion=$true};if($restoredJournal.status -notin @('restored','expired')){throw ('The saved one-time change was not restored: '+$restoredJournal.status)}};$journalRestored=$true}
   finally{
-   try{if($gameSession -and $gameSession.restorable -and [IO.File]::Exists($gameSession.sessionPath) -and ([IO.File]::ReadAllText($gameSession.sessionPath)|ConvertFrom-Json).restorable){$stopped=& (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe') -NoProfile -NonInteractive -ExecutionPolicy Bypass -File (Join-Path $AppRoot 'backend\scripts\Stop-GameTuneSession.ps1') -SessionId $gameSession.sessionId -SessionPath $gameSession.sessionPath -BackupPath $gameSession.backupManifestPath -ConfirmApply;$code=$LASTEXITCODE;$closed=try{($stopped -join "`n")|ConvertFrom-Json}catch{$null};if($code -or $null -eq $closed -or $closed.restorable -ne $false){throw ('Game priority cleanup left its session open: '+($stopped -join ' '))}}}
+   try{if(-not$journalRestored -and $fixture){Stop-OwnedProcess $fixture;$fixture=$null}
+    if($gameSession -and $gameSession.restorable -and [IO.File]::Exists($gameSession.sessionPath) -and ([IO.File]::ReadAllText($gameSession.sessionPath)|ConvertFrom-Json).restorable){$stopped=& (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe') -NoProfile -NonInteractive -ExecutionPolicy Bypass -File (Join-Path $AppRoot 'backend\scripts\Stop-GameTuneSession.ps1') -SessionId $gameSession.sessionId -SessionPath $gameSession.sessionPath -BackupPath $gameSession.backupManifestPath -ConfirmApply;$code=$LASTEXITCODE;$closed=try{($stopped -join "`n")|ConvertFrom-Json}catch{$null};if($code -or $null -eq $closed -or $closed.restorable -ne $false){throw ('Game priority cleanup left its session open: '+($stopped -join ' '))}}}
    finally{
     try{if($fixture){Stop-OwnedProcess $fixture}}
     finally{if($journalRestored -and $operation -and [IO.Directory]::Exists($operation)){Remove-Item -LiteralPath $operation -Recurse -Force}}
