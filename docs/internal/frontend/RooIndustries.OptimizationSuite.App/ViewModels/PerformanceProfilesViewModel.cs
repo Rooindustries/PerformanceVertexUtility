@@ -565,12 +565,15 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
                 return;
             }
             var restoredSessions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            // Every run's outcome stays on the card, so an older run's result never hides a newer run's kept settings.
+            var outcomes = new List<string>();
+            string Walked(string text) => string.Join("\n", outcomes.Append(text));
             while (evidence is not null)
             {
                 if (!restoredSessions.Add(evidence.SessionId))
                 {
                     GovernorStatus = "Background restore needs attention";
-                    GovernorDetail = "The same saved run still needs recovery. Restore stopped before repeating it.";
+                    GovernorDetail = Walked("The same saved run still needs recovery. Restore stopped before repeating it.");
                     SetGovernorRestore(evidence);
                     return;
                 }
@@ -578,26 +581,28 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
                 if (response.Value is null)
                 {
                     GovernorStatus = "Background restore not confirmed";
-                    GovernorDetail = PageWords(response.Error ?? "The background restore returned no result.", profile: false);
-                    SetGovernorRestore(ValidateSessionRestoreEvidence(evidence) ? evidence : null);
+                    GovernorDetail = Walked(PageWords(response.Error ?? "The background restore returned no result.", profile: false));
+                    SetGovernorRestore(await ReadHeldGovernorRestoreAsync(evidence));
                     return;
                 }
-                GovernorDetail = SummarizeSessionAction(response.Value, "The background restore result needs review.");
+                var outcome = SummarizeSessionAction(response.Value, "The background restore result needs review.");
+                GovernorDetail = Walked(outcome);
                 if (response.Error is null && SessionRestoreCompleted(response.Value, evidence, "performance.governor.stopSession"))
                 {
                     using var restored = JsonDocument.Parse(response.Value);
                     if (!TryExtractBool(restored.RootElement, out _, "restorable") || ExtractString(restored.RootElement, "status") != "completed")
                     {
                         GovernorStatus = "Background restore needs attention";
-                        SetGovernorRestore(evidence);
+                        SetGovernorRestore(await ReadHeldGovernorRestoreAsync(evidence));
                         return;
                     }
+                    outcomes.Add(outcome);
                     GovernorStatus = "Background limits restored";
                     var next = await ReadGovernorRestoreChainAsync();
                     if (next.Error is not null)
                     {
                         GovernorStatus = "Background restore needs attention";
-                        GovernorDetail = next.Error;
+                        GovernorDetail = Walked(next.Error);
                         SetGovernorRestore(evidence);
                         return;
                     }
@@ -607,7 +612,7 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
                 else
                 {
                     GovernorStatus = "Background restore needs attention";
-                    SetGovernorRestore(ValidateSessionRestoreEvidence(evidence) ? evidence : null);
+                    SetGovernorRestore(await ReadHeldGovernorRestoreAsync(evidence));
                     return;
                 }
             }
@@ -1090,7 +1095,8 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
     {
         var newest = await ReadGovernorRestoreChainAsync();
         if (newest.Error is null) return newest.Evidence;
-        return fallback is not null && ValidateSessionRestoreEvidence(fallback) ? fallback : null;
+        // While the saved runs can't be read, keep the way back; Restore reads them again before it writes anything.
+        return fallback;
     }
 
     private static bool HoldsApps(string? json)

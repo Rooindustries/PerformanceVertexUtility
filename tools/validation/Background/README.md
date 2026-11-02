@@ -506,7 +506,10 @@ them and names each one; status then moves on to the older run, and offers the
 kept run again once its lowered values come back.
 The queued concurrent Start lowers the first run's probe further and is restored
 first. Restoring an older run before a newer run that lowered the same setting
-keeps the older run open, also when the user set a value between the runs, and a
+keeps the older run open, also when the user set a value between the runs. A
+memory priority that older Restore already put back is no longer the run's, so
+when another program later sets the lowered value again, the last Restore leaves
+it. A
 closed probe's process ID given to a protected Windows process (`csrss`), with a
 different name or the same name and another start time, counts as closed instead
 of holding the run open, so status reports the older run that still holds an app.
@@ -515,7 +518,9 @@ is gone doesn't hide that older run from status either. A running session from a
 without a recorded worker stops reading as running once it is long past its watch
 time. A second busy probe that another program raises during the watch keeps that
 value when the watch restores it, keeps the run's backup, and offers Restore again
-once the lowered value comes back; Restore during that live run reports busy and
+once the lowered value comes back. An I/O priority the watch already put back
+stays as another program later sets it, even at the lowered value, and is not
+offered for Restore. Restore during that live run reports busy and
 changes nothing. A separate owned busy probe becomes idle after restraint; the app's
 current 60-second watch must put its controls back without a Restore press,
 using the shipped 8-second pressure and 15-second minimum restraint times, while
@@ -539,15 +544,31 @@ is the negative control and must fail the ordering and original-restore checks.
 This fixture is not native Windows process proof. The real concurrent Start
 case is also in `Test-GovernorSecondRun.ps1`.
 
+`Test-GovernorRestorePlan.ps1 -Source <source> -OutRoot <new-owned-dir>` runs on
+Windows and Linux without opening or changing any process. It loads the real
+Restore preview and watch restore functions and gives them recorded process
+states. For every control (CPU priority, affinity, I/O, memory and GPU priority)
+at its original value, at the lowered value, at a value another program set, and
+unreadable, Restore must plan exactly what the shared plan gives the watch and
+status, and status must count an unreadable control as still held. It also checks
+that a control the run already put back drops out of the plan, and that a watch
+restore retried after a failed write names a kept setting once, saves each control
+it put back, and leaves a later value another program set.
+
 `Invoke-BackgroundLimitsUi.ps1` drives the built app the same way as
 `Invoke-RestoreKeptUi.ps1` (`Source`, `AppRoot`, `OutRoot`, `Label`). It points the
-app root's Background limits profile at one owned PING fixture (CPU pressure
-thresholds at 0 and minimum restraint at 600 seconds to keep the fixture lowered)
-and puts the profile's bytes back in `finally`, even if another cleanup fails.
-It presses Start, Start again and then Restore on the Background limits card,
-saving the card text, screenshots and window frames for a video. It passes only
-when the second Start runs without refusing, keeps Restore, lists each skipped
-app once, and Restore puts the fixture back exactly. A build of main fails
+app root's Background limits profile at three owned PING fixtures (CPU
+pressure thresholds at 0 and minimum restraint at 600 seconds to keep them
+lowered) and puts the profile's bytes back in `finally`, even if another cleanup
+fails. It presses Start with only the first fixture running, starts the other
+two, presses Start again, raises one of the new fixtures' CPU priority as another
+program would, then presses Restore once on the Background limits card, saving
+the card text, screenshots and window frames for a video. It passes only when
+each Start lowers its fixtures' CPU, I/O and memory priority, the second Start
+runs without refusing and keeps the first fixture lowered and Restore offered,
+the card lists each skipped app once, and the one Restore puts both runs'
+fixtures back exactly, keeps the raised CPU priority with the rest of that
+fixture restored, and names the kept value on the card. A build of main fails
 after saving its evidence, because Restore disappears while the fixture stays
 lowered.
 

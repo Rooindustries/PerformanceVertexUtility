@@ -769,10 +769,24 @@ function Get-RooIndustriesProcessGovernorPreview {
     }
 }
 
+$script:RooIndustriesGovernorControlUnreadable = 'Windows couldn''t read this setting, so it was left alone. Restore again, or it resets when that app restarts.'
+
 function Get-RooIndustriesGovernorRecordedControls {
     param($Snapshot)
-    if($null -ne $Snapshot.PSObject.Properties['appliedControls']){return @(Get-RooIndustriesPropertyArray $Snapshot 'appliedControls')}
-    return @(Get-RooIndustriesPropertyArray $Snapshot 'controlChanges' | Where-Object { (Get-RooIndustriesPropertyValue $_ 'outcome' '') -ne 'failed' })
+    $recorded = if($null -ne $Snapshot.PSObject.Properties['appliedControls']){@(Get-RooIndustriesPropertyArray $Snapshot 'appliedControls')}else{@(Get-RooIndustriesPropertyArray $Snapshot 'controlChanges' | Where-Object { (Get-RooIndustriesPropertyValue $_ 'outcome' '') -ne 'failed' })}
+    # A control this run already put back is no longer its own; a later value belongs to whoever set it.
+    return @($recorded | Where-Object { [string]::IsNullOrWhiteSpace([string](Get-RooIndustriesPropertyValue $_ 'restoredAtUtc' '')) })
+}
+
+function Complete-RooIndustriesGovernorRestoredControls {
+    param($Snapshot,[object[]]$Changes)
+    $stamp = Get-RooIndustriesUtcStamp
+    foreach ($change in @(Get-RooIndustriesArray $Changes)) {
+        $control = [string](Get-RooIndustriesPropertyValue $change 'control' '')
+        foreach ($record in @(Get-RooIndustriesGovernorRecordedControls $Snapshot | Where-Object { [string](Get-RooIndustriesPropertyValue $_ 'control' '') -eq $control })) {
+            $record | Add-Member -NotePropertyName restoredAtUtc -NotePropertyValue $stamp -Force
+        }
+    }
 }
 
 function Select-RooIndustriesGovernorOwnedRestoreChanges {
@@ -782,7 +796,9 @@ function Select-RooIndustriesGovernorOwnedRestoreChanges {
         $control=[string](Get-RooIndustriesPropertyValue $change 'control' '')
         $owned=@($recorded|Where-Object {[string](Get-RooIndustriesPropertyValue $_ 'control' '') -eq $control -and -not [bool](Get-RooIndustriesPropertyValue $_ 'blocked' $false)})
         if($owned.Count -ne 1){continue}
-        if(-not(Test-RooIndustriesControlValueEqual $control (Get-RooIndustriesPropertyValue $change 'currentValue' $null) (Get-RooIndustriesPropertyValue $owned[0] 'proposedValue' $null))) {
+        if([bool](Get-RooIndustriesPropertyValue $change 'blocked' $false)) {
+            if(Test-RooIndustriesSnapshotReleased $Snapshot $control 'Background limits'){continue}
+        } elseif(-not(Test-RooIndustriesControlValueEqual $control (Get-RooIndustriesPropertyValue $change 'currentValue' $null) (Get-RooIndustriesPropertyValue $owned[0] 'proposedValue' $null))) {
             $change.blocked=$true
             $change.blockedReason=$script:RooIndustriesChangedExternally
             $change|Add-Member -NotePropertyName appliedValue -NotePropertyValue (Get-RooIndustriesPropertyValue $owned[0] 'proposedValue' $null) -Force
@@ -793,31 +809,39 @@ function Select-RooIndustriesGovernorOwnedRestoreChanges {
     }
 }
 
+# The one restore plan for Background limits: the watch, Restore and status all use it.
+# A control Windows can't read right now stays pending, never "nothing to restore".
 function Get-RooIndustriesGovernorRestoreChanges {
     param(
         [object]$Snapshot,
         [object]$CurrentState
     )
     $changes = New-Object System.Collections.Generic.List[object]
-    $originalPriority = Get-RooIndustriesPropertyValue $Snapshot 'originalPriorityClass' $null
-    $originalAffinity = Get-RooIndustriesPropertyValue $Snapshot 'originalAffinityMask' $null
-    $originalIoPriority = Get-RooIndustriesPropertyValue $Snapshot 'originalIoPriority' $null
-    $originalMemoryPriority = Get-RooIndustriesPropertyValue $Snapshot 'originalMemoryPriority' $null
-    $originalGpuPriority = Get-RooIndustriesPropertyValue $Snapshot 'originalGpuPriority' $null
-    if (-not [string]::IsNullOrWhiteSpace([string]$originalPriority) -and (Test-RooIndustriesPriorityAllowed ([string]$originalPriority) -Restoring) -and [string](Get-RooIndustriesPropertyValue $CurrentState 'priorityClass' $null) -ne [string]$originalPriority) {
-        $changes.Add((New-RooIndustriesControlChange 'priorityClass' (Get-RooIndustriesPropertyValue $CurrentState 'priorityClass' $null) $originalPriority 'restorePriority' 'Restore original process priority after governor restraint.')) | Out-Null
-    }
-    if ($null -ne $originalAffinity -and -not [string]::IsNullOrWhiteSpace([string]$originalAffinity) -and (Test-RooIndustriesAffinityMaskAllowed $originalAffinity) -and [string](Get-RooIndustriesPropertyValue $CurrentState 'affinityMask' $null) -ne [string]$originalAffinity) {
-        $changes.Add((New-RooIndustriesControlChange 'affinityMask' (Get-RooIndustriesPropertyValue $CurrentState 'affinityMask' $null) ([int64]$originalAffinity) 'restoreAffinity' 'Restore original CPU affinity after governor restraint.')) | Out-Null
-    }
-    if (-not [string]::IsNullOrWhiteSpace([string]$originalIoPriority) -and (Test-RooIndustriesIoPriorityAllowed ([string]$originalIoPriority) -Restoring) -and [string](Get-RooIndustriesPropertyValue $CurrentState 'ioPriority' $null) -ne [string]$originalIoPriority) {
-        $changes.Add((New-RooIndustriesControlChange 'ioPriority' (Get-RooIndustriesPropertyValue $CurrentState 'ioPriority' $null) $originalIoPriority 'restoreIoPriority' 'Restore original I/O priority after governor restraint.')) | Out-Null
-    }
-    if (-not [string]::IsNullOrWhiteSpace([string]$originalMemoryPriority) -and (Test-RooIndustriesMemoryPriorityAllowed ([string]$originalMemoryPriority)) -and [string](Get-RooIndustriesPropertyValue $CurrentState 'memoryPriority' $null) -ne [string]$originalMemoryPriority) {
-        $changes.Add((New-RooIndustriesControlChange 'memoryPriority' (Get-RooIndustriesPropertyValue $CurrentState 'memoryPriority' $null) $originalMemoryPriority 'restoreMemoryPriority' 'Restore original memory priority after governor restraint.')) | Out-Null
-    }
-    if (-not [string]::IsNullOrWhiteSpace([string]$originalGpuPriority) -and (Test-RooIndustriesGpuPriorityAllowed ([string]$originalGpuPriority)) -and [string](Get-RooIndustriesPropertyValue $CurrentState 'gpuPriority' $null) -ne [string]$originalGpuPriority -and [bool](Get-RooIndustriesPropertyValue $CurrentState 'gpuPriorityAvailable' $false)) {
-        $changes.Add((New-RooIndustriesControlChange 'gpuPriority' (Get-RooIndustriesPropertyValue $CurrentState 'gpuPriority' $null) $originalGpuPriority 'restoreGpuPriority' 'Restore original GPU scheduling priority after governor restraint.')) | Out-Null
+    foreach ($plan in @(
+        @('priorityClass', 'originalPriorityClass', 'restorePriority', 'Restore original process priority after governor restraint.'),
+        @('affinityMask', 'originalAffinityMask', 'restoreAffinity', 'Restore original CPU affinity after governor restraint.'),
+        @('ioPriority', 'originalIoPriority', 'restoreIoPriority', 'Restore original I/O priority after governor restraint.'),
+        @('memoryPriority', 'originalMemoryPriority', 'restoreMemoryPriority', 'Restore original memory priority after governor restraint.'),
+        @('gpuPriority', 'originalGpuPriority', 'restoreGpuPriority', 'Restore original GPU scheduling priority after governor restraint.'))) {
+        $control = $plan[0]
+        $original = Get-RooIndustriesPropertyValue $Snapshot $plan[1] $null
+        if ([string]::IsNullOrWhiteSpace([string]$original)) { continue }
+        $allowed = switch ($control) {
+            'priorityClass' { Test-RooIndustriesPriorityAllowed ([string]$original) -Restoring }
+            'affinityMask' { Test-RooIndustriesAffinityMaskAllowed $original }
+            'ioPriority' { Test-RooIndustriesIoPriorityAllowed ([string]$original) -Restoring }
+            'memoryPriority' { Test-RooIndustriesMemoryPriorityAllowed ([string]$original) }
+            'gpuPriority' { Test-RooIndustriesGpuPriorityAllowed ([string]$original) }
+        }
+        if (-not $allowed) { continue }
+        if ($control -eq 'affinityMask') { $original = [int64]$original }
+        $current = Get-RooIndustriesControlStateValue $CurrentState $control
+        if ([string]::IsNullOrWhiteSpace([string]$current)) {
+            $changes.Add((New-RooIndustriesControlChange $control $null $original $plan[2] $plan[3] $true $script:RooIndustriesGovernorControlUnreadable)) | Out-Null
+            continue
+        }
+        if (Test-RooIndustriesControlValueEqual $control $current $original) { continue }
+        $changes.Add((New-RooIndustriesControlChange $control $current $original $plan[2] $plan[3])) | Out-Null
     }
     return @(Select-RooIndustriesGovernorOwnedRestoreChanges $Snapshot @($changes.ToArray()))
 }
