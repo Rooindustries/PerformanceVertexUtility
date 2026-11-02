@@ -11,6 +11,11 @@ static class GameTuneRestoreChecks
     const string UnprovenReason = "priorityClass: Undo couldn't confirm it set this value, so it was left alone. It resets when that app restarts.";
     const string ManagedReason = "affinityMask: Another saved change still uses this control. Undo that change first, then try again.";
     const string IoReason = "ioPriority: Windows could not read back I/O priority.";
+    const string UnprovenHeldReason = "priorityClass: Undo couldn't confirm it set this value, so it was left alone. It resets when that app restarts.; gpuPriority: Undo couldn't confirm it set this value, so it was left alone. It resets when that app restarts.";
+    const string RecoveryForeignReason = "priorityClass: Another program changed it, so recovery left it alone and kept the backup. Restore keeps that program's value and finishes.";
+    const string RecoveryUnreadableReason = "gpuPriority: Windows couldn't read it, so recovery left it alone and kept the backup. Restore stays available; try it again later.";
+    const string GovernorReason = "priorityClass: Managed by the governor";
+    const string GovernorShown = "FixtureGame.exe (CPU priority): A Governor rule controls it. Turn that rule off on the Processes tab, then Restore again.";
 
     public static async Task SkipReasonsAsync(Action<bool, string> check)
     {
@@ -48,6 +53,7 @@ static class GameTuneRestoreChecks
                 ("another program", UnconfirmedReason, "FixtureGame.exe (CPU priority): Restore couldn't confirm another program still holds it, so it was left alone. Restore again once that app closes."),
                 ("unproven write", UnprovenReason + "; " + IoReason, "FixtureGame.exe (CPU priority): Restore couldn't confirm it set this value, so it was left alone. It resets when that app restarts; then Restore again.\nFixtureGame.exe (I/O priority): Windows could not read back I/O priority."),
                 ("another saved change", ManagedReason, "FixtureGame.exe (CPU affinity): Another saved change still uses this control. Restore that change first, then try again."),
+                ("a Governor rule", GovernorReason, GovernorShown),
             })
             {
                 var card = new PerformanceProfilesViewModel();
@@ -60,6 +66,21 @@ static class GameTuneRestoreChecks
                 check(card.MatchTuneStatus == "Game restore needs attention" && card.MatchTuneDetail == shown && card.MatchTuneRestoreAvailable,
                     "A Game Tune Restore card uses this page's Restore wording: " + name);
             }
+
+            foreach (var (name, reason, shown) in new[]
+            {
+                ("an unconfirmed write", UnprovenHeldReason, "FixtureGame.exe (CPU priority): Restore couldn't confirm it set this value, so it was left alone. It resets when that app restarts; then Restore again.\nFixtureGame.exe (GPU priority): Restore couldn't confirm it set this value, so it was left alone. It resets when that app restarts; then Restore again."),
+                ("a confirmed write", RecoveryForeignReason, "FixtureGame.exe (CPU priority): Another program changed it, so recovery left it alone and kept the backup. Restore keeps that program's value and finishes."),
+                ("an unreadable setting", RecoveryUnreadableReason, "FixtureGame.exe (GPU priority): Windows couldn't read it, so recovery left it alone and kept the backup. Restore stays available; try it again later."),
+                ("a Governor rule", GovernorReason, GovernorShown),
+            })
+            {
+                var card = new PerformanceProfilesViewModel();
+                App.Live.GameTuneStatusText = Recovery(envelopes["refresh"], reason);
+                await RefreshSessions(card);
+                check(card.MatchTuneStatus == "Needs attention" && card.MatchTuneDetail == shown && card.MatchTuneRestoreAvailable,
+                    "A refused recovery names each setting another program holds after " + name);
+            }
         }
         finally
         {
@@ -69,6 +90,19 @@ static class GameTuneRestoreChecks
     }
 
     static string Reason(string envelope, string reason) => envelope.Replace("{reason}", JsonEncodedText.Encode(reason).ToString(), StringComparison.Ordinal);
+
+    static string Recovery(string envelope, string reason)
+    {
+        var status = JsonNode.Parse(Reason(envelope, reason))!.AsObject();
+        status["summary"]!["changedItemCount"] = 1;
+        status["errors"] = new JsonArray(new JsonObject
+        {
+            ["code"] = "GAME_TUNE_RECOVERY_NEEDS_ATTENTION",
+            ["message"] = "CPU priority for FixtureGame.exe: held by another program.",
+            ["severity"] = "error",
+        });
+        return status.ToJsonString();
+    }
 
     static Dictionary<string, string> Envelopes(string root)
     {

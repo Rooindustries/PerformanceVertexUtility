@@ -980,7 +980,9 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
                         "memoryPriority" => "memory priority",
                         _ => "GPU priority",
                     };
-                    lines.Add(game + " (" + setting + "): " + match.Groups[2].Value);
+                    lines.Add(game + " (" + setting + "): " + (match.Groups[2].Value == "Managed by the governor"
+                        ? "A Governor rule controls it. Turn that rule off on the Processes tab, then Restore again."
+                        : match.Groups[2].Value));
                 }
             }
             return lines.Count == 0 ? null : string.Join("\n", lines);
