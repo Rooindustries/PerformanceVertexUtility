@@ -98,7 +98,10 @@ function Resolve-RooIndustriesProcessGovernorStateRoot {
 function New-RooIndustriesProcessGovernorSessionId {
     param([string]$ProfileId)
     $safeProfileId = if ([string]::IsNullOrWhiteSpace($ProfileId)) { 'profile' } else { $ProfileId.ToLowerInvariant() -replace '[^a-z0-9\-]+', '-' }
-    return "process-governor-$safeProfileId-$(Get-RooIndustriesFileStamp)-$([Guid]::NewGuid().ToString('N').Substring(0, 12))"
+    # The name is a folder under process-governor-sessions, and every file saved in it has to fit the 260-character
+    # path limit of Windows PowerShell 5.1, so it stays short: part of the profile name, the time and a random part.
+    if ($safeProfileId.Length -gt 24) { $safeProfileId = $safeProfileId.Substring(0, 24).TrimEnd('-') }
+    return "$safeProfileId-$(Get-RooIndustriesFileStamp)-$([Guid]::NewGuid().ToString('N').Substring(0, 8))"
 }
 
 function Get-RooIndustriesProcessGovernorSessionDirectory {
@@ -805,50 +808,13 @@ function Get-RooIndustriesProcessGovernorPreview {
 
 $script:RooIndustriesGovernorControlUnreadable = 'Windows couldn''t read this setting, so it was left alone. Restore again, or it resets when that app restarts.'
 $script:RooIndustriesGovernorRestoreInterrupted = 'Restore stopped part-way while putting this setting back, so it can''t tell whether the value now is still from Background limits. It was left alone. It resets when that app restarts.'
-
-function Get-RooIndustriesGovernorRecordedControls {
-    param($Snapshot)
-    $recorded = if($null -ne $Snapshot.PSObject.Properties['appliedControls']){@(Get-RooIndustriesPropertyArray $Snapshot 'appliedControls')}else{@(Get-RooIndustriesPropertyArray $Snapshot 'controlChanges' | Where-Object { (Get-RooIndustriesPropertyValue $_ 'outcome' '') -ne 'failed' })}
-    # A control this run stopped holding is no longer its own; a later value belongs to whoever set it.
-    return @($recorded | Where-Object { [string]::IsNullOrWhiteSpace([string](Get-RooIndustriesPropertyValue $_ 'restoredAtUtc' '')) })
-}
-
-# A run owns a control only until it stops holding it: once the control is put back, left as another
-# program set it, or read back at its original. Callers save the backup right after, before anything else.
-function Close-RooIndustriesGovernorControlOwnership {
-    param($Snapshot,[string[]]$Controls)
-    $stamp = Get-RooIndustriesUtcStamp
-    foreach ($record in @(Get-RooIndustriesGovernorRecordedControls $Snapshot | Where-Object { @($Controls) -ccontains [string](Get-RooIndustriesPropertyValue $_ 'control' '') })) {
-        $record | Add-Member -NotePropertyName restoredAtUtc -NotePropertyValue $stamp -Force
-        $record.PSObject.Properties.Remove('restoreIntent')
-    }
-}
-
-function Complete-RooIndustriesGovernorRestoredControls {
-    param($Snapshot,[object[]]$Changes)
-    Close-RooIndustriesGovernorControlOwnership $Snapshot @(Get-RooIndustriesArray $Changes | ForEach-Object { [string](Get-RooIndustriesPropertyValue $_ 'control' '') })
-}
-
-# Puts one owned control back. The attempt is saved before the write and its completion right after,
-# so a run stopped in between leaves a record the next plan treats as unproven instead of as its own.
-function Invoke-RooIndustriesGovernorControlRestore {
-    param([System.Diagnostics.Process]$Process,$Snapshot,[object]$Change,[object]$BackupManifest,[string]$BackupPath)
-    $control = [string](Get-RooIndustriesPropertyValue $Change 'control' '')
-    $records = @(Get-RooIndustriesGovernorRecordedControls $Snapshot | Where-Object { [string](Get-RooIndustriesPropertyValue $_ 'control' '') -ceq $control })
-    $intent = [pscustomobject]@{ fromValue = Get-RooIndustriesPropertyValue $Change 'currentValue' $null; toValue = Get-RooIndustriesPropertyValue $Change 'proposedValue' $null; startedAtUtc = Get-RooIndustriesUtcStamp }
-    foreach ($record in $records) { $record | Add-Member -NotePropertyName restoreIntent -NotePropertyValue $intent -Force }
-    Write-RooIndustriesProcessGovernorJsonFile $BackupManifest $BackupPath
-    try {
-        Invoke-RooIndustriesProcessControlChange $Process $Change
-    } catch {
-        # The attempt ended here and its outcome is known, so the next plan reads the value as it is.
-        foreach ($record in $records) { $record.PSObject.Properties.Remove('restoreIntent') }
-        Write-RooIndustriesProcessGovernorJsonFile $BackupManifest $BackupPath
-        throw
-    }
-    Complete-RooIndustriesGovernorRestoredControls $Snapshot @($Change)
-    Write-RooIndustriesProcessGovernorJsonFile $BackupManifest $BackupPath
-}
+$script:RooIndustriesGovernorReadbackFailed = 'Windows couldn''t read this setting back after Restore put it back, so it can''t tell whether the value now is still from Background limits. It was left alone. It resets when that app restarts.'
+$script:RooIndustriesGovernorNotKept = 'Windows didn''t keep the value Restore put back, so it can''t tell whether the value now is still from Background limits. It was left alone. It resets when that app restarts.'
+$script:RooIndustriesGovernorRecordChanged = 'The saved record for this setting changed while Restore was working, so it was left alone. Try Restore again.'
+$script:RooIndustriesGovernorSaveFailed = 'Background limits couldn''t save its record for this setting, so Restore stopped there. Try Restore again.'
+$script:RooIndustriesGovernorNewerRunHolds = 'A newer Background limits run still holds this setting. Restore that run first.'
+$script:RooIndustriesGovernorUnreadableRunHolds = 'A newer Background limits run whose saved files couldn''t be read may have changed this setting, so it was left alone. It resets when that app restarts.'
+$script:RooIndustriesGovernorUnreadableRun = 'Its saved files couldn''t be read, so Restore leaves alone every setting it may have changed. They go back to normal when those apps restart.'
 
 $script:RooIndustriesGovernorRestorePlan = @(
     @('priorityClass', 'originalPriorityClass', 'restorePriority', 'Restore original process priority after governor restraint.'),
@@ -856,6 +822,75 @@ $script:RooIndustriesGovernorRestorePlan = @(
     @('ioPriority', 'originalIoPriority', 'restoreIoPriority', 'Restore original I/O priority after governor restraint.'),
     @('memoryPriority', 'originalMemoryPriority', 'restoreMemoryPriority', 'Restore original memory priority after governor restraint.'),
     @('gpuPriority', 'originalGpuPriority', 'restoreGpuPriority', 'Restore original GPU scheduling priority after governor restraint.'))
+
+# Background limits ownership. Each control a run lowered is in one state, kept in its record in backup.json:
+#   owned          the lowered value may still be the run's, and only this run may put it back
+#   restoreIntent  a write putting it back may have happened (saved before that write)
+#   released       the run let go of it: it was put back, left as another program set it, or found at its original
+# Every path asks Get-RooIndustriesGovernorControlStep what it may do, and every state change is saved before
+# the action it guards. A failed save undoes the change in memory and stops before anything is written.
+
+function Get-RooIndustriesGovernorRestorePlanRow {
+    param([string]$Control)
+    foreach ($plan in $script:RooIndustriesGovernorRestorePlan) {
+        if ($plan[0] -ceq $Control) { return ,$plan }
+    }
+    return $null
+}
+
+function Get-RooIndustriesGovernorRecordedControls {
+    param($Snapshot)
+    if ($null -eq $Snapshot) { return @() }
+    if ($null -ne $Snapshot.PSObject.Properties['appliedControls']) { return @(Get-RooIndustriesPropertyArray $Snapshot 'appliedControls') }
+    return @(Get-RooIndustriesPropertyArray $Snapshot 'controlChanges' | Where-Object { (Get-RooIndustriesPropertyValue $_ 'outcome' '') -ne 'failed' })
+}
+
+function Get-RooIndustriesGovernorControlRecord {
+    param($Snapshot,[string]$Control)
+    $records = @(Get-RooIndustriesGovernorRecordedControls $Snapshot | Where-Object {
+        [string](Get-RooIndustriesPropertyValue $_ 'control' '') -ceq $Control -and -not [bool](Get-RooIndustriesPropertyValue $_ 'blocked' $false)
+    })
+    if ($records.Count -ne 1) { return $null }
+    return $records[0]
+}
+
+function Get-RooIndustriesGovernorControlOwnership {
+    param($Record)
+    if ($null -eq $Record) { return 'none' }
+    if (-not [string]::IsNullOrWhiteSpace([string](Get-RooIndustriesPropertyValue $Record 'restoredAtUtc' ''))) { return 'released' }
+    if ($null -ne (Get-RooIndustriesPropertyValue $Record 'restoreIntent' $null)) { return 'restoreIntent' }
+    return 'owned'
+}
+
+function Save-RooIndustriesGovernorControlOwnership {
+    param($Backup,[string]$BackupPath,$Record,[string]$State,[object]$Intent = $null,[string]$Because = '')
+    $before = foreach ($name in 'restoreIntent', 'restoredAtUtc', 'releasedBecause') {
+        [pscustomobject]@{ name = $name; present = $null -ne $Record.PSObject.Properties[$name]; value = Get-RooIndustriesPropertyValue $Record $name $null }
+    }
+    switch ($State) {
+        'owned' {
+            $Record.PSObject.Properties.Remove('restoreIntent')
+        }
+        'restoreIntent' {
+            $Record | Add-Member -NotePropertyName restoreIntent -NotePropertyValue $Intent -Force
+        }
+        'released' {
+            $Record.PSObject.Properties.Remove('restoreIntent')
+            $Record | Add-Member -NotePropertyName restoredAtUtc -NotePropertyValue (Get-RooIndustriesUtcStamp) -Force
+            $Record | Add-Member -NotePropertyName releasedBecause -NotePropertyValue $Because -Force
+        }
+        default { throw "Unknown Background limits ownership state '$State'." }
+    }
+    try {
+        Write-RooIndustriesProcessGovernorJsonFile $Backup $BackupPath
+    } catch {
+        foreach ($field in $before) {
+            $Record.PSObject.Properties.Remove($field.name)
+            if ($field.present) { $Record | Add-Member -NotePropertyName $field.name -NotePropertyValue $field.value }
+        }
+        throw [IO.IOException]::new($script:RooIndustriesGovernorSaveFailed, $_.Exception)
+    }
+}
 
 function Get-RooIndustriesGovernorSnapshotOriginal {
     param([object]$Snapshot,[object[]]$Plan)
@@ -873,69 +908,216 @@ function Get-RooIndustriesGovernorSnapshotOriginal {
     return $original
 }
 
-# Closes every control this run still owns that reads back at its original, for confirmed restores only.
-# Returns whether the backup needs saving.
-function Close-RooIndustriesGovernorSettledControls {
-    param([object]$Snapshot,[object]$CurrentState)
-    $owned = @(Get-RooIndustriesGovernorRecordedControls $Snapshot | ForEach-Object { [string](Get-RooIndustriesPropertyValue $_ 'control' '') })
-    $settled = @(foreach ($plan in $script:RooIndustriesGovernorRestorePlan) {
-        if ($owned -cnotcontains $plan[0]) { continue }
-        $original = Get-RooIndustriesGovernorSnapshotOriginal $Snapshot $plan
-        $current = Get-RooIndustriesControlStateValue $CurrentState $plan[0]
-        if ($null -eq $original -or [string]::IsNullOrWhiteSpace([string]$current)) { continue }
-        if (Test-RooIndustriesControlValueEqual $plan[0] $current $original) { $plan[0] }
-    })
-    if ($settled.Count -eq 0) { return $false }
-    Close-RooIndustriesGovernorControlOwnership $Snapshot $settled
-    return $true
-}
-
-function Select-RooIndustriesGovernorOwnedRestoreChanges {
-    param($Snapshot,[object[]]$Changes)
-    $recorded=@(Get-RooIndustriesGovernorRecordedControls $Snapshot)
-    foreach($change in $Changes) {
-        $control=[string](Get-RooIndustriesPropertyValue $change 'control' '')
-        $owned=@($recorded|Where-Object {[string](Get-RooIndustriesPropertyValue $_ 'control' '') -eq $control -and -not [bool](Get-RooIndustriesPropertyValue $_ 'blocked' $false)})
-        if($owned.Count -ne 1){continue}
-        if([bool](Get-RooIndustriesPropertyValue $change 'blocked' $false)) {
-            if(Test-RooIndustriesSnapshotReleased $Snapshot $control 'Background limits'){continue}
-        } elseif(-not(Test-RooIndustriesControlValueEqual $control (Get-RooIndustriesPropertyValue $change 'currentValue' $null) (Get-RooIndustriesPropertyValue $owned[0] 'proposedValue' $null))) {
-            $change.blocked=$true
-            $change.blockedReason=$script:RooIndustriesChangedExternally
-            $change|Add-Member -NotePropertyName appliedValue -NotePropertyValue (Get-RooIndustriesPropertyValue $owned[0] 'proposedValue' $null) -Force
-        } elseif(Test-RooIndustriesSnapshotReleased $Snapshot $control 'Background limits') {
+# Whether a newer run owns or may own this control of the app instance the snapshot names. A newer run whose
+# backup can't be read may own every setting of each app its session names. A newer run whose session can't be
+# read could have lowered any app, so no setting may be let go of while it stays unreadable; a value that reads
+# exactly as this run left it is still this run's to put back.
+function Get-RooIndustriesGovernorNewerClaim {
+    param([object[]]$NewerRuns,$Snapshot,[string]$Control)
+    $processId = [string](Get-RooIndustriesPropertyValue $Snapshot 'processId' 0)
+    $startTime = [string](Get-RooIndustriesPropertyValue $Snapshot 'processStartTimeUtc' '')
+    $claim = $null
+    foreach ($run in @($NewerRuns)) {
+        if ($null -ne $run.error) {
+            if ($null -eq $run.session) {
+                $claim = [pscustomobject]@{ blocksWrite = $false; holds = $false; reason = $script:RooIndustriesGovernorUnreadableRunHolds }
+            } elseif (@(Get-RooIndustriesProcessGovernorSessionProcessIds $run.session) -contains $processId) {
+                return [pscustomobject]@{ blocksWrite = $true; holds = $false; reason = $script:RooIndustriesGovernorUnreadableRunHolds }
+            }
             continue
-        } elseif($null -ne (Get-RooIndustriesPropertyValue $owned[0] 'restoreIntent' $null)) {
-            # An earlier restore may have written this control before it stopped. The lowered value it
-            # reads now could be another program's, so it is never overwritten.
-            $change.blocked=$true
-            $change.blockedReason=$script:RooIndustriesGovernorRestoreInterrupted
         }
-        $change
+        foreach ($snapshot in @(Get-RooIndustriesProcessGovernorLatestSnapshots $run.backup)) {
+            if ([string](Get-RooIndustriesPropertyValue $snapshot 'processId' 0) -ne $processId -or [string](Get-RooIndustriesPropertyValue $snapshot 'processStartTimeUtc' '') -ne $startTime) { continue }
+            if ((Get-RooIndustriesGovernorControlOwnership (Get-RooIndustriesGovernorControlRecord $snapshot $Control)) -in 'owned', 'restoreIntent') {
+                return [pscustomobject]@{ blocksWrite = $true; holds = $true; reason = $script:RooIndustriesGovernorNewerRunHolds }
+            }
+        }
     }
+    return $claim
 }
 
-# The one restore plan for Background limits: the watch, Restore and status all use it.
-# A control Windows can't read right now stays pending, never "nothing to restore".
-function Get-RooIndustriesGovernorRestoreChanges {
-    param(
-        [object]$Snapshot,
-        [object]$CurrentState
-    )
-    $changes = New-Object System.Collections.Generic.List[object]
+# The one decision for a control: what this run may do with it now. Kinds:
+#   restore  owned, reads exactly as the run left it, and nothing newer claims it
+#   release  let go: back at its original (because restored or alreadyOriginal) or another program's value (leftAsSet)
+#   keep     left alone with a reason; holds says whether Restore can still act on it (status offers Restore)
+# Returns $null when the run doesn't hold the control.
+function Get-RooIndustriesGovernorControlStep {
+    param($Snapshot,[string]$Control,[object]$Current,[object[]]$NewerRuns,[System.Diagnostics.Process]$Process = $null)
+    $plan = Get-RooIndustriesGovernorRestorePlanRow $Control
+    $record = Get-RooIndustriesGovernorControlRecord $Snapshot $Control
+    $ownership = Get-RooIndustriesGovernorControlOwnership $record
+    if ($ownership -notin 'owned', 'restoreIntent') { return $null }
+    if (Test-RooIndustriesSnapshotReleased $Snapshot $Control 'Background limits') { return $null }
+    $original = Get-RooIndustriesGovernorSnapshotOriginal $Snapshot $plan
+    if ($null -eq $original) { return $null }
+    $left = Get-RooIndustriesPropertyValue $record 'proposedValue' $null
+    $step = [pscustomobject]@{
+        control = $Control
+        kind = 'keep'
+        because = $null
+        reason = $null
+        holds = $false
+        currentValue = $Current
+        originalValue = $original
+        appliedValue = $left
+        record = $record
+    }
+    if ([string]::IsNullOrWhiteSpace([string]$Current)) {
+        $step.reason = $script:RooIndustriesGovernorControlUnreadable
+        $step.holds = $true
+        return $step
+    }
+    $claim = Get-RooIndustriesGovernorNewerClaim $NewerRuns $Snapshot $Control
+    if ($null -eq $claim -and $null -ne $Process) {
+        $owner = Get-RooIndustriesRestoreControlOwnershipReason $Process $Control
+        if (-not [string]::IsNullOrWhiteSpace($owner)) { $claim = [pscustomobject]@{ blocksWrite = $true; holds = $true; reason = $owner } }
+    }
+    $intent = $ownership -eq 'restoreIntent'
+    if (Test-RooIndustriesControlValueEqual $Control $Current $original) {
+        if ($intent -and ($null -eq $claim -or -not $claim.blocksWrite)) {
+            $step.kind = 'release'
+            $step.because = 'restored'
+        } elseif ($null -eq $claim) {
+            $step.kind = 'release'
+            $step.because = 'alreadyOriginal'
+        } else {
+            $step.reason = $claim.reason
+            $step.holds = $claim.holds
+        }
+        return $step
+    }
+    if (Test-RooIndustriesControlValueEqual $Control $Current $left) {
+        if ($intent) {
+            # An earlier restore may have written this control before it stopped. The lowered value it reads
+            # now could be another program's, so it is never overwritten.
+            $step.reason = $script:RooIndustriesGovernorRestoreInterrupted
+        } elseif ($null -ne $claim -and $claim.blocksWrite) {
+            $step.reason = $claim.reason
+            $step.holds = $claim.holds
+        } else {
+            $step.kind = 'restore'
+            $step.holds = $true
+        }
+        return $step
+    }
+    if ($null -ne $claim) {
+        $step.reason = $claim.reason
+        $step.holds = $claim.holds
+        return $step
+    }
+    $step.kind = 'release'
+    $step.because = 'leftAsSet'
+    return $step
+}
+
+function Get-RooIndustriesGovernorSnapshotSteps {
+    param($Snapshot,[object]$CurrentState,[object[]]$NewerRuns,[System.Diagnostics.Process]$Process = $null)
     foreach ($plan in $script:RooIndustriesGovernorRestorePlan) {
-        $control = $plan[0]
-        $original = Get-RooIndustriesGovernorSnapshotOriginal $Snapshot $plan
-        if ($null -eq $original) { continue }
-        $current = Get-RooIndustriesControlStateValue $CurrentState $control
-        if ([string]::IsNullOrWhiteSpace([string]$current)) {
-            $changes.Add((New-RooIndustriesControlChange $control $null $original $plan[2] $plan[3] $true $script:RooIndustriesGovernorControlUnreadable)) | Out-Null
-            continue
-        }
-        if (Test-RooIndustriesControlValueEqual $control $current $original) { continue }
-        $changes.Add((New-RooIndustriesControlChange $control $current $original $plan[2] $plan[3])) | Out-Null
+        $step = Get-RooIndustriesGovernorControlStep $Snapshot $plan[0] (Get-RooIndustriesControlStateValue $CurrentState $plan[0]) $NewerRuns $Process
+        if ($null -ne $step) { $step }
     }
-    return @(Select-RooIndustriesGovernorOwnedRestoreChanges $Snapshot @($changes.ToArray()))
+}
+
+# Restore's preview of one app: the steps it would take now, as control changes. A control back at its
+# original isn't listed; one another program changed is listed as kept.
+function Get-RooIndustriesGovernorRestoreChanges {
+    param([object]$Snapshot,[object]$CurrentState,[object[]]$NewerRuns)
+    foreach ($step in @(Get-RooIndustriesGovernorSnapshotSteps $Snapshot $CurrentState $NewerRuns)) {
+        $plan = Get-RooIndustriesGovernorRestorePlanRow $step.control
+        if ($step.kind -eq 'restore') {
+            New-RooIndustriesControlChange $step.control $step.currentValue $step.originalValue $plan[2] $plan[3]
+        } elseif ($step.kind -eq 'keep') {
+            New-RooIndustriesControlChange $step.control $step.currentValue $step.originalValue $plan[2] $plan[3] $true $step.reason
+        } elseif ($step.because -eq 'leftAsSet') {
+            $change = New-RooIndustriesControlChange $step.control $step.currentValue $step.originalValue $plan[2] $plan[3] $true $script:RooIndustriesChangedExternally
+            $change | Add-Member -NotePropertyName appliedValue -NotePropertyValue $step.appliedValue -Force
+            $change
+        }
+    }
+}
+
+function Find-RooIndustriesGovernorSavedSnapshot {
+    param($Backup,$Snapshot)
+    foreach ($saved in @(Get-RooIndustriesPropertyArray $Backup 'snapshots')) {
+        $same = $true
+        foreach ($field in 'processId', 'processStartTimeUtc', 'capturedAtUtc') {
+            if ([string](Get-RooIndustriesPropertyValue $saved $field '') -cne [string](Get-RooIndustriesPropertyValue $Snapshot $field '')) { $same = $false }
+        }
+        if ($same) { return $saved }
+    }
+    return $null
+}
+
+# Takes the one step a control allows now, under the run lock, from the record on disk and a fresh read of the
+# value. A write needs the record to say owned on disk, the value to read exactly as the run left it, and no
+# newer run owning or possibly owning it. Returns the step taken (kind restored after a write), or $null.
+function Invoke-RooIndustriesGovernorControlStep {
+    param($Backup,[string]$BackupPath,$Snapshot,[string]$Control,[System.Diagnostics.Process]$Process,[object[]]$NewerRuns,[switch]$SettleOnly)
+    $record = Get-RooIndustriesGovernorControlRecord $Snapshot $Control
+    $ownership = Get-RooIndustriesGovernorControlOwnership $record
+    if ($ownership -notin 'owned', 'restoreIntent') { return $null }
+    $saved = Find-RooIndustriesGovernorSavedSnapshot (Read-RooIndustriesProcessGovernorBackup $BackupPath) $Snapshot
+    if ((Get-RooIndustriesGovernorControlOwnership (Get-RooIndustriesGovernorControlRecord $saved $Control)) -cne $ownership) {
+        $plan = Get-RooIndustriesGovernorRestorePlanRow $Control
+        return [pscustomobject]@{ control = $Control; kind = 'keep'; because = $null; reason = $script:RooIndustriesGovernorRecordChanged; holds = $true; currentValue = $null; originalValue = Get-RooIndustriesGovernorSnapshotOriginal $Snapshot $plan; appliedValue = Get-RooIndustriesPropertyValue $record 'proposedValue' $null; record = $record }
+    }
+    $current = $null
+    try { $current = Get-RooIndustriesProcessControlReadback $Process $Control } catch { $current = $null }
+    $step = Get-RooIndustriesGovernorControlStep $Snapshot $Control $current $NewerRuns $Process
+    if ($null -eq $step -or $step.kind -eq 'keep') { return $step }
+    if ($step.kind -eq 'release') {
+        Save-RooIndustriesGovernorControlOwnership $Backup $BackupPath $record 'released' -Because $step.because
+        return $step
+    }
+    if ($SettleOnly) { return $null }
+    $intent = [pscustomobject]@{ fromValue = $current; toValue = $step.originalValue; startedAtUtc = Get-RooIndustriesUtcStamp }
+    Save-RooIndustriesGovernorControlOwnership $Backup $BackupPath $record 'restoreIntent' -Intent $intent
+    try {
+        Set-RooIndustriesProcessControlValue $Process $Control $step.originalValue -Restoring
+    } catch {
+        # Windows refused the write, so nothing changed and the lowered value is still the run's.
+        $step.kind = 'keep'
+        $step.reason = $_.Exception.Message
+        Save-RooIndustriesGovernorControlOwnership $Backup $BackupPath $record 'owned'
+        return $step
+    }
+    $after = $null
+    try { $after = Get-RooIndustriesProcessControlReadback $Process $Control } catch { $after = $null }
+    $step.kind = 'keep'
+    $step.holds = $false
+    if ([string]::IsNullOrWhiteSpace([string]$after)) {
+        # The write may have happened, so the intent stays and a later lowered value is never taken as the run's.
+        $step.reason = $script:RooIndustriesGovernorReadbackFailed
+        return $step
+    }
+    if (Test-RooIndustriesControlValueEqual $Control $after $step.originalValue) {
+        Save-RooIndustriesGovernorControlOwnership $Backup $BackupPath $record 'released' -Because 'restored'
+        $step.kind = 'restored'
+        return $step
+    }
+    if (Test-RooIndustriesControlValueEqual $Control $after $current) {
+        $step.reason = $script:RooIndustriesGovernorNotKept
+        return $step
+    }
+    $step.currentValue = $after
+    Save-RooIndustriesGovernorControlOwnership $Backup $BackupPath $record 'released' -Because 'leftAsSet'
+    $step.kind = 'release'
+    $step.because = 'leftAsSet'
+    return $step
+}
+
+# Every step one app instance allows now, one control at a time. A failed save throws and stops here.
+function Invoke-RooIndustriesGovernorSnapshotSteps {
+    param($Backup,[string]$BackupPath,$Snapshot,[System.Diagnostics.Process]$Process,[object[]]$NewerRuns,[switch]$SettleOnly)
+    foreach ($plan in $script:RooIndustriesGovernorRestorePlan) {
+        $step = Invoke-RooIndustriesGovernorControlStep $Backup $BackupPath $Snapshot $plan[0] $Process $NewerRuns -SettleOnly:$SettleOnly
+        if ($null -ne $step) { $step }
+    }
+}
+
+function New-RooIndustriesGovernorKeptItem {
+    param($Snapshot,$Step)
+    return New-RooIndustriesLeftAsSetItem $Snapshot ([pscustomobject]@{ control = $Step.control; currentValue = $Step.currentValue; appliedValue = $Step.appliedValue; originalValue = $Step.originalValue })
 }
 
 function Get-RooIndustriesProcessGovernorLiveIdentity {
@@ -1035,51 +1217,6 @@ function Get-RooIndustriesProcessGovernorSnapshotIdentity {
     })
 }
 
-function Test-RooIndustriesGovernorChangeLeftAsSet {
-    param([object]$Change)
-    return [bool](Get-RooIndustriesPropertyValue $Change 'blocked' $false) -and
-        [string](Get-RooIndustriesPropertyValue $Change 'blockedReason' '') -ceq $script:RooIndustriesChangedExternally -and
-        -not [string]::IsNullOrWhiteSpace([string](Get-RooIndustriesPropertyValue $Change 'currentValue' $null))
-}
-
-function Test-RooIndustriesProcessGovernorBackupHolds {
-    param([object]$Backup)
-    foreach ($snapshot in @(Get-RooIndustriesProcessGovernorLatestSnapshots $Backup)) {
-        $candidate = Get-RooIndustriesProcessGovernorSnapshotIdentity $snapshot
-        if (-not $candidate.exists) { continue }
-        if (-not $candidate.matches) {
-            if (-not $candidate.instanceEnded) { return $true }
-            continue
-        }
-        if (@(Get-RooIndustriesGovernorRestoreChanges $snapshot $candidate.currentControlState | Where-Object { -not (Test-RooIndustriesGovernorChangeLeftAsSet $_) }).Count -gt 0) { return $true }
-    }
-    return $false
-}
-
-$script:RooIndustriesGovernorNewerRunHolds = 'A newer Background limits run still holds this setting. Restore that run first.'
-$script:RooIndustriesGovernorUnreadableRunHolds = 'A newer Background limits run whose saved files couldn''t be read lowered this app, so it was left alone. It resets when that app restarts.'
-
-# Why a newer run still holds this control, or $null. A newer run whose files can't be read is
-# never touched: every app its readable session file names is left alone.
-function Get-RooIndustriesProcessGovernorNewerRunReason {
-    param([string]$SessionDirectory,[object]$Entry,[string]$Control)
-    $processId = [string](Get-RooIndustriesPropertyValue $Entry 'processId' 0)
-    $startTime = [string](Get-RooIndustriesPropertyValue $Entry 'processStartTimeUtc' '')
-    $state = $null
-    foreach ($run in @(Get-RooIndustriesProcessGovernorRestorableSessions (Split-Path $SessionDirectory -Parent) (Get-Item -LiteralPath $SessionDirectory).CreationTimeUtc)) {
-        if ($null -ne $run.error) {
-            if (@(Get-RooIndustriesProcessGovernorSessionProcessIds $run.session) -contains $processId) { return $script:RooIndustriesGovernorUnreadableRunHolds }
-            continue
-        }
-        foreach ($snapshot in @(Get-RooIndustriesProcessGovernorLatestSnapshots $run.backup)) {
-            if ([string](Get-RooIndustriesPropertyValue $snapshot 'processId' 0) -ne $processId -or [string](Get-RooIndustriesPropertyValue $snapshot 'processStartTimeUtc' '') -ne $startTime) { continue }
-            if ($null -eq $state) { $state = Get-RooIndustriesProcessControlState ([int]$processId) $null -ReadGpu:($Control -eq 'gpuPriority') }
-            if (@(Get-RooIndustriesGovernorRestoreChanges $snapshot $state | Where-Object { [string]$_.control -eq $Control -and -not (Test-RooIndustriesGovernorChangeLeftAsSet $_) }).Count -gt 0) { return $script:RooIndustriesGovernorNewerRunHolds }
-        }
-    }
-    return $null
-}
-
 function Get-RooIndustriesProcessGovernorSessionProcessIds {
     param([object]$Session)
     if ($null -eq $Session) { return }
@@ -1118,23 +1255,82 @@ function Read-RooIndustriesProcessGovernorJson {
     return $value
 }
 
-# Every confirmed run still marked restorable, newest first. A run whose files can't be read comes
-# back with its error (and its session, when only the backup failed) instead of being skipped.
+function Test-RooIndustriesGovernorArrayField {
+    param($Object,[string]$Name)
+    $property = $Object.PSObject.Properties[$Name]
+    return $null -ne $property -and $property.Value -is [array]
+}
+
+function Test-RooIndustriesGovernorJsonObject {
+    param($Value)
+    return $Value -is [Management.Automation.PSCustomObject]
+}
+
+# A saved file with a required field missing or of the wrong type can't be read. It is never taken as a run
+# with nothing to restore.
+function Read-RooIndustriesProcessGovernorSession {
+    param([string]$Path)
+    $session = Read-RooIndustriesProcessGovernorJson $Path
+    $restorable = Get-RooIndustriesPropertyValue $session 'restorable' $null
+    $valid = -not [string]::IsNullOrWhiteSpace([string](Get-RooIndustriesPropertyValue $session 'sessionId' '')) -and $restorable -is [bool]
+    if ($valid -and $restorable) {
+        $backupPath = Get-RooIndustriesPropertyValue $session 'backupManifestPath' $null
+        $valid = $backupPath -is [string] -and -not [string]::IsNullOrWhiteSpace($backupPath)
+    }
+    foreach ($field in 'activeRestraints', 'changedItems', 'leftAsSetItems') {
+        $property = $session.PSObject.Properties[$field]
+        if ($null -ne $property -and $null -ne $property.Value -and $property.Value -isnot [array]) { $valid = $false }
+    }
+    if (-not $valid) { throw [IO.InvalidDataException]::new("The saved Background limits file $([IO.Path]::GetFileName($Path)) is incomplete or damaged.") }
+    return $session
+}
+
+function Read-RooIndustriesProcessGovernorBackup {
+    param([string]$Path)
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { throw [IO.FileNotFoundException]::new("The saved Background limits file $([IO.Path]::GetFileName($Path)) is missing.") }
+    $backup = Read-RooIndustriesProcessGovernorJson $Path
+    $valid = [string](Get-RooIndustriesPropertyValue $backup 'actionId' '') -ceq 'performance.governor.startSession' -and
+        (Get-RooIndustriesPropertyValue $backup 'dryRun' $null) -is [bool] -and
+        -not [string]::IsNullOrWhiteSpace([string](Get-RooIndustriesPropertyValue $backup 'sessionId' '')) -and
+        -not [string]::IsNullOrWhiteSpace([string](Get-RooIndustriesPropertyValue $backup 'profileId' '')) -and
+        (Test-RooIndustriesGovernorArrayField $backup 'snapshots')
+    if ($valid) {
+        foreach ($snapshot in $backup.snapshots) {
+            $processId = Get-RooIndustriesPropertyValue $snapshot 'processId' $null
+            # A snapshot from an older build may list no controls; one that lists them must list them whole.
+            $records = if ($null -ne $snapshot.PSObject.Properties['appliedControls']) { 'appliedControls' } else { 'controlChanges' }
+            if (-not (Test-RooIndustriesGovernorJsonObject $snapshot) -or ($processId -isnot [int] -and $processId -isnot [long]) -or
+                [string]::IsNullOrWhiteSpace([string](Get-RooIndustriesPropertyValue $snapshot 'processName' '')) -or
+                ($null -ne $snapshot.PSObject.Properties[$records] -and -not (Test-RooIndustriesGovernorArrayField $snapshot $records))) {
+                $valid = $false
+                break
+            }
+            foreach ($record in @(Get-RooIndustriesPropertyArray $snapshot $records)) {
+                if (-not (Test-RooIndustriesGovernorJsonObject $record) -or [string]::IsNullOrWhiteSpace([string](Get-RooIndustriesPropertyValue $record 'control' ''))) { $valid = $false }
+            }
+            if (-not $valid) { break }
+        }
+    }
+    if (-not $valid) { throw [IO.InvalidDataException]::new("The saved Background limits file $([IO.Path]::GetFileName($Path)) is incomplete or damaged.") }
+    return $backup
+}
+
+# Every confirmed run still marked restorable, newest first. A run whose files can't be read comes back with
+# its error (and its session, when only the backup failed) instead of being skipped.
 function Get-RooIndustriesProcessGovernorRestorableSessions {
     param([string]$ResolvedGovernorStateRoot,[Nullable[datetime]]$CreatedAfterUtc = $null)
     if (-not (Test-Path -LiteralPath $ResolvedGovernorStateRoot)) { return }
     foreach ($directory in @(Get-ChildItem -LiteralPath $ResolvedGovernorStateRoot -Directory | Where-Object { $null -eq $CreatedAfterUtc -or $_.CreationTimeUtc -gt $CreatedAfterUtc } | Sort-Object CreationTimeUtc -Descending)) {
         $sessionPath = Join-Path $directory.FullName 'session.json'
         if (-not (Test-Path -LiteralPath $sessionPath -PathType Leaf)) { continue }
-        $run = [pscustomobject]@{ sessionId = $directory.Name; sessionPath = $sessionPath; createdAtUtc = $directory.CreationTimeUtc.ToString('o', [Globalization.CultureInfo]::InvariantCulture); session = $null; backup = $null; error = $null }
+        $run = [pscustomobject]@{ sessionId = $directory.Name; sessionPath = $sessionPath; backupPath = $null; createdAtUtc = $directory.CreationTimeUtc.ToString('o', [Globalization.CultureInfo]::InvariantCulture); session = $null; backup = $null; error = $null }
         try {
-            $run.session = Read-RooIndustriesProcessGovernorJson $sessionPath
-            $restorable = Get-RooIndustriesPropertyValue $run.session 'restorable' $false
-            $dryRun = Get-RooIndustriesPropertyValue $run.session 'dryRun' $false
-            if ($restorable -isnot [bool] -or -not $restorable -or ($dryRun -is [bool] -and $dryRun)) { continue }
-            $backupPath = [string](Get-RooIndustriesPropertyValue $run.session 'backupManifestPath' '')
-            if ([string]::IsNullOrWhiteSpace($backupPath) -or -not (Test-Path -LiteralPath $backupPath -PathType Leaf)) { continue }
-            $run.backup = Read-RooIndustriesProcessGovernorJson $backupPath
+            $session = Read-RooIndustriesProcessGovernorSession $sessionPath
+            $dryRun = Get-RooIndustriesPropertyValue $session 'dryRun' $false
+            if (-not $session.restorable -or ($dryRun -is [bool] -and $dryRun)) { continue }
+            $run.session = $session
+            $run.backupPath = Resolve-RooIndustriesPath $session.backupManifestPath $session.backupManifestPath
+            $run.backup = Read-RooIndustriesProcessGovernorBackup $run.backupPath
         } catch {
             $run.error = $_.Exception.Message
         }
@@ -1142,16 +1338,42 @@ function Get-RooIndustriesProcessGovernorRestorableSessions {
     }
 }
 
+# Whether Restore can still act on this run: it holds a value it can put back, or one it can't read or that a
+# newer run or another saved change holds first. Settings it only waits to let go of don't count.
+function Test-RooIndustriesProcessGovernorRunHolds {
+    param([object]$Backup,[object[]]$NewerRuns)
+    foreach ($snapshot in @(Get-RooIndustriesProcessGovernorLatestSnapshots $Backup)) {
+        $candidate = Get-RooIndustriesProcessGovernorSnapshotIdentity $snapshot
+        if (-not $candidate.exists) { continue }
+        if (-not $candidate.matches) {
+            if (-not $candidate.instanceEnded) { return $true }
+            continue
+        }
+        foreach ($step in @(Get-RooIndustriesGovernorSnapshotSteps $snapshot $candidate.currentControlState $NewerRuns)) {
+            if ($step.holds) { return $true }
+        }
+    }
+    return $false
+}
+
+function Get-RooIndustriesProcessGovernorNewerRuns {
+    param([object[]]$Runs,[int]$Index)
+    if ($Index -le 0) { return @() }
+    return @($Runs[0..($Index - 1)])
+}
+
 # The newest readable run that still holds an app. A run whose files can't be read is never picked:
 # Restore can't act on it, so it would stop every older run from being restored.
 function Get-RooIndustriesProcessGovernorHeldSession {
     param([string]$ResolvedGovernorStateRoot)
-    $held = Get-RooIndustriesProcessGovernorRestorableSessions $ResolvedGovernorStateRoot | Where-Object {
-        if ($null -ne $_.error) { return $false }
-        try { Test-RooIndustriesProcessGovernorBackupHolds $_.backup } catch { $true }
-    } | Select-Object -First 1
-    if ($null -eq $held) { return $null }
-    return $held.sessionPath
+    $runs = @(Get-RooIndustriesProcessGovernorRestorableSessions $ResolvedGovernorStateRoot)
+    for ($index = 0; $index -lt $runs.Count; $index++) {
+        if ($null -ne $runs[$index].error) { continue }
+        $holds = $true
+        try { $holds = Test-RooIndustriesProcessGovernorRunHolds $runs[$index].backup (Get-RooIndustriesProcessGovernorNewerRuns $runs $index) } catch { $holds = $true }
+        if ($holds) { return $runs[$index].sessionPath }
+    }
+    return $null
 }
 
 function Get-RooIndustriesProcessGovernorUnreadableSessions {
@@ -1161,8 +1383,32 @@ function Get-RooIndustriesProcessGovernorUnreadableSessions {
             sessionId = $run.sessionId
             sessionPath = $run.sessionPath
             createdAtUtc = $run.createdAtUtc
-            reason = 'Its saved files couldn''t be read, so Restore leaves its apps alone. They go back to normal when they restart.'
+            reason = $script:RooIndustriesGovernorUnreadableRun
             error = $run.error
+        }
+    }
+}
+
+# A confirmed Restore first lets go of every setting each other saved run no longer holds, newest run first,
+# so a run the walk passes over never takes a later value as its own. Nothing is written to any app here.
+# Returns the settings it found another program had set.
+function Invoke-RooIndustriesProcessGovernorSettleRuns {
+    param([string]$ResolvedGovernorStateRoot,[string]$ExceptBackupPath)
+    $runs = @(Get-RooIndustriesProcessGovernorRestorableSessions $ResolvedGovernorStateRoot)
+    for ($index = 0; $index -lt $runs.Count; $index++) {
+        $run = $runs[$index]
+        if ($null -ne $run.error -or [string]::Equals($run.backupPath, $ExceptBackupPath, [StringComparison]::OrdinalIgnoreCase)) { continue }
+        $newer = Get-RooIndustriesProcessGovernorNewerRuns $runs $index
+        foreach ($snapshot in @(Get-RooIndustriesProcessGovernorLatestSnapshots $run.backup)) {
+            $candidate = Get-RooIndustriesProcessGovernorSnapshotIdentity $snapshot
+            if (-not ($candidate.exists -and $candidate.matches)) { continue }
+            try {
+                foreach ($step in @(Invoke-RooIndustriesGovernorSnapshotSteps $run.backup $run.backupPath $snapshot $candidate.process $newer -SettleOnly)) {
+                    if ($step.kind -eq 'release' -and $step.because -eq 'leftAsSet') { New-RooIndustriesGovernorKeptItem $snapshot $step }
+                }
+            } catch {
+                # A run whose release couldn't be saved keeps owning the setting, which only makes older runs wait.
+            }
         }
     }
 }
@@ -1181,7 +1427,7 @@ function Close-RooIndustriesProcessGovernorEndedSession {
         $candidate = Get-RooIndustriesProcessGovernorSnapshotIdentity $snapshot
         if ($candidate.exists -and ($candidate.matches -or -not $candidate.instanceEnded)) { return }
     }
-    $session = Read-RooIndustriesProcessGovernorJson $Run.sessionPath
+    $session = Read-RooIndustriesProcessGovernorSession $Run.sessionPath
     if (-not [bool](Get-RooIndustriesPropertyValue $session 'restorable' $false)) { return }
     $session.restorable = $false
     foreach ($field in 'sessionStatus', 'status') { if ([string](Get-RooIndustriesPropertyValue $session $field '') -eq 'running') { $session.$field = 'completed' } }

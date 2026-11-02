@@ -536,16 +536,26 @@ Restore preview plans what status counts as held. A GPU priority the run recorde
 but Windows can't read on the probe (`PING` has no GPU context) keeps the run held
 with every other setting at its original; a confirmed Restore then saves those
 settings as no longer the run's and keeps the run open, and when another program
-later sets the lowered CPU priority, Restore leaves it. A Restore stopped right
-after its first write (a breakpoint on the completion step exits the real Restore
-process) leaves its saved attempt; when another program then sets the lowered CPU
-priority, the next Restore leaves it, names it and keeps the run open, and still
-puts back the settings the stopped Restore never reached. A newer run whose
-session file can't be read is named in status and passed over, so the older run is
-restored and the unreadable run's probe is left alone; a newer run whose backup
-can't be read, on the same probe, makes the older Restore leave every setting of
-that probe alone and say why. Restoring the unreadable files lets both runs put the
-probe back exactly.
+later sets the lowered CPU priority, Restore leaves it.
+
+`Test-GovernorOwnership.ps1 -Source <frame source> -OutRoot <dir> [-Only <cell pattern>]`
+checks the one ownership rule every Background limits path follows, on a real
+owned PING probe. A run lowers its CPU, I/O and memory priority; a newer run
+either doesn't exist, lowers only its CPU priority further, has an unreadable
+session file, or has a damaged backup (`{}`, `{"snapshots":null}`, a single
+object where the list belongs, half a file, or a session file of `{}`). A real
+Restore of the older run in its own Windows PowerShell is cut at one step of
+putting I/O priority back: its saved intent fails, it is killed after the intent
+is saved, after the write, or after the readback, the readback fails, or saving
+the result fails. Breakpoints on the save, write and readback functions make each
+cut, so the same cells also run against older builds. Then nothing happens, or
+another program sets a different I/O priority, or sets the lowered one again,
+and status and a second Restore run. Each cell checks the final value, the
+ownership saved on disk, whether status offers Restore, and the card's words.
+Two more cells check that a setting found back at its original and then lowered
+again during Restore is never written over, and that settings of a newer run a
+Restore walk passes over are saved as let go, so their lowered values coming back
+later are not offered for Restore.
 
 `Test-GovernorRunSerialization.ps1 -Source <source> -OutRoot <new-owned-dir>`
 checks the live run boundary with two separate PowerShell processes and disk

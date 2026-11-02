@@ -597,7 +597,6 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
                         return;
                     }
                     outcomes.Add(outcome);
-                    GovernorStatus = "Background limits restored";
                     var next = await ReadGovernorRestoreChainAsync();
                     if (next.Error is not null)
                     {
@@ -608,7 +607,12 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
                     }
                     evidence = next.Evidence;
                     SetGovernorRestore(evidence);
-                    if (evidence is null) GovernorDetail = string.Join("\n", outcomes) + next.Unreadable;
+                    // The card says restored only once no older run still holds an app.
+                    if (evidence is null)
+                    {
+                        GovernorStatus = "Background limits restored";
+                        GovernorDetail = string.Join("\n", outcomes) + next.Unreadable;
+                    }
                 }
                 else
                 {

@@ -127,9 +127,11 @@ static class BackgroundLimitsChecks
             await stacked.ReloadAsync();
             Case(stacked.GovernorRestoreAvailable, "Opening the page offers Restore for the newest run that still holds an app");
             var requests = new List<string>();
+            var titles = new List<string>();
             App.Live.GovernorRestoreHandler = (id, path, backup) =>
             {
                 requests.Add(id);
+                titles.Add(stacked.GovernorStatus);
                 var run = id == second.SessionId ? second : first;
                 App.Live.GovernorStatusText = Status(id == second.SessionId ? first : null);
                 return new(Restored(run), null);
@@ -137,6 +139,8 @@ static class BackgroundLimitsChecks
             await stacked.RestoreGovernorCommand.ExecuteAsync(null);
             Case(requests.SequenceEqual(new[] { second.SessionId, first.SessionId }) && !stacked.GovernorRestoreAvailable,
                 "One Restore puts every holding run back, newest first");
+            Case(titles.Count == 2 && titles.All(title => title == "Restoring background limits") && stacked.GovernorStatus == "Background limits restored",
+                "The card keeps saying it is restoring until the older run is back too: " + string.Join(" | ", titles));
 
             var stale = new PerformanceProfilesViewModel();
             App.Live.GovernorStatusText = Status(null);
@@ -375,7 +379,7 @@ static class BackgroundLimitsChecks
         sessionId = run.SessionId, sessionPath = run.SessionPath, backupManifestPath = run.BackupPath, restorable = false,
         result = new { status = "rolledBack", summary = "Process governor restore completed with 1 restored item(s) and 0 skipped item(s)." } });
 
-    private const string UnreadableReason = "Its saved files couldn't be read, so Restore leaves its apps alone. They go back to normal when they restart.";
+    private const string UnreadableReason = "Its saved files couldn't be read, so Restore leaves alone every setting it may have changed. They go back to normal when those apps restart.";
 
     private static string WithUnreadable(string status) => status[..^1] + ",\"unreadableRuns\":" + JsonSerializer.Serialize(new[]
         { new { sessionId = "process-governor-unreadable", createdAtUtc = "2026-11-02T07:41:00.0000000Z", reason = UnreadableReason } }) + "}";
