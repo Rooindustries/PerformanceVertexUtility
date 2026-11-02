@@ -1,4 +1,4 @@
-﻿param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutRoot,[Parameter(Mandatory)][ValidatePattern('^[a-z][a-z0-9-]{0,30}$')][string]$Label)
+﻿param([Parameter(Mandatory)][string]$Source,[Parameter(Mandatory)][string]$OutRoot,[Parameter(Mandatory)][ValidatePattern('^[a-z][a-z0-9-]{0,30}$')][string]$Label,[ValidateSet('full','link-review')][string]$Scenario='full')
 $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
 . (Join-Path $Source 'tools\validation\Update\Harness.Common.ps1')
@@ -31,7 +31,7 @@ public static class RooIndustriesSavedSettingsUi {
 [RooIndustriesSavedSettingsUi]::SetProcessDPIAware()|Out-Null
 $A=[Windows.Automation.AutomationElement];$TS=[Windows.Automation.TreeScope];$CT=[Windows.Automation.ControlType]
 $evidence=[ordered]@{label=$Label;steps=@();chooseWays=@();unexpected=@()};$status='fail';$imageLock=$null
-$app=$null;$limited=$null;$window=$null;$recorder=$null;$owned=[Collections.Generic.List[object]]::new();$roots=[Collections.Generic.List[string]]::new();$copies=[Collections.Generic.List[object]]::new()
+$link=$null;$app=$null;$limited=$null;$window=$null;$recorder=$null;$owned=[Collections.Generic.List[object]]::new();$roots=[Collections.Generic.List[string]]::new();$copies=[Collections.Generic.List[object]]::new()
 # The app's data folder: an older folder name stays in use where it already exists.
 . (Join-Path $Source 'backend\scripts\BrandCompatibility.Common.ps1')
 $operations=Join-Path (Get-RooIndustriesLocalDataRoot) 'operations'
@@ -151,9 +151,9 @@ function Next-Launcher([string]$Name){
  try{return WaitFor {$state=ProfileState;if($state -and $state.status -eq 'armed' -and $state.launcher.processId -eq [int]$launcher.Identity.pid -and (Test-Path -LiteralPath $ifeo)){$state}} 90 ('the saved settings to turn on for the next launcher run ('+$Name+')')}
  catch{return $null}
 }
-function Setup{
+function Setup([string]$Game=$gamePath){
  Invoke (WaitFor {Enabled 'GameSessionNew'} 60 'New on Games');Start-Sleep -Milliseconds 500
- (WaitFor {Enabled 'GameSessionExecutable'} 60 'the game file box').GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern).SetValue($gamePath);Start-Sleep -Milliseconds 500
+ (WaitFor {Enabled 'GameSessionExecutable'} 60 'the game file box').GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern).SetValue($Game);Start-Sleep -Milliseconds 500
  Invoke (WaitFor {Enabled 'GameSessionRefresh'} 30 'Refresh on Games')
  $choice=Choose (WaitFor {Enabled 'GameSessionLauncher'} 60 'the launcher list') {param($n) $n -like ([IO.Path]::GetFileNameWithoutExtension($launcherPath)+'*')} 'the launcher fixture'
  $preset=Choose (WaitFor {Enabled 'GameSessionPreset'} 60 'the preset list') {param($n) $n -like 'Balanced*'} 'the Balanced preset'
@@ -195,6 +195,47 @@ try{
  $launcherRoot=Fixture 'launcher'
  $owned.Add((Start-OwnedProcess $launcherPath ('--launcher "'+$launcherRoot+'"') 'Hidden' 'saved-launcher-fixture'))
  WaitFor {Test-Path -LiteralPath (Join-Path $launcherRoot 'launcher-ready.json')} 30 'the launcher fixture'|Out-Null
+ if($Scenario -eq 'link-review'){
+ # Settings an earlier version saved for a game picked through a folder junction kept the junction path. They must not turn on, and the row must say why.
+ $link=Join-Path $directory 'game-link'
+ & (Join-Path ([Environment]::SystemDirectory) 'cmd.exe') /d /c mklink /J "$link" "$bin"|Out-Null
+ if($LASTEXITCODE -ne 0){$link=$null;throw 'The folder junction to the game could not be made.'}
+ $legacyGame=Join-Path $link ([IO.Path]::GetFileName($gamePath))
+ Setup $legacyGame|Out-Null
+ Toggle (WaitFor {Enabled 'GameSessionKeep'} 30 'Save for next time') $true
+ Invoke (WaitFor {Enabled 'GameSessionPreview'} 60 'Review changes')
+ WaitFor {Text 'GameSessionReview'} 120 'the review'|Out-Null
+ Invoke (WaitFor {Enabled 'GameSessionStart'} 60 'Start')
+ WaitFor {(Text 'GameSessionStatus') -like 'Ready*'} 120 'the session to be ready'|Out-Null
+ WaitFor {ById 'GameSessionProfileStatus'} 60 'the saved settings row'|Out-Null
+ [IO.File]::WriteAllText((Join-Path $launcherRoot 'stop-launcher'),'')
+ WaitFor {-not(Get-Process -Name 'RooIndustriesSavedLauncher' -ErrorAction SilentlyContinue)} 30 'the launcher to close'|Out-Null
+ WaitFor {-not(Test-Path -LiteralPath $ifeo)} 60 'the closed launcher''s session to put its launch priorities back'|Out-Null
+ $profileRoot=@([IO.Directory]::GetDirectories($operations,'launch-profile-*')|Where-Object {$before -notcontains $_})
+ if($profileRoot.Count -ne 1){throw 'Save for next time did not save one set of launch settings.'}
+ $savedPreview=Join-Path $profileRoot[0] 'reviewed-preview.json';$profileFile=Join-Path $profileRoot[0] 'profile.json'
+ $realGame=([IO.File]::ReadAllText($savedPreview)|ConvertFrom-Json).gamePath
+ Expect 'saved' ($realGame -ieq $gamePath) 'settings saved for a game picked through a junction keep its real path'
+ $json={param($value) ($value|ConvertTo-Json).Trim('"')}
+ $utf8=[Text.UTF8Encoding]::new($false)
+ [IO.File]::WriteAllText($savedPreview,[IO.File]::ReadAllText($savedPreview).Replace('"'+(& $json $realGame)+'"','"'+(& $json $legacyGame)+'"'),$utf8)
+ $sha=[Security.Cryptography.SHA256]::Create();try{$hash=[BitConverter]::ToString($sha.ComputeHash([IO.File]::ReadAllBytes($savedPreview))).Replace('-','')}finally{$sha.Dispose()}
+ [IO.File]::WriteAllText($profileFile,([regex]'"reviewHash": "[0-9A-Fa-f]{64}"').Replace([IO.File]::ReadAllText($profileFile),'"reviewHash": "'+$hash+'"',1),$utf8)
+ if(([IO.File]::ReadAllText($savedPreview)|ConvertFrom-Json).gamePath -cne $legacyGame -or ([IO.File]::ReadAllText($profileFile)|ConvertFrom-Json).reviewHash -cne $hash){throw 'The saved settings could not be rewritten the way an earlier version saved them.'}
+ $launcherRoot=Fixture 'launcher-legacy'
+ $owned.Add((Start-OwnedProcess $launcherPath ('--launcher "'+$launcherRoot+'"') 'Hidden' 'saved-launcher-fixture'))
+ WaitFor {Test-Path -LiteralPath (Join-Path $launcherRoot 'launcher-ready.json')} 30 'the launcher fixture'|Out-Null
+ WaitFor {(Text 'GameSessionProfileStatus') -like 'Not turned on this time*'} 120 'the saved settings row to ask for a fresh review'|Out-Null
+ Start-Sleep -Seconds 1
+ $review=Step 'link-review' @{row=(Text 'GameSessionProfileStatus');status=(Text 'GameSessionStatus');launchPriorities=(Test-Path -LiteralPath $ifeo)}
+ Expect 'link-review' ($review.row -ceq ('Not turned on this time. These settings were saved for '+$legacyGame+', which now leads to '+$realGame+' through a folder link or network drive. Turn these off and set the game up again.')) 'the row says where the saved path leads and how to set the game up again'
+ Expect 'link-review' (-not $review.launchPriorities) 'settings that need a fresh review change nothing'
+ Invoke (WaitFor {Enabled 'GameSessionProfileOff'} 30 'Turn off and restore')
+ WaitFor {-not(ById 'GameSessionProfileStatus') -and (Text 'GameSessionStatus') -like 'Saved settings turned off*'} 60 'the saved settings to turn off'|Out-Null
+ Step 'link-review-off' @{status=(Text 'GameSessionStatus')}|Out-Null
+ $window.GetCurrentPattern([Windows.Automation.WindowPattern]::Pattern).Close();$window=$null
+ Expect 'closed' ($app.process.WaitForExit(30000)) 'with no saved settings left, closing the window ends the app'
+ }else{
  $picked=Setup
  Toggle (WaitFor {Enabled 'GameSessionKeep'} 30 'Save for next time') $true
  Invoke (WaitFor {Enabled 'GameSessionPreview'} 60 'Review changes')
@@ -331,6 +372,7 @@ try{
  # With no saved settings left, closing the window ends the app.
  $window.GetCurrentPattern([Windows.Automation.WindowPattern]::Pattern).Close();$window=$null
  Expect 'closed' ($app.process.WaitForExit(30000)) 'with no saved settings left, closing the window ends the app'
+ }
  if($evidence.unexpected.Count){throw ('Unexpected: '+($evidence.unexpected -join '; '))}
  $status='pass'
 }catch{
@@ -338,6 +380,7 @@ try{
  if($window){try{Step 'failure' @{}|Out-Null}catch{}}
 }finally{
  if($imageLock){try{$imageLock.ReleaseMutex()}catch{};$imageLock.Dispose()}
+ if($link -and [IO.Directory]::Exists($link)){try{[IO.Directory]::Delete($link)}catch{$evidence.cleanupError+=@($_.Exception.Message)}}
  try{Stop-Recorder $recorder}catch{$evidence.recorderError=$_.Exception.Message}
  foreach($folder in $roots){if([IO.Directory]::Exists($folder)){[IO.File]::WriteAllText((Join-Path $folder 'stop-launcher'),'')}}
  Start-Sleep -Seconds 3

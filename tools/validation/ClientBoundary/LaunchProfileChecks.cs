@@ -551,10 +551,7 @@ static class LaunchProfileChecks
                 Check(string.Equals(aliasReview.Plan.GamePath, gamePath, StringComparison.OrdinalIgnoreCase), "A game picked through a folder junction is reviewed at its real path");
                 await aliasApp.StartGameSessionAsync(aliasReview);
                 var aliasSaved = await aliasApp.SaveLaunchProfileAsync(aliasReview);
-                var savedPreview = Path.Combine(aliasSaved.Root, "reviewed-preview.json");
-                OperationFiles.Write(savedPreview, OperationFiles.Read<ProtectedSessionPreview>(savedPreview) with { GamePath = aliasGame });
-                var profileFile = Path.Combine(aliasSaved.Root, "profile.json");
-                OperationFiles.Write(profileFile, OperationFiles.Read<LaunchProfile>(profileFile) with { ReviewHash = OperationFiles.HashFile(savedPreview) });
+                Check(string.Equals(aliasSaved.Saved.GamePath, gamePath, StringComparison.OrdinalIgnoreCase), "Settings saved for a game picked through a folder junction keep the game's real path");
                 var aliasPlayed = await Game(aliasLauncher, launchPath: aliasGame);
                 await Until(async () => (await App().ReadGameSessionAsync(aliasReview.SessionRoot)).State?.Status == "active", "A game picked through a folder junction was not followed when its launcher started it.");
                 Check(Affinity(aliasPlayed) == core && aliasPlayed.PriorityClass == ProcessPriorityClass.AboveNormal, "A game picked through a folder junction gets its cores and priority when its launcher starts it");
@@ -564,14 +561,44 @@ static class LaunchProfileChecks
                 var reopenedLauncher = await OpenLauncher();
                 var aliasRearmed = await ArmedFor(App(), reopenedLauncher);
                 Check(aliasRearmed.ProfileId == aliasSaved.Profile.ProfileId && string.Equals(aliasRearmed.Worker.State!.Preview.GamePath, gamePath, StringComparison.OrdinalIgnoreCase),
-                    "Settings saved through a junction by an earlier version turn on again for the restarted launcher, at the game's real path");
+                    "Settings saved through a junction turn on again for the restarted launcher, at the game's real path");
                 var aliasNext = await Game(reopenedLauncher, launchPath: aliasGame);
                 await Until(async () => (await App().ReadGameSessionAsync(aliasRearmed.SessionRoot)).State?.Status == "active", "The game under the re-armed junction settings was not followed.");
                 Check(Affinity(aliasNext) == core && aliasNext.PriorityClass == ProcessPriorityClass.AboveNormal, "The next game start gets the settings saved through a junction");
                 EndGame(aliasNext);
-                Check(await App().DisableLaunchProfileAsync((await Profile()).Root) is null && (await Sessions()).All(entry => GameSessionDisplay.Restored(entry.Worker)) && NoLaunchPolicy() && Affinity(reopenedLauncher) == original,
-                    "Turning off the settings saved through a junction restores the launcher and game settings");
                 await CloseLauncher(reopenedLauncher);
+                await Until(async () => (await Sessions()).All(entry => GameSessionDisplay.Restored(entry.Worker)), "Closing the launcher did not end the re-armed junction session.");
+
+                // An earlier version saved the junction path itself. Those settings were reviewed for a path, not for whatever it leads to now.
+                var savedPreview = Path.Combine(aliasSaved.Root, "reviewed-preview.json");
+                OperationFiles.Write(savedPreview, OperationFiles.Read<ProtectedSessionPreview>(savedPreview) with { GamePath = aliasGame });
+                var profileFile = Path.Combine(aliasSaved.Root, "profile.json");
+                OperationFiles.Write(profileFile, OperationFiles.Read<LaunchProfile>(profileFile) with { ReviewHash = OperationFiles.HashFile(savedPreview) });
+                async Task<LaunchProfileEntry> NeedsReview(Process launcher, string message)
+                {
+                    var app = App();
+                    await Until(async () => { await app.RearmLaunchProfilesAsync(); return (await Profile()).State is { Status: "changed" } state && state.Launcher.ProcessId == launcher.Id; }, message);
+                    return await Profile();
+                }
+                var legacyLauncher = await OpenLauncher();
+                var legacy = await NeedsReview(legacyLauncher, "Settings an earlier version saved through a junction were not sent back for review.");
+                Check(legacy.State!.Message == "These settings were saved for " + aliasGame + ", which now leads to " + gamePath + " through a folder link or network drive." &&
+                    OptimizerService.DescribeLaunchProfile(legacy) == "Not turned on this time. " + legacy.State.Message + " Turn these off and set the game up again.",
+                    "Settings an earlier version saved through a junction ask for a fresh review, saying where the saved path leads");
+                Check((await Sessions()).All(entry => GameSessionDisplay.Restored(entry.Worker)) && NoLaunchPolicy() && Affinity(legacyLauncher) == original,
+                    "Settings that need a fresh review change nothing for the launcher or the game");
+                await CloseLauncher(legacyLauncher);
+
+                Directory.Delete(linked);
+                Check(Junction(linked, other) == 0, "The junction now leads to an identical copy of the game in another folder");
+                var retargetedLauncher = await OpenLauncher();
+                var retargeted = await NeedsReview(retargetedLauncher, "Settings saved through a junction turned on after the junction was pointed at another folder.");
+                Check(retargeted.State!.Message!.EndsWith(Path.Combine(Path.GetFileName(other), Path.GetFileName(gamePath)) + " through a folder link or network drive.", StringComparison.OrdinalIgnoreCase) &&
+                    (await Sessions()).All(entry => GameSessionDisplay.Restored(entry.Worker)) && NoLaunchPolicy() && Affinity(retargetedLauncher) == original,
+                    "Settings saved through a junction don't turn on for an identical copy the junction was pointed at later");
+                Check(await App().DisableLaunchProfileAsync((await Profile()).Root) is null && (await Sessions()).All(entry => GameSessionDisplay.Restored(entry.Worker)) && NoLaunchPolicy() && Affinity(retargetedLauncher) == original,
+                    "Turning off the settings saved through a junction leaves the launcher and game settings as they were");
+                await CloseLauncher(retargetedLauncher);
             }
 
             async Task Completion()

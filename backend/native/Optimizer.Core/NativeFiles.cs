@@ -55,6 +55,27 @@ internal static class NativeFiles
     public static SafeFileHandle OpenEntry(string path, bool forDelete)
         => Open(path, ReadAttributes | ReadControl | Synchronize | (forDelete ? Delete | WriteAttributes : 0), ShareAll, BackupSemantics | OpenReparsePoint | NoRecallAnonymous);
 
+    // Follows links, and asks only for what naming the file needs, so a share that refuses reading still answers.
+    public static SafeFileHandle OpenTarget(string path) => Open(path, ReadAttributes | Synchronize, ShareAll, BackupSemantics);
+
+    public static string? UniversalPath(string path)
+    {
+        if (path.Length < 3 || !char.IsAsciiLetter(path[0]) || path[1] != ':' || path[2] != '\\' || GetDriveType(path[..3]) != 4) return null;
+        var size = 1024u;
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            var buffer = Marshal.AllocHGlobal((int)size);
+            try
+            {
+                var result = WNetGetUniversalName(path, 1, buffer, ref size);
+                if (result == 0) return Marshal.PtrToStringUni(Marshal.ReadIntPtr(buffer));
+                if (result != 234) return null;
+            }
+            finally { Marshal.FreeHGlobal(buffer); }
+        }
+        return null;
+    }
+
     public static HandleInfo Info(SafeFileHandle handle)
     {
         if (!GetFileInformationByHandle(handle, out var information)) throw Fail(Marshal.GetLastWin32Error(), "");
@@ -347,6 +368,8 @@ internal static class NativeFiles
     private static extern uint QueryDosDevice(string name, StringBuilder target, uint length);
     [DllImport("kernel32.dll", EntryPoint = "GetDriveTypeW", CharSet = CharSet.Unicode)]
     private static extern uint GetDriveType(string root);
+    [DllImport("mpr.dll", EntryPoint = "WNetGetUniversalNameW", CharSet = CharSet.Unicode)]
+    private static extern uint WNetGetUniversalName(string path, uint level, IntPtr buffer, ref uint size);
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern bool DeviceIoControl(SafeFileHandle handle, uint control, IntPtr input, uint inputLength, byte[] output, uint outputLength, out uint returned, IntPtr overlapped);
     [DllImport("kernel32.dll", SetLastError = true)]

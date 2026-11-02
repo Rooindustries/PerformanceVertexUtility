@@ -33,7 +33,7 @@ var evidence=Path.Combine(repo,"artifacts","validation","protected-session-clean
 var fixture=new FixtureScope(root,evidence);var launcherCopy=new FixtureCopy(gamePath,launcherPath);
 var ownedProcesses=new Dictionary<Process,FixtureProcess>();
 ulong originalMask=0,firstMask=0,secondMask=0;
-Process? launcher=null,worker=null;var links=new List<string>();var files=new List<string>();string? mappedDrive=null;var activeRoots=new List<string>();var sameName=new List<(FixtureProcess Process,string Root)>();var session=new ProtectedSessions(_=>false);int passed=0;
+Process? launcher=null,worker=null;var links=new List<string>();var files=new List<string>();string? mappedDrive=null,sharedFolder=null;var activeRoots=new List<string>();var sameName=new List<(FixtureProcess Process,string Root)>();var session=new ProtectedSessions(_=>false);int passed=0;
 void Check(bool ok,string text){if(!ok)throw new InvalidOperationException(text);Console.WriteLine("PASS "+text);passed++;}
 void Until(Func<bool> condition,string text,int seconds=20){var clock=Stopwatch.StartNew();while(!condition()){if(clock.Elapsed.TotalSeconds>seconds)throw new TimeoutException(text);Thread.Sleep(100);}}
 JsonElement V<T>(T value)=>JsonSerializer.SerializeToElement(value,OperationFiles.Json);
@@ -45,7 +45,8 @@ FixtureProcess StandardHolder(string path){var held=StandardFixtureHolder.Start(
 bool HeldElsewhere(string path){try{using var probe=new FileStream(path,FileMode.Open,FileAccess.ReadWrite,FileShare.None);return false;}catch(IOException){return true;}}
 string Review(string name){var path=Path.Combine(root,name+".preview.json");OperationFiles.Write(path,session.Preview(launcher!.Id,gamePath,Wanted(),true));return path;}
 Process Run(string preview,string target){Directory.CreateDirectory(target);activeRoots.Add(target);var request=Path.Combine(target,"request.json");OperationFiles.Write(request,new{schemaVersion=1,repoRoot=repo,sessionRoot=target,previewPath=preview,reviewHash=OperationFiles.HashFile(preview),confirm=true});return Start(workerExe,"run",request);}
-int Tool(string program,string? arguments,params string[] values){var info=new ProcessStartInfo(Path.Combine(Environment.SystemDirectory,program)){UseShellExecute=false,CreateNoWindow=true,RedirectStandardOutput=true,RedirectStandardError=true};if(arguments is not null)info.Arguments=arguments;foreach(var value in values)info.ArgumentList.Add(value);using var process=Process.Start(info)!;process.StandardOutput.ReadToEnd();process.StandardError.ReadToEnd();process.WaitForExit();return process.ExitCode;}
+(int Exit,string Output) Shell(string program,string? arguments,params string[] values){var info=new ProcessStartInfo(Path.Combine(Environment.SystemDirectory,program)){UseShellExecute=false,CreateNoWindow=true,RedirectStandardOutput=true,RedirectStandardError=true};if(arguments is not null)info.Arguments=arguments;foreach(var value in values)info.ArgumentList.Add(value);using var process=Process.Start(info)!;var output=process.StandardOutput.ReadToEnd();process.StandardError.ReadToEnd();process.WaitForExit();return(process.ExitCode,output);}
+int Tool(string program,string? arguments,params string[] values)=>Shell(program,arguments,values).Exit;
 int Junction(string link,string target){if(link.Contains('"')||target.Contains('"'))throw new ArgumentException("A junction path can't contain quotes.");return Tool("cmd.exe","/d /c mklink /J \""+link+"\" \""+target+"\"");}
 int Net(params string[] values)=>Tool("net.exe",null,values);
 int FileLink(string link,string target){if(link.Contains('"')||target.Contains('"'))throw new ArgumentException("A link path can't contain quotes.");return Tool("cmd.exe","/d /c mklink \""+link+"\" \""+target+"\"");}
@@ -168,28 +169,40 @@ try{
   File.WriteAllText(Path.Combine(root,"game-6","stop"),"");CheckGame(game,6);
  }
  worker.Dispose();worker=null;
- var taken=Environment.GetLogicalDrives().Select(drive=>char.ToUpperInvariant(drive[0])).ToHashSet();
- var free=new[]{'M','L','K','J','I','H','G','F'}.Where(letter=>!taken.Contains(letter)).Select(letter=>letter+":").FirstOrDefault(letter=>Net("use",letter)!=0);
- var share=@"\\localhost\"+bin[0]+"$"+bin[2..].TrimEnd('\\');
- Check(free is not null&&Net("use",free,share)==0,"The game's folder is mapped as a network drive on a letter nothing else uses, for the mapped-drive pick");mappedDrive=free;
- var mappedRoot=Directory.CreateDirectory(Path.Combine(root,"mapped-launcher")).FullName;
- var mappedLauncher=Start(Path.Combine(mappedDrive!+@"\",Path.GetFileName(launcherPath)),"--launcher",mappedRoot);Until(()=>File.Exists(Path.Combine(mappedRoot,"launcher-ready.json")),"The launcher on the mapped drive did not start");
- var mappedOriginal=(Affinity:Oracle.Affinity(mappedLauncher),Io:Oracle.Io(mappedLauncher),Memory:Oracle.Memory(mappedLauncher));
- var mappedPreview=Path.Combine(root,"mapped.preview.json");OperationFiles.Write(mappedPreview,session.Preview(mappedLauncher.Id,Path.Combine(mappedDrive+@"\",Path.GetFileName(gamePath)),Wanted(),true));
- var mappedRootSession=Path.Combine(root,"session5");worker=Run(mappedPreview,mappedRootSession);Until(()=>File.Exists(Path.Combine(mappedRootSession,"session.json"))&&State(mappedRootSession).Status=="armed","Mapped-drive session did not arm");
- using(var game=Launch(7,mappedRoot,Path.Combine(share,Path.GetFileName(gamePath)),Path.Combine(mappedDrive+@"\",Path.GetFileName(gamePath)))){
-  Until(()=>State(mappedRootSession).Status=="active","A game picked through a mapped drive was not followed when its launcher started it",30);
-  Check(game.PriorityClass==ProcessPriorityClass.AboveNormal&&Oracle.Gpu(game)==3&&Oracle.Affinity(game)==firstMask,"A game picked through a mapped drive gets its GPU priority, priority and cores when its launcher starts it");
-  session.Command(mappedRootSession,"stop");Check(worker.WaitForExit(20000),"The mapped-drive session stops");Restored(mappedRootSession);
-  Check(Oracle.Gpu(game)==2&&Oracle.Affinity(game)==originalMask,"Stop puts back the GPU priority and cores of the game picked through a mapped drive");
-  Check((Oracle.Affinity(mappedLauncher),Oracle.Io(mappedLauncher),Oracle.Memory(mappedLauncher))==mappedOriginal,"Stop puts back the cores and I/O and memory defaults of the launcher started from the mapped drive");
-  File.WriteAllText(Path.Combine(root,"game-7","stop"),"");CheckGame(game,7);
+ // The Server service shares the game's folder; the test never starts it, so a PC with file sharing off skips this part.
+ if(!Shell("sc.exe",null,"query","LanmanServer").Output.Contains("RUNNING",StringComparison.Ordinal))Console.WriteLine("SKIP A game picked through a mapped network drive (file sharing, the Server service, is off on this PC)");
+ else{
+  var shareName="RooIndustriesGame"+Guid.NewGuid().ToString("N")[..12];
+  Check(Net("share",shareName+"="+bin.TrimEnd('\\'),"/GRANT:"+System.Security.Principal.WindowsIdentity.GetCurrent().Name+",READ")==0,"The game's folder is shared, for this Windows account only, for the mapped-drive pick");sharedFolder=shareName;
+  var taken=Environment.GetLogicalDrives().Select(drive=>char.ToUpperInvariant(drive[0])).ToHashSet();
+  var free=new[]{'M','L','K','J','I','H','G','F'}.Where(letter=>!taken.Contains(letter)).Select(letter=>letter+":").FirstOrDefault(letter=>Net("use",letter)!=0);
+  var share=@"\\localhost\"+shareName;
+  Check(free is not null&&Net("use",free,share)==0,"The share is mapped as a network drive on a letter nothing else uses");mappedDrive=free;
+  var mappedRoot=Directory.CreateDirectory(Path.Combine(root,"mapped-launcher")).FullName;
+  var mappedLauncher=Start(Path.Combine(mappedDrive!+@"\",Path.GetFileName(launcherPath)),"--launcher",mappedRoot);Until(()=>File.Exists(Path.Combine(mappedRoot,"launcher-ready.json")),"The launcher on the mapped drive did not start");
+  var mappedOriginal=(Affinity:Oracle.Affinity(mappedLauncher),Io:Oracle.Io(mappedLauncher),Memory:Oracle.Memory(mappedLauncher));
+  var mappedPreview=Path.Combine(root,"mapped.preview.json");OperationFiles.Write(mappedPreview,session.Preview(mappedLauncher.Id,Path.Combine(mappedDrive+@"\",Path.GetFileName(gamePath)),Wanted(),true));
+  Check(string.Equals(OperationFiles.Read<ProtectedSessionPreview>(mappedPreview).GamePath,Path.Combine(share,Path.GetFileName(gamePath)),StringComparison.OrdinalIgnoreCase),"The mapped-drive pick is reviewed at the share's network path");
+  var mappedRootSession=Path.Combine(root,"session5");worker=Run(mappedPreview,mappedRootSession);Until(()=>File.Exists(Path.Combine(mappedRootSession,"session.json"))&&State(mappedRootSession).Status=="armed","Mapped-drive session did not arm");
+  using(var game=Launch(7,mappedRoot,Path.Combine(share,Path.GetFileName(gamePath)),Path.Combine(mappedDrive+@"\",Path.GetFileName(gamePath)))){
+   Until(()=>State(mappedRootSession).Status=="active","A game picked through a mapped drive was not followed when its launcher started it",30);
+   Check(game.PriorityClass==ProcessPriorityClass.AboveNormal&&Oracle.Gpu(game)==3&&Oracle.Affinity(game)==firstMask,"A game picked through a mapped drive gets its GPU priority, priority and cores when its launcher starts it");
+   session.Command(mappedRootSession,"stop");Check(worker.WaitForExit(20000),"The mapped-drive session stops");Restored(mappedRootSession);
+   Check(Oracle.Gpu(game)==2&&Oracle.Affinity(game)==originalMask,"Stop puts back the GPU priority and cores of the game picked through a mapped drive");
+   Check((Oracle.Affinity(mappedLauncher),Oracle.Io(mappedLauncher),Oracle.Memory(mappedLauncher))==mappedOriginal,"Stop puts back the cores and I/O and memory defaults of the launcher started from the mapped drive");
+   File.WriteAllText(Path.Combine(root,"game-7","stop"),"");CheckGame(game,7);
+  }
+  File.WriteAllText(Path.Combine(mappedRoot,"stop-launcher"),"");Check(mappedLauncher.WaitForExit(15000),"The launcher on the mapped drive exits");
  }
- File.WriteAllText(Path.Combine(mappedRoot,"stop-launcher"),"");Check(mappedLauncher.WaitForExit(15000),"The launcher on the mapped drive exits");
  var renamed=Path.Combine(root,"RenamedGame.exe");Check(FileLink(renamed,gamePath)==0,"A file link with another name points at the game");files.Add(renamed);
  Check(Refusal(renamed)==$"RenamedGame.exe is a shortcut to {Path.GetFileName(gamePath)}. Pick {Path.GetFileName(gamePath)} itself.","A game file that is a link to a file with another name is refused in plain words");
  var notGame=Path.Combine(root,"NotAGame.exe");Check(FileLink(notGame,Path.Combine(bin,Path.GetFileNameWithoutExtension(gamePath)+".dll"))==0,"A file link named like a game points at a library");files.Add(notGame);
  Check(Refusal(notGame)=="Select an installed game executable.","A pick whose real file isn't a program is refused");
+ // Windows opens a named pipe like a file but has no drive path for it, the same answer a share gives when it won't name a file.
+ var unnamed="RooIndustriesUnnamed"+Guid.NewGuid().ToString("N")[..12]+".exe";
+ using(var pipe=new System.IO.Pipes.NamedPipeServerStream(unnamed,System.IO.Pipes.PipeDirection.InOut,1,System.IO.Pipes.PipeTransmissionMode.Byte,System.IO.Pipes.PipeOptions.Asynchronous)){
+  Check(Refusal(@"\\.\pipe\"+unnamed)==$"Windows can't tell where {unnamed} is really stored, so a session couldn't recognize the game when it starts. Pick the game from the drive or folder it's installed in.","A pick Windows opens but can't name is refused in plain words instead of being reviewed at the picked path");
+ }
  Console.WriteLine("Protected-session assertions: "+passed);
 }finally{
  bool finished=true;
@@ -202,6 +215,7 @@ try{
   ()=>Step(()=>{foreach(var identity in ownedProcesses.Values)identity.Stop();}),
   ()=>Step(()=>{foreach(var(probe,_) in sameName)probe.Stop();}),
   ()=>Step(()=>{if(mappedDrive is not null&&Net("use",mappedDrive,"/delete","/y")!=0)throw new IOException("The fixture's mapped drive could not be removed.");}),
+  ()=>Step(()=>{if(sharedFolder is not null&&Net("share",sharedFolder,"/delete","/y")!=0)throw new IOException("The fixture's share could not be removed.");}),
   ()=>Step(()=>{foreach(var link in links)if(Directory.Exists(link))Directory.Delete(link);foreach(var file in files)if(File.Exists(file)||new FileInfo(file).LinkTarget is not null)File.Delete(file);}),
   ()=>{fixture.Cleanup(finished);},
   ()=>{launcherCopy.Remove();},

@@ -146,26 +146,27 @@ public sealed class ProtectedSessions
     public static string GameFile(string gamePath)
     {
         if (!Path.IsPathFullyQualified(gamePath) || !gamePath.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("Select an installed game executable.");
-        string? final; bool link;
-        try { using var file = File.OpenHandle(gamePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete); final = NativeFiles.FinalPath(file); link = new FileInfo(gamePath).LinkTarget is not null; }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException) { throw new InvalidDataException("Select an installed game executable.", error); }
-        if (final is null)
+        string? resolved; var link = false;
+        try
         {
-            if (link) throw new InvalidDataException("Windows can't tell which program " + Path.GetFileName(gamePath) + " opens. Pick the game's own exe.");
-            return Path.GetFullPath(gamePath);
+            using var file = NativeFiles.OpenTarget(gamePath);
+            var final = NativeFiles.FinalPath(file);
+            resolved = final is null ? NativeFiles.UniversalPath(gamePath) : final.StartsWith(@"\\?\UNC\", StringComparison.OrdinalIgnoreCase) ? @"\\" + final[8..] : NativeFiles.Normalize(final);
+            if (resolved is not null)
+            {
+                if (NativeFiles.Info(file).IsDirectory) throw new InvalidDataException("Select an installed game executable.");
+                link = new FileInfo(gamePath).LinkTarget is not null;
+                // A drive's network name doesn't follow a link to another file.
+                if (link && final is null) resolved = null;
+            }
         }
-        var resolved = final.StartsWith(@"\\?\UNC\", StringComparison.OrdinalIgnoreCase) ? @"\\" + final[8..] : NativeFiles.Normalize(final);
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException) { throw new InvalidDataException("Select an installed game executable.", error); }
+        if (resolved is null)
+            throw new InvalidDataException("Windows can't tell where " + Path.GetFileName(gamePath) + " is really stored, so a session couldn't recognize the game when it starts. Pick the game from the drive or folder it's installed in.");
         if (!resolved.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("Select an installed game executable.");
         if (link && !string.Equals(Path.GetFileName(resolved), Path.GetFileName(gamePath), StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException(Path.GetFileName(gamePath) + " is a shortcut to " + Path.GetFileName(resolved) + ". Pick " + Path.GetFileName(resolved) + " itself.");
         return resolved;
-    }
-
-    private static bool SameGame(string saved, string fresh)
-    {
-        if (string.Equals(saved, fresh, StringComparison.OrdinalIgnoreCase)) return true;
-        try { return string.Equals(GameFile(saved), fresh, StringComparison.OrdinalIgnoreCase); }
-        catch (InvalidDataException) { return false; }
     }
 
     internal static void ValidateControls(Dictionary<string, JsonElement> desired)
@@ -189,7 +190,9 @@ public sealed class ProtectedSessions
         if (fresh.SchemaVersion != saved.SchemaVersion || fresh.Owner != saved.Owner) return "It was set up by another Windows account.";
         if (!string.Equals(fresh.Launcher.ExecutablePath, saved.Launcher.ExecutablePath, StringComparison.OrdinalIgnoreCase) || fresh.LauncherHash != saved.LauncherHash)
             return "The launcher was updated or changed since you saved these settings.";
-        if (!SameGame(saved.GamePath, fresh.GamePath) || fresh.GameHash != saved.GameHash || fresh.GameLength != saved.GameLength || fresh.GameModifiedAtUtc != saved.GameModifiedAtUtc)
+        if (!string.Equals(fresh.GamePath, saved.GamePath, StringComparison.OrdinalIgnoreCase))
+            return "These settings were saved for " + saved.GamePath + ", which now leads to " + fresh.GamePath + " through a folder link or network drive.";
+        if (fresh.GameHash != saved.GameHash || fresh.GameLength != saved.GameLength || fresh.GameModifiedAtUtc != saved.GameModifiedAtUtc)
             return "The game changed since you saved these settings.";
         if (fresh.TopologyHash != saved.TopologyHash || !ProcessTarget.Equivalent("affinity", Value(fresh.OriginalAffinity), Value(saved.OriginalAffinity)))
             return "The CPU or the launcher's cores changed since you saved these settings.";
