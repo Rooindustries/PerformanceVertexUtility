@@ -10,7 +10,16 @@ $ErrorActionPreference = 'Stop'
 
 try {
     $resolvedStateRoot = Resolve-RooIndustriesProcessGovernorStateRoot $StateRoot
-    $resolvedSessionPath = Resolve-RooIndustriesProcessGovernorSessionFile $SessionId $SessionPath $StateRoot
+    $latestOnly = $false
+    if ([string]::IsNullOrWhiteSpace($SessionId) -and [string]::IsNullOrWhiteSpace($SessionPath)) {
+        $resolvedSessionPath = Get-RooIndustriesProcessGovernorHeldSession $resolvedStateRoot
+        if ($null -eq $resolvedSessionPath) {
+            $resolvedSessionPath = Get-RooIndustriesProcessGovernorLatestSessionFile $resolvedStateRoot
+            $latestOnly = $true
+        }
+    } else {
+        $resolvedSessionPath = Resolve-RooIndustriesProcessGovernorSessionFile $SessionId $SessionPath $StateRoot
+    }
     if ([string]::IsNullOrWhiteSpace($resolvedSessionPath) -or -not (Test-Path -LiteralPath $resolvedSessionPath)) {
         $notFound = [pscustomobject]@{
             actionId = 'performance.governor.sessionStatus'
@@ -47,12 +56,14 @@ try {
         exit 0
     }
 
-    $session = Read-RooIndustriesJsonFile $resolvedSessionPath
+    $session = Read-RooIndustriesProcessGovernorJson $resolvedSessionPath
     $sessionDirectory = Split-Path $resolvedSessionPath -Parent
     $rawStatus = [string](Get-RooIndustriesPropertyValue $session 'sessionStatus' (Get-RooIndustriesPropertyValue $session 'status' 'completed'))
-    $isRunning = $rawStatus -eq 'running'
+    $isRestorable = [bool](Get-RooIndustriesPropertyValue $session 'restorable' $false) -and -not $latestOnly
+    $worker = Get-RooIndustriesPropertyValue $session 'worker' $null
+    $interrupted = $rawStatus -eq 'running' -and $(if ($null -ne $worker) { Test-RooIndustriesProcessGovernorWorkerEnded $worker } else { Test-RooIndustriesProcessGovernorSessionOverdue $session })
+    $isRunning = $rawStatus -eq 'running' -and -not $interrupted
     $isFailed = $rawStatus -eq 'failed'
-    $isRestorable = [bool](Get-RooIndustriesPropertyValue $session 'restorable' $false)
     $status = if ($isRunning) { 'active' } elseif ($isFailed) { 'failed' } elseif ($isRestorable) { 'restorable' } else { 'completed' }
 
     $latestLogs = New-Object System.Collections.Generic.List[object]
@@ -85,6 +96,7 @@ try {
         active = ($status -eq 'active')
         completed = ($status -eq 'completed')
         failed = ($status -eq 'failed')
+        interrupted = $interrupted
         startedAtUtc = Get-RooIndustriesPropertyValue $session 'startedAtUtc' $null
         completedAtUtc = Get-RooIndustriesPropertyValue $session 'completedAtUtc' $null
         summary = [pscustomobject]@{

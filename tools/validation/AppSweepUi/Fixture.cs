@@ -93,6 +93,8 @@ namespace RooIndustries.OptimizationSuite.Services
         public string? GovernorResultError { get; set; }
         public string? GovernorRestoreError { get; set; }
         public string? GovernorStatusError { get; set; }
+        public Func<string, string, string, LiveDataResult<string>>? GovernorRestoreHandler { get; set; }
+        public int LastGovernorDuration { get; private set; }
         public (string SessionId, string SessionPath, string BackupPath)? LastGameRestoreRequest { get; private set; }
         public GameTuneReview? GameTuneReviewModel { get; set; }
         public GameTuneReview? LastGameTuneStartReview { get; private set; }
@@ -180,10 +182,14 @@ namespace RooIndustries.OptimizationSuite.Services
         public Task<LiveDataResult<string>> GetGameTuneSessionStatusResultAsync(CancellationToken cancellationToken = default)
             => Task.FromResult(new LiveDataResult<string>(GameTuneStatusText, GameTuneStatusError ?? (GameTuneStatusText is null ? LastError : null)));
         public Task<LiveDataResult<string>> RunProcessGovernorSessionResultAsync(bool confirmApply, int maxDurationSeconds, int pollIntervalSeconds, int sampleIntervalMilliseconds, CancellationToken cancellationToken = default)
-            => Task.FromResult(new LiveDataResult<string>(GovernorText, GovernorResultError ?? (GovernorText is null ? LastError : null)));
+        {
+            LastGovernorDuration = maxDurationSeconds;
+            return Task.FromResult(new LiveDataResult<string>(GovernorText, GovernorResultError ?? (GovernorText is null ? LastError : null)));
+        }
         public Task<LiveDataResult<string>> RestoreProcessGovernorSessionResultAsync(string sessionId, string sessionPath, string backupManifestPath, CancellationToken cancellationToken = default)
         {
             LastGovernorRestoreRequest = (sessionId, sessionPath, backupManifestPath);
+            if (GovernorRestoreHandler is not null) return Task.FromResult(GovernorRestoreHandler(sessionId, sessionPath, backupManifestPath));
             return Task.FromResult(new LiveDataResult<string>(GovernorRestoreText, GovernorRestoreError ?? (GovernorRestoreText is null ? LastError : null)));
         }
         public Task<LiveDataResult<string>> GetProcessGovernorSessionStatusResultAsync(CancellationToken cancellationToken = default)

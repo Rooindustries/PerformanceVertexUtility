@@ -494,6 +494,63 @@ Game priority session while it is still open, stops the fixture and removes the
 operation folder it created. A saved change that fails to restore keeps its
 folder and journal so it can be restored again.
 
+`Test-GovernorSecondRun.ps1 -Source <frame source> -OutRoot <dir>` runs Background
+limits Start twice against owned PING probes, with a state root under `OutRoot`.
+Its legacy 12-second run lowers its probe at the first check and ends before the
+15-second minimum restraint, so it retains the original backup; a second Start lowers a new
+probe, and status walks the holding runs newest first. It covers changed limits
+on the same app, already-original controls, external changes, a newer run whose
+probe closed, and a Start killed mid-run, which must read as ready to restore
+instead of running. Restoring a run whose values another program replaced keeps
+them and names each one; status then moves on to the older run, and offers the
+kept run again once its lowered values come back.
+The queued concurrent Start lowers the first run's probe further and is restored
+first. Restoring an older run before a newer run that lowered the same setting
+keeps the older run open, also when the user set a value between the runs, and a
+closed probe's process ID given to a protected Windows process (`csrss`), with a
+different name or the same name and another start time, counts as closed instead
+of holding the run open, so status reports the older run that still holds an app.
+The next Start closes a run whose apps have all closed, and a run whose backup file
+is gone doesn't hide that older run from status either. A running session from an older build
+without a recorded worker stops reading as running once it is long past its watch
+time. A second busy probe that another program raises during the watch keeps that
+value when the watch restores it, keeps the run's backup, and offers Restore again
+once the lowered value comes back; Restore during that live run reports busy and
+changes nothing. A separate owned busy probe becomes idle after restraint; the app's
+current 60-second watch must put its controls back without a Restore press,
+using the shipped 8-second pressure and 15-second minimum restraint times, while
+status is read repeatedly and another reader holds the session file without
+delete sharing, without breaking the run. Every probe the runs still
+control is checked at its exact original values after Restore; a value another
+program changed stays as that program set it.
+
+`Test-GovernorRunSerialization.ps1 -Source <source> -OutRoot <new-owned-dir>`
+checks the live run boundary with two separate PowerShell processes and disk
+journals. The first delays its write so an unguarded second run overtakes it.
+The run gate keeps creation and writes in the same order, and unique session
+names preserve both backups even with a fixed clock stamp. It restores from the
+saved originals, checks previews do not wait, kills its owned gate holder and
+checks recovery, then checks an action failure releases the gate and a run that
+can't get the gate in time reports busy without running. On Windows it also
+holds the gate with an access list the waiting run can't open, as when an
+administrator run holds it, and checks the waiting run waits for it instead of
+failing. `-Unserialized`
+is the negative control and must fail the ordering and original-restore checks.
+This fixture is not native Windows process proof. The real concurrent Start
+case is also in `Test-GovernorSecondRun.ps1`.
+
+`Invoke-BackgroundLimitsUi.ps1` drives the built app the same way as
+`Invoke-RestoreKeptUi.ps1` (`Source`, `AppRoot`, `OutRoot`, `Label`). It points the
+app root's Background limits profile at one owned PING fixture (CPU pressure
+thresholds at 0 and minimum restraint at 600 seconds to keep the fixture lowered)
+and puts the profile's bytes back in `finally`, even if another cleanup fails.
+It presses Start, Start again and then Restore on the Background limits card,
+saving the card text, screenshots and window frames for a video. It passes only
+when the second Start runs without refusing, keeps Restore, lists each skipped
+app once, and Restore puts the fixture back exactly. A build of main fails
+after saving its evidence, because Restore disappears while the fixture stays
+lowered.
+
 The retired Linux-only [Profile confirmation](https://github.com/Rooindustries/PerformanceVertexUtility/blob/8159820c33531fa476a3aefa987a3b8094ecfae6/tools/validation/Background/Test-ProfileRestoreConfirmation.ps1) and [identity recovery](https://github.com/Rooindustries/PerformanceVertexUtility/blob/8159820c33531fa476a3aefa987a3b8094ecfae6/tools/validation/Background/Test-ProfileRestoreIdentityRecovery.ps1) simulations remain in Git history. Their old receipts apply only to their recorded source inputs. `Test-RestoreGovernorOwnership.ps1`, `Test-RestoreProcessOperationOwnership.ps1` and `Test-RestoreOwnershipScale.ps1` run the current restore bodies on Linux with PowerShell 7.5 or later (`pwsh -NoProfile -File <script> -Source $Source -OutRoot $NewOwnedEvidence`). They restore owned `sleep` probe processes through `RestoreSimulation.Common.ps1`, which stands in for the Windows process identity calls, keeps saved JSON dates as text like Windows PowerShell 5.1 and builds each fake governor gate as a real mutex that counts its releases. `check_powershell.ps1` fails when a fake gate no longer matches the real one. Process controls and the governor are simulated, so these are not native proof. These Background checks are not automatically discovered by `Test-Baseline.ps1`. The Baseline workflow runs its declared Linux checks and optional Windows matrix. The manual real restore group is a separate required gate. C6 still requires 40 real processes, two controls, 125 histories and each whole Undo under 45 seconds. UI8, screenshots, interaction video and both actual vision reviews remain separate required Windows gates.
 
 The Global governor gate coordinates supported actors for the current SID.
