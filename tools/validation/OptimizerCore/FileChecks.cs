@@ -45,7 +45,10 @@ static class FileChecks
             check((File.GetAttributes(text) & FileAttributes.ReadOnly) != 0 && File.ReadAllText(sentinel) == "unrelated", "Read-only metadata and unrelated sibling data survive file recovery");
             File.SetAttributes(text, FileAttributes.Normal);
             File.WriteAllText(text, "new user data");
-            check(engine.Restore(journalPath).Status == "needsReconciliation" && File.ReadAllText(text) == "new user data", "Repeated file restore preserves newer destination data");
+            var repeated = engine.Restore(journalPath);
+            check(File.ReadAllText(text) == "new user data" && repeated.Entries.Single(entry => entry.Original.Path == text).LeftAsChanged is not null &&
+                repeated.Entries.Where(entry => entry.Original.Path != text).All(entry => entry.LeftAsChanged is null && entry.Error is null),
+                "Repeated file restore preserves newer destination data and says it left that file as is");
 
             foreach (var (drive, parent) in new[] { ("same drive", root), ("other drive", far) })
             {

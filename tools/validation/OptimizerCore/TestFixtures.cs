@@ -77,6 +77,37 @@ sealed class TestVolume : IDisposable
     }
 }
 
+// A second drive letter for a folder, as the subst command makes, removed again on dispose.
+sealed class SubstDrive : IDisposable
+{
+    public string Root { get; }
+
+    private SubstDrive(string root) { Root = root; }
+
+    public static SubstDrive Create(string folder)
+    {
+        var used = DriveInfo.GetDrives().Select(drive => char.ToUpperInvariant(drive.Name[0])).ToHashSet();
+        var letter = Enumerable.Range('M', 'Z' - 'M' + 1).Select(code => (char)code).Reverse().First(candidate => !used.Contains(candidate));
+        Subst(letter + ":", folder);
+        var drive = new SubstDrive(letter + ":\\");
+        if (!Directory.Exists(drive.Root)) { drive.Dispose(); throw new InvalidOperationException("The subst drive did not appear at " + drive.Root); }
+        return drive;
+    }
+
+    public void Dispose() => Subst(Root[..2], "/D");
+
+    private static void Subst(params string[] arguments)
+    {
+        var start = new System.Diagnostics.ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "subst.exe")) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
+        foreach (var argument in arguments) start.ArgumentList.Add(argument);
+        using var process = System.Diagnostics.Process.Start(start) ?? throw new InvalidOperationException("subst did not start.");
+        var output = process.StandardOutput.ReadToEndAsync();
+        var errors = process.StandardError.ReadToEndAsync();
+        if (!process.WaitForExit(30000)) { process.Kill(true); throw new TimeoutException("subst did not finish."); }
+        if (process.ExitCode != 0) throw new InvalidOperationException("subst " + string.Join(" ", arguments) + " failed (" + process.ExitCode + "): " + output.Result + errors.Result);
+    }
+}
+
 sealed class OwnedRegistryKey : IDisposable
 {
     [DllImport("advapi32.dll", CharSet = CharSet.Unicode)] static extern int RegCreateKeyEx(SafeRegistryHandle key, string subKey, int reserved, string? className, int options, int access, IntPtr security, out IntPtr result, out int disposition);
