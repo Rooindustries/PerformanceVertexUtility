@@ -24,7 +24,7 @@ public sealed class TweakEngine
             try { foreach (var requirement in definition.Requirements ?? []) _store.CheckRequirement(requirement); return null; }
             catch (Exception error) { return error; }
         }).ToArray();
-        var addresses = _catalog.Settings.Where((_, index) => requirementErrors[index] is null).SelectMany(definition => definition.Options).SelectMany(option => option.Controls ?? []).Select(control => control.Address).Distinct().ToArray();
+        var addresses = _catalog.Settings.Where((_, index) => requirementErrors[index] is null).SelectMany(definition => definition.Options.Where(Supported)).SelectMany(option => option.Controls ?? []).Select(control => control.Address).Distinct().ToArray();
         var slow = addresses.Where(address => address.Kind is "windows-features" or "windows-feature" or "reserved-storage").ToArray();
         var fast = addresses.Except(slow).ToArray();
         var fastRead = _store.ReadControlsAsync(fast);
@@ -36,7 +36,7 @@ public sealed class TweakEngine
             {
                 var supported = Supported(definition);
                 if (requirementErrors[index] is { } failed) throw failed;
-                var resolvedOptions = definition.Options.Select(option => option with { Changes = option.Changes.SelectMany(_store.Resolve).ToArray() }).ToArray();
+                var resolvedOptions = definition.Options.Where(Supported).Select(option => option with { Changes = option.Changes.SelectMany(_store.Resolve).ToArray() }).ToArray();
                 var readings = resolvedOptions.SelectMany(option => option.Changes).Select(change => change.Address).Distinct().ToDictionary(address => address, Read);
                 return (Definition: definition, Supported: supported, Options: resolvedOptions, Readings: readings, Error: (Exception?)null);
             }
@@ -78,12 +78,10 @@ public sealed class TweakEngine
                 try
                 {
                     if (failure is not null) throw failure;
-                    var controls = definition.Options.SelectMany(option => option.Controls ?? []).Select(change => change.Address).Distinct().ToDictionary(address => address, InspectControl);
-                    var all = readings.Values.DistinctBy(read => read.Id).ToArray();
-                    if (readings.Values.Any(read => !read.Same(all.Single(item => item.Id == read.Id)))) throw new InvalidDataException("A setting changed while being read.");
-                    var available = definition.Options.Where(option => Supported(option) && (option.Controls ?? []).All(control => controls[control.Address].Allows(control.Value))).Select(option => option.Id).ToArray();
-                    var usable = resolvedOptions.Where(option => available.Contains(option.Id)).SelectMany(option => option.Changes).Select(change => change.Address).ToHashSet();
-                    var reads = available.Length == 0 ? all : readings.Where(pair => usable.Contains(pair.Key)).Select(pair => pair.Value).DistinctBy(read => read.Id).ToArray();
+                    var controls = resolvedOptions.SelectMany(option => option.Controls ?? []).Select(change => change.Address).Distinct().ToDictionary(address => address, InspectControl);
+                    var reads = readings.Values.DistinctBy(read => read.Id).ToArray();
+                    if (readings.Values.Any(read => !read.Same(reads.Single(item => item.Id == read.Id)))) throw new InvalidDataException("A setting changed while being read.");
+                    var available = resolvedOptions.Where(option => (option.Controls ?? []).All(control => controls[control.Address].Allows(control.Value))).Select(option => option.Id).ToArray();
                     var matches = resolvedOptions.Where(option => supported && available.Contains(option.Id) && option.Changes.All(change => TweakComposition.Matches(new(definition.Id, option.Id, readings[change.Address], Desired(change), change.Token, change.Bits), readings[change.Address].Value)) && (option.Controls ?? []).All(change => (change.Address.Kind != "windows-features" || controls[change.Address].Allows(change.Value)) && ControlComposition.Matches(new(definition.Id, option.Id, controls[change.Address], controls[change.Address].Expand(change.Value, allowPending: true), change.Patch), controls[change.Address].Value))).Select(option => option.Id).ToArray();
                     supported &= available.Length > 0;
                     return new TweakSettingStatus(definition.Id, definition.Name, supported, matches, reads, supported ? null : "No choice applies to this Windows version, edition or installed product.", available, controls.Values.ToArray());

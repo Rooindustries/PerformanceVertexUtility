@@ -39,7 +39,7 @@ public partial class WindowsTweakRow : ObservableObject
     {
         get
         {
-            var options = Definition.Options.Where(option => !_resetIds.Contains(option.Id) && _observed?.AvailableChoices?.Contains(option.Id) != false).ToArray();
+            var options = Definition.Options.Where(option => !_resetIds.Contains(option.Id) && OfferedHere?.Contains(option.Id) != false).ToArray();
             if (options.Length == 0) options = Definition.Options;
             return options.SelectMany(option => option.Controls ?? []).Any(control => control.Address.Kind == "timer-startup") ? "This user" : options.SelectMany(option => option.Changes).FirstOrDefault()?.Address.Hive switch
             {
@@ -258,7 +258,7 @@ public partial class WindowsTweakRow : ObservableObject
         AppliedChoice = FindApplied(status);
         _cannotRevert = false;
         if (AppliedChoice is not null && Selected.Id.Length == 0 && _action != AppliedChoice) { _action = AppliedChoice; OnPropertyChanged(nameof(Action)); OnPropertyChanged(nameof(ActionNote)); }
-        else if (AppliedChoice is null && Selected.Id.Length == 0 && !_actionPicked && _action == _recommended && status?.AvailableChoices is { } available && !available.Contains(_action.Id)
+        else if (AppliedChoice is null && Selected.Id.Length == 0 && !_actionPicked && _action == _recommended && OfferedHere is { } available && !available.Contains(_action.Id)
             && ActionChoices.FirstOrDefault(choice => available.Contains(choice.Id) && Definition.Options.Any(option => option.Id == choice.Id && option.Replaces == _action.Id)) is { } usable) { _action = usable; OnPropertyChanged(nameof(Action)); OnPropertyChanged(nameof(ActionNote)); }
         OnPropertyChanged(nameof(AppliedChoice)); OnPropertyChanged(nameof(IsApplied));
         Name = Presentation.Name ?? (status?.Controls?.FirstOrDefault() is { Address.Kind: "service", DisplayName: { } serviceName } && ReadableName(serviceName) ? serviceName : Definition.Name);
