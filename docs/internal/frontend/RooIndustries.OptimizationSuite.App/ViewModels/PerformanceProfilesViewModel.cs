@@ -561,7 +561,7 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
             if (evidence is null)
             {
                 GovernorStatus = "Background limits restored";
-                GovernorDetail = "No saved background limits remain to restore.";
+                GovernorDetail = "No saved background limits remain to restore." + newest.Unreadable;
                 return;
             }
             var restoredSessions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -608,6 +608,7 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
                     }
                     evidence = next.Evidence;
                     SetGovernorRestore(evidence);
+                    if (evidence is null) GovernorDetail = string.Join("\n", outcomes) + next.Unreadable;
                 }
                 else
                 {
@@ -696,13 +697,13 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
         var governor = await App.Live.GetProcessGovernorSessionStatusResultAsync();
         var governorValid = governor.Value is not null && governor.Error is null
             && SessionEnvelopeMatches(governor.Value, "performance.governor.sessionStatus", null);
-        var governorRecovery = ReadSessionRestoreEvidence(governor.Value, "governor")
-            ?? (!governorValid && _governorRestore is not null && ValidateSessionRestoreEvidence(_governorRestore) ? _governorRestore : null);
+        // While status can't be read, keep the way back unchanged; Restore reads the saved runs again before it writes anything.
+        var governorRecovery = ReadSessionRestoreEvidence(governor.Value, "governor") ?? (!governorValid ? _governorRestore : null);
         if (!Quiet || governorRecovery != _governorRestore)
         {
             GovernorStatus = governorValid ? SessionStatusTitle(governor.Value, "No active background limits") : "Background limits unavailable";
             GovernorDetail = governorValid
-                ? SummarizeSessionAction(governor.Value, "No background limits session has changed this PC yet.")
+                ? SummarizeSessionAction(governor.Value, "No background limits session has changed this PC yet.") + UnreadableGovernorRuns(governor.Value)
                 : governor.Error ?? "The background-session status returned invalid evidence.";
         }
         SetGovernorRestore(governorRecovery);
@@ -1076,19 +1077,44 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
         GovernorRestoreAvailable = evidence is not null;
     }
 
-    private static async Task<(SessionRestoreEvidence? Evidence, string? Error)> ReadGovernorRestoreChainAsync()
+    private static async Task<(SessionRestoreEvidence? Evidence, string? Error, string Unreadable)> ReadGovernorRestoreChainAsync()
     {
         var status = await App.Live.GetProcessGovernorSessionStatusResultAsync();
         if (status.Value is null || status.Error is not null || !SessionEnvelopeMatches(status.Value, "performance.governor.sessionStatus", null))
-            return (null, status.Error ?? "The remaining saved background limits could not be checked.");
+            return (null, status.Error ?? "The remaining saved background limits could not be checked.", string.Empty);
+        var unreadable = UnreadableGovernorRuns(status.Value);
         var next = ReadSessionRestoreEvidence(status.Value, "governor");
-        if (next is not null) return (next, null);
+        if (next is not null) return (next, null, unreadable);
         using var doc = JsonDocument.Parse(status.Value);
         var state = ExtractString(doc.RootElement, "status");
         if (TryExtractBool(doc.RootElement, out var restorable, "restorable") && !restorable
             && (state is "notFound" or "completed" || state is "failed" or "active" && TryExtractBool(doc.RootElement, out var dryRun, "dryRun") && !dryRun))
-            return (null, null);
-        return (null, "The remaining saved background limits could not be verified.");
+            return (null, null, unreadable);
+        return (null, "The remaining saved background limits could not be verified.", unreadable);
+    }
+
+    // A run whose saved files can't be read stays pending; the card names it so it never silently disappears.
+    private static string UnreadableGovernorRuns(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return string.Empty;
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            if (!doc.RootElement.TryGetProperty("unreadableRuns", out var runs) || runs.ValueKind != JsonValueKind.Array) return string.Empty;
+            var lines = new List<string>();
+            foreach (var run in runs.EnumerateArray())
+            {
+                if (run.ValueKind != JsonValueKind.Object || ExtractString(run, "reason") is not { Length: > 0 } reason) continue;
+                var when = DateTime.TryParse(ExtractString(run, "createdAtUtc"), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var created)
+                    ? " from " + created.ToLocalTime().ToString("g", CultureInfo.CurrentCulture) : string.Empty;
+                lines.Add("Background limits run" + when + ": " + reason);
+            }
+            return lines.Count == 0 ? string.Empty : "\n" + string.Join("\n", lines);
+        }
+        catch (JsonException)
+        {
+            return string.Empty;
+        }
     }
 
     private static async Task<SessionRestoreEvidence?> ReadHeldGovernorRestoreAsync(SessionRestoreEvidence? fallback)

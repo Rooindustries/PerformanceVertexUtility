@@ -290,11 +290,35 @@ static class BackgroundLimitsChecks
                 await persisted.RestoreGovernorCommand.ExecuteAsync(null);
                 Case(persisted.GovernorRestoreAvailable && requests.SequenceEqual(new[] { second.SessionId }),
                     "After the newest restore is saved, " + label + " keeps Restore while an older run still holds an app");
+                if (statusFails)
+                {
+                    await persisted.ReloadAsync();
+                    Case(persisted.GovernorRestoreAvailable, "Revisiting the page while status still can't be read keeps Restore after " + label);
+                }
                 App.Live.GovernorStatusError = null;
                 await persisted.RestoreGovernorCommand.ExecuteAsync(null);
                 Case(requests.SequenceEqual(new[] { second.SessionId, first.SessionId }) && !persisted.GovernorRestoreAvailable,
                     "Retry after " + label + " restores the older run without replaying the saved newer restore");
             }
+
+            Write(root, "first");
+            var unreadable = new PerformanceProfilesViewModel();
+            App.Live.GovernorStatusText = WithUnreadable(Status(first));
+            await unreadable.ReloadAsync();
+            Case(unreadable.GovernorRestoreAvailable && unreadable.GovernorDetail.Contains(": " + UnreadableReason, StringComparison.Ordinal),
+                "The card names a run whose files can't be read and still offers Restore for the older run: " + unreadable.GovernorDetail);
+            requests.Clear();
+            App.Live.GovernorRestoreHandler = (id, path, backup) =>
+            {
+                requests.Add(id);
+                App.Live.GovernorStatusText = WithUnreadable(Status(null));
+                return new(Restored(first), null);
+            };
+            await unreadable.RestoreGovernorCommand.ExecuteAsync(null);
+            Case(requests.SequenceEqual(new[] { first.SessionId }) && !unreadable.GovernorRestoreAvailable && unreadable.GovernorStatus == "Background limits restored"
+                    && unreadable.GovernorDetail.Contains("Process governor restore completed with 1 restored item(s)", StringComparison.Ordinal)
+                    && unreadable.GovernorDetail.Contains(": " + UnreadableReason, StringComparison.Ordinal),
+                "One Restore walks past the unreadable run, restores the older one and keeps the unreadable run named: " + unreadable.GovernorDetail);
         }
         finally
         {
@@ -350,6 +374,11 @@ static class BackgroundLimitsChecks
     private static string Restored(Run run) => JsonSerializer.Serialize(new { actionId = "performance.governor.stopSession", dryRun = false, status = "completed",
         sessionId = run.SessionId, sessionPath = run.SessionPath, backupManifestPath = run.BackupPath, restorable = false,
         result = new { status = "rolledBack", summary = "Process governor restore completed with 1 restored item(s) and 0 skipped item(s)." } });
+
+    private const string UnreadableReason = "Its saved files couldn't be read, so Restore leaves its apps alone. They go back to normal when they restart.";
+
+    private static string WithUnreadable(string status) => status[..^1] + ",\"unreadableRuns\":" + JsonSerializer.Serialize(new[]
+        { new { sessionId = "process-governor-unreadable", createdAtUtc = "2026-11-02T07:41:00.0000000Z", reason = UnreadableReason } }) + "}";
 
     private static string Status(Run? run) => run is null
         ? JsonSerializer.Serialize(new { actionId = "performance.governor.sessionStatus", status = "notFound", sessionStatus = "notFound", restorable = false })

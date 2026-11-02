@@ -100,9 +100,9 @@ try{
  Case ($undo.result.status -eq 'rolledBack' -and $undo.restorable -and @($undo.result.leftAsSetItems).Count -eq 3 -and $undo.result.summary -match 'Left as another program set it: ') 'Restore of the kept run names each kept setting and keeps its recovery instead of failing'
  Case (-not (Get-Status 'status-after-kept').restorable) 'Status offers no Restore while the only run left keeps another program''s values'
  $p.PriorityClass=$keptLowered.priorityClass;[RooIndustriesBackgroundOracle]::SetIo($p,$keptLowered.ioPriority);[RooIndustriesBackgroundOracle]::SetMemory($p,$keptLowered.memoryPriority)
- Case ((Get-Status 'status-kept-returned').sessionId -eq $kept.sessionId) 'When another change puts the lowered values back, status offers the kept run''s Restore again'
- $undo=Stop-Limits 'undo-kept-returned' $kept
- Case ((Test-Original 'LimitsFixtureA') -and -not$undo.restorable) 'That Restore then returns the exact original and closes'
+ Case (-not (Get-Status 'status-kept-returned').restorable) 'Once a run kept another program''s values, a later return to the lowered values is not offered for Restore'
+ $undo=Stop-Limits 'undo-kept-returned' $kept;$keptValue=Read-Probe 'LimitsFixtureA'
+ Case ($keptValue.priorityClass -eq $keptLowered.priorityClass -and $keptValue.ioPriority -eq $keptLowered.ioPriority -and $keptValue.memoryPriority -eq $keptLowered.memoryPriority) 'Restore then leaves the lowered values another program set'
  Reset-Probe 'LimitsFixtureA'
  $olderHeld=Start-Limits 'older-held' $quickB 3 1;$newerKept=Start-Limits 'newer-kept' $quickA 3 1
  $p=$probes['LimitsFixtureA'];$p.PriorityClass='AboveNormal';[RooIndustriesBackgroundOracle]::SetIo($p,0);[RooIndustriesBackgroundOracle]::SetMemory($p,3)
@@ -156,6 +156,84 @@ try{
  $alreadyOriginal=Start-Limits 'already-original-start' $quickD 3 1;Reset-Probe 'LimitsFixtureD'
  $undo=Stop-Limits 'already-original-undo' $alreadyOriginal
  Case ($undo.result.status -eq 'rolledBack' -and -not$undo.restorable -and (Test-Original 'LimitsFixtureD')) 'Controls already put back by Processes Undo close recovery without another write'
+
+ # The plan Restore previews is the one status uses, for each control the run sets at its original,
+ # lowered and another program's value, and for a GPU priority Windows can't read on this probe.
+ Start-Probe 'LimitsFixtureG';$quickG=New-Profile 'quick-g' @('LimitsFixtureG') 0 600
+ $plan=Start-Limits 'plan-start' $quickG 3 1;$planLowered=Read-Probe 'LimitsFixtureG';$p=$probes['LimitsFixtureG']
+ $setters=@{priorityClass={param($v)$p.PriorityClass=$v};ioPriority={param($v)[RooIndustriesBackgroundOracle]::SetIo($p,$v)};memoryPriority={param($v)[RooIndustriesBackgroundOracle]::SetMemory($p,$v)}}
+ $values=@{priorityClass=@('Normal',$planLowered.priorityClass,'AboveNormal');ioPriority=@(2,$planLowered.ioPriority,@(0,1|Where-Object {$_ -ne $planLowered.ioPriority})[0]);memoryPriority=@(5,$planLowered.memoryPriority,@(3,4|Where-Object {$_ -ne $planLowered.memoryPriority})[0])}
+ foreach($control in 'priorityClass','ioPriority','memoryPriority'){
+  foreach($case in @(@{name='original';index=0;holds=$false},@{name='lowered';index=1;holds=$true},@{name='set by another program';index=2;holds=$false})){
+   foreach($other in $values.Keys){& $setters[$other] $(if($other -eq $control){$values[$other][$case.index]}else{$values[$other][0]})}
+   $review=Join-Path $directory ('plan-'+$control+'-'+$case.index+'.json');& (Join-Path $scripts 'Stop-ProcessGovernorSession.ps1') -SessionPath $plan.sessionPath -StateRoot $state -OutputPath $review|Out-Null
+   $planned=@(@((Get-Content -Raw $review|ConvertFrom-Json).preview)[0].controlChanges|Where-Object {$_.control -eq $control})
+   $expected=switch($case.index){0{$planned.Count -eq 0}1{$planned.Count -eq 1 -and -not$planned[0].blocked}2{$planned.Count -eq 1 -and $planned[0].blocked -and $planned[0].blockedReason -eq 'The control changed externally; its current value was preserved.'}}
+   Case $expected ('Restore plans '+$control+' at '+$case.name+' as status does: '+($planned|ConvertTo-Json -Compress -Depth 5))
+   $held=Get-Status ('plan-status-'+$control+'-'+$case.index)
+   Case (($held.restorable -and $held.sessionId -eq $plan.sessionId) -eq $case.holds) ('Status counts '+$control+' at '+$case.name+' as '+$(if($case.holds){'still held'}else{'not held'}))
+  }
+ }
+ foreach($other in $values.Keys){& $setters[$other] $values[$other][0]}
+ # The run also lowered a GPU priority that Windows can't read on this probe now.
+ $saved=Get-Content -Raw $plan.backupManifestPath|ConvertFrom-Json
+ foreach($snapshot in @($saved.snapshots)){
+  $snapshot|Add-Member -NotePropertyName originalGpuPriority -NotePropertyValue 'Normal' -Force;$snapshot|Add-Member -NotePropertyName proposedGpuPriority -NotePropertyValue 'BelowNormal' -Force
+  $snapshot.controlChanges=@($snapshot.controlChanges)+@([pscustomobject]@{control='gpuPriority';currentValue='Normal';proposedValue='BelowNormal';action='setGpuPriority';outcome='applied';blocked=$false})
+ }
+ [IO.File]::WriteAllText($plan.backupManifestPath,($saved|ConvertTo-Json -Depth 40),$utf8)
+ $review=Join-Path $directory 'plan-gpu.json';& (Join-Path $scripts 'Stop-ProcessGovernorSession.ps1') -SessionPath $plan.sessionPath -StateRoot $state -OutputPath $review|Out-Null
+ $planned=@(@((Get-Content -Raw $review|ConvertFrom-Json).preview)[0].controlChanges|Where-Object {$_.control -eq 'gpuPriority'})
+ Case ($planned.Count -eq 1 -and $planned[0].blocked -and $planned[0].blockedReason -match 'couldn''t read' -and (Get-Status 'plan-gpu-status').sessionId -eq $plan.sessionId) 'With every readable setting at its original, a GPU priority Windows can''t read stays planned and keeps the run held'
+
+ # Settings found back at their original are no longer the run's once a confirmed Restore sees them,
+ # even while the unreadable GPU priority keeps the run open.
+ $undo=Stop-Limits 'settled-undo' $plan
+ $closed=@(@(@((Get-Content -Raw $plan.backupManifestPath|ConvertFrom-Json).snapshots)[0].controlChanges|Where-Object {$_.restoredAtUtc}|ForEach-Object {$_.control})|Sort-Object)
+ Case ($undo.restorable -and (Test-Original 'LimitsFixtureG') -and (@($undo.skippedItems|ForEach-Object {$_.reason}) -join ' ') -match 'couldn''t read this setting') 'Restore keeps the run open for the GPU priority it can''t read'
+ Case (($closed -join ',') -eq 'ioPriority,memoryPriority,priorityClass') ('That Restore saves the settings it found at their original as no longer the run''s: '+($closed -join ','))
+ $p.PriorityClass=$planLowered.priorityClass
+ $undo=Stop-Limits 'settled-undo-again' $plan
+ Case ((Read-Probe 'LimitsFixtureG').priorityClass -eq $planLowered.priorityClass) 'A later Restore of that open run leaves a lowered CPU priority another program set'
+ Stop-OwnedProcess $owned['LimitsFixtureG'];$probes['LimitsFixtureG'].WaitForExit(10000)|Out-Null
+
+ # Restore stopped right after its first write, before it saved that the setting is back.
+ Start-Probe 'LimitsFixtureH';$quickH=New-Profile 'quick-h' @('LimitsFixtureH') 0 600
+ $cut=Start-Limits 'interrupted-start' $quickH 3 1;$cutLowered=Read-Probe 'LimitsFixtureH'
+ $script=Join-Path $directory 'interrupted-restore.ps1'
+ $text='Set-PSBreakpoint -Command Complete-RooIndustriesGovernorRestoredControls -Action { [Environment]::Exit(9) } | Out-Null; & '''+(Join-Path $scripts 'Stop-ProcessGovernorSession.ps1').Replace("'","''")+''' -SessionPath '''+$cut.sessionPath.Replace("'","''")+''' -StateRoot '''+$state.Replace("'","''")+''' -ConfirmApply -OutputPath '''+(Join-Path $directory 'interrupted-restore.json').Replace("'","''")+''''
+ [IO.File]::WriteAllText($script,$text,[Text.UTF8Encoding]::new($true))
+ $worker=Start-Process (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe') -ArgumentList ('-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "'+$script+'"') -WindowStyle Hidden -PassThru;$workerOwned=New-OwnedProcess $worker
+ if(-not$worker.WaitForExit(60000)){throw 'The interrupted Restore did not stop'}
+ Case ($worker.ExitCode -eq 9 -and (Read-Probe 'LimitsFixtureH').priorityClass -eq 'Normal') 'The interrupted Restore stopped right after it put CPU priority back'
+ $probes['LimitsFixtureH'].PriorityClass=$cutLowered.priorityClass
+ $undo=Stop-Limits 'interrupted-retry' $cut;$value=Read-Probe 'LimitsFixtureH'
+ Case ($value.priorityClass -eq $cutLowered.priorityClass) 'The next Restore leaves a lowered CPU priority it can''t prove is still its own'
+ Case ($value.ioPriority -eq 2 -and $value.memoryPriority -eq 5) 'It still puts back the settings the interrupted Restore never reached'
+ Case ($undo.restorable -and ($undo.skippedItems|ConvertTo-Json -Depth 10) -match 'Restore stopped part-way') 'It names that setting in plain words and keeps the run open'
+ Stop-OwnedProcess $owned['LimitsFixtureH'];$probes['LimitsFixtureH'].WaitForExit(10000)|Out-Null
+
+ # A run whose files can't be read is named and left pending, and Restore walks past it.
+ Start-Probe 'LimitsFixtureI';Start-Probe 'LimitsFixtureJ';$quickI=New-Profile 'quick-i' @('LimitsFixtureI') 0 600;$quickJ=New-Profile 'quick-j' @('LimitsFixtureJ') 0 600
+ $older=Start-Limits 'unreadable-older' $quickI 3 1;$newer=Start-Limits 'unreadable-newer' $quickJ 3 1
+ $bytes=[IO.File]::ReadAllBytes($newer.sessionPath);[IO.File]::WriteAllText($newer.sessionPath,'{ "restorable": true,',$utf8)
+ $status=Get-Status 'unreadable-status'
+ Case ($status.sessionId -eq $older.sessionId -and $status.restorable -and @($status.unreadableRuns|Where-Object {$_.sessionId -eq $newer.sessionId}).Count -eq 1) 'Status passes over a newer run whose files can''t be read, names it, and offers the older run'
+ $undo=Stop-Limits 'unreadable-undo-older' $older
+ Case ((Test-Original 'LimitsFixtureI') -and (Read-Probe 'LimitsFixtureJ').priorityClass -eq 'BelowNormal') 'Restore puts the older run back and leaves the unreadable run''s app alone'
+ $status=Get-Status 'unreadable-status-after'
+ Case (-not$status.restorable -and @($status.unreadableRuns).Count -eq 1) 'The unreadable run stays pending and named afterwards'
+ [IO.File]::WriteAllBytes($newer.sessionPath,$bytes)
+ $undo=Stop-Limits 'unreadable-undo-newer' $newer;Case (Test-Original 'LimitsFixtureJ') 'Once its files read again, that run restores its app exactly'
+ $differentI=New-Profile 'different-i' @('LimitsFixtureI') 0 600
+ $value=Get-Content -Raw $differentI|ConvertFrom-Json;$value.governor.restraint.priorityClass='Idle';$value.governor.restraint.ioPriority='VeryLow';[IO.File]::WriteAllText($differentI,($value|ConvertTo-Json -Depth 40),$utf8)
+ $older=Start-Limits 'unreadable-same-older' $quickI 3 1;$newer=Start-Limits 'unreadable-same-newer' $differentI 3 1;$before=Read-Probe 'LimitsFixtureI'
+ $bytes=[IO.File]::ReadAllBytes($newer.backupManifestPath);[IO.File]::WriteAllText($newer.backupManifestPath,'[',$utf8)
+ $undo=Stop-Limits 'unreadable-same-undo-older' $older;$after=Read-Probe 'LimitsFixtureI'
+ Case ($before.priorityClass -eq 'Idle' -and $after.priorityClass -eq 'Idle' -and $after.ioPriority -eq $before.ioPriority -and $after.memoryPriority -eq $before.memoryPriority -and $undo.restorable -and (@($undo.skippedItems|ForEach-Object {$_.reason}) -join ' ') -match 'couldn''t be read') 'An older Restore leaves every setting of an app a newer unreadable run lowered, and says why'
+ [IO.File]::WriteAllBytes($newer.backupManifestPath,$bytes)
+ $undo=Stop-Limits 'unreadable-same-undo-newer' $newer;$undo=Stop-Limits 'unreadable-same-undo-again' $older
+ Case (Test-Original 'LimitsFixtureI') 'Once the newer run reads again, both runs put the app back exactly'
 
  Start-Probe 'LimitsFixtureF';$quickF=New-Profile 'quick-f' @('LimitsFixtureF') 0 600
  $script=Join-Path $directory 'crash-start.ps1';$crashOutput=Join-Path $directory 'crash-start.json'
@@ -229,9 +307,9 @@ try{
  [RooIndustriesBackgroundOracle]::SetIo($probes[$keptName],$keptLowered.ioPriority);Save 'kept-watch-io-by-other-program' (Read-Probe $keptName)
  Case (-not (Get-Status 'kept-watch-io-status').restorable) 'An I/O priority the watch put back is not offered for Restore when another program later picks the lowered value'
  $probes[$keptName].PriorityClass=$keptLowered.priorityClass
- Case ((Get-Status 'kept-watch-status').sessionId -eq $keptResult.sessionId) 'When the lowered value comes back, status offers that run''s Restore again'
+ Case (-not (Get-Status 'kept-watch-status').restorable) 'A CPU priority the watch kept as another program set it is not offered for Restore when the lowered value comes back'
  $undo=Stop-Limits 'kept-watch-undo' $keptResult;$keptNow=Read-Probe $keptName
- Case ($keptNow.priorityClass -eq 'Normal' -and $keptNow.memoryPriority -eq 5 -and -not$undo.restorable) 'That Restore returns the exact original CPU priority'
+ Case ($keptNow.priorityClass -eq $keptLowered.priorityClass -and $keptNow.memoryPriority -eq 5) 'Restore leaves that lowered CPU priority as the other program set it'
  Case ($keptNow.ioPriority -eq $keptLowered.ioPriority) 'That Restore leaves the I/O priority another program set after the watch put it back'
  Save 'done' @{passed=($failures.Count -eq 0);failures=@($failures)}
  if($failures.Count){throw ('Background limits second-run checks failed: '+($failures -join '; '))}

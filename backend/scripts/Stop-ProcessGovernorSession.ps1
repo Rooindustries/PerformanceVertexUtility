@@ -22,15 +22,18 @@ function New-GovernorAlreadyClosedItem {
     }
 }
 
-$script:GovernorNewerRunHolds = 'A newer Background limits run still holds this setting. Restore that run first.'
-
+# A control another program changed is left as that program set it, and from then on it is no longer
+# this run's: its ownership is saved as closed before Restore moves on.
 function Get-GovernorKeptControl {
-    param([object]$Entry,[System.Diagnostics.Process]$Process,[string]$Control,[object]$Applied,[object]$Original)
+    param([object]$Entry,[System.Diagnostics.Process]$Process,[string]$Control,[object]$Applied,[object]$Original,[object]$Snapshot,[object]$Backup,[string]$BackupPath)
     try { $now = Get-RooIndustriesProcessControlReadback $Process $Control } catch { return $null }
     if ([string]::IsNullOrWhiteSpace([string]$now) -or (Test-RooIndustriesControlValueEqual $Control $now $Applied)) { return $null }
-    if (Test-RooIndustriesProcessGovernorNewerRunHolds $script:GovernorSessionDirectory $Entry $Control) { return $script:GovernorNewerRunHolds }
+    $newer = Get-RooIndustriesProcessGovernorNewerRunReason $script:GovernorSessionDirectory $Entry $Control
+    if (-not [string]::IsNullOrWhiteSpace($newer)) { return $newer }
     $owner = Get-RooIndustriesRestoreControlOwnershipReason $Process $Control
     if (-not [string]::IsNullOrWhiteSpace($owner)) { return $owner }
+    Close-RooIndustriesGovernorControlOwnership $Snapshot @($Control)
+    Write-RooIndustriesProcessGovernorJsonFile $Backup $BackupPath
     return New-RooIndustriesLeftAsSetItem $Entry ([pscustomobject]@{ control = $Control; currentValue = $now; appliedValue = $Applied; originalValue = $Original })
 }
 
@@ -268,12 +271,16 @@ try {
                     continue
                 }
                 $live = $identity.process
+                $snapshot = $previewSnapshots[$index]
                 $entrySkipStart = $skipped.Count
                 $entryLeftStart = $leftAsSet.Count
+                if (Close-RooIndustriesGovernorSettledControls $snapshot (Get-RooIndustriesProcessControlState $processId $null -Process $live -ReadGpu:(Test-RooIndustriesEntryHasGpuControl $snapshot))) {
+                    Write-RooIndustriesProcessGovernorJsonFile $backup $resolvedBackupPath
+                }
                 foreach ($control in @(Get-RooIndustriesPreviewControlChanges $entry | Where-Object { $_.blocked })) {
                     $reason = $control.blockedReason
                     if (Test-RooIndustriesGovernorChangeLeftAsSet $control) {
-                        $kept = Get-GovernorKeptControl $entry $live ([string]$control.control) (Get-RooIndustriesPropertyValue $control 'appliedValue' $null) $control.proposedValue
+                        $kept = Get-GovernorKeptControl $entry $live ([string]$control.control) (Get-RooIndustriesPropertyValue $control 'appliedValue' $null) $control.proposedValue $snapshot $backup $resolvedBackupPath
                         if ($kept -is [string]) { $reason = $kept }
                         elseif ($null -ne $kept) { $leftAsSet.Add($kept) | Out-Null; continue }
                     }
@@ -285,8 +292,9 @@ try {
                 $failedControls = New-Object System.Collections.Generic.List[string]
                 foreach ($change in $entryControlChanges) {
                     $name = [string](Get-RooIndustriesPropertyValue $change 'control' '')
-                    if (Test-RooIndustriesProcessGovernorNewerRunHolds $script:GovernorSessionDirectory $entry $name) {
-                        $failedControls.Add($name + ': ' + $script:GovernorNewerRunHolds) | Out-Null
+                    $newer = Get-RooIndustriesProcessGovernorNewerRunReason $script:GovernorSessionDirectory $entry $name
+                    if (-not [string]::IsNullOrWhiteSpace($newer)) {
+                        $failedControls.Add($name + ': ' + $newer) | Out-Null
                         continue
                     }
                     $owner = Get-RooIndustriesRestoreControlOwnershipReason $live $name
@@ -295,21 +303,18 @@ try {
                         continue
                     }
                     try {
-                        Invoke-RooIndustriesProcessControlChange $live $change
+                        Invoke-RooIndustriesGovernorControlRestore $live $snapshot $change $backup $resolvedBackupPath
                         $appliedControls.Add($change) | Out-Null
                     } catch {
                         $failure = $_.Exception.Message
                         if ($failure -ceq $script:RooIndustriesChangedExternally) {
-                            $kept = Get-GovernorKeptControl $entry $live ([string](Get-RooIndustriesPropertyValue $change 'control' '')) (Get-RooIndustriesPropertyValue $change 'currentValue' $null) $change.proposedValue
+                            $kept = Get-GovernorKeptControl $entry $live $name (Get-RooIndustriesPropertyValue $change 'currentValue' $null) $change.proposedValue $snapshot $backup $resolvedBackupPath
                             if ($kept -is [string]) { $failure = $kept }
                             elseif ($null -ne $kept) { $leftAsSet.Add($kept) | Out-Null; continue }
                         }
                         $failedControls.Add("$([string](Get-RooIndustriesPropertyValue $change 'control' 'unknown')): $failure") | Out-Null
                         continue
                     }
-                    # Saved at once, so a later Restore never treats another program's value of this control as ours.
-                    Complete-RooIndustriesGovernorRestoredControls $previewSnapshots[$index] @($change)
-                    Write-RooIndustriesProcessGovernorJsonFile $backup $resolvedBackupPath
                 }
                 if ($appliedControls.Count -gt 0) {
                     $afterControls = Get-RooIndustriesProcessControlState $processId $null -ReadGpu:(Test-RooIndustriesEntryHasGpuControl $entry)
