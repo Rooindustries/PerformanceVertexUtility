@@ -24,7 +24,7 @@ $directory=Join-Path $OutRoot $Label
 if([IO.Directory]::Exists($directory)){throw 'Evidence directory exists; retained.'}
 $frames=Join-Path $directory 'frames';[IO.Directory]::CreateDirectory($frames)|Out-Null
 $utf8=[Text.UTF8Encoding]::new($false);$A=[Windows.Automation.AutomationElement];$TS=[Windows.Automation.TreeScope];$CT=[Windows.Automation.ControlType]
-$app=$null;$receipt=$null;$fixture=$null;$window=$null;$operation=$null;$journal=$null;$gameSession=$null;$frameCount=0;$clock=[Diagnostics.Stopwatch]::StartNew();$timeline=[Collections.Generic.List[object]]::new()
+$app=$null;$receipt=$null;$fixture=$null;$window=$null;$operation=$null;$journal=$null;$journalRestored=$false;$gameSession=$null;$frameCount=0;$clock=[Diagnostics.Stopwatch]::StartNew();$timeline=[Collections.Generic.List[object]]::new()
 function Save([string]$name,$value){[IO.File]::WriteAllText((Join-Path $directory $name),($value|ConvertTo-Json -Depth 30),$utf8)}
 function WaitFor([scriptblock]$probe,[double]$seconds,[string]$what){$deadline=[DateTime]::UtcNow.AddSeconds($seconds);while([DateTime]::UtcNow -lt $deadline){try{$v=&$probe}catch{$v=$null};if($v){return $v};Start-Sleep -Milliseconds 100};throw ('Timed out: '+$what)}
 function All{@($window.FindAll($TS::Descendants,[Windows.Automation.Condition]::TrueCondition))}
@@ -80,10 +80,9 @@ try{
  })
  $start=& (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe') -NoProfile -NonInteractive -ExecutionPolicy Bypass -File (Join-Path $AppRoot 'backend\scripts\Start-GameTuneSession.ps1') -ProfilePath (Join-Path $directory 'profile.json') -TargetGameProcessName $name -MaxDurationSeconds 1 -PollIntervalSeconds 1 -ConfirmApply
  if($LASTEXITCODE){throw 'Game priority start failed.'}
- $start=($start -join "`n")|ConvertFrom-Json;Save 'start.json' $start
+ $start=($start -join "`n")|ConvertFrom-Json;$gameSession=$start;Save 'start.json' $start
  $applied=Read-Fixture $process
  if($applied.priorityClass -ne 'AboveNormal' -or $applied.affinityMask -ne $affinity -or -not$start.restorable){throw ('Game priority did not apply to the fixture: '+$applied.priorityClass+' '+$applied.affinityMask)}
- $gameSession=$start
  if($Scenario -eq 'saved-change'){
   . (Join-Path $AppRoot 'backend\scripts\BrandCompatibility.Common.ps1')
   $operation=Join-Path (Get-RooIndustriesLocalDataRoot) ('operations\process-'+[Guid]::NewGuid().ToString('N'));[IO.Directory]::CreateDirectory($operation)|Out-Null
@@ -145,12 +144,12 @@ try{
 }finally{
  try{if($app){Stop-OwnedValidationApp $app $receipt}}
  finally{
-  try{if($journal -and [IO.File]::Exists($journal)){HostCall 'process-restore' @{journalPath=$journal;acceptEarlierVersion=$true}|Out-Null}}
+  try{if($journal -and [IO.File]::Exists($journal)){HostCall 'process-restore' @{journalPath=$journal;acceptEarlierVersion=$true}|Out-Null};$journalRestored=$true}
   finally{
-   try{if($Scenario -eq 'saved-change' -and $gameSession -and $gameSession.restorable){$stopped=& (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe') -NoProfile -NonInteractive -ExecutionPolicy Bypass -File (Join-Path $AppRoot 'backend\scripts\Stop-GameTuneSession.ps1') -SessionId $gameSession.sessionId -SessionPath $gameSession.sessionPath -BackupPath $gameSession.backupManifestPath -ConfirmApply;$code=$LASTEXITCODE;$closed=try{($stopped -join "`n")|ConvertFrom-Json}catch{$null};if($code -or $null -eq $closed -or $closed.restorable -ne $false){throw ('Game priority cleanup left its session open: '+($stopped -join ' '))}}}
+   try{if($gameSession -and $gameSession.restorable -and [IO.File]::Exists($gameSession.sessionPath) -and ([IO.File]::ReadAllText($gameSession.sessionPath)|ConvertFrom-Json).restorable){$stopped=& (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe') -NoProfile -NonInteractive -ExecutionPolicy Bypass -File (Join-Path $AppRoot 'backend\scripts\Stop-GameTuneSession.ps1') -SessionId $gameSession.sessionId -SessionPath $gameSession.sessionPath -BackupPath $gameSession.backupManifestPath -ConfirmApply;$code=$LASTEXITCODE;$closed=try{($stopped -join "`n")|ConvertFrom-Json}catch{$null};if($code -or $null -eq $closed -or $closed.restorable -ne $false){throw ('Game priority cleanup left its session open: '+($stopped -join ' '))}}}
    finally{
     try{if($fixture){Stop-OwnedProcess $fixture}}
-    finally{if($operation -and [IO.Directory]::Exists($operation)){Remove-Item -LiteralPath $operation -Recurse -Force}}
+    finally{if($journalRestored -and $operation -and [IO.Directory]::Exists($operation)){Remove-Item -LiteralPath $operation -Recurse -Force}}
    }
   }
  }

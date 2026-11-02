@@ -489,8 +489,10 @@ app's own native helper, the way the Processes page saves one, before Restore.
 It passes only when Restore leaves that saved change in place, the card names
 the setting another saved change holds, and the card uses Restore wording, not
 Undo wording. A build without the card wording fix fails that check after saving
-its evidence. `finally` restores the saved change and the Game priority session,
-stops the fixture and removes the operation folder it created.
+its evidence. In either scenario `finally` restores the saved change, stops the
+Game priority session while it is still open, stops the fixture and removes the
+operation folder it created. A saved change that fails to restore keeps its
+folder and journal so it can be restored again.
 
 The retired Linux-only [Profile confirmation](https://github.com/Rooindustries/PerformanceVertexUtility/blob/8159820c33531fa476a3aefa987a3b8094ecfae6/tools/validation/Background/Test-ProfileRestoreConfirmation.ps1) and [identity recovery](https://github.com/Rooindustries/PerformanceVertexUtility/blob/8159820c33531fa476a3aefa987a3b8094ecfae6/tools/validation/Background/Test-ProfileRestoreIdentityRecovery.ps1) simulations remain in Git history. Their old receipts apply only to their recorded source inputs. `Test-RestoreGovernorOwnership.ps1`, `Test-RestoreProcessOperationOwnership.ps1` and `Test-RestoreOwnershipScale.ps1` run the current restore bodies on Linux with PowerShell 7.5 or later (`pwsh -NoProfile -File <script> -Source $Source -OutRoot $NewOwnedEvidence`). They restore owned `sleep` probe processes through `RestoreSimulation.Common.ps1`, which stands in for the Windows process identity calls, keeps saved JSON dates as text like Windows PowerShell 5.1 and builds each fake governor gate as a real mutex that counts its releases. `check_powershell.ps1` fails when a fake gate no longer matches the real one. Process controls and the governor are simulated, so these are not native proof. These Background checks are not automatically discovered by `Test-Baseline.ps1`. The Baseline workflow runs its declared Linux checks and optional Windows matrix. The manual real restore group is a separate required gate. C6 still requires 40 real processes, two controls, 125 histories and each whole Undo under 45 seconds. UI8, screenshots, interaction video and both actual vision reviews remain separate required Windows gates.
 
