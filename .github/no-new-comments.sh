@@ -148,9 +148,14 @@ BEGIN { st = "code"; f = lang; yb = 0; depth = 0; cont = 0; tsp = 0; bd = 0; las
     next
   }
   if (lang == "iss") {
-    if (!ib && line ~ /^[ \t]*\[[^]]+\][ \t]*$/) { icode = tolower(line) ~ /^[ \t]*\[code\]/; next }
+    if (!ib && line ~ /^[ \t]*\[[^]]+\][ \t]*$/) { isig = 1; icode = tolower(line) ~ /^[ \t]*\[code\]/; next }
+    if (!ib && line ~ /^[ \t]*#[ \t]*[A-Za-z]/) next
+    if (!isig && !ib) {
+      if (line ~ /^[ \t]*(;|\/\/)/) { out(NR, line, "c"); next }
+      if (line ~ /^[ \t]*$/) next
+      isig = 1; icode = 1
+    }
     if (!icode && !ib) { if (line ~ /^[ \t]*(;|\/\/)/) out(NR, line, "c"); next }
-    if (!ib && line ~ /^[ \t]*#/) next
     if (ib) out(NR, "", "c")
     iq = 0
     while (i <= n) {

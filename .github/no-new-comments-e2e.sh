@@ -95,6 +95,26 @@ expect "inst/a.iss:9: adds a comment" "a Pascal brace comment in installer code 
 expect "inst/a.iss:10: adds a comment" "a Pascal (* *) comment in installer code fails"
 expect "inst/a.iss:12: adds a comment: trailing note" "a trailing // comment in installer code fails"
 
+case_branch issinclude
+put inst/inc.iss <<'EOF'
+; shared setup code
+#define Delay 5
+const
+  A = 1; { brace note }
+  B = 2; // slash note
+  (* paren note *)
+  C = #13#10;
+EOF
+commit "feat: add included installer code"
+expect "inst/inc.iss:4: adds a comment" "a brace comment in a headerless installer include fails"
+expect "inst/inc.iss:5: adds a comment: slash note" "a trailing // comment in a headerless installer include fails"
+expect "inst/inc.iss:6: adds a comment" "a (* *) comment in a headerless installer include fails"
+
+case_branch bom
+mkdir -p tool && printf '\357\273\277%s\n' '# a plain note' 'Write-Output 1' >tool/note.ps1
+commit "feat: add a script with a BOM"
+expect "tool/note.ps1:1: adds a comment" "a comment on line 1 after a BOM fails"
+
 case_branch issok
 put inst/b.iss <<'EOF'
 [Setup]
