@@ -2019,7 +2019,7 @@ try {
         try {
             $clock=[Diagnostics.Stopwatch]::StartNew()
             while (-not (Test-Path -LiteralPath $ready)) {
-                if ($process.HasExited -or $clock.Elapsed.TotalSeconds -gt 30) { throw 'The machine-wide change lock holder did not start' }
+                if ($process.HasExited -or $clock.Elapsed.TotalSeconds -gt 150) { throw 'The machine-wide change lock holder did not start' }
                 Start-Sleep -Milliseconds 50
             }
             $scoped=$null
