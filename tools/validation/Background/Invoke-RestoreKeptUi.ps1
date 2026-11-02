@@ -59,6 +59,7 @@ function HostCall([string]$action,[hashtable]$fields){
  }finally{Stop-OwnedProcess $owned}
 }
 function Read-Fixture($p){$p.Refresh();[ordered]@{priorityClass=[string]$p.PriorityClass;affinityMask=$p.ProcessorAffinity.ToInt64()}}
+trap{if(-not[IO.File]::Exists((Join-Path $directory 'failure.json'))){Save 'failure.json' @{error=$_.Exception.Message;stack=$_.ScriptStackTrace}};break}
 try{
  Assert-NoUnownedAppProcess
  $exe=@(Get-ChildItem -LiteralPath (Join-Path $AppRoot 'docs\internal\frontend\RooIndustries.OptimizationSuite.App\bin') -Recurse -Filter 'RooIndustries.OptimizationSuite.App.exe')
@@ -136,7 +137,6 @@ try{
   if($after.priorityClass -ne 'BelowNormal'){throw ('Restore overwrote the priority another program set: '+$after.priorityClass)}
   if($result -notcontains 'Game priorities restored' -or $detail -notmatch ([regex]::Escape($process.ProcessName)+'(\.exe)? CPU priority \(BelowNormal\)') -or $detail -notmatch 'Left as another program set it'){throw 'The restore result does not name the priority it left.'}
  }
- Save 'done.json' @{passed=$true;label=$Label}
 }catch{
  Save 'failure.json' @{error=$_.Exception.Message;stack=$_.ScriptStackTrace}
  if($window){try{Shot 'failure'}catch{}}
@@ -155,3 +155,4 @@ try{
   }
  }
 }
+Save 'done.json' @{passed=$true;label=$Label}
