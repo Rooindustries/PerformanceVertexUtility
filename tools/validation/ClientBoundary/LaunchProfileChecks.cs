@@ -83,6 +83,14 @@ static class LaunchProfileChecks
     }
     static Task<string?> UpdateBlocker(OptimizerService app) => new InstallGate(app.RecoverAndReadGameSessionsAsync,
         () => Task.FromResult(new LiveDataResult<string>("{\"active\":false}", null)), () => false, () => ("C:", long.MaxValue)).ReasonAsync();
+    static int Junction(string link, string target)
+    {
+        if (link.Contains('"') || target.Contains('"')) throw new ArgumentException("A junction path can't contain quotes.");
+        var start = new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "cmd.exe"), "/d /c mklink /J \"" + link + "\" \"" + target + "\"") { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
+        using var cmd = Process.Start(start)!;
+        cmd.StandardOutput.ReadToEnd(); cmd.StandardError.ReadToEnd(); cmd.WaitForExit();
+        return cmd.ExitCode;
+    }
     static bool TaskExists(string sessionRoot) => Schtasks("/Query", "/TN", TaskName(sessionRoot)).Exit == 0;
     static string SignInTask(string operations) => "Performance Vertex Utility Saved Launch Settings " +
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes((System.Security.Principal.WindowsIdentity.GetCurrent().User!.Value + "|" + Path.GetFullPath(operations).TrimEnd('\\')).ToLowerInvariant())))[..16];
@@ -130,6 +138,7 @@ static class LaunchProfileChecks
         var games = new List<(Process Process, string Root, long Created)>();
         var clients = new List<OptimizerService>();
         string? unrelatedSession = null;
+        string? linked = null;
         OptimizerService App()
         {
             var app = new OptimizerService(new BackendLocator(), operations);
@@ -179,7 +188,7 @@ static class LaunchProfileChecks
             Check(NtSuspendProcess(worker.Handle) == 0 && NtSuspendProcess(watcher.Handle) == 0, "The session worker and its watcher are frozen together, like a power loss");
             worker.Kill(); watcher.Kill(); worker.WaitForExit(10000); watcher.WaitForExit(10000);
         }
-        async Task<Process> Game(Process? launcher, bool failReadiness = false, string mode = "none")
+        async Task<Process> Game(Process? launcher, bool failReadiness = false, string mode = "none", string? launchPath = null)
         {
             var folder = Path.Combine(root, "game-" + (games.Count + 1)); Directory.CreateDirectory(folder);
             Process? game = null;
@@ -188,7 +197,7 @@ static class LaunchProfileChecks
                 game = failReadiness ? Start(gamePath, "--hold-lock", Path.Combine(folder, "held"), Path.Combine(folder, "holder-ready.json"), Path.Combine(folder, "stop")) : Start(gamePath, "--game", folder, mode);
                 games.Add((game, folder, game.StartTime.ToUniversalTime().ToFileTimeUtc()));
             }
-            else OperationFiles.Write(Path.Combine(launchers.Single(item => item.Process == launcher).Root, "launch.json"), new { root = folder, mode, exe = Path.GetFileName(gamePath) });
+            else OperationFiles.Write(Path.Combine(launchers.Single(item => item.Process == launcher).Root, "launch.json"), new { root = folder, mode, exe = launchPath ?? Path.GetFileName(gamePath) });
             await Until(() => Task.FromResult(File.Exists(Path.Combine(folder, "ready.json"))), failReadiness ? "Deliberate standalone readiness failure" : "The game fixture did not start.", failReadiness ? 2 : 60);
             if (game is null) { game = Process.GetProcessById(OperationFiles.Read<JsonElement>(Path.Combine(folder, "ready.json")).GetProperty("pid").GetInt32()); games.Add((game, folder, game.StartTime.ToUniversalTime().ToFileTimeUtc())); }
             return game;
@@ -532,6 +541,37 @@ static class LaunchProfileChecks
                 Check(await App().DisableLaunchProfileAsync((await Profile()).Root) is null && (await Sessions()).All(entry => GameSessionDisplay.Restored(entry.Worker)) && NoLaunchPolicy() && Affinity(second) == original,
                     "Turning the saved settings off restores the launcher and game settings");
                 await CloseLauncher(second);
+
+                linked = Path.Combine(root, "linked");
+                Check(Junction(linked, bin) == 0, "A folder junction to the game's folder stands in for a game library reached through a junction");
+                var aliasGame = Path.Combine(linked, Path.GetFileName(gamePath));
+                var aliasLauncher = await OpenLauncher();
+                var aliasApp = App();
+                var aliasReview = await aliasApp.PreviewGameSessionAsync(aliasLauncher.Id, aliasGame, controls, true);
+                Check(string.Equals(aliasReview.Plan.GamePath, gamePath, StringComparison.OrdinalIgnoreCase), "A game picked through a folder junction is reviewed at its real path");
+                await aliasApp.StartGameSessionAsync(aliasReview);
+                var aliasSaved = await aliasApp.SaveLaunchProfileAsync(aliasReview);
+                var savedPreview = Path.Combine(aliasSaved.Root, "reviewed-preview.json");
+                OperationFiles.Write(savedPreview, OperationFiles.Read<ProtectedSessionPreview>(savedPreview) with { GamePath = aliasGame });
+                var profileFile = Path.Combine(aliasSaved.Root, "profile.json");
+                OperationFiles.Write(profileFile, OperationFiles.Read<LaunchProfile>(profileFile) with { ReviewHash = OperationFiles.HashFile(savedPreview) });
+                var aliasPlayed = await Game(aliasLauncher, launchPath: aliasGame);
+                await Until(async () => (await App().ReadGameSessionAsync(aliasReview.SessionRoot)).State?.Status == "active", "A game picked through a folder junction was not followed when its launcher started it.");
+                Check(Affinity(aliasPlayed) == core && aliasPlayed.PriorityClass == ProcessPriorityClass.AboveNormal, "A game picked through a folder junction gets its cores and priority when its launcher starts it");
+                EndGame(aliasPlayed);
+                await CloseLauncher(aliasLauncher);
+                await Until(async () => (await Sessions()).All(entry => GameSessionDisplay.Restored(entry.Worker)), "Closing the launcher did not end the junction session.");
+                var reopenedLauncher = await OpenLauncher();
+                var aliasRearmed = await ArmedFor(App(), reopenedLauncher);
+                Check(aliasRearmed.ProfileId == aliasSaved.Profile.ProfileId && string.Equals(aliasRearmed.Worker.State!.Preview.GamePath, gamePath, StringComparison.OrdinalIgnoreCase),
+                    "Settings saved through a junction by an earlier version turn on again for the restarted launcher, at the game's real path");
+                var aliasNext = await Game(reopenedLauncher, launchPath: aliasGame);
+                await Until(async () => (await App().ReadGameSessionAsync(aliasRearmed.SessionRoot)).State?.Status == "active", "The game under the re-armed junction settings was not followed.");
+                Check(Affinity(aliasNext) == core && aliasNext.PriorityClass == ProcessPriorityClass.AboveNormal, "The next game start gets the settings saved through a junction");
+                EndGame(aliasNext);
+                Check(await App().DisableLaunchProfileAsync((await Profile()).Root) is null && (await Sessions()).All(entry => GameSessionDisplay.Restored(entry.Worker)) && NoLaunchPolicy() && Affinity(reopenedLauncher) == original,
+                    "Turning off the settings saved through a junction restores the launcher and game settings");
+                await CloseLauncher(reopenedLauncher);
             }
 
             async Task Completion()
@@ -1041,6 +1081,7 @@ static class LaunchProfileChecks
                 Clean(() => (typeof(OptimizerService).GetField("_storageLease", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(client) as IDisposable)?.Dispose());
             foreach (var task in tasks) Clean(() => { if (Schtasks("/Query", "/TN", task).Exit == 0 && Schtasks("/Delete", "/TN", task, "/F").Exit != 0) throw new IOException("A fixture task could not be removed."); });
             Clean(() => File.Delete(gamePath)); Clean(() => File.Delete(launcherPath));
+            Clean(() => { if (linked is not null && Directory.Exists(linked)) Directory.Delete(linked); });
             Clean(() => Directory.Delete(root, true));
             Clean(() =>
             {
