@@ -1,6 +1,6 @@
 param(
     [string]$HarnessPath = (Join-Path $PSScriptRoot '..\..\LeanClientOptimizer.ps1'),
-    [ValidateSet('All','Selection','Drift','PreviewBinding','Dependents','ChangeLock','BackupWrite','Services','Registry','Recovery','SnapshotSafety','ApplyComparison')][string]$Scenario = 'All',
+    [ValidateSet('All','Selection','Drift','PreviewBinding','Dependents','ChangeLock','BackupWrite','Services','Registry','Recovery','SnapshotSafety','Editions','ApplyComparison')][string]$Scenario = 'All',
     [ValidateSet('All','Signed','LegacyEvidence','Preflight','RegistryFailure','ServiceFailure','ServiceRuntime','OriginalEvidence','ServiceExistence','SourceEvidence','JsonNumbers','LegacyNames')][string]$RecoveryCase = 'All',
     [string]$BaseHarnessPath = $env:ROO_INDUSTRIES_LEGACY_BASE_HARNESS,
     [string]$BaseHarnessSha256 = $env:ROO_INDUSTRIES_LEGACY_BASE_HARNESS_SHA256
@@ -2733,6 +2733,168 @@ public static class RooIndustriesLegacyFixtureRaw {
             [Microsoft.Win32.Registry]::CurrentUser.DeleteSubKeyTree($subkey,$false)
         }
         Assert ($null -eq [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($subkey)) 'The real-registry fixture is removed'
+    } }
+    if ($Scenario -in 'All','Editions') { & {
+        Set-Alias Enter-ChangeLock Enter-TestChangeLock
+        . $HarnessPath -Action ListModules -ManifestPath $fixtureManifest -DataRoot $tempRoot -ModuleId 'fixture' | Out-Null
+        $readEdition=${function:Get-PcEdition}
+        # The real M2 module and the edition limits the app uses. Only the registry and the edition read are replaced, so nothing on the PC changes.
+        $ManifestPath=Join-Path (Split-Path -Parent $HarnessPath) 'modules\tweak_manifest.json'
+        $ModuleId='M2-safe-registry'
+        $limited='DisableSoftLanding;DisableWindowsSpotlightFeatures'
+        function Get-EditionKey([string]$Path,[string]$Name) { ((Convert-RegPath $Path)+'\'+$Name).ToLowerInvariant() }
+        function Open-RegistryKey {
+            param($Path,[switch]$Writable,[switch]$Create)
+            $key=[pscustomobject]@{path=$Path}
+            $key|Add-Member ScriptMethod DeleteValue {param($Name,$Throw) $script:editionWrites.Add('delete '+$Name);$script:editionValues.Remove((Get-EditionKey $this.path $Name))}
+            $key|Add-Member ScriptMethod Dispose {} -PassThru
+        }
+        function Get-RegistryValueSnapshot {
+            param($Item,[switch]$AllowChangedLayout)
+            $current=$script:editionValues[(Get-EditionKey $Item.path $Item.name)]
+            [pscustomobject]@{path=$Item.path;name=[string]$Item.name;type=$Item.type;desiredData=$Item.data;pathExists=$true;valueExists=($null -ne $current);kind=$(if($current){$current.kind});oldValue=$(if($current){$current.value})}
+        }
+        function Set-RegistrySnapshotData {
+            param($Key,$Name,$Snapshot)
+            $script:editionWrites.Add('set '+$Name)
+            $script:editionValues[(Get-EditionKey $Key.path $Name)]=@{kind=$Snapshot.kind;value=$Snapshot.oldValue}
+        }
+        function Get-PcEdition { $script:editionReads++; if ($script:editionFails) { throw 'Fixture edition read failure' }; [pscustomobject]@{edition=$script:edition;build=$script:build} }
+        function Get-BenchmarkSnapshot { param($Label) @{label=$Label} }
+        function Invoke-SmokeTest { @() }
+        function Get-EditionState { ($script:editionValues.Keys|Sort-Object|ForEach-Object {$_+'='+$script:editionValues[$_].kind+':'+$script:editionValues[$_].value}) -join ';' }
+        function Reset-EditionFixture {
+            param([string]$Edition,[int]$Build=26200)
+            $script:edition=$Edition;$script:build=$Build;$script:editionReads=0;$script:editionFails=$false
+            $script:editionValues=@{(Get-EditionKey 'HKLM\SOFTWARE\Policies\Microsoft\Windows\CloudContent' 'DisableSoftLanding')=@{kind='DWord';value=[uint32]0}}
+            $script:editionWrites=New-Object System.Collections.Generic.List[string]
+            return (Join-Path $tempRoot ('ed-'+[guid]::NewGuid().ToString('N').Substring(0,8)))
+        }
+        function Get-Skipped { param($Entries) (@($Entries|Where-Object {$_.skipped}|ForEach-Object {if ($_.PSObject.Properties['name']) {[string]$_.name} else {[string]$_.target -replace '^.*\\',''}})|Sort-Object) -join ';' }
+
+        foreach ($edition in 'Professional','Core') {
+            $DataRoot=Reset-EditionFixture $edition
+            $original=Get-EditionState
+            $ConfirmApply=$false
+            $preview=Invoke-ApplyModule
+            $saved=Get-Content -LiteralPath $preview.previewPath -Raw|ConvertFrom-Json
+            $reason='Windows ignores this policy on the '+$edition+' edition.'
+            Assert ((Get-Skipped $saved.plan) -ceq $limited -and (Get-Skipped $saved.actions) -ceq $limited -and @($saved.plan|Where-Object {$_.skipped -and $_.skipped -cne $reason}).Count -eq 0 -and $script:editionWrites.Count -eq 0) ("The $edition preview lists only the tips and spotlight policies as skipped, with the reason, and changes nothing")
+            $ConfirmApply=$true
+            $PreviewPath=$preview.previewPath
+            $applied=Invoke-ApplyModule
+            $backup=Get-Content -LiteralPath $applied.backupPath -Raw|ConvertFrom-Json
+            $written=@($applied.plan|Where-Object {-not $_.blocked -and -not $_.skipped}).Count
+            Assert ($script:editionWrites.Count -eq $written -and @($script:editionWrites|Where-Object {$_ -match 'DisableSoftLanding|DisableWindowsSpotlightFeatures'}).Count -eq 0 -and @($backup.registry).Count -eq $written -and @($backup.registry|Where-Object {$_.name -match 'DisableSoftLanding|DisableWindowsSpotlightFeatures'}).Count -eq 0) ("A confirmed $edition apply writes and backs up every other M2 value but not the skipped policies")
+            Assert ($script:editionValues[(Get-EditionKey 'HKLM\SOFTWARE\Policies\Microsoft\Windows\CloudContent' 'DisableSoftLanding')].value -eq 0 -and -not $script:editionValues.ContainsKey((Get-EditionKey 'HKLM\Software\Policies\Microsoft\Windows\CloudContent' 'DisableWindowsSpotlightFeatures'))) ("The $edition apply leaves the existing tips value and the absent spotlight value as they were")
+            $restored=Invoke-RollbackModule
+            Assert ($restored.success -and @($restored.leftAsChanged).Count -eq 0 -and (Get-EditionState) -ceq $original) ("Undo of the $edition apply restores every value it changed")
+        }
+
+        $DataRoot=Reset-EditionFixture 'Enterprise'
+        $original=Get-EditionState
+        $ConfirmApply=$false
+        $preview=Invoke-ApplyModule
+        Assert ((Get-Skipped $preview.plan) -ceq '' -and (Get-Skipped $preview.actions) -ceq '') 'The Enterprise preview skips nothing'
+        $ConfirmApply=$true
+        $PreviewPath=$preview.previewPath
+        $applied=Invoke-ApplyModule
+        $backup=Get-Content -LiteralPath $applied.backupPath -Raw|ConvertFrom-Json
+        $softLanding=@($backup.registry|Where-Object {$_.name -ceq 'DisableSoftLanding'})
+        $spotlight=@($backup.registry|Where-Object {$_.name -ceq 'DisableWindowsSpotlightFeatures'})
+        Assert ($script:editionValues[(Get-EditionKey 'HKLM\SOFTWARE\Policies\Microsoft\Windows\CloudContent' 'DisableSoftLanding')].value -eq 1 -and $script:editionValues[(Get-EditionKey 'HKLM\Software\Policies\Microsoft\Windows\CloudContent' 'DisableWindowsSpotlightFeatures')].value -eq 1 -and $softLanding.Count -eq 1 -and $softLanding[0].valueExists -eq $true -and $softLanding[0].oldValue -eq 0 -and $spotlight.Count -eq 1 -and $spotlight[0].valueExists -eq $false) 'A confirmed Enterprise apply backs up and writes the tips and spotlight policies'
+        $script:edition='Professional'
+        $restored=Invoke-RollbackModule
+        Assert ($restored.success -and @($restored.leftAsChanged).Count -eq 0 -and (Get-EditionState) -ceq $original) 'Undo of a backup that wrote the policies restores them exactly, even after the PC became Pro'
+
+        $DataRoot=Reset-EditionFixture 'Enterprise'
+        $ConfirmApply=$false
+        $PreviewPath=(Invoke-ApplyModule).previewPath
+        $script:edition='Professional'
+        $ConfirmApply=$true
+        $message=$null
+        try { Invoke-ApplyModule|Out-Null } catch { $message=$_.Exception.Message }
+        Assert ($null -ne $message -and $message.Contains('DisableSoftLanding: REG_DWORD 1 -> skipped: Windows ignores this policy on the Professional edition.') -and $message.Contains('Nothing was changed') -and $script:editionWrites.Count -eq 0 -and -not (Test-Path -LiteralPath (Join-Path $DataRoot 'backups'))) 'An Enterprise preview applied after the PC became Pro is refused before any backup or write and names the skip'
+
+        $realEditions=$PolicyEditionsPath
+        $brokenEditions=Join-Path $tempRoot 'broken-editions.json'
+        $entry='"hive":"LocalMachine","keyPath":"SOFTWARE\\Policies\\Microsoft\\Windows\\CloudContent","valueName":"DisableSoftLanding"'
+        $good='{'+$entry+',"editions":["Enterprise*"]}'
+        foreach ($case in @(
+            @{name='a missing file';json=$null;reason='Cannot read'},@{name='an empty file';json='';reason='no policies list'},@{name='null';json='null';reason='no policies list'},@{name='{}';json='{}';reason='no policies list'},
+            @{name='a misspelled policies key';json='{"polices":['+$good+']}';reason='no policies list'},
+            @{name='{"policies":null}';json='{"policies":null}';reason='no policies list'},@{name='{"policies":{}}';json='{"policies":{}}';reason='no policies list'},@{name='{"policies":[]}';json='{"policies":[]}';reason='no policies list'},
+            @{name='an entry that is not an object';json='{"policies":['+$good+',"DisableSoftLanding"]}';reason='Policy 2'},
+            @{name='an entry without editions';json='{"policies":['+$good+',{'+$entry+'}]}';reason='Policy 2'},
+            @{name='an entry with a misspelled editions key';json='{"policies":['+$good+',{'+$entry+',"edition":["Enterprise*"]}]}';reason='Policy 2'},
+            @{name='an empty editions list';json='{"policies":['+$good+',{'+$entry+',"editions":[]}]}';reason='Policy 2'},
+            @{name='editions as one text';json='{"policies":['+$good+',{'+$entry+',"editions":"Enterprise*"}]}';reason='Policy 2'},
+            @{name='an edition that is not text';json='{"policies":['+$good+',{'+$entry+',"editions":["Enterprise*",1]}]}';reason='Policy 2'},
+            @{name='a misspelled hive key';json='{"policies":['+$good+',{"hiv":"LocalMachine","keyPath":"SOFTWARE\\Policies\\Microsoft\\Windows\\CloudContent","valueName":"DisableSoftLanding","editions":["Enterprise*"]}]}';reason='Policy 2'},
+            @{name='an unknown hive';json='{"policies":['+$good+',{"hive":"LocalMachin","keyPath":"SOFTWARE\\Policies\\Microsoft\\Windows\\CloudContent","valueName":"DisableSoftLanding","editions":["Enterprise*"]}]}';reason='Policy 2'},
+            @{name='a missing keyPath';json='{"policies":['+$good+',{"hive":"LocalMachine","valueName":"DisableSoftLanding","editions":["Enterprise*"]}]}';reason='Policy 2'},
+            @{name='a missing valueName';json='{"policies":['+$good+',{"hive":"LocalMachine","keyPath":"SOFTWARE\\Policies\\Microsoft\\Windows\\CloudContent","editions":["Enterprise*"]}]}';reason='Policy 2'},
+            @{name='minimumBuild as text';json='{"policies":['+$good+',{'+$entry+',"editions":["Enterprise*"],"minimumBuild":"14393"}]}';reason='Policy 2'},
+            @{name='a fractional minimumBuild';json='{"policies":['+$good+',{'+$entry+',"editions":["Enterprise*"],"minimumBuild":14393.5}]}';reason='Policy 2'},
+            @{name='dword as text';json='{"policies":['+$good+',{'+$entry+',"editions":["Enterprise*"],"dword":"1"}]}';reason='Policy 2'}
+        )) {
+            $DataRoot=Reset-EditionFixture 'Professional'
+            $PolicyEditionsPath=$realEditions
+            $ConfirmApply=$false
+            $PreviewPath=(Invoke-ApplyModule).previewPath
+            $files=@(Get-ChildItem -LiteralPath $DataRoot -Recurse -File).Count
+            if ($null -eq $case.json) { $PolicyEditionsPath=Join-Path $tempRoot 'missing-editions.json' } else { [IO.File]::WriteAllText($brokenEditions,$case.json); $PolicyEditionsPath=$brokenEditions }
+            foreach ($ConfirmApply in $false,$true) {
+                $message=$null
+                try { Invoke-ApplyModule|Out-Null } catch { $message=$_.Exception.Message }
+                Assert ($null -ne $message -and $message.Contains('Windows edition limits') -and $message.Contains($case.reason) -and $message.EndsWith('Nothing was changed.') -and $script:editionWrites.Count -eq 0 -and @(Get-ChildItem -LiteralPath $DataRoot -Recurse -File).Count -eq $files) ($(if ($ConfirmApply) {'A confirmed apply'} else {'A preview'})+' with '+$case.name+' as the edition limits is refused before anything is written')
+            }
+        }
+        $DataRoot=Reset-EditionFixture 'Professional'
+        [IO.File]::WriteAllText($brokenEditions,'{"policies":['+$good+']}');$PolicyEditionsPath=$brokenEditions
+        $ConfirmApply=$false
+        $oneResult=$null;$oneError=$null
+        try { $oneResult=Invoke-ApplyModule } catch { $oneError=$_.Exception.Message }
+        Assert ($null -eq $oneError -and (Get-Skipped $oneResult.plan) -ceq 'DisableSoftLanding') ('A valid edition limits file with one policy previews and skips that policy on Pro, saw: '+$oneError)
+        $PolicyEditionsPath=$realEditions
+
+        $ConfirmApply=$false
+        foreach ($case in @(
+            @{edition='Education';skipped=''},@{edition='EducationN';skipped=''},@{edition='EnterpriseS';skipped=''},@{edition='EnterpriseEval';skipped=''},
+            @{edition='IoTEnterprise';skipped=''},@{edition='ServerStandard';skipped=''},@{edition='enterprise';skipped=''},
+            @{edition='CoreSingleLanguage';skipped=$limited},@{edition='ProfessionalWorkstation';skipped=$limited},
+            @{edition='ProfessionalEducation';skipped=$limited},@{edition='CloudEdition';skipped=$limited}
+        )) {
+            $DataRoot=Reset-EditionFixture $case.edition
+            Assert ((Get-Skipped (Invoke-ApplyModule).plan) -ceq $case.skipped) ('The '+$case.edition+' preview skips '+$(if ($case.skipped) {'the tips and spotlight policies'} else {'nothing'}))
+        }
+        $ManifestPath=Join-Path $tempRoot 'editions-manifest.json'
+        Write-JsonFile @{protected=@{services=@();registryPathPatterns=@()};modules=@(@{id='fixture';name='Fixture';services=@();registryValues=@(
+            @{path='HKLM\SOFTWARE\Policies\Microsoft\Windows\DataCollection';name='AllowTelemetry';type='REG_DWORD';data=0},
+            @{path='HKLM\SOFTWARE\Policies\Microsoft\Windows\DataCollection';name='AllowTelemetry';type='REG_DWORD';data=1},
+            @{path='hklm/Software\Microsoft\\Windows\CurrentVersion\Policies\DataCollection\';name='allowtelemetry';type='reg_dword';data=0},
+            @{path='HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate';name='TargetReleaseVersion';type='REG_DWORD';data=1}
+        )})} $ManifestPath
+        $ModuleId='fixture'
+        $DataRoot=Reset-EditionFixture 'Professional' 17133
+        $plan=(Invoke-ApplyModule).plan
+        Assert ($plan[0].skipped -ceq 'Windows ignores this policy on the Professional edition.' -and $null -eq $plan[1].skipped -and $plan[2].skipped -ceq $plan[0].skipped -and $plan[3].skipped -ceq 'Windows ignores this policy before build 17134.') 'A limit on one value skips only that value, matches any spelling of its path, and a build limit names the first build'
+        $DataRoot=Reset-EditionFixture 'Professional' 17134
+        Assert ($null -eq (Invoke-ApplyModule).plan[3].skipped) 'The first build a limit names gets the value'
+        $ManifestPath=$fixtureManifest
+        $DataRoot=Reset-EditionFixture 'Professional'
+        $script:editionFails=$true
+        Invoke-ApplyModule|Out-Null
+        Assert ($script:editionReads -eq 0) 'A module without edition-limited values never reads the Windows edition'
+        $ManifestPath=Join-Path (Split-Path -Parent $HarnessPath) 'modules\tweak_manifest.json'
+        $ModuleId='M2-safe-registry'
+        $message=$null
+        try { Invoke-ApplyModule|Out-Null } catch { $message=$_.Exception.Message }
+        Assert ($null -ne $message -and $message.Contains('Windows edition') -and $message.Contains('Nothing was changed') -and $script:editionWrites.Count -eq 0) 'An unreadable Windows edition stops the preview before anything changes'
+        if ($env:OS -eq 'Windows_NT') {
+            $version=[Microsoft.Win32.RegistryKey]::OpenBaseKey('LocalMachine','Registry64').OpenSubKey('SOFTWARE\Microsoft\Windows NT\CurrentVersion')
+            try { $pc=& $readEdition; Assert ($pc.edition -ceq $version.GetValue('EditionID') -and $pc.build -eq [int]$version.GetValue('CurrentBuildNumber')) ('The harness reads this PC''s edition '+$pc.edition+' and build '+$pc.build) } finally { $version.Dispose() }
+        }
     } }
     if ($Scenario -eq 'ApplyComparison' -or ($Scenario -eq 'All' -and $BaseHarnessPath)) { & {
         if ($env:OS -ne 'Windows_NT') { throw 'The base/new apply comparison requires Windows.' }
