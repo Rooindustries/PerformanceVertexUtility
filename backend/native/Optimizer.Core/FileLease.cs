@@ -18,7 +18,7 @@ public sealed class FileLease : IDisposable
     private readonly bool _writable;
     public string Path { get; }
 
-    private FileLease(string path, bool writable, bool create, bool directory, bool restore, bool shareDelete = false, bool policy = false, bool content = false, bool owner = false, bool move = false)
+    private FileLease(string path, bool writable, bool create, bool directory, bool restore, bool shareDelete = false, bool policy = false, bool content = false, bool owner = false, bool move = false, bool times = false, bool rename = false)
     {
         Path = NormalizePath(path);
         _writable = writable;
@@ -37,6 +37,7 @@ public sealed class FileLease : IDisposable
                 if (final) access |= ReadControl | (writable ? Delete : 0);
                 if (final && restore) access |= (create ? 2u : 0u) | WriteAttributes | WriteDacl | WriteOwner;
                 if (final && move) access |= WriteAttributes | WriteDacl;
+                if (final && times) access = ReadData | ReadAttributes | ReadControl | Synchronize | WriteAttributes | (rename ? Delete : 0);
                 if (final && policy) access = ReadAttributes | ReadControl | Synchronize | (writable ? WriteDacl : 0);
                 if (final && owner) access |= WriteOwner;
                 if (final && content) access = ReadData | ReadAttributes | ReadControl | Synchronize | (writable ? 2u | WriteAttributes : 0u);
@@ -57,6 +58,8 @@ public sealed class FileLease : IDisposable
     public static FileLease Create(string path, bool directory) => new(path, true, true, directory, true);
     public static FileLease OpenForRestore(string path) => new(path, true, false, false, true);
     public static FileLease OpenForMove(string path) => new(path, true, false, false, false, move: true);
+    public static FileLease OpenForTimes(string path) => new(path, true, false, false, false, times: true);
+    public static FileLease OpenForRename(string path) => new(path, true, false, false, false, times: true, rename: true);
     public static FileLease OpenPolicy(string path, bool writable = false, bool owner = false) => new(path, writable, false, false, false, policy: true, owner: owner);
     public void SetOwner(byte[] sid)
     {

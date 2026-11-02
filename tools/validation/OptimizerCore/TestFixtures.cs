@@ -7,9 +7,10 @@ using Microsoft.Win32.SafeHandles;
 
 static class TestFixtures
 {
-    public static string InheritingRoot(string label)
+    public static string InheritingRoot(string label) => InheritingFolder(Path.Combine(Path.GetTempPath(), "roo-industries-" + label + "-" + Guid.NewGuid().ToString("N")));
+
+    public static string InheritingFolder(string root)
     {
-        var root = Path.Combine(Path.GetTempPath(), "roo-industries-" + label + "-" + Guid.NewGuid().ToString("N"));
         var directory = Directory.CreateDirectory(root);
         var security = new DirectorySecurity();
         security.SetAccessRuleProtection(true, false);
@@ -66,9 +67,11 @@ sealed class TestVolume : IDisposable
                 UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true,
             };
             using var process = System.Diagnostics.Process.Start(start) ?? throw new InvalidOperationException("diskpart did not start.");
-            var output = process.StandardOutput.ReadToEnd() + process.StandardError.ReadToEnd();
-            if (!process.WaitForExit(120000)) { process.Kill(); throw new TimeoutException("diskpart did not finish."); }
-            if (process.ExitCode != 0) throw new InvalidOperationException("diskpart failed (" + process.ExitCode + "): " + output);
+            var output = process.StandardOutput.ReadToEndAsync();
+            var errors = process.StandardError.ReadToEndAsync();
+            if (!process.WaitForExit(120000)) { process.Kill(true); throw new TimeoutException("diskpart did not finish."); }
+            process.WaitForExit();
+            if (process.ExitCode != 0) throw new InvalidOperationException("diskpart failed (" + process.ExitCode + "): " + output.Result + errors.Result);
         }
         finally { File.Delete(script); }
     }

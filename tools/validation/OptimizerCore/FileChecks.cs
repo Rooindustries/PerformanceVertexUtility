@@ -6,7 +6,7 @@ static class FileChecks
     public static void Run(Action<bool, string> check, TestVolume volume)
     {
         var root = TestFixtures.InheritingRoot("file-core");
-        var far = Path.Combine(volume.Root, "roo-industries-file-core-" + Guid.NewGuid().ToString("N"));
+        var far = TestFixtures.InheritingFolder(Path.Combine(volume.Root, "roo-industries-file-core-" + Guid.NewGuid().ToString("N")));
         var source = Path.Combine(root, "Application files");
         var operations = Path.Combine(root, "Operations");
         Directory.CreateDirectory(Path.Combine(source, "Settings"));
@@ -58,6 +58,7 @@ static class FileChecks
                 var partialJournal = Path.Combine(operations, drive + " partial-journal.json");
                 OperationFiles.Write(partialPath, partialPreview);
                 var partial = engine.Apply(partialPath, OperationFiles.HashFile(partialPath), partialJournal);
+                if (partial.Status != "applied") Console.WriteLine(drive + " partial apply: " + partial.Status + " " + string.Join(" | ", partial.Entries.Where(entry => entry.Error is not null).Select(entry => entry.Original.Path + ": " + entry.Error)));
                 check(partial.Status == "applied", drive + ": partial-recovery fixture starts from a verified deletion with complete undo copies");
                 var broken = partial.Entries.Single(entry => entry.Original.Path.EndsWith("second.txt"));
                 var saved = File.ReadAllBytes(broken.BackupPath);
