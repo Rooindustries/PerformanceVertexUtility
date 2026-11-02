@@ -1,4 +1,12 @@
 {
+  "knownEditions": [
+    "Core", "CoreN", "CoreCountrySpecific", "CoreSingleLanguage", "Professional", "ProfessionalN", "ProfessionalSingleLanguage",
+    "ProfessionalEducation", "ProfessionalEducationN", "ProfessionalWorkstation", "ProfessionalWorkstationN", "Cloud",
+    "CloudN", "CloudEdition", "CloudEditionN", "Enterprise", "EnterpriseN", "EnterpriseS", "EnterpriseSN", "EnterpriseEval",
+    "EnterpriseNEval", "EnterpriseSEval", "EnterpriseSNEval", "EnterpriseG", "EnterpriseGN", "Education", "EducationN",
+    "IoTEnterprise", "IoTEnterpriseS", "ServerRdsh", "ServerStandard", "ServerStandardEval", "ServerDatacenter", "ServerDatacenterEval",
+    "ServerTurbine"
+  ],
   "policies": [
     {
       "hive": "LocalMachine",
@@ -17,6 +25,7 @@
         "https://learn.microsoft.com/en-us/windows/win32/api/sysinfoapi/nf-sysinfoapi-getproductinfo",
         "https://learn.microsoft.com/en-us/windows-server/get-started/azure-edition"
       ],
+      "noEquivalent": "Windows has no other setting that blocks consumer suggestions and promotions on Home or Pro.",
       "reason": "CloudContent.admx help limits the registry policy. Match documented edition families so their evaluation, LTSC, multi-session and Azure variants remain supported. Microsoft also documents this registry setting for Server. Removing an override remains available everywhere."
     },
     {
@@ -71,6 +80,35 @@
       "additionalReferences": [
         "https://learn.microsoft.com/en-us/windows/client-management/mdm/policy-csp-experience#allowwindowstips"
       ],
+      "equivalentChoice": {
+        "name": "On for this user",
+        "editions": [
+          "Core*", "Professional*", "Cloud*"
+        ],
+        "changes": [
+          {
+            "hive": "CurrentUser",
+            "keyPath": "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager",
+            "valueName": "SubscribedContent-338389Enabled",
+            "dword": 0
+          },
+          {
+            "hive": "CurrentUser",
+            "keyPath": "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager",
+            "valueName": "SoftLandingEnabled",
+            "dword": 0,
+            "windowsDefault": 1
+          }
+        ],
+        "windowsDefaultEvidence": "A new user profile on Windows 11 Pro 25H2 (build 26200) starts with SoftLandingEnabled as REG_DWORD 1 and without SubscribedContent-338389Enabled; read-only read of a copy of the Default user profile on the test PC, 2026-10-25. Use Windows default writes 1 back to the first and removes the second, so the user's key matches a new profile.",
+        "reference": "https://support.microsoft.com/en-us/windows/notifications-and-do-not-disturb-in-windows-feeca47f-0baf-5680-16f0-8801db1a8466",
+        "quote": "Get tips and suggestions when using Windows",
+        "additionalReferences": [
+          "https://learn.microsoft.com/en-us/windows/privacy/manage-connections-from-windows-operating-system-components-to-microsoft-services#25-personalized-experiences",
+          "https://dl5.oo-software.com/files/ooshutup10/OOSU10.exe"
+        ],
+        "reason": "Home and Pro turn tips off with the user's own Settings switch, which Microsoft keeps outside the policy: \"This excludes how individual experiences (e.g., Windows Spotlight) can be controlled by users in Windows Settings.\" The switch is stored in these two ContentDeliveryManager values (O&O ShutUp10 P066 and M005). Undo restores each value exactly."
+      },
       "reason": "Windows tips are part of Windows spotlight. The Experience CSP maps \"Do not show Windows tips\" to this value and lists Enterprise, Education and IoT Enterprise, not Pro. The client docs don't cover Windows Server, so it keeps its existing availability. Removing the override remains available everywhere."
     },
     {
@@ -86,7 +124,67 @@
         "https://learn.microsoft.com/en-us/windows/client-management/mdm/policy-csp-experience#allowwindowsspotlight",
         "https://learn.microsoft.com/en-us/windows/privacy/manage-connections-from-windows-operating-system-components-to-microsoft-services#25-personalized-experiences"
       ],
+      "noEquivalent": "Home and Pro turn spotlight features off one by one in Windows Settings; no single setting does what this policy does.",
       "reason": "\"Turn off all Windows spotlight features\" is limited to these editions; the Experience CSP lists Enterprise, Education and IoT Enterprise, not Pro. Microsoft documents it as a user policy, so this machine-wide value can't do more on Home or Pro. The client docs don't cover Windows Server, so it keeps its existing availability. Removing the override remains available everywhere."
+    },
+    {
+      "hive": "LocalMachine",
+      "keyPath": "SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsUpdate",
+      "valueName": "DeferFeatureUpdates",
+      "minimumBuild": 14393,
+      "editions": [
+        "Professional*", "Education*", "Enterprise*", "IoTEnterprise*", "Server*"
+      ],
+      "reference": "https://learn.microsoft.com/en-us/windows/deployment/update/windows-update-client-policies",
+      "quote": "Windows Update client policies are a free service that is available for the following editions of Windows 10 and Windows 11:",
+      "additionalReferences": [
+        "https://learn.microsoft.com/en-us/windows/client-management/mdm/policy-csp-update#deferfeatureupdatesperiodindays"
+      ],
+      "noEquivalent": "Home and Windows 11 SE can only pause updates from Windows Settings, for up to five weeks.",
+      "reason": "Windows writes this flag with the feature update deferral of \"Select when Preview Builds and Feature Updates are received\" (Group Policy name DeferFeatureUpdates), which the Update CSP lists from Windows 10, version 1607 (build 14393) on, including Windows 11. The list is Pro (including Pro for Workstations), Education, Enterprise, IoT Enterprise and their LTSC versions; Home and Windows 11 SE aren't on it. The client docs don't cover Windows Server, so it keeps its existing availability. Removing the override remains available everywhere."
+    },
+    {
+      "hive": "LocalMachine",
+      "keyPath": "SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsUpdate",
+      "valueName": "DeferFeatureUpdatesPeriodInDays",
+      "minimumBuild": 14393,
+      "editions": [
+        "Professional*", "Education*", "Enterprise*", "IoTEnterprise*", "Server*"
+      ],
+      "reference": "https://learn.microsoft.com/en-us/windows/deployment/update/windows-update-client-policies",
+      "quote": "Windows Update client policies are a free service that is available for the following editions of Windows 10 and Windows 11:",
+      "additionalReferences": [
+        "https://learn.microsoft.com/en-us/windows/client-management/mdm/policy-csp-update#deferfeatureupdatesperiodindays"
+      ],
+      "noEquivalent": "Home and Windows 11 SE can only pause updates from Windows Settings, for up to five weeks.",
+      "reason": "The Update CSP lists the feature update deferral from Windows 10, version 1607 (build 14393) on, including Windows 11, for Pro, Enterprise, Education and IoT Enterprise. The list is Pro (including Pro for Workstations), Education, Enterprise, IoT Enterprise and their LTSC versions; Home and Windows 11 SE aren't on it. The client docs don't cover Windows Server, so it keeps its existing availability. Removing the override remains available everywhere."
+    },
+    {
+      "hive": "LocalMachine",
+      "keyPath": "SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsUpdate",
+      "valueName": "TargetReleaseVersion",
+      "minimumBuild": 17134,
+      "editions": [
+        "Professional*", "Education*", "Enterprise*", "IoTEnterprise*", "Server*"
+      ],
+      "reference": "https://learn.microsoft.com/en-us/windows/deployment/update/windows-update-client-policies",
+      "quote": "Windows Update client policies are a free service that is available for the following editions of Windows 10 and Windows 11:",
+      "additionalReferences": [
+        "https://learn.microsoft.com/en-us/windows/client-management/mdm/policy-csp-update#targetreleaseversion"
+      ],
+      "noEquivalent": "Home and Windows 11 SE can only pause updates from Windows Settings, for up to five weeks.",
+      "reason": "The Update CSP lists the target version from Windows 10, version 1803 (build 17134, with its May 2020 update) on, including Windows 11, for Pro, Enterprise, Education and IoT Enterprise. The list is Pro (including Pro for Workstations), Education, Enterprise, IoT Enterprise and their LTSC versions; Home and Windows 11 SE aren't on it. The client docs don't cover Windows Server, so it keeps its existing availability. Removing the override remains available everywhere."
+    }
+  ],
+  "unlimited": [
+    {
+      "settingId": "windows.389efb50bc4b96f7",
+      "hive": "LocalMachine",
+      "keyPath": "SOFTWARE\\Policies\\Microsoft\\Windows\\Personalization",
+      "valueName": "NoLockScreen",
+      "reference": "https://learn.microsoft.com/en-us/windows/client-management/mdm/policy-csp-admx-controlpaneldisplay#cpl_personalization_nolockscreen",
+      "quote": "This policy setting controls whether the lock screen appears for users.",
+      "reason": "\"Do not display the lock screen\" lists Pro, Enterprise, Education and IoT Enterprise on Windows 10 and Windows 11, with no edition note. The note \"This setting only applies to Enterprise, Education, and Server SKUs\" on the same page belongs to the default lock screen image policy, not this one. The edition table describes MDM support and doesn't establish that the registry policy is ignored on Home, so every edition keeps it."
     }
   ],
   "allowedOverlaps": [

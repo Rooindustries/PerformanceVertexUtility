@@ -29,25 +29,58 @@ has taken effect in a running app or improved gaming performance.
 `backend/catalogs/windows-policy-editions.json` records Microsoft's registry-policy
 edition limits. The compiler applies them after combining all sources, so a
 wildcard from another source cannot bypass a limit. Home, Pro, Windows 10 S and Windows 11 SE editions no
-longer offer **Consumer suggestions and promotions: Blocked**, **Windows tips**
-or **Windows spotlight** turned off, or Windows diagnostic data **Off** (value 0).
+longer offer **Consumer suggestions and promotions: Blocked** or **Windows spotlight**
+turned off, or Windows diagnostic data **Off** (value 0).
 Enterprise, Education, IoT Enterprise and Server retain them. A limit can name one
 value: Microsoft documents that diagnostic data 0 counts as 1 on other editions,
 so both diagnostic data settings also offer **Required diagnostic data** (value 1)
-on every edition, listed right after the value it replaces and marked with `replaces`. When a row's
-starting choice doesn't apply to this PC, its switch starts on the choice that replaces
-it, so on Home and Pro it turns on Required diagnostic data. Rows without a replacement
+on every edition, listed right after the value it replaces and marked with `replaces`.
+A limit can instead name the Windows setting that does the same job where the policy
+is ignored, with its own values and editions (`equivalentChoice.changes` and
+`equivalentChoice.editions`). The policy and that choice must split every edition
+between them. On Home, Pro, Windows 10 S and Windows 11 SE, **Windows tips** offers
+**On for this user**: it turns off this user's own **Get tips and suggestions when
+using Windows** switch by setting `SubscribedContent-338389Enabled` and
+`SoftLandingEnabled` under `HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\ContentDeliveryManager`
+to 0. The review lists each of the two values for this user, and Undo restores each
+one exactly. A choice like this brings its own **Use Windows default** on the same
+editions: it removes the policy and puts this user's two values back the way a new
+user profile has them, so switching the row off turns tips back on even when they
+were turned off in Windows Settings rather than by the app. A new profile on Windows
+11 25H2 keeps `SoftLandingEnabled` at 1 and has no `SubscribedContent-338389Enabled`,
+so Use Windows default writes the first back to 1 and removes the second
+(`windowsDefault` and `windowsDefaultEvidence` in the policy file; `check_windows_tweaks.py`
+fails while the reset deletes a value listed there). Values left at 1 read as
+**Windows default**. Where a choice and
+its replacement split the editions, the row lists only the one this PC can use, so a
+row shows a single **Use Windows default**. When a row's starting choice doesn't apply to this PC, its switch starts
+on the choice that replaces it, so on Home and Pro it turns on Required diagnostic data
+or turns tips off for this user. Rows without a replacement
 keep their starting choice. **Remove this override** remains available, including when the
 limited value was set before this catalog update. An unsupported choice is
 excluded from the applicable current choices; its raw registry value remains in
-the observations. When removing an override is the only choice left for this PC
+the observations when a choice this PC can use writes the same value. Values only
+unsupported choices write, such as this user's tips switches on Enterprise, are
+left out of the row's reading on that PC. When removing an override is the only choice left for this PC
 and nothing is set, the Windows settings page shows the row as
 **Not available here**, without Retry, and hides it in simple mode.
 
-The lock screen policy, third-party spotlight suggestions and Windows Update
-deferral keep their existing availability. Microsoft's current references list
-Pro for the first two, and the Windows Update page describes which editions the
-service is offered on rather than stating that Home ignores the registry policy.
+Feature update deferral (`DeferFeatureUpdates` and `DeferFeatureUpdatesPeriodInDays`)
+and the target version (`TargetReleaseVersion`) are Windows Update client policies.
+Microsoft offers those only on Pro, Education, Enterprise and IoT Enterprise, and the
+Update CSP lists the same editions from build 14393 for the deferral and build 17134
+for the target version, Windows 11 included. Home, Windows 10 S and Windows 11 SE,
+and older builds, show these rows as **Not available here**; Server keeps them. A
+policy's `minimumBuild` raises each gate of the limited choice to that build. So the
+**FSOS-X Dash · Windows Update · disabled** preset skips those three settings where
+Windows ignores them.
+
+The lock screen policy is listed under `unlimited` with its reference: the CSP lists
+Pro with no edition note, so every edition keeps it. Third-party spotlight
+suggestions keep their existing availability; Microsoft's current reference lists Pro.
+Every limited policy names either its `equivalentChoice` or, in `noEquivalent`, why
+none exists. `knownEditions` is the list of Windows edition IDs that
+`check_windows_tweaks.py` and the native edition checks test every policy against.
 
 Edition gates match exact edition IDs, `*` for every edition, or a trailing `*`
 for a family, such as `Enterprise*` or `Server*`. This keeps evaluation, LTSC,

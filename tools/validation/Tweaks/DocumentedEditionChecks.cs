@@ -1,19 +1,27 @@
+using System.Text.Json;
 using RooIndustries.Optimizer;
 
 static class DocumentedEditionChecks
 {
-    static readonly string[] Editions = ["Core", "CoreN", "CoreCountrySpecific", "CoreSingleLanguage", "Professional", "ProfessionalN", "ProfessionalEducation", "ProfessionalWorkstation", "CloudEdition",
-        "Enterprise", "EnterpriseS", "EnterpriseEval", "EnterpriseG", "Education", "EducationN", "IoTEnterprise", "IoTEnterpriseS", "ServerRdsh", "ServerStandard", "ServerDatacenter", "ServerTurbine"];
+    public sealed record Policy(string Hive, string KeyPath, string ValueName, uint? Dword, string[] Editions, int MinimumBuild, uint? EquivalentDword, string? EquivalentName);
 
-    public static void Run(string root, TweakCatalog catalog, Action<bool, string> check, Action<Action, string> reject)
+    public static (string[] Known, Policy[] Policies) Load(string repo)
     {
-        var limited = new (string Name, string KeyPath, string ValueName, uint Value, bool Required)[]
-        {
-            ("Diagnostic data off", @"SOFTWARE\Policies\Microsoft\Windows\DataCollection", "AllowTelemetry", 0, true),
-            ("Diagnostic data off in the Settings value", @"SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\DataCollection", "AllowTelemetry", 0, true),
-            ("Windows tips off", @"SOFTWARE\Policies\Microsoft\Windows\CloudContent", "DisableSoftLanding", 1, false),
-            ("Windows spotlight off", @"SOFTWARE\Policies\Microsoft\Windows\CloudContent", "DisableWindowsSpotlightFeatures", 1, false),
-        };
+        using var document = JsonDocument.Parse(File.ReadAllText(Path.Combine(repo, "backend", "catalogs", "windows-policy-editions.json")));
+        var root = document.RootElement;
+        static string[] Strings(JsonElement array) => array.EnumerateArray().Select(item => item.GetString()!).ToArray();
+        return (Strings(root.GetProperty("knownEditions")), root.GetProperty("policies").EnumerateArray().Select(policy => new Policy(policy.GetProperty("hive").GetString()!, policy.GetProperty("keyPath").GetString()!,
+            policy.GetProperty("valueName").GetString()!, policy.TryGetProperty("dword", out var dword) ? dword.GetUInt32() : null, Strings(policy.GetProperty("editions")),
+            policy.TryGetProperty("minimumBuild", out var build) ? build.GetInt32() : 0,
+            policy.TryGetProperty("equivalentChoice", out var equivalent) && equivalent.TryGetProperty("dword", out var same) ? same.GetUInt32() : null,
+            policy.TryGetProperty("equivalentChoice", out var named) ? named.GetProperty("name").GetString() : null)).ToArray());
+    }
+
+    public static bool Allowed(string edition, IEnumerable<string> patterns) => patterns.Any(pattern => pattern.EndsWith('*') ? edition.StartsWith(pattern[..^1], StringComparison.OrdinalIgnoreCase) : string.Equals(edition, pattern, StringComparison.OrdinalIgnoreCase));
+
+    public static void Run(string root, string repo, TweakCatalog catalog, Action<bool, string> check, Action<Action, string> reject)
+    {
+        var (Editions, policies) = Load(repo);
         void Seed(string path, RegistryAddress address, uint value)
         {
             var fixture = OperationFiles.Read<TweakFixture>(path);
@@ -34,30 +42,32 @@ static class DocumentedEditionChecks
             check(engine.Apply(review, OperationFiles.HashFile(review)).Replayed, "A documented edition fixture apply can be replayed without a second change");
         }
         var gated = new HashSet<TweakSelection>();
-        for (var index = 0; index < limited.Length; index++)
+        for (var index = 0; index < policies.Length; index++)
         {
-            var (name, keyPath, valueName, value, required) = limited[index];
-            bool Same(TweakAssignment change) => change.Address.Hive == "LocalMachine" && string.Equals(change.Address.KeyPath, keyPath, StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(change.Address.ValueName, valueName, StringComparison.OrdinalIgnoreCase);
-            var definitions = catalog.Settings.Where(setting => setting.Options.Any(option => option.Changes is [var change] && Same(change) && change.Dword == value)).ToArray();
+            var policy = policies[index];
+            bool Same(TweakAssignment change) => change.Address.Hive == policy.Hive && string.Equals(change.Address.KeyPath, policy.KeyPath, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(change.Address.ValueName, policy.ValueName, StringComparison.OrdinalIgnoreCase);
+            var definitions = catalog.Settings.Where(setting => setting.Options.Any(option => option.Changes is [var change] && Same(change) && change.Dword is { } written && (policy.Dword ?? written) == written)).ToArray();
+            var name = policy.ValueName + (policy.Dword is { } limitedValue ? " " + limitedValue : "");
             check(definitions.Length == 1, name + " has exactly one catalog setting");
             var definition = definitions[0];
-            var limitedOption = definition.Options.Single(option => option.Changes.Single().Dword == value);
-            var remove = definition.Options.Single(option => option.Changes.Single() is { Dword: null, Value: null, Token: null, Bits: null, Formula: null });
-            var equivalent = required ? definition.Options.SingleOrDefault(option => option.Changes.Single().Dword == 1) : null;
-            check(!required || equivalent is { Name: "Required diagnostic data" }, name + " has a Required diagnostic data choice for the editions that ignore it");
+            var limitedOption = definition.Options.Single(option => option.Changes is [{ } change] && Same(change) && change.Dword is { } written && (policy.Dword ?? written) == written);
+            var value = limitedOption.Changes.Single().Dword!.Value;
+            var remove = definition.Options.Single(option => option.Changes is [{ Dword: null, Value: null, Token: null, Bits: null, Formula: null }]);
+            var equivalent = policy.EquivalentDword is { } equivalentValue ? definition.Options.SingleOrDefault(option => option.Changes is [{ } change] && change.Dword == equivalentValue) : null;
+            check(policy.EquivalentDword is null || equivalent is not null && equivalent.Name == policy.EquivalentName, name + " has a " + policy.EquivalentName + " choice for the editions that ignore it");
             var address = limitedOption.Changes.Single().Address;
             var selected = new TweakSelection(definition.Id, limitedOption.Id);
             gated.Add(selected);
             var subset = catalog with { Settings = [definition], Presets = [], Incompatible = null };
-            foreach (var edition in Editions)
+            var older = policy.MinimumBuild > definition.MinimumBuild ? new[] { ("Professional", policy.MinimumBuild - 1), ("Enterprise", policy.MinimumBuild - 1) } : [];
+            foreach (var (edition, build) in Editions.Select(edition => (edition, edition.StartsWith("Server", StringComparison.Ordinal) && edition != "ServerRdsh" ? 20348 : 26100)).Concat(older))
             {
-                var build = edition.StartsWith("Server", StringComparison.Ordinal) && edition != "ServerRdsh" ? 20348 : 26100;
-                var path = Path.Combine(root, "documented-" + index + "-" + edition + ".json"); var store = FileTweakStore.Create(path, build, edition);
+                var path = Path.Combine(root, "documented-" + index + "-" + edition + "-" + build + ".json"); var store = FileTweakStore.Create(path, build, edition);
                 var engine = new TweakEngine(subset, store); var status = engine.Detect().Settings.Single();
-                var supported = new[] { "Enterprise", "Education", "IoTEnterprise", "Server" }.Any(family => edition.StartsWith(family, StringComparison.Ordinal));
+                var supported = Allowed(edition, policy.Editions) && build >= policy.MinimumBuild;
                 check(status.Supported && status.Error is null && status.AvailableChoices!.Contains(remove.Id), name + ": removing the override stays available on " + edition);
-                check(status.AvailableChoices!.Contains(limitedOption.Id) == supported, name + " is offered only where Windows honors it: " + edition);
+                check(status.AvailableChoices!.Contains(limitedOption.Id) == supported, name + " is offered only where Windows honors it: " + edition + " build " + build);
                 if (equivalent is not null) check(status.AvailableChoices!.Contains(equivalent.Id), "Required diagnostic data is offered on " + edition);
                 if (!supported)
                 {
@@ -71,7 +81,7 @@ static class DocumentedEditionChecks
                 Apply(engine, engine.Preview("documented", []));
                 check(store.Read(address).Value is null && store.ReadState()!.Profiles.Length == 0, name + ": undo removes " + choice.Name + " again on " + edition);
             }
-            foreach (var edition in new[] { "Core", "Professional" })
+            foreach (var edition in new[] { "Core", "Professional", "CloudEdition" }.Where(edition => !Allowed(edition, policy.Editions)))
             {
                 var path = Path.Combine(root, "documented-" + index + "-old-" + edition + ".json"); var store = FileTweakStore.Create(path, 26100, edition);
                 var original = value == 0 ? 3u : 0u;
@@ -84,6 +94,164 @@ static class DocumentedEditionChecks
                 check(!status.ConfiguredChoices.Contains(limitedOption.Id) && status.AvailableChoices!.Contains(remove.Id), name + " applied before this update no longer reads as an applicable choice on " + edition);
                 Apply(current, current.Preview("old-profile", []));
                 check(Dword(store, address) == original && store.ReadState()!.Profiles.Length == 0, "Undo restores the exact value from before " + name + " was applied on " + edition);
+            }
+        }
+        var personal = new (string Name, string ValueName, string[] Switches)[]
+        {
+            ("Windows tips off", "DisableSoftLanding", ["SubscribedContent-338389Enabled", "SoftLandingEnabled"]),
+        };
+        const string delivery = @"SOFTWARE\Microsoft\Windows\CurrentVersion\ContentDeliveryManager";
+        RegistryValueData? Text(string valueName, string text) => new(valueName, 1, System.Text.Encoding.Unicode.GetBytes(text + "\0"));
+        RegistryValueData? Number(string valueName, uint number) => new(valueName, 4, BitConverter.GetBytes(number));
+        void Put(string path, RegistryAddress address, RegistryValueData? data)
+        {
+            var fixture = OperationFiles.Read<TweakFixture>(path);
+            var prefix = @"\REGISTRY\USER\" + fixture.Context.Owner.UserSid + @"\";
+            var parts = address.KeyPath.Split('\\');
+            for (var count = 2; count <= parts.Length; count++)
+            {
+                var key = prefix + string.Join('\\', parts.Take(count));
+                fixture.Keys.TryAdd(key.ToUpperInvariant(), new(key, "fixture", []));
+            }
+            var values = fixture.Keys[(prefix + address.KeyPath).ToUpperInvariant()].Values;
+            if (data is null) values.Remove(address.ValueName!.ToUpperInvariant()); else values[address.ValueName!.ToUpperInvariant()] = data;
+            OperationFiles.Write(path, fixture);
+        }
+        for (var index = 0; index < personal.Length; index++)
+        {
+            var (name, valueName, switches) = personal[index];
+            var definition = catalog.Settings.Single(setting => setting.Options.Any(option => option.Changes is [{ Dword: 1 } change] && change.Address.Hive == "LocalMachine" &&
+                string.Equals(change.Address.KeyPath, @"SOFTWARE\Policies\Microsoft\Windows\CloudContent", StringComparison.OrdinalIgnoreCase) && string.Equals(change.Address.ValueName, valueName, StringComparison.OrdinalIgnoreCase)));
+            var policy = definition.Options.Single(option => option.Changes is [{ Dword: 1 }]);
+            var user = definition.Options.SingleOrDefault(option => option.Changes.Length == switches.Length && option.Controls is null or [] && option.Changes.All(change => change is { Dword: 0, Value: null, Token: null, Bits: null, Selector: null, Formula: null }
+                && change.Address is { Hive: "CurrentUser", View: "Registry64", Kind: "value" } && string.Equals(change.Address.KeyPath, delivery, StringComparison.OrdinalIgnoreCase))
+                && option.Changes.Select(change => change.Address.ValueName!).Order(StringComparer.OrdinalIgnoreCase).SequenceEqual(switches.Order(StringComparer.OrdinalIgnoreCase), StringComparer.OrdinalIgnoreCase));
+            check(user is not null, name + " has a choice that turns this user's Windows Settings switches off: " + string.Join(", ", switches));
+            check(user!.Replaces == policy.Id, name + ": the per-user choice replaces the policy choice where Windows ignores the policy");
+            var addresses = user.Changes.Select(change => change.Address).ToArray();
+            var policyAddress = policy.Changes.Single().Address;
+            var remover = definition.Options.Single(option => option.Changes is [{ Dword: null, Value: null } removed] && removed.Address == policyAddress);
+            var homeReset = definition.Options.SingleOrDefault(option => option.Replaces == remover.Id);
+            check(homeReset is not null && homeReset.Availability!.SelectMany(gate => gate.Editions).Order().SequenceEqual(user.Availability!.SelectMany(gate => gate.Editions).Order()) &&
+                homeReset.Changes.Select(change => change.Address).ToHashSet().SetEquals([policyAddress, .. user.Changes.Select(change => change.Address)]) && homeReset.Changes.All(change => string.Equals(change.Address.ValueName, "SoftLandingEnabled", StringComparison.OrdinalIgnoreCase) ? change is { Dword: 1, Value: null } : change is { Dword: null, Value: null, Token: null, Bits: null }),
+                name + ": Home and Pro get a Use Windows default that clears the policy and this user's switches");
+            var choice = new TweakSelection(definition.Id, user.Id);
+            var subset = catalog with { Settings = [definition], Presets = [], Incompatible = null };
+            foreach (var edition in Editions)
+            {
+                var build = edition.StartsWith("Server", StringComparison.Ordinal) && edition != "ServerRdsh" ? 20348 : 26100;
+                var path = Path.Combine(root, "personal-" + index + "-" + edition + ".json"); var store = FileTweakStore.Create(path, build, edition);
+                var engine = new TweakEngine(subset, store); var status = engine.Detect().Settings.Single();
+                var policyHere = Allowed(edition, policies.Single(item => item.ValueName == valueName).Editions);
+                check(status.Supported && status.Error is null && status.AvailableChoices!.Contains(user.Id) == !policyHere && status.AvailableChoices!.Contains(policy.Id) == policyHere,
+                    name + ": exactly one way to turn it off is offered on " + edition);
+                check(status.Observations.Select(read => read.Address).ToHashSet().SetEquals(policyHere ? [policyAddress] : [policyAddress, .. addresses]),
+                    name + ": the row reads only the values its choices on " + edition + " use");
+                check(status.AvailableChoices!.Contains(remover.Id) && status.AvailableChoices!.Contains(homeReset!.Id) == !policyHere,
+                    name + ": the Use Windows default that also clears this user's switches is offered exactly where the per-user choice is, on " + edition);
+                if (policyHere)
+                {
+                    var before = OperationFiles.HashFile(path);
+                    reject(() => engine.Preview("personal", [choice]), name + ": the per-user choice is refused where the policy works, on " + edition);
+                    check(OperationFiles.HashFile(path) == before, name + ": a refused per-user preview leaves Windows untouched on " + edition);
+                    continue;
+                }
+                Apply(engine, engine.Preview("personal", [choice]));
+                check(addresses.All(address => Dword(store, address) == 0) && store.Read(policyAddress).Value is null && engine.Detect().Settings.Single().ConfiguredChoices.Contains(user.Id),
+                    name + ": the per-user switches turn off and read back on " + edition);
+                Apply(engine, engine.Preview("personal", []));
+                check(addresses.All(address => store.Read(address).Value is null) && store.ReadState()!.Profiles.Length == 0 && OperationFiles.Read<TweakFixture>(path).Keys.Count == 0,
+                    name + ": Undo removes the per-user values and the keys it created on " + edition);
+            }
+            foreach (var edition in new[] { "Core", "Professional" })
+            {
+                var path = Path.Combine(root, "personal-" + index + "-" + edition + "-already-off.json"); var store = FileTweakStore.Create(path, 26100, edition);
+                foreach (var address in addresses) Put(path, address, Number(address.ValueName!, 0));
+                var engine = new TweakEngine(subset, store);
+                check(engine.Detect().Settings.Single().ConfiguredChoices.Contains(user.Id), name + " reads as on when this user turned tips off in Settings, on " + edition);
+                var reset = new TweakSelection(definition.Id, homeReset!.Id);
+                Apply(engine, engine.Preview("personal", [reset]));
+                check(addresses.All(address => string.Equals(address.ValueName, "SoftLandingEnabled", StringComparison.OrdinalIgnoreCase) ? Dword(store, address) == 1 : store.Read(address).Value is null) && store.Read(policyAddress).Value is null
+                    && !engine.Detect().Settings.Single().ConfiguredChoices.Contains(user.Id), name + ": Use Windows default puts this user's switches back as a new profile has them after Settings turned them off, on " + edition);
+                Apply(engine, engine.Preview("personal", []));
+                check(addresses.All(address => Dword(store, address) == 0 && store.Read(address).Value!.Type == 4) && store.ReadState()!.Profiles.Length == 0,
+                    name + ": Undo puts this user's own switches back off exactly, on " + edition);
+            }
+            var originals = new (string Label, Func<string, RegistryValueData?>[] Values)[]
+            {
+                ("both on", [item => Number(item, 1), item => Number(item, 1)]),
+                ("one missing", [_ => null, item => Number(item, 1)]),
+                ("already off", [item => Number(item, 0), item => Number(item, 0)]),
+                ("other values and types", [item => Text(item, "1"), item => Number(item, 2)]),
+            };
+            foreach (var edition in new[] { "Core", "Professional" })
+                foreach (var (label, values) in originals)
+                {
+                    var path = Path.Combine(root, "personal-" + index + "-" + edition + "-from-" + label.Replace(' ', '-') + ".json"); var store = FileTweakStore.Create(path, 26100, edition);
+                    var seeded = addresses.Select((address, slot) => values[slot % values.Length](address.ValueName!)).ToArray();
+                    for (var slot = 0; slot < addresses.Length; slot++) Put(path, addresses[slot], seeded[slot]);
+                    var keys = OperationFiles.Read<TweakFixture>(path).Keys.Count;
+                    var engine = new TweakEngine(subset, store);
+                    Apply(engine, engine.Preview("personal", [choice]));
+                    check(addresses.All(address => Dword(store, address) == 0), name + " turns the switches off from " + label + " on " + edition);
+                    Apply(engine, engine.Preview("personal", []));
+                    check(addresses.Select((address, slot) => TweakRead.SameValue(store.Read(address).Value, seeded[slot])).All(same => same) && store.ReadState()!.Profiles.Length == 0 && OperationFiles.Read<TweakFixture>(path).Keys.Count == keys,
+                        name + ": Undo restores the exact values and types from " + label + " on " + edition);
+                }
+            {
+                var path = Path.Combine(root, "personal-" + index + "-changed.json"); var store = FileTweakStore.Create(path, 26100, "Professional");
+                var engine = new TweakEngine(subset, store);
+                Apply(engine, engine.Preview("personal", [choice]));
+                Put(path, addresses[0], Number(addresses[0].ValueName!, 1));
+                var undo = engine.Preview("personal", []);
+                check(undo.LeftAsChanged.Contains(definition.Id), name + ": Undo names the setting when the Settings switch was turned back on after apply");
+                Apply(engine, undo);
+                check(Dword(store, addresses[0]) == 1 && addresses.Skip(1).All(address => store.Read(address).Value is null) && store.ReadState()!.Profiles.Length == 0,
+                    name + ": Undo keeps the switch the user turned back on and restores the others");
+            }
+            {
+                var path = Path.Combine(root, "personal-" + index + "-upgraded.json"); var store = FileTweakStore.Create(path, 26100, "Professional");
+                foreach (var address in addresses) Put(path, address, Number(address.ValueName!, 1));
+                var pro = new TweakEngine(subset, store);
+                Apply(pro, pro.Preview("personal", [choice]));
+                var fixture = OperationFiles.Read<TweakFixture>(path);
+                OperationFiles.Write(path, fixture with { Context = fixture.Context with { Edition = "Enterprise" } });
+                var upgraded = new FileTweakStore(path); var engine = new TweakEngine(subset, upgraded);
+                check(engine.Detect().Settings.Single() is var upgradedStatus && !upgradedStatus.ConfiguredChoices.Contains(user.Id) && upgradedStatus.Observations.All(read => read.Address == policyAddress),
+                    name + ": after an upgrade to Enterprise the per-user choice no longer reads as applied and its switches don't count toward the row");
+                Apply(engine, engine.Preview("personal", []));
+                check(addresses.All(address => Dword(upgraded, address) == 1) && upgraded.ReadState()!.Profiles.Length == 0, name + ": Undo after an upgrade to Enterprise restores the exact switches");
+            }
+            foreach (var (edition, used) in new[] { ("Enterprise", false), ("Professional", true) })
+            {
+                var path = Path.Combine(root, "personal-" + index + "-malformed-" + edition + ".json"); FileTweakStore.Create(path, 26100, edition);
+                Put(path, addresses[^1], new(addresses[^1].ValueName!, 4, [1, 0, 0]));
+                var status = new TweakEngine(subset, new FileTweakStore(path)).Detect().Settings.Single();
+                check(used ? status.Error is not null : status.Error is null && status.Supported && status.AvailableChoices!.Contains(policy.Id),
+                    name + (used ? ": a damaged per-user switch is reported where the row uses it, on " : ": a damaged per-user switch, which this edition doesn't use, doesn't stop the row reading on ") + edition + ": " + status.Error);
+            }
+            foreach (var address in addresses)
+            {
+                var row = catalog.Settings.Single(setting => setting.Id != definition.Id && setting.Options.Any(option => option.Changes is [{ Address: var other }] && other.Hive == "CurrentUser" &&
+                    string.Equals(other.KeyPath, delivery, StringComparison.OrdinalIgnoreCase) && string.Equals(other.ValueName, address.ValueName, StringComparison.OrdinalIgnoreCase)));
+                var on = new TweakSelection(row.Id, row.Options.Single(option => option.Changes is [{ Dword: 1 }]).Id);
+                var off = new TweakSelection(row.Id, row.Options.Single(option => option.Changes is [{ Dword: 0 }]).Id);
+                var pair = catalog with { Settings = [definition, row], Presets = [], Incompatible = null };
+                var path = Path.Combine(root, "personal-" + index + "-shared-" + address.ValueName + ".json"); var store = FileTweakStore.Create(path, 26100, "Professional");
+                var engine = new TweakEngine(pair, store);
+                Apply(engine, engine.Preview("other", [on]));
+                var before = OperationFiles.HashFile(path);
+                reject(() => engine.Preview("personal", [choice]), name + " is refused while another profile sets " + row.Name + " on");
+                reject(() => engine.Preview("other", [on, choice]), name + " is refused together with " + row.Name + " on in one profile");
+                var refusal = "";
+                try { engine.Preview("other", [on, choice]); } catch (InvalidDataException error) { refusal = error.Message; }
+                check(refusal.Contains(definition.Name, StringComparison.Ordinal) && refusal.Contains(row.Name, StringComparison.Ordinal) && !refusal.Contains(definition.Id, StringComparison.Ordinal) && !refusal.Contains(row.Id, StringComparison.Ordinal),
+                    name + " names both settings when one profile sets " + row.Name + " differently: " + refusal);
+                check(OperationFiles.HashFile(path) == before, name + ": refused conflicts with " + row.Name + " leave Windows untouched");
+                Apply(engine, engine.Preview("other", [off, choice]));
+                check(addresses.All(item => Dword(store, item) == 0), name + " and " + row.Name + " off apply together");
+                Apply(engine, engine.Preview("other", []));
+                check(addresses.All(item => store.Read(item).Value is null) && store.ReadState()!.Profiles.Length == 0, name + " and " + row.Name + " restore every shared value once");
             }
         }
         foreach (var preset in catalog.Presets.Where(preset => !preset.AvailableOnly && preset.Selections.Any(gated.Contains)))

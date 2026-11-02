@@ -43,6 +43,12 @@ static class AppliedStateChecks
 
         row.Observe(Status(withReset, ["reset"]));
         check(!row.ToggleOn && !row.IsApplied && !row.HasPendingChange, "A setting at its Windows default shows off");
+        var saved = Row(withReset);
+        saved.Selected = saved.Choices.Single(choice => choice.Id == "reset");
+        saved.Observe(Status(withReset, ["reset"]));
+        check(!saved.ToggleOn && !saved.IsApplied && !saved.HasPendingChange && saved.StateLabel == "Off", "A saved Windows default that Windows already reads shows off with nothing queued");
+        saved.Observe(Status(withReset, ["off"]));
+        check(saved.HasPendingChange && saved.Selected.Id == "reset", "A saved Windows default that another program changed back is queued again");
         row.ToggleOn = true;
         check(row.Selected.Id == "off" && row.HasPendingChange && row.StateLabel == "Will turn on", "Turning on a setting that is not applied queues its action");
         row.Observe(Status(withReset, ["off"]));

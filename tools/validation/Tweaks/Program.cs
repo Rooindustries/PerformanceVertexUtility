@@ -88,7 +88,7 @@ try
         return;
     }
     if (args is [_, "--download-blocker-fixture"]) { DownloadBlockerChecks.Native(Check); Console.WriteLine($"Completed {count} native download blocker checks."); return; }
-    if (args is [_, "--catalog-integration"]) { CatalogIntegrationChecks.Run(root, catalog, Check, Reject); Console.WriteLine($"Completed {count} catalog integration checks."); return; }
+    if (args is [_, "--catalog-integration"]) { CatalogIntegrationChecks.Run(root, repo, catalog, Check, Reject); Console.WriteLine($"Completed {count} catalog integration checks."); return; }
     if (args is [_, "--recover-controls-fixture"]) { NativeControlChecks.RecoverFixture(); return; }
     if (args is [_, "--controls-recovery-fixture"]) { NativeControlChecks.RecoveryChecks(Check); Console.WriteLine($"Completed {count} native control recovery checks."); return; }
     if (args is [_, "--controls-fixture"]) { NativeControlChecks.Run(root, Check, Reject); Console.WriteLine($"Completed {count} native control checks."); return; }
@@ -406,7 +406,7 @@ try
     SelectionChecks.Run(root, Check, Reject);
     PowerCompositionChecks.Run(root, Check, Reject);
     HostsChecks.Run(root, Check, Reject);
-    CatalogIntegrationChecks.Run(root, catalog, Check, Reject);
+    CatalogIntegrationChecks.Run(root, repo, catalog, Check, Reject);
     SavedChoiceChecks.Run(root, catalog, Check, Reject);
     MitigationChecks.Run(Check, Reject);
     RestorePointChecks.Layout(Check);
