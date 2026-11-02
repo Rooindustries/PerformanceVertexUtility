@@ -15,6 +15,7 @@ $ErrorActionPreference = 'Stop'
 if ([string]::IsNullOrWhiteSpace($ManifestPath)) {
     $ManifestPath = Join-Path $PSScriptRoot 'modules\tweak_manifest.json'
 }
+$PolicyEditionsPath = Join-Path $PSScriptRoot 'backend\catalogs\windows-policy-editions.json'
 
 function Get-NowStamp {
     return (Get-Date).ToString('yyyyMMdd-HHmmssfff') + '-' + [guid]::NewGuid().ToString('N')
@@ -638,9 +639,46 @@ function Get-ModuleById {
     return $module
 }
 
+function Get-PcEdition {
+    $machine = [Microsoft.Win32.RegistryKey]::OpenBaseKey([Microsoft.Win32.RegistryHive]::LocalMachine, [Microsoft.Win32.RegistryView]::Registry64)
+    try {
+        $version = $machine.OpenSubKey('SOFTWARE\Microsoft\Windows NT\CurrentVersion')
+        if ($version) { try { $edition = $version.GetValue('EditionID'); $build = $version.GetValue('CurrentBuildNumber') } finally { $version.Dispose() } }
+    } finally { $machine.Dispose() }
+    $number = 0
+    if ($edition -isnot [string] -or [string]::IsNullOrWhiteSpace($edition) -or $build -isnot [string] -or -not [int]::TryParse($build, [Globalization.NumberStyles]::None, [Globalization.CultureInfo]::InvariantCulture, [ref]$number)) {
+        throw "EditionID or CurrentBuildNumber under HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion is missing or not valid."
+    }
+    return [pscustomobject]@{ edition=$edition; build=$number }
+}
+
+function Get-EditionSkip {
+    param([object]$Item, [string]$Type, [string]$Data, [object[]]$Policies, [ref]$Windows)
+    $parts = (Convert-RegPath $Item.path).Substring(10) -split '\\', 2
+    $hive = @{ HKEY_LOCAL_MACHINE='LocalMachine'; HKEY_CURRENT_USER='CurrentUser'; HKEY_USERS='Users'; HKEY_CLASSES_ROOT='ClassesRoot' }[$parts[0]]
+    $keyPath = if ($parts.Count -gt 1) { $parts[1] } else { '' }
+    foreach ($policy in $Policies) {
+        if (-not [string]::Equals($policy.hive, $hive, [StringComparison]::OrdinalIgnoreCase) -or -not [string]::Equals($policy.keyPath, $keyPath, [StringComparison]::OrdinalIgnoreCase) -or -not [string]::Equals($policy.valueName, [string]$Item.name, [StringComparison]::OrdinalIgnoreCase)) { continue }
+        if ($policy.PSObject.Properties['dword'] -and ($Type -cne 'REG_DWORD' -or $Data -cne ([string]$policy.dword))) { continue }
+        if ($null -eq $Windows.Value) {
+            try { $Windows.Value = Get-PcEdition } catch { throw "Cannot read this PC's Windows edition and build, which decide whether $($Item.path)\$($Item.name) applies: $($_.Exception.Message) Nothing was changed." }
+        }
+        $pc = $Windows.Value
+        $allowed = @($policy.editions | Where-Object { if ($_.EndsWith('*')) { $pc.edition.StartsWith($_.Substring(0, $_.Length - 1), [StringComparison]::OrdinalIgnoreCase) } else { [string]::Equals($_, $pc.edition, [StringComparison]::OrdinalIgnoreCase) } })
+        if ($allowed.Count -eq 0) { return "Windows ignores this policy on the $($pc.edition) edition." }
+        if ($policy.minimumBuild -and $pc.build -lt [int]$policy.minimumBuild) { return "Windows ignores this policy before build $($policy.minimumBuild)." }
+    }
+    return $null
+}
+
 function Get-ModulePlan {
     param([object]$Manifest, [object]$Module)
     $plan = New-Object System.Collections.Generic.List[object]
+    $policies = @()
+    if (@($Module.registryValues).Count -gt 0) {
+        try { $policies = @((Get-Content -LiteralPath $PolicyEditionsPath -Raw -ErrorAction Stop | ConvertFrom-Json).policies) } catch { throw "Cannot read the Windows edition limits in $PolicyEditionsPath`: $($_.Exception.Message) Nothing was changed." }
+    }
+    $windows = $null
     foreach ($rv in @($Module.registryValues)) {
         $target = "$($rv.path)\$($rv.name)"
         $type = $null
@@ -654,7 +692,10 @@ function Get-ModulePlan {
             throw "Unsupported registry type $shown for $target. This harness writes only REG_DWORD, REG_QWORD and REG_SZ. Nothing was changed."
         }
         try { $data = [string](Get-ManifestRegistrySnapshot $rv).oldValue } catch { throw "Cannot write $target as ${type}: $($_.Exception.Message) Nothing was changed." }
-        $plan.Add([pscustomobject]@{ kind='registry'; path=[string]$rv.path; name=[string]$rv.name; type=$type; data=$data; blocked=[bool](Test-ProtectedRegistryPath $rv.path $Manifest $rv.name) }) | Out-Null
+        $entry = [pscustomobject]@{ kind='registry'; path=[string]$rv.path; name=[string]$rv.name; type=$type; data=$data; blocked=[bool](Test-ProtectedRegistryPath $rv.path $Manifest $rv.name) }
+        $skipped = Get-EditionSkip $rv $type $data $policies ([ref]$windows)
+        if ($skipped) { $entry | Add-Member -NotePropertyName skipped -NotePropertyValue $skipped }
+        $plan.Add($entry) | Out-Null
     }
     foreach ($svc in @($Module.services)) {
         $blocked = [bool](Test-ProtectedService $svc.name $Manifest)
@@ -702,7 +743,7 @@ function Get-ModulePlanChanges {
             if ($null -eq $entry) { continue }
             $service = [string]$entry.kind -ceq 'service'
             $key = [string]$entry.kind + [char]0 + [string]$entry.path + [char]0 + [string]$entry.name
-            $detail = if ($entry.blocked -eq $true) { 'protected, skipped' } elseif ($service) { 'startup=' + [string]$entry.startup + ', state=' + [string]$entry.targetState } else { [string]$entry.type + ' ' + [string]$entry.data }
+            $detail = if ($entry.blocked -eq $true) { 'protected, skipped' } elseif ($entry.skipped) { 'skipped: ' + [string]$entry.skipped } elseif ($service) { 'startup=' + [string]$entry.startup + ', state=' + [string]$entry.targetState } else { [string]$entry.type + ' ' + [string]$entry.data }
             if (-not $targets.ContainsKey($key)) {
                 $keys.Add($key)
                 $targets[$key] = if ($service) { 'service ' + [string]$entry.name } else { [string]$entry.path + '\' + [string]$entry.name }
@@ -732,7 +773,7 @@ function Assert-ModulePreview {
     if ($preview.plan -isnot [array] -or -not [string]::Equals((Get-ModulePlanHash @($preview.plan)), $preview.previewHash, [StringComparison]::Ordinal)) { throw "The preview plan does not match its hash. $next" }
     if (-not [string]::Equals($preview.previewHash, $PlanHash, [StringComparison]::Ordinal)) {
         $changes = Get-ModulePlanChanges @($preview.plan) $Plan
-        throw "The manifest changed after the preview $PreviewPath`: $($changes -join '; '). $next"
+        throw "What $($Module.id) would change is different from the preview $PreviewPath`: $($changes -join '; '). $next"
     }
     $actionsError = "The preview actions do not match its plan. $next"
     if ($preview.actions -isnot [array] -or $preview.actions.Count -ne $Plan.Count) { throw $actionsError }
@@ -743,6 +784,7 @@ function Assert-ModulePreview {
         $target = if ($service) { $entry.name } else { $entry.path + '\' + $entry.name }
         $verb = if ($service) { 'startup=' + $entry.startup + ', state=' + $entry.targetState } else { 'set' }
         if ($action.type -isnot [string] -or $action.type -cne $entry.kind -or $action.target -isnot [string] -or $action.target -cne $target -or $action.action -isnot [string] -or $action.action -cne $verb -or $action.blocked -isnot [bool] -or $action.blocked -ne $entry.blocked) { throw $actionsError }
+        if (($entry.skipped -or $action.PSObject.Properties['skipped']) -and ($action.skipped -isnot [string] -or $action.skipped -cne $entry.skipped)) { throw $actionsError }
         if (-not $service) {
             if (-not $action.PSObject.Properties['value']) { throw $actionsError }
             try { $data = [string](Get-ManifestRegistrySnapshot ([pscustomobject]@{type=$entry.type;data=$action.value})).oldValue } catch { throw $actionsError }
@@ -752,10 +794,12 @@ function Assert-ModulePreview {
 }
 
 function New-ModuleBackup {
-    param([object]$Manifest, [object]$Module)
+    param([object]$Manifest, [object]$Module, [object[]]$Plan)
     $moduleDir = Join-Path $DataRoot ("backups\" + $Module.id + "\" + (Get-NowStamp))
     $regSnapshots = New-Object System.Collections.Generic.List[object]
+    $index = 0
     foreach ($rv in @($Module.registryValues)) {
+        if ($Plan[$index++].skipped) { continue }
         if (Test-ProtectedRegistryPath $rv.path $Manifest $rv.name) { continue }
         $snap = Get-RegistryValueSnapshot $rv
         if ($snap.valueExists -and $snap.kind -notin 'String','ExpandString','MultiString','DWord','QWord','Binary') {
@@ -814,14 +858,18 @@ function Invoke-ApplyModule {
     $changeLock = if ($ConfirmApply) { Enter-ChangeLock } else { $null }
     try {
         if ($ConfirmApply) { Assert-LastApplyFinished $module }
-        $created = if ($ConfirmApply) { New-ModuleBackup $manifest $module } else { $null }
+        $created = if ($ConfirmApply) { New-ModuleBackup $manifest $module $plan } else { $null }
         $backupPath = $created.path
         $actions = New-Object System.Collections.Generic.List[object]
         try {
+            $index = 0
             foreach ($rv in @($module.registryValues)) {
                 $blocked = Test-ProtectedRegistryPath $rv.path $manifest $rv.name
-                $actions.Add([pscustomobject]@{ type='registry'; target=($rv.path + '\' + $rv.name); blocked=$blocked; action='set'; value=$rv.data }) | Out-Null
-                if ($blocked) { continue }
+                $skipped = $plan[$index++].skipped
+                $action = [pscustomobject]@{ type='registry'; target=($rv.path + '\' + $rv.name); blocked=$blocked; action='set'; value=$rv.data }
+                if ($skipped) { $action | Add-Member -NotePropertyName skipped -NotePropertyValue $skipped }
+                $actions.Add($action) | Out-Null
+                if ($blocked -or $skipped) { continue }
                 if ($ConfirmApply) { Set-RegistryValueFromManifest $rv }
             }
             foreach ($svc in @($module.services)) {
