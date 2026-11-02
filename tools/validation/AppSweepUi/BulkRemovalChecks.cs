@@ -8,6 +8,54 @@ using RooIndustries.Optimizer;
 
 static class BulkRemovalChecks
 {
+    // Restore names every leftover it left because it changed after cleanup, right after Restore and when the cleanup is picked from history again.
+    static async Task LeftAsChangedAsync(Action<bool, string> check)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "roo-industries-left-as-changed-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var operations = App.Operations;
+        try
+        {
+            var recovery = Path.Combine(root, "app-journal.json");
+            File.WriteAllText(recovery, "{}");
+            const string changed = @"C:\Games\Roo Industries Fixture Editor\settings.ini";
+            var part = new ApplicationCleanupPreview
+            {
+                SchemaVersion = 1, Owner = OperationOwner.Current(), OperationId = Guid.NewGuid().ToString("N"), Source = Path.Combine(root, "queue.json"),
+                AppId = "registry:editor", DisplayName = "Roo Industries Fixture Editor", ProviderIdentityHash = new string('A', 64), InventoryHash = new string('B', 64),
+                Selection = [], Registry = null, Files = new(Path.Combine(root, "files-preview.json"), new string('C', 64), Path.Combine(root, "files-journal.json")),
+            };
+            var plan = new CleanupBatchPreview { SchemaVersion = 1, BatchId = Guid.NewGuid().ToString("N"), Owner = OperationOwner.Current(), Parts = [new(part, new(Path.Combine(root, "app-preview.json"), new string('D', 64), recovery))] };
+            CleanupBatchSession Session(string status, List<string> left) => new(new(plan, Path.Combine(root, "batch-preview.json"), new string('E', 64), Path.Combine(root, "batch-journal.json")), new CleanupBatchJournal
+            {
+                SchemaVersion = 1, PreviewPath = Path.Combine(root, "batch-preview.json"), ReviewHash = new string('E', 64), Preview = plan, RestoreStarted = status == "restored",
+                Status = status, UpdatedAtUtc = DateTime.UtcNow, Entries = [new() { OperationId = part.OperationId, Status = status, LeftAsChanged = left }],
+            });
+            operations.CleanupHistory = [Session("needsReconciliation", [])];
+            operations.RestoreCleanupBatch = path =>
+            {
+                operations.CleanupHistory = [Session("restored", [changed])];
+                return Task.FromResult(operations.CleanupHistory[0].State);
+            };
+            var model = new BulkRemovalViewModel();
+            await model.InitializeAsync();
+            check(model.CanRestoreFiles && !model.FileSummary.Contains(changed, StringComparison.Ordinal), "A stopped cleanup can be restored and names no changed leftovers before Restore runs");
+            await model.RestoreFilesCommand.ExecuteAsync(null);
+            check(model.FileStatus == "Restore done." && model.FileSummary.Contains("These changed after the cleanup, so Restore left them as they are:\n" + changed, StringComparison.Ordinal),
+                "After Restore, the cleanup page names the leftover it left because it changed after cleanup: " + model.FileSummary.Replace("\n", " / "));
+            var reopened = new BulkRemovalViewModel();
+            await reopened.InitializeAsync();
+            check(reopened.FileSummary.Contains("so Restore left them as they are:\n" + changed, StringComparison.Ordinal),
+                "Picking that cleanup from history again still names the leftover Restore left: " + reopened.FileSummary.Replace("\n", " / "));
+        }
+        finally
+        {
+            operations.CleanupHistory = [];
+            operations.RestoreCleanupBatch = _ => throw new InvalidOperationException("Unexpected cleanup restore.");
+            Directory.Delete(root, true);
+        }
+    }
+
     public static async Task RunAsync(Action<bool, string> check)
     {
         App.Live.InstalledApps = new InstalledAppInventory
@@ -16,6 +64,7 @@ static class BulkRemovalChecks
             Complete = true,
         };
         App.Live.LastError = null;
+        await LeftAsChangedAsync(check);
         BulkRemovalJournal Journal(string status, params (string AppId, string State, bool Absent)[] entries) => new()
         {
             Status = status,

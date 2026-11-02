@@ -43,6 +43,8 @@ public sealed class ApplicationCleanupJournal
     public string? RegistryStatus { get; set; }
     public string? FileStatus { get; set; }
     public required List<string> Errors { get; set; }
+    // Restored leftovers that were changed after cleanup, so Restore left them as they are now.
+    public List<string> LeftAsChanged { get; set; } = [];
     public required DateTime UpdatedAtUtc { get; set; }
 }
 
@@ -131,6 +133,10 @@ public sealed class ApplicationCleanup(Func<CleanupContext> currentContext,
         try
         {
             Authority();
+            var fileEngine = new FileCleanupEngine(Authority);
+            // Every leftover file is held and checked, and its undo copies made, before the first registry change, so a file that's in use
+            // or can't be backed up refuses the whole app before anything changes.
+            using var held = preview.Files is { } part ? fileEngine.Prepare(part.PreviewPath, part.ReviewHash, part.JournalPath) : null;
             if (preview.Registry is { } registry)
             {
                 journal.RegistryStatus = "applying";
@@ -140,11 +146,11 @@ public sealed class ApplicationCleanup(Func<CleanupContext> currentContext,
                 if (result.Status != "applied") throw new InvalidOperationException(result.Error ?? "Registry cleanup requires recovery: " + result.Status);
                 Save(journalPath, journal);
             }
-            if (preview.Files is { } files)
+            if (held is not null)
             {
                 journal.FileStatus = "applying";
                 Save(journalPath, journal);
-                var result = new FileCleanupEngine(Authority).Apply(files.PreviewPath, files.ReviewHash, files.JournalPath);
+                var result = fileEngine.Apply(held);
                 journal.FileStatus = result.Status;
                 if (result.Status != "applied") throw new InvalidOperationException(string.Join("; ", result.Entries.Where(entry => entry.Error is not null).Select(entry => entry.Error)));
             }
@@ -174,6 +180,7 @@ public sealed class ApplicationCleanup(Func<CleanupContext> currentContext,
             {
                 var result = new FileCleanupEngine(Authority).Restore(files.JournalPath);
                 journal.FileStatus = result.Status;
+                journal.LeftAsChanged = result.Entries.Where(entry => entry.LeftAsChanged is not null).Select(entry => entry.Original.Path).ToList();
                 if (result.Status != "restored")
                 {
                     journal.Errors.Add("File restoration requires reconciliation: " + result.Status);

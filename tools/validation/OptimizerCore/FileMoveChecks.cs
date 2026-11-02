@@ -35,6 +35,9 @@ static class FileMoveChecks
             MoveOnlyLowSpace(check, volume, far);
             OneVolumeTwoLetters(check, root, volume, far);
             JunctionSwaps(check, root);
+            StagingKept(check, root, far);
+            BudgetAgrees(check, volume, far);
+            InUseRefusesApp(check, root);
             Crashes(check, root, far);
             Thousand(check, root);
         }
@@ -144,16 +147,16 @@ static class FileMoveChecks
             stream.SetLength(new DriveInfo(volume.Root).AvailableFreeSpace - (1L << 30) - (150L << 20));
             filled = true;
         }));
-        FileCleanupJournal stopped;
-        try { stopped = shrinking.Engine.Apply(shrinking.Review, shrinking.Hash, shrinking.Journal); }
+        var stoppedError = "not refused";
+        try { shrinking.Engine.Apply(shrinking.Review, shrinking.Hash, shrinking.Journal); }
+        catch (CleanupSpaceException error) { stoppedError = error.Message; }
         finally { hook?.SetValue(null, null); }
-        var stoppedError = string.Join(" | ", stopped.Entries.Where(entry => entry.Error is not null).Select(entry => entry.Error));
-        Console.WriteLine("Space that shrinks during the copies: " + stopped.Status + " " + stoppedError);
+        Console.WriteLine("Space that shrinks during the copies: " + stoppedError);
         check(hook is not null && filled, "The space-shrink scenario reached the point after the first copy (needs a GovernorTestHooks build)");
-        check(stopped.Status == "needsReconciliation" && stoppedError.Contains("enough free space", StringComparison.Ordinal) &&
-            stopped.Entries.All(entry => entry.Status == "pending") && !Directory.EnumerateFileSystemEntries(Path.GetDirectoryName(shrinking.Journal)!, "file-backup-*").Any() &&
+        check(stoppedError.Contains("enough free space", StringComparison.Ordinal) && !File.Exists(shrinking.Journal) &&
+            !Directory.EnumerateFileSystemEntries(Path.GetDirectoryName(shrinking.Journal)!, "file-backup-*").Any() &&
             Mismatches(shrinking.Plan, _ => true).Length == 0 && new DriveInfo(volume.Root).AvailableFreeSpace >= 1L << 30,
-            "When other programs eat the space during the copies, cleanup stops before the drive drops under its spare room, removes its copies and deletes nothing");
+            "When other programs eat the space during the copies, cleanup stops before the drive drops under its spare room, removes its copies and journal, and deletes nothing");
         File.Delete(filler);
     }
 
@@ -541,50 +544,336 @@ static class FileMoveChecks
         return lease.Capture();
     }
 
+    // Each cleanup and restore step is stopped, then run again with nothing changed and after the user changes a leftover that's at its path
+    // in each way a user would: its data, its permissions, its read-only flag, or replacing it with their own file.
+    static readonly string[] UserChanges = ["none", "content", "permissions", "attributes", "replace"];
+
     static void Crashes(Action<bool, string> check, string root, string far)
     {
         foreach (var phase in new[] { "apply", "restore" })
         {
             var covered = 0;
-            for (var at = 1; at < 200; at++)
+            var changes = UserChanges.ToDictionary(change => change, _ => 0);
+            var done = false;
+            for (var at = 1; at < 200 && !done; at++)
             {
-                var label = phase + "-" + at;
-                var near = Tree(Path.Combine(root, "crash", label), "App", exotic: true);
-                var locked = FileLease.NormalizePath(Locked(Path.Combine(root, "crash", label)));
-                var remote = Tree(Path.Combine(far, "crash", label), "App", exotic: false);
-                var plan = Review(Path.Combine(root, "crash", label, "Undo"), near, locked, remote);
-                bool Moved(string path) => !path.StartsWith(Path.GetPathRoot(far)!, StringComparison.OrdinalIgnoreCase) && path != locked && !path.StartsWith(locked + "\\", StringComparison.OrdinalIgnoreCase);
-                if (phase == "restore")
+                foreach (var change in UserChanges)
                 {
-                    var applied = plan.Engine.Apply(plan.Review, plan.Hash, plan.Journal);
-                    if (applied.Status != "applied" || applied.Entries.Single(entry => entry.Original.Path == locked).BackupHash is null)
+                    var label = phase + "-" + at + "-" + change;
+                    var near = Tree(Path.Combine(root, "crash", label), "App", exotic: true);
+                    var locked = FileLease.NormalizePath(Locked(Path.Combine(root, "crash", label)));
+                    var remote = Tree(Path.Combine(far, "crash", label), "App", exotic: false);
+                    var plan = Review(Path.Combine(root, "crash", label, "Undo"), near, locked, remote);
+                    bool Moved(string path) => !path.StartsWith(Path.GetPathRoot(far)!, StringComparison.OrdinalIgnoreCase) && path != locked && !path.StartsWith(locked + "\\", StringComparison.OrdinalIgnoreCase);
+                    if (phase == "restore")
                     {
-                        check(false, "Crash fixture " + label + " applies before its restore is interrupted, copying the folder whose permissions the app can't change (" + applied.Status + " " +
-                            string.Join(" | ", applied.Entries.Where(entry => entry.Error is not null).Select(entry => entry.Original.Path + ": " + entry.Error)) + ")");
+                        var applied = plan.Engine.Apply(plan.Review, plan.Hash, plan.Journal);
+                        if (applied.Status != "applied" || applied.Entries.Single(entry => entry.Original.Path == locked).BackupHash is null)
+                        {
+                            check(false, "Crash fixture " + label + " applies before its restore is interrupted, copying the folder whose permissions the app can't change (" + applied.Status + " " +
+                                string.Join(" | ", applied.Entries.Where(entry => entry.Error is not null).Select(entry => entry.Original.Path + ": " + entry.Error)) + ")");
+                            return;
+                        }
+                    }
+                    var exit = RunChild(at, phase == "apply" ? ["apply", plan.Review, plan.Hash, plan.Journal] : ["restore", plan.Journal]);
+                    if (exit != 0 && exit != -1) { check(false, "The " + phase + " child at step " + at + " ends only by finishing or by being killed (exit " + exit + ")"); return; }
+                    if (exit == 0)
+                    {
+                        check(covered > 0, "Every " + phase + " step is interrupted at least once (needs a GovernorTestHooks build)");
+                        Console.WriteLine("Interrupted " + phase + " at each of its " + covered + " steps; user changes after the stop: " + string.Join(", ", changes.Where(item => item.Key != "none").Select(item => item.Key + " " + item.Value)));
+                        check(changes.Where(item => item.Key != "none").All(item => item.Value > 0), "Each kind of user change is tried after a stopped " + phase);
+                        done = true;
                         break;
                     }
+                    if (change == "none") covered++;
+                    var journal = File.Exists(plan.Journal) ? OperationFiles.Read<FileCleanupJournal>(plan.Journal) : null;
+                    var lost = plan.Plan.Files.Where(file => !Path.Exists(file.Path) && journal?.Entries.Any(entry => entry.Original.Path == file.Path && Path.Exists(entry.BackupPath)) != true).Select(file => file.Path).ToArray();
+                    var target = change == "none" ? null : Target(plan.Plan, locked);
+                    if (change != "none" && target is null) continue;
+                    var made = target is null ? null : UserChange(target, change);
+                    if (target is not null) changes[change]++;
+                    var restored = journal is null ? null : plan.Engine.Restore(plan.Journal);
+                    var entry = target is null ? null : restored?.Entries.Single(item => item.Original.Path == target);
+                    var conflict = entry?.Error is not null;
+                    var problems = Mismatches(plan.Plan, file => Moved(file.Path)).Where(problem =>
+                        target is null || !problem.StartsWith(target + ": ", StringComparison.OrdinalIgnoreCase) &&
+                        !((conflict || change == "replace") && plan.Plan.Files.Any(folder => folder.Directory && Within(target, folder.Path) && problem.StartsWith(folder.Path + ": ", StringComparison.OrdinalIgnoreCase) &&
+                            problem[(folder.Path.Length + 2)..].Split(", ").All(difference => difference is "last-write time" or "attributes")))).ToArray();
+                    var leftovers = (journal?.Entries ?? []).Where(item => Moved(item.Original.Path) && Path.Exists(item.BackupPath) && !(conflict && item.Original.Path == target)).Select(item => item.BackupPath)
+                        .Concat(new[] { near, locked, remote }.SelectMany(folder => Directory.Exists(folder) ? Directory.EnumerateFiles(folder, ".roo-industries-restore-*", SearchOption.AllDirectories) : [])).ToArray();
+                    foreach (var problem in problems.Concat(lost.Select(path => "lost " + path)).Concat(leftovers.Select(path => "left behind " + path))) Console.WriteLine("  " + label + " " + problem);
+                    if (restored is not null && restored.Status != "restored") Console.WriteLine("  " + label + " " + restored.Status + " " + string.Join(" | ", restored.Entries.Where(item => item.Error is not null).Select(item => item.Original.Path + ": " + item.Error)));
+                    check(lost.Length == 0 && problems.Length == 0 && leftovers.Length == 0 && (restored is null || restored.Status is "restored" or "preparing" || conflict && restored.Status == "needsReconciliation" && restored.Entries.Where(item => item.Error is not null).All(item => item.Original.Path == target || Within(target!, item.Original.Path))),
+                        "After the " + phase + " is killed at step " + at + (target is null ? "" : " and the user changes a leftover's " + change) + ", Restore puts back everything cleanup took, exactly");
+                    if (target is null) continue;
+                    FileSnapshot? now = null;
+                    try { now = Snapshot(target); } catch (Exception error) when (error is System.ComponentModel.Win32Exception or InvalidDataException) { }
+                    var kept = now is not null && now.Identity == made!.Identity && made.SameRestorableData(now);
+                    var reported = entry is null || restored!.Status == "preparing" || entry.LeftAsChanged is not null || conflict;
+                    if (!kept || !reported) Console.WriteLine("  " + label + " " + target + ": " + (now is null ? "missing" : string.Join(", ", made!.Differences(now))) + (reported ? "" : " (not reported)"));
+                    check(kept && reported, "After the " + phase + " is killed at step " + at + ", a leftover whose " + change + " the user changed is left as they made it, and Restore says so");
                 }
-                var exit = RunChild(at, phase == "apply" ? ["apply", plan.Review, plan.Hash, plan.Journal] : ["restore", plan.Journal]);
-                if (exit != 0 && exit != -1) { check(false, "The " + phase + " child at step " + at + " ends only by finishing or by being killed (exit " + exit + ")"); break; }
-                if (exit == 0)
-                {
-                    check(covered > 0, "Every " + phase + " step is interrupted at least once (needs a GovernorTestHooks build)");
-                    Console.WriteLine("Interrupted " + phase + " at each of its " + covered + " steps");
-                    break;
-                }
-                covered++;
-                var journal = OperationFiles.Read<FileCleanupJournal>(plan.Journal);
-                var lost = plan.Plan.Files.Where(file => !Path.Exists(file.Path) && !journal.Entries.Any(entry => entry.Original.Path == file.Path && Path.Exists(entry.BackupPath))).Select(file => file.Path).ToArray();
-                var restored = plan.Engine.Restore(plan.Journal);
-                var problems = Mismatches(plan.Plan, file => Moved(file.Path));
-                var leftovers = journal.Entries.Where(entry => Moved(entry.Original.Path) && Path.Exists(entry.BackupPath)).Select(entry => entry.BackupPath).ToArray();
-                foreach (var problem in problems.Concat(lost.Select(path => "lost " + path)).Concat(leftovers.Select(path => "left in undo folder " + path))) Console.WriteLine("  " + label + " " + problem);
-                if (restored.Status != "restored") Console.WriteLine("  " + label + " " + restored.Status + " " + string.Join(" | ", restored.Entries.Where(entry => entry.Error is not null).Select(entry => entry.Original.Path + ": " + entry.Error)));
-                check(lost.Length == 0 && problems.Length == 0 && leftovers.Length == 0 && restored.Status is "restored" or "preparing",
-                    "After the " + phase + " is killed at step " + at + ", every leftover is either in place or in the undo folder, and Restore puts all of them back exactly");
             }
         }
     }
+
+    // A leftover file at its path after the stop, preferring one cleanup or restore left partway through.
+    static string? Target(FileCleanupPreview plan, string skipped)
+    {
+        var present = new List<(FileSnapshot Reviewed, FileSnapshot Now)>();
+        foreach (var file in plan.Files.Where(file => !file.Directory && !Within(file.Path, skipped)))
+        {
+            try { present.Add((file, Snapshot(file.Path))); }
+            catch (Exception error) when (error is System.ComponentModel.Win32Exception or InvalidDataException) { }
+        }
+        return (present.FirstOrDefault(item => !item.Reviewed.SameObjectAndContent(item.Now)).Reviewed ?? present.FirstOrDefault().Reviewed)?.Path;
+    }
+
+    static FileSnapshot UserChange(string path, string change)
+    {
+        var attributes = File.GetAttributes(path);
+        switch (change)
+        {
+            case "content":
+                File.SetAttributes(path, attributes & ~FileAttributes.ReadOnly);
+                File.AppendAllText(path, " changed by the user");
+                File.SetAttributes(path, attributes);
+                break;
+            case "permissions":
+                RefusalChecks.SetSecurity(path, "D:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;FA;;;" + User + ")(A;;FR;;;WD)", 4);
+                break;
+            case "attributes":
+                File.SetAttributes(path, attributes ^ FileAttributes.ReadOnly);
+                break;
+            case "replace":
+                File.SetAttributes(path, FileAttributes.Normal);
+                File.Delete(path);
+                File.WriteAllText(path, "the user's own file");
+                break;
+        }
+        return Snapshot(path);
+    }
+
+    static bool Within(string path, string folder) => path.StartsWith(folder + "\\", StringComparison.OrdinalIgnoreCase);
+
+    // A restore stopped after saving its staging copy's identity, before the copy took the leftover's name. Retrying finishes with that copy
+    // when it's untouched; a staging file someone changed or replaced is kept and reported, not deleted.
+    static void StagingKept(Action<bool, string> check, string root, string far)
+    {
+        foreach (var change in new[] { "none", "content", "replace" })
+        {
+            var remote = Tree(Path.Combine(far, "staging-" + change), "App", exotic: false);
+            var file = Path.Combine(remote, "Data", "settings.bin");
+            var plan = Review(Path.Combine(root, "staging-" + change, "Undo"), remote);
+            var applied = plan.Engine.Apply(plan.Review, plan.Hash, plan.Journal);
+            var restored = plan.Engine.Restore(plan.Journal);
+            var ready = applied.Status == "applied" && restored.Status == "restored";
+            check(ready, "The staging fixture (" + change + ") cleans and restores a copied leftover");
+            if (!ready) return;
+            var journal = OperationFiles.Read<FileCleanupJournal>(plan.Journal);
+            var entry = journal.Entries.Single(item => item.Original.Path == file);
+            var staging = Path.Combine(Path.GetDirectoryName(file)!, ".roo-industries-restore-" + Path.GetFileName(entry.BackupPath)["file-backup-".Length..]);
+            File.Move(file, staging);
+            entry.Status = "restoreIntent";
+            entry.RestoredIdentity = Snapshot(staging).Identity;
+            entry.RestoreStagingPath = staging;
+            // A real stop at this point comes before the folders above it got their times back.
+            foreach (var folder in journal.Entries.Where(item => item.Original.Directory && Within(file, item.Original.Path))) folder.DirectoryMetadataRestored = false;
+            journal.Status = "needsReconciliation";
+            OperationFiles.Write(plan.Journal, journal);
+            if (change == "content") File.AppendAllText(staging, " newer data");
+            if (change == "replace") { File.Delete(staging); File.WriteAllText(staging, "another program's newer file"); }
+            var made = Snapshot(staging);
+            var retried = plan.Engine.Restore(plan.Journal);
+            var error = retried.Entries.Single(item => item.Original.Path == file).Error;
+            if (change == "none")
+            {
+                var problems = Mismatches(plan.Plan, _ => false);
+                foreach (var problem in problems) Console.WriteLine("  staging " + problem);
+                check(retried.Status == "restored" && problems.Length == 0 && !File.Exists(staging), "A restore stopped with its untouched staging copy finishes on retry with that copy");
+                continue;
+            }
+            FileSnapshot? now = null;
+            try { now = Snapshot(staging); } catch (Exception failure) when (failure is System.ComponentModel.Win32Exception or InvalidDataException) { }
+            Console.WriteLine("Staging file " + change + " after a stop: " + retried.Status + " " + error);
+            check(now is not null && now.Identity == made.Identity && made.SameRestorableData(now) && !File.Exists(file) && retried.Status == "needsReconciliation" && error is not null,
+                "A staging file that was " + (change == "content" ? "changed" : "replaced") + " after a stopped restore is kept with its newer data and reported, not deleted");
+        }
+    }
+
+    // The space check that runs before an app's registry part and the one cleanup makes itself use one journal budget, so when the first passes
+    // the second can't refuse after the registry part has run.
+    static void BudgetAgrees(Action<bool, string> check, TestVolume volume, string far)
+    {
+        var registryRoot = "Software\\RooIndustriesCleanupSpaceTests\\" + Guid.NewGuid().ToString("N");
+        using var hive = RegistryKey.OpenBaseKey(RegistryHive.CurrentUser, RegistryView.Registry64);
+        using var owned = OwnedRegistryKey.Create(hive, registryRoot);
+        const string name = "Roo Industries Budget";
+        var scope = Path.Combine(far, "budget");
+        var source = Path.Combine(scope, name);
+        var operations = Path.Combine(far, "budget-operations");
+        var filler = Path.Combine(far, "budget-filler.bin");
+        try
+        {
+            for (var folder = 0; folder < 20; folder++)
+            {
+                var directory = Path.Combine(source, "Folder " + folder);
+                Directory.CreateDirectory(directory);
+                for (var item = 0; item < 40; item++) File.WriteAllText(Path.Combine(directory, "file " + item + ".txt"), name + " " + folder + " " + item);
+            }
+            using (var key = hive.CreateSubKey(registryRoot + "\\" + name)) key.SetValue("Original", name + " registry");
+            var app = new CleanupApplication { AppId = "fixture:" + name, DisplayName = name, Publisher = "Roo Industries", InstallLocation = source, PackageFamilyName = null };
+            var authority = new CleanupAuthority
+            {
+                AppId = app.AppId, ProviderIdentityHash = OperationFiles.Hash(Encoding.UTF8.GetBytes(name)), Owner = OperationOwner.Current(),
+                ProviderQueryComplete = true, RegistrationPresent = false, RebootPending = false, RemoverRunning = false, RemovalResolved = true,
+            };
+            var context = new CleanupContext(Path.Combine(scope, "queue.json"), authority, app, [app], true);
+            var engine = new ApplicationCleanup(() => context, [scope], [new("CurrentUser", "Registry64", registryRoot, "key", null)]);
+            var review = Path.Combine(operations, "review.json");
+            var preview = engine.Preview(review, engine.Scan(CancellationToken.None).Candidates.Select(item => item.ItemId).ToArray(), true, true);
+            var files = OperationFiles.Read<FileCleanupPreview>(preview.Files!.PreviewPath, preview.Files.ReviewHash);
+            // Find the most filler the check before the registry part still accepts, then leave a little more room than that.
+            var baseline = new DriveInfo(volume.Root).AvailableFreeSpace;
+            using (File.Create(filler)) { }
+            bool Accepted(long size)
+            {
+                using (var stream = new FileStream(filler, FileMode.Open)) stream.SetLength(size);
+                try { FileCleanupEngine.RequireSpace([(files, preview.Files.JournalPath)]); return true; }
+                catch (CleanupSpaceException) { return false; }
+            }
+            long low = 0, high = baseline;
+            while (high - low > 4096) { var middle = low + (high - low) / 2; if (Accepted(middle)) low = middle; else high = middle; }
+            var accepted = Accepted(Math.Max(0, low - (64L << 10)));
+            var journal = Path.Combine(operations, "journal.json");
+            var result = engine.Apply(review, OperationFiles.HashFile(review), journal);
+            Console.WriteLine("Cleanup with " + ((baseline - low) >> 10) + " KB free beyond the check's limit plus 64 KB: " + result.Status + " " + string.Join(" | ", result.Errors));
+            check(accepted && result.Status == "applied" && !Directory.Exists(source), "A cleanup the space check accepts before its registry part isn't refused for space by its own file step");
+        }
+        finally
+        {
+            File.Delete(filler);
+            foreach (var folder in new[] { scope, operations }.Where(Directory.Exists)) Directory.Delete(folder, true);
+        }
+    }
+
+    // An app with a file another program holds open is refused before anything changes, its registry keys included, and runs once the file is free.
+    static void InUseRefusesApp(Action<bool, string> check, string root)
+    {
+        var registryRoot = "Software\\RooIndustriesCleanupInUseTests\\" + Guid.NewGuid().ToString("N");
+        using var hive = RegistryKey.OpenBaseKey(RegistryHive.CurrentUser, RegistryView.Registry64);
+        using var owned = OwnedRegistryKey.Create(hive, registryRoot);
+        var scope = Path.Combine(root, "in-use");
+        var contexts = new Dictionary<string, CleanupContext>();
+        foreach (var name in new[] { "Roo Industries Busy One", "Roo Industries Busy Two", "Roo Industries Busy Alone" })
+        {
+            var source = Path.Combine(scope, name);
+            Directory.CreateDirectory(Path.Combine(source, "Data"));
+            File.WriteAllText(Path.Combine(source, "readme.txt"), name + " readme");
+            File.WriteAllText(Path.Combine(source, "Data", "settings.txt"), name + " settings");
+            using (var key = hive.CreateSubKey(registryRoot + "\\" + name)) key.SetValue("Original", name + " registry");
+            var app = new CleanupApplication { AppId = "fixture:" + name, DisplayName = name, Publisher = "Roo Industries", InstallLocation = source, PackageFamilyName = null };
+            var authority = new CleanupAuthority
+            {
+                AppId = app.AppId, ProviderIdentityHash = OperationFiles.Hash(Encoding.UTF8.GetBytes(name)), Owner = OperationOwner.Current(),
+                ProviderQueryComplete = true, RegistrationPresent = false, RebootPending = false, RemoverRunning = false, RemovalResolved = true,
+            };
+            contexts.Add(app.AppId, new CleanupContext(Path.Combine(scope, "queue.json"), authority, app, [], true));
+        }
+        var peers = contexts.Values.Select(context => context.Application).ToArray();
+        foreach (var appId in contexts.Keys.ToArray()) contexts[appId] = contexts[appId] with { Peers = peers };
+        ApplicationCleanup App(string source, string appId) => new(() => contexts[appId], [scope], [new("CurrentUser", "Registry64", registryRoot, "key", null)]);
+        CleanupPart ReviewApp(CleanupContext context)
+        {
+            var engine = App(context.Source, context.Application.AppId);
+            var path = Path.Combine(scope, "operations", context.Application.DisplayName, "review.json");
+            engine.Preview(path, engine.Scan(CancellationToken.None).Candidates.Where(item => item.Target.Contains(context.Application.DisplayName, StringComparison.Ordinal)).Select(item => item.ItemId).ToArray(), true, true);
+            return new(path, OperationFiles.HashFile(path), Path.Combine(Path.GetDirectoryName(path)!, "journal.json"));
+        }
+        bool Untouched(CleanupContext context)
+        {
+            using var key = hive.OpenSubKey(registryRoot + "\\" + context.Application.DisplayName);
+            return key?.GetValue("Original") as string == context.Application.DisplayName + " registry" &&
+                File.ReadAllText(Path.Combine(context.Application.InstallLocation!, "Data", "settings.txt")) == context.Application.DisplayName + " settings";
+        }
+        bool Gone(CleanupContext context)
+        {
+            using var key = hive.OpenSubKey(registryRoot + "\\" + context.Application.DisplayName);
+            return key is null && !Directory.Exists(context.Application.InstallLocation);
+        }
+        try
+        {
+            var alone = contexts["fixture:Roo Industries Busy Alone"];
+            var part = ReviewApp(alone);
+            var plan = OperationFiles.Read<ApplicationCleanupPreview>(part.PreviewPath, part.ReviewHash);
+            check(plan.Registry is not null && plan.Files is not null, "The in-use fixture's cleanup has a registry part and a file part");
+            ApplicationCleanupJournal refused;
+            using (Holder.Open(Path.Combine(alone.Application.InstallLocation!, "Data", "settings.txt")))
+                refused = App(alone.Source, alone.Application.AppId).Apply(part.PreviewPath, part.ReviewHash, part.JournalPath);
+            Console.WriteLine("Cleanup with a file open in another program: " + refused.Status + " " + string.Join(" | ", refused.Errors));
+            check(refused.Status == "needsReconciliation" && refused.Errors.Any(error => error.Contains("is open in another program", StringComparison.Ordinal)) && Untouched(alone) &&
+                !File.Exists(plan.Files!.JournalPath) && !ApplicationCleanup.HasRestorableOperation(refused),
+                "An app with a file open in another program is refused before its registry keys or files change, and says which file");
+            var resumed = App(alone.Source, alone.Application.AppId).Apply(part.PreviewPath, part.ReviewHash, part.JournalPath);
+            check(resumed.Status == "applied" && Gone(alone), "Once the file is closed, running the cleanup again removes the app's registry keys and files");
+            var back = App(alone.Source, alone.Application.AppId).Restore(part.JournalPath);
+            check(back.Status == "restored" && Untouched(alone), "Restore brings that app's registry keys and files back");
+
+            var one = contexts["fixture:Roo Industries Busy One"];
+            var two = contexts["fixture:Roo Industries Busy Two"];
+            var parts = new[] { ReviewApp(one), ReviewApp(two) };
+            var batchPath = Path.Combine(scope, "operations", "batch-review.json");
+            var batchJournal = Path.Combine(scope, "operations", "batch-journal.json");
+            CleanupBatch.Preview(batchPath, parts);
+            var batch = new CleanupBatch(App);
+            CleanupBatchJournal stopped;
+            using (Holder.Open(Path.Combine(two.Application.InstallLocation!, "Data", "settings.txt")))
+                stopped = batch.Apply(batchPath, OperationFiles.HashFile(batchPath), batchJournal);
+            Console.WriteLine("Batch with the second app's file open: " + stopped.Status + " " + string.Join(" | ", stopped.Entries.Select(entry => entry.Status + ":" + entry.Error)));
+            check(stopped.Status == "needsReconciliation" && stopped.Entries[0].Status == "applied" && Gone(one) && stopped.Entries[1].Status == "needsReconciliation" && Untouched(two),
+                "In a batch, the app with a file open in another program changes nothing, its registry keys included, after the apps before it finish");
+            var finished = batch.Apply(batchPath, OperationFiles.HashFile(batchPath), batchJournal);
+            check(finished.Status == "applied" && Gone(two), "Resuming the batch once the file is closed finishes that app");
+            var restored = batch.Restore(batchJournal);
+            check(restored.Status == "restored" && Untouched(one) && Untouched(two), "Restoring the batch brings both apps back");
+        }
+        finally { if (Directory.Exists(scope)) Remove(scope); }
+    }
+
+    // Holds a file open in another process, the way another program would, until disposed.
+    sealed class Holder : IDisposable
+    {
+        readonly Process _process;
+        Holder(Process process) => _process = process;
+
+        public static Holder Open(string path)
+        {
+            var start = new ProcessStartInfo(Environment.ProcessPath!) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardInput = true, RedirectStandardOutput = true };
+            if (Path.GetFileNameWithoutExtension(Environment.ProcessPath) == "dotnet") start.ArgumentList.Add(Assembly.GetEntryAssembly()!.Location);
+            start.ArgumentList.Add("--file-hold");
+            start.ArgumentList.Add(path);
+            var process = Process.Start(start) ?? throw new InvalidOperationException("The file holder did not start.");
+            if (process.StandardOutput.ReadLine() != "held") { process.Kill(); process.Dispose(); throw new InvalidOperationException("The file holder could not open " + path); }
+            return new(process);
+        }
+
+        public static void Child(string path)
+        {
+            using var held = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+            Console.WriteLine("held");
+            Console.ReadLine();
+        }
+
+        public void Dispose()
+        {
+            _process.StandardInput.WriteLine();
+            if (!_process.WaitForExit(30000)) _process.Kill();
+            _process.Dispose();
+        }
+    }
+
+    public static void HoldFile(string path) => Holder.Child(path);
+
 
     static void Thousand(Action<bool, string> check, string root)
     {

@@ -19,17 +19,17 @@ public sealed class FileLease : IDisposable
     public string Path { get; }
 
     // What each kind of lease may do to its final path component. Ancestors are always read-only directory handles that block renames.
-    private enum Mode { Read, Lookup, Delete, CreateFile, CreateDirectory, Restore, Move, Times, Rename, Policy, PolicyWrite, PolicyOwner, Content, ContentWrite, Folder }
+    private enum Mode { Read, Lookup, Delete, CreateFile, CreateUnkept, CreateDirectory, Restore, Move, Times, Rename, Policy, PolicyWrite, PolicyOwner, Content, ContentWrite, Folder }
 
     private FileLease(string path, Mode mode)
     {
         var folder = mode == Mode.Folder;
         Path = folder ? NormalizeFolder(path) : NormalizePath(path);
-        _writable = mode is Mode.Delete or Mode.CreateFile or Mode.CreateDirectory or Mode.Restore or Mode.Move or Mode.Times or Mode.Rename
+        _writable = mode is Mode.Delete or Mode.CreateFile or Mode.CreateUnkept or Mode.CreateDirectory or Mode.Restore or Mode.Move or Mode.Times or Mode.Rename
             or Mode.PolicyWrite or Mode.PolicyOwner or Mode.ContentWrite;
         var shareAll = mode == Mode.Lookup;
         var policy = mode is Mode.Policy or Mode.PolicyWrite or Mode.PolicyOwner;
-        var create = mode is Mode.CreateFile or Mode.CreateDirectory;
+        var create = mode is Mode.CreateFile or Mode.CreateUnkept or Mode.CreateDirectory;
         try
         {
             var root = System.IO.Path.GetPathRoot(Path)!;
@@ -44,7 +44,7 @@ public sealed class FileLease : IDisposable
                 var final = index == parts.Length - 1 && !folder;
                 var access = final ? FinalAccess(mode) : ReadData | ReadAttributes | Synchronize;
                 var handle = OpenRelative(parent, parts[index], access, shareAll ? 7u : final ? 1u : 3u, final && create ? 2u : 1u,
-                    0x00200020 | (policy ? 0x4000u : 0u) | (final && create ? mode == Mode.CreateDirectory ? 1u : 0x40u : 0u));
+                    0x00200020 | (policy ? 0x4000u : 0u) | (final && create ? mode == Mode.CreateDirectory ? 1u : 0x40u : 0u) | (final && mode == Mode.CreateUnkept ? 0x1000u : 0u));
                 try { RequireOrdinary(handle); } catch { handle.Dispose(); throw; }
                 if (final) { _handle = handle; return; }
                 if ((Basic(handle).FileAttributes & 0x10) == 0) { handle.Dispose(); throw new InvalidDataException("A file replaced a path ancestor."); }
@@ -61,7 +61,7 @@ public sealed class FileLease : IDisposable
     {
         Mode.Read or Mode.Lookup => ReadData | ReadAttributes | ReadControl | Synchronize,
         Mode.Delete => ReadData | ReadAttributes | ReadControl | Synchronize | Delete,
-        Mode.CreateFile or Mode.CreateDirectory => ReadData | WriteData | ReadAttributes | WriteAttributes | ReadControl | WriteDacl | WriteOwner | Synchronize | Delete,
+        Mode.CreateFile or Mode.CreateUnkept or Mode.CreateDirectory => ReadData | WriteData | ReadAttributes | WriteAttributes | ReadControl | WriteDacl | WriteOwner | Synchronize | Delete,
         Mode.Restore => ReadData | ReadAttributes | WriteAttributes | ReadControl | WriteDacl | WriteOwner | Synchronize | Delete,
         Mode.Move => ReadData | ReadAttributes | WriteAttributes | ReadControl | WriteDacl | Synchronize | Delete,
         Mode.Times => ReadData | ReadAttributes | WriteAttributes | ReadControl | Synchronize,
@@ -76,6 +76,8 @@ public sealed class FileLease : IDisposable
 
     public static FileLease Open(string path, bool writable = false) => new(path, writable ? Mode.Delete : Mode.Read);
     public static FileLease Create(string path, bool directory) => new(path, directory ? Mode.CreateDirectory : Mode.CreateFile);
+    // A new file Windows deletes when its last handle closes, including when the app stops without closing it, until Keep is called.
+    public static FileLease CreateUnkept(string path) => new(path, Mode.CreateUnkept);
     public static FileLease OpenForRestore(string path) => new(path, Mode.Restore);
     public static FileLease OpenForMove(string path) => new(path, Mode.Move);
     public static FileLease OpenForTimes(string path) => new(path, Mode.Times);
@@ -309,6 +311,14 @@ public sealed class FileLease : IDisposable
         uint flags = 1 | 0x10;
         if (!SetDispositionInformation(_handle, 21, ref flags, 4)) Fail("SetFileInformationByHandle(FileDispositionInfoEx)");
         if (!Standard(_handle).DeletePending) throw new IOException("Windows did not report the reviewed object as pending deletion.");
+    }
+
+    // Keeps a file made with CreateUnkept after its handle closes.
+    public void Keep()
+    {
+        if (!_writable) throw new InvalidOperationException("A detection handle cannot keep a file.");
+        uint flags = 0x8;
+        if (!SetDispositionInformation(_handle, 21, ref flags, 4)) Fail("SetFileInformationByHandle(FileDispositionInfoEx keep on close)");
     }
 
     public void RenameToSibling(string name) => Rename(_ancestors[^1], name);

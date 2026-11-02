@@ -41,6 +41,7 @@ if (args is ["--marked-root-start", var markedParent, var markedHive, .. var mar
 if (args is ["--data-folder", .. var scenarios]) { DataFolderChecks.Run(Check, scenarios); return; }
 if (args is [var child, ..] && child.StartsWith("--child-", StringComparison.Ordinal) || args is ["--timer-worker-fake", ..]) { DataRootChild.Run(args); return; }
 if (args is ["--file-crash", .. var crashStep]) { FileMoveChecks.Child(crashStep); return; }
+if (args is ["--file-hold", var heldPath]) { FileMoveChecks.HoldFile(heldPath); return; }
 void Files()
 {
     using var volume = TestVolume.Create(Path.GetTempPath(), 2048);
