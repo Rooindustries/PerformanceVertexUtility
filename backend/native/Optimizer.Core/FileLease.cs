@@ -18,22 +18,34 @@ public sealed class FileLease : IDisposable
     private readonly bool _writable;
     public string Path { get; }
 
-    // What each kind of lease may do to its final path component. Ancestors are always read-only directory handles that block renames.
-    private enum Mode { Read, Lookup, Delete, CreateFile, CreateUnkept, CreateDirectory, Restore, Move, Times, Rename, Policy, PolicyWrite, PolicyOwner, Content, ContentWrite, Folder }
+    // What each kind of lease may do to its final path component. Ancestors are always read-only directory handles; above a cleanup's own folders they also block renames.
+    private enum Mode { Read, Lookup, Delete, CreateFile, CreateUnkept, CreateDirectory, CreateUnkeptDirectory, Restore, Move, Times, Rename, Policy, PolicyWrite, PolicyOwner, Content, ContentWrite, Folder }
 
-    private FileLease(string path, Mode mode)
+    // Folders at or below `within` are opened as ancestors with delete sharing, because cleanup holds each of them open for deletion itself
+    // and that handle is what keeps anyone else from renaming them.
+    private FileLease(string path, Mode mode, string? within = null)
     {
         var folder = mode == Mode.Folder;
         Path = folder ? NormalizeFolder(path) : NormalizePath(path);
-        _writable = mode is Mode.Delete or Mode.CreateFile or Mode.CreateUnkept or Mode.CreateDirectory or Mode.Restore or Mode.Move or Mode.Times or Mode.Rename
-            or Mode.PolicyWrite or Mode.PolicyOwner or Mode.ContentWrite;
+        _writable = mode is Mode.Delete or Mode.CreateFile or Mode.CreateUnkept or Mode.CreateDirectory or Mode.CreateUnkeptDirectory or Mode.Restore or Mode.Move or Mode.Times
+            or Mode.Rename or Mode.PolicyWrite or Mode.PolicyOwner or Mode.ContentWrite;
         var shareAll = mode == Mode.Lookup;
         var policy = mode is Mode.Policy or Mode.PolicyWrite or Mode.PolicyOwner;
-        var create = mode is Mode.CreateFile or Mode.CreateUnkept or Mode.CreateDirectory;
+        var create = mode is Mode.CreateFile or Mode.CreateUnkept or Mode.CreateDirectory or Mode.CreateUnkeptDirectory;
+        var directory = mode is Mode.CreateDirectory or Mode.CreateUnkeptDirectory;
+        var unkept = mode is Mode.CreateUnkept or Mode.CreateUnkeptDirectory;
         try
         {
             var root = System.IO.Path.GetPathRoot(Path)!;
             if (GetDriveType(root) == 4) throw new InvalidDataException("Network drives are outside this file recovery contract.");
+            var shared = int.MaxValue;
+            if (within is not null)
+            {
+                within = NormalizePath(within);
+                if (!string.Equals(Path, within, StringComparison.OrdinalIgnoreCase) && !Path.StartsWith(within + "\\", StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidDataException("A cleanup entry is outside its reviewed folder.");
+                shared = within[root.Length..].Split('\\').Length - 1;
+            }
             var parent = CreateFile("\\\\?\\" + root, ReadData | ReadAttributes | Synchronize, shareAll ? 7u : 3u, IntPtr.Zero, 3, 0x02200000, IntPtr.Zero);
             if (parent.IsInvalid) { parent.Dispose(); Fail("CreateFile(root)"); }
             if (Path.Length == root.Length) { _handle = parent; return; }
@@ -43,8 +55,8 @@ public sealed class FileLease : IDisposable
             {
                 var final = index == parts.Length - 1 && !folder;
                 var access = final ? FinalAccess(mode) : ReadData | ReadAttributes | Synchronize;
-                var handle = OpenRelative(parent, parts[index], access, shareAll ? 7u : final ? 1u : 3u, final && create ? 2u : 1u,
-                    0x00200020 | (policy ? 0x4000u : 0u) | (final && create ? mode == Mode.CreateDirectory ? 1u : 0x40u : 0u) | (final && mode == Mode.CreateUnkept ? 0x1000u : 0u));
+                var handle = OpenRelative(parent, parts[index], access, shareAll || !final && index >= shared ? 7u : final ? 1u : 3u, final && create ? 2u : 1u,
+                    0x00200020 | (policy ? 0x4000u : 0u) | (final && create ? directory ? 1u : 0x40u : 0u) | (final && unkept ? 0x1000u : 0u));
                 try { RequireOrdinary(handle); } catch { handle.Dispose(); throw; }
                 if (final) { _handle = handle; return; }
                 if ((Basic(handle).FileAttributes & 0x10) == 0) { handle.Dispose(); throw new InvalidDataException("A file replaced a path ancestor."); }
@@ -61,7 +73,7 @@ public sealed class FileLease : IDisposable
     {
         Mode.Read or Mode.Lookup => ReadData | ReadAttributes | ReadControl | Synchronize,
         Mode.Delete => ReadData | ReadAttributes | ReadControl | Synchronize | Delete,
-        Mode.CreateFile or Mode.CreateUnkept or Mode.CreateDirectory => ReadData | WriteData | ReadAttributes | WriteAttributes | ReadControl | WriteDacl | WriteOwner | Synchronize | Delete,
+        Mode.CreateFile or Mode.CreateUnkept or Mode.CreateDirectory or Mode.CreateUnkeptDirectory => ReadData | WriteData | ReadAttributes | WriteAttributes | ReadControl | WriteDacl | WriteOwner | Synchronize | Delete,
         Mode.Restore => ReadData | ReadAttributes | WriteAttributes | ReadControl | WriteDacl | WriteOwner | Synchronize | Delete,
         Mode.Move => ReadData | ReadAttributes | WriteAttributes | ReadControl | WriteDacl | Synchronize | Delete,
         Mode.Times => ReadData | ReadAttributes | WriteAttributes | ReadControl | Synchronize,
@@ -74,12 +86,12 @@ public sealed class FileLease : IDisposable
         _ => throw new ArgumentOutOfRangeException(nameof(mode)),
     };
 
-    public static FileLease Open(string path, bool writable = false) => new(path, writable ? Mode.Delete : Mode.Read);
+    public static FileLease Open(string path, bool writable = false, string? within = null) => new(path, writable ? Mode.Delete : Mode.Read, within);
     public static FileLease Create(string path, bool directory) => new(path, directory ? Mode.CreateDirectory : Mode.CreateFile);
-    // A new file Windows deletes when its last handle closes, including when the app stops without closing it, until Keep is called.
-    public static FileLease CreateUnkept(string path) => new(path, Mode.CreateUnkept);
+    // A new file or empty folder Windows deletes when its last handle closes, including when the app stops without closing it, until Keep is called.
+    public static FileLease CreateUnkept(string path, bool directory = false) => new(path, directory ? Mode.CreateUnkeptDirectory : Mode.CreateUnkept);
     public static FileLease OpenForRestore(string path) => new(path, Mode.Restore);
-    public static FileLease OpenForMove(string path) => new(path, Mode.Move);
+    public static FileLease OpenForMove(string path, string? within = null) => new(path, Mode.Move, within);
     public static FileLease OpenForTimes(string path) => new(path, Mode.Times);
     public static FileLease OpenForRename(string path) => new(path, Mode.Rename);
     public static FileLease OpenPolicy(string path, bool writable = false, bool owner = false) => new(path, !writable ? Mode.Policy : owner ? Mode.PolicyOwner : Mode.PolicyWrite);
@@ -175,14 +187,18 @@ public sealed class FileLease : IDisposable
 
     public FileIdentity ObjectIdentity => Identity(_handle);
 
-    public void ReplaceDacl(byte[] descriptor)
+    // Inherited permissions go back in two writes: the list itself, then a write that asks Windows to mark it inherited again.
+    // `between` runs after the first write, while the list is back but not yet marked inherited.
+    public void ReplaceDacl(byte[] descriptor, Action? between = null)
     {
         if (!_writable) throw new InvalidOperationException("A detection handle cannot change permissions.");
         var source = new RawSecurityDescriptor(descriptor, 0);
         if (source.DiscretionaryAcl is null || (source.ControlFlags & ControlFlags.DiscretionaryAclPresent) == 0) throw new InvalidDataException("A complete file DACL is required.");
         var flags = source.ControlFlags & (ControlFlags.DiscretionaryAclAutoInherited | ControlFlags.DiscretionaryAclProtected);
         Set(flags & ~ControlFlags.DiscretionaryAclAutoInherited);
-        if ((flags & ControlFlags.DiscretionaryAclAutoInherited) != 0) Set(flags | ControlFlags.DiscretionaryAclAutoInheritRequired);
+        if ((flags & ControlFlags.DiscretionaryAclAutoInherited) == 0) return;
+        between?.Invoke();
+        Set(flags | ControlFlags.DiscretionaryAclAutoInheritRequired);
         void Set(ControlFlags control)
         {
             var replacement = new RawSecurityDescriptor(control | ControlFlags.DiscretionaryAclPresent, null, null, null, source.DiscretionaryAcl);
@@ -191,9 +207,12 @@ public sealed class FileLease : IDisposable
         }
     }
 
-    public void RestoreMoved(FileSnapshot original)
+    // Windows sets the archive flag when permissions change, so attributes and times go back last. `step` runs between the two permission
+    // writes and after them.
+    public void RestoreMoved(FileSnapshot original, Action? step = null)
     {
-        ReplaceDacl(original.Security);
+        ReplaceDacl(original.Security, step);
+        step?.Invoke();
         RestoreTimes(original);
     }
 
@@ -255,9 +274,13 @@ public sealed class FileLease : IDisposable
         return names.OrderBy(entry => entry.Name, StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
-    public void Backup(string destination)
+    // Writes this object's data and alternate streams into a new file made for it and returns the SHA-256 of what it wrote.
+    public string Backup(FileLease copy)
     {
-        using var output = new FileStream(destination, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+        if (!copy._writable) throw new InvalidOperationException("A detection handle cannot hold an undo copy.");
+        using var borrowed = new SafeFileHandle(copy._handle.DangerousGetHandle(), ownsHandle: false);
+        using var output = new FileStream(borrowed, FileAccess.Write);
+        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         var bytes = new byte[65536];
         IntPtr context = IntPtr.Zero;
         try
@@ -267,16 +290,44 @@ public sealed class FileLease : IDisposable
                 if (!BackupRead(_handle, bytes, (uint)bytes.Length, out var read, false, false, ref context)) Fail("BackupRead");
                 if (read == 0) break;
                 output.Write(bytes, 0, (int)read);
+                hash.AppendData(bytes, 0, (int)read);
             }
             output.Flush(flushToDisk: true);
         }
         finally { if (context != IntPtr.Zero) BackupRead(_handle, null, 0, out _, true, false, ref context); }
+        return Convert.ToHexString(hash.GetHashAndReset());
+    }
+
+    // The SHA-256 of a file's main data, read through this handle.
+    public string HashData()
+    {
+        using var input = Data();
+        return Convert.ToHexString(SHA256.HashData(input));
+    }
+
+    private FileStream Data()
+    {
+        var borrowed = new SafeFileHandle(_handle.DangerousGetHandle(), ownsHandle: false);
+        var input = new FileStream(borrowed, FileAccess.Read);
+        input.Position = 0;
+        return input;
     }
 
     public void RestoreData(string backup, FileSnapshot original)
     {
-        if (!_writable) throw new InvalidOperationException("A detection handle cannot restore files.");
         using var input = new FileStream(backup, FileMode.Open, FileAccess.Read, FileShare.Read);
+        RestoreData(input, original);
+    }
+
+    public void RestoreData(FileLease backup, FileSnapshot original)
+    {
+        using var input = backup.Data();
+        RestoreData(input, original);
+    }
+
+    private void RestoreData(Stream input, FileSnapshot original)
+    {
+        if (!_writable) throw new InvalidOperationException("A detection handle cannot restore files.");
         var bytes = new byte[65536];
         IntPtr context = IntPtr.Zero;
         try

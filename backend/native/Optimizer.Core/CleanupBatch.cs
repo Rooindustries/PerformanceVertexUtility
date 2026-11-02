@@ -20,6 +20,8 @@ public sealed class CleanupBatchEntry
     public string? Error { get; set; }
     // Restored leftovers that were changed after cleanup, so Restore left them as they are now.
     public List<string> LeftAsChanged { get; set; } = [];
+    // Leftovers Restore couldn't put back, each naming its path and why.
+    public List<string> NotRestored { get; set; } = [];
 }
 
 public sealed class CleanupBatchJournal
@@ -82,7 +84,7 @@ public sealed class CleanupBatch(Func<string, string, ApplicationCleanup> applic
             var cancellation = Cancellation(journalPath, preview.BatchId);
             if (cancellation is not null) { journal.Status = "stopped"; journal.CancellationId = cancellation.CancellationId; Save(journalPath, journal); return journal; }
             var part = preview.Parts.Single(part => part.Preview.OperationId == entry.OperationId);
-            if (entry.Status is not ("pending" or "applying" or "applied" or "needsReconciliation")) throw new InvalidDataException("This batch cannot resume a restored application.");
+            if (entry.Status is not ("pending" or "refused" or "applying" or "applied" or "needsReconciliation")) throw new InvalidDataException("This batch cannot resume a restored application.");
             entry.Status = "applying";
             entry.Error = null;
             Save(journalPath, journal);
@@ -93,7 +95,8 @@ public sealed class CleanupBatch(Func<string, string, ApplicationCleanup> applic
                 if (result.Status != "applied") entry.Error = string.Join(Environment.NewLine, result.Errors);
             }
             catch (Exception error) { entry.Status = "needsReconciliation"; entry.Error = error.Message; }
-            if (entry.Status != "applied") { journal.Status = "needsReconciliation"; Save(journalPath, journal); return journal; }
+            // An app refused before it changed anything pauses the batch; running it again picks up from that app.
+            if (entry.Status != "applied") { journal.Status = entry.Status == "refused" ? "paused" : "needsReconciliation"; Save(journalPath, journal); return journal; }
             Save(journalPath, journal);
         }
         journal.Status = "applied";
@@ -119,7 +122,7 @@ public sealed class CleanupBatch(Func<string, string, ApplicationCleanup> applic
             throw new InvalidDataException("Select distinct application IDs from this cleanup batch.");
         var selected = journal.Preview.Parts.Where(part => appIds is null || appIds.Contains(part.Preview.AppId, StringComparer.Ordinal))
             .Select(part => part.Preview.OperationId).ToHashSet(StringComparer.Ordinal);
-        if (appIds is not null && journal.Entries.Any(entry => selected.Contains(entry.OperationId) && entry.Status == "pending"))
+        if (appIds is not null && journal.Entries.Any(entry => selected.Contains(entry.OperationId) && entry.Status is "pending" or "refused"))
             throw new InvalidDataException("A selected application has no attempted cleanup to restore.");
         var selectedEntries = journal.Entries.Where(entry => selected.Contains(entry.OperationId)).ToArray();
         if (selectedEntries.Length > 0 && selectedEntries.All(entry => entry.Status == "restored")) return journal;
@@ -128,7 +131,7 @@ public sealed class CleanupBatch(Func<string, string, ApplicationCleanup> applic
         journal.RestoreStarted = true;
         journal.Status = "restoring";
         Save(journalPath, journal);
-        foreach (var entry in journal.Entries.AsEnumerable().Reverse().Where(entry => selected.Contains(entry.OperationId) && entry.Status is not ("pending" or "restored")))
+        foreach (var entry in journal.Entries.AsEnumerable().Reverse().Where(entry => selected.Contains(entry.OperationId) && entry.Status is not ("pending" or "refused" or "restored")))
         {
             var part = journal.Preview.Parts.Single(part => part.Preview.OperationId == entry.OperationId);
             try
@@ -138,11 +141,12 @@ public sealed class CleanupBatch(Func<string, string, ApplicationCleanup> applic
                 entry.Status = restored.Status;
                 entry.Error = restored.Errors.Count == 0 ? null : string.Join(Environment.NewLine, restored.Errors);
                 entry.LeftAsChanged = restored.LeftAsChanged;
+                entry.NotRestored = restored.NotRestored;
             }
             catch (Exception error) { entry.Status = "needsReconciliation"; entry.Error = error.Message; }
             Save(journalPath, journal);
         }
-        journal.Status = journal.Entries.All(entry => entry.Status is "pending" or "restored") ? "restored"
+        journal.Status = journal.Entries.All(entry => entry.Status is "pending" or "refused" or "restored") ? "restored"
             : journal.Entries.Any(entry => entry.Status is "needsReconciliation" or "applying" or "restoring") ? "needsReconciliation" : "partiallyRestored";
         Save(journalPath, journal);
         return journal;
@@ -222,11 +226,11 @@ public sealed class CleanupBatch(Func<string, string, ApplicationCleanup> applic
         if (journal.SchemaVersion != 1 || JsonSerializer.Serialize(original, OperationFiles.Json) != JsonSerializer.Serialize(journal.Preview, OperationFiles.Json) ||
             !journal.Entries.Select(entry => entry.OperationId).SequenceEqual(original.Parts.Select(part => part.Preview.OperationId)))
             throw new InvalidDataException("Batch recovery state does not match its reviewed applications.");
-        if (journal.Status is not ("prepared" or "running" or "applied" or "stopped" or "needsReconciliation" or "restoring" or "restored" or "partiallyRestored") ||
-            journal.Entries.Any(entry => entry.Status is not ("pending" or "applying" or "applied" or "needsReconciliation" or "restoring" or "restored")))
+        if (journal.Status is not ("prepared" or "running" or "applied" or "stopped" or "paused" or "needsReconciliation" or "restoring" or "restored" or "partiallyRestored") ||
+            journal.Entries.Any(entry => entry.Status is not ("pending" or "refused" or "applying" or "applied" or "needsReconciliation" or "restoring" or "restored")))
             throw new InvalidDataException("Unknown batch recovery state.");
         if (!journal.RestoreStarted && journal.Status is ("restoring" or "restored" or "partiallyRestored")
-            || journal.RestoreStarted && journal.Status is ("prepared" or "running" or "applied" or "stopped"))
+            || journal.RestoreStarted && journal.Status is ("prepared" or "running" or "applied" or "stopped" or "paused"))
             throw new InvalidDataException("Batch recovery phase contradicts its restore state.");
         if (journal.Status == "restored" && !journal.Entries.Any(entry => entry.Status == "restored"))
             throw new InvalidDataException("Restored batch state is missing an actual restored entry.");
