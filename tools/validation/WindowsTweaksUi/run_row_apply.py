@@ -1,4 +1,4 @@
-"""Stage this checkout on a Windows test PC, run the named Tweaks and Windows settings page suites, then drive one setting choice through Apply and Undo in the real app and read Windows back after each step."""
+"""Stage this checkout on a Windows test PC, optionally check the row capture's recovery on disposable values, run the named Tweaks and Windows settings page suites, then drive one setting choice through Apply and Undo in the real app and read Windows back after each step."""
 import argparse
 import json
 import re
@@ -77,6 +77,7 @@ def main():
     parser.add_argument('--lease-minutes', type=float, default=40)
     parser.add_argument('--tweaks', default='--catalog-integration', help='Comma-separated Tweaks suite modes; empty skips them')
     parser.add_argument('--ui', default='--policy-editions,--freshness', help='Comma-separated Windows settings page suite modes, "catalog" for the full suite against this checkout; empty skips them')
+    parser.add_argument('--recovery', action='store_true', help='First run Test-RowApplyRecovery.ps1, which retries the capture recovery on disposable HKCU values')
     parser.add_argument('--scenario', type=scenario, action='append', default=[], help='JSON object with the Capture-RowApply.ps1 parameters for one Apply and Undo run')
     args = parser.parse_args()
     args.out_dir.mkdir(parents=True, exist_ok=False)
@@ -86,6 +87,15 @@ def main():
     results = {}
     try:
         lease(args, receipt)
+        if args.recovery:
+            check = '& ' + windows.ps_literal(receipt['stagingPath'] + r'\tools\validation\WindowsTweaksUi\Test-RowApplyRecovery.ps1') + ' -Source ' + windows.ps_literal(receipt['stagingPath'])
+            try:
+                output = windows.invoke(args.host, args.expected_machine, check, timeout=600).stdout
+            except subprocess.CalledProcessError as error:
+                output = (error.stdout or '') + (error.stderr or '')
+            (args.out_dir / 'recovery.log').write_text(output)
+            print('\n'.join(line for line in output.splitlines() if line.startswith(('PASS', 'FAIL', 'ROO_INDUSTRIES_ROW_RECOVERY'))), flush=True)
+            results['recovery'] = 'pass' if 'ROO_INDUSTRIES_ROW_RECOVERY pass' in output else 'fail'
         tweaks = [mode for mode in args.tweaks.split(',') if mode]
         ui = [mode for mode in args.ui.split(',') if mode]
         if tweaks or ui:

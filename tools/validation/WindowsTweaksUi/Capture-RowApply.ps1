@@ -17,30 +17,9 @@ public static class RooIndustriesRowApply {
  [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
  [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr h,IntPtr after,int x,int y,int w,int hgt,uint flags);
- [DllImport("advapi32.dll",CharSet=CharSet.Unicode)] static extern int RegOpenKeyExW(UIntPtr root,string path,int options,int access,out UIntPtr key);
- [DllImport("advapi32.dll",CharSet=CharSet.Unicode)] static extern int RegQueryValueExW(UIntPtr key,string name,IntPtr reserved,out int type,byte[] data,ref int size);
- [DllImport("advapi32.dll",CharSet=CharSet.Unicode)] static extern int RegSetValueExW(UIntPtr key,string name,int reserved,int type,byte[] data,int size);
- [DllImport("advapi32.dll",CharSet=CharSet.Unicode)] static extern int RegDeleteValueW(UIntPtr key,string name);
- [DllImport("advapi32.dll")] static extern int RegCloseKey(UIntPtr key);
- static UIntPtr Root(string hive){if(hive=="CurrentUser")return new UIntPtr(0x80000001u);if(hive=="LocalMachine")return new UIntPtr(0x80000002u);throw new ArgumentException("Unsupported hive: "+hive);}
- static UIntPtr Open(string hive,string path,int access){UIntPtr key;int error=RegOpenKeyExW(Root(hive),path,0,access|0x0100,out key);if(error!=0)throw new Win32Exception(error);return key;}
- public static object[] Get(string hive,string path,string name){
-  UIntPtr key;int error=RegOpenKeyExW(Root(hive),path,0,0x20019|0x0100,out key);
-  if(error==2)return new object[]{false,false,0,null};
-  if(error!=0)throw new Win32Exception(error);
-  try{
-   int type,size=0;error=RegQueryValueExW(key,name,IntPtr.Zero,out type,null,ref size);
-   if(error==2)return new object[]{true,false,0,null};
-   if(error!=0&&error!=234)throw new Win32Exception(error);
-   byte[] data=new byte[size];error=RegQueryValueExW(key,name,IntPtr.Zero,out type,data,ref size);
-   if(error!=0)throw new Win32Exception(error);
-   Array.Resize(ref data,size);return new object[]{true,true,type,data};
-  }finally{RegCloseKey(key);}
- }
- public static void Put(string hive,string path,string name,int type,byte[] data){UIntPtr key=Open(hive,path,0x20006);try{int error=RegSetValueExW(key,name,0,type,data,data.Length);if(error!=0)throw new Win32Exception(error);}finally{RegCloseKey(key);}}
- public static void Remove(string hive,string path,string name){UIntPtr key;int opened=RegOpenKeyExW(Root(hive),path,0,0x20006|0x0100,out key);if(opened==2)return;if(opened!=0)throw new Win32Exception(opened);try{int error=RegDeleteValueW(key,name);if(error!=0&&error!=2)throw new Win32Exception(error);}finally{RegCloseKey(key);}}
 }
 '@
+. (Join-Path $Source 'tools\validation\WindowsTweaksUi\RowApplyJournal.ps1')
 [RooIndustriesRowApply]::SetProcessDPIAware()|Out-Null
 $A=[Windows.Automation.AutomationElement];$TS=[Windows.Automation.TreeScope];$CT=[Windows.Automation.ControlType]
 $evidence=[ordered]@{label=$Label;settingId=$SettingId;choice=$Choice;seed=$Seed;values=@();stages=[ordered]@{};settings=[ordered]@{};checks=@()}
@@ -63,21 +42,21 @@ function Shot($Window,[string]$Name){
  try{$graphics.CopyFromScreen([int]$r.X,[int]$r.Y,0,0,$bitmap.Size);$bitmap.Save((Join-Path $directory ($Name+'.png')),[Drawing.Imaging.ImageFormat]::Png)}finally{$graphics.Dispose();$bitmap.Dispose()}
 }
 function Check([bool]$Condition,[string]$Name){$evidence.checks+=@([ordered]@{name=$Name;passed=$Condition});if(-not$Condition){throw ('Check failed: '+$Name)};Write-Output ('PASS '+$Name)}
-function ReadValue($Address){$r=[RooIndustriesRowApply]::Get($Address.hive,$Address.keyPath,$Address.valueName);[ordered]@{keyExists=[bool]$r[0];exists=[bool]$r[1];type=$(if($r[1]){[int]$r[2]}else{$null});data=$(if($r[1]){[Convert]::ToBase64String([byte[]]$r[3])}else{$null})}}
-function WriteValue($Address,$State){if($State.exists){[RooIndustriesRowApply]::Put($Address.hive,$Address.keyPath,$Address.valueName,[int]$State.type,[Convert]::FromBase64String([string]$State.data))}else{[RooIndustriesRowApply]::Remove($Address.hive,$Address.keyPath,$Address.valueName)}}
-function Same($Left,$Right){$Left.exists -eq $Right.exists -and (-not$Left.exists -or ($Left.type -eq $Right.type -and $Left.data -ceq $Right.data))}
-function Describe($State){if(-not$State.exists){return 'absent'};$bytes=[Convert]::FromBase64String([string]$State.data);switch([int]$State.type){4{if($bytes.Length -eq 4){return 'REG_DWORD '+[BitConverter]::ToUInt32($bytes,0)}};11{if($bytes.Length -eq 8){return 'REG_QWORD '+[BitConverter]::ToUInt64($bytes,0)}};{$_ -in 1,2}{return $(if($_ -eq 1){'REG_SZ '}else{'REG_EXPAND_SZ '})+'"'+[Text.Encoding]::Unicode.GetString($bytes).TrimEnd([char]0)+'"'}};return 'type '+$State.type+' '+[BitConverter]::ToString($bytes)}
 function Snapshot([string]$Stage){$evidence.stages[$Stage]=[ordered]@{};foreach($value in $values){$state=ReadValue $value.address;$evidence.stages[$Stage][$value.address.valueName]=[ordered]@{state=$state;text=(Describe $state)}};return $evidence.stages[$Stage]}
 function RegQuery([string]$Stage){$ErrorActionPreference='Continue';$lines=@(foreach($value in $values){$root=if($value.address.hive -eq 'CurrentUser'){'HKCU'}else{'HKLM'};& (Join-Path ([Environment]::SystemDirectory) 'reg.exe') query ($root+'\'+$value.address.keyPath) /v $value.address.valueName /reg:64 2>&1|ForEach-Object {[string]$_}});[IO.File]::WriteAllLines((Join-Path $directory ('reg-query-'+$Stage+'.txt')),$lines,[Text.UTF8Encoding]::new($false))}
+function SystemErrors{@($A::RootElement.FindAll($TS::Children,[Windows.Automation.PropertyCondition]::new($A::ClassNameProperty,'#32770'))|Where-Object {$_.Current.Name -like '* - System Error'}|ForEach-Object {$_.Current.Name})}
+function SettingsPopups($Since){@(Get-WinEvent -FilterHashtable @{LogName='System';ProviderName='Application Popup';Id=26;StartTime=$Since} -ErrorAction SilentlyContinue|Where-Object {$_.Message -like '*SystemSettings.exe*'}|ForEach-Object {$_.TimeCreated.ToString('HH:mm:ss')+' '+($_.Message -replace '\s+',' ')})}
 function SettingsToggle([string]$Stage){
  if(-not$SettingsUri){return $null}
  if(@(Get-Process -Name 'SystemSettings' -ErrorAction SilentlyContinue).Count){throw 'Windows Settings is already open; this capture does not take over another window.'}
- $opened=[DateTime]::Now
- Start-Process $SettingsUri
- $settingsWindow=$null
+ # Settings starts through the shell rather than as a child of this script, so every SystemSettings that starts after the launch belongs to this capture.
+ $opened=[DateTime]::Now;$owned=@{};$settingsWindow=$null;$state=$null;$popups=@()
+ function Own{foreach($process in @(Get-Process -Name 'SystemSettings' -ErrorAction SilentlyContinue|Where-Object {$_.StartTime -ge $opened})){$owned[$process.Id]=$process}}
  try{
-  $settingsWindow=WaitFor {$A::RootElement.FindFirst($TS::Children,[Windows.Automation.AndCondition]::new([Windows.Automation.PropertyCondition]::new($A::ClassNameProperty,'ApplicationFrameWindow'),[Windows.Automation.PropertyCondition]::new($A::NameProperty,'Settings')))} 60 'Windows Settings'
+  Start-Process $SettingsUri
+  $settingsWindow=WaitFor {Own;$A::RootElement.FindFirst($TS::Children,[Windows.Automation.AndCondition]::new([Windows.Automation.PropertyCondition]::new($A::ClassNameProperty,'ApplicationFrameWindow'),[Windows.Automation.PropertyCondition]::new($A::NameProperty,'Settings')))} 60 'Windows Settings'
   $toggle=WaitFor {
+   Own
    $found=@($settingsWindow.FindAll($TS::Descendants,[Windows.Automation.PropertyCondition]::new($A::IsTogglePatternAvailableProperty,$true))|Where-Object {$_.Current.Name -like $SettingsToggle})
    if($found.Count){$found[0]}else{
     if($SettingsGroup){foreach($group in @($settingsWindow.FindAll($TS::Descendants,[Windows.Automation.PropertyCondition]::new($A::IsExpandCollapsePatternAvailableProperty,$true))|Where-Object {$_.Current.Name -like $SettingsGroup})){$pattern=$group.GetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern);if($pattern.Current.ExpandCollapseState -eq [Windows.Automation.ExpandCollapseState]::Collapsed){$pattern.Expand()}}}
@@ -92,12 +71,19 @@ function SettingsToggle([string]$Stage){
   Start-Sleep -Milliseconds 1200
   Shot $settingsWindow ('settings-'+$Stage)
   $evidence.settings[$Stage]=[ordered]@{switch=$toggle.Current.Name;state=$state}
-  return $state
  }finally{
+  Own
   if($settingsWindow){try{$settingsWindow.GetCurrentPattern([Windows.Automation.WindowPattern]::Pattern).Close()}catch{}}
-  Start-Sleep -Seconds 2
-  foreach($process in @(Get-Process -Name 'SystemSettings' -ErrorAction SilentlyContinue|Where-Object {$_.StartTime -ge $opened})){Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue}
+  $deadline=[DateTime]::UtcNow.AddSeconds(20);while(@($owned.Values|Where-Object {-not$_.HasExited}).Count -and [DateTime]::UtcNow -lt $deadline){Start-Sleep -Milliseconds 250}
+  foreach($process in @($owned.Values|Where-Object {-not$_.HasExited})){Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue}
+  $reports=@(if($owned.Count){Get-CimInstance Win32_Process -Filter "Name='WerFault.exe' or Name='WerFaultSecure.exe'"|Where-Object {$_.CommandLine -match ('\s-p\s+('+(@($owned.Keys) -join '|')+')(\s|$)')}})
+  foreach($report in $reports){Stop-Process -Id $report.ProcessId -Force -ErrorAction SilentlyContinue}
+  # Windows itself (csrss) shows a system error that Settings raises, and this capture can't close it, so the run reports it and fails.
+  $popups=@(SettingsPopups $opened)
+  $evidence.settings[$Stage+'-cleanup']=[ordered]@{processes=@($owned.Keys);errorReports=@($reports|ForEach-Object {$_.ProcessId});systemErrors=$popups}
  }
+ Check (-not$popups.Count) ('Windows Settings opens without a system error, saw: '+($popups -join '; '))|Out-Host
+ return $state
 }
 $catalog=Get-Content -Raw -LiteralPath (Join-Path $Source 'backend\catalogs\windows-tweaks.json')|ConvertFrom-Json
 $definition=@($catalog.settings|Where-Object {$_.id -ceq $SettingId})
@@ -126,21 +112,6 @@ $dotnet=@((Join-Path $env:LOCALAPPDATA 'Microsoft\dotnet\dotnet.exe'),(Join-Path
 if(-not$dotnet){throw 'No .NET SDK was found for the test build.'}
 $dotnet=$dotnet[0]
 $parent='Software\RooIndustriesTweakTests';$fixture=$parent+'\'+[Guid]::NewGuid().ToString('N');$recovery=$fixture+'\Recovery';$journal=$parent+'\RowApplyRecovery'
-# The journal outlives this run: it holds each value's original kind and bytes, the last value this capture or the app wrote, and a write that may have happened.
-# A later run restores a value only while it still reads as one of those writes; anything else was changed by another program and is left as it is.
-function State($Item){if($null -eq $Item){return $null};[ordered]@{exists=[bool]$Item.exists;type=$(if($Item.exists){[int]$Item.type}else{$null});data=$(if($Item.exists){[string]$Item.data}else{$null})}}
-function SaveJournal{$key=[Microsoft.Win32.Registry]::CurrentUser.CreateSubKey($journal);try{$key.SetValue('Record',(ConvertTo-Json -InputObject $record -Depth 6 -Compress),[Microsoft.Win32.RegistryValueKind]::String)}finally{$key.Dispose()}}
-function Mark($Entry,$Target,[switch]$Done){if($Done){$Entry.written=State $Target;$Entry.pending=$null}else{$Entry.pending=State $Target}}
-function Recover($Record){
- $result=[ordered]@{restored=@();conflicts=@();errors=@()}
- foreach($entry in @($Record.values)){try{
-  $now=ReadValue $entry
-  if(Same $now $entry.original){continue}
-  if(@(@($entry.written,$entry.pending)|Where-Object {$_ -and (Same $now $_)}).Count){WriteValue $entry $entry.original;if(-not(Same (ReadValue $entry) $entry.original)){throw 'the restored value does not read back'};$result.restored+=@($entry.valueName+' back to '+(Describe $entry.original))}
-  else{$result.conflicts+=@($entry.valueName+' was changed by something else to '+(Describe $now)+'; left as it is')}
- }catch{$result.errors+=@($entry.valueName+': '+$_.Exception.Message)}}
- return $result
-}
 function DropJournal([bool]$OwnsParent){
  if(Test-Path -LiteralPath ('HKCU:\'+$journal)){Remove-Item -LiteralPath ('HKCU:\'+$journal) -Force}
  if($OwnsParent -and (Test-Path -LiteralPath ('HKCU:\'+$parent))){$left=Get-Item -LiteralPath ('HKCU:\'+$parent);if($left.SubKeyCount -eq 0 -and $left.ValueCount -eq 0){Remove-Item -LiteralPath ('HKCU:\'+$parent) -Force}}
@@ -151,6 +122,7 @@ $record=$null
 $app=$null;$status='fail';$evidence.restored=$false
 try{
  if(@(Get-Process -Name 'RooIndustries.OptimizationSuite.App' -ErrorAction SilentlyContinue).Count){throw 'The Suite is already open; this capture does not take over another window.'}
+ if(@(SystemErrors).Count){throw ('A system error dialog is open and would cover the screenshots: '+((SystemErrors) -join '; '))}
  $previous=Get-ItemProperty -LiteralPath ('HKCU:\'+$journal) -Name 'Record' -ErrorAction SilentlyContinue
  if($previous){
   $left=ConvertFrom-Json $previous.Record
@@ -163,8 +135,8 @@ try{
  $evidence.values=@($values|ForEach-Object {[ordered]@{hive=$_.address.hive;keyPath=$_.address.keyPath;valueName=$_.address.valueName;expected=(Describe $_.expected)}})
  $record=[ordered]@{parentExisted=$parentExisted;values=@(foreach($value in $values){[ordered]@{hive=$value.address.hive;keyPath=$value.address.keyPath;valueName=$value.address.valueName;original=(State $originals[$value.address.valueName.ToUpperInvariant()]);written=$null;pending=$null}})}
  $entries=@{};foreach($entry in $record.values){$entries[$entry.valueName.ToUpperInvariant()]=$entry}
- SaveJournal
- foreach($value in $values){$key=$value.address.valueName.ToUpperInvariant();if($seeds.ContainsKey($key)){Mark $entries[$key] $seeds[$key];SaveJournal;WriteValue $value.address $seeds[$key];Mark $entries[$key] $seeds[$key] -Done;SaveJournal}}
+ SaveJournal $record
+ foreach($value in $values){$key=$value.address.valueName.ToUpperInvariant();if($seeds.ContainsKey($key)){Mark $entries[$key] $seeds[$key];SaveJournal $record;WriteValue $value.address $seeds[$key];Mark $entries[$key] $seeds[$key] -Done;SaveJournal $record}}
  $seeded=Snapshot 'seeded';RegQuery 'seeded'
  foreach($value in $values){$key=$value.address.valueName.ToUpperInvariant();if($seeds.ContainsKey($key)){Check (Same $seeded[$value.address.valueName].state $seeds[$key]) ('Seeded '+$value.address.valueName+' reads back as '+(Describe $seeds[$key]))}}
  if($SettingsRestored){Check ((SettingsToggle 'seeded') -eq $SettingsRestored) ('Windows Settings shows '+$SettingsToggle+' '+$SettingsRestored+' before the change')}
@@ -192,6 +164,7 @@ try{
  if(-not$ReadOnly){Check ($before -notin "Couldn't check",'Not available here') ('The row reads its value on this PC, saw: '+$before)}
  # The page keeps every row's controls disabled until it finishes reading Windows features.
  WaitFor {$switch=ById $window ($SettingId+'.select');$picker=ById $window ($SettingId+'.value');$switch -and $switch.Current.IsEnabled -and (-not$picker -or $picker.Current.IsOffscreen -or $picker.Current.IsEnabled)} 240 'the row to accept changes'|Out-Null
+ WaitFor {$text=Status $window;if($text -and $text -notlike '*checking Windows features*'){$text}} 240 'the page to finish reading Windows features'|Out-Null
  [RooIndustriesRowApply]::SetWindowPos($hwnd,[IntPtr]::new(-1),0,0,0,0,0x0003)|Out-Null
  [RooIndustriesRowApply]::SetForegroundWindow($hwnd)|Out-Null
  Start-Sleep -Milliseconds 1500
@@ -215,7 +188,7 @@ try{
  $evidence.reviewApply=[ordered]@{status=(Status $window);lines=@(ReviewLines $window)}
  Shot $window 'review-apply'
  $approval.GetCurrentPattern([Windows.Automation.TogglePattern]::Pattern).Toggle()
- foreach($value in $values){Mark $entries[$value.address.valueName.ToUpperInvariant()] $value.expected};SaveJournal
+ foreach($value in $values){Mark $entries[$value.address.valueName.ToUpperInvariant()] $value.expected};SaveJournal $record
  (ById $window 'WindowsTweaksApply').GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
  $applied=WaitFor {$text=Status $window;if($text -in 'Windows settings saved','Profile saved' -or $text -like '*attention*' -or $text -like '*not confirmed*' -or $text -like '*failed*'){$text}} 180 'Apply to finish'
  Check ($applied -eq 'Windows settings saved') ('Apply finishes with Windows settings saved, saw: '+$applied)
@@ -225,7 +198,7 @@ try{
  Shot $window 'applied'
  $after=Snapshot 'applied';RegQuery 'applied'
  foreach($value in $values){Check (Same $after[$value.address.valueName].state $value.expected) ('Windows reads '+$value.address.valueName+' as '+(Describe $value.expected)+' after Apply')}
- foreach($value in $values){Mark $entries[$value.address.valueName.ToUpperInvariant()] $value.expected -Done};SaveJournal
+ foreach($value in $values){Mark $entries[$value.address.valueName.ToUpperInvariant()] $value.expected -Done};SaveJournal $record
  Start-Sleep -Seconds 10
  $held=Snapshot 'held'
  foreach($value in $values){Check (Same $held[$value.address.valueName].state $value.expected) ($value.address.valueName+' still reads '+(Describe $value.expected)+' ten seconds later')}
@@ -239,7 +212,7 @@ try{
  $evidence.reviewUndo=[ordered]@{status=(Status $window);lines=@(ReviewLines $window)}
  Shot $window 'review-undo'
  $approval.GetCurrentPattern([Windows.Automation.TogglePattern]::Pattern).Toggle()
- foreach($value in $values){Mark $entries[$value.address.valueName.ToUpperInvariant()] $seeded[$value.address.valueName].state};SaveJournal
+ foreach($value in $values){Mark $entries[$value.address.valueName.ToUpperInvariant()] $seeded[$value.address.valueName].state};SaveJournal $record
  (ById $window 'WindowsTweaksApply').GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
  $undone=WaitFor {$text=Status $window;if($text -in 'Windows settings saved','Profile saved','Saved choices removed' -or $text -like '*attention*' -or $text -like '*not confirmed*' -or $text -like '*failed*'){$text}} 180 'Undo to finish'
  Check ($undone -eq 'Windows settings saved') ('Undo finishes with Windows settings saved, saw: '+$undone)
@@ -250,7 +223,7 @@ try{
  Check (-not$evidence.undone.undoAvailable) 'Nothing is left to undo after Undo'
  $back=Snapshot 'undone';RegQuery 'undone'
  foreach($value in $values){Check (Same $back[$value.address.valueName].state $seeded[$value.address.valueName].state) ('Undo puts '+$value.address.valueName+' back to '+$seeded[$value.address.valueName].text)}
- foreach($value in $values){Mark $entries[$value.address.valueName.ToUpperInvariant()] $seeded[$value.address.valueName].state -Done};SaveJournal
+ foreach($value in $values){Mark $entries[$value.address.valueName.ToUpperInvariant()] $seeded[$value.address.valueName].state -Done};SaveJournal $record
  [RooIndustriesRowApply]::SetWindowPos($hwnd,[IntPtr]::new(-2),0,0,0,0,0x0003)|Out-Null
  if($SettingsRestored){Check ((SettingsToggle 'undone') -eq $SettingsRestored) ('Windows Settings shows '+$SettingsToggle+' '+$SettingsRestored+' after Undo')}
  $window.GetCurrentPattern([Windows.Automation.WindowPattern]::Pattern).Close()
