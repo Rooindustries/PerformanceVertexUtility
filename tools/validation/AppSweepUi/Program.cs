@@ -44,6 +44,13 @@ if (args is ["governor-left-as-set"])
     return;
 }
 
+if (args is ["background-limits"])
+{
+    await BackgroundLimitsChecks.RunAsync(Check);
+    Console.WriteLine($"Completed {count} background limits checks.");
+    return;
+}
+
 if (args is ["poll-guard"])
 {
     await PollGuardChecks.RunAsync(Check);
@@ -574,6 +581,7 @@ if (args is ["governor-task", var taskRoot, var taskName, var registered, var en
 if (args is [] or ["game-tune-restore-skips"]) await GameTuneRestoreChecks.SkipReasonsAsync(Check);
 if (args is ["game-tune-restore-skips"]) { Console.WriteLine($"Completed {count} game restore explanation checks."); return; }
 
+if (args is []) await BackgroundLimitsChecks.RunAsync(Check);
 if (args is [] or ["governor"]) await GovernorChecks.RunAsync(Check);
 if (args is ["governor"]) { Console.WriteLine($"Completed {count} governor status checks."); return; }
 

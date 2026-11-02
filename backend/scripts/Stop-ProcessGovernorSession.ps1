@@ -22,6 +22,18 @@ function New-GovernorAlreadyClosedItem {
     }
 }
 
+$script:GovernorNewerRunHolds = 'A newer Background limits run still holds this setting. Restore that run first.'
+
+function Get-GovernorKeptControl {
+    param([object]$Entry,[System.Diagnostics.Process]$Process,[string]$Control,[object]$Applied,[object]$Original)
+    try { $now = Get-RooIndustriesProcessControlReadback $Process $Control } catch { return $null }
+    if ([string]::IsNullOrWhiteSpace([string]$now) -or (Test-RooIndustriesControlValueEqual $Control $now $Applied)) { return $null }
+    if (Test-RooIndustriesProcessGovernorNewerRunHolds $script:GovernorSessionDirectory $Entry $Control) { return $script:GovernorNewerRunHolds }
+    $owner = Get-RooIndustriesRestoreControlOwnershipReason $Process $Control
+    if (-not [string]::IsNullOrWhiteSpace($owner)) { return $owner }
+    return New-RooIndustriesLeftAsSetItem $Entry ([pscustomobject]@{ control = $Control; currentValue = $now; appliedValue = $Applied; originalValue = $Original })
+}
+
 function New-GovernorRestorePreview {
     param(
         [object]$Snapshot,
@@ -146,256 +158,305 @@ function New-GovernorRestorePreview {
     }
 }
 
-try {
-    $session = $null
-    $resolvedSessionPath = $null
-    if (-not [string]::IsNullOrWhiteSpace($SessionId) -or -not [string]::IsNullOrWhiteSpace($SessionPath)) {
-        $resolvedSessionPath = Resolve-RooIndustriesProcessGovernorSessionFile $SessionId $SessionPath $StateRoot
-        if ([string]::IsNullOrWhiteSpace($resolvedSessionPath) -or -not (Test-Path -LiteralPath $resolvedSessionPath)) {
-            throw 'The selected process governor session file was not found.'
-        }
-        $session = Read-RooIndustriesJsonFile $resolvedSessionPath
-    }
-    if ([string]::IsNullOrWhiteSpace($BackupPath)) {
-        if ($null -eq $session) {
-            $resolvedSessionPath = Resolve-RooIndustriesProcessGovernorSessionFile $SessionId $SessionPath $StateRoot
-        }
-        if ($resolvedSessionPath -and (Test-Path -LiteralPath $resolvedSessionPath)) {
-            if ($null -eq $session) { $session = Read-RooIndustriesJsonFile $resolvedSessionPath }
-            $BackupPath = [string](Get-RooIndustriesPropertyValue $session 'backupManifestPath' '')
-        }
-    }
-    if ([string]::IsNullOrWhiteSpace($BackupPath)) {
-        throw 'No process governor backup path was provided or found for the selected session.'
-    }
-    $resolvedBackupPath = Resolve-RooIndustriesPath $BackupPath $BackupPath
-    $backup = Read-RooIndustriesJsonFile $resolvedBackupPath
-    $backupDryRun = Get-RooIndustriesPropertyValue $backup 'dryRun' $null
-    if ([string](Get-RooIndustriesPropertyValue $backup 'actionId' '') -cne 'performance.governor.startSession' -or $backupDryRun -isnot [bool] -or $backupDryRun) {
-        throw 'The process governor backup is not a confirmed backup for this session type.'
-    }
-    $sessionIdValue = [string](Get-RooIndustriesPropertyValue $backup 'sessionId' '')
-    $profileId = [string](Get-RooIndustriesPropertyValue $backup 'profileId' '')
-    if ([string]::IsNullOrWhiteSpace($sessionIdValue) -or [string]::IsNullOrWhiteSpace($profileId)) {
-        throw 'The process governor backup identity is incomplete.'
-    }
-    if (-not [string]::IsNullOrWhiteSpace($SessionId) -and $SessionId -cne $sessionIdValue) {
-        throw 'The process governor session ID does not match the selected backup.'
-    }
-    if ($null -eq $session) {
-        $candidateSessionPath = Resolve-RooIndustriesProcessGovernorSessionFile $sessionIdValue '' $StateRoot
-        if ($candidateSessionPath -and (Test-Path -LiteralPath $candidateSessionPath)) {
-            $resolvedSessionPath = $candidateSessionPath
-            $session = Read-RooIndustriesJsonFile $resolvedSessionPath
-        }
-    }
-    if ($null -ne $session) {
-        $sessionBackupPath = [string](Get-RooIndustriesPropertyValue $session 'backupManifestPath' '')
-        $recordedSessionPath = [string](Get-RooIndustriesPropertyValue $session 'sessionPath' '')
-        if ([string](Get-RooIndustriesPropertyValue $session 'sessionId' '') -cne $sessionIdValue -or
-            [string](Get-RooIndustriesPropertyValue $session 'profileId' '') -cne $profileId -or
-            [string]::IsNullOrWhiteSpace($sessionBackupPath) -or
-            -not [string]::Equals((Resolve-RooIndustriesPath $sessionBackupPath $sessionBackupPath), $resolvedBackupPath, [StringComparison]::OrdinalIgnoreCase) -or
-            (-not [string]::IsNullOrWhiteSpace($recordedSessionPath) -and -not [string]::Equals((Get-RooIndustriesProcessGovernorSessionFileFromPath $recordedSessionPath), $resolvedSessionPath, [StringComparison]::OrdinalIgnoreCase))) {
-            throw 'The process governor session and backup identity do not match.'
-        }
-    }
-    $startedAtUtc = Get-RooIndustriesUtcStamp
-
-    $preview = New-Object System.Collections.Generic.List[object]
-    $snapshotList=@(Get-RooIndustriesPropertyArray $backup 'snapshots')
-    $seenIdentities=@{}
-    for($snapshotIndex=$snapshotList.Count-1;$snapshotIndex -ge 0;$snapshotIndex--) {
-        $snapshot=$snapshotList[$snapshotIndex]
-        $identityKey=([string](Get-RooIndustriesPropertyValue $snapshot 'processId' 0))+'|'+([string](Get-RooIndustriesPropertyValue $snapshot 'processStartTimeUtc' ''))+'|'+([string](Get-RooIndustriesPropertyValue $snapshot 'executablePath' ''))
-        if($seenIdentities.ContainsKey($identityKey)){continue}
-        $seenIdentities[$identityKey]=$true
-        $candidate = Get-RooIndustriesProcessGovernorLiveIdentity ([pscustomobject]@{
-            processId = Get-RooIndustriesPropertyValue $snapshot 'processId' 0
-            processName = Get-RooIndustriesPropertyValue $snapshot 'processName' ''
-            executablePath = Get-RooIndustriesPropertyValue $snapshot 'executablePath' $null
-            processStartTimeUtc = Get-RooIndustriesPropertyValue $snapshot 'processStartTimeUtc' $null
-            controlChanges = @(Get-RooIndustriesPreviewControlChanges $snapshot)
-        })
-        $preview.Add((New-GovernorRestorePreview $snapshot $candidate)) | Out-Null
-    }
-
-    $changed = New-Object System.Collections.Generic.List[object]
-    $skipped = New-Object System.Collections.Generic.List[object]
-    $alreadyClosed = New-Object System.Collections.Generic.List[object]
-    $restored = New-Object System.Collections.Generic.List[object]
-    if ($ConfirmApply) {
-        foreach ($entry in @($preview.ToArray())) {
-            if ([bool](Get-RooIndustriesPropertyValue $entry 'blocked' $false)) {
-                if (@(Get-RooIndustriesPropertyArray $entry 'reasonCodes') -contains 'PROCESS_GOVERNOR_ALREADY_CLOSED') {
-                    $alreadyClosed.Add((New-GovernorAlreadyClosedItem $entry)) | Out-Null
-                    continue
-                }
-                $skip = [pscustomobject]@{
-                    processId = Get-RooIndustriesPropertyValue $entry 'processId' 0
-                    processName = Get-RooIndustriesPropertyValue $entry 'processName' ''
-                    reason = Get-RooIndustriesPropertyValue $entry 'blockedReason' 'Restore entry is blocked.'
-                    skippedAtUtc = Get-RooIndustriesUtcStamp
-                }
-                $skipped.Add($skip) | Out-Null
-                continue
-            }
-            $processId = [int](Get-RooIndustriesPropertyValue $entry 'processId' 0)
-            $identity = Get-RooIndustriesProcessGovernorLiveIdentity $entry
-            if (-not $identity.exists -or -not $identity.matches) {
-                if ($identity.instanceEnded) {
-                    $alreadyClosed.Add((New-GovernorAlreadyClosedItem $entry)) | Out-Null
-                    continue
-                }
-                $skipped.Add([pscustomobject]@{
-                    processId = $processId
-                    processName = Get-RooIndustriesPropertyValue $entry 'processName' ''
-                    reason = $identity.reason
-                    skippedAtUtc = Get-RooIndustriesUtcStamp
-                }) | Out-Null
-                continue
-            }
-            $live = $identity.process
-            $entrySkipStart = $skipped.Count
-            foreach ($control in @(Get-RooIndustriesPreviewControlChanges $entry | Where-Object { $_.blocked })) {
-                $skipped.Add([pscustomobject]@{ processId = $processId; processName = $entry.processName; control = $control.control; reason = $control.blockedReason; skippedAtUtc = Get-RooIndustriesUtcStamp }) | Out-Null
-            }
-            $entryControlChanges = @(Get-RooIndustriesGovernorApplicableControlChanges @(Get-RooIndustriesPreviewControlChanges $entry))
-            if ($entryControlChanges.Count -eq 0) { continue }
-            $appliedControls = New-Object System.Collections.Generic.List[object]
-            $failedControls = New-Object System.Collections.Generic.List[string]
-            foreach ($change in $entryControlChanges) {
-                try {
-                    Invoke-RooIndustriesProcessControlChange $live $change
-                    $appliedControls.Add($change) | Out-Null
-                } catch {
-                    $failedControls.Add("$([string](Get-RooIndustriesPropertyValue $change 'control' 'unknown')): $($_.Exception.Message)") | Out-Null
-                }
-            }
-            if ($appliedControls.Count -gt 0) {
-                $afterControls = Get-RooIndustriesProcessControlState $processId $null -ReadGpu:(Test-RooIndustriesEntryHasGpuControl $entry)
-                $restoreItem = [pscustomobject]@{
-                    processId = $processId
-                    processName = Get-RooIndustriesPropertyValue $entry 'processName' ''
-                    restoredPriorityClass = $afterControls.priorityClass
-                    restoredAffinityMask = $afterControls.affinityMask
-                    restoredIoPriority = $afterControls.ioPriority
-                    restoredMemoryPriority = $afterControls.memoryPriority
-                    restoredGpuPriority = $afterControls.gpuPriority
-                    restoredControls = @($appliedControls.ToArray())
-                    ruleId = Get-RooIndustriesPropertyValue $entry 'ruleId' ''
-                    restoredAtUtc = Get-RooIndustriesUtcStamp
-                }
-                $restored.Add($restoreItem) | Out-Null
-                $changed.Add($restoreItem) | Out-Null
-            }
-            $exitedDuringRestore = $false
-            if ($failedControls.Count -gt 0 -or $skipped.Count -gt $entrySkipStart) {
-                try { $exitedDuringRestore = $live.HasExited } catch { $exitedDuringRestore = $false }
-            }
-            if ($exitedDuringRestore) {
-                while ($skipped.Count -gt $entrySkipStart) { $skipped.RemoveAt($skipped.Count - 1) }
-                if ($failedControls.Count -gt 0) { $alreadyClosed.Add((New-GovernorAlreadyClosedItem $entry)) | Out-Null }
-                continue
-            }
-            if ($failedControls.Count -gt 0) {
-                $skipped.Add([pscustomobject]@{
-                    processId = $processId
-                    processName = Get-RooIndustriesPropertyValue $entry 'processName' ''
-                    reason = $failedControls -join '; '
-                    skippedAtUtc = Get-RooIndustriesUtcStamp
-                }) | Out-Null
-            }
-        }
-    } else {
-        foreach ($entry in @($preview.ToArray())) {
-            if ([bool](Get-RooIndustriesPropertyValue $entry 'blocked' $false)) {
-                if (@(Get-RooIndustriesPropertyArray $entry 'reasonCodes') -contains 'PROCESS_GOVERNOR_ALREADY_CLOSED') {
-                    $alreadyClosed.Add((New-GovernorAlreadyClosedItem $entry)) | Out-Null
-                    continue
-                }
-                $skipped.Add([pscustomobject]@{
-                    processId = Get-RooIndustriesPropertyValue $entry 'processId' 0
-                    processName = Get-RooIndustriesPropertyValue $entry 'processName' ''
-                    reason = Get-RooIndustriesPropertyValue $entry 'blockedReason' 'Restore entry is blocked.'
-                    skippedAtUtc = Get-RooIndustriesUtcStamp
-                }) | Out-Null
-            }
-        }
-    }
-
-    $status = if ($ConfirmApply) {
-        if ($restored.Count -gt 0 -and $skipped.Count -gt 0) { 'partial' }
-        elseif ($restored.Count -gt 0) { 'completed' }
-        elseif ($skipped.Count -gt 0) { 'failed' }
-        else { 'completed' }
-    } else {
-        'preview'
-    }
-    $sessionStatus = if ($status -eq 'partial') { 'completed' } else { $status }
-    $warnings = New-Object System.Collections.Generic.List[object]
-    if (-not $ConfirmApply) {
-        $warnings.Add((New-RooIndustriesIssue 'PROCESS_GOVERNOR_RESTORE_PREVIEW_ONLY' 'Governor restore preview did not change any process because -ConfirmApply was omitted.' 'info' 'performance.governor' $resolvedBackupPath $false 'Rerun with -ConfirmApply only after reviewing the restore preview.' $null)) | Out-Null
-    }
-    $closedText = if ($alreadyClosed.Count -gt 0) { ' Already closed or restarted, so nothing remained to restore: ' + (($alreadyClosed | ForEach-Object { $_.processName + ' (PID ' + $_.processId + ')' }) -join ', ') + '.' } else { '' }
-    $skippedOut = @($skipped.ToArray()) + @($alreadyClosed.ToArray())
-    $summary = if ($ConfirmApply) {
-        "Process governor restore completed with $($restored.Count) restored item(s) and $($skipped.Count) skipped item(s)." + $closedText
-    } else {
-        'Process governor restore preview completed. No process changes were applied.'
-    }
-    $backupMetadata = New-RooIndustriesProcessGovernorBackupMetadata $backup $resolvedBackupPath
-    $result = [pscustomobject]@{
-        resultId = "process-governor-restore-$(Get-RooIndustriesFileStamp)"
-        status = if ($status -eq 'completed' -and $ConfirmApply) { 'rolledBack' } elseif ($status -eq 'preview') { 'preview' } else { $status }
-        startedAtUtc = $startedAtUtc
-        completedAtUtc = Get-RooIndustriesUtcStamp
-        summary = $summary
-        changedItems = @($changed.ToArray())
-        skippedItems = $skippedOut
-        restoredItems = @($restored.ToArray())
-        artifacts = @([pscustomobject]@{ type = 'processGovernorSessionBackup'; path = $resolvedBackupPath })
-    }
-    $envelope = [pscustomobject]@{
+function Write-GovernorStopBusyEnvelope {
+    $message = 'Another Background limits run is still going, so Restore did not change anything. Try again once it finishes.'
+    $busy = [pscustomobject]@{
         actionId = 'performance.governor.stopSession'
         schemaVersion = 1
         productName = $script:RooIndustriesProcessProductName
-        correlationId = $sessionIdValue
-        sessionId = $sessionIdValue
-        dryRun = (-not $ConfirmApply)
-        profileId = $profileId
-        status = $status
-        sessionStatus = $sessionStatus
-        startedAtUtc = $startedAtUtc
+        correlationId = $SessionId
+        sessionId = if ([string]::IsNullOrWhiteSpace($SessionId)) { $null } else { $SessionId }
+        dryRun = $false
+        profileId = $null
+        status = 'failed'
+        sessionStatus = 'failed'
+        startedAtUtc = $null
         completedAtUtc = Get-RooIndustriesUtcStamp
-        sessionPath = $resolvedSessionPath
-        backupManifestPath = $resolvedBackupPath
-        restorable = (-not $ConfirmApply -or $status -in @('partial', 'failed'))
-        preview = @($preview.ToArray())
-        changedItems = @($changed.ToArray())
-        skippedItems = $skippedOut
-        restoredItems = @($restored.ToArray())
-        backup = $backupMetadata
-        result = $result
-        warnings = @($warnings.ToArray())
-        errors = @()
-        logs = @((New-RooIndustriesLog $summary))
+        sessionPath = $SessionPath
+        backupManifestPath = $BackupPath
+        restorable = $true
+        preview = @()
+        changedItems = @()
+        skippedItems = @()
+        restoredItems = @()
+        backup = $null
+        result = $null
+        warnings = @()
+        errors = @((New-RooIndustriesIssue 'PROCESS_GOVERNOR_RUN_BUSY' $message 'warning' 'performance.governor' $BackupPath $true 'Try again once the other Background limits run finishes.' $null))
+        logs = @((New-RooIndustriesLog $message 'warning'))
     }
+    Write-RooIndustriesJsonOutput $busy $OutputPath
+}
 
-    if ($ConfirmApply -and $resolvedSessionPath -and (Test-Path -LiteralPath $resolvedSessionPath)) {
-        $session = Read-RooIndustriesJsonFile $resolvedSessionPath
-        $session.sessionStatus = $sessionStatus
-        $session.status = $sessionStatus
-        $session.restorable = ($status -in @('partial', 'failed'))
-        $session.activeRestraints = @()
-        $session.restoredItems = @($restored.ToArray())
-        $session.skippedItems = $skippedOut
-        $session.completedAtUtc = Get-RooIndustriesUtcStamp
-        Write-RooIndustriesProcessGovernorJsonFile $session $resolvedSessionPath
-        Add-RooIndustriesProcessGovernorLogFileEntry (Split-Path $resolvedSessionPath -Parent) (New-RooIndustriesLog $summary)
+try {
+    Invoke-RooIndustriesProcessGovernorRun -ConfirmApply:$ConfirmApply -Wait ([TimeSpan]::FromSeconds(20)) -Busy ${function:Write-GovernorStopBusyEnvelope} -Action {
+        $session = $null
+        $resolvedSessionPath = $null
+        if (-not [string]::IsNullOrWhiteSpace($SessionId) -or -not [string]::IsNullOrWhiteSpace($SessionPath)) {
+            $resolvedSessionPath = Resolve-RooIndustriesProcessGovernorSessionFile $SessionId $SessionPath $StateRoot
+            if ([string]::IsNullOrWhiteSpace($resolvedSessionPath) -or -not (Test-Path -LiteralPath $resolvedSessionPath)) {
+                throw 'The selected process governor session file was not found.'
+            }
+            $session = Read-RooIndustriesProcessGovernorJson $resolvedSessionPath
+        }
+        if ([string]::IsNullOrWhiteSpace($BackupPath)) {
+            if ($null -eq $session) {
+                $resolvedSessionPath = Resolve-RooIndustriesProcessGovernorSessionFile $SessionId $SessionPath $StateRoot
+            }
+            if ($resolvedSessionPath -and (Test-Path -LiteralPath $resolvedSessionPath)) {
+                if ($null -eq $session) { $session = Read-RooIndustriesProcessGovernorJson $resolvedSessionPath }
+                $BackupPath = [string](Get-RooIndustriesPropertyValue $session 'backupManifestPath' '')
+            }
+        }
+        if ([string]::IsNullOrWhiteSpace($BackupPath)) {
+            throw 'No process governor backup path was provided or found for the selected session.'
+        }
+        $resolvedBackupPath = Resolve-RooIndustriesPath $BackupPath $BackupPath
+        $backup = Read-RooIndustriesProcessGovernorJson $resolvedBackupPath
+        $backupDryRun = Get-RooIndustriesPropertyValue $backup 'dryRun' $null
+        if ([string](Get-RooIndustriesPropertyValue $backup 'actionId' '') -cne 'performance.governor.startSession' -or $backupDryRun -isnot [bool] -or $backupDryRun) {
+            throw 'The process governor backup is not a confirmed backup for this session type.'
+        }
+        $sessionIdValue = [string](Get-RooIndustriesPropertyValue $backup 'sessionId' '')
+        $profileId = [string](Get-RooIndustriesPropertyValue $backup 'profileId' '')
+        if ([string]::IsNullOrWhiteSpace($sessionIdValue) -or [string]::IsNullOrWhiteSpace($profileId)) {
+            throw 'The process governor backup identity is incomplete.'
+        }
+        if (-not [string]::IsNullOrWhiteSpace($SessionId) -and $SessionId -cne $sessionIdValue) {
+            throw 'The process governor session ID does not match the selected backup.'
+        }
+        if ($null -eq $session) {
+            $candidateSessionPath = Resolve-RooIndustriesProcessGovernorSessionFile $sessionIdValue '' $StateRoot
+            if ($candidateSessionPath -and (Test-Path -LiteralPath $candidateSessionPath)) {
+                $resolvedSessionPath = $candidateSessionPath
+                $session = Read-RooIndustriesProcessGovernorJson $resolvedSessionPath
+            }
+        }
+        if ($null -ne $session) {
+            $sessionBackupPath = [string](Get-RooIndustriesPropertyValue $session 'backupManifestPath' '')
+            $recordedSessionPath = [string](Get-RooIndustriesPropertyValue $session 'sessionPath' '')
+            if ([string](Get-RooIndustriesPropertyValue $session 'sessionId' '') -cne $sessionIdValue -or
+                [string](Get-RooIndustriesPropertyValue $session 'profileId' '') -cne $profileId -or
+                [string]::IsNullOrWhiteSpace($sessionBackupPath) -or
+                -not [string]::Equals((Resolve-RooIndustriesPath $sessionBackupPath $sessionBackupPath), $resolvedBackupPath, [StringComparison]::OrdinalIgnoreCase) -or
+                (-not [string]::IsNullOrWhiteSpace($recordedSessionPath) -and -not [string]::Equals((Get-RooIndustriesProcessGovernorSessionFileFromPath $recordedSessionPath), $resolvedSessionPath, [StringComparison]::OrdinalIgnoreCase))) {
+                throw 'The process governor session and backup identity do not match.'
+            }
+        }
+        $startedAtUtc = Get-RooIndustriesUtcStamp
+        $script:GovernorSessionDirectory = Split-Path $(if ($resolvedSessionPath) { $resolvedSessionPath } else { $resolvedBackupPath }) -Parent
+
+        $preview = New-Object System.Collections.Generic.List[object]
+        foreach ($snapshot in @(Get-RooIndustriesProcessGovernorLatestSnapshots $backup)) {
+            $preview.Add((New-GovernorRestorePreview $snapshot (Get-RooIndustriesProcessGovernorSnapshotIdentity $snapshot))) | Out-Null
+        }
+
+        $changed = New-Object System.Collections.Generic.List[object]
+        $skipped = New-Object System.Collections.Generic.List[object]
+        $alreadyClosed = New-Object System.Collections.Generic.List[object]
+        $restored = New-Object System.Collections.Generic.List[object]
+        $leftAsSet = New-Object System.Collections.Generic.List[object]
+        if ($ConfirmApply) {
+            foreach ($entry in @($preview.ToArray())) {
+                if ([bool](Get-RooIndustriesPropertyValue $entry 'blocked' $false)) {
+                    if (@(Get-RooIndustriesPropertyArray $entry 'reasonCodes') -contains 'PROCESS_GOVERNOR_ALREADY_CLOSED') {
+                        $alreadyClosed.Add((New-GovernorAlreadyClosedItem $entry)) | Out-Null
+                        continue
+                    }
+                    $skip = [pscustomobject]@{
+                        processId = Get-RooIndustriesPropertyValue $entry 'processId' 0
+                        processName = Get-RooIndustriesPropertyValue $entry 'processName' ''
+                        reason = Get-RooIndustriesPropertyValue $entry 'blockedReason' 'Restore entry is blocked.'
+                        skippedAtUtc = Get-RooIndustriesUtcStamp
+                    }
+                    $skipped.Add($skip) | Out-Null
+                    continue
+                }
+                $processId = [int](Get-RooIndustriesPropertyValue $entry 'processId' 0)
+                $identity = Get-RooIndustriesProcessGovernorLiveIdentity $entry
+                if (-not $identity.exists -or -not $identity.matches) {
+                    if ($identity.instanceEnded) {
+                        $alreadyClosed.Add((New-GovernorAlreadyClosedItem $entry)) | Out-Null
+                        continue
+                    }
+                    $skipped.Add([pscustomobject]@{
+                        processId = $processId
+                        processName = Get-RooIndustriesPropertyValue $entry 'processName' ''
+                        reason = $identity.reason
+                        skippedAtUtc = Get-RooIndustriesUtcStamp
+                    }) | Out-Null
+                    continue
+                }
+                $live = $identity.process
+                $entrySkipStart = $skipped.Count
+                $entryLeftStart = $leftAsSet.Count
+                foreach ($control in @(Get-RooIndustriesPreviewControlChanges $entry | Where-Object { $_.blocked })) {
+                    $reason = $control.blockedReason
+                    if (Test-RooIndustriesGovernorChangeLeftAsSet $control) {
+                        $kept = Get-GovernorKeptControl $entry $live ([string]$control.control) (Get-RooIndustriesPropertyValue $control 'appliedValue' $null) $control.proposedValue
+                        if ($kept -is [string]) { $reason = $kept }
+                        elseif ($null -ne $kept) { $leftAsSet.Add($kept) | Out-Null; continue }
+                    }
+                    $skipped.Add([pscustomobject]@{ processId = $processId; processName = $entry.processName; control = $control.control; reason = $reason; skippedAtUtc = Get-RooIndustriesUtcStamp }) | Out-Null
+                }
+                $entryControlChanges = @(Get-RooIndustriesGovernorApplicableControlChanges @(Get-RooIndustriesPreviewControlChanges $entry))
+                if ($entryControlChanges.Count -eq 0) { continue }
+                $appliedControls = New-Object System.Collections.Generic.List[object]
+                $failedControls = New-Object System.Collections.Generic.List[string]
+                foreach ($change in $entryControlChanges) {
+                    $name = [string](Get-RooIndustriesPropertyValue $change 'control' '')
+                    if (Test-RooIndustriesProcessGovernorNewerRunHolds $script:GovernorSessionDirectory $entry $name) {
+                        $failedControls.Add($name + ': ' + $script:GovernorNewerRunHolds) | Out-Null
+                        continue
+                    }
+                    $owner = Get-RooIndustriesRestoreControlOwnershipReason $live $name
+                    if (-not [string]::IsNullOrWhiteSpace($owner)) {
+                        $failedControls.Add($name + ': ' + $owner) | Out-Null
+                        continue
+                    }
+                    try {
+                        Invoke-RooIndustriesProcessControlChange $live $change
+                        $appliedControls.Add($change) | Out-Null
+                    } catch {
+                        $failure = $_.Exception.Message
+                        if ($failure -ceq $script:RooIndustriesChangedExternally) {
+                            $kept = Get-GovernorKeptControl $entry $live ([string](Get-RooIndustriesPropertyValue $change 'control' '')) (Get-RooIndustriesPropertyValue $change 'currentValue' $null) $change.proposedValue
+                            if ($kept -is [string]) { $failure = $kept }
+                            elseif ($null -ne $kept) { $leftAsSet.Add($kept) | Out-Null; continue }
+                        }
+                        $failedControls.Add("$([string](Get-RooIndustriesPropertyValue $change 'control' 'unknown')): $failure") | Out-Null
+                    }
+                }
+                if ($appliedControls.Count -gt 0) {
+                    $afterControls = Get-RooIndustriesProcessControlState $processId $null -ReadGpu:(Test-RooIndustriesEntryHasGpuControl $entry)
+                    $restoreItem = [pscustomobject]@{
+                        processId = $processId
+                        processName = Get-RooIndustriesPropertyValue $entry 'processName' ''
+                        restoredPriorityClass = $afterControls.priorityClass
+                        restoredAffinityMask = $afterControls.affinityMask
+                        restoredIoPriority = $afterControls.ioPriority
+                        restoredMemoryPriority = $afterControls.memoryPriority
+                        restoredGpuPriority = $afterControls.gpuPriority
+                        restoredControls = @($appliedControls.ToArray())
+                        ruleId = Get-RooIndustriesPropertyValue $entry 'ruleId' ''
+                        restoredAtUtc = Get-RooIndustriesUtcStamp
+                    }
+                    $restored.Add($restoreItem) | Out-Null
+                    $changed.Add($restoreItem) | Out-Null
+                }
+                $exitedDuringRestore = $false
+                if ($failedControls.Count -gt 0 -or $skipped.Count -gt $entrySkipStart) {
+                    try { $exitedDuringRestore = $live.HasExited } catch { $exitedDuringRestore = $false }
+                }
+                if ($exitedDuringRestore) {
+                    while ($skipped.Count -gt $entrySkipStart) { $skipped.RemoveAt($skipped.Count - 1) }
+                    while ($leftAsSet.Count -gt $entryLeftStart) { $leftAsSet.RemoveAt($leftAsSet.Count - 1) }
+                    if ($failedControls.Count -gt 0) { $alreadyClosed.Add((New-GovernorAlreadyClosedItem $entry)) | Out-Null }
+                    continue
+                }
+                if ($failedControls.Count -gt 0) {
+                    $skipped.Add([pscustomobject]@{
+                        processId = $processId
+                        processName = Get-RooIndustriesPropertyValue $entry 'processName' ''
+                        reason = $failedControls -join '; '
+                        skippedAtUtc = Get-RooIndustriesUtcStamp
+                    }) | Out-Null
+                }
+            }
+        } else {
+            foreach ($entry in @($preview.ToArray())) {
+                if ([bool](Get-RooIndustriesPropertyValue $entry 'blocked' $false)) {
+                    if (@(Get-RooIndustriesPropertyArray $entry 'reasonCodes') -contains 'PROCESS_GOVERNOR_ALREADY_CLOSED') {
+                        $alreadyClosed.Add((New-GovernorAlreadyClosedItem $entry)) | Out-Null
+                        continue
+                    }
+                    $skipped.Add([pscustomobject]@{
+                        processId = Get-RooIndustriesPropertyValue $entry 'processId' 0
+                        processName = Get-RooIndustriesPropertyValue $entry 'processName' ''
+                        reason = Get-RooIndustriesPropertyValue $entry 'blockedReason' 'Restore entry is blocked.'
+                        skippedAtUtc = Get-RooIndustriesUtcStamp
+                    }) | Out-Null
+                }
+            }
+        }
+
+        $status = if ($ConfirmApply) {
+            if ($restored.Count -gt 0 -and $skipped.Count -gt 0) { 'partial' }
+            elseif ($restored.Count -gt 0) { 'completed' }
+            elseif ($skipped.Count -gt 0) { 'failed' }
+            else { 'completed' }
+        } else {
+            'preview'
+        }
+        $sessionStatus = if ($status -eq 'partial') { 'completed' } else { $status }
+        $warnings = New-Object System.Collections.Generic.List[object]
+        if (-not $ConfirmApply) {
+            $warnings.Add((New-RooIndustriesIssue 'PROCESS_GOVERNOR_RESTORE_PREVIEW_ONLY' 'Governor restore preview did not change any process because -ConfirmApply was omitted.' 'info' 'performance.governor' $resolvedBackupPath $false 'Rerun with -ConfirmApply only after reviewing the restore preview.' $null)) | Out-Null
+        }
+        $closedText = if ($alreadyClosed.Count -gt 0) { ' Already closed or restarted, so nothing remained to restore: ' + (($alreadyClosed | ForEach-Object { $_.processName + ' (PID ' + $_.processId + ')' }) -join ', ') + '.' } else { '' }
+        $skippedOut = @($skipped.ToArray()) + @($alreadyClosed.ToArray())
+        $leftOut = @($leftAsSet.ToArray())
+        $summary = if ($ConfirmApply) {
+            "Process governor restore completed with $($restored.Count) restored item(s) and $($skipped.Count) skipped item(s)." + $closedText + (Format-RooIndustriesLeftAsSetText $leftOut)
+        } else {
+            'Process governor restore preview completed. No process changes were applied.'
+        }
+        $backupMetadata = New-RooIndustriesProcessGovernorBackupMetadata $backup $resolvedBackupPath
+        $result = [pscustomobject]@{
+            resultId = "process-governor-restore-$(Get-RooIndustriesFileStamp)"
+            status = if ($status -eq 'completed' -and $ConfirmApply) { 'rolledBack' } elseif ($status -eq 'preview') { 'preview' } else { $status }
+            startedAtUtc = $startedAtUtc
+            completedAtUtc = Get-RooIndustriesUtcStamp
+            summary = $summary
+            changedItems = @($changed.ToArray())
+            skippedItems = $skippedOut
+            restoredItems = @($restored.ToArray())
+            leftAsSetItems = $leftOut
+            artifacts = @([pscustomobject]@{ type = 'processGovernorSessionBackup'; path = $resolvedBackupPath })
+        }
+        $envelope = [pscustomobject]@{
+            actionId = 'performance.governor.stopSession'
+            schemaVersion = 1
+            productName = $script:RooIndustriesProcessProductName
+            correlationId = $sessionIdValue
+            sessionId = $sessionIdValue
+            dryRun = (-not $ConfirmApply)
+            profileId = $profileId
+            status = $status
+            sessionStatus = $sessionStatus
+            startedAtUtc = $startedAtUtc
+            completedAtUtc = Get-RooIndustriesUtcStamp
+            sessionPath = $resolvedSessionPath
+            backupManifestPath = $resolvedBackupPath
+            restorable = (-not $ConfirmApply -or $status -in @('partial', 'failed') -or $leftOut.Count -gt 0)
+            preview = @($preview.ToArray())
+            changedItems = @($changed.ToArray())
+            skippedItems = $skippedOut
+            restoredItems = @($restored.ToArray())
+            leftAsSetItems = $leftOut
+            backup = $backupMetadata
+            result = $result
+            warnings = @($warnings.ToArray())
+            errors = @()
+            logs = @((New-RooIndustriesLog $summary))
+        }
+
+        if ($ConfirmApply -and $resolvedSessionPath -and (Test-Path -LiteralPath $resolvedSessionPath)) {
+            $session = Read-RooIndustriesProcessGovernorJson $resolvedSessionPath
+            $session.sessionStatus = $sessionStatus
+            $session.status = $sessionStatus
+            $session.restorable = ($status -in @('partial', 'failed') -or $leftOut.Count -gt 0)
+            $session.activeRestraints = @()
+            $session.restoredItems = @($restored.ToArray())
+            $session.skippedItems = $skippedOut
+            $session | Add-Member -NotePropertyName leftAsSetItems -NotePropertyValue $leftOut -Force
+            $session.completedAtUtc = Get-RooIndustriesUtcStamp
+            Write-RooIndustriesProcessGovernorJsonFile $session $resolvedSessionPath
+            Add-RooIndustriesProcessGovernorLogFileEntry (Split-Path $resolvedSessionPath -Parent) (New-RooIndustriesLog $summary)
+        }
+
+        Write-RooIndustriesJsonOutput $envelope $OutputPath
     }
-
-    Write-RooIndustriesJsonOutput $envelope $OutputPath
 } catch {
     $errorEnvelope = [pscustomobject]@{
         actionId = 'performance.governor.stopSession'

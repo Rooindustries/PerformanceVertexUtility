@@ -2,6 +2,58 @@
 
 $script:RooIndustriesProcessGovernorStateFolderName = 'process-governor-sessions'
 
+function Invoke-RooIndustriesProcessGovernorRun {
+    param([scriptblock]$Action,[scriptblock]$Busy,[switch]$ConfirmApply,[string]$GateName='',[TimeSpan]$Wait=[TimeSpan]::FromMinutes(2))
+    if(-not$ConfirmApply){& $Action;return}
+    if([string]::IsNullOrWhiteSpace($GateName)){$GateName='Global\RooIndustriesGovernorRun-'+[Security.Principal.WindowsIdentity]::GetCurrent().User.Value}
+    $clock=[Diagnostics.Stopwatch]::StartNew()
+    $gate=$null
+    $held=$false
+    try{
+        while($null -eq $gate -and $clock.Elapsed -lt $Wait){
+            try{$gate=[Threading.Mutex]::new($false,$GateName)}
+            catch{
+                $failure=$_.Exception
+                while($failure -is [Management.Automation.MethodInvocationException] -and $failure.InnerException){$failure=$failure.InnerException}
+                if($failure -isnot [UnauthorizedAccessException]){throw}
+                Start-Sleep -Milliseconds 100
+            }
+        }
+        if($null -ne $gate){
+            $remaining=$Wait-$clock.Elapsed
+            if($remaining -lt [TimeSpan]::Zero){$remaining=[TimeSpan]::Zero}
+            try{$held=$gate.WaitOne($remaining)}
+            catch{
+                $failure=$_.Exception
+                while($failure -is [Management.Automation.MethodInvocationException] -and $failure.InnerException){$failure=$failure.InnerException}
+                if($failure -isnot [Threading.AbandonedMutexException]){throw}
+                $held=$true
+            }
+        }
+        if($held){& $Action}
+        elseif($Busy){& $Busy}
+        else{throw [TimeoutException]::new('Another Background limits run is still going, so this one did not start.')}
+    }finally{
+        try{if($held){$gate.ReleaseMutex()}}finally{if($null -ne $gate){$gate.Dispose()}}
+    }
+}
+
+function Get-RooIndustriesProcessGovernorWorker {
+    $self=[Diagnostics.Process]::GetCurrentProcess()
+    try{return [pscustomobject]@{processId=$self.Id;startTimeUtc=$self.StartTime.ToUniversalTime().ToString('o',[Globalization.CultureInfo]::InvariantCulture)}}finally{$self.Dispose()}
+}
+
+function Test-RooIndustriesProcessGovernorWorkerEnded {
+    param([object]$Worker)
+    $processId=Get-RooIndustriesPropertyValue $Worker 'processId' 0
+    $saved=[string](Get-RooIndustriesPropertyValue $Worker 'startTimeUtc' '')
+    if(($processId -isnot [int] -and $processId -isnot [long]) -or $processId -le 0 -or [string]::IsNullOrWhiteSpace($saved)){return $false}
+    $live=Get-Process -Id ([int]$processId) -ErrorAction SilentlyContinue
+    if($null -eq $live){return $true}
+    try{$started=$live.StartTime.ToUniversalTime().ToString('o',[Globalization.CultureInfo]::InvariantCulture)}catch{return $false}finally{$live.Dispose()}
+    return -not (Test-RooIndustriesProcessStartTime $saved $started)
+}
+
 function Resolve-RooIndustriesProcessGovernorStateRoot {
     param([string]$StateRoot)
     $defaultStateRoot = Join-Path $PSScriptRoot '..\state'
@@ -12,7 +64,7 @@ function Resolve-RooIndustriesProcessGovernorStateRoot {
 function New-RooIndustriesProcessGovernorSessionId {
     param([string]$ProfileId)
     $safeProfileId = if ([string]::IsNullOrWhiteSpace($ProfileId)) { 'profile' } else { $ProfileId.ToLowerInvariant() -replace '[^a-z0-9\-]+', '-' }
-    return "process-governor-$safeProfileId-$(Get-RooIndustriesFileStamp)"
+    return "process-governor-$safeProfileId-$(Get-RooIndustriesFileStamp)-$([Guid]::NewGuid().ToString('N').Substring(0, 12))"
 }
 
 function Get-RooIndustriesProcessGovernorSessionDirectory {
@@ -29,7 +81,16 @@ function Write-RooIndustriesProcessGovernorJsonFile {
         [string]$Path
     )
     Ensure-RooIndustriesDirectory (Split-Path $Path -Parent)
-    Write-RooIndustriesOperationJson $Value $Path
+    for ($attempt = 0; ; $attempt++) {
+        try { Write-RooIndustriesOperationJson $Value $Path; return }
+        catch {
+            $failure = $_.Exception
+            while ($failure -is [Management.Automation.MethodInvocationException] -and $failure.InnerException) { $failure = $failure.InnerException }
+            $held = $failure -is [UnauthorizedAccessException] -or ($failure -is [IO.IOException] -and ($failure.HResult -band 0xffff) -in 32, 1175)
+            if ($attempt -ge 80 -or -not $held) { throw }
+            Start-Sleep -Milliseconds 25
+        }
+    }
 }
 
 function Add-RooIndustriesProcessGovernorLogFileEntry {
@@ -75,6 +136,8 @@ function Resolve-RooIndustriesProcessGovernorSessionFile {
     if (-not [string]::IsNullOrWhiteSpace($SessionId)) {
         return Join-Path (Get-RooIndustriesProcessGovernorSessionDirectory $resolvedStateRoot $SessionId) 'session.json'
     }
+    $held = Get-RooIndustriesProcessGovernorHeldSession $resolvedStateRoot
+    if ($null -ne $held) { return $held }
     return Get-RooIndustriesProcessGovernorLatestSessionFile $resolvedStateRoot
 }
 
@@ -706,21 +769,57 @@ function Get-RooIndustriesProcessGovernorPreview {
     }
 }
 
+function Get-RooIndustriesGovernorRecordedControls {
+    param($Snapshot)
+    if($null -ne $Snapshot.PSObject.Properties['appliedControls']){return @(Get-RooIndustriesPropertyArray $Snapshot 'appliedControls')}
+    return @(Get-RooIndustriesPropertyArray $Snapshot 'controlChanges' | Where-Object { (Get-RooIndustriesPropertyValue $_ 'outcome' '') -ne 'failed' })
+}
+
 function Select-RooIndustriesGovernorOwnedRestoreChanges {
     param($Snapshot,[object[]]$Changes)
-    $recorded=if($null -ne $Snapshot.PSObject.Properties['appliedControls']){@(Get-RooIndustriesPropertyArray $Snapshot 'appliedControls')}else{@(Get-RooIndustriesPropertyArray $Snapshot 'controlChanges' | Where-Object { (Get-RooIndustriesPropertyValue $_ 'outcome' '') -ne 'failed' })}
+    $recorded=@(Get-RooIndustriesGovernorRecordedControls $Snapshot)
     foreach($change in $Changes) {
         $control=[string](Get-RooIndustriesPropertyValue $change 'control' '')
         $owned=@($recorded|Where-Object {[string](Get-RooIndustriesPropertyValue $_ 'control' '') -eq $control -and -not [bool](Get-RooIndustriesPropertyValue $_ 'blocked' $false)})
         if($owned.Count -ne 1){continue}
         if(-not(Test-RooIndustriesControlValueEqual $control (Get-RooIndustriesPropertyValue $change 'currentValue' $null) (Get-RooIndustriesPropertyValue $owned[0] 'proposedValue' $null))) {
             $change.blocked=$true
-            $change.blockedReason='The control changed externally; its current value was preserved.'
+            $change.blockedReason=$script:RooIndustriesChangedExternally
+            $change|Add-Member -NotePropertyName appliedValue -NotePropertyValue (Get-RooIndustriesPropertyValue $owned[0] 'proposedValue' $null) -Force
         } elseif(Test-RooIndustriesSnapshotReleased $Snapshot $control 'Background limits') {
             continue
         }
         $change
     }
+}
+
+function Get-RooIndustriesGovernorRestoreChanges {
+    param(
+        [object]$Snapshot,
+        [object]$CurrentState
+    )
+    $changes = New-Object System.Collections.Generic.List[object]
+    $originalPriority = Get-RooIndustriesPropertyValue $Snapshot 'originalPriorityClass' $null
+    $originalAffinity = Get-RooIndustriesPropertyValue $Snapshot 'originalAffinityMask' $null
+    $originalIoPriority = Get-RooIndustriesPropertyValue $Snapshot 'originalIoPriority' $null
+    $originalMemoryPriority = Get-RooIndustriesPropertyValue $Snapshot 'originalMemoryPriority' $null
+    $originalGpuPriority = Get-RooIndustriesPropertyValue $Snapshot 'originalGpuPriority' $null
+    if (-not [string]::IsNullOrWhiteSpace([string]$originalPriority) -and (Test-RooIndustriesPriorityAllowed ([string]$originalPriority) -Restoring) -and [string](Get-RooIndustriesPropertyValue $CurrentState 'priorityClass' $null) -ne [string]$originalPriority) {
+        $changes.Add((New-RooIndustriesControlChange 'priorityClass' (Get-RooIndustriesPropertyValue $CurrentState 'priorityClass' $null) $originalPriority 'restorePriority' 'Restore original process priority after governor restraint.')) | Out-Null
+    }
+    if ($null -ne $originalAffinity -and -not [string]::IsNullOrWhiteSpace([string]$originalAffinity) -and (Test-RooIndustriesAffinityMaskAllowed $originalAffinity) -and [string](Get-RooIndustriesPropertyValue $CurrentState 'affinityMask' $null) -ne [string]$originalAffinity) {
+        $changes.Add((New-RooIndustriesControlChange 'affinityMask' (Get-RooIndustriesPropertyValue $CurrentState 'affinityMask' $null) ([int64]$originalAffinity) 'restoreAffinity' 'Restore original CPU affinity after governor restraint.')) | Out-Null
+    }
+    if (-not [string]::IsNullOrWhiteSpace([string]$originalIoPriority) -and (Test-RooIndustriesIoPriorityAllowed ([string]$originalIoPriority) -Restoring) -and [string](Get-RooIndustriesPropertyValue $CurrentState 'ioPriority' $null) -ne [string]$originalIoPriority) {
+        $changes.Add((New-RooIndustriesControlChange 'ioPriority' (Get-RooIndustriesPropertyValue $CurrentState 'ioPriority' $null) $originalIoPriority 'restoreIoPriority' 'Restore original I/O priority after governor restraint.')) | Out-Null
+    }
+    if (-not [string]::IsNullOrWhiteSpace([string]$originalMemoryPriority) -and (Test-RooIndustriesMemoryPriorityAllowed ([string]$originalMemoryPriority)) -and [string](Get-RooIndustriesPropertyValue $CurrentState 'memoryPriority' $null) -ne [string]$originalMemoryPriority) {
+        $changes.Add((New-RooIndustriesControlChange 'memoryPriority' (Get-RooIndustriesPropertyValue $CurrentState 'memoryPriority' $null) $originalMemoryPriority 'restoreMemoryPriority' 'Restore original memory priority after governor restraint.')) | Out-Null
+    }
+    if (-not [string]::IsNullOrWhiteSpace([string]$originalGpuPriority) -and (Test-RooIndustriesGpuPriorityAllowed ([string]$originalGpuPriority)) -and [string](Get-RooIndustriesPropertyValue $CurrentState 'gpuPriority' $null) -ne [string]$originalGpuPriority -and [bool](Get-RooIndustriesPropertyValue $CurrentState 'gpuPriorityAvailable' $false)) {
+        $changes.Add((New-RooIndustriesControlChange 'gpuPriority' (Get-RooIndustriesPropertyValue $CurrentState 'gpuPriority' $null) $originalGpuPriority 'restoreGpuPriority' 'Restore original GPU scheduling priority after governor restraint.')) | Out-Null
+    }
+    return @(Select-RooIndustriesGovernorOwnedRestoreChanges $Snapshot @($changes.ToArray()))
 }
 
 function Get-RooIndustriesProcessGovernorLiveIdentity {
@@ -740,7 +839,16 @@ function Get-RooIndustriesProcessGovernorLiveIdentity {
     $expectedName = [string](Get-RooIndustriesPropertyValue $Entry 'processName' '')
     $nameMatches = Test-RooIndustriesProcessNameEquals $live.ProcessName $expectedName
     $currentPath = $null
-    try { $held = $live.Handle; $currentPath = $live.Path } catch { $gone = $false; try { $gone = $live.HasExited } catch { $gone = $null -eq (Get-Process -Id $processId -ErrorAction SilentlyContinue) }; return [pscustomobject]@{ exists = $true; matches = $false; instanceEnded = $gone; process = $null; currentPath = $null; reason = 'Live process identity could not be verified.' } }
+    try { $held = $live.Handle; $currentPath = $live.Path } catch {
+        $gone = $false; try { $gone = $live.HasExited } catch { $gone = $null -eq (Get-Process -Id $processId -ErrorAction SilentlyContinue) }
+        $replaced = -not $nameMatches
+        $savedStart = [string](Get-RooIndustriesPropertyValue $Entry 'processStartTimeUtc' (Get-RooIndustriesPropertyValue $Entry 'startTimeUtc' ''))
+        if (-not $replaced -and -not [string]::IsNullOrWhiteSpace($savedStart)) {
+            $liveStart = Get-RooIndustriesProcessStartTimeUtc $live
+            $replaced = -not [string]::IsNullOrWhiteSpace([string]$liveStart) -and -not (Test-RooIndustriesProcessStartTime $savedStart $liveStart)
+        }
+        return [pscustomobject]@{ exists = $true; matches = $false; instanceEnded = ($gone -or $replaced); process = $null; currentPath = $null; reason = 'Live process identity could not be verified.' }
+    }
     $expectedPath = Get-RooIndustriesPropertyValue $Entry 'executablePath' $null
     $pathMatches = $true
     $pathReason = $null
@@ -785,6 +893,160 @@ function Get-RooIndustriesProcessGovernorLiveIdentity {
         currentPath = $currentPath
         reason = $reason
     }
+}
+
+function Get-RooIndustriesProcessGovernorLatestSnapshots {
+    param([object]$Backup)
+    $seen = @{}
+    $snapshots = @(Get-RooIndustriesPropertyArray $Backup 'snapshots')
+    for ($index = $snapshots.Count - 1; $index -ge 0; $index--) {
+        $snapshot = $snapshots[$index]
+        $identityKey = ([string](Get-RooIndustriesPropertyValue $snapshot 'processId' 0)) + '|' + ([string](Get-RooIndustriesPropertyValue $snapshot 'processStartTimeUtc' '')) + '|' + ([string](Get-RooIndustriesPropertyValue $snapshot 'executablePath' ''))
+        if ($seen.ContainsKey($identityKey)) { continue }
+        $seen[$identityKey] = $true
+        $snapshot
+    }
+}
+
+function Get-RooIndustriesProcessGovernorSnapshotIdentity {
+    param([object]$Snapshot)
+    return Get-RooIndustriesProcessGovernorLiveIdentity ([pscustomobject]@{
+        processId = Get-RooIndustriesPropertyValue $Snapshot 'processId' 0
+        processName = Get-RooIndustriesPropertyValue $Snapshot 'processName' ''
+        executablePath = Get-RooIndustriesPropertyValue $Snapshot 'executablePath' $null
+        processStartTimeUtc = Get-RooIndustriesPropertyValue $Snapshot 'processStartTimeUtc' $null
+        controlChanges = @(Get-RooIndustriesPreviewControlChanges $Snapshot)
+    })
+}
+
+function Test-RooIndustriesGovernorChangeLeftAsSet {
+    param([object]$Change)
+    return [bool](Get-RooIndustriesPropertyValue $Change 'blocked' $false) -and
+        [string](Get-RooIndustriesPropertyValue $Change 'blockedReason' '') -ceq $script:RooIndustriesChangedExternally -and
+        -not [string]::IsNullOrWhiteSpace([string](Get-RooIndustriesPropertyValue $Change 'currentValue' $null))
+}
+
+function Test-RooIndustriesProcessGovernorBackupHolds {
+    param([object]$Backup)
+    foreach ($snapshot in @(Get-RooIndustriesProcessGovernorLatestSnapshots $Backup)) {
+        $candidate = Get-RooIndustriesProcessGovernorSnapshotIdentity $snapshot
+        if (-not $candidate.exists) { continue }
+        if (-not $candidate.matches) {
+            if (-not $candidate.instanceEnded) { return $true }
+            continue
+        }
+        if (@(Get-RooIndustriesGovernorRestoreChanges $snapshot $candidate.currentControlState | Where-Object { -not (Test-RooIndustriesGovernorChangeLeftAsSet $_) }).Count -gt 0) { return $true }
+    }
+    return $false
+}
+
+function Test-RooIndustriesProcessGovernorNewerRunHolds {
+    param([string]$SessionDirectory,[object]$Entry,[string]$Control)
+    $processId = [string](Get-RooIndustriesPropertyValue $Entry 'processId' 0)
+    $startTime = [string](Get-RooIndustriesPropertyValue $Entry 'processStartTimeUtc' '')
+    $state = $null
+    foreach ($run in @(Get-RooIndustriesProcessGovernorRestorableSessions (Split-Path $SessionDirectory -Parent) (Get-Item -LiteralPath $SessionDirectory).CreationTimeUtc)) {
+        if ($null -ne $run.error) { return $true }
+        foreach ($snapshot in @(Get-RooIndustriesProcessGovernorLatestSnapshots $run.backup)) {
+            if ([string](Get-RooIndustriesPropertyValue $snapshot 'processId' 0) -ne $processId -or [string](Get-RooIndustriesPropertyValue $snapshot 'processStartTimeUtc' '') -ne $startTime) { continue }
+            if ($null -eq $state) { $state = Get-RooIndustriesProcessControlState ([int]$processId) $null -ReadGpu:($Control -eq 'gpuPriority') }
+            if (@(Get-RooIndustriesGovernorRestoreChanges $snapshot $state | Where-Object { [string]$_.control -eq $Control -and -not (Test-RooIndustriesGovernorChangeLeftAsSet $_) }).Count -gt 0) { return $true }
+        }
+    }
+    return $false
+}
+
+function Read-RooIndustriesProcessGovernorSharedText {
+    param([string]$Path,[int]$Limit=0)
+    $Path = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Path)
+    for ($attempt = 0; ; $attempt++) {
+        try {
+            $stream = [IO.FileStream]::new($Path, [IO.FileMode]::Open, [IO.FileAccess]::Read, ([IO.FileShare]::ReadWrite -bor [IO.FileShare]::Delete))
+            try {
+                $reader = [IO.StreamReader]::new($stream, [Text.Encoding]::UTF8, $true)
+                if ($Limit -le 0) { return $reader.ReadToEnd() }
+                $buffer = New-Object char[] $Limit
+                $count = $reader.ReadBlock($buffer, 0, $Limit)
+                return [pscustomobject]@{ text = [string]::new($buffer, 0, $count); complete = $reader.EndOfStream }
+            } finally { $stream.Dispose() }
+        } catch {
+            $failure = $_.Exception
+            while ($failure -is [Management.Automation.MethodInvocationException] -and $failure.InnerException) { $failure = $failure.InnerException }
+            $transient = $failure -is [UnauthorizedAccessException] -or $failure -is [IO.FileNotFoundException] -or ($failure -is [IO.IOException] -and ($failure.HResult -band 0xffff) -eq 32)
+            if ($attempt -ge 40 -or -not $transient) { throw }
+            Start-Sleep -Milliseconds 25
+        }
+    }
+}
+
+function Read-RooIndustriesProcessGovernorJson {
+    param([string]$Path)
+    return (Read-RooIndustriesProcessGovernorSharedText $Path) | ConvertFrom-Json
+}
+
+function Get-RooIndustriesProcessGovernorRestorableSessions {
+    param([string]$ResolvedGovernorStateRoot,[Nullable[datetime]]$CreatedAfterUtc = $null)
+    if (-not (Test-Path -LiteralPath $ResolvedGovernorStateRoot)) { return }
+    foreach ($directory in @(Get-ChildItem -LiteralPath $ResolvedGovernorStateRoot -Directory | Where-Object { $null -eq $CreatedAfterUtc -or $_.CreationTimeUtc -gt $CreatedAfterUtc } | Sort-Object CreationTimeUtc -Descending)) {
+        $sessionPath = Join-Path $directory.FullName 'session.json'
+        if (-not (Test-Path -LiteralPath $sessionPath -PathType Leaf)) { continue }
+        $run = [pscustomobject]@{ sessionPath = $sessionPath; backup = $null; error = $null }
+        try {
+            $head = Read-RooIndustriesProcessGovernorSharedText $sessionPath 4096
+            $text = $head.text
+            if ($text -notmatch '"restorable"\s*:\s*(true|false)' -and -not $head.complete) { $text = Read-RooIndustriesProcessGovernorSharedText $sessionPath }
+            if ($text -notmatch '"restorable"\s*:\s*true' -or $text -match '"dryRun"\s*:\s*true') { continue }
+            $path = [regex]::Match($text, '"backupManifestPath"\s*:\s*("(?:[^"\\]|\\.)*")')
+            $backupPath = if ($path.Success) { [string]('{"path":' + $path.Groups[1].Value + '}' | ConvertFrom-Json).path } else { [string](Get-RooIndustriesPropertyValue (Read-RooIndustriesProcessGovernorJson $sessionPath) 'backupManifestPath' '') }
+            if ([string]::IsNullOrWhiteSpace($backupPath) -or -not (Test-Path -LiteralPath $backupPath -PathType Leaf)) { continue }
+            $run.backup = Read-RooIndustriesProcessGovernorJson $backupPath
+        } catch {
+            $run.error = $_.Exception.Message
+        }
+        $run
+    }
+}
+
+function Get-RooIndustriesProcessGovernorHeldSession {
+    param([string]$ResolvedGovernorStateRoot)
+    $held = Get-RooIndustriesProcessGovernorRestorableSessions $ResolvedGovernorStateRoot | Where-Object {
+        if ($null -ne $_.error) { return $true }
+        try { Test-RooIndustriesProcessGovernorBackupHolds $_.backup } catch { $true }
+    } | Select-Object -First 1
+    if ($null -eq $held) { return $null }
+    return $held.sessionPath
+}
+
+function Close-RooIndustriesProcessGovernorEndedSessions {
+    param([string]$ResolvedGovernorStateRoot)
+    foreach ($run in @(Get-RooIndustriesProcessGovernorRestorableSessions $ResolvedGovernorStateRoot)) {
+        if ($null -ne $run.error) { continue }
+        try { Close-RooIndustriesProcessGovernorEndedSession $run } catch { }
+    }
+}
+
+function Close-RooIndustriesProcessGovernorEndedSession {
+    param([object]$Run)
+    foreach ($snapshot in @(Get-RooIndustriesProcessGovernorLatestSnapshots $Run.backup)) {
+        $candidate = Get-RooIndustriesProcessGovernorSnapshotIdentity $snapshot
+        if ($candidate.exists -and ($candidate.matches -or -not $candidate.instanceEnded)) { return }
+    }
+    $session = Read-RooIndustriesProcessGovernorJson $Run.sessionPath
+    if (-not [bool](Get-RooIndustriesPropertyValue $session 'restorable' $false)) { return }
+    $session.restorable = $false
+    foreach ($field in 'sessionStatus', 'status') { if ([string](Get-RooIndustriesPropertyValue $session $field '') -eq 'running') { $session.$field = 'completed' } }
+    if ($null -eq (Get-RooIndustriesPropertyValue $session 'completedAtUtc' $null)) { $session.completedAtUtc = Get-RooIndustriesUtcStamp }
+    Write-RooIndustriesProcessGovernorJsonFile $session $Run.sessionPath
+    Add-RooIndustriesProcessGovernorLogFileEntry (Split-Path $Run.sessionPath -Parent) (New-RooIndustriesLog 'Every app this run lowered has closed, so nothing remains to restore.')
+}
+
+function Test-RooIndustriesProcessGovernorSessionOverdue {
+    param([object]$Session)
+    $started = [DateTime]::MinValue
+    if (-not [DateTime]::TryParse([string](Get-RooIndustriesPropertyValue $Session 'startedAtUtc' ''), [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::RoundtripKind, [ref]$started)) { return $false }
+    $limit = [double](Get-RooIndustriesPropertyValue $Session 'maxDurationSeconds' 0)
+    if ($limit -le 0) { return $false }
+    return [DateTime]::UtcNow -gt $started.ToUniversalTime().AddSeconds($limit + 300)
 }
 
 function New-RooIndustriesProcessGovernorBackupMetadata {
