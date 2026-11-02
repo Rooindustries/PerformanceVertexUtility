@@ -57,7 +57,7 @@ public sealed record CleanupHistoryChoice(CleanupBatchSession Session)
     public static string StatusLabel(string status) => status switch
     {
         "applied" => "Cleaned", "restored" => "Restored", "pending" => "Not started", "running" or "applying" => "Cleaning",
-        "restoring" => "Restoring", "stopped" => "Stopped", "prepared" => "Ready", "needsReconciliation" => "Stopped partway", _ => "Unknown",
+        "restoring" => "Restoring", "stopped" => "Stopped", "paused" => "Paused", "refused" => "Not changed", "prepared" => "Ready", "needsReconciliation" => "Stopped partway", _ => "Unknown",
     };
 }
 
@@ -484,19 +484,32 @@ public partial class BulkRemovalViewModel : ObservableObject
     {
         _batchState = state;
         _cleanupObserved = true;
-        FileReviewReady = !state.RestoreStarted && !_cleanupRunning && state.Status is "stopped" or "needsReconciliation" or "running" or "prepared";
+        FileReviewReady = !state.RestoreStarted && !_cleanupRunning && state.Status is "stopped" or "paused" or "needsReconciliation" or "running" or "prepared";
         CleanupApplyLabel = FileReviewReady ? "Resume cleanup" : "Delete leftovers";
+        string Name(CleanupBatchEntry entry) => state.Preview.Parts.Single(part => part.Preview.OperationId == entry.OperationId).Preview.DisplayName;
+        var refused = state.Entries.FirstOrDefault(entry => entry.Status == "refused");
         FileStatus = state.Status switch
         {
             "applied" => "Cleanup done.", "stopped" => "Cleanup stopped before the other apps.",
+            "paused" when refused is not null => "Cleanup paused at " + Name(refused) + ". Nothing was changed for it.",
             "restored" => "Restore done.", "restoring" => "Restoring…",
             "prepared" => "A saved cleanup is ready.",
             "running" when !_cleanupRunning => "A saved cleanup stopped partway. Resume it, or restore it.",
+            "needsReconciliation" when state.RestoreStarted => "Restore couldn't put everything back. Press Restore this cleanup to try again.",
             "needsReconciliation" => "This cleanup stopped partway. Restore it, or find leftovers again.", _ => "Deleting leftovers…",
         };
-        string Name(CleanupBatchEntry entry) => state.Preview.Parts.Single(part => part.Preview.OperationId == entry.OperationId).Preview.DisplayName;
         foreach (var entry in state.Entries.Where(entry => entry.Error is not null)) Log(Name(entry) + ": " + entry.Error);
-        FileSummary = string.Join("\n", state.Entries.Select(entry => Name(entry) + ": " + CleanupHistoryChoice.StatusLabel(entry.Status)));
+        // An app refused before anything changed says why, in the words cleanup gave: which file is in use and what to do about it.
+        string Label(CleanupBatchEntry entry) => state.RestoreStarted && entry.Status == "needsReconciliation" ? "Not all put back" : CleanupHistoryChoice.StatusLabel(entry.Status);
+        FileSummary = string.Join("\n", state.Entries.Select(entry => Name(entry) + ": " + Label(entry) +
+            (entry.Status == "refused" && entry.Error is not null ? ". " + entry.Error : "")));
+        if (refused is not null && FileReviewReady) FileSummary += "\n\nPress Resume cleanup to carry on from " + Name(refused) + ".";
+        var left = state.Entries.SelectMany(entry => entry.LeftAsChanged).ToArray();
+        if (left.Length > 0)
+            FileSummary += "\n\nThese changed after the cleanup, so Restore left them as they are:\n" + string.Join("\n", left);
+        var missed = state.Entries.SelectMany(entry => entry.NotRestored).ToArray();
+        if (missed.Length > 0)
+            FileSummary += "\n\nThese couldn't be put back:\n" + string.Join("\n", missed);
         if (FileReviewReady)
             FileSummary += "\n\nOn the list:\n" + string.Join("\n\n", state.Preview.Parts.Select(part => part.Preview.DisplayName + "\n" + string.Join("\n", part.Preview.Selection.Select(item => item.Target))));
         RefreshCommands();

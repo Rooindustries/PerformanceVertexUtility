@@ -53,13 +53,23 @@ public sealed class FileBackupEntry
 {
     public required FileSnapshot Original { get; init; }
     public required string BackupPath { get; init; }
+    public bool Moved { get; set; }
     public string? BackupHash { get; set; }
+    // The undo copy's own identity, saved before cleanup keeps it, so only that exact copy is ever removed.
+    public FileIdentity? BackupIdentity { get; set; }
     public required string Status { get; set; }
     public string? Error { get; set; }
     public string? RestoreStagingPath { get; set; }
     public FileIdentity? RestoredIdentity { get; set; }
     public bool DirectoryMetadataRestored { get; set; }
+    public string? LeftAsChanged { get; set; }
+    // Saved before Restore acts: it may move this leftover back from the undo folder and put its own permissions back. Both set the archive
+    // flag, and inherited permissions take two writes.
+    public bool PermissionsBack { get; set; }
 }
+
+// The permissions a moved leftover takes for its time in the undo folder: the folder's own, saved before the first one moves.
+public sealed record FileStoreProtection(byte[] File, byte[] Directory);
 
 public sealed class FileCleanupJournal
 {
@@ -70,4 +80,5 @@ public sealed class FileCleanupJournal
     public required List<FileBackupEntry> Entries { get; init; }
     public required string Status { get; set; }
     public required DateTime UpdatedAtUtc { get; set; }
+    public FileStoreProtection? Protection { get; set; }
 }

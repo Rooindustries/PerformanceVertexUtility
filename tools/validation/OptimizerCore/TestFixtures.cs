@@ -7,9 +7,10 @@ using Microsoft.Win32.SafeHandles;
 
 static class TestFixtures
 {
-    public static string InheritingRoot(string label)
+    public static string InheritingRoot(string label) => InheritingFolder(Path.Combine(Path.GetTempPath(), "roo-industries-" + label + "-" + Guid.NewGuid().ToString("N")));
+
+    public static string InheritingFolder(string root)
     {
-        var root = Path.Combine(Path.GetTempPath(), "roo-industries-" + label + "-" + Guid.NewGuid().ToString("N"));
         var directory = Directory.CreateDirectory(root);
         var security = new DirectorySecurity();
         security.SetAccessRuleProtection(true, false);
@@ -17,6 +18,93 @@ static class TestFixtures
             security.AddAccessRule(new FileSystemAccessRule(sid, FileSystemRights.FullControl, InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit, PropagationFlags.None, AccessControlType.Allow));
         directory.SetAccessControl(security);
         return root;
+    }
+}
+
+sealed class TestVolume : IDisposable
+{
+    private readonly string _image;
+    public string Root { get; }
+
+    private TestVolume(string image, string root) { _image = image; Root = root; }
+
+    public static TestVolume Create(string folder, int megabytes)
+    {
+        var used = DriveInfo.GetDrives().Select(drive => char.ToUpperInvariant(drive.Name[0])).ToHashSet();
+        var letter = Enumerable.Range('M', 'Z' - 'M' + 1).Select(code => (char)code).Reverse().First(candidate => !used.Contains(candidate));
+        var image = Path.Combine(folder, "roo-industries-volume-" + Guid.NewGuid().ToString("N") + ".vhdx");
+        var volume = new TestVolume(image, letter + ":\\");
+        try
+        {
+            DiskPart("create vdisk file=\"" + image + "\" maximum=" + megabytes + " type=expandable", "select vdisk file=\"" + image + "\"", "attach vdisk",
+                "create partition primary", "format fs=ntfs quick label=RooIndustriesTest", "assign letter=" + letter);
+            if (!new DriveInfo(volume.Root).IsReady || new DriveInfo(volume.Root).DriveFormat != "NTFS") throw new InvalidOperationException("The disposable test drive did not mount at " + volume.Root);
+            return volume;
+        }
+        catch
+        {
+            try { volume.Dispose(); }
+            catch (Exception cleanup) { Console.WriteLine("FATAL the test drive at " + image + " could not be removed: " + cleanup.Message); }
+            throw;
+        }
+    }
+
+    public void Dispose()
+    {
+        if (!File.Exists(_image)) return;
+        try { DiskPart("select vdisk file=\"" + _image + "\"", "detach vdisk"); }
+        finally { File.Delete(_image); }
+    }
+
+    private static void DiskPart(params string[] commands)
+    {
+        var script = Path.Combine(Path.GetTempPath(), "roo-industries-diskpart-" + Guid.NewGuid().ToString("N") + ".txt");
+        File.WriteAllLines(script, commands);
+        try
+        {
+            var start = new System.Diagnostics.ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "diskpart.exe"), "/s \"" + script + "\"")
+            {
+                UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true,
+            };
+            using var process = System.Diagnostics.Process.Start(start) ?? throw new InvalidOperationException("diskpart did not start.");
+            var output = process.StandardOutput.ReadToEndAsync();
+            var errors = process.StandardError.ReadToEndAsync();
+            if (!process.WaitForExit(120000)) { process.Kill(true); throw new TimeoutException("diskpart did not finish."); }
+            process.WaitForExit();
+            if (process.ExitCode != 0) throw new InvalidOperationException("diskpart failed (" + process.ExitCode + "): " + output.Result + errors.Result);
+        }
+        finally { File.Delete(script); }
+    }
+}
+
+// A second drive letter for a folder, as the subst command makes, removed again on dispose.
+sealed class SubstDrive : IDisposable
+{
+    public string Root { get; }
+
+    private SubstDrive(string root) { Root = root; }
+
+    public static SubstDrive Create(string folder)
+    {
+        var used = DriveInfo.GetDrives().Select(drive => char.ToUpperInvariant(drive.Name[0])).ToHashSet();
+        var letter = Enumerable.Range('M', 'Z' - 'M' + 1).Select(code => (char)code).Reverse().First(candidate => !used.Contains(candidate));
+        Subst(letter + ":", folder);
+        var drive = new SubstDrive(letter + ":\\");
+        if (!Directory.Exists(drive.Root)) { drive.Dispose(); throw new InvalidOperationException("The subst drive did not appear at " + drive.Root); }
+        return drive;
+    }
+
+    public void Dispose() => Subst(Root[..2], "/D");
+
+    private static void Subst(params string[] arguments)
+    {
+        var start = new System.Diagnostics.ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "subst.exe")) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
+        foreach (var argument in arguments) start.ArgumentList.Add(argument);
+        using var process = System.Diagnostics.Process.Start(start) ?? throw new InvalidOperationException("subst did not start.");
+        var output = process.StandardOutput.ReadToEndAsync();
+        var errors = process.StandardError.ReadToEndAsync();
+        if (!process.WaitForExit(30000)) { process.Kill(true); throw new TimeoutException("subst did not finish."); }
+        if (process.ExitCode != 0) throw new InvalidOperationException("subst " + string.Join(" ", arguments) + " failed (" + process.ExitCode + "): " + output.Result + errors.Result);
     }
 }
 
