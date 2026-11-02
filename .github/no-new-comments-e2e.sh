@@ -74,6 +74,42 @@ EOF
 commit "feat: add a"
 expect "src/a.ts:6: adds a comment" "a new TS block comment fails"
 
+case_branch iss
+put inst/a.iss <<'EOF'
+[Setup]
+AppName={#AppName}
+[Code]
+var
+  Url: String;
+function A(): Boolean;
+begin
+  Url := 'https://example.com/{x}' + '{#AppName}';
+  Result := True; { keep it simple }
+  (* start
+     end *)
+  Url := Url + 'it''s // fine'; // trailing note
+end;
+EOF
+commit "feat: add installer code"
+expect "inst/a.iss:9: adds a comment" "a Pascal brace comment in installer code fails"
+expect "inst/a.iss:10: adds a comment" "a Pascal (* *) comment in installer code fails"
+expect "inst/a.iss:12: adds a comment: trailing note" "a trailing // comment in installer code fails"
+
+case_branch issok
+put inst/b.iss <<'EOF'
+[Setup]
+AppVersion={#AppVersion}
+[Code]
+#define Name "b"
+function B(): String;
+begin
+  Result := 'it''s {not} // a comment' + '{#Name}';
+end;
+EOF
+mkdir -p tool && printf '\357\273\277%s\n' '# Copyright (c) 2026 Example. Permission is hereby granted, free of charge, to any person obtaining a copy.' 'Write-Output 1' >tool/bom.ps1
+commit "feat: add more installer code"
+expect pass "Pascal strings, preprocessor lines and a license header after a BOM pass"
+
 case_branch markup
 mkdir -p web
 printf '%s\n' 'export const FRAG = /* glsl */ `' '  float a = 1.0;' '  // the glow fades out here' '  vec2 b = vec2(a, a / 2.0);' '`;' >web/shader.ts

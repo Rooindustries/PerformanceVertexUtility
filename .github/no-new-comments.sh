@@ -118,7 +118,7 @@ function open_str(q, e, t) { st = "str"; sq = q; sesc = e; sterm = t }
 function stmt_start(pre) { sub(/[rRbBuUfF]+$/, "", pre); return pre ~ /^[ \t]*$/ && depth == 0 && !cont }
 BEGIN { st = "code"; f = lang; yb = 0; depth = 0; cont = 0; tsp = 0; bd = 0; lastsig = ""; fc = 0; te = 0 }
 {
-  line = $0; sub(/\r$/, "", line); n = length(line); i = 1
+  line = $0; sub(/\r$/, "", line); if (NR == 1) sub(/^\357\273\277/, "", line); n = length(line); i = 1
   if (NR == 1 && substr(line, 1, 2) == "#!") next
   if (lang == "yaml") {
     f = "yaml"
@@ -148,7 +148,26 @@ BEGIN { st = "code"; f = lang; yb = 0; depth = 0; cont = 0; tsp = 0; bd = 0; las
     next
   }
   if (lang == "iss") {
-    if (line ~ /^[ \t]*(;|\/\/)/) out(NR, line, "c")
+    if (!ib && line ~ /^[ \t]*\[[^]]+\][ \t]*$/) { icode = tolower(line) ~ /^[ \t]*\[code\]/; next }
+    if (!icode && !ib) { if (line ~ /^[ \t]*(;|\/\/)/) out(NR, line, "c"); next }
+    if (!ib && line ~ /^[ \t]*#/) next
+    if (ib) out(NR, "", "c")
+    iq = 0
+    while (i <= n) {
+      c = substr(line, i, 1); c2 = substr(line, i, 2)
+      if (ib) {
+        if (substr(line, i, length(ibe)) == ibe) { out(NR, ibe, "c"); i += length(ibe); ib = 0 }
+        else { out(NR, c, "c"); i++ }
+        continue
+      }
+      if (iq) { if (c == "\047") iq = 0; i++; continue }
+      if (c == "\047") { iq = 1; i++; continue }
+      if (c2 == "{#") { j = index(substr(line, i), "}"); i += j ? j : n; continue }
+      if (c2 == "//") { out(NR, substr(line, i), "c"); break }
+      if (c2 == "(*") { ib = 1; ibe = "*)"; out(NR, c2, "c"); i += 2; continue }
+      if (c == "{") { ib = 1; ibe = "}"; out(NR, c, "c"); i++; continue }
+      i++
+    }
     next
   }
   if (st == "lc") st = "code"

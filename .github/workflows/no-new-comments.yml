@@ -21,7 +21,7 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
-          filter: blob:none
+          persist-credentials: false
       - name: The check still catches its own cases
         run: bash .github/no-new-comments-e2e.sh
       - name: No new comments or authorship credits
