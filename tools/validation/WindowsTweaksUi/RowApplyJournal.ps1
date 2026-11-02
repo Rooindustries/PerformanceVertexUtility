@@ -28,6 +28,7 @@ public static class RooIndustriesRowRegistry {
 '@
 function ReadValue($Address){$r=[RooIndustriesRowRegistry]::Get($Address.hive,$Address.keyPath,$Address.valueName);[ordered]@{keyExists=[bool]$r[0];exists=[bool]$r[1];type=$(if($r[1]){[int]$r[2]}else{$null});data=$(if($r[1]){[Convert]::ToBase64String([byte[]]$r[3])}else{$null})}}
 function WriteValue($Address,$State){if($State.exists){[RooIndustriesRowRegistry]::Put($Address.hive,$Address.keyPath,$Address.valueName,[int]$State.type,[Convert]::FromBase64String([string]$State.data))}else{[RooIndustriesRowRegistry]::Remove($Address.hive,$Address.keyPath,$Address.valueName)}}
+function AddressKey($Address){($Address.hive+'\'+$Address.keyPath+'\'+$Address.valueName).ToUpperInvariant()}
 function Same($Left,$Right){$Left.exists -eq $Right.exists -and (-not$Left.exists -or ($Left.type -eq $Right.type -and $Left.data -ceq $Right.data))}
 function Describe($State){if(-not$State.exists){return 'absent'};$bytes=[Convert]::FromBase64String([string]$State.data);switch([int]$State.type){4{if($bytes.Length -eq 4){return 'REG_DWORD '+[BitConverter]::ToUInt32($bytes,0)}};11{if($bytes.Length -eq 8){return 'REG_QWORD '+[BitConverter]::ToUInt64($bytes,0)}};{$_ -in 1,2}{return $(if($_ -eq 1){'REG_SZ '}else{'REG_EXPAND_SZ '})+'"'+[Text.Encoding]::Unicode.GetString($bytes).TrimEnd([char]0)+'"'}};return 'type '+$State.type+' '+[BitConverter]::ToString($bytes)}
 # The journal outlives a run: it holds each value's original kind and bytes, the last value the capture or the app wrote, and a write that may have happened.

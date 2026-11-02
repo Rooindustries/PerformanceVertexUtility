@@ -42,7 +42,7 @@ function Shot($Window,[string]$Name){
  try{$graphics.CopyFromScreen([int]$r.X,[int]$r.Y,0,0,$bitmap.Size);$bitmap.Save((Join-Path $directory ($Name+'.png')),[Drawing.Imaging.ImageFormat]::Png)}finally{$graphics.Dispose();$bitmap.Dispose()}
 }
 function Check([bool]$Condition,[string]$Name){$evidence.checks+=@([ordered]@{name=$Name;passed=$Condition});if(-not$Condition){throw ('Check failed: '+$Name)};Write-Output ('PASS '+$Name)}
-function Snapshot([string]$Stage){$evidence.stages[$Stage]=[ordered]@{};foreach($value in $values){$state=ReadValue $value.address;$evidence.stages[$Stage][$value.address.valueName]=[ordered]@{state=$state;text=(Describe $state)}};return $evidence.stages[$Stage]}
+function Snapshot([string]$Stage){$evidence.stages[$Stage]=[ordered]@{};foreach($value in $values){$state=ReadValue $value.address;$evidence.stages[$Stage][(AddressKey $value.address)]=[ordered]@{state=$state;text=(Describe $state)}};return $evidence.stages[$Stage]}
 function RegQuery([string]$Stage){$ErrorActionPreference='Continue';$lines=@(foreach($value in $values){$root=if($value.address.hive -eq 'CurrentUser'){'HKCU'}else{'HKLM'};& (Join-Path ([Environment]::SystemDirectory) 'reg.exe') query ($root+'\'+$value.address.keyPath) /v $value.address.valueName /reg:64 2>&1|ForEach-Object {[string]$_}});[IO.File]::WriteAllLines((Join-Path $directory ('reg-query-'+$Stage+'.txt')),$lines,[Text.UTF8Encoding]::new($false))}
 function SystemErrors{@($A::RootElement.FindAll($TS::Children,[Windows.Automation.PropertyCondition]::new($A::ClassNameProperty,'#32770'))|Where-Object {$_.Current.Name -like '* - System Error'}|ForEach-Object {$_.Current.Name})}
 function SettingsPopups($Since){@(Get-WinEvent -FilterHashtable @{LogName='System';ProviderName='Application Popup';Id=26;StartTime=$Since} -ErrorAction SilentlyContinue|Where-Object {$_.Message -like '*SystemSettings.exe*'}|ForEach-Object {$_.TimeCreated.ToString('HH:mm:ss')+' '+($_.Message -replace '\s+',' ')})}
@@ -131,14 +131,14 @@ try{
   $parentExisted=[bool]$left.parentExisted
   DropJournal $false
  }
- foreach($value in $values){$state=ReadValue $value.address;$seed=$seeds[$value.address.valueName.ToUpperInvariant()];if(-not$state.keyExists -and ($value.expected.exists -or ($seed -and $seed.exists))){throw ('The key this choice writes is missing: '+$value.address.keyPath)};$originals[$value.address.valueName.ToUpperInvariant()]=$state}
+ foreach($value in $values){$state=ReadValue $value.address;$seed=$seeds[$value.address.valueName.ToUpperInvariant()];if(-not$state.keyExists -and ($value.expected.exists -or ($seed -and $seed.exists))){throw ('The key this choice writes is missing: '+$value.address.keyPath)};$originals[(AddressKey $value.address)]=$state}
  $evidence.values=@($values|ForEach-Object {[ordered]@{hive=$_.address.hive;keyPath=$_.address.keyPath;valueName=$_.address.valueName;expected=(Describe $_.expected)}})
- $record=[ordered]@{parentExisted=$parentExisted;values=@(foreach($value in $values){[ordered]@{hive=$value.address.hive;keyPath=$value.address.keyPath;valueName=$value.address.valueName;original=(State $originals[$value.address.valueName.ToUpperInvariant()]);written=$null;pending=$null}})}
- $entries=@{};foreach($entry in $record.values){$entries[$entry.valueName.ToUpperInvariant()]=$entry}
+ $record=[ordered]@{parentExisted=$parentExisted;values=@(foreach($value in $values){[ordered]@{hive=$value.address.hive;keyPath=$value.address.keyPath;valueName=$value.address.valueName;original=(State $originals[(AddressKey $value.address)]);written=$null;pending=$null}})}
+ $entries=@{};foreach($entry in $record.values){$entries[(AddressKey $entry)]=$entry}
  SaveJournal $record
- foreach($value in $values){$key=$value.address.valueName.ToUpperInvariant();if($seeds.ContainsKey($key)){Mark $entries[$key] $seeds[$key];SaveJournal $record;WriteValue $value.address $seeds[$key];Mark $entries[$key] $seeds[$key] -Done;SaveJournal $record}}
+ foreach($value in $values){$name=$value.address.valueName.ToUpperInvariant();$key=AddressKey $value.address;if($seeds.ContainsKey($name)){Mark $entries[$key] $seeds[$name];SaveJournal $record;WriteValue $value.address $seeds[$name];Mark $entries[$key] $seeds[$name] -Done;SaveJournal $record}}
  $seeded=Snapshot 'seeded';RegQuery 'seeded'
- foreach($value in $values){$key=$value.address.valueName.ToUpperInvariant();if($seeds.ContainsKey($key)){Check (Same $seeded[$value.address.valueName].state $seeds[$key]) ('Seeded '+$value.address.valueName+' reads back as '+(Describe $seeds[$key]))}}
+ foreach($value in $values){$key=$value.address.valueName.ToUpperInvariant();if($seeds.ContainsKey($key)){Check (Same $seeded[(AddressKey $value.address)].state $seeds[$key]) ('Seeded '+$value.address.valueName+' reads back as '+(Describe $seeds[$key]))}}
  if($SettingsRestored){Check ((SettingsToggle 'seeded') -eq $SettingsRestored) ('Windows Settings shows '+$SettingsToggle+' '+$SettingsRestored+' before the change')}
  Initialize-HarnessBuildFolders $Source
  Ensure-HarnessOutputDirectory (Join-Path $Source 'backend\bin\optimizer')
@@ -188,7 +188,7 @@ try{
  $evidence.reviewApply=[ordered]@{status=(Status $window);lines=@(ReviewLines $window)}
  Shot $window 'review-apply'
  $approval.GetCurrentPattern([Windows.Automation.TogglePattern]::Pattern).Toggle()
- foreach($value in $values){Mark $entries[$value.address.valueName.ToUpperInvariant()] $value.expected};SaveJournal $record
+ foreach($value in $values){Mark $entries[(AddressKey $value.address)] $value.expected};SaveJournal $record
  (ById $window 'WindowsTweaksApply').GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
  $applied=WaitFor {$text=Status $window;if($text -in 'Windows settings saved','Profile saved' -or $text -like '*attention*' -or $text -like '*not confirmed*' -or $text -like '*failed*'){$text}} 180 'Apply to finish'
  Check ($applied -eq 'Windows settings saved') ('Apply finishes with Windows settings saved, saw: '+$applied)
@@ -197,11 +197,11 @@ try{
  $evidence.applied=[ordered]@{status=$applied;detail=(ById $window 'WindowsTweaksDetail').Current.Name;current=$current;texts=@(Texts (RowItem $window))}
  Shot $window 'applied'
  $after=Snapshot 'applied';RegQuery 'applied'
- foreach($value in $values){Check (Same $after[$value.address.valueName].state $value.expected) ('Windows reads '+$value.address.valueName+' as '+(Describe $value.expected)+' after Apply')}
- foreach($value in $values){Mark $entries[$value.address.valueName.ToUpperInvariant()] $value.expected -Done};SaveJournal $record
+ foreach($value in $values){Check (Same $after[(AddressKey $value.address)].state $value.expected) ('Windows reads '+$value.address.valueName+' as '+(Describe $value.expected)+' after Apply')}
+ foreach($value in $values){Mark $entries[(AddressKey $value.address)] $value.expected -Done};SaveJournal $record
  Start-Sleep -Seconds 10
  $held=Snapshot 'held'
- foreach($value in $values){Check (Same $held[$value.address.valueName].state $value.expected) ($value.address.valueName+' still reads '+(Describe $value.expected)+' ten seconds later')}
+ foreach($value in $values){Check (Same $held[(AddressKey $value.address)].state $value.expected) ($value.address.valueName+' still reads '+(Describe $value.expected)+' ten seconds later')}
  [RooIndustriesRowApply]::SetWindowPos($hwnd,[IntPtr]::new(-2),0,0,0,0,0x0003)|Out-Null
  if($SettingsApplied){Check ((SettingsToggle 'applied') -eq $SettingsApplied) ('Windows Settings shows '+$SettingsToggle+' '+$SettingsApplied+' after Apply')}
  [RooIndustriesRowApply]::SetWindowPos($hwnd,[IntPtr]::new(-1),0,0,0,0,0x0003)|Out-Null
@@ -212,7 +212,7 @@ try{
  $evidence.reviewUndo=[ordered]@{status=(Status $window);lines=@(ReviewLines $window)}
  Shot $window 'review-undo'
  $approval.GetCurrentPattern([Windows.Automation.TogglePattern]::Pattern).Toggle()
- foreach($value in $values){Mark $entries[$value.address.valueName.ToUpperInvariant()] $seeded[$value.address.valueName].state};SaveJournal $record
+ foreach($value in $values){Mark $entries[(AddressKey $value.address)] $seeded[(AddressKey $value.address)].state};SaveJournal $record
  (ById $window 'WindowsTweaksApply').GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
  $undone=WaitFor {$text=Status $window;if($text -in 'Windows settings saved','Profile saved','Saved choices removed' -or $text -like '*attention*' -or $text -like '*not confirmed*' -or $text -like '*failed*'){$text}} 180 'Undo to finish'
  Check ($undone -eq 'Windows settings saved') ('Undo finishes with Windows settings saved, saw: '+$undone)
@@ -222,8 +222,8 @@ try{
  Shot $window 'undone'
  Check (-not$evidence.undone.undoAvailable) 'Nothing is left to undo after Undo'
  $back=Snapshot 'undone';RegQuery 'undone'
- foreach($value in $values){Check (Same $back[$value.address.valueName].state $seeded[$value.address.valueName].state) ('Undo puts '+$value.address.valueName+' back to '+$seeded[$value.address.valueName].text)}
- foreach($value in $values){Mark $entries[$value.address.valueName.ToUpperInvariant()] $seeded[$value.address.valueName].state -Done};SaveJournal $record
+ foreach($value in $values){Check (Same $back[(AddressKey $value.address)].state $seeded[(AddressKey $value.address)].state) ('Undo puts '+$value.address.valueName+' back to '+$seeded[(AddressKey $value.address)].text)}
+ foreach($value in $values){Mark $entries[(AddressKey $value.address)] $seeded[(AddressKey $value.address)].state -Done};SaveJournal $record
  [RooIndustriesRowApply]::SetWindowPos($hwnd,[IntPtr]::new(-2),0,0,0,0,0x0003)|Out-Null
  if($SettingsRestored){Check ((SettingsToggle 'undone') -eq $SettingsRestored) ('Windows Settings shows '+$SettingsToggle+' '+$SettingsRestored+' after Undo')}
  $window.GetCurrentPattern([Windows.Automation.WindowPattern]::Pattern).Close()
@@ -241,7 +241,7 @@ try{
   $evidence.restoreConflicts=@();$evidence.restoreErrors=@()
   if($record){$cleanup=Recover $record;$evidence.restoreConflicts=@($cleanup.conflicts);$evidence.restoreErrors=@($cleanup.errors);$evidence.restoredByCleanup=@($cleanup.restored)}
   $evidence.restored=$null -ne $record -and $evidence.restoreConflicts.Count -eq 0 -and $evidence.restoreErrors.Count -eq 0 -and @($record.values|Where-Object {-not(Same (ReadValue $_) $_.original)}).Count -eq 0
-  $evidence.originals=[ordered]@{};foreach($value in $values){$key=$value.address.valueName.ToUpperInvariant();if($originals.ContainsKey($key)){$evidence.originals[$value.address.valueName]=Describe $originals[$key]}}
+  $evidence.originals=[ordered]@{};foreach($value in $values){$key=AddressKey $value.address;if($originals.ContainsKey($key)){$evidence.originals[$key]=Describe $originals[$key]}}
   if(Test-Path -LiteralPath ('HKCU:\'+$fixture)){Remove-Item -LiteralPath ('HKCU:\'+$fixture) -Recurse -Force}
   if($record -and -not$evidence.restoreErrors.Count){DropJournal (-not$parentExisted)}
   $evidence.fixtureRemoved=-not(Test-Path -LiteralPath ('HKCU:\'+$fixture))
