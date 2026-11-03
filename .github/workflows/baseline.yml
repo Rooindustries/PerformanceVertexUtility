@@ -12,7 +12,7 @@ concurrency:
 jobs:
   contracts:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: [self-hosted, laptop]
+    runs-on: [self-hosted, devbox]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -25,7 +25,7 @@ jobs:
       - run: python tools/validation/check_baseline.py
   python-tests:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: [self-hosted, laptop]
+    runs-on: [self-hosted, devbox]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -36,7 +36,7 @@ jobs:
       - run: python -I tools/validation/Update/check_publish_guard.py --local-only --out "$RUNNER_TEMP/publish-guard.json"
   powershell:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: [self-hosted, laptop]
+    runs-on: [self-hosted, devbox]
     steps:
       - uses: actions/checkout@v4
       - name: Install PSScriptAnalyzer
@@ -47,7 +47,7 @@ jobs:
         run: ./tools/validation/check_powershell.ps1
   dotnet-build:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: [self-hosted, laptop]
+    runs-on: [self-hosted, devbox]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
