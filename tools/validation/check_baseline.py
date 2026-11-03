@@ -346,6 +346,11 @@ def validate(root: Path, contracts_only: bool = False):
         for label, passed in product_name_negative_controls().items():
             if not passed:
                 failures.append(f'Negative control failed: {label} did not match the product name check result')
+        head_checkout = runpy.run_path(str(Path(__file__).with_name('check_pr_head_checkout.py')))
+        failures.extend(head_checkout['check'](root))
+        for label, passed in head_checkout['negative_controls']().items():
+            if not passed:
+                failures.append(f'Negative control failed: {label} did not match the pull request head checkout check')
         agent_files = runpy.run_path(str(Path(__file__).with_name('check_agent_files.py')))
         failures.extend(agent_files['check'](root))
         for label, passed in agent_files['negative_controls']().items():
