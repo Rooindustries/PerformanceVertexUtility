@@ -355,6 +355,7 @@ def validate(root: Path, contracts_only: bool = False):
         for label, passed in fixture_cleanup_negative_controls().items():
             if not passed:
                 failures.append(f'Negative control failed: {label} did not match the fixture cleanup check result')
+        failures.extend(runpy.run_path(str(Path(__file__).with_name('check_workflow_runners.py')))['check'](root))
     documents = {}
     for folder in ('backend/contracts', 'backend/samples', 'backend/profiles', 'backend/uninstall', 'backend/catalogs', 'backend/capabilities', 'modules'):
         for path in sorted((root / folder).rglob('*.json')):
