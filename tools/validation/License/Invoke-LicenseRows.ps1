@@ -1,4 +1,4 @@
-﻿﻿param(
+param(
     [Parameter(Mandatory)][string]$Source,
     [Parameter(Mandatory)][string]$OutRoot,
     [Parameter(Mandatory)][ValidatePattern('^[a-z0-9-]{1,40}$')][string]$Label,
@@ -29,7 +29,8 @@ $installKey = 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\' +
 $installDir = Join-Path $env:ProgramFiles 'Roo Industries\Optimization Suite'
 $localAppData = [Environment]::GetFolderPath('LocalApplicationData')
 $dataFolderNames = @('RooOptimizationSuite', 'RooIndustriesOptimizationSuite')
-$liveKeys = @('HKLM:\SOFTWARE\RooIndustries', 'HKCU:\Software\RooIndustries', 'HKCU:\Software\RooOptimizationSuite')
+$appKeys = @('HKLM:\SOFTWARE\RooIndustries', 'HKCU:\Software\RooIndustries', 'HKCU:\Software\RooOptimizationSuite')
+$appTasks = 'RooIndustries|RooOptimizationSuite'
 $results = [ordered]@{ A1 = [ordered]@{ result = 'not run' }; S1 = [ordered]@{ result = 'not run' } }
 $steps = [Collections.Generic.List[object]]::new()
 $utf8 = [Text.UTF8Encoding]::new($false)
@@ -108,64 +109,37 @@ function Installed {
     [ordered]@{ uninstallKey = (Test-Path -LiteralPath $installKey); installFolder = (Test-HarnessPath $installDir) }
 }
 
-function RegName([string]$Key) {
-    $Key.Replace(':\', '\')
-}
-
-function LiveState {
-    $folders = foreach ($name in $dataFolderNames) {
-        $root = Join-Path $localAppData $name
-        if (-not (Test-Path -LiteralPath $root)) {
-            [ordered]@{ name = $name; exists = $false }
-            continue
-        }
-        $items = @(Get-Item -LiteralPath $root -Force) + @(Get-ChildItem -LiteralPath $root -Recurse -Force)
-        $entries = foreach ($item in ($items | Sort-Object FullName)) {
-            $hash = if ($item.PSIsContainer) { $null } else { (Get-FileHash -LiteralPath $item.FullName).Hash }
-            [ordered]@{
-                path = $item.FullName.Substring($root.Length)
-                sha256 = $hash
-                sddl = (Get-Acl -LiteralPath $item.FullName).Sddl
-            }
-        }
-        [ordered]@{ name = $name; exists = $true; entries = @($entries) }
-    }
-    $keys = foreach ($key in $liveKeys) {
-        $file = Join-Path $out ('export-' + [Guid]::NewGuid().ToString('N') + '.reg')
-        cmd /c ('reg export "' + (RegName $key) + '" "' + $file + '" /y >nul 2>&1')
-        if ($LASTEXITCODE -ne 0) {
-            [ordered]@{ key = $key; exists = $false }
-            continue
-        }
-        $text = [IO.File]::ReadAllText($file)
-        [IO.File]::Delete($file)
-        [ordered]@{ key = $key; exists = $true; export = $text }
-    }
-    $productTasks = 'RooIndustries|RooOptimizationSuite'
-    $tasks = Get-ScheduledTask | Where-Object { ($_.TaskPath + $_.TaskName) -match $productTasks }
-    [ordered]@{
-        folders = @($folders)
-        registry = @($keys)
-        tasks = @($tasks | ForEach-Object { $_.TaskPath + $_.TaskName })
+function Present([string]$Path) {
+    try {
+        Get-Item -LiteralPath $Path -Force -ErrorAction Stop | Out-Null
+        $true
+    } catch [Management.Automation.ItemNotFoundException] {
+        $false
     }
 }
 
-function SaveLiveState([string]$Folder) {
-    New-HarnessDirectory $Folder 'saved-live-state' | Out-Null
-    $state = LiveState
-    foreach ($entry in $state.folders | Where-Object { $_.exists }) {
-        $copy = Join-Path $Folder $entry.name
-        & robocopy.exe (Join-Path $localAppData $entry.name) $copy /E /COPYALL /DCOPY:DAT /B /R:0 /W:0 /NP /NFL /NDL |
-            Out-Null
-        if ($LASTEXITCODE -ge 8) { throw ('Saving ' + $entry.name + ' failed with robocopy code ' + $LASTEXITCODE) }
+function AppState {
+    $found = [Collections.Generic.List[string]]::new()
+    $unknown = [Collections.Generic.List[string]]::new()
+    $paths = @($dataFolderNames | ForEach-Object { Join-Path $localAppData $_ }) + $appKeys
+    foreach ($path in $paths) {
+        try {
+            if (Present $path) { $found.Add($path) }
+        } catch {
+            $unknown.Add($path + ': ' + $_.Exception.Message)
+        }
     }
-    for ($i = 0; $i -lt $liveKeys.Count; $i++) {
-        $file = Join-Path $Folder ('key-' + $i + '.reg')
-        cmd /c ('reg export "' + (RegName $liveKeys[$i]) + '" "' + $file + '" /y >nul 2>&1')
+    try {
+        $tasks = Get-ScheduledTask -ErrorAction Stop | Where-Object { ($_.TaskPath + $_.TaskName) -match $appTasks }
+        foreach ($task in $tasks) { $found.Add('task ' + $task.TaskPath + $task.TaskName) }
+    } catch {
+        $unknown.Add('scheduled tasks: ' + $_.Exception.Message)
     }
-    $json = ConvertTo-Json $state -Depth 8
-    [IO.File]::WriteAllText((Join-Path $out 'live-state-before.json'), $json, $utf8)
-    $json
+    [ordered]@{ found = @($found); unknown = @($unknown) }
+}
+
+function Absent($State) {
+    $State.found.Count -eq 0 -and $State.unknown.Count -eq 0
 }
 
 function StopStageProcesses([string]$Stage) {
@@ -178,32 +152,19 @@ function StopStageProcesses([string]$Stage) {
     }
 }
 
-function RestoreLiveState([string]$Folder, [string]$Saved) {
+function RemoveCreatedState {
     foreach ($name in $dataFolderNames) {
         $dataFolder = Join-Path $localAppData $name
-        if (Test-Path -LiteralPath $dataFolder) {
-            cmd /c ('takeown /F "' + $dataFolder + '" /R /A /D Y >nul 2>&1')
-            cmd /c ('icacls "' + $dataFolder + '" /grant *S-1-5-32-544:(OI)(CI)F /T /C /Q >nul 2>&1')
-            Remove-Item -LiteralPath $dataFolder -Recurse -Force
-        }
-        $copy = Join-Path $Folder $name
-        if (Test-Path -LiteralPath $copy) {
-            & robocopy.exe $copy $dataFolder /E /COPYALL /DCOPY:DAT /B /R:0 /W:0 /NP /NFL /NDL | Out-Null
-            if ($LASTEXITCODE -ge 8) { throw ('Restoring ' + $name + ' failed with robocopy code ' + $LASTEXITCODE) }
-        }
+        if (Present $dataFolder) { Remove-Item -LiteralPath $dataFolder -Recurse -Force }
     }
-    for ($i = 0; $i -lt $liveKeys.Count; $i++) {
-        $liveKey = $liveKeys[$i]
-        if (Test-Path -LiteralPath $liveKey) { Remove-Item -LiteralPath $liveKey -Recurse -Force }
-        $file = Join-Path $Folder ('key-' + $i + '.reg')
-        if (Test-Path -LiteralPath $file) {
-            cmd /c ('reg import "' + $file + '" >nul 2>&1')
-            if ($LASTEXITCODE -ne 0) { throw ('Restoring ' + $liveKey + ' failed.') }
-        }
+    foreach ($appKey in $appKeys) {
+        if (Present $appKey) { Remove-Item -LiteralPath $appKey -Recurse -Force }
     }
-    $json = ConvertTo-Json (LiveState) -Depth 8
-    [IO.File]::WriteAllText((Join-Path $out 'live-state-after.json'), $json, $utf8)
-    $json -ceq $Saved
+    $tasks = Get-ScheduledTask -ErrorAction Stop | Where-Object { ($_.TaskPath + $_.TaskName) -match $appTasks }
+    foreach ($task in $tasks) {
+        Unregister-ScheduledTask -TaskName $task.TaskName -TaskPath $task.TaskPath -Confirm:$false
+    }
+    AppState
 }
 
 function Build {
@@ -334,8 +295,13 @@ function RowA1($Build) {
     if (@(Get-Process -Name 'RooIndustries.OptimizationSuite.App' -ErrorAction SilentlyContinue).Count) {
         throw 'Another app window is open; this run left it alone.'
     }
-    $savedFolder = Join-Path $out 'saved-live-state'
-    $saved = SaveLiveState $savedFolder
+    $row.stateBefore = AppState
+    Note 'A1' 'app state before the run' $row.stateBefore
+    if (-not (Absent $row.stateBefore)) {
+        $named = @($row.stateBefore.found) + @($row.stateBefore.unknown)
+        $row.reason = 'Existing app state on this PC, left untouched: ' + ($named -join '; ')
+        return
+    }
     $owned = $null
     try {
         $folder = Split-Path $exe
@@ -351,8 +317,10 @@ function RowA1($Build) {
             if (-not $owned.process.WaitForExit(20000)) { Stop-HarnessProcess $owned }
         }
         StopStageProcesses $Build.stage
-        $row.restored = RestoreLiveState $savedFolder $saved
-        Note 'A1' 'data folder and registry restored' @{ matchesSavedState = $row.restored }
+        $row.cleaned = $false
+        $row.stateAfter = RemoveCreatedState
+        $row.cleaned = Absent $row.stateAfter
+        Note 'A1' 'app state after cleanup' $row.stateAfter
     }
 }
 
@@ -536,11 +504,11 @@ try {
         $reason = if ($results[$name].reason) { ' :: ' + $results[$name].reason } else { '' }
         Write-Output ('ROW ' + $name + ' ' + $results[$name].result + $reason)
     }
-    $restoreFailed = $results.A1.Contains('restored') -and -not $results.A1.restored
-    if ($restoreFailed) { Write-Output 'RESTORE failed: the data folder or registry differs from the saved state.' }
-    $failed = @($Rows | Where-Object { $results[$_].result -ne 'passed' }).Count -or $restoreFailed
+    $notClean = $results.A1.Contains('cleaned') -and -not $results.A1.cleaned
+    if ($notClean) { Write-Output 'CLEANUP failed: app state the run created is still on this PC.' }
+    $failed = @($Rows | Where-Object { $results[$_].result -ne 'passed' }).Count -or $notClean
     Complete-HarnessInvocation $(if ($failed) { 'fail' } else { 'pass' }) -Cleanup | Out-Null
 }
-if ($restoreFailed) { throw 'The data folder or registry was not restored to the saved state.' }
+if ($notClean) { throw 'App state the run created is still on this PC.' }
 $notPassed = @('A1', 'S1' | Where-Object { $results[$_].result -ne 'passed' })
 if ($notPassed.Count) { throw ('Rows not passed: ' + ($notPassed -join ', ')) }

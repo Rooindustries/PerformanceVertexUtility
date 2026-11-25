@@ -15,21 +15,23 @@ The build copies the frame's source next to it and raises only the app project's
 because `Build-Release.ps1` refuses a version that is already released. The release is built
 without an update feed, so the app never goes online.
 
-The app has only one data folder: the signed-in account's own. Before A1 starts the app, the check
-copies both app data folder names under that account's local AppData, with their ACLs, and exports
-`HKLM\SOFTWARE\RooIndustries`, `HKCU\Software\RooIndustries` and `HKCU\Software\RooOptimizationSuite`.
-When A1 ends, however it ends, it closes the app, stops anything started from the built layout,
-puts the folders and keys back and compares the file list, hashes, ACLs, registry exports and
-product scheduled tasks with the saved state. A difference fails the run.
-`live-state-before.json` and `live-state-after.json` hold both sides.
+The app has only one data folder: the signed-in account's own. A1 never reads, moves or removes
+existing app state. Before it starts the app, it looks for both app data folder names under that
+account's local AppData, `HKLM\SOFTWARE\RooIndustries`, `HKCU\Software\RooIndustries`,
+`HKCU\Software\RooOptimizationSuite` and the app's scheduled tasks. If any of them exists, or a
+lookup fails, A1 is reported as not run with the reason naming what it found, and the app is not
+started. Otherwise, when A1 ends, however it ends, it closes the app, stops anything started from
+the built layout, removes what its run created and fails the run unless all of them are absent
+again.
 
 Each row reports passed, failed, invalid (its start, action or observation could not be read) or
-not run. The script exits 0 only when every row passed and the restore matched. It refuses to start
-while another app window or setup is open, stops only what it started, and treats any change to the
-install state as invalid.
+not run. The script exits 0 only when every row passed and A1 left no app state behind. It refuses
+to start while another app window or setup is open, stops only what it started, and treats any
+change to the install state as invalid.
 
 Stage a frame with `--include-frontend` under `C:\RooBuild` and run it through the interactive
-route on a signed-in, unlocked desktop that no other session is using:
+route on a signed-in, unlocked desktop that no other session is using and that has no app
+state:
 
 ```sh
 python3 -I tools/validation/windows_ssh.py --host <test-pc> --expected-machine <COMPUTERNAME> \
@@ -41,7 +43,7 @@ python3 -I tools/validation/windows_ssh.py --host <test-pc> --expected-machine <
   --arguments "$arguments" --minutes 75
 ```
 
-Results land in `<OutRoot>\<Label>\results.json`, with the release build log, the layout's file
-list and both live-state files next to it. Then remove the frame with
+Results land in `<OutRoot>\<Label>\results.json`, with the release build log and the layout's
+file list next to it. Then remove the frame with
 `tools/validation/Update/Clear-UpdateFrame.ps1 -Frame <runRoot> -ExpectedMachine <COMPUTERNAME>`
 through `windows_ssh.py run`.
