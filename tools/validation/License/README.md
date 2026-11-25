@@ -2,7 +2,7 @@
 
 `Invoke-LicenseRows.ps1` builds the release from a staged frame and drives the real app and the real setup program through UI Automation on a Windows test PC.
 
-- A1: opens the built app, selects Settings in the navigation and reads the About panel. It passes when the product name, the version line, the copyright line and the source line follow each other in that order, each matching its whole text.
+- A1: opens the built app, selects Settings in the navigation and reads the About panel. It passes when the product name, the version line ("Version" and its number), the copyright line and the source line follow each other in that order, each matching its whole text.
 - S1: starts the built setup with no arguments, the way a user does, and presses Next page by page until the page with Install. It passes when an earlier page shows the whole text of `LICENSE` (line ends aside) with Next and no accept choice. It then presses Cancel and Yes, so nothing is installed.
 
 The build copies the frame's source next to it and raises only the app project's Version line, because `Build-Release.ps1` refuses a version that is already released. The release is built without an update feed, so the app never goes online.

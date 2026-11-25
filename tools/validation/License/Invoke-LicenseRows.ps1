@@ -107,7 +107,7 @@ function RowA1($Build){
   $row.observation=[ordered]@{afterAbout=$shown;fourthLineSelectable=$selectable}
   Note 'A1' 'About panel' $row.observation
   if($index -lt 0 -or $shown.Count -lt 4 -or -not$shown[0]){$row.result='invalid';$row.reason='The About panel lines could not be read.';return}
-  $passed=$shown[0] -ceq $productName -and $shown[1] -cmatch '^Version \S+$' -and $shown[2] -ceq $copyright -and $shown[3] -ceq $sourceLine
+  $passed=$shown[0] -ceq $productName -and $shown[1] -cmatch '^Version \d+\.\d+\.\d+' -and $shown[2] -ceq $copyright -and $shown[3] -ceq $sourceLine
   $row.result=if($passed){'passed'}else{'failed'}
  }finally{
   if(-not$app.HasExited){
