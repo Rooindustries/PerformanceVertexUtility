@@ -214,6 +214,13 @@
       "reason": "Actual install folder, kept so existing installs upgrade in place."
     },
     {
+      "text": "Copyright Roo Industries. Free and open source",
+      "files": [
+        "docs/internal/frontend/RooIndustries.OptimizationSuite.App/Views/SettingsPage.xaml"
+      ],
+      "reason": "Copyright holder in the About panel's license notice, the same as in the LICENSE."
+    },
+    {
       "text": "AppCopyright=Roo Industries",
       "files": [
         "tools/release/RooIndustries.OptimizationSuite.iss"

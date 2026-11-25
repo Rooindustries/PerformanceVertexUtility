@@ -23,6 +23,7 @@ try {
     Add-Type -Path (Join-Path $Source 'tools\validation\RedirectedFolders\Fixture.cs')
     $stage=Join-Path $work 'payload';New-Item -ItemType Directory -Path (Join-Path $stage 'backend\scripts'),(Join-Path $stage 'assets\brand\roo-industries')|Out-Null
     Copy-Item -LiteralPath (Join-Path $Source 'assets\brand\roo-industries\favicon.ico') -Destination (Join-Path $stage 'assets\brand\roo-industries\favicon.ico')
+    Copy-Item -LiteralPath (Join-Path $Source 'LICENSE') -Destination (Join-Path $stage 'LICENSE.txt')
     [IO.File]::WriteAllText((Join-Path $stage 'proof-payload.txt'),'replacement payload')
     $recorder=@'
 param([string]$Action)

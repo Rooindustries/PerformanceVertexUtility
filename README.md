@@ -137,3 +137,21 @@ See [desktop controls](docs/optimization-controls.md#desktop-workflows) for CPU 
 This app is built on other people's work. [CREDITS.md](CREDITS.md) lists the projects, tools, libraries and fonts it draws from, with links and licenses.
 
 Made and maintained by Roo Industries.
+
+## License
+
+Performance Vertex Utility is free and open-source software under the GNU General Public License version 3 only. The full text is in [LICENSE](LICENSE).
+
+Anyone may use, change and share the GPL-covered software. If you distribute it, changed or unchanged, you must keep the GPL rights of the people you give it to and make the corresponding source code available, the way the GPL requires.
+
+Roo Industries holds the copyright in its own Performance Vertex Utility software.
+
+The Roo Industries and Performance Vertex Utility names and logos are not covered by that license.
+
+Some third-party material in the app stays under its owners' terms and is outside the GPL grant for Performance Vertex Utility: the O&O ShutUp10++ setting titles, the WPD setting titles, the Adobe host list and the 28 third-party tool icons on the Tools page. They are listed in [CREDITS.md](CREDITS.md#not-covered-by-this-projects-license).
+
+The app changes Windows settings and comes with no warranty. See sections 15 and 16 of the license.
+
+Additional permission under GNU GPL version 3 section 7
+
+If you modify this Program, or any covered work, by linking or combining it with the Microsoft Windows App SDK, the Windows SDK, the Microsoft Edge WebView2 runtime, the Microsoft Visual C++ runtime or the .NET runtime (or a modified version of those libraries), containing parts covered by the terms of those libraries' licenses, the licensors of this Program grant you additional permission to convey the resulting work.
