@@ -71,11 +71,17 @@ The app doesn't include these. It links to them, opens them if you already have 
 | Library | Made by | License | Used in |
 | --- | --- | --- | --- |
 | [CommunityToolkit.Mvvm](https://github.com/CommunityToolkit/dotnet) 8.2.2 | .NET Foundation and contributors | MIT | The desktop app |
-| [Windows App SDK](https://github.com/microsoft/WindowsAppSDK) 1.8.260529003, with Windows ML 1.8.2197 | Microsoft | [Microsoft Software License Terms for the Windows App SDK](https://www.nuget.org/packages/Microsoft.WindowsAppSDK/1.8.260529003/License) | The desktop app: WinUI, the Windows App SDK runtime and the Windows ML files that ship with it |
-| [.NET runtime](https://github.com/dotnet/runtime) 8.0.31 | .NET Foundation and contributors | MIT | The desktop app and its helpers, which ship with their own copy of the runtime |
+| [Windows App SDK](https://github.com/microsoft/WindowsAppSDK) 1.8.260529003 | Microsoft | [Microsoft Software License Terms for the Windows App SDK](https://www.nuget.org/packages/Microsoft.WindowsAppSDK/1.8.260529003/License) | The desktop app: WinUI, the Windows App SDK runtime, its interaction, text, AI and widget parts, and Windows ML 1.8.2197 |
+| NPUDetect 1.5 | Microsoft | Microsoft Software License Terms for the Windows App SDK, which ships it | The desktop app, as a part of the Windows App SDK's AI package |
+| [ONNX Runtime](https://onnxruntime.ai/) 1.23.5 | Microsoft | MIT | The desktop app, as a part Windows ML 1.8.2197 ships |
+| [DirectML](https://www.nuget.org/packages/Microsoft.AI.DirectML/1.15.4) 1.15.4 | Microsoft | [Microsoft Software License Terms for DirectML](https://www.nuget.org/packages/Microsoft.AI.DirectML/1.15.4/License) | The desktop app, as a part Windows ML 1.8.2197 ships |
+| [.NET runtime](https://github.com/dotnet/runtime) 8 | .NET Foundation and contributors | MIT, except `coreclr.dll`, which is under the [.NET Library License](https://dotnet.microsoft.com/dotnet_library_license.htm) ([Microsoft's breakdown](https://github.com/dotnet/core/blob/main/license-information-windows.md)) | The desktop app and its helpers, which ship with their own copy of the runtime |
+| [MsQuic](https://github.com/microsoft/msquic) | Microsoft | MIT | The desktop app and its helpers, as a part of the .NET runtime |
+| Microsoft DiaSymReader native library (`Microsoft.DiaSymReader.Native.amd64.dll`) | Microsoft | [.NET Library License](https://dotnet.microsoft.com/dotnet_library_license.htm) | The desktop app and its helpers, as a part of the .NET runtime |
 | [System.Numerics.Tensors](https://www.nuget.org/packages/System.Numerics.Tensors/9.0.0) 9.0.0 | .NET Foundation and contributors | MIT | The desktop app, as a part Windows ML needs |
 | [WebView2 SDK](https://www.nuget.org/packages/Microsoft.Web.WebView2/1.0.3179.45) 1.0.3179.45 | Microsoft | BSD 3-clause style license | The desktop app, as a part WinUI needs |
-| [Windows SDK .NET projection](https://www.nuget.org/packages/Microsoft.Windows.SDK.NET.Ref/10.0.19041.56) 10.0.19041.56 (`Microsoft.Windows.SDK.NET.dll` and `WinRT.Runtime.dll`) | Microsoft | [Microsoft Software License Terms for the Windows SDK](https://aka.ms/WinSDKLicenseURL) | The desktop app |
+| [Windows SDK for .NET](https://www.nuget.org/packages/Microsoft.Windows.SDK.NET.Ref) 10.0.19041 projection (`Microsoft.Windows.SDK.NET.dll`) | Microsoft | [Microsoft Software License Terms for the Windows SDK](https://aka.ms/WinSDKLicenseURL) | The desktop app |
+| [C#/WinRT](https://github.com/microsoft/CsWinRT) (`WinRT.Runtime.dll`) | Microsoft | MIT | The desktop app, as a part the Windows SDK for .NET ships |
 | [Windows SDK Build Tools](https://www.nuget.org/packages/Microsoft.Windows.SDK.BuildTools) | Microsoft | Microsoft Software License | Building the desktop app |
 | [ClrMD](https://github.com/microsoft/clrmd) | Microsoft | MIT | A memory check in the validation tools |
 | [Vortice.Windows](https://github.com/amerkoleci/Vortice.Windows) | Amer Koleci | MIT | GPU workloads in the validation tools |
@@ -174,7 +180,7 @@ The above copyright notice and this permission notice shall be included in all c
 THE SOFTWARE IS PROVIDED *AS IS*, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-The MIT license of the .NET runtime and System.Numerics.Tensors, from their 8.0.31 and 9.0.0 packages:
+The MIT license of the .NET runtime and System.Numerics.Tensors, from their runtime pack and 9.0.0 packages. It covers every .NET file the app ships except the two under the .NET Library License named above:
 
 ```text
 The MIT License (MIT)
@@ -200,6 +206,84 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+```
+
+ONNX Runtime's MIT license, from its Microsoft.ML.OnnxRuntime package:
+
+```text
+MIT License
+
+Copyright (c) Microsoft Corporation
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+MsQuic's MIT license, from its repository:
+
+```text
+Copyright (c) Microsoft Corporation.
+
+MIT License
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED *AS IS*, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+C#/WinRT's MIT license, from its repository at the commit the shipped `WinRT.Runtime.dll` records:
+
+```text
+    MIT License
+
+    Copyright (c) Microsoft Corporation.
+
+    Permission is hereby granted, free of charge, to any person obtaining a copy
+    of this software and associated documentation files (the "Software"), to deal
+    in the Software without restriction, including without limitation the rights
+    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+    copies of the Software, and to permit persons to whom the Software is
+    furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included in all
+    copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+    SOFTWARE
 ```
 
 The WebView2 SDK license, from its 1.0.3179.45 package:
