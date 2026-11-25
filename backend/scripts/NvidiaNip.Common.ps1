@@ -1,5 +1,4 @@
 . (Join-Path $PSScriptRoot 'ProcessProfile.Common.ps1')
-. (Join-Path $PSScriptRoot 'NvidiaProfileFile.Common.ps1')
 
 $script:RooIndustriesNvidiaNipProductName = 'Roo Industries Optimization Suite'
 

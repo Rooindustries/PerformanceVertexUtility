@@ -41,7 +41,6 @@ New-BulkUninstallPlan.ps1
 New-CleanupDeletionManifest.ps1
 New-UninstallCleanupExecutionPlan.ps1
 NvidiaNip.Common.ps1
-NvidiaProfileFile.Common.ps1
 OperationState.Common.ps1
 Preview-LeftoverScan.ps1
 Preview-NvidiaNipProfile.ps1

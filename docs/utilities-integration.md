@@ -141,7 +141,7 @@ Required metadata shape:
 ## NIP Profile Testing
 
 - Seed profile: `Utilities/Other/base-profile.nip`.
-- A file directly under `Utilities/Other` counts as the seed profile only when its SHA-256 matches the catalog's `sourceSha256`, whatever its name. The inventory, capability registry, profile review and Apply all use that rule.
+- A utilities folder made before this name change needs its profile file renamed to `base-profile.nip`.
 - Future `.nip` files should be added to the profile catalog.
 - Apply profile only on NVIDIA systems.
 - Benchmark each candidate profile against selected games.

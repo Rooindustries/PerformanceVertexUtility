@@ -10,7 +10,19 @@ function Get-RooIndustriesUtcStamp {
     return (Get-Date).ToUniversalTime().ToString('o')
 }
 
-. (Join-Path $PSScriptRoot 'NvidiaProfileFile.Common.ps1')
+function Resolve-RooIndustriesUtilitiesRoot {
+    param([string]$Path)
+
+    $candidate = $Path
+    if ([string]::IsNullOrWhiteSpace($candidate)) {
+        $candidate = $env:ROO_INDUSTRIES_UTILITIES_ROOT
+    }
+    if ([string]::IsNullOrWhiteSpace($candidate)) {
+        $candidate = (Join-Path ([Environment]::GetFolderPath('DesktopDirectory')) 'Utilities')
+    }
+
+    return [System.IO.Path]::GetFullPath($candidate)
+}
 
 function Convert-ToCleanString {
     param([object]$Value)
@@ -33,11 +45,10 @@ function Join-RooIndustriesUtilitiesPath {
 function Get-RooIndustriesFileEvidence {
     param(
         [string]$Path,
-        [string]$PathKind,
-        [bool]$Present
+        [string]$PathKind
     )
 
-    $exists = $Present -and (Test-Path -LiteralPath $Path -PathType Leaf)
+    $exists = Test-Path -LiteralPath $Path -PathType Leaf
     if (-not $exists) {
         return [pscustomobject]@{
             path = $Path
@@ -187,9 +198,7 @@ $tools = @($toolDefinitions | ForEach-Object {
         } else {
             [System.IO.Path]::GetFullPath([string]$spec.absolutePath)
         }
-        $candidate = Resolve-RooIndustriesNvidiaProfileFile $path
-        if ($null -ne $candidate) { $path = $candidate }
-        Get-RooIndustriesFileEvidence $path ([string]$spec.kind) ($null -ne $candidate)
+        Get-RooIndustriesFileEvidence $path ([string]$spec.kind)
     })
 
     [pscustomobject]@{
