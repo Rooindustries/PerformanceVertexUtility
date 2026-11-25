@@ -136,7 +136,7 @@ try {
 
     $utilitiesRoot = Join-Path $tempRoot 'Utilities'
     New-Item -ItemType Directory -Path (Join-Path $utilitiesRoot 'Other') -Force | Out-Null
-    $profileFile = Join-Path $utilitiesRoot 'Other\bundled-profile.nip'
+    $profileFile = Join-Path $utilitiesRoot 'Other\base-profile.nip'
     Set-Content -LiteralPath $profileFile -Value 'fixture NVIDIA profile' -Encoding ascii
     $legacyId = 'legacy-fixture'
     $sha = [System.Security.Cryptography.SHA256]::Create()
@@ -437,7 +437,10 @@ try {
         }
     }
 
-    $renamed = Get-ProfileFileView $utilitiesRoot
+    $renamedRoot = Join-Path $tempRoot 'RenamedUtilities'
+    New-Item -ItemType Directory -Path (Join-Path $renamedRoot 'Other') -Force | Out-Null
+    Copy-Item -LiteralPath $profileFile -Destination (Join-Path $renamedRoot 'Other\bundled-profile.nip')
+    $renamed = Get-ProfileFileView $renamedRoot
     $evidence.cases['profile-file-renamed'] = $renamed
     $renamedNames = @(
         $renamed.rule.resolvedTarget,
