@@ -78,6 +78,7 @@
         "tools/validation/BackgroundPolling/README.md",
         "tools/validation/Governor/Test-PolicyPermissionProbe.ps1",
         "tools/validation/Governor/Test-SetupTempAclContract.ps1",
+        "tools/validation/License/README.md",
         "tools/validation/Memory/Memory.Common.ps1",
         "tools/validation/Memory/run_memory.py",
         "tools/validation/Release/Invoke-BlackwellEpochRecovery.ps1",
