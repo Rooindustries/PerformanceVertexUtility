@@ -355,8 +355,8 @@ try
     var formerService = new LiveDataService(new BackendLocator(), formerDirectory);
     var formerPending = await formerService.ReadNvidiaProfileRecoveryAsync("base-profile");
     var formerRestoreCount = Counter("nvidia-restore-count.txt");
-    var formerRestore = await formerService.RestoreNvidiaProfileResultAsync(formerPending!, true);
-    Check(formerPending == formerSaved && formerRestore.Error is null && Counter("nvidia-restore-count.txt") == formerRestoreCount + 1
+    var formerRestore = formerPending is null ? null : await formerService.RestoreNvidiaProfileResultAsync(formerPending, true);
+    Check(formerPending == formerSaved && formerRestore is { Error: null } && Counter("nvidia-restore-count.txt") == formerRestoreCount + 1
             && await formerService.ReadNvidiaProfileRecoveryAsync("base-profile") is null
             && File.Exists(formerSaved.RollbackManifestPath) && File.Exists(formerSaved.ExportPath),
         "A recovery saved under the profile's former ID is pending for the current profile and restores through it, keeping its files");

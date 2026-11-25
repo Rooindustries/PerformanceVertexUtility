@@ -538,7 +538,8 @@ public sealed class LiveDataService
         catch (RooIndustries.Optimizer.EarlierVersionException error) { return new(null, error.Message); }
         using var operation = TryOperationLease(NvidiaOperationPath, "NVIDIA profile", out var leaseError);
         if (operation is null) return new(null, leaseError);
-        var profileId = NvidiaCatalogProfileId(recovery.ProfileId);
+        if (NvidiaCatalogProfileId(recovery.ProfileId) is not { } profileId)
+            return new(null, "The selected NVIDIA recovery is no longer current.");
         var current = await ReadNvidiaProfileRecoveryAsync(profileId).ConfigureAwait(false);
         if (!ValidNvidiaRecovery(recovery, profileId) || current != recovery)
             return new(null, "The selected NVIDIA recovery is no longer current.");
@@ -1084,7 +1085,7 @@ public sealed class LiveDataService
         => recovery is not null && NvidiaCatalogProfileId(recovery.ProfileId) == profileId
             && ValidateNvidiaRecovery(recovery, recovery.ProfileId);
 
-    private string NvidiaCatalogProfileId(string savedId)
+    private string? NvidiaCatalogProfileId(string savedId)
     {
         if (_locator.CatalogsDirectory is not { } catalogs) return savedId;
         var bytes = Encoding.UTF8.GetBytes(savedId);
@@ -1095,12 +1096,14 @@ public sealed class LiveDataService
             using var doc = JsonDocument.Parse(File.ReadAllText(path));
             foreach (var profile in doc.RootElement.GetProperty("profiles").EnumerateArray())
             {
+                var current = NvidiaString(profile, "profileId");
+                if (current == savedId) return current;
                 if (profile.TryGetProperty("formerProfileIdSha256", out var former)
                     && former.EnumerateArray()
                         .Any(item => digest.Equals(item.GetString(), StringComparison.OrdinalIgnoreCase)))
-                    return NvidiaString(profile, "profileId") ?? savedId;
+                    return current;
             }
-            return savedId;
+            return null;
         }
         catch
         {
