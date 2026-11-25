@@ -498,14 +498,14 @@ public sealed class LiveDataService
     {
         var generation = ReadGeneration(NvidiaGenerationPath);
         if (VolatileNvidiaRecovery.TryGetValue(_recoveryKey, out var volatileRecovery)
-            && ValidateNvidiaRecovery(volatileRecovery, profileId)
+            && ValidNvidiaRecovery(volatileRecovery, profileId)
             && SameGeneration(volatileRecovery.Generation, generation)) return Task.FromResult<NvidiaProfileRecovery?>(volatileRecovery);
         var path = NvidiaRecoveryIndexPath;
         if (!File.Exists(path)) return Task.FromResult<NvidiaProfileRecovery?>(null);
         try
         {
             var recovery = RooIndustries.Optimizer.OperationFiles.Read<NvidiaProfileRecovery>(path);
-            return Task.FromResult(ValidateNvidiaRecovery(recovery, profileId)
+            return Task.FromResult(ValidNvidiaRecovery(recovery, profileId)
                 && SameGeneration(recovery.Generation, generation) ? recovery : null);
         }
         catch
@@ -538,12 +538,13 @@ public sealed class LiveDataService
         catch (RooIndustries.Optimizer.EarlierVersionException error) { return new(null, error.Message); }
         using var operation = TryOperationLease(NvidiaOperationPath, "NVIDIA profile", out var leaseError);
         if (operation is null) return new(null, leaseError);
-        var current = await ReadNvidiaProfileRecoveryAsync(recovery.ProfileId).ConfigureAwait(false);
-        if (!ValidateNvidiaRecovery(recovery, recovery.ProfileId) || current != recovery)
+        var profileId = NvidiaCatalogProfileId(recovery.ProfileId);
+        var current = await ReadNvidiaProfileRecoveryAsync(profileId).ConfigureAwait(false);
+        if (!ValidNvidiaRecovery(recovery, profileId) || current != recovery)
             return new(null, "The selected NVIDIA recovery is no longer current.");
         if (!TryWriteGeneration(NvidiaGenerationPath, recovery.Generation!, "NVIDIA profile", out var generationError))
             return new(null, generationError);
-        var args = "-Operation Restore -ProfileId " + QuotePowerShell(recovery.ProfileId)
+        var args = "-Operation Restore -ProfileId " + QuotePowerShell(profileId)
             + " -ExecutorMode " + (userApproved ? "Real" : "Preview")
             + " -ExportPath " + QuotePowerShell(recovery.ExportPath)
             + " -RollbackManifestPath " + QuotePowerShell(recovery.RollbackManifestPath)
@@ -554,7 +555,7 @@ public sealed class LiveDataService
         }
 
         var result = await RunBackendScriptResultAsync("Invoke-NvidiaNipExecutor.ps1", ct, args).ConfigureAwait(false);
-        if (result.Error is null && NvidiaRestoreCompleted(result.Value, recovery))
+        if (result.Error is null && NvidiaRestoreCompleted(result.Value, recovery, profileId))
         {
             try
             {
@@ -1079,6 +1080,34 @@ public sealed class LiveDataService
         return ValidateNvidiaRecovery(recovery, profileId) ? recovery : null;
     }
 
+    private bool ValidNvidiaRecovery(NvidiaProfileRecovery? recovery, string profileId)
+        => recovery is not null && NvidiaCatalogProfileId(recovery.ProfileId) == profileId
+            && ValidateNvidiaRecovery(recovery, recovery.ProfileId);
+
+    private string NvidiaCatalogProfileId(string savedId)
+    {
+        if (_locator.CatalogsDirectory is not { } catalogs) return savedId;
+        var bytes = Encoding.UTF8.GetBytes(savedId);
+        var digest = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes));
+        try
+        {
+            var path = Path.Combine(catalogs, "nvidia-profile-inspector-nip-catalog.json");
+            using var doc = JsonDocument.Parse(File.ReadAllText(path));
+            foreach (var profile in doc.RootElement.GetProperty("profiles").EnumerateArray())
+            {
+                if (profile.TryGetProperty("formerProfileIdSha256", out var former)
+                    && former.EnumerateArray()
+                        .Any(item => digest.Equals(item.GetString(), StringComparison.OrdinalIgnoreCase)))
+                    return NvidiaString(profile, "profileId") ?? savedId;
+            }
+            return savedId;
+        }
+        catch
+        {
+            return savedId;
+        }
+    }
+
     private static bool ValidateNvidiaRecovery(NvidiaProfileRecovery? recovery, string profileId)
     {
         if (recovery is null || recovery.ProfileId != profileId || string.IsNullOrWhiteSpace(recovery.Generation)
@@ -1101,7 +1130,7 @@ public sealed class LiveDataService
         }
     }
 
-    private static bool NvidiaRestoreCompleted(string? json, NvidiaProfileRecovery recovery)
+    private static bool NvidiaRestoreCompleted(string? json, NvidiaProfileRecovery recovery, string profileId)
     {
         if (string.IsNullOrWhiteSpace(json)) return false;
         try
@@ -1114,7 +1143,7 @@ public sealed class LiveDataService
             var importCompleted = NvidiaBool(root, "summary", "importCompleted");
             return NvidiaString(root, "actionId") == "drivers.nvidiaNip.executor"
                 && NvidiaString(root, "operation") == "Restore"
-                && NvidiaString(root, "profileId") == recovery.ProfileId
+                && NvidiaString(root, "profileId") == profileId
                 && NvidiaBool(root, "dryRun") == false
                 && NvidiaString(root, "status") == "success"
                 && reportedBlocking == 0

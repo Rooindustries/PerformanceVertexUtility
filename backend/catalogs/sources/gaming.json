@@ -1,8 +1,7 @@
 {
-  "product": "FSOS-X Dash",
+  "product": "Gaming toggles",
   "version": "2.4.9",
-  "reference": "https://fsosx.com/FSOS-XR11H2.apbx",
-  "sha256": "dd50c1d39bd4c75f44076e49320206759004b2e498f64657681796648c81b8db",
+  "reference": "gaming-toggles-r11h2",
   "records": [
     {
       "id": "activity-history",
@@ -94,7 +93,7 @@
       "extraEffects": [],
       "notes": [],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -139,7 +138,7 @@
       "extraEffects": [],
       "notes": [],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -182,7 +181,7 @@
       "extraEffects": [],
       "notes": [],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -233,7 +232,7 @@
       "extraEffects": [],
       "notes": [],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -283,7 +282,7 @@
       ],
       "notes": [],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -351,7 +350,7 @@
       ],
       "notes": [],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -423,7 +422,7 @@
         "HKLM helper was traced to Registry.LocalMachine; enabling clears conflicting policy Enabled value. ACL helper behavior and Windows support remain separate executor requirements."
       ],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -499,7 +498,7 @@
       ],
       "notes": [],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -542,7 +541,7 @@
       "extraEffects": [],
       "notes": [],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -665,7 +664,7 @@
       "extraEffects": [],
       "notes": [],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -715,7 +714,7 @@
       ],
       "notes": [],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -799,7 +798,7 @@
       "extraEffects": [],
       "notes": [],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -844,7 +843,7 @@
       "extraEffects": [],
       "notes": [],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -887,7 +886,7 @@
       "extraEffects": [],
       "notes": [],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -937,7 +936,7 @@
       ],
       "notes": [],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -1052,7 +1051,7 @@
       "extraEffects": [],
       "notes": [],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -1129,7 +1128,7 @@
       "extraEffects": [],
       "notes": [],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -1174,7 +1173,7 @@
       "extraEffects": [],
       "notes": [],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -1224,7 +1223,7 @@
       ],
       "notes": [],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -1269,7 +1268,7 @@
       "extraEffects": [],
       "notes": [],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -1314,7 +1313,7 @@
       "extraEffects": [],
       "notes": [],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -1359,7 +1358,7 @@
       "extraEffects": [],
       "notes": [],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -1404,7 +1403,7 @@
         "Upstream title is inverted relative to methods: EnableAsync removes PlatformAoAcOverride; DisableAsync writes DWORD0. Do not infer action polarity from the title."
       ],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -1492,7 +1491,7 @@
         "Includes live SystemParametersInfo mouse update; registry edits alone do not establish immediate live behavior."
       ],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -1537,7 +1536,7 @@
       "extraEffects": [],
       "notes": [],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -1582,7 +1581,7 @@
       "extraEffects": [],
       "notes": [],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -1625,7 +1624,7 @@
       "extraEffects": [],
       "notes": [],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -1706,7 +1705,7 @@
       "extraEffects": [],
       "notes": [],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -1783,7 +1782,7 @@
       "extraEffects": [],
       "notes": [],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -1826,7 +1825,7 @@
       "extraEffects": [],
       "notes": [],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -1885,7 +1884,7 @@
       "extraEffects": [],
       "notes": [],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -1948,7 +1947,7 @@
       "extraEffects": [],
       "notes": [],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -1999,7 +1998,7 @@
       "extraEffects": [],
       "notes": [],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -2046,7 +2045,7 @@
         "Literal registry key and enabled/disabled values verified; this is source evidence, not confirmation of effective Code Integrity policy."
       ],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -2109,7 +2108,7 @@
       "extraEffects": [],
       "notes": [],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -2736,7 +2735,7 @@
       "extraEffects": [],
       "notes": [],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -2859,7 +2858,7 @@
       "extraEffects": [],
       "notes": [],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -3393,7 +3392,7 @@
       ],
       "notes": [],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -3480,7 +3479,7 @@
       ],
       "notes": [],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -3567,7 +3566,7 @@
       "extraEffects": [],
       "notes": [],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -3618,7 +3617,7 @@
         "Must compose token updates with other controls on the same registry value and snapshot the original entire string once."
       ],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -3669,7 +3668,7 @@
         "Must compose token updates with other controls on the same registry value and snapshot the original entire string once."
       ],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -3716,7 +3715,7 @@
         "The menu exposes presets and a constrained custom dialog; the underlying selection method accepts any parseable signed integer. Treat values as choices, not independent tweaks."
       ],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -3778,7 +3777,7 @@
         "Enable reports failure only if no endpoints were found; individual delete failures are ignored. Disable counts successful writes and fails if zero; partial writes still report success."
       ],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -3817,7 +3816,7 @@
         "Task enable/disable exit result is not checked by the control; missing task can still produce a success message."
       ],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -4094,7 +4093,7 @@
         "Absent services are skipped. Only Automatic starts immediately; Disabled stops immediately; Manual/System changes do not stop an already running service. Startup failure => failed result; failed start/stop => restart requested."
       ],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -4137,7 +4136,7 @@
         "Apply uses PowerShell Set-ProcessMitigation and process exit status; setting one mitigation does not establish the state of all others."
       ],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -4441,7 +4440,7 @@
         "Enabling writes menu definitions only; boot edits and reboot occur later when a user invokes a menu entry. Individual writes catch errors. Disable deletes both entire subtrees, including pre-existing contents."
       ],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -4655,7 +4654,7 @@
         "Only the first SearchOrderConfig write determines control success. All eight registry effects and Driver Install scheduled task are attempted. ACL fallback can occur on TrySetDword writes."
       ],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -4695,10 +4694,10 @@
       },
       "extraEffects": [],
       "notes": [
-        "Uses NetworkAdapterResolver names; empty resolution becomes wildcard all adapters. Property support differs by NIC/driver. PowerShell errors are silenced; native process return is ignored by this control."
+        "Uses the primary network adapter names; empty resolution becomes wildcard all adapters. Property support differs by NIC/driver. PowerShell errors are silenced; native process return is ignored by this control."
       ],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -4753,7 +4752,7 @@
         "Disable additionally invokes rundll32 fthsvc.dll,FthSysprepSpecialize; its internal Windows cleanup is a native OS operation, not recoverable from the Enabled value alone. Apply return does not check registry/native success."
       ],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -4794,13 +4793,13 @@
             "then": [
               {
                 "method": "scheduled-task-create-if-missing",
-                "name": "FSOS-TimerResolution",
+                "name": "{source}-TimerResolution",
                 "trigger": "Boot",
                 "principal": "S-1-5-18",
                 "runLevel": "HighestAvailable",
                 "hidden": true,
                 "enabled": true,
-                "executable": "%WINDIR%\\FSOS\\Tools\\SetTimerResolution.exe",
+                "executable": "%WINDIR%\\{source}\\Tools\\SetTimerResolution.exe",
                 "arguments": [
                   "--resolution",
                   "5000",
@@ -4820,12 +4819,12 @@
               },
               {
                 "method": "scheduled-task",
-                "path": "FSOS-TimerResolution",
+                "path": "{source}-TimerResolution",
                 "operation": "enable"
               },
               {
                 "method": "scheduled-task-run",
-                "name": "FSOS-TimerResolution"
+                "name": "{source}-TimerResolution"
               }
             ],
             "otherwise": "Return success for registry/BCD subset; no timer process starts"
@@ -4846,7 +4845,7 @@
           },
           {
             "method": "scheduled-task",
-            "path": "FSOS-TimerResolution",
+            "path": "{source}-TimerResolution",
             "operation": "disable"
           },
           {
@@ -4861,10 +4860,10 @@
       },
       "extraEffects": [],
       "notes": [
-        "Missing task is created from temporary UTF-16 XML at %TEMP%\\fsos-timerres-task.xml; cleanup deletes that file in finally. Existing task action is not revalidated or replaced. Enabling does not inspect operation exit results. Disabling does not remove the task or tool. Process stop selects all matching process names, not only the tool path."
+        "Missing task is created from temporary UTF-16 XML at %TEMP%\\{source}-timerres-task.xml; cleanup deletes that file in finally. Existing task action is not revalidated or replaced. Enabling does not inspect operation exit results. Disabling does not remove the task or tool. Process stop selects all matching process names, not only the tool path."
       ],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -4969,7 +4968,7 @@
         "Enable powercfg /hibernate on, then Fast Startup and Sleep-menu values; read back HibernateEnabled=1 or fail after partial changes. powercfg /a is parsed for available Standby/S1/S2/S3 before English not available section; missing output/exception assumes sleep available. Disable powercfg /hibernate off then other values; readback must be0. No rollback occurs on failed readback."
       ],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -5032,7 +5031,7 @@
         "Enable writes Manual then starts icssvc. Disable stops then writes Disabled. Exit results are ignored."
       ],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -5304,7 +5303,7 @@
         "All operations proceed even when service batch reports failures. BCD uses10s wait; feature command waits180s, suppresses per-feature errors, does not check final exit status. Features may be unavailable on an edition; the control can still report success."
       ],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -5344,10 +5343,10 @@
       },
       "extraEffects": [],
       "notes": [
-        "Uses NetworkAdapterResolver names; empty resolution becomes wildcard all adapters. Property support differs by NIC/driver. PowerShell errors are silenced; native process return is ignored by this control."
+        "Uses the primary network adapter names; empty resolution becomes wildcard all adapters. Property support differs by NIC/driver. PowerShell errors are silenced; native process return is ignored by this control."
       ],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -5386,7 +5385,7 @@
         "Empty adapter resolution becomes wildcard all adapters. Enable/Disable acts on the feature without an IPv4-only flag, but detector inspects only the named IPv4 property. PowerShell errors are silenced and process result is ignored."
       ],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -5442,7 +5441,7 @@
         "Windows11 UI gate. Key deletion catches errors; Explorer command outcome ignored. Disable removes the entire CLSID tree, including any original contents."
       ],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -5505,7 +5504,7 @@
         "Enable attempts both verified deletions even if the first fails. Disable first verifies service-parameter DWORD0; only if that succeeds does it delete the policy value, with delete failures ignored."
       ],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -5528,7 +5527,7 @@
           {
             "method": "service",
             "name": "lfsvc",
-            "helper": "ServiceControlHelper",
+            "helper": "service-control",
             "startup": 2
           },
           {
@@ -5638,7 +5637,7 @@
           {
             "method": "service",
             "name": "lfsvc",
-            "helper": "ServiceControlHelper",
+            "helper": "service-control",
             "running": "restart"
           },
           {
@@ -5648,7 +5647,7 @@
               {
                 "method": "service",
                 "name": "camsvc",
-                "helper": "ServiceControlHelper",
+                "helper": "service-control",
                 "running": "restart"
               }
             ]
@@ -5662,7 +5661,7 @@
           {
             "method": "service",
             "name": "lfsvc",
-            "helper": "ServiceControlHelper",
+            "helper": "service-control",
             "startup": 4
           },
           {
@@ -5718,7 +5717,7 @@
           {
             "method": "service",
             "name": "lfsvc",
-            "helper": "ServiceControlHelper",
+            "helper": "service-control",
             "running": false
           },
           {
@@ -5728,7 +5727,7 @@
               {
                 "method": "service",
                 "name": "camsvc",
-                "helper": "ServiceControlHelper",
+                "helper": "service-control",
                 "running": "restart"
               }
             ]
@@ -5744,7 +5743,7 @@
         "Only service startup-change result determines success. Registry changes, lfsvc/camsvc restart failures can be masked."
       ],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -5790,7 +5789,7 @@
         "Enable runs Enable-MMAgent -mc then Get-MMAgent; true required. Disable runs Disable-MMAgent -mc then reads; only true while SysMain is not disabled causes failure. Missing/unknown query can therefore produce a success response when disabling."
       ],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -5866,7 +5865,7 @@
         "Enabled deletes both override values and enables five system process mitigations. Disabled writes3/3 only; it does not reverse process mitigation changes from enable. Native PowerShell errors are silenced and its exit status is ignored."
       ],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -5921,7 +5920,7 @@
         "Per-interface failures are caught; at least one successful write/delete is required, even if other adapters fail."
       ],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -5977,7 +5976,7 @@
         "NetBT subkey prefix Tcpip_ is removed before interface-ID comparison. Enable writes DHCP-default0, not forced NetBIOS1. Missing root=>failure; zero matches can still succeed."
       ],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -6018,7 +6017,7 @@
         "Uses fsutil, not a direct registry mutation. Apply does not check exit result. Opposite direction selects explicit user-managed defaults rather than original system-managed values."
       ],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -6075,7 +6074,7 @@
         "Apply uses PowerShell Set-ProcessMitigation and process exit status; setting one mitigation does not establish the state of all others."
       ],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -6347,7 +6346,7 @@
         "Apply order is NIC, device classes, USB, WMI. An uncaught NIC open or PnPCapabilities write failure aborts later passes and returns failure. Device-class and USB passes catch at each root, so one root failure does not prevent later roots. Individual NIC property, class PnP and USB value failures are swallowed."
       ],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -6481,7 +6480,7 @@
         "Absent services are skipped. Only Automatic starts immediately; Disabled stops immediately; Manual/System changes do not stop an already running service. Startup failure => failed result; failed start/stop => restart requested."
       ],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -6544,7 +6543,7 @@
         "Enable writes Start2 before service start; Disable requests stop before Start4. Success checks startup DWORD only, not running state."
       ],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -6653,7 +6652,7 @@
         "Enable clears entire IFEO smartscreen.exe subtree, including unrelated pre-existing values. Enable deletes HKCU Edge SmartScreenEnabled; disable writes DWORD0. Enabling writes Explorer Warn and removes two policy values; disabling writes Explorer Off, EnableSmartScreen0 and ShellSmartScreenLevel Warn."
       ],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -6706,7 +6705,7 @@
           {
             "method": "service",
             "name": "SysMain",
-            "helper": "ServiceControlHelper",
+            "helper": "service-control",
             "running": true
           }
         ],
@@ -6744,7 +6743,7 @@
           {
             "method": "service",
             "name": "SysMain",
-            "helper": "ServiceControlHelper",
+            "helper": "service-control",
             "running": false
           }
         ]
@@ -6754,7 +6753,7 @@
         "Helper start may change Disabled startup to Manual if the preceding registry write failed. Failed runtime start/stop still reports success with restart required."
       ],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -6811,7 +6810,7 @@
         "Drive is hardcoded C:\\, not actual system drive lookup. Native PowerShell operation results are ignored; RPSessionInterval alone is not proof that protection is available."
       ],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -6866,7 +6865,7 @@
         "Missing root=>failure; otherwise zero matched interfaces can still report success. One thrown write can abort the remaining loop; no rollback."
       ],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -6905,7 +6904,7 @@
         "Empty adapter resolution becomes wildcard all adapters. Enable/Disable acts on the feature without an IPv4-only flag, but detector inspects only the named IPv4 property. PowerShell errors are silenced and process result is ignored."
       ],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -7398,7 +7397,7 @@
         "Disabled stops each named service then writes Start4; Enable writes fixed startup defaults but does not start them. Helpers may create registry service paths even when a real service is absent. All task/native and registry results ignored."
       ],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -7422,7 +7421,7 @@
             "method": "registry-restore-from-backup-or-default",
             "hive": "HKLM",
             "path": "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System",
-            "backupPath": "SOFTWARE\\FrameSyncLabs\\FSOS-X Dash\\UacBackup",
+            "backupPath": "SOFTWARE\\{source}\\UacBackup",
             "names": [
               "EnableLUA",
               "ConsentPromptBehaviorAdmin",
@@ -7447,7 +7446,7 @@
             "method": "registry-snapshot-if-missing",
             "hive": "HKLM",
             "sourcePath": "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System",
-            "destinationPath": "SOFTWARE\\FrameSyncLabs\\FSOS-X Dash\\UacBackup",
+            "destinationPath": "SOFTWARE\\{source}\\UacBackup",
             "guardName": "EnableLUA",
             "names": [
               "EnableLUA",
@@ -7496,7 +7495,7 @@
         "This is the only reviewed control using a per-control original-value backup; absence/type is replaced with defaults, backup is retained, and originally disabled UAC is intentionally re-enabled."
       ],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -7761,7 +7760,7 @@
         "CoreIsolationRegistry catches write failures. BCD/feature commands do not verify exit results. Disable does not remove optional features enabled by Enable. Credential Guard/System Guard/LSA and graphics IOMMU settings are part of the same bundle."
       ],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -7856,7 +7855,7 @@
         "Disable leaves WlanSvc Manual and does not directly stop it; it disables/stops the four supporting services."
       ],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -8477,7 +8476,7 @@
         "Enable sets wuauserv Manual, UsoSvc Automatic, BITS Manual but does not start them; deletes27 looped pause/policy values plus four other flags. Disable stops those three then writes Disabled and all literal policy/pause/app-updater fields. Results are ignored. Fixed2033 dates and current Windows applicability require independent checks."
       ],
       "evidence": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     }
   ],
@@ -8659,8 +8658,6 @@
     {
       "path": "Executables/SetTimerResolution.exe",
       "present": true,
-      "sha256": "c5bfc7d4b3cba390bf766f8cd68be116bdfd1151009428f951ddfa04bd73abb1",
-      "bytes": 139264,
       "executed": false
     }
   ]

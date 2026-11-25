@@ -1,11 +1,12 @@
 param(
     [ValidateSet('Apply','Restore')]
     [string]$Operation = 'Apply',
-    [string]$ProfileId = 'framesync',
+    [string]$ProfileId = 'base-profile',
     [string]$CatalogPath = '',
     [string]$HardwareInventoryPath = '',
     [string]$NvpiExecutablePath = '',
     [string]$NipSourcePath = '',
+    [string]$UtilitiesRoot = '',
     [string]$ExportPath = '',
     [string]$RollbackManifestPath = '',
     [ValidateSet('Preview','Mock','Real')]
@@ -113,11 +114,13 @@ try {
         $resolvedRequestedRollbackManifestPath = Resolve-RooIndustriesPath $RollbackManifestPath $RollbackManifestPath
         if (Test-Path -LiteralPath $resolvedRequestedRollbackManifestPath) {
             $persistedRollbackManifest = Read-RooIndustriesJsonFile $resolvedRequestedRollbackManifestPath
+            $profile = Get-RooIndustriesNvidiaNipProfile (Read-RooIndustriesNvidiaNipCatalog $CatalogPath) $ProfileId
             $manifestExportPath = [string](Get-RooIndustriesPropertyValue $persistedRollbackManifest 'exportPath' '')
+            $savedProfileId = [string](Get-RooIndustriesPropertyValue $persistedRollbackManifest 'profileId' '')
             $rollbackManifestBound = (
                 [string](Get-RooIndustriesPropertyValue $persistedRollbackManifest 'actionId' '') -ceq 'drivers.nvidiaNip.rollbackManifest' -and
                 [string](Get-RooIndustriesPropertyValue $persistedRollbackManifest 'restoreActionId' '') -ceq 'drivers.nvidiaNip.restoreProfile' -and
-                [string](Get-RooIndustriesPropertyValue $persistedRollbackManifest 'profileId' '') -ceq $ProfileId -and
+                (Test-RooIndustriesNvidiaProfileId $profile $savedProfileId) -and
                 [bool](Get-RooIndustriesPropertyValue $persistedRollbackManifest 'rollbackSupported' $false) -and
                 [bool](Get-RooIndustriesPropertyValue $persistedRollbackManifest 'exportCompleted' $false) -and
                 -not [string]::IsNullOrWhiteSpace($manifestExportPath) -and
@@ -134,6 +137,7 @@ try {
         -HardwareInventoryPath $HardwareInventoryPath `
         -NvpiExecutablePath $NvpiExecutablePath `
         -NipSourcePath $NipSourcePath `
+        -UtilitiesRoot $UtilitiesRoot `
         -ExportPath $ExportPath) | ConvertFrom-Json
 
     $commands = Get-RooIndustriesPropertyValue $preview 'commands' $null
@@ -160,6 +164,11 @@ try {
     $realMode = ($ExecutorMode -eq 'Real')
     $mockMode = ($ExecutorMode -eq 'Mock')
     $executeRequested = ($ExecutorMode -ne 'Preview')
+    $apply = ($Operation -eq 'Apply')
+    $previewProfile = Get-RooIndustriesPropertyValue $preview 'profile' $null
+    $fileReady = (-not $apply) -or [bool](Get-RooIndustriesPropertyValue $previewProfile 'candidatePresent' $false)
+    $fileReason = 'Apply needs a file in the utilities Other folder with the catalog profile content.'
+    $fileProof = [pscustomobject]@{ sourceFile = Get-RooIndustriesPropertyValue $previewProfile 'sourceFile' $null }
     $gates = @(
         (New-RooIndustriesBackendExecutorGate 'confirm-apply' 'Confirmed execution requested' $true ([bool]$ConfirmApply) 'Executor will not run from preview-only calls.' $null),
         (New-RooIndustriesBackendExecutorGate 'executor-mode-selected' 'Executor mode selected' $true $executeRequested 'ExecutorMode must be Mock or Real to run commands.' ([pscustomobject]@{ executorMode = $ExecutorMode })),
@@ -168,6 +177,7 @@ try {
         (New-RooIndustriesBackendExecutorGate 'no-auto-apply' 'No auto-apply path used' $true ($ConfirmApply -and $executeRequested) 'Default invocation remains preview-only.' ([pscustomobject]@{ confirmApply = [bool]$ConfirmApply; executorMode = $ExecutorMode })),
         (New-RooIndustriesBackendExecutorGate 'mock-shim-present' 'Mock NVPI shim present' $mockMode ((-not $mockMode) -or $mockShimPresent) 'Mock validation requires a shim path.' ([pscustomobject]@{ mockNvpiShimPath = $MockNvpiShimPath })),
         (New-RooIndustriesBackendExecutorGate 'real-nvpi-explicit-flag' 'Real NVPI explicit flag supplied' $realMode ((-not $realMode) -or [bool]$AllowRealNvpiExecution) 'Real NVIDIA Profile Inspector execution requires -AllowRealNvpiExecution in addition to confirmation.' $null),
+        (New-RooIndustriesBackendExecutorGate 'profile-file-present' 'Profile file' $apply $fileReady $fileReason $fileProof),
         (New-RooIndustriesBackendExecutorGate 'benchmark-evidence' 'Benchmark evidence attached' ($Operation -eq 'Apply') (($Operation -ne 'Apply') -or [bool]$BenchmarkEvidenceAttached) 'Profile apply requires benchmark evidence before recommendation.' $null),
         (New-RooIndustriesBackendExecutorGate 'rollback-manifest-bound' 'Rollback manifest matches this profile' ($Operation -eq 'Restore') (($Operation -ne 'Restore') -or $rollbackManifestBound) 'Restore requires the exact rollback manifest written by the selected profile apply.' ([pscustomobject]@{ rollbackManifestPath = $resolvedRequestedRollbackManifestPath })),
         (New-RooIndustriesBackendExecutorGate 'rollback-export-present' 'Rollback export is present' ($Operation -eq 'Restore') (($Operation -ne 'Restore') -or $rollbackExportPresent) 'Restore requires the exported profile named by the rollback manifest.' ([pscustomobject]@{ exportPath = $ExportPath }))

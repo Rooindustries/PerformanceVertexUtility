@@ -1,9 +1,10 @@
 param(
-    [string]$ProfileId = 'framesync',
+    [string]$ProfileId = 'base-profile',
     [string]$CatalogPath = '',
     [string]$HardwareInventoryPath = '',
     [string]$NvpiExecutablePath = '',
     [string]$NipSourcePath = '',
+    [string]$UtilitiesRoot = '',
     [string]$ExportPath = '',
     [string]$OutputPath = ''
 )
@@ -21,8 +22,14 @@ try {
         $NvpiExecutablePath = [string](Get-RooIndustriesPropertyValue $toolAsset 'archivePath' 'Utilities\Other\NVPI\nvidiaProfileInspector.exe')
     }
     if ([string]::IsNullOrWhiteSpace($NipSourcePath)) {
-        $NipSourcePath = [string](Get-RooIndustriesPropertyValue $profile 'sourceFile' '')
+        $utilitiesFolder = Resolve-RooIndustriesUtilitiesRoot $UtilitiesRoot
+        $NipSourcePath = Join-Path $utilitiesFolder ([string]$profile.sourceFile -replace '^Utilities\\', '')
     }
+    $candidatePath = Resolve-RooIndustriesNvidiaProfileFile $NipSourcePath $profile
+    if ($null -ne $candidatePath) { $NipSourcePath = $candidatePath }
+    $fileReady = $null -ne $candidatePath
+    $fileReason = 'Apply needs a file in the utilities Other folder with the catalog profile content.'
+    $fileProof = [pscustomobject]@{ sourceFile = $NipSourcePath }
     if ([string]::IsNullOrWhiteSpace($ExportPath)) {
         $ExportPath = Join-Path ([System.IO.Path]::GetTempPath()) ("roo-industries-nvidia-nip-export-{0}-{1}.nip" -f (ConvertTo-RooIndustriesNvidiaSafeId $ProfileId), (Get-RooIndustriesFileStamp))
     }
@@ -33,6 +40,7 @@ try {
 
     $gates = @(
         (New-RooIndustriesNvidiaNipGate 'nvidia-hardware-present' 'NVIDIA hardware detected' $true ([bool]$hardware.nvidiaGpuPresent) 'NIP profile import is NVIDIA-only.' $hardware),
+        (New-RooIndustriesNvidiaNipGate 'profile-file-present' 'Profile file' $true $fileReady $fileReason $fileProof),
         (New-RooIndustriesNvidiaNipGate 'export-before-import' 'Current NVIDIA profile export completed' $true $false 'The current profile must be exported before any import can be considered.' ([pscustomobject]@{ exportPath = $ExportPath; exportCommand = $exportCommand.commandLine })),
         (New-RooIndustriesNvidiaNipGate 'explicit-user-approval' 'Explicit profile import approval captured' $true $false 'A future apply path must capture fresh approval for this exact profile and export path.' $null),
         (New-RooIndustriesNvidiaNipGate 'future-nvpi-execution-flag' 'Future NVPI execution flag supplied' $true $false 'Backend validation and normal previews must not launch NVIDIA Profile Inspector.' $null),
@@ -54,6 +62,7 @@ try {
             name = [string](Get-RooIndustriesPropertyValue $profile 'name' '')
             profileNameInNip = $profileName
             sourceFile = $NipSourcePath
+            candidatePresent = $fileReady
             sourceSha256 = Get-RooIndustriesPropertyValue $profile 'sourceSha256' $null
             settingCount = Get-RooIndustriesPropertyValue $profile 'settingCount' $null
             supportedHardware = @(Get-RooIndustriesPropertyArray $profile 'supportedHardware')

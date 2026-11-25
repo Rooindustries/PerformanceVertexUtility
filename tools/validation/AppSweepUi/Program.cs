@@ -1152,13 +1152,13 @@ if (args is [] or ["responses"] or ["cleanup"] or ["race"])
     File.WriteAllText(nvidiaExport, "fixture export");
     try
     {
-        var recovery = new RooIndustries.OptimizationSuite.Services.NvidiaProfileRecovery("framesync", nvidiaManifest, nvidiaExport);
+        var recovery = new RooIndustries.OptimizationSuite.Services.NvidiaProfileRecovery("base-profile", nvidiaManifest, nvidiaExport);
         App.Live.NvidiaRecovery = recovery;
         App.Live.NvidiaApplyText = JsonSerializer.Serialize(new
         {
             actionId = "drivers.nvidiaNip.executor",
             operation = "Apply",
-            profileId = "framesync",
+            profileId = "base-profile",
             dryRun = false,
             status = "failed",
             summary = new { exportCompleted = true, importAttempted = true, importCompleted = false },
@@ -1180,7 +1180,7 @@ if (args is [] or ["responses"] or ["cleanup"] or ["race"])
         {
             actionId = "drivers.nvidiaNip.executor",
             operation = "Restore",
-            profileId = "framesync",
+            profileId = "base-profile",
             dryRun = false,
             status = "success",
             rollbackManifestPath = nvidiaManifest,
@@ -1196,7 +1196,7 @@ if (args is [] or ["responses"] or ["cleanup"] or ["race"])
         {
             actionId = "drivers.nvidiaNip.executor",
             operation = "Restore",
-            profileId = "framesync",
+            profileId = "base-profile",
             dryRun = false,
             status = "success",
             rollbackManifestPath = nvidiaManifest,

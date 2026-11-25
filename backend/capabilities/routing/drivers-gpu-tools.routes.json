@@ -79,7 +79,7 @@
       "notes": "Restore preview builds rollback import metadata without launching NVIDIA Profile Inspector."
     },
     {
-      "capabilityId": "drivers-gpu-tools.nvidia-nip-framesync-catalog",
+      "capabilityId": "drivers-gpu-tools.nvidia-nip-base-catalog",
       "preview": {
         "script": "backend/scripts/Preview-NvidiaNipProfile.ps1",
         "args": [],
@@ -95,7 +95,7 @@
         "reason": "catalog-only metadata",
         "nextRequiredStep": "Use Preview-NvidiaNipProfile.ps1 for catalog review; catalog-only metadata has no restore path."
       },
-      "notes": "FrameSync catalog preview is command metadata only."
+      "notes": "Base profile catalog preview is command metadata only."
     },
     {
       "capabilityId": "drivers-gpu-tools.driver-package-nvidia-59579-no-app",

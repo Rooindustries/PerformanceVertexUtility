@@ -3,7 +3,7 @@
   "version": "2026-09-20.1",
   "records": [
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "activity-history",
       "name": "Activity History",
@@ -60,7 +60,7 @@
       ]
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "auto-reboot-crash",
       "name": "Auto-reboot After BSOD",
@@ -93,7 +93,7 @@
       ]
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "auto-maintenance",
       "name": "Automatic Maintenance",
@@ -126,7 +126,7 @@
       ]
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "bgapps",
       "name": "Background Apps",
@@ -159,7 +159,7 @@
       ]
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "center-taskbar",
       "name": "Center Taskbar Icons",
@@ -192,7 +192,7 @@
       ]
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "combine-taskbar-buttons",
       "name": "Combine Taskbar Buttons",
@@ -233,7 +233,7 @@
       ]
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "core-isolation",
       "name": "Core Isolation / Memory Integrity",
@@ -278,7 +278,7 @@
       ]
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "dark-theme",
       "name": "Dark Theme",
@@ -319,7 +319,7 @@
       ]
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "delivery-optimization-p2p",
       "name": "Update Delivery Optimization (P2P)",
@@ -352,7 +352,7 @@
       ]
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "dynamic-lighting",
       "name": "Dynamic Lighting",
@@ -409,7 +409,7 @@
       ]
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "end-task-right-click",
       "name": "End Task on Taskbar Right-Click",
@@ -442,7 +442,7 @@
       ]
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "energyrecs",
       "name": "Energy Recommendations",
@@ -491,7 +491,7 @@
       ]
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "explorer-launch-target",
       "name": "Open Explorer to This PC",
@@ -524,7 +524,7 @@
       ]
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "fast-send-datagram-threshold",
       "name": "Fast UDP Datagram Send",
@@ -557,7 +557,7 @@
       ]
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "show-file-extensions",
       "name": "Show File Extensions",
@@ -590,7 +590,7 @@
       ]
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "fullscreen-optimizations",
       "name": "Fullscreen Optimizations",
@@ -655,7 +655,7 @@
       ]
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "game-bar",
       "name": "Xbox Game Bar",
@@ -704,7 +704,7 @@
       ]
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "hags",
       "name": "HAGS",
@@ -737,7 +737,7 @@
       ]
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "show-hidden-files",
       "name": "Show Hidden Files",
@@ -770,7 +770,7 @@
       ]
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "kernel-paging-executive",
       "name": "Kernel Paging Executive",
@@ -803,7 +803,7 @@
       ]
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "long-paths",
       "name": "Long File Paths",
@@ -836,7 +836,7 @@
       ]
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "menu-delay",
       "name": "Snappy Menus",
@@ -869,7 +869,7 @@
       ]
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "modern-standby-fix",
       "name": "Modern Standby Fix",
@@ -902,7 +902,7 @@
       ]
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "mouse-acceleration",
       "name": "Mouse Acceleration",
@@ -951,7 +951,7 @@
       ]
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "ndu-service",
       "name": "Network Data Usage",
@@ -984,7 +984,7 @@
       ]
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "network-throttling",
       "name": "Network Throttling Index",
@@ -1017,7 +1017,7 @@
       ]
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "qos-reserved-bandwidth",
       "name": "QoS Reserved Bandwidth",
@@ -1050,7 +1050,7 @@
       ]
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "sticky-keys",
       "name": "Sticky Keys Shortcut",
@@ -1099,7 +1099,7 @@
       ]
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "storagesense",
       "name": "Storage Sense",
@@ -1144,7 +1144,7 @@
       ]
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "tcpip-task-offload",
       "name": "TCP/IP Task Offload",
@@ -1177,7 +1177,7 @@
       ]
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "tdr-delay",
       "name": "Extended GPU Timeout",
@@ -1218,7 +1218,7 @@
       ]
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "text-input-service",
       "name": "Text Input Service (ctfmon)",
@@ -1259,7 +1259,7 @@
       ]
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "transparency",
       "name": "Transparency Effects",
@@ -1292,7 +1292,7 @@
       ]
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "vulnerable-driver-blocklist",
       "name": "Vulnerable Driver Blocklist",
@@ -1325,7 +1325,7 @@
       ]
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "windows-game-mode",
       "name": "Windows Game Mode",
@@ -1366,7 +1366,7 @@
       ]
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "consumer-features",
       "name": "Consumer Features",
@@ -1663,7 +1663,7 @@
       ]
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "mouse-throttling",
       "name": "Mouse Throttling",
@@ -1736,7 +1736,7 @@
       ]
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "animations",
       "name": "Animations",
@@ -1961,7 +1961,7 @@
       ]
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "small-desktop-icons",
       "name": "Small Desktop Icons",
@@ -2010,7 +2010,7 @@
       ]
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "mpo",
       "name": "Multi-Plane Overlay (MPO)",
@@ -2067,7 +2067,7 @@
       ]
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "variable-refresh-rate",
       "name": "Variable Refresh Rate",
@@ -2100,7 +2100,7 @@
       ]
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "windowed-optimizations",
       "name": "Optimizations for Windowed Games",
@@ -2133,7 +2133,7 @@
       ]
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "foreground-boost",
       "name": "Foreground App Boost",
@@ -2166,7 +2166,7 @@
       ]
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "audio-enhancements",
       "name": "Audio Enhancements",
@@ -2207,7 +2207,7 @@
       ]
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "auto-defrag",
       "name": "Scheduled Defrag / TRIM",
@@ -2240,7 +2240,7 @@
       ]
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "bluetooth",
       "name": "Bluetooth",
@@ -2473,7 +2473,7 @@
       ]
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "control-flow-guard",
       "name": "Control Flow Guard",
@@ -2506,7 +2506,7 @@
       ]
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "desktop-context-menu",
       "name": "Safe Mode and Power Plans in the Desktop Menu",
@@ -2580,7 +2580,7 @@
       "compatibility": "Register only menu values owned by this app. Power and startup entries open Windows review dialogs; ownership opens the app review before changing one selected item. Restore preserves unrelated menus."
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "auto-driver-updates",
       "name": "Automatic Driver Updates",
@@ -2684,7 +2684,7 @@
       "compatibility": "Windows default writes the value Windows keeps instead of deleting it."
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "nic-eee",
       "name": "Energy Efficient Ethernet",
@@ -2717,7 +2717,7 @@
       ]
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "fault-tolerant-heap",
       "name": "Fault Tolerant Heap",
@@ -2759,7 +2759,7 @@
       ]
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "global-timer-resolution",
       "name": "Configure Timer Resolution",
@@ -2817,7 +2817,7 @@
       "startup": "The owned worker continues after the UI closes and starts in the current user session at Windows sign-in."
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "hibernation",
       "name": "Hibernation & Sleep",
@@ -2878,7 +2878,7 @@
       ]
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "hotspot",
       "name": "Mobile Hotspot",
@@ -2919,7 +2919,7 @@
       ]
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "hyper-v",
       "name": "Hyper-V",
@@ -3148,7 +3148,7 @@
       ]
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "nic-interrupt-moderation",
       "name": "Interrupt Moderation",
@@ -3181,7 +3181,7 @@
       ]
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "nic-lso",
       "name": "Large Send Offload",
@@ -3214,7 +3214,7 @@
       ]
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "legacy-context-menu",
       "name": "Legacy Context Menu",
@@ -3248,7 +3248,7 @@
       "compatibility": "Remove only the classic-menu registration value; preserve unrelated COM registration data. Sign out to refresh Explorer."
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "llmnr",
       "name": "LLMNR",
@@ -3289,7 +3289,7 @@
       ]
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "location",
       "name": "Location",
@@ -3394,7 +3394,7 @@
       ]
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "memory-compression",
       "name": "Memory Compression",
@@ -3427,7 +3427,7 @@
       ]
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "cpu-mitigations",
       "name": "CPU Mitigations",
@@ -3488,7 +3488,7 @@
       ]
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "nagle-algorithm",
       "name": "Nagle Algorithm",
@@ -3521,7 +3521,7 @@
       ]
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "netbios",
       "name": "NetBIOS over TCP/IP",
@@ -3554,7 +3554,7 @@
       ]
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "ntfs-last-access",
       "name": "NTFS Last-Access Updates",
@@ -3587,7 +3587,7 @@
       ]
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "other-security-mitigations",
       "name": "Other Security Mitigations",
@@ -3676,7 +3676,7 @@
       ]
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "power-saving",
       "name": "Power Saving",
@@ -3934,7 +3934,7 @@
       "compatibility": "Writes the registry type Windows keeps for these values instead of a DWORD."
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "printing",
       "name": "Printing",
@@ -4059,7 +4059,7 @@
       ]
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "search-indexing",
       "name": "Search Indexing",
@@ -4100,7 +4100,7 @@
       ]
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "smart-screen",
       "name": "SmartScreen",
@@ -4162,7 +4162,7 @@
       "compatibility": "Remove the IFEO Debugger override, preserving unrelated performance and tracing settings."
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "sysmain",
       "name": "SysMain",
@@ -4219,7 +4219,7 @@
       ]
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "system-restore",
       "name": "System Restore",
@@ -4278,7 +4278,7 @@
       ]
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "tcp-ack-frequency",
       "name": "TCP ACK Frequency",
@@ -4311,7 +4311,7 @@
       ]
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "tcp-rsc",
       "name": "TCP Receive Segment Coalescing",
@@ -4344,7 +4344,7 @@
       ]
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "telemetry",
       "name": "Windows Telemetry",
@@ -4601,7 +4601,7 @@
       ]
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "user-account-control",
       "name": "User Account Control",
@@ -4652,7 +4652,7 @@
       "recovery": "Exact original snapshots in the shared engine replace the source backup keys."
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "vbs",
       "name": "Virtualization-Based Security (VBS)",
@@ -4781,7 +4781,7 @@
       ]
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "wifi",
       "name": "Wi-Fi",
@@ -4866,7 +4866,7 @@
       ]
     },
     {
-      "product": "FSOS-X Dash",
+      "product": "Gaming toggles",
       "version": "2.4.9",
       "sourceId": "windows-update",
       "name": "Windows Update",

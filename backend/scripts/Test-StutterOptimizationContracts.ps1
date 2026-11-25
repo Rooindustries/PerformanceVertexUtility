@@ -203,7 +203,7 @@ if ($stateBefore -eq $stateAfter -and $stateAfter -eq 0) {
     Add-Failure "backend/state is not empty or changed during stutter validation: before=$stateBefore after=$stateAfter"
 }
 
-Add-Pass 'Stutter optimization validation did not launch FSOS, WinUtil, power, service, cleanup, registry, driver, or forbidden tweak utilities'
+Add-Pass 'Stutter optimization validation did not launch gaming toggles, WinUtil, power, service, cleanup, registry, driver, or forbidden tweak utilities'
 
 $evidence.scriptSha256 = (Get-FileHash -LiteralPath (Join-Path $PSScriptRoot 'Invoke-StutterOptimization.ps1') -Algorithm SHA256).Hash
 $evidence.passes = @($passes.ToArray()); $evidence.failures = @($failures.ToArray())

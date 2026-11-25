@@ -113,6 +113,7 @@ foreach ($relative in $requiredFiles) {
 $stateBefore = Get-StateEntryCount
 $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) "roo-industries-nvidia-nip-executor-$([guid]::NewGuid().ToString('N'))"
 $cleanupDone = $false
+$previousUtilitiesRoot = $env:ROO_INDUSTRIES_UTILITIES_ROOT
 try {
     New-Item -ItemType Directory -Path $tempRoot -Force | Out-Null
     $nvidiaHardware = Join-Path $tempRoot 'nvidia-hardware.json'
@@ -133,14 +134,30 @@ try {
     New-NvpiMockShim $timeoutShim $timeoutLog 'Timeout'
     New-NvpiMockShim $importFailShim $importFailLog 'ImportFail'
 
-    $preview = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipExecutor.ps1') -HardwareInventoryPath $nvidiaHardware)
+    $utilitiesRoot = Join-Path $tempRoot 'Utilities'
+    New-Item -ItemType Directory -Path (Join-Path $utilitiesRoot 'Other') -Force | Out-Null
+    $profileFile = Join-Path $utilitiesRoot 'Other\bundled-profile.nip'
+    Set-Content -LiteralPath $profileFile -Value 'fixture NVIDIA profile' -Encoding ascii
+    $legacyId = 'legacy-fixture'
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try { $legacyHash = $sha.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($legacyId)) } finally { $sha.Dispose() }
+    $catalogPath = Join-Path $tempRoot 'nvidia-catalog.json'
+    $catalog = Get-Content -LiteralPath (Join-Path $repoRoot 'backend\catalogs\nvidia-profile-inspector-nip-catalog.json') -Raw |
+        ConvertFrom-Json
+    $catalog.profiles[0].sourceSha256 = (Get-FileHash -LiteralPath $profileFile -Algorithm SHA256).Hash
+    $catalog.profiles[0].sourceSizeBytes = (Get-Item -LiteralPath $profileFile).Length
+    $catalog.profiles[0].formerProfileIdSha256 += -join ($legacyHash | ForEach-Object { $_.ToString('X2') })
+    $catalog | ConvertTo-Json -Depth 32 | Set-Content -LiteralPath $catalogPath -Encoding UTF8
+    $env:ROO_INDUSTRIES_UTILITIES_ROOT = $utilitiesRoot
+
+    $preview = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipExecutor.ps1') -CatalogPath $catalogPath -HardwareInventoryPath $nvidiaHardware)
     if ($preview.status -eq 'preview' -and $preview.summary.willRunNvpi -eq $false -and $preview.summary.willRunMockShim -eq $false -and @($preview.executionSequence).Count -eq 0) {
         Add-Pass 'NVIDIA NIP executor default call is preview-only and runs no command'
     } else {
         Add-Failure 'NVIDIA NIP executor default call was not preview-only'
     }
 
-    $blockedHardware = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipExecutor.ps1') -ExecutorMode Mock -MockNvpiShimPath $successShim -HardwareInventoryPath $nonNvidiaHardware -ConfirmApply -UserApproved -BenchmarkEvidenceAttached)
+    $blockedHardware = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipExecutor.ps1') -CatalogPath $catalogPath -ExecutorMode Mock -MockNvpiShimPath $successShim -HardwareInventoryPath $nonNvidiaHardware -ConfirmApply -UserApproved -BenchmarkEvidenceAttached)
     $hardwareGate = @($blockedHardware.gates | Where-Object { $_.gateId -eq 'nvidia-hardware-present' }) | Select-Object -First 1
     if ($blockedHardware.status -eq 'blocked' -and $hardwareGate.blocking -eq $true -and @($blockedHardware.executionSequence).Count -eq 0) {
         Add-Pass 'NVIDIA NIP executor blocks mock apply when NVIDIA hardware gate is not satisfied'
@@ -150,7 +167,7 @@ try {
 
     $exportPath = Join-Path $tempRoot 'before-success.nip'
     $rollbackPath = Join-Path $tempRoot 'nvidia-rollback.json'
-    $success = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipExecutor.ps1') -ExecutorMode Mock -MockNvpiShimPath $successShim -HardwareInventoryPath $nvidiaHardware -ExportPath $exportPath -RollbackManifestPath $rollbackPath -ConfirmApply -UserApproved -BenchmarkEvidenceAttached)
+    $success = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipExecutor.ps1') -CatalogPath $catalogPath -ExecutorMode Mock -MockNvpiShimPath $successShim -HardwareInventoryPath $nvidiaHardware -ExportPath $exportPath -RollbackManifestPath $rollbackPath -ConfirmApply -UserApproved -BenchmarkEvidenceAttached)
     $successLogEntries = Read-MockLog $successLog
     $writtenRollback = Get-Content -LiteralPath $rollbackPath -Raw | ConvertFrom-Json
     $evidence.cases['success'] = [pscustomobject]@{ result = $success; log = @($successLogEntries); manifest = $writtenRollback }
@@ -169,7 +186,7 @@ try {
 
     $logCountBeforeCollisions = @(Read-MockLog $successLog).Count
     $collisionPath = Join-Path $tempRoot 'colliding-export-and-manifest.nip'
-    $exportManifestCollision = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipExecutor.ps1') -ExecutorMode Mock -MockNvpiShimPath $successShim -HardwareInventoryPath $nvidiaHardware -ExportPath $collisionPath -RollbackManifestPath $collisionPath -ConfirmApply -UserApproved -BenchmarkEvidenceAttached)
+    $exportManifestCollision = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipExecutor.ps1') -CatalogPath $catalogPath -ExecutorMode Mock -MockNvpiShimPath $successShim -HardwareInventoryPath $nvidiaHardware -ExportPath $collisionPath -RollbackManifestPath $collisionPath -ConfirmApply -UserApproved -BenchmarkEvidenceAttached)
     $evidence.cases['export-manifest-path-collision'] = $exportManifestCollision
     if ($exportManifestCollision.status -eq 'failed' -and @($exportManifestCollision.errors).Count -eq 1 -and
         $exportManifestCollision.errors[0].message -eq 'The export, rollback manifest and output paths must be three different files. Nothing was changed.' -and
@@ -178,7 +195,7 @@ try {
     } else { Add-Failure 'Colliding export and manifest paths must be refused before creating a file or invoking the mock shim' }
 
     $manifestHashBeforeCollision = (Get-FileHash -LiteralPath $rollbackPath -Algorithm SHA256).Hash
-    $outputManifestCollision = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipExecutor.ps1') -ExecutorMode Mock -MockNvpiShimPath $successShim -HardwareInventoryPath $nvidiaHardware -ExportPath $exportPath -RollbackManifestPath $rollbackPath -OutputPath $rollbackPath -ConfirmApply -UserApproved -BenchmarkEvidenceAttached)
+    $outputManifestCollision = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipExecutor.ps1') -CatalogPath $catalogPath -ExecutorMode Mock -MockNvpiShimPath $successShim -HardwareInventoryPath $nvidiaHardware -ExportPath $exportPath -RollbackManifestPath $rollbackPath -OutputPath $rollbackPath -ConfirmApply -UserApproved -BenchmarkEvidenceAttached)
     $manifestHashAfterCollision = (Get-FileHash -LiteralPath $rollbackPath -Algorithm SHA256).Hash
     $evidence.cases['output-manifest-path-collision'] = [pscustomobject]@{ result = $outputManifestCollision; manifestSha256Before = $manifestHashBeforeCollision; manifestSha256After = $manifestHashAfterCollision }
     if ($outputManifestCollision.status -eq 'failed' -and @($outputManifestCollision.errors).Count -eq 1 -and
@@ -188,7 +205,7 @@ try {
     } else { Add-Failure 'Colliding output and manifest paths must print the refusal and preserve the earlier manifest bytes without invoking the mock shim' }
 
     $invalidExportPath = $tempRoot + [char]0 + 'invalid'
-    $invalidPathCollision = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipExecutor.ps1') -ExecutorMode Mock -MockNvpiShimPath $successShim -HardwareInventoryPath $nvidiaHardware -ExportPath $invalidExportPath -RollbackManifestPath $rollbackPath -OutputPath $rollbackPath -ConfirmApply -UserApproved -BenchmarkEvidenceAttached)
+    $invalidPathCollision = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipExecutor.ps1') -CatalogPath $catalogPath -ExecutorMode Mock -MockNvpiShimPath $successShim -HardwareInventoryPath $nvidiaHardware -ExportPath $invalidExportPath -RollbackManifestPath $rollbackPath -OutputPath $rollbackPath -ConfirmApply -UserApproved -BenchmarkEvidenceAttached)
     $evidence.cases['invalid-path-with-output-manifest-collision'] = $invalidPathCollision
     if ($invalidPathCollision.status -eq 'failed' -and @($invalidPathCollision.errors).Count -eq 1 -and
         (Get-FileHash -LiteralPath $rollbackPath -Algorithm SHA256).Hash -eq $manifestHashBeforeCollision -and
@@ -197,7 +214,7 @@ try {
     } else { Add-Failure 'Path normalization failure must print the error and preserve a colliding manifest without invoking the mock shim' }
 
     $exportHashBeforeCollision = (Get-FileHash -LiteralPath $exportPath -Algorithm SHA256).Hash
-    $inheritedExportCollision = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipExecutor.ps1') -Operation Restore -ExecutorMode Mock -MockNvpiShimPath $successShim -HardwareInventoryPath $nvidiaHardware -RollbackManifestPath $rollbackPath -OutputPath $exportPath -ConfirmApply -UserApproved)
+    $inheritedExportCollision = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipExecutor.ps1') -CatalogPath $catalogPath -Operation Restore -ExecutorMode Mock -MockNvpiShimPath $successShim -HardwareInventoryPath $nvidiaHardware -RollbackManifestPath $rollbackPath -OutputPath $exportPath -ConfirmApply -UserApproved)
     $exportHashAfterCollision = (Get-FileHash -LiteralPath $exportPath -Algorithm SHA256).Hash
     $evidence.cases['output-inherited-export-path-collision'] = [pscustomobject]@{ result = $inheritedExportCollision; exportSha256Before = $exportHashBeforeCollision; exportSha256After = $exportHashAfterCollision }
     if ($inheritedExportCollision.status -eq 'failed' -and @($inheritedExportCollision.errors).Count -eq 1 -and
@@ -208,7 +225,7 @@ try {
 
     $replacementExportPath = Join-Path $tempRoot 'replacement-export.nip'
     [IO.File]::WriteAllText($replacementExportPath, 'Replacement export fixture')
-    $replacementExportCollision = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipExecutor.ps1') -Operation Restore -ExecutorMode Mock -MockNvpiShimPath $successShim -HardwareInventoryPath $nvidiaHardware -ExportPath $replacementExportPath -RollbackManifestPath $rollbackPath -OutputPath $exportPath -ConfirmApply -UserApproved)
+    $replacementExportCollision = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipExecutor.ps1') -CatalogPath $catalogPath -Operation Restore -ExecutorMode Mock -MockNvpiShimPath $successShim -HardwareInventoryPath $nvidiaHardware -ExportPath $replacementExportPath -RollbackManifestPath $rollbackPath -OutputPath $exportPath -ConfirmApply -UserApproved)
     $evidence.cases['output-original-export-with-replacement'] = $replacementExportCollision
     if ($replacementExportCollision.status -eq 'failed' -and @($replacementExportCollision.errors).Count -eq 1 -and
         $replacementExportCollision.errors[0].message -eq 'The export, rollback manifest and output paths must be three different files. Nothing was changed.' -and
@@ -225,7 +242,7 @@ try {
         $hardLinkCreated = $true
         $outputLinkType = (Get-Item -LiteralPath $hardLinkOutputPath -Force).LinkType
         $manifestLinkType = (Get-Item -LiteralPath $rollbackPath -Force).LinkType
-        $hardLinkRestore = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipExecutor.ps1') -Operation Restore -HardwareInventoryPath $nvidiaHardware -ExportPath $exportPath -RollbackManifestPath $rollbackPath -OutputPath $hardLinkOutputPath)
+        $hardLinkRestore = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipExecutor.ps1') -CatalogPath $catalogPath -Operation Restore -HardwareInventoryPath $nvidiaHardware -ExportPath $exportPath -RollbackManifestPath $rollbackPath -OutputPath $hardLinkOutputPath)
         $manifestHashAfterHardLink = (Get-FileHash -LiteralPath $rollbackPath -Algorithm SHA256).Hash
         $evidence.cases['output-hardlink-to-manifest'] = [pscustomobject]@{ result = $hardLinkRestore; outputLinkType = $outputLinkType; manifestLinkType = $manifestLinkType; manifestSha256Before = $manifestHashBeforeHardLink; manifestSha256After = $manifestHashAfterHardLink }
         if ($outputLinkType -eq 'HardLink' -and $manifestLinkType -eq 'HardLink' -and
@@ -245,7 +262,7 @@ try {
         New-Item -ItemType Junction -Path $manifestAlias -Target $tempRoot | Out-Null
         $manifestJunctionCreated = $true
         $junctionOutputPath = Join-Path $manifestAlias (Split-Path $rollbackPath -Leaf)
-        $junctionCollision = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipExecutor.ps1') -ExecutorMode Mock -MockNvpiShimPath $successShim -HardwareInventoryPath $nvidiaHardware -ExportPath $exportPath -RollbackManifestPath $rollbackPath -OutputPath $junctionOutputPath -ConfirmApply -UserApproved -BenchmarkEvidenceAttached)
+        $junctionCollision = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipExecutor.ps1') -CatalogPath $catalogPath -ExecutorMode Mock -MockNvpiShimPath $successShim -HardwareInventoryPath $nvidiaHardware -ExportPath $exportPath -RollbackManifestPath $rollbackPath -OutputPath $junctionOutputPath -ConfirmApply -UserApproved -BenchmarkEvidenceAttached)
         $evidence.cases['output-junction-to-manifest'] = $junctionCollision
         if ($junctionCollision.status -eq 'failed' -and @($junctionCollision.errors).Count -eq 1 -and
             $junctionCollision.errors[0].message -eq 'The export, rollback manifest and output paths must not go through a junction, symbolic link or hard link. Nothing was changed.' -and
@@ -258,7 +275,7 @@ try {
     }
 
     $matchingOutputPath = Join-Path $tempRoot 'matching-restore-preview.json'
-    $matchingRestore = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipExecutor.ps1') -Operation Restore -HardwareInventoryPath $nvidiaHardware -ExportPath $exportPath -RollbackManifestPath $rollbackPath -OutputPath $matchingOutputPath)
+    $matchingRestore = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipExecutor.ps1') -CatalogPath $catalogPath -Operation Restore -HardwareInventoryPath $nvidiaHardware -ExportPath $exportPath -RollbackManifestPath $rollbackPath -OutputPath $matchingOutputPath)
     $savedMatchingRestore = Get-Content -LiteralPath $matchingOutputPath -Raw | ConvertFrom-Json
     $evidence.cases['matching-explicit-and-manifest-export'] = $matchingRestore
     if ($matchingRestore.status -eq 'preview' -and @($matchingRestore.errors).Count -eq 0 -and $savedMatchingRestore.status -eq 'preview' -and
@@ -269,9 +286,9 @@ try {
 
     $rollbackHash = (Get-FileHash -LiteralPath $rollbackPath -Algorithm SHA256).Hash
     $exportHash = (Get-FileHash -LiteralPath $exportPath -Algorithm SHA256).Hash
-    $reused = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipExecutor.ps1') -ExecutorMode Mock -MockNvpiShimPath $successShim -HardwareInventoryPath $nvidiaHardware -ExportPath $exportPath -RollbackManifestPath $rollbackPath -ConfirmApply -UserApproved -BenchmarkEvidenceAttached)
+    $reused = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipExecutor.ps1') -CatalogPath $catalogPath -ExecutorMode Mock -MockNvpiShimPath $successShim -HardwareInventoryPath $nvidiaHardware -ExportPath $exportPath -RollbackManifestPath $rollbackPath -ConfirmApply -UserApproved -BenchmarkEvidenceAttached)
     $rollbackHashAfter = (Get-FileHash -LiteralPath $rollbackPath -Algorithm SHA256).Hash
-    $restorePreview = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipExecutor.ps1') -Operation Restore -HardwareInventoryPath $nvidiaHardware -ExportPath $exportPath -RollbackManifestPath $rollbackPath)
+    $restorePreview = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipExecutor.ps1') -CatalogPath $catalogPath -Operation Restore -HardwareInventoryPath $nvidiaHardware -ExportPath $exportPath -RollbackManifestPath $rollbackPath)
     $restoreGates = @($restorePreview.gates | Where-Object { $_.gateId -in @('rollback-manifest-bound', 'rollback-export-present') })
     $evidence.cases['reused-success'] = [pscustomobject]@{ result = $reused; restorePreview = $restorePreview; manifestSha256Before = $rollbackHash; manifestSha256After = $rollbackHashAfter; exportSha256Before = $exportHash; exportSha256After = (Get-FileHash -LiteralPath $exportPath -Algorithm SHA256).Hash }
     if ($reused.status -eq 'failed' -and $null -eq $reused.rollbackManifestPath -and
@@ -289,7 +306,7 @@ try {
         $shimPath = Join-Path $caseRoot 'nvpi.ps1'; $logPath = Join-Path $caseRoot 'nvpi.log'
         $caseExportPath = Join-Path $caseRoot 'before.nip'; $caseRollbackPath = Join-Path $caseRoot 'rollback.json'
         New-NvpiMockShim $shimPath $logPath $behavior
-        $result = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipExecutor.ps1') -ExecutorMode Mock -MockNvpiShimPath $shimPath -HardwareInventoryPath $nvidiaHardware -ExportPath $caseExportPath -RollbackManifestPath $caseRollbackPath -ConfirmApply -UserApproved -BenchmarkEvidenceAttached)
+        $result = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipExecutor.ps1') -CatalogPath $catalogPath -ExecutorMode Mock -MockNvpiShimPath $shimPath -HardwareInventoryPath $nvidiaHardware -ExportPath $caseExportPath -RollbackManifestPath $caseRollbackPath -ConfirmApply -UserApproved -BenchmarkEvidenceAttached)
         $entries = @(Read-MockLog $logPath)
         $manifest = Get-Content -LiteralPath $caseRollbackPath -Raw | ConvertFrom-Json
         $exportRuns = @($result.executionSequence | Where-Object { $_.operation -eq 'export' })
@@ -318,7 +335,7 @@ try {
         if ($existingType -eq 'folder') { [IO.Directory]::CreateDirectory($caseExportPath) | Out-Null; $olderFile = Join-Path $caseExportPath 'older.nip' }
         [IO.File]::WriteAllText($olderFile, 'older export')
         $olderHash = (Get-FileHash -LiteralPath $olderFile -Algorithm SHA256).Hash
-        $result = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipExecutor.ps1') -ExecutorMode Mock -MockNvpiShimPath $shimPath -HardwareInventoryPath $nvidiaHardware -ExportPath $caseExportPath -RollbackManifestPath $caseRollbackPath -ConfirmApply -UserApproved -BenchmarkEvidenceAttached)
+        $result = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipExecutor.ps1') -CatalogPath $catalogPath -ExecutorMode Mock -MockNvpiShimPath $shimPath -HardwareInventoryPath $nvidiaHardware -ExportPath $caseExportPath -RollbackManifestPath $caseRollbackPath -ConfirmApply -UserApproved -BenchmarkEvidenceAttached)
         $entries = @(Read-MockLog $logPath)
         $manifestExists = Test-Path -LiteralPath $caseRollbackPath
         $olderHashAfter = (Get-FileHash -LiteralPath $olderFile -Algorithm SHA256).Hash
@@ -335,7 +352,7 @@ try {
     }
 
     $failExportPath = Join-Path $tempRoot 'before-fail.nip'
-    $failExport = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipExecutor.ps1') -ExecutorMode Mock -MockNvpiShimPath $exportFailShim -HardwareInventoryPath $nvidiaHardware -ExportPath $failExportPath -ConfirmApply -UserApproved -BenchmarkEvidenceAttached)
+    $failExport = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipExecutor.ps1') -CatalogPath $catalogPath -ExecutorMode Mock -MockNvpiShimPath $exportFailShim -HardwareInventoryPath $nvidiaHardware -ExportPath $failExportPath -ConfirmApply -UserApproved -BenchmarkEvidenceAttached)
     if ($failExport.status -eq 'failed' -and $failExport.summary.exportCompleted -eq $false -and $failExport.summary.importAttempted -eq $false -and $failExport.summary.importSkippedUntilExportSucceeded -eq $true -and $failExport.summary.nonZeroExitCount -eq 1) {
         Add-Pass 'NVIDIA NIP executor skips import when export fails'
     } else {
@@ -343,7 +360,7 @@ try {
     }
 
     $timeoutExportPath = Join-Path $tempRoot 'before-timeout.nip'
-    $timeout = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipExecutor.ps1') -ExecutorMode Mock -MockNvpiShimPath $timeoutShim -HardwareInventoryPath $nvidiaHardware -ExportPath $timeoutExportPath -ConfirmApply -UserApproved -BenchmarkEvidenceAttached -TimeoutSeconds 1)
+    $timeout = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipExecutor.ps1') -CatalogPath $catalogPath -ExecutorMode Mock -MockNvpiShimPath $timeoutShim -HardwareInventoryPath $nvidiaHardware -ExportPath $timeoutExportPath -ConfirmApply -UserApproved -BenchmarkEvidenceAttached -TimeoutSeconds 1)
     if ($timeout.status -eq 'failed' -and $timeout.summary.timeoutCount -eq 1 -and $timeout.summary.importAttempted -eq $false -and $timeout.summary.importSkippedUntilExportSucceeded -eq $true) {
         Add-Pass 'NVIDIA NIP executor skips import when export times out'
     } else {
@@ -352,7 +369,7 @@ try {
 
     $importFailExportPath = Join-Path $tempRoot 'before-import-fail.nip'
     $importFailRollbackPath = Join-Path $tempRoot 'import-fail-rollback.json'
-    $importFail = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipExecutor.ps1') -ExecutorMode Mock -MockNvpiShimPath $importFailShim -HardwareInventoryPath $nvidiaHardware -ExportPath $importFailExportPath -RollbackManifestPath $importFailRollbackPath -ConfirmApply -UserApproved -BenchmarkEvidenceAttached)
+    $importFail = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipExecutor.ps1') -CatalogPath $catalogPath -ExecutorMode Mock -MockNvpiShimPath $importFailShim -HardwareInventoryPath $nvidiaHardware -ExportPath $importFailExportPath -RollbackManifestPath $importFailRollbackPath -ConfirmApply -UserApproved -BenchmarkEvidenceAttached)
     $importFailManifest = Get-Content -LiteralPath $importFailRollbackPath -Raw | ConvertFrom-Json
     if ($importFail.status -eq 'failed' -and $importFail.summary.exportCompleted -eq $true -and $importFail.summary.importAttempted -eq $true -and $importFail.summary.importCompleted -eq $false -and $importFailManifest.exportCompleted -eq $true -and $importFailManifest.importAttempted -eq $true -and $importFailManifest.importCompleted -eq $false -and (Test-Path -LiteralPath $importFailExportPath)) {
         Add-Pass 'NVIDIA NIP failed import retains durable exact rollback evidence'
@@ -360,7 +377,7 @@ try {
         Add-Failure 'NVIDIA NIP failed import did not retain durable exact rollback evidence'
     }
 
-    $missingManifestRestore = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipExecutor.ps1') -Operation Restore -ExecutorMode Mock -MockNvpiShimPath $successShim -HardwareInventoryPath $nvidiaHardware -ExportPath $exportPath -ConfirmApply -UserApproved)
+    $missingManifestRestore = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipExecutor.ps1') -CatalogPath $catalogPath -Operation Restore -ExecutorMode Mock -MockNvpiShimPath $successShim -HardwareInventoryPath $nvidiaHardware -ExportPath $exportPath -ConfirmApply -UserApproved)
     if ($missingManifestRestore.status -eq 'blocked' -and @($missingManifestRestore.executionSequence).Count -eq 0 -and (@($missingManifestRestore.gates | Where-Object { $_.gateId -eq 'rollback-manifest-bound' -and $_.blocking }).Count -eq 1)) {
         Add-Pass 'NVIDIA NIP restore rejects an export without its exact rollback manifest'
     } else {
@@ -371,7 +388,7 @@ try {
     $wrongManifest = Get-Content -LiteralPath $rollbackPath -Raw | ConvertFrom-Json
     $wrongManifest.profileId = 'another-profile'
     $wrongManifest | ConvertTo-Json -Depth 24 | Set-Content -LiteralPath $wrongManifestPath -Encoding UTF8
-    $wrongProfileRestore = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipExecutor.ps1') -Operation Restore -ExecutorMode Mock -MockNvpiShimPath $successShim -HardwareInventoryPath $nvidiaHardware -RollbackManifestPath $wrongManifestPath -ConfirmApply -UserApproved)
+    $wrongProfileRestore = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipExecutor.ps1') -CatalogPath $catalogPath -Operation Restore -ExecutorMode Mock -MockNvpiShimPath $successShim -HardwareInventoryPath $nvidiaHardware -RollbackManifestPath $wrongManifestPath -ConfirmApply -UserApproved)
     if ($wrongProfileRestore.status -eq 'blocked' -and @($wrongProfileRestore.executionSequence).Count -eq 0) {
         Add-Pass 'NVIDIA NIP restore rejects a rollback manifest for another profile'
     } else {
@@ -382,18 +399,109 @@ try {
     $staleManifest = Get-Content -LiteralPath $rollbackPath -Raw | ConvertFrom-Json
     $staleManifest.exportPath = Join-Path $tempRoot 'missing-export.nip'
     $staleManifest | ConvertTo-Json -Depth 24 | Set-Content -LiteralPath $staleManifestPath -Encoding UTF8
-    $staleRestore = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipExecutor.ps1') -Operation Restore -ExecutorMode Mock -MockNvpiShimPath $successShim -HardwareInventoryPath $nvidiaHardware -RollbackManifestPath $staleManifestPath -ConfirmApply -UserApproved)
+    $staleRestore = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipExecutor.ps1') -CatalogPath $catalogPath -Operation Restore -ExecutorMode Mock -MockNvpiShimPath $successShim -HardwareInventoryPath $nvidiaHardware -RollbackManifestPath $staleManifestPath -ConfirmApply -UserApproved)
     if ($staleRestore.status -eq 'blocked' -and @($staleRestore.executionSequence).Count -eq 0 -and (@($staleRestore.gates | Where-Object { $_.gateId -eq 'rollback-export-present' -and $_.blocking }).Count -eq 1)) {
         Add-Pass 'NVIDIA NIP restore rejects a rollback manifest whose export is missing'
     } else {
         Add-Failure 'NVIDIA NIP restore accepted a missing rollback export'
     }
 
-    $restore = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipExecutor.ps1') -Operation Restore -ExecutorMode Mock -MockNvpiShimPath $successShim -HardwareInventoryPath $nvidiaHardware -ExportPath $exportPath -RollbackManifestPath $rollbackPath -ConfirmApply -UserApproved)
+    $restore = ConvertFrom-ScriptJson (& (Join-Path $PSScriptRoot 'Invoke-NvidiaNipExecutor.ps1') -CatalogPath $catalogPath -Operation Restore -ExecutorMode Mock -MockNvpiShimPath $successShim -HardwareInventoryPath $nvidiaHardware -ExportPath $exportPath -RollbackManifestPath $rollbackPath -ConfirmApply -UserApproved)
     if ($restore.status -eq 'success' -and $restore.summary.exportAttempted -eq $false -and $restore.summary.importAttempted -eq $true -and @($restore.executionSequence)[0].operation -eq 'restore-import') {
         Add-Pass 'NVIDIA NIP restore executor imports only the exact manifest-bound rollback export'
     } else {
         Add-Failure 'NVIDIA NIP restore executor did not run the exact manifest-bound rollback import'
+    }
+
+    $tree = Join-Path $tempRoot 'tree'
+    New-Item -ItemType Directory -Path (Join-Path $tree 'backend\catalogs') -Force | Out-Null
+    foreach ($folder in @('backend\scripts', 'backend\capabilities')) {
+        Copy-Item -LiteralPath (Join-Path $repoRoot $folder) -Destination (Join-Path $tree $folder) -Recurse
+    }
+    Copy-Item -LiteralPath $catalogPath -Destination (Join-Path $tree 'backend\catalogs\nvidia-profile-inspector-nip-catalog.json')
+    $treeScripts = Join-Path $tree 'backend\scripts'
+    $registryScript = Join-Path $treeScripts 'Get-RooIndustriesCapabilityRegistry.ps1'
+    $inventoryScript = Join-Path $treeScripts 'Get-RooIndustriesUtilitiesInventory.ps1'
+    $treeExecutor = Join-Path $treeScripts 'Invoke-NvidiaNipExecutor.ps1'
+    $mock = @{ ExecutorMode = 'Mock'; MockNvpiShimPath = $successShim; HardwareInventoryPath = $nvidiaHardware }
+    function Get-ProfileFileView {
+        param([string]$Root)
+        $registry = ConvertFrom-ScriptJson (& $registryScript -UtilitiesRoot $Root)
+        $entry = @($registry.capabilities | Where-Object { $_.capabilityId -eq 'drivers-gpu-tools.nvidia-nip-base-catalog' })[0]
+        $inventory = ConvertFrom-ScriptJson (& $inventoryScript -UtilitiesRoot $Root)
+        $review = & (Join-Path $treeScripts 'Preview-NvidiaNipProfile.ps1') -UtilitiesRoot $Root -HardwareInventoryPath $nvidiaHardware
+        return [pscustomobject]@{
+            rule = @($entry.resolvedAvailability.checkedRules | Where-Object { [string]$_.target -like '*base-profile.nip' })[0]
+            tool = @($inventory.tools | Where-Object { $_.id -eq 'base-profile-nip' })[0]
+            review = ConvertFrom-ScriptJson $review
+        }
+    }
+
+    $renamed = Get-ProfileFileView $utilitiesRoot
+    $evidence.cases['profile-file-renamed'] = $renamed
+    $renamedNames = @(
+        $renamed.rule.resolvedTarget,
+        $renamed.tool.files[0].path,
+        $renamed.review.profile.sourceFile,
+        @($renamed.review.commands.importCandidateProfile.arguments)[1]
+    ) | ForEach-Object { [System.IO.Path]::GetFileName([string]$_) }
+    if ($renamed.rule.passed -eq $true -and $renamed.tool.present -eq $true -and $renamed.review.status -eq 'preview' -and
+        $renamed.review.profile.candidatePresent -eq $true -and @($renamedNames | Where-Object { $_ -ne 'bundled-profile.nip' }).Count -eq 0) {
+        Add-Pass 'A profile file under another name with the catalog content is found by the registry, inventory and review'
+    } else {
+        Add-Failure "A profile file under another name was not found by every entry point: $($renamedNames -join ', ')"
+    }
+
+    $wrongRoot = Join-Path $tempRoot 'WrongUtilities'
+    New-Item -ItemType Directory -Path (Join-Path $wrongRoot 'Other') -Force | Out-Null
+    Set-Content -LiteralPath (Join-Path $wrongRoot 'Other\base-profile.nip') -Value 'fixture NVIDIA PROFILE' -Encoding ascii
+    $wrong = Get-ProfileFileView $wrongRoot
+    $logBeforeWrong = @(Read-MockLog $successLog).Count
+    $wrongExport = Join-Path $tempRoot 'before-wrong-content.nip'
+    $wrongApply = ConvertFrom-ScriptJson (& $treeExecutor @mock -UtilitiesRoot $wrongRoot -ExportPath $wrongExport `
+        -ConfirmApply -UserApproved -BenchmarkEvidenceAttached)
+    $wrongRestore = ConvertFrom-ScriptJson (& $treeExecutor @mock -UtilitiesRoot $wrongRoot -Operation Restore `
+        -ExportPath $exportPath -RollbackManifestPath $rollbackPath -ConfirmApply -UserApproved)
+    $evidence.cases['profile-file-wrong-content'] = [pscustomobject]@{ view = $wrong; apply = $wrongApply; restore = $wrongRestore }
+    $wrongGate = @($wrongApply.gates | Where-Object { $_.gateId -eq 'profile-file-present' })[0]
+    $restoreSource = @(@($wrongRestore.executionSequence)[0].command.arguments)[1]
+    if ($wrong.rule.passed -eq $false -and $wrong.tool.present -eq $false -and $wrong.review.profile.candidatePresent -eq $false -and
+        $wrongApply.status -eq 'blocked' -and $wrongGate.blocking -eq $true -and @($wrongApply.executionSequence).Count -eq 0 -and
+        $wrongRestore.status -eq 'success' -and $restoreSource -eq $exportPath -and
+        @(Read-MockLog $successLog).Count -eq $logBeforeWrong + 1) {
+        Add-Pass 'A file named like the profile with other content is missing to every entry point and Restore still uses the saved export'
+    } else {
+        Add-Failure 'A file named like the profile with other content was accepted, or Restore stopped using the saved export'
+    }
+
+    $legacyManifestPath = Join-Path $tempRoot 'legacy-rollback.json'
+    $unknownManifestPath = Join-Path $tempRoot 'unknown-rollback.json'
+    foreach ($case in @(@($legacyManifestPath, $legacyId), @($unknownManifestPath, 'unknown-fixture'))) {
+        $saved = Get-Content -LiteralPath $rollbackPath -Raw | ConvertFrom-Json
+        $saved.profileId = $case[1]
+        $saved | ConvertTo-Json -Depth 24 | Set-Content -LiteralPath $case[0] -Encoding UTF8
+    }
+    $restoreScript = Join-Path $PSScriptRoot 'Restore-NvidiaNipProfile.ps1'
+    $executorScript = Join-Path $PSScriptRoot 'Invoke-NvidiaNipExecutor.ps1'
+    $selected = @{ CatalogPath = $catalogPath; ProfileId = 'base-profile'; HardwareInventoryPath = $nvidiaHardware }
+    $logBeforeIds = @(Read-MockLog $successLog).Count
+    $legacyMetadata = ConvertFrom-ScriptJson (& $restoreScript @selected -RollbackManifestPath $legacyManifestPath)
+    $legacyRestore = ConvertFrom-ScriptJson (& $executorScript @mock -CatalogPath $catalogPath -ProfileId 'base-profile' `
+        -Operation Restore -RollbackManifestPath $legacyManifestPath -ConfirmApply -UserApproved)
+    $unknownMetadata = ConvertFrom-ScriptJson (& $restoreScript @selected -RollbackManifestPath $unknownManifestPath)
+    $unknownRestore = ConvertFrom-ScriptJson (& $executorScript @mock -CatalogPath $catalogPath -ProfileId 'base-profile' `
+        -Operation Restore -RollbackManifestPath $unknownManifestPath -ConfirmApply -UserApproved)
+    $evidence.cases['former-id-restore'] = [pscustomobject]@{ metadata = $legacyMetadata; executor = $legacyRestore }
+    $evidence.cases['unknown-id-restore'] = [pscustomobject]@{ metadata = $unknownMetadata; executor = $unknownRestore }
+    $unbound = @(@($unknownMetadata.gates) + @($unknownRestore.gates) |
+        Where-Object { $_.gateId -eq 'rollback-manifest-bound' -and $_.blocking }).Count
+    if ($legacyMetadata.summary.restoreSupported -eq $true -and $legacyRestore.status -eq 'success' -and
+        $legacyRestore.profileId -eq 'base-profile' -and $unknownMetadata.summary.restoreSupported -eq $false -and
+        $unknownRestore.status -eq 'blocked' -and $unbound -eq 2 -and @($unknownRestore.executionSequence).Count -eq 0 -and
+        @(Read-MockLog $successLog).Count -eq $logBeforeIds + 1) {
+        Add-Pass 'Both restore entry points bind a manifest saved under a former profile ID and refuse an unknown ID without importing'
+    } else {
+        Add-Failure 'Restore entry points did not bind the former profile ID or accepted an unknown ID'
     }
 
     Remove-Item -LiteralPath $tempRoot -Recurse -Force
@@ -406,6 +514,7 @@ try {
 } catch {
     Add-Failure "NVIDIA NIP executor validation failed: $($_.Exception.Message)"
 } finally {
+    $env:ROO_INDUSTRIES_UTILITIES_ROOT = $previousUtilitiesRoot
     if (-not $cleanupDone -and (Test-Path -LiteralPath $tempRoot)) {
         Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue
     }

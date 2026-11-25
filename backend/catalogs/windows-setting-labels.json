@@ -5022,7 +5022,7 @@
       "refresh": "Use input-settings refresh; verify effective cursor behavior.",
       "constraints": [],
       "sources": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -5101,7 +5101,7 @@
       "refresh": "Use input-settings refresh; verify effective cursor behavior.",
       "constraints": [],
       "sources": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -5180,7 +5180,7 @@
       "refresh": "Use input-settings refresh; verify effective cursor behavior.",
       "constraints": [],
       "sources": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -10557,10 +10557,10 @@
     {
       "match": {
         "kind": "scheduled-task",
-        "target": "FSOS-TimerResolution",
+        "target": "{source}-TimerResolution",
         "property": "enabled"
       },
-      "name": "FSOS-TimerResolution task",
+      "name": "{source}-TimerResolution task",
       "semanticStatus": "verified",
       "choices": [
         {
@@ -16731,7 +16731,7 @@
       "refresh": "Notify shell and affected apps; recheck visible result.",
       "constraints": [],
       "sources": [
-        "https://fsosx.com/FSOS-XR11H2.apbx",
+        "gaming-toggles-r11h2",
         "https://github.com/ChrisTitusTech/winutil/blob/fc60cbde09d669178bda1665be9cb1a703516fca/config/tweaks.json"
       ]
     },
@@ -16775,7 +16775,7 @@
       "refresh": "Refresh File Explorer.",
       "constraints": [],
       "sources": [
-        "https://fsosx.com/FSOS-XR11H2.apbx",
+        "gaming-toggles-r11h2",
         "https://github.com/ChrisTitusTech/winutil/blob/fc60cbde09d669178bda1665be9cb1a703516fca/config/tweaks.json"
       ]
     },
@@ -16833,7 +16833,7 @@
       "refresh": "Refresh File Explorer.",
       "constraints": [],
       "sources": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -16878,7 +16878,7 @@
         "Windows 11."
       ],
       "sources": [
-        "https://fsosx.com/FSOS-XR11H2.apbx"
+        "gaming-toggles-r11h2"
       ]
     },
     {
@@ -16921,7 +16921,7 @@
       "refresh": "Notify shell and affected apps; recheck visible result.",
       "constraints": [],
       "sources": [
-        "https://fsosx.com/FSOS-XR11H2.apbx",
+        "gaming-toggles-r11h2",
         "https://github.com/ChrisTitusTech/winutil/blob/fc60cbde09d669178bda1665be9cb1a703516fca/config/tweaks.json"
       ]
     },
@@ -17504,7 +17504,7 @@
         "Requires supported OS, graphics driver, display and game."
       ],
       "sources": [
-        "https://fsosx.com/FSOS-XR11H2.apbx",
+        "gaming-toggles-r11h2",
         "https://support.microsoft.com/en-us/windows/hardware/display-graphics/optimizations-for-windowed-games-in-windows-11"
       ]
     },
@@ -17563,7 +17563,7 @@
         "Requires supported OS, graphics driver, display and game."
       ],
       "sources": [
-        "https://fsosx.com/FSOS-XR11H2.apbx",
+        "gaming-toggles-r11h2",
         "https://support.microsoft.com/en-us/windows/hardware/display-graphics/optimizations-for-windowed-games-in-windows-11"
       ]
     },

@@ -10,19 +10,7 @@ function Get-RooIndustriesUtcStamp {
     return (Get-Date).ToUniversalTime().ToString('o')
 }
 
-function Resolve-RooIndustriesUtilitiesRoot {
-    param([string]$Path)
-
-    $candidate = $Path
-    if ([string]::IsNullOrWhiteSpace($candidate)) {
-        $candidate = $env:ROO_INDUSTRIES_UTILITIES_ROOT
-    }
-    if ([string]::IsNullOrWhiteSpace($candidate)) {
-        $candidate = (Join-Path ([Environment]::GetFolderPath('DesktopDirectory')) 'Utilities')
-    }
-
-    return [System.IO.Path]::GetFullPath($candidate)
-}
+. (Join-Path $PSScriptRoot 'NvidiaProfileFile.Common.ps1')
 
 function Convert-ToCleanString {
     param([object]$Value)
@@ -45,10 +33,11 @@ function Join-RooIndustriesUtilitiesPath {
 function Get-RooIndustriesFileEvidence {
     param(
         [string]$Path,
-        [string]$PathKind
+        [string]$PathKind,
+        [bool]$Present
     )
 
-    $exists = Test-Path -LiteralPath $Path -PathType Leaf
+    $exists = $Present -and (Test-Path -LiteralPath $Path -PathType Leaf)
     if (-not $exists) {
         return [pscustomobject]@{
             path = $Path
@@ -123,8 +112,8 @@ $toolDefinitions = @(
         (New-RooIndustriesPathSpec 'tool-executable' 'Other\NVPI\nvidiaProfileInspector.exe'),
         (New-RooIndustriesPathSpec 'reference-metadata' 'Other\NVPI\Reference.xml')
     ) 'NVPI is inspected by file metadata only.'),
-    (New-RooIndustriesInventoryTool 'framesync-nip' 'FrameSync NIP Profile' 'nvidia-profile' 'medium' @(
-        (New-RooIndustriesPathSpec 'profile-file' 'Other\framesync.nip')
+    (New-RooIndustriesInventoryTool 'base-profile-nip' 'Base NIP Profile' 'nvidia-profile' 'medium' @(
+        (New-RooIndustriesPathSpec 'profile-file' 'Other\base-profile.nip')
     ) 'Seed NIP profile source file; no import is attempted.'),
     (New-RooIndustriesInventoryTool 'nvidia-59579-no-app' 'NVIDIA 595.79 Driver Package (No NVIDIA App)' 'driver-package' 'high' @(
         (New-RooIndustriesPathSpec 'installer-package' 'Drivers\Graphics\NVIDIA_595.79_NO_Nvidia_App.exe')
@@ -198,7 +187,9 @@ $tools = @($toolDefinitions | ForEach-Object {
         } else {
             [System.IO.Path]::GetFullPath([string]$spec.absolutePath)
         }
-        Get-RooIndustriesFileEvidence $path ([string]$spec.kind)
+        $candidate = Resolve-RooIndustriesNvidiaProfileFile $path
+        if ($null -ne $candidate) { $path = $candidate }
+        Get-RooIndustriesFileEvidence $path ([string]$spec.kind) ($null -ne $candidate)
     })
 
     [pscustomobject]@{

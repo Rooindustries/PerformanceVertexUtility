@@ -12,7 +12,7 @@ Private actionable corrections: `<private work folder>/four-tool-tweaks-20260919
 | --- | ---: | --- |
 | O&O ShutUp10 3.5.1130.0 | 376 | 365 IDs plus OS-specific registration variants |
 | WPD 1.5.2042 RC 1 | 110 | 102 documented switches plus eight experimental controls |
-| FSOS-X Dash 2.4.9 | 79 | Statically registered tuning controls |
+| Gaming toggles 2.4.9 | 79 | Statically registered tuning controls |
 | WinUtil fc60cbde | 67 | Configuration entries, including some buttons and selectors |
 
 At capture, the generated catalog contained 1,005 resources and 1,239 presets. Coverage options were 1,236 `implemented`, 13 `pending-executor`, eight `guided-action`, six `partial`, six `guided-action-with-settings`, and six `no-independent-change`. Counts must be recomputed after integration, not retained as permanent completion criteria.

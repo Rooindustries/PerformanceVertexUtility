@@ -2,18 +2,17 @@
 
 Captured 2026-09-14. Roo Industries source coverage is pinned to local commit `33bbd55f1196657a5935c783db65a8a0c59448bb`; implementation added after that commit must supply its own verification evidence.
 
-The accompanying [normalized inventory](../../backend/catalogs/upstream-settings-inventory.json) contains **376 setting/action/control records**, **267 application package records**, and **1,319 FSOS-X YAML action records**. These are source records, not a claim of 1,962 distinct optimizations: presets, buttons, package operations, progress messages, aliases, and inferred binary symbols are identified by their record kinds. The inventory is complete for the pinned WinUtil configuration keys and FSOS-X YAML action nodes. Dash implementation internals remain only partially observable.
+The accompanying [normalized inventory](../../backend/catalogs/upstream-settings-inventory.json) contains **376 setting/action/control records**, **267 application package records**, and **1,319 gaming playbook YAML action records**. These are source records, not a claim of 1,962 distinct optimizations: presets, buttons, package operations, progress messages, aliases, and inferred binary symbols are identified by their record kinds. The inventory is complete for the pinned WinUtil configuration keys and gaming playbook YAML action nodes. Gaming toggles implementation internals remain only partially observable.
 
 | Source | Pinned identity | Primary evidence |
 | --- | --- | --- |
 | WinUtil current main | `fc60cbde09d669178bda1665be9cb1a703516fca`; commit 2026-09-14 02:59:32 UTC | [Repository commit](https://github.com/ChrisTitusTech/winutil/commit/fc60cbde09d669178bda1665be9cb1a703516fca); [configuration directory](https://github.com/ChrisTitusTech/winutil/tree/fc60cbde09d669178bda1665be9cb1a703516fca/config) |
 | WinUtil stable release observed | 26.08.19, published 2026-08-19 | [Stable release](https://github.com/ChrisTitusTech/winutil/releases/tag/26.08.19). Inventory counts use the newer pinned main commit. |
-| FSOS-X playbook | R11H2; playbook.conf version 11.2; release dated 2026-09-04 | [Official release site](https://fsosx.com/); [downloaded archive](https://fsosx.com/FSOS-XR11H2.apbx) |
-| FSOS-X archive verification | 436,280,934 bytes; SHA-256 `75d0e6a716f722d452d7ed9b9d403c9b9ef20207f35a84ada4213e043fc62741` | Downloaded bytes matched the digest published on the official site. |
-| FSOS-X Dash bundled with R11H2 | PE FileVersion 2.4.9.0; ProductVersion 2.4.9; 137,034,281 bytes | `Executables/FSOSXDash.exe` inside the [verified archive](https://fsosx.com/FSOS-XR11H2.apbx); SHA-256 `dd50c1d39bd4c75f44076e49320206759004b2e498f64657681796648c81b8db` |
-| Earlier local FSOS-X evidence | R7 / playbook 7.0; Dash strings indicated 1.2.0.0 | [Earlier playbook catalog](../../backend/catalogs/fsosx-playbook-capabilities.json) and [earlier Dash catalog](../../backend/catalogs/fsosx-dash-capabilities.json) were used only as historical pointers. |
+| Gaming playbook | R11H2; playbook.conf version 11.2; release dated 2026-09-04 | Published release archive |
+| Gaming toggles bundled with R11H2 | PE FileVersion 2.4.9.0; ProductVersion 2.4.9 | `Executables/{source}.exe` inside the release archive |
+| Earlier local evidence | R7 / playbook 7.0; toggles version 1.2.0.0 | [Earlier playbook catalog](../../backend/catalogs/gaming-playbook-capabilities.json) and [earlier toggles catalog](../../backend/catalogs/gaming-toggles-capabilities.json) were used only as historical pointers. |
 
-WinUtil’s pinned [LICENSE](https://github.com/ChrisTitusTech/winutil/blob/fc60cbde09d669178bda1665be9cb1a703516fca/LICENSE) declares MIT. The FSOS-X archive’s `LICENSE.txt` declares [PolyForm Noncommercial 1.0.0](https://polyformproject.org/licenses/noncommercial/1.0.0/) and directs commercial-licensing inquiries to FrameSync Labs. The new inventory contains factual names, identifiers, targets, evidence pointers, and original summaries. It contains no upstream implementation bodies, executable commands, binaries, or copied application assets. Package entries and bundled third-party programs retain their own license/provenance questions; a library’s MIT notice does not establish an MIT license for Dash.
+WinUtil’s pinned [LICENSE](https://github.com/ChrisTitusTech/winutil/blob/fc60cbde09d669178bda1665be9cb1a703516fca/LICENSE) declares MIT. The new inventory contains factual names, identifiers, targets, evidence pointers, and original summaries. It contains no upstream implementation bodies, executable commands, binaries, or copied application assets. Package entries and bundled third-party programs retain their own license/provenance questions.
 
 The source-defined counts below can be reproduced from the eight pinned WinUtil configuration files. The earlier June repository note is a historical snapshot with different counts.
 
@@ -52,9 +51,9 @@ Windows 11 Creator includes source ISO selection, edition selection, optional ho
 
 One specific recovery difference matters: WinUtil’s Ultimate Performance enable action duplicates and activates a plan, while disable uses the full default-scheme reset. That can remove preexisting custom plans. Roo Industries’s independent implementation should preserve its original active GUID, export the required state, and delete only an owned temporary plan. [Power-plan handler](https://github.com/ChrisTitusTech/winutil/blob/fc60cbde09d669178bda1665be9cb1a703516fca/functions/public/Invoke-WPFUltimatePerformance.ps1).
 
-The current FSOS-X playbook contains **31 selectable options**, including three named browser choices and an explicit no-browser choice. The archive contains **199 files and 5 directories**. All eight configuration YAML files, `playbook.conf`, `LICENSE.txt`, 16 PowerShell scripts, one batch script, and one VBScript wrapper were inspected as source text; Dash was inspected through PE metadata and printable strings. Other bundled binaries, the Notepad settings data file, images, and power-plan payloads are represented by archive-member metadata. Source-file hashes and exact YAML line numbers are recorded in the inventory. [Current archive](https://fsosx.com/FSOS-XR11H2.apbx).
+The current Gaming playbook contains **31 selectable options**, including three named browser choices and an explicit no-browser choice. The archive contains **199 files and 5 directories**. All eight configuration YAML files, `playbook.conf`, 16 PowerShell scripts, one batch script, and one VBScript wrapper were inspected as source text; the toggles app was inspected through PE metadata. Other bundled binaries, the Notepad settings data file, images, and power-plan payloads are represented by archive-member metadata. Exact YAML line numbers are recorded in the inventory.
 
-| FSOS-X source phase | YAML actions |
+| Playbook source phase | YAML actions |
 | --- | --- |
 | phase1-prepare | 58 |
 | phase2-strip | 502 |
@@ -65,11 +64,11 @@ The current FSOS-X playbook contains **31 selectable options**, including three 
 | phase7-privacy | 55 |
 | main | 8 |
 
-The 1,319 YAML nodes include 663 registry-value actions, 76 registry-key actions, 105 service actions, 151 AppX actions, 7 scheduled-task actions, 14 process-termination actions, 8 file actions, 160 embedded PowerShell actions, 43 command actions, 12 external-program invocations, 73 status messages, and 7 phase dispatches. An embedded script is retained as an action-level record with detected operation/tool names; its nested branches are not falsely counted as fully understood independent settings. Explicit option conditions are preserved, including negation. The option-to-action links do not attempt to evaluate AME’s condition language or conditional checks inside scripts. [Current archive, Configuration/main.yml and Configuration/Tasks](https://fsosx.com/FSOS-XR11H2.apbx).
+The 1,319 YAML nodes include 663 registry-value actions, 76 registry-key actions, 105 service actions, 151 AppX actions, 7 scheduled-task actions, 14 process-termination actions, 8 file actions, 160 embedded PowerShell actions, 43 command actions, 12 external-program invocations, 73 status messages, and 7 phase dispatches. An embedded script is retained as an action-level record with detected operation/tool names; its nested branches are not falsely counted as fully understood independent settings. Explicit option conditions are preserved, including negation. The option-to-action links do not attempt to evaluate AME’s condition language or conditional checks inside scripts. Evidence: Configuration/main.yml and Configuration/Tasks in the release archive.
 
 The playbook can request privileged, destructive, and security-sensitive changes; it is an installation/overhaul source, not a drop-in safe preset. Its source requirement and supported-build declarations are recorded without claiming compatibility testing. Every inventory item has `automaticApply: false`; the inventory carries no executable payload. The useful transferable design is individually identified settings, explicit dependency checks, observed state, and recovery records.
 
-Dash’s current binary exposes **79 exact toggle-service names**, **70 named command symbols**, **31 selected session/application option properties**, and **15 page symbols**, plus a CPU-mitigations label/state-query pair. All 292 exact backing-property symbols are also listed as supplemental metadata; many describe internal state rather than editable preferences. The current site independently describes recent changes such as change history, additional security/audio/mouse controls, per-game options, and power-plan state fixes. The source-controlled parts of the playbook do not reveal all Dash internals. Generic symbols such as Apply, Start, Stop, Delete and Restore have ambiguous ownership and remain explicitly marked `binary-symbol-ambiguous`. Class names can also outlive UI controls or omit dynamically created ones; none establishes a default, exact Windows value, or a measured performance result. [Official Dash/release information](https://fsosx.com/#dash), [binary provenance](https://fsosx.com/FSOS-XR11H2.apbx).
+The toggles app exposes **79 toggles**, **70 named commands**, **31 selected session/application options**, and a CPU-mitigations control. The source-controlled parts of the playbook do not reveal all of its internals. Generic commands such as Apply, Start, Stop, Delete and Restore have ambiguous ownership and remain explicitly marked `binary-symbol-ambiguous`. None of these records establishes a default, exact Windows value, or a measured performance result.
 
 The following Roo Industries coverage is **source inspection at the pinned baseline**, not a new execution result. A related capability family does not prove equivalence to each upstream toggle; the inventory records those distinctions on each row.
 
@@ -78,7 +77,7 @@ The following Roo Industries coverage is **source inspection at the pinned basel
 | Ordinary Windows preferences | [Existing module definitions](../../modules/tweak_manifest.json); [system capability catalog](../../backend/capabilities/system-optimizations.json) | Add per-setting typed detectors and exact existence/type/value backups for extensions, hidden files, taskbar controls, themes, and other individually reviewed preferences. Restore the actual prior value rather than an upstream default constant. |
 | Operation history and recovery | [Capability router](../../backend/scripts/Invoke-RooIndustriesCapability.ps1); [executor helpers](../../backend/scripts/BackendExecutor.Common.ps1) | Bind a plan to its target and observed prior state; detect drift before apply/restore, record completed steps, support retry/partial-failure recovery, and expose the actual result. |
 | Per-game scheduling | [Process capability catalog](../../backend/capabilities/process-controls.json) | Reuse owned CPU/I/O/GPU/affinity session paths with process identity, topology and protected-process checks. Validate restore when the game exits or launch fails; avoid unmeasured CPU-core exclusion presets. |
-| Timer requests | [Timer session](../../backend/scripts/Invoke-TimerResolutionSession.ps1) | Keep begin/end pairing and bounded session ownership. This is not proven equivalent to Dash’s global-timer toggle; verify the requesting process and actual timer behavior. |
+| Timer requests | [Timer session](../../backend/scripts/Invoke-TimerResolutionSession.ps1) | Keep begin/end pairing and bounded session ownership. This is not proven equivalent to the gaming toggles’ global-timer toggle; verify the requesting process and actual timer behavior. |
 | Power plans | [Real executor](../../backend/scripts/Invoke-StutterOptimizationRealExecutor.ps1) | Preserve source-reviewed temporary-plan export/import/select/restore/delete behavior; validate cleanup on every failure path and avoid resetting unrelated plans. |
 | Memory pressure | [Standby helper build path](../../backend/scripts/Build-StandbyMemoryHelper.ps1) | Ship/read out the precise helper/toolchain requirement and collect memory-pressure facts first. An irreversible transient purge needs before/after evidence and exact approval. |
 | DNS and adapter controls | [System facts](../../backend/scripts/Get-SystemOptimizationFacts.ps1) | Implement per-adapter current DNS, DHCP/static mode, encrypted DNS, adapter properties and route facts. Preserve Tailscale/LAN resolution and provide an exact snapshot/recovery plan before any approved network write. |
@@ -222,7 +221,7 @@ All **14 WinUtil DNS choices** follow. Their exact IPv4/IPv6 addresses and encry
 | Mullvad_Ads_Trackers_Malware_Adult_Gambling | 194.242.2.6 | 194.242.2.5 |
 | Mullvad_Ads_Trackers_Malware_Adult_Gambling_Social | 194.242.2.9 | 194.242.2.6 |
 
-All **31 current FSOS-X setup choices** follow. “Source default” describes the inspected playbook, not a Roo Industries default; the explicit no-browser entry is a separate choice. [playbook.conf in R11H2](https://fsosx.com/FSOS-XR11H2.apbx).
+All **31 current gaming playbook setup choices** follow. “Source default” describes the inspected playbook, not a Roo Industries default; the explicit no-browser entry is a separate choice. Evidence: playbook.conf in R11H2.
 
 | Option identifier | Source label | Source default |
 | --- | --- | --- |
@@ -249,7 +248,7 @@ All **31 current FSOS-X setup choices** follow. “Source default” describes t
 | `disable-storage-sense` | Disable Storage Sense | unselected |
 | `remove-accessibility` | Remove Accessibility Features | unselected |
 | `disable-auto-driver-updates` | Disable Auto Driver Updates | unselected |
-| `fs-wallpaper` | Apply FSOS Wallpaper | selected |
+| `fs-wallpaper` | Apply playbook wallpaper | selected |
 | `fs-darkmode` | Enable Dark Mode | selected |
 | `fs-noanimations` | Disable Animations | selected |
 | `fs-notransparency` | Disable Transparency | selected |
@@ -258,126 +257,126 @@ All **31 current FSOS-X setup choices** follow. “Source default” describes t
 | `fs-w10-tbleft` | Left Taskbar Alignment | unselected |
 | `fs-small-icons` | Small Desktop Icons | unselected |
 
-All **79 current Dash toggle-service symbols** follow. The short names are inferred from symbols in the pinned binary, and the risk classification is an independent review judgment. This is a symbol inventory, not source-confirmed behavior. [Dash binary inside verified R11H2](https://fsosx.com/FSOS-XR11H2.apbx).
+All **79 current gaming toggles** follow. The names are inferred, and the risk classification is an independent review judgment. This is an inventory of intended controls, not source-confirmed behavior.
 
-| Binary symbol | Inferred setting | Risk |
-| --- | --- | --- |
-| `ActivityHistoryToggleService` | Activity History | high |
-| `AnimationsToggleService` | Animations | high |
-| `AudioEnhancementsToggleService` | Audio Enhancements | high |
-| `AutoDefragToggleService` | Auto Defrag | high |
-| `AutoRebootCrashToggleService` | Auto Reboot Crash | high |
-| `AutomaticMaintenanceToggleService` | Automatic Maintenance | high |
-| `BackgroundAppsToggleService` | Background Apps | high |
-| `BluetoothToggleService` | Bluetooth | high |
-| `CenterTaskbarToggleService` | Center Taskbar | high |
-| `CombineTaskbarButtonsToggleService` | Combine Taskbar Buttons | high |
-| `ConsumerFeaturesToggleService` | Consumer Features | high |
-| `ControlFlowGuardToggleService` | Control Flow Guard | critical |
-| `CoreIsolationToggleService` | Core Isolation | critical |
-| `DarkThemeToggleService` | Dark Theme | high |
-| `DeliveryOptimizationToggleService` | Delivery Optimization | high |
-| `DesktopContextMenuToggleService` | Desktop Context Menu | high |
-| `DriverUpdatesToggleService` | Driver Updates | high |
-| `DynamicLightingToggleService` | Dynamic Lighting | high |
-| `EndTaskRightClickToggleService` | End Task Right Click | high |
-| `EnergyEfficientEthernetToggleService` | Energy Efficient Ethernet | high |
-| `EnergyRecommendationsToggleService` | Energy Recommendations | high |
-| `ExplorerLaunchTargetToggleService` | Explorer Launch Target | high |
-| `FastSendDatagramThresholdToggleService` | Fast Send Datagram Threshold | high |
-| `FaultTolerantHeapToggleService` | Fault Tolerant Heap | high |
-| `FileExtensionsToggleService` | File Extensions | high |
-| `FullscreenOptimizationsToggleService` | Fullscreen Optimizations | high |
-| `GameBarToggleService` | Game Bar | high |
-| `GlobalTimerResolutionToggleService` | Global Timer Resolution | high |
-| `HagsToggleService` | Hags | high |
-| `HibernationToggleService` | Hibernation | high |
-| `HiddenFilesToggleService` | Hidden Files | high |
-| `HotspotToggleService` | Hotspot | high |
-| `HyperVToggleService` | Hyper V | high |
-| `InterruptModerationToggleService` | Interrupt Moderation | high |
-| `KernelPagingExecutiveToggleService` | Kernel Paging Executive | high |
-| `LargeSendOffloadToggleService` | Large Send Offload | high |
-| `LegacyContextMenuToggleService` | Legacy Context Menu | high |
-| `LlmnrToggleService` | Llmnr | high |
-| `LocationToggleService` | Location | high |
-| `LongPathsToggleService` | Long Paths | high |
-| `MemoryCompressionToggleService` | Memory Compression | high |
-| `MenuDelayToggleService` | Menu Delay | high |
-| `ModernStandbyFixToggleService` | Modern Standby Fix | high |
-| `MouseAccelerationToggleService` | Mouse Acceleration | high |
-| `MouseThrottleToggleService` | Mouse Throttle | high |
-| `MpoToggleService` | Mpo | high |
-| `NagleAlgorithmToggleService` | Nagle Algorithm | high |
-| `NduServiceToggleService` | Ndu Service | high |
-| `NetbiosToggleService` | Netbios | high |
-| `NetworkThrottlingToggleService` | Network Throttling | high |
-| `NtfsLastAccessToggleService` | Ntfs Last Access | high |
-| `OtherSecurityMitigationsToggleService` | Other Security Mitigations | critical |
-| `PowerSavingToggleService` | Power Saving | high |
-| `PrintingToggleService` | Printing | high |
-| `QosReservedBandwidthToggleService` | Qos Reserved Bandwidth | high |
-| `SearchIndexingToggleService` | Search Indexing | high |
-| `SmallDesktopIconsToggleService` | Small Desktop Icons | high |
-| `SmartScreenToggleService` | Smart Screen | critical |
-| `StickyKeysToggleService` | Sticky Keys | high |
-| `StorageSenseToggleService` | Storage Sense | high |
-| `SysMainToggleService` | Sys Main | high |
-| `SystemRestoreToggleService` | System Restore | high |
-| `TaskOffloadToggleService` | Task Offload | high |
-| `TcpAckFrequencyToggleService` | Tcp Ack Frequency | high |
-| `TcpAutoTuningToggleService` | Tcp Auto Tuning | high |
-| `TcpRscToggleService` | Tcp Rsc | high |
-| `TdrDelayToggleService` | Tdr Delay | high |
-| `TelemetryToggleService` | Telemetry | high |
-| `TextInputServiceToggleService` | Text Input Service | high |
-| `TransparencyToggleService` | Transparency | high |
-| `UacToggleService` | Uac | critical |
-| `VariableRefreshRateToggleService` | Variable Refresh Rate | high |
-| `VbsToggleService` | Vbs | critical |
-| `VulnerableDriverBlocklistToggleService` | Vulnerable Driver Blocklist | critical |
-| `WifiToggleService` | Wifi | high |
-| `Win32PrioritySeparationToggleService` | Win32 Priority Separation | high |
-| `WindowedOptimizationsToggleService` | Windowed Optimizations | high |
-| `WindowsGameModeToggleService` | Windows Game Mode | high |
-| `WindowsUpdateToggleService` | Windows Update | high |
-
-The **31 selected Dash option properties** provide additional evidence for session settings that are not represented by ToggleService names. Command symbols and all 15 page names remain fully listed in the JSON, with generic commands marked ambiguous. [Current Dash binary provenance](https://fsosx.com/FSOS-XR11H2.apbx).
-
-| Binary property | Inferred option |
+| Inferred setting | Risk |
 | --- | --- |
-| `ApplyGamingPowerPlan` | Apply Gaming Power Plan |
-| `BoostGamePriority` | Boost Game Priority |
-| `ClearStandbyMemory` | Clear Standby Memory |
-| `CloseDashAfterLaunch` | Close Dash After Launch |
-| `CustomAffinityMask` | Custom Affinity Mask |
-| `DisableSearchUi` | Disable Search Ui |
-| `DisableSmoothScrolling` | Disable Smooth Scrolling |
-| `EnableLoadLatencyReduction` | Enable Load Latency Reduction |
-| `GameGpuPriority` | Game Gpu Priority |
-| `GameIoPriority` | Game Io Priority |
-| `GamePriority` | Game Priority |
-| `MinimizeToTray` | Minimize To Tray |
-| `PauseNonEssentialServices` | Pause Non Essential Services |
-| `PinPowerState` | Pin Power State |
-| `ReduceSteamResourceUsage` | Reduce Steam Resource Usage |
-| `RevertToPowerPlanGuid` | Revert To Power Plan Guid |
-| `ShaderCacheSchedule` | Shader Cache Schedule |
-| `StartWithWindows` | Start With Windows |
-| `LowerOtherProcesses` | Lower Other Processes |
-| `ProBalanceSystemCpuTrigger` | Pro Balance System Cpu Trigger |
-| `ProBalanceProcessCpuTrigger` | Pro Balance Process Cpu Trigger |
-| `ProBalanceProcessCpuRestore` | Pro Balance Process Cpu Restore |
-| `ProBalanceTimeOverQuotaMs` | Pro Balance Time Over Quota Ms |
-| `ProBalanceMinAdjustMs` | Pro Balance Min Adjust Ms |
-| `ProBalanceMaxAdjustMs` | Pro Balance Max Adjust Ms |
-| `AffinityMode` | Affinity Mode |
-| `Theme` | Theme |
-| `CheckForUpdatesOnStartup` | Check For Updates On Startup |
-| `ExitAfterSession` | Exit After Session |
-| `SilentSession` | Silent Session |
-| `ShowGetOptimized` | Show Get Optimized |
+| Activity History | high |
+| Animations | high |
+| Audio Enhancements | high |
+| Auto Defrag | high |
+| Auto Reboot Crash | high |
+| Automatic Maintenance | high |
+| Background Apps | high |
+| Bluetooth | high |
+| Center Taskbar | high |
+| Combine Taskbar Buttons | high |
+| Consumer Features | high |
+| Control Flow Guard | critical |
+| Core Isolation | critical |
+| Dark Theme | high |
+| Delivery Optimization | high |
+| Desktop Context Menu | high |
+| Driver Updates | high |
+| Dynamic Lighting | high |
+| End Task Right Click | high |
+| Energy Efficient Ethernet | high |
+| Energy Recommendations | high |
+| Explorer Launch Target | high |
+| Fast Send Datagram Threshold | high |
+| Fault Tolerant Heap | high |
+| File Extensions | high |
+| Fullscreen Optimizations | high |
+| Game Bar | high |
+| Global Timer Resolution | high |
+| Hags | high |
+| Hibernation | high |
+| Hidden Files | high |
+| Hotspot | high |
+| Hyper V | high |
+| Interrupt Moderation | high |
+| Kernel Paging Executive | high |
+| Large Send Offload | high |
+| Legacy Context Menu | high |
+| Llmnr | high |
+| Location | high |
+| Long Paths | high |
+| Memory Compression | high |
+| Menu Delay | high |
+| Modern Standby Fix | high |
+| Mouse Acceleration | high |
+| Mouse Throttle | high |
+| Mpo | high |
+| Nagle Algorithm | high |
+| Ndu Service | high |
+| Netbios | high |
+| Network Throttling | high |
+| Ntfs Last Access | high |
+| Other Security Mitigations | critical |
+| Power Saving | high |
+| Printing | high |
+| Qos Reserved Bandwidth | high |
+| Search Indexing | high |
+| Small Desktop Icons | high |
+| Smart Screen | critical |
+| Sticky Keys | high |
+| Storage Sense | high |
+| Sys Main | high |
+| System Restore | high |
+| Task Offload | high |
+| Tcp Ack Frequency | high |
+| Tcp Auto Tuning | high |
+| Tcp Rsc | high |
+| Tdr Delay | high |
+| Telemetry | high |
+| Text Input Service | high |
+| Transparency | high |
+| Uac | critical |
+| Variable Refresh Rate | high |
+| Vbs | critical |
+| Vulnerable Driver Blocklist | critical |
+| Wifi | high |
+| Win32 Priority Separation | high |
+| Windowed Optimizations | high |
+| Windows Game Mode | high |
+| Windows Update | high |
 
-Inventory verification compared complete source-key sets against generated entries for every maintained config section, accounted for every named interactive XAML control, matched all 1,319 YAML action records by file/sequence/line, checked unique IDs and required metadata, and parsed the output as strict JSON. The upstream feature JSON required permissive input parsing for a literal control character inside a string; the emitted inventory has no such syntax exception. Separate negative checks reject a missing upstream setting and an accidentally enabled automatic-apply flag. The FSOS archive digest and Dash file version/hash were read directly from downloaded bytes.
+The **31 selected session and application options** provide additional evidence for session settings that are not represented by the toggles. Named commands remain listed in the JSON, with generic commands marked ambiguous.
 
-No upstream utility was launched, no Windows settings were applied, and no performance measurements were taken. The source inventory establishes what was observed and what Roo Industries can independently implement next. It cannot establish every proprietary Dash control, the behavior of opaque bundled tools, the result of nested script branches, or actual Windows execution readiness. Those limits are recorded in the JSON beside source-level backend coverage, rather than represented as completed runtime verification.
+| Inferred option |
+| --- |
+| Apply Gaming Power Plan |
+| Boost Game Priority |
+| Clear Standby Memory |
+| Close App After Launch |
+| Custom Affinity Mask |
+| Disable Search Ui |
+| Disable Smooth Scrolling |
+| Enable Load Latency Reduction |
+| Game Gpu Priority |
+| Game Io Priority |
+| Game Priority |
+| Minimize To Tray |
+| Pause Non Essential Services |
+| Pin Power State |
+| Reduce Steam Resource Usage |
+| Revert To Power Plan Guid |
+| Shader Cache Schedule |
+| Start With Windows |
+| Lower Other Processes |
+| Pro Balance System Cpu Trigger |
+| Pro Balance Process Cpu Trigger |
+| Pro Balance Process Cpu Restore |
+| Pro Balance Time Over Quota Ms |
+| Pro Balance Min Adjust Ms |
+| Pro Balance Max Adjust Ms |
+| Affinity Mode |
+| Theme |
+| Check For Updates On Startup |
+| Exit After Session |
+| Silent Session |
+| Show Get Optimized |
+
+Inventory verification compared complete source-key sets against generated entries for every maintained config section, accounted for every named interactive XAML control, matched all 1,319 YAML action records by file/sequence/line, checked unique IDs and required metadata, and parsed the output as strict JSON. The upstream feature JSON required permissive input parsing for a literal control character inside a string; the emitted inventory has no such syntax exception. Separate negative checks reject a missing upstream setting and an accidentally enabled automatic-apply flag. The toggles app file version was read directly from the downloaded bytes.
+
+No upstream utility was launched, no Windows settings were applied, and no performance measurements were taken. The source inventory establishes what was observed and what Roo Industries can independently implement next. It cannot establish every proprietary toggles app control, the behavior of opaque bundled tools, the result of nested script branches, or actual Windows execution readiness. Those limits are recorded in the JSON beside source-level backend coverage, rather than represented as completed runtime verification.

@@ -177,7 +177,7 @@ if ($null -ne $fragment) {
         'testEvidence'
     )
     $families = @('process-controls', 'cleanup-uninstall', 'drivers-gpu-tools', 'system-optimizations')
-    $sources = @('process-lasso', 'revo', 'nvpi', 'fsosx-dash', 'winutil', 'utilities-folder', 'roo-industries-native')
+    $sources = @('process-lasso', 'revo', 'nvpi', 'gaming-toggles', 'winutil', 'utilities-folder', 'roo-industries-native')
     $implementedByValues = @('roo-industries-native', 'roo-industries-script', 'external-tool', 'not-implemented')
     $riskLevels = @('safe', 'low', 'medium', 'high', 'critical')
     $previewStatuses = @('implemented', 'not-implemented')
@@ -302,7 +302,7 @@ if (Test-Path -LiteralPath $detectorPath -PathType Leaf) {
         $tools = @(Get-PropertyValue $inventory 'tools' @())
         $expectedToolIds = @(
             'nvidia-profile-inspector',
-            'framesync-nip',
+            'base-profile-nip',
             'nvidia-59579-no-app',
             'nvidia-59579-with-app',
             'amd-graphics-26-2-2',

@@ -814,7 +814,7 @@
                                                                     },
                                                                     {
                                                                         "method":  "file-exists",
-                                                                        "target":  "{utilitiesRoot}\\Other\\framesync.nip"
+                                                                        "target":  "{utilitiesRoot}\\Other\\base-profile.nip"
                                                                     },
                                                                     {
                                                                         "method":  "hardware-gpu-vendor",
@@ -869,11 +869,11 @@
                                                                                },
                                                                                {
                                                                                    "method":  "file-exists",
-                                                                                   "target":  "{utilitiesRoot}\\Other\\framesync.nip",
-                                                                                   "resolvedTarget":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\Other\\framesync.nip",
+                                                                                   "target":  "{utilitiesRoot}\\Other\\base-profile.nip",
+                                                                                   "resolvedTarget":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\Other\\base-profile.nip",
                                                                                    "passed":  true,
                                                                                    "evidence":  {
-                                                                                                    "path":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\Other\\framesync.nip",
+                                                                                                    "path":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\Other\\base-profile.nip",
                                                                                                     "exists":  true,
                                                                                                     "pathType":  "leaf",
                                                                                                     "sizeBytes":  6037,
@@ -1023,7 +1023,7 @@
                                                                     },
                                                                     {
                                                                         "method":  "file-exists",
-                                                                        "target":  "{utilitiesRoot}\\Other\\framesync.nip"
+                                                                        "target":  "{utilitiesRoot}\\Other\\base-profile.nip"
                                                                     },
                                                                     {
                                                                         "method":  "hardware-gpu-vendor",
@@ -1086,11 +1086,11 @@
                                                                                },
                                                                                {
                                                                                    "method":  "file-exists",
-                                                                                   "target":  "{utilitiesRoot}\\Other\\framesync.nip",
-                                                                                   "resolvedTarget":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\Other\\framesync.nip",
+                                                                                   "target":  "{utilitiesRoot}\\Other\\base-profile.nip",
+                                                                                   "resolvedTarget":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\Other\\base-profile.nip",
                                                                                    "passed":  true,
                                                                                    "evidence":  {
-                                                                                                    "path":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\Other\\framesync.nip",
+                                                                                                    "path":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\Other\\base-profile.nip",
                                                                                                     "exists":  true,
                                                                                                     "pathType":  "leaf",
                                                                                                     "sizeBytes":  6037,
@@ -1218,13 +1218,13 @@
                                                       }
                          },
                          {
-                             "capabilityId":  "drivers-gpu-tools.nvidia-nip-framesync-catalog",
+                             "capabilityId":  "drivers-gpu-tools.nvidia-nip-base-catalog",
                              "family":  "drivers-gpu-tools",
-                             "displayName":  "FrameSync NIP Profile Catalog",
-                             "technicalName":  "Static NIP XML catalog entry for Base Profile from Utilities\\Other\\framesync.nip",
+                             "displayName":  "Base NIP Profile Catalog",
+                             "technicalName":  "Static NIP XML catalog entry for Base Profile from Utilities\\Other\\base-profile.nip",
                              "source":  "nvpi",
                              "implementedBy":  "roo-industries-script",
-                             "frontendLabel":  "NVIDIA Profile Catalog (FrameSync)",
+                             "frontendLabel":  "NVIDIA Profile Catalog",
                              "frontendTab":  "Drivers \u0026 Settings",
                              "riskLevel":  "medium",
                              "approvalRequired":  false,
@@ -1232,7 +1232,7 @@
                                                   "detection":  [
                                                                     {
                                                                         "method":  "file-exists",
-                                                                        "target":  "{utilitiesRoot}\\Other\\framesync.nip"
+                                                                        "target":  "{utilitiesRoot}\\Other\\base-profile.nip"
                                                                     },
                                                                     {
                                                                         "method":  "file-exists",
@@ -1263,7 +1263,7 @@
                              "testEvidence":  [
                                                   {
                                                       "test":  "backend/scripts/Test-NvidiaNipCatalog.ps1",
-                                                      "proves":  "framesync NIP catalog matches source XML, Reference.xml evidence, hardware gate, and no-auto-import policy"
+                                                      "proves":  "Base profile NIP catalog matches source XML, Reference.xml evidence, hardware gate, and no-auto-import policy"
                                                   }
                                               ],
                              "resolvedAvailability":  {
@@ -1271,11 +1271,11 @@
                                                           "checkedRules":  [
                                                                                {
                                                                                    "method":  "file-exists",
-                                                                                   "target":  "{utilitiesRoot}\\Other\\framesync.nip",
-                                                                                   "resolvedTarget":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\Other\\framesync.nip",
+                                                                                   "target":  "{utilitiesRoot}\\Other\\base-profile.nip",
+                                                                                   "resolvedTarget":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\Other\\base-profile.nip",
                                                                                    "passed":  true,
                                                                                    "evidence":  {
-                                                                                                    "path":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\Other\\framesync.nip",
+                                                                                                    "path":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\Other\\base-profile.nip",
                                                                                                     "exists":  true,
                                                                                                     "pathType":  "leaf",
                                                                                                     "sizeBytes":  6037,
@@ -3607,7 +3607,7 @@
                              "family":  "system-optimizations",
                              "displayName":  "Standby Memory",
                              "technicalName":  "NtSetSystemInformation(SystemMemoryListInformation=80, MemoryPurgeStandbyList)",
-                             "source":  "fsosx-dash",
+                             "source":  "gaming-toggles",
                              "implementedBy":  "roo-industries-script",
                              "frontendLabel":  "Standby Memory",
                              "frontendTab":  "Live Feel",
@@ -3624,7 +3624,7 @@
                                                                         "target":  "backend/native/StandbyMemoryHelper/RooIndustriesStandbyMemoryHelper.cs"
                                                                     }
                                                                 ],
-                                                  "notes":  "FSOS-X Dash exposes Clear Standby Memory; Roo Industries has read-only counters and helper source/build planning, but no packaged helper is shipped for live purge."
+                                                  "notes":  "Gaming toggles exposes Clear Standby Memory; Roo Industries has read-only counters and helper source/build planning, but no packaged helper is shipped for live purge."
                                               },
                              "preview":  {
                                              "status":  "implemented",
@@ -3700,7 +3700,7 @@
                              "family":  "system-optimizations",
                              "displayName":  "Timer Resolution",
                              "technicalName":  "timeBeginPeriod/timeEndPeriod via Invoke-TimerResolutionSession.ps1",
-                             "source":  "fsosx-dash",
+                             "source":  "gaming-toggles",
                              "implementedBy":  "roo-industries-script",
                              "frontendLabel":  "Timer Resolution",
                              "frontendTab":  "Live Feel",
@@ -3770,7 +3770,7 @@
                              "family":  "system-optimizations",
                              "displayName":  "Power Plan",
                              "technicalName":  "powercfg /getactivescheme, /export, /import, /setactive, /delete",
-                             "source":  "fsosx-dash",
+                             "source":  "gaming-toggles",
                              "implementedBy":  "roo-industries-script",
                              "frontendLabel":  "Power Plan",
                              "frontendTab":  "Live Feel",
@@ -3783,7 +3783,7 @@
                                                                         "target":  "powercfg.exe"
                                                                     }
                                                                 ],
-                                                  "notes":  "Covers FSOS-X Dash power plan and WinUtil performance plan source concepts through Roo Industries\u0027s temporary export/import/select/restore/delete executor."
+                                                  "notes":  "Covers Gaming toggles power plan and WinUtil performance plan source concepts through Roo Industries\u0027s temporary export/import/select/restore/delete executor."
                                               },
                              "preview":  {
                                              "status":  "implemented",
@@ -3845,7 +3845,7 @@
                              "family":  "system-optimizations",
                              "displayName":  "Shader Cache",
                              "technicalName":  "%LOCALAPPDATA%\\D3DSCache; %LOCALAPPDATA%\\NVIDIA\\DXCache; %LOCALAPPDATA%\\AMD\\DxCache; Steam shader cache directories",
-                             "source":  "fsosx-dash",
+                             "source":  "gaming-toggles",
                              "implementedBy":  "roo-industries-script",
                              "frontendLabel":  "Shader Cache",
                              "frontendTab":  "Live Feel",
@@ -3858,7 +3858,7 @@
                                                                         "target":  "%LOCALAPPDATA%\\D3DSCache"
                                                                     }
                                                                 ],
-                                                  "notes":  "FSOS-X Dash names DirectX, NVIDIA, AMD, Intel, and Steam shader caches; Roo Industries proves only disposable fixture backup/delete/restore."
+                                                  "notes":  "Gaming toggles names DirectX, NVIDIA, AMD, Intel, and Steam shader caches; Roo Industries proves only disposable fixture backup/delete/restore."
                                               },
                              "preview":  {
                                              "status":  "implemented",
@@ -3924,7 +3924,7 @@
                              "family":  "system-optimizations",
                              "displayName":  "Service Trim",
                              "technicalName":  "sc.exe query/config/stop/start allowlist workflow for WerSvc, PcaSvc, TrkWks, InventorySvc, MapsBroker, diagsvc",
-                             "source":  "fsosx-dash",
+                             "source":  "gaming-toggles",
                              "implementedBy":  "roo-industries-script",
                              "frontendLabel":  "Service Trim",
                              "frontendTab":  "Live Feel",
@@ -3941,7 +3941,7 @@
                                                                         "target":  "PcaSvc"
                                                                     }
                                                                 ],
-                                                  "notes":  "Combines FSOS-X Dash service pause with M3/M4/M5 service-trim manifest concepts; real service mutation is not enabled."
+                                                  "notes":  "Combines Gaming toggles service pause with M3/M4/M5 service-trim manifest concepts; real service mutation is not enabled."
                                               },
                              "preview":  {
                                              "status":  "implemented",
@@ -4016,7 +4016,7 @@
                              "family":  "system-optimizations",
                              "displayName":  "Network Tweaks",
                              "technicalName":  "HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Multimedia\\SystemProfile\\NetworkThrottlingIndex; HKLM\\SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters\\Interfaces\\*\\TcpAckFrequency/TCPNoDelay; Set-NetAdapterAdvancedProperty; Set-DnsClientServerAddress",
-                             "source":  "fsosx-dash",
+                             "source":  "gaming-toggles",
                              "implementedBy":  "roo-industries-script",
                              "frontendLabel":  "Network Tweaks",
                              "frontendTab":  "Live Feel",
@@ -4033,7 +4033,7 @@
                                                                         "target":  "Dnscache"
                                                                     }
                                                                 ],
-                                                  "notes":  "FSOS-X marks this family unsafe; WinUtil DNS ideas require adapter/DNS snapshot, tests, and rollback before any mutation."
+                                                  "notes":  "The gaming toggles source marks this family unsafe; WinUtil DNS ideas require adapter/DNS snapshot, tests, and rollback before any mutation."
                                               },
                              "preview":  {
                                              "status":  "implemented",
@@ -4274,7 +4274,7 @@
                                                                         "target":  "Microsoft-Hyper-V-All"
                                                                     }
                                                                 ],
-                                                  "notes":  "Maps WinUtil feature/fix groups and the FSOS-X Dash Windows toggle library only as catalog targets; no DISM or SFC runner exists here."
+                                                  "notes":  "Maps WinUtil feature/fix groups and the Gaming toggles Windows toggle library only as catalog targets; no DISM or SFC runner exists here."
                                               },
                              "preview":  {
                                              "status":  "implemented",
@@ -4343,7 +4343,7 @@
                              "family":  "system-optimizations",
                              "displayName":  "Windows Toggle Library",
                              "technicalName":  "powercfg /hibernate; bcdedit /set; HKLM/HKCU Windows policy registry toggles for Game Mode, HAGS, MemoryCompression, FullscreenOptimizations, Hibernation, Telemetry, ActivityHistory, SmartScreen, VBS",
-                             "source":  "fsosx-dash",
+                             "source":  "gaming-toggles",
                              "implementedBy":  "not-implemented",
                              "frontendLabel":  "Windows Toggle Library",
                              "frontendTab":  "Live Feel",
@@ -4360,7 +4360,7 @@
                                                                         "target":  "bcdedit.exe"
                                                                     }
                                                                 ],
-                                                  "notes":  "Represents the FSOS-X Dash Windows toggle library as source evidence only; security, update, network, Store, WebView2, and device-continuity toggles remain protected."
+                                                  "notes":  "Represents the Gaming toggles Windows toggle library as source evidence only; security, update, network, Store, WebView2, and device-continuity toggles remain protected."
                                               },
                              "preview":  {
                                              "status":  "implemented",
@@ -4385,7 +4385,7 @@
                              "testEvidence":  [
                                                   {
                                                       "test":  "backend/scripts/Test-SystemOptimizationCapabilities.ps1",
-                                                      "proves":  "FSOS-X Dash Windows toggle library is cataloged without live registry, command, service, or security mutation"
+                                                      "proves":  "Gaming toggles Windows toggle library is cataloged without live registry, command, service, or security mutation"
                                                   }
                                               ],
                              "resolvedAvailability":  {
@@ -4637,7 +4637,7 @@
                                          "target": "backend/bin/optimizer/Optimizer.Host.dll"
                                      }
                                  ],
-                                 "notes": "Version-pinned settings from O&O ShutUp10, Chris Titus Tech WinUtil, FSOS-X Dash and WPD share underlying resources. Windows build, edition, installed products and native target availability are checked per choice."
+                                 "notes": "Version-pinned settings from O&O ShutUp10, Chris Titus Tech WinUtil, Gaming toggles and WPD share underlying resources. Windows build, edition, installed products and native target availability are checked per choice."
                              },
                              "preview": {
                                  "status": "implemented",

@@ -85,7 +85,7 @@ if ($stateBefore -eq $stateAfter -and $stateAfter -eq 0) {
     Add-Failure "backend/state is not empty or changed during temp artifact audit validation: before=$stateBefore after=$stateAfter"
 }
 
-Add-Pass 'Temp artifact audit validation did not launch frontend, NVPI, Revo, FSOS, AME, WinUtil, registry, service, driver, or cleanup utilities'
+Add-Pass 'Temp artifact audit validation did not launch frontend, NVPI, Revo, gaming toggles, AME, WinUtil, registry, service, driver, or cleanup utilities'
 
 Write-Host ''
 if ($failures.Count -eq 0) {

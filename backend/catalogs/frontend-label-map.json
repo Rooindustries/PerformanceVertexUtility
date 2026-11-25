@@ -208,9 +208,9 @@
           "approvalRequired": true
         },
         {
-          "capabilityId": "drivers-gpu-tools.nvidia-nip-framesync-catalog",
-          "frontendLabel": "NVIDIA Profile Catalog (FrameSync)",
-          "displayName": "FrameSync NIP Profile Catalog",
+          "capabilityId": "drivers-gpu-tools.nvidia-nip-base-catalog",
+          "frontendLabel": "NVIDIA Profile Catalog",
+          "displayName": "Base NIP Profile Catalog",
           "riskLevel": "medium",
           "applyStatus": "preview-only",
           "approvalRequired": false

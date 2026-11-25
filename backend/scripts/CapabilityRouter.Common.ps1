@@ -1,4 +1,5 @@
 Set-StrictMode -Version Latest
+. (Join-Path $PSScriptRoot 'NvidiaProfileFile.Common.ps1')
 
 function Get-RooIndustriesUtcStamp {
     return (Get-Date).ToUniversalTime().ToString('o')
@@ -24,20 +25,6 @@ function Convert-ToCleanString {
     $text = ([string]$Value).Trim()
     if ([string]::IsNullOrWhiteSpace($text)) { return $null }
     return $text
-}
-
-function Resolve-RooIndustriesUtilitiesRoot {
-    param([string]$Path)
-
-    $candidate = $Path
-    if ([string]::IsNullOrWhiteSpace($candidate)) {
-        $candidate = $env:ROO_INDUSTRIES_UTILITIES_ROOT
-    }
-    if ([string]::IsNullOrWhiteSpace($candidate)) {
-        $candidate = (Join-Path ([Environment]::GetFolderPath('DesktopDirectory')) 'Utilities')
-    }
-
-    return [System.IO.Path]::GetFullPath([Environment]::ExpandEnvironmentVariables($candidate))
 }
 
 function Resolve-RooIndustriesDetectionFilePath {
@@ -191,8 +178,11 @@ function Resolve-RooIndustriesDetectionRule {
         'file-exists' {
             try {
                 $resolvedTarget = Resolve-RooIndustriesDetectionFilePath $target $RepoRoot $ResolvedUtilitiesRoot
+                $candidate = Resolve-RooIndustriesNvidiaProfileFile $resolvedTarget
+                if ($null -ne $candidate) { $resolvedTarget = $candidate }
                 $evidence = Get-RooIndustriesFileEvidence $resolvedTarget
-                $passed = [bool]$evidence.exists
+                $passed = $null -ne $candidate -and [bool]$evidence.exists
+                if ($null -eq $candidate) { $reason = 'No file in this folder has the catalog profile content.' }
                 $repoPrefix = [System.IO.Path]::GetFullPath($RepoRoot).TrimEnd('\') + '\'
                 if ($resolvedTarget.StartsWith($repoPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
                     $relative = $resolvedTarget.Substring($repoPrefix.Length).Replace('\', '/')

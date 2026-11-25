@@ -56,11 +56,11 @@
                                                                },
                                                                {
                                                                    "method":  "file-exists",
-                                                                   "target":  "{utilitiesRoot}\\Other\\framesync.nip",
-                                                                   "resolvedTarget":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\Other\\framesync.nip",
+                                                                   "target":  "{utilitiesRoot}\\Other\\base-profile.nip",
+                                                                   "resolvedTarget":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\Other\\base-profile.nip",
                                                                    "passed":  true,
                                                                    "evidence":  {
-                                                                                    "path":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\Other\\framesync.nip",
+                                                                                    "path":  "%ROO_INDUSTRIES_UTILITIES_ROOT%\\Other\\base-profile.nip",
                                                                                     "exists":  true,
                                                                                     "pathType":  "leaf",
                                                                                     "sizeBytes":  6037,

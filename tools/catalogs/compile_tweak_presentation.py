@@ -91,12 +91,12 @@ NETWORK_SUMMARIES = {
 def compile_presentation():
     catalog = json.loads((ROOT / 'backend/catalogs/windows-tweaks.json').read_text())
     coverage = json.loads((ROOT / 'backend/catalogs/windows-tweak-coverage.json').read_text())
-    fsos = {row['id']: row['category'] for row in json.loads((ROOT / 'backend/catalogs/sources/fsos.json').read_text())['records']}
+    gaming = {row['id']: row['category'] for row in json.loads((ROOT / 'backend/catalogs/sources/gaming.json').read_text())['records']}
     source_sections = {}
     dns_choices = {}
     provider_members = {}
     for record in coverage['records']:
-        category = fsos.get(record['sourceId']) if record['product'] == 'FSOS-X Dash' else None
+        category = gaming.get(record['sourceId']) if record['product'] == 'Gaming toggles' else None
         section = {'Network': 'network', 'CPU & Scheduling': 'gaming', 'GPU & Display': 'gaming', 'Input': 'devices', 'Security': 'security'}.get(category)
         for option in record['options']:
             for selection in option['selections']:

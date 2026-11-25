@@ -82,25 +82,25 @@ function Get-UniqueCapabilities {
     return @($items.ToArray())
 }
 
-$playbook = Read-CatalogJson 'backend\catalogs\fsosx-playbook-capabilities.json'
-$dash = Read-CatalogJson 'backend\catalogs\fsosx-dash-capabilities.json'
-$gap = Read-CatalogJson 'backend\catalogs\fsosx-gap-map.json'
+$playbook = Read-CatalogJson 'backend\catalogs\gaming-playbook-capabilities.json'
+$dash = Read-CatalogJson 'backend\catalogs\gaming-toggles-capabilities.json'
+$gap = Read-CatalogJson 'backend\catalogs\gaming-gap-map.json'
 
 if ($playbook -and $dash -and $gap) {
-    if ($playbook.sourceKind -eq 'fsosx-playbook' -and $dash.sourceKind -eq 'fsosx-dash') {
-        Add-Pass 'FSOS-X playbook and FSOS-X Dash catalogs use separate sourceKind values'
+    if ($playbook.sourceKind -eq 'gaming-playbook' -and $dash.sourceKind -eq 'gaming-toggles') {
+        Add-Pass 'Gaming playbook and Gaming toggles catalogs use separate sourceKind values'
     } else {
         Add-Failure "Unexpected sourceKind values: playbook=$($playbook.sourceKind) dash=$($dash.sourceKind)"
     }
 
     if ($playbook.catalogId -ne $dash.catalogId -and $playbook.sourceProduct -ne $dash.sourceProduct) {
-        Add-Pass 'FSOS-X playbook and FSOS-X Dash catalogs are not the same bucket'
+        Add-Pass 'Gaming playbook and Gaming toggles catalogs are not the same bucket'
     } else {
-        Add-Failure 'FSOS-X playbook and FSOS-X Dash catalogs appear merged'
+        Add-Failure 'Gaming playbook and Gaming toggles catalogs appear merged'
     }
 
-    $playbookWrongKind = @($playbook.capabilities | Where-Object { $_.sourceKind -ne 'fsosx-playbook' })
-    $dashWrongKind = @($dash.capabilities | Where-Object { $_.sourceKind -ne 'fsosx-dash' })
+    $playbookWrongKind = @($playbook.capabilities | Where-Object { $_.sourceKind -ne 'gaming-playbook' })
+    $dashWrongKind = @($dash.capabilities | Where-Object { $_.sourceKind -ne 'gaming-toggles' })
     if ($playbookWrongKind.Count -eq 0 -and $dashWrongKind.Count -eq 0) {
         Add-Pass 'Every catalog capability stays inside its source product boundary'
     } else {
@@ -118,9 +118,9 @@ if ($playbook -and $dash -and $gap) {
     $gapProducts = @($gap.sourceSeparation.products)
     $gapKinds = @($gapProducts | ForEach-Object { $_.sourceKind } | Sort-Object -Unique)
     if ($gap.sourceSeparation.requiredSeparateProducts -eq $true -and $gap.sourceSeparation.mergedBucketAllowed -eq $false -and $gapProducts.Count -eq 2 -and $gapKinds.Count -eq 2) {
-        Add-Pass 'Gap map explicitly forbids merging FSOS-X playbook and FSOS-X Dash'
+        Add-Pass 'Gap map explicitly forbids merging Gaming playbook and Gaming toggles'
     } else {
-        Add-Failure 'Gap map does not explicitly preserve separate FSOS-X playbook and Dash products'
+        Add-Failure 'Gap map does not explicitly preserve separate Gaming playbook and Dash products'
     }
 
     $phaseTotal = 0
@@ -191,9 +191,9 @@ if ($playbook -and $dash -and $gap) {
     }
 
     $catalogText = @(
-        (Get-Content -LiteralPath (Join-Path $repoRoot 'backend\catalogs\fsosx-playbook-capabilities.json') -Raw),
-        (Get-Content -LiteralPath (Join-Path $repoRoot 'backend\catalogs\fsosx-dash-capabilities.json') -Raw),
-        (Get-Content -LiteralPath (Join-Path $repoRoot 'backend\catalogs\fsosx-gap-map.json') -Raw),
+        (Get-Content -LiteralPath (Join-Path $repoRoot 'backend\catalogs\gaming-playbook-capabilities.json') -Raw),
+        (Get-Content -LiteralPath (Join-Path $repoRoot 'backend\catalogs\gaming-toggles-capabilities.json') -Raw),
+        (Get-Content -LiteralPath (Join-Path $repoRoot 'backend\catalogs\gaming-gap-map.json') -Raw),
         (Get-Content -LiteralPath (Join-Path $repoRoot 'backend\catalogs\stutter-optimization-ranking.json') -Raw)
     ) -join [Environment]::NewLine
     $staleExecutorText = @(
@@ -205,24 +205,24 @@ if ($playbook -and $dash -and $gap) {
     )
     $staleHits = @($staleExecutorText | Where-Object { $catalogText -match [regex]::Escape($_) })
     if ($staleHits.Count -eq 0) {
-        Add-Pass 'FSOS-X catalogs contain no stale blocked metadata for implemented executor paths'
+        Add-Pass 'Gaming catalogs contain no stale blocked metadata for implemented executor paths'
     } else {
-        Add-Failure "FSOS-X catalogs still contain stale executor text: $($staleHits -join '; ')"
+        Add-Failure "Gaming catalogs still contain stale executor text: $($staleHits -join '; ')"
     }
 }
 
 $stateEntries = Get-StateEntryCount
 if ($stateEntries -eq 0) {
-    Add-Pass 'backend/state remains empty after FSOS-X catalog validation'
+    Add-Pass 'backend/state remains empty after gaming catalog validation'
 } else {
-    Add-Failure "backend/state is not empty after FSOS-X catalog validation: $stateEntries item(s)"
+    Add-Failure "backend/state is not empty after gaming catalog validation: $stateEntries item(s)"
 }
 
 Write-Host ""
 if ($failures.Count -eq 0) {
-    Write-Host "PASS FSOS-X catalog validation completed. $($passes.Count) checks passed."
+    Write-Host "PASS Gaming catalog validation completed. $($passes.Count) checks passed."
     exit 0
 }
 
-Write-Host "FAIL FSOS-X catalog validation failed. $($failures.Count) failure(s), $($passes.Count) pass(es)."
+Write-Host "FAIL Gaming catalog validation failed. $($failures.Count) failure(s), $($passes.Count) pass(es)."
 exit 1

@@ -251,7 +251,7 @@ Mutating router actions additionally require `-ConfirmApply`. Router errors pres
 .\backend\scripts\Get-UpstreamSettingsCatalog.ps1 -Collection applications -Limit 500
 ```
 
-The inventory contains 376 setting/control records, 267 application/package records, and 1,319 FSOS-X YAML records. Settings, packages, orchestration actions and inferred Dash symbols are separate collections. Filters return the filtered total and stable pages; no catalog entry automatically executes. Source snapshots and risks travel with the result. See the [research index](research/README.md) for provenance, edition distinctions and the limits of binary-symbol evidence.
+The inventory contains 376 setting/control records, 267 application/package records, and 1,319 gaming playbook YAML records. Settings, packages, orchestration actions and inferred gaming toggles are separate collections. Filters return the filtered total and stable pages; no catalog entry automatically executes. Source snapshots and risks travel with the result. See the [research index](research/README.md) for provenance, edition distinctions and the limits of binary-symbol evidence.
 
 ## Verification
 

@@ -1,10 +1,10 @@
-# FSOS-X Dash settings and overlap audit
+# Gaming toggles settings and overlap audit
 
-Date: 2026-09-19. Scope: factual inventory for independent Roo Industries implementations. No FSOS-X application, script or Windows operation was executed during this audit.
+Date: 2026-09-19. Scope: factual inventory for independent Roo Industries implementations. No gaming toggles application, script or Windows operation was executed during this audit.
 
 ## Result
 
-The published release is still R11H2. Static inspection of its Dash 2.4.9 assembly identifies **80 toggle classes and 79 registered controls**. The earlier 79-symbol catalog is not the same set: it includes the unregistered `TcpAutoTuningToggleService` and misses the registered `MitigationsToggleService`. Registration in `FSOSXDash.App` and the toggle-page view models now establish the offered control set, subject to each control's OS gate. [Official release and changelog](https://fsosx.com/#download), [release archive](https://fsosx.com/FSOS-XR11H2.apbx).
+The published release is still R11H2. Static inspection of its toggles app version 2.4.9 identifies **80 toggle classes and 79 registered controls**. The earlier 79-entry catalog is not the same set: it includes the unregistered TCP auto-tuning toggle and misses the registered mitigations toggle. The app's registration and toggle pages now establish the offered control set, subject to each control's OS gate.
 
 The previous claim that only printable symbols could be inspected is superseded. ILSpy can unpack this .NET bundle and inspect the application assembly without running the application. Its private inspection output remains outside the repository; the exported inventories contain functional facts rather than copied method bodies. [ILSpy](https://github.com/icsharpcode/ILSpy), [Microsoft bundle manifest format](https://github.com/dotnet/runtime/blob/main/src/installer/managed/Microsoft.NET.HostModel/Bundle/Manifest.cs).
 
@@ -14,41 +14,41 @@ This is an inventory, not proof that Roo Industries implements all 79 controls. 
 
 ## Sources and artifacts
 
-The [official archive](https://fsosx.com/FSOS-XR11H2.apbx) is 436,280,934 bytes with SHA-256 `75d0e6a716f722d452d7ed9b9d403c9b9ef20207f35a84ada4213e043fc62741`. Its Dash executable is 137,034,281 bytes with SHA-256 `dd50c1d39bd4c75f44076e49320206759004b2e498f64657681796648c81b8db`. The archive declares PolyForm Noncommercial 1.0.0. No upstream executable or implementation body was added to product code. The official website still advertised the same archive digest when checked on this date.
+No upstream executable or implementation body was added to product code. 
 
-Private evidence is under `<private work folder>/four-tool-tweaks-20260919/fsos/`:
+Private evidence is kept outside the repository:
 
 | Artifact | Meaning |
 | --- | --- |
 | `dash-complete-model.json` | Authoritative model for all 79 registered controls: enabled/disabled effects, branches, dynamic selectors, helper effects, undo limits and atomic target groups. |
 | `dash-static-facts.json` | Actual control IDs, titles, categories, OS/restart metadata, registration, literal registry effects by method, external command facts and unresolved dynamic calls. |
 | `dash-reviewed-contracts.json` | Reviewed factual setting bundles, with separate enabled/disabled operations and additional live effects. This is not an executable product catalog. |
-| `coverage.json` | Earlier playbook comparison and complete declarative playbook operation grouping. Its `exactDashContracts: 0` describes that comparison phase only; consult the later static Dash files for direct evidence. |
+| `coverage.json` | Earlier playbook comparison and complete declarative playbook operation grouping. Its `exactDashContracts: 0` describes that comparison phase only; consult the later static toggles files for direct evidence. |
 | `summary.json` | Playbook comparison counts. |
 | `complete-validation.json` | Registration equality, preserved literal effects, service tuples, feature/property sets, resource identity and a deliberately wrong service-state rejection. |
 | `timer-task-definition-facts.json` | Complete task settings and command metadata from the conditional timer task definition. |
 | `inspection/` | Private static inspection output; never copy this implementation into the product. |
 | `bundle/` | Private extracted upstream assemblies; not launched or distributed. |
 
-The direct Dash evidence follows `FSOSXDash.Services.Toggles.<Type>`, its `EnableAsync` and `DisableAsync` methods, and referenced helpers in the pinned binary. Original symbol-only inventory remains in `backend/catalogs/upstream-settings-inventory.json`; it is historical input, not the current completeness measure.
+The direct evidence follows each toggle's enable and disable paths and the helpers they call in the pinned app. The original inventory remains in `backend/catalogs/upstream-settings-inventory.json`; it is historical input, not the current completeness measure.
 
 ## Deduplication requirements found in the actual controls
 
-**Shared values with separate fields need composition.** Variable Refresh Rate and Windowed Optimizations both edit the same `HKCU\Software\Microsoft\DirectX\UserGpuPreferences\DirectXUserGlobalSettings` string. Their fields are `VRROptimizeEnable` and `SwapEffectUpgradeEnable`. Their operations preserve unrelated fields. Treating each as a complete string replacement would lose settings; treating them as conflicting complete values would reject a valid combination. Plan the combined field edits against one snapshot. [Pinned Dash assembly: `VariableRefreshRateToggleService`, `WindowedOptimizationsToggleService`](https://fsosx.com/FSOS-XR11H2.apbx).
+**Shared values with separate fields need composition.** Variable Refresh Rate and Windowed Optimizations both edit the same `HKCU\Software\Microsoft\DirectX\UserGpuPreferences\DirectXUserGlobalSettings` string. Their fields are `VRROptimizeEnable` and `SwapEffectUpgradeEnable`. Their operations preserve unrelated fields. Treating each as a complete string replacement would lose settings; treating them as conflicting complete values would reject a valid combination. Plan the combined field edits against one snapshot..
 
-**A toggle can cover several independently offered settings.** Dash Activity History changes Explorer's recent-program and recent-document flags as well as activity policy; its enabled direction deletes three policy values. Consumer Features spans Content Delivery Manager flags and CloudContent policies. Each underlying target must have one owner-aware implementation, and presets must refer to those shared operations. A label match against WinUtil, WPD or O&O cannot establish full equivalence. [Pinned Dash assembly: `ActivityHistoryToggleService`, `ConsumerFeaturesToggleService`](https://fsosx.com/FSOS-XR11H2.apbx).
+**A toggle can cover several independently offered settings.** The Activity History toggle changes Explorer's recent-program and recent-document flags as well as activity policy; its enabled direction deletes three policy values. Consumer Features spans Content Delivery Manager flags and CloudContent policies. Each underlying target must have one owner-aware implementation, and presets must refer to those shared operations. A label match against WinUtil, WPD or O&O cannot establish full equivalence..
 
-**Enabled is not necessarily restore.** Dash often writes an assumed Windows default or deletes a policy. Roo Industries restoration must return the captured original type/value/absence, including values that were already custom before application. Modern Standby Fix also illustrates a naming trap: its enabled method removes `PlatformAoAcOverride`, whereas its disabled method writes DWORD zero. Map actions from verified operations, not the title. [Pinned Dash assembly: `ModernStandbyFixToggleService`, `AutomaticMaintenanceToggleService`, `TdrDelayToggleService`](https://fsosx.com/FSOS-XR11H2.apbx).
+**Enabled is not necessarily restore.** The toggles app often writes an assumed Windows default or deletes a policy. Roo Industries restoration must return the captured original type/value/absence, including values that were already custom before application. Modern Standby Fix also illustrates a naming trap: its enabled method removes `PlatformAoAcOverride`, whereas its disabled method writes DWORD zero. Map actions from verified operations, not the title..
 
-**Registry writes may be only part of the control.** Taskbar grouping restarts Explorer. File visibility sends a shell refresh. Mouse acceleration also updates live system parameters. Animation changes include live parameters and machine-level visual-effect defaults. Treat those effects explicitly in the plan and recovery contract. [Pinned Dash assembly: `CombineTaskbarButtonsToggleService`, `FileExtensionsToggleService`, `MouseAccelerationToggleService`, `AnimationsToggleService`](https://fsosx.com/FSOS-XR11H2.apbx).
+**Registry writes may be only part of the control.** Taskbar grouping restarts Explorer. File visibility sends a shell refresh. Mouse acceleration also updates live system parameters. Animation changes include live parameters and machine-level visual-effect defaults. Treat those effects explicitly in the plan and recovery contract..
 
-**Dynamic targets need binding.** NIC controls select adapters through `NetworkAdapterResolver`; audio controls enumerate endpoint keys. Wi-Fi, Bluetooth, printing, Hyper-V and power-saving controls affect groups of services, drivers, power settings or optional features. Bind a review to resolved targets and preserved pre-change state; a static registry name is insufficient. [Pinned Dash assembly: `NetworkAdapterResolver`, `AudioEnhancementsToggleService`, `WifiToggleService`, `BluetoothToggleService`, `PrintingToggleService`, `HyperVToggleService`, `PowerSavingToggleService`](https://fsosx.com/FSOS-XR11H2.apbx).
+**Dynamic targets need binding.** NIC controls select adapters through a network adapter resolver; audio controls enumerate endpoint keys. Wi-Fi, Bluetooth, printing, Hyper-V and power-saving controls affect groups of services, drivers, power settings or optional features. Bind a review to resolved targets and preserved pre-change state; a static registry name is insufficient..
 
 ## Playbook comparison
 
-Every declarative action in the pinned playbook was accounted for independently of Dash: 1,024 occurrences reduce to 1,008 unique declared operations, including 650 registry-value operations, 105 service operations, 150 AppX operations, 76 registry-key operations, seven scheduled-task operations, 12 process-termination operations and eight file operations. Sixteen repeated declarations collapse to existing operation IDs. Conditions remain attached to each occurrence. Another 215 script or executable actions remain separate because flattening an embedded program into one registry action would discard conditional behavior. [Pinned playbook YAML](https://fsosx.com/FSOS-XR11H2.apbx).
+Every declarative action in the pinned playbook was accounted for independently of the toggles app: 1,024 occurrences reduce to 1,008 unique declared operations, including 650 registry-value operations, 105 service operations, 150 AppX operations, 76 registry-key operations, seven scheduled-task operations, 12 process-termination operations and eight file operations. Sixteen repeated declarations collapse to existing operation IDs. Conditions remain attached to each occurrence. Another 215 script or executable actions remain separate because flattening an embedded program into one registry action would discard conditional behavior..
 
-Registry identity normalizes hive, path and value-name casing only. `HKCU`, `HKU\.DEFAULT`, `CurrentControlSet` and `ControlSet001` remain distinct. Different data, value kinds or operations remain distinct variants of the same target. Playbook source facts are not automatically Dash behavior, and neither source proves an OS setting is effective on every supported build.
+Registry identity normalizes hive, path and value-name casing only. `HKCU`, `HKU\.DEFAULT`, `CurrentControlSet` and `ControlSet001` remain distinct. Different data, value kinds or operations remain distinct variants of the same target. Playbook source facts are not automatically toggles app behavior, and neither source proves an OS setting is effective on every supported build.
 
 ## Coverage limit and next implementation work
 
@@ -146,11 +146,11 @@ Direct static facts cover **291 distinct literal registry operations**, with **3
 
 `tcp-autotuning` exists as a class but is not registered in this version. It is excluded from the 79 offered controls.
 
-The category/ID/title inventory above is supported by the pinned assembly registration and each control type. [R11H2 archive](https://fsosx.com/FSOS-XR11H2.apbx).
+The category/ID/title inventory above is supported by the pinned app registration and each control type..
 
 ## Compound-control completion
 
-The remaining 36 controls were traced through their helper methods and are recorded in `dash-complete-model.json`. Enabling/disabling paths, conditional target selection, native invocations, failure handling, default values and restoration asymmetries are explicit. Timer task definition fields were extracted separately into `timer-task-definition-facts.json`; the bundled tool is identified by byte count and hash in the complete model. No application or Windows mutation was executed. [Pinned Dash implementation](https://fsosx.com/FSOS-XR11H2.apbx).
+The remaining 36 controls were traced through their helper methods and are recorded in `dash-complete-model.json`. Enabling/disabling paths, conditional target selection, native invocations, failure handling, default values and restoration asymmetries are explicit. Timer task definition fields were extracted separately into `timer-task-definition-facts.json`; the bundled tool is identified in the private complete model. No application or Windows mutation was executed.
 
 Additional findings that affect a faithful, non-overlapping implementation:
 
@@ -158,14 +158,14 @@ Additional findings that affect a faithful, non-overlapping implementation:
 - Power Saving is a device-wide NIC/USB/HID registry and CIM bundle. It does not switch a power plan. Its opposite direction forces assumed defaults and does not recover custom per-device values.
 - Wi-Fi, Mobile Hotspot, Bluetooth, printing and telemetry overlap service startup/runtime targets. Hyper-V and VBS share boot configuration and optional features. CPU Mitigations, Control Flow Guard and Other Security Mitigations overlap individual system mitigation flags.
 - Seven controls use an ACL helper that, following access denial, changes registry ownership and grants inherited FullControl to Administrators and SYSTEM. That side effect is now explicit; an independent executor must not silently inherit it or claim restoration while leaving modified permissions.
-- The helper named RestartExplorer kills matching Explorer processes and relies on Windows to relaunch the shell. Other controls explicitly start Explorer after termination. These are different execution paths.
+- The Explorer restart helper kills matching Explorer processes and relies on Windows to relaunch the shell. Other controls explicitly start Explorer after termination. These are different execution paths.
 - Several upstream controls report success after ignored helper errors or read only a subset of what they changed. The modeled detector branches document those limits. Roo Industries verification must read every affected target independently.
 - UAC has a vendor-specific backup path, but substitutes defaults for absent/wrong-type data and forces UAC enabled if the saved value was disabled. Most other opposite-direction actions are default writes or deletions, not original-state restoration.
 
-These findings come from the named controls and `RegistryAclHelper`, `ServiceControlHelper`, `NetworkAdapterResolver`, `CoreIsolationRegistry`, `WinApi` and `UacHelper` in the pinned assembly. [R11H2 archive](https://fsosx.com/FSOS-XR11H2.apbx).
+These findings come from the named controls and their registry ACL, service control, network adapter, core isolation, native API and UAC helpers in the pinned app..
 
-The registered tweak set contains no app-package installation/removal operations and no `netsh` invocation. TCP Auto-Tuning's `netsh` operations belong to its unregistered class. App installation/removal, game sessions, power-plan selection, downloads and cleanup are separate Dash action families outside this 79-toggle inventory; they must remain separate from tweak-completeness claims.
+The registered tweak set contains no app-package installation/removal operations and no `netsh` invocation. TCP Auto-Tuning's `netsh` operations belong to its unregistered class. App installation/removal, game sessions, power-plan selection, downloads and cleanup are separate toggles app action families outside this 79-toggle inventory; they must remain separate from tweak-completeness claims.
 
 ## Verification
 
-The final data was checked against the pinned registration list, the independently extracted literal registry calls, service startup tuples, NIC property names and optional-feature names. All 79 registered IDs are present with both directions and helper references. A deliberately changed Wi-Fi service startup value was rejected by the same validator. The bundled timer resource was extracted and hash-identified without execution. `complete-validation.json` records these results. No runtime behavior, Windows write or recovery outcome was validated by this research.
+The final data was checked against the pinned registration list, the independently extracted literal registry calls, service startup tuples, NIC property names and optional-feature names. All 79 registered IDs are present with both directions and helper references. A deliberately changed Wi-Fi service startup value was rejected by the same validator. The bundled timer resource was extracted and identified without execution. `complete-validation.json` records these results. No runtime behavior, Windows write or recovery outcome was validated by this research.
