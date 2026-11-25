@@ -174,6 +174,27 @@ try
             && new LiveDataService(new BackendLocator(), failedRecoveryDirectory).ProcessProfileRecovery is null
             && !File.Exists(Path.Combine(failedRecoveryDirectory, "process-profile-apply.json")),
         "A process recovery whose pointer could not be saved blocks a later apply and restores through its handle");
+    var unreadDirectory = Path.Combine(root, "recovery-unreadable-new-instance");
+    var unreadGeneration = Guid.NewGuid().ToString("N");
+    var unreadBackup = Path.Combine(unreadDirectory, "process-profile-backups", unreadGeneration, "backup.json");
+    Directory.CreateDirectory(Path.GetDirectoryName(unreadBackup)!);
+    await File.WriteAllTextAsync(unreadBackup, "{\"actionId\":\"performance.applyProfile\","
+        + "\"backupId\":\"unread-process\",\"profileId\":\"fixture-profile\","
+        + "\"dryRun\":false,\"snapshots\":[{\"processId\":902}]}");
+    OperationFiles.Write(Path.Combine(unreadDirectory, "process-profile-operation-generation.json"),
+        new RecoveryOperationGeneration(unreadGeneration));
+    OperationFiles.Write(Path.Combine(unreadDirectory, "process-profile-apply.json"),
+        new ProcessProfileApplyJournal(unreadBackup, unreadGeneration));
+    Directory.CreateDirectory(Path.Combine(unreadDirectory, "process-profile-recovery.json"));
+    var unreadService = new LiveDataService(new BackendLocator(), unreadDirectory);
+    var applyCountBeforeUnread = Counter("process-apply-count.txt");
+    var unreadRecovery = unreadService.ProcessProfileRecovery;
+    var unreadApply = await unreadService.ApplyProcessProfileResultAsync();
+    Check(unreadRecovery is null && unreadApply.Value is null
+            && unreadApply.Error?.StartsWith("The last process recovery could not be checked", StringComparison.Ordinal)
+                == true
+            && Counter("process-apply-count.txt") == applyCountBeforeUnread,
+        "A new app instance offers no recovery from an unreadable reference and refuses apply before its script");
     Environment.SetEnvironmentVariable("ROO_INDUSTRIES_ACTION_RECOVERY_DIRECTORY", recoveryDirectory);
 
     var firstNvidiaApply = service.ApplyNvidiaProfileResultAsync("framesync", true, true, true);

@@ -78,6 +78,7 @@ public sealed class LiveDataService
         }
         catch (Exception error) when (error is FileNotFoundException or DirectoryNotFoundException) { }
         catch (Exception error) when (error is JsonException or InvalidDataException or InvalidOperationException) { invalid = "The process recovery reference is invalid: " + error.Message; }
+        catch (Exception error) when (validCurrent && error is IOException or UnauthorizedAccessException) { }
         if (discardInvalid)
         {
             if (invalid is not null)
