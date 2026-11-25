@@ -68,37 +68,51 @@ try
     File.WriteAllText(Path.Combine(root, "process-apply-release"), "release");
     var firstApplyResult = await firstApply;
     var firstProcess = service.ProcessProfileRecovery;
-    Check(firstProcess is not null && firstProcess.Valid() && firstApplyResult.RecoveryPath == firstProcess.Path && reopened.ProcessProfileRecovery == firstProcess,
+    Check(firstProcess is not null && firstProcess.Valid() && firstApplyResult.RecoveryPath == firstProcess.Path
+            && reopened.ProcessProfileRecovery == firstProcess
+            && firstProcess.Path == Path.Combine(recoveryDirectory, "process-profile-backups", firstProcess.Generation!, "backup.json")
+            && !File.Exists(Path.Combine(recoveryDirectory, "process-profile-apply.json")),
         "Process apply persists its verified recovery before releasing the operation lease");
 
-    var secondApplyResult = await reopened.ApplyProcessProfileResultAsync();
-    var secondProcess = service.ProcessProfileRecovery;
-    Check(secondProcess is not null && secondProcess.Valid() && secondProcess != firstProcess && secondApplyResult.RecoveryPath == secondProcess.Path,
-        "A later process apply replaces the pointer with its own verified artifact");
-    var staleRestore = await service.RestoreProcessProfileResultAsync(firstProcess!);
-    Check(staleRestore.Value is null && staleRestore.Error?.Contains("no longer current", StringComparison.OrdinalIgnoreCase) == true && Counter("process-restore-count.txt") == 0 && reopened.ProcessProfileRecovery == secondProcess,
-        "An older process recovery cannot run or clear a newer pointer");
+    var laterApply = await reopened.ApplyProcessProfileResultAsync();
+    Check(laterApply.Value is null && laterApply.Error == "Restore the last change first"
+            && Counter("process-apply-count.txt") == 1 && service.ProcessProfileRecovery == firstProcess,
+        "A later process apply waits until the pending recovery is restored and keeps its pointer");
 
     Environment.SetEnvironmentVariable("ROO_INDUSTRIES_ACTION_SLOW_PROCESS_RESTORE", "1");
-    var restore = reopened.RestoreProcessProfileResultAsync(secondProcess!);
+    var restore = reopened.RestoreProcessProfileResultAsync(firstProcess!);
     await WaitFor(Path.Combine(root, "process-restore-started"));
     var applyDuringRestore = await service.ApplyProcessProfileResultAsync();
-    Check(applyDuringRestore.Value is null && applyDuringRestore.Error?.Contains("already in progress", StringComparison.OrdinalIgnoreCase) == true && Counter("process-apply-count.txt") == 2,
+    Check(applyDuringRestore.Value is null
+            && applyDuringRestore.Error?.Contains("already in progress", StringComparison.OrdinalIgnoreCase) == true
+            && Counter("process-apply-count.txt") == 1,
         "Process apply cannot start while another instance is restoring");
     File.WriteAllText(Path.Combine(root, "process-restore-release"), "release");
     var restoreResult = await restore;
     Environment.SetEnvironmentVariable("ROO_INDUSTRIES_ACTION_SLOW_PROCESS_RESTORE", null);
     Check(restoreResult.Error is null && restoreResult.RecoveryPath is null && service.ProcessProfileRecovery is null,
         "Confirmed process restore clears its exact pointer before releasing the lease");
-    await service.ApplyProcessProfileResultAsync();
-    var thirdProcess = new LiveDataService(new BackendLocator(), recoveryDirectory).ProcessProfileRecovery;
-    Check(thirdProcess is not null && thirdProcess.Valid() && thirdProcess != secondProcess,
-        "A new service instance observes the process pointer from the later completed operation");
+
+    var processGeneration = Path.Combine(recoveryDirectory, "process-profile-operation-generation.json");
+    var generationBeforeNoChange = File.Exists(processGeneration) ? File.ReadAllText(processGeneration) : null;
     Environment.SetEnvironmentVariable("ROO_INDUSTRIES_ACTION_PROCESS_NO_CHANGE", "1");
     var noChange = await service.ApplyProcessProfileResultAsync();
     Environment.SetEnvironmentVariable("ROO_INDUSTRIES_ACTION_PROCESS_NO_CHANGE", null);
-    Check(noChange.Error is null && service.ProcessProfileRecovery == thirdProcess,
-        "A confirmed no-change process apply restores the prior durable generation and recovery pointer");
+    Check(noChange.Error is null && noChange.RecoveryPath is null && Counter("process-apply-count.txt") == 2
+            && new LiveDataService(new BackendLocator(), recoveryDirectory).ProcessProfileRecovery is null
+            && !service.ProcessProfileRestorePending
+            && (File.Exists(processGeneration) ? File.ReadAllText(processGeneration) : null) == generationBeforeNoChange,
+        "A confirmed no-change process apply leaves no recovery and restores the prior operation generation");
+
+    var secondApplyResult = await service.ApplyProcessProfileResultAsync();
+    var secondProcess = new LiveDataService(new BackendLocator(), recoveryDirectory).ProcessProfileRecovery;
+    Check(secondProcess is not null && secondProcess.Valid() && secondProcess != firstProcess
+            && secondApplyResult.RecoveryPath == secondProcess.Path,
+        "A new service instance observes the process pointer from the later completed operation");
+    var staleRestore = await service.RestoreProcessProfileResultAsync(firstProcess!);
+    Check(staleRestore.Value is null && staleRestore.Error?.Contains("no longer current", StringComparison.OrdinalIgnoreCase) == true
+            && Counter("process-restore-count.txt") == 1 && reopened.ProcessProfileRecovery == secondProcess,
+        "An older process recovery cannot run or clear a newer pointer");
 
     var lockFailureDirectory = Path.Combine(root, "lock-open-failure");
     Directory.CreateDirectory(Path.Combine(lockFailureDirectory, "process-profile-operation.lock"));
@@ -115,13 +129,22 @@ try
         "Lock path failures are reported distinctly from contention and dispatch no helper");
 
     var generationFailureDirectory = Path.Combine(root, "generation-write-failure");
-    Directory.CreateDirectory(Path.Combine(generationFailureDirectory, "process-profile-operation-generation.json"));
-    Directory.CreateDirectory(Path.Combine(generationFailureDirectory, "nvidia-profile-operation-generation.json"));
+    string[] readOnlyGenerations =
+    [
+        Path.Combine(generationFailureDirectory, "process-profile-operation-generation.json"),
+        Path.Combine(generationFailureDirectory, "nvidia-profile-operation-generation.json"),
+    ];
+    foreach (var path in readOnlyGenerations)
+    {
+        OperationFiles.Write(path, new RecoveryOperationGeneration("prior-generation"));
+        File.SetAttributes(path, FileAttributes.ReadOnly);
+    }
     var generationFailureService = new LiveDataService(new BackendLocator(), generationFailureDirectory);
     processCountBeforeLockFailure = Counter("process-apply-count.txt");
     nvidiaCountBeforeLockFailure = Counter("nvidia-apply-count.txt");
     var processGenerationFailure = await generationFailureService.ApplyProcessProfileResultAsync();
     var nvidiaGenerationFailure = await generationFailureService.ApplyNvidiaProfileResultAsync("framesync", true, true, true);
+    foreach (var path in readOnlyGenerations) File.SetAttributes(path, FileAttributes.Normal);
     Check(processGenerationFailure.Error?.Contains("generation could not be recorded", StringComparison.OrdinalIgnoreCase) == true
             && nvidiaGenerationFailure.Error?.Contains("generation could not be recorded", StringComparison.OrdinalIgnoreCase) == true
             && Counter("process-apply-count.txt") == processCountBeforeLockFailure
@@ -140,15 +163,17 @@ try
             && new LiveDataService(new BackendLocator(), failedRecoveryDirectory).ProcessProfileRecovery == failedProcessHandle,
         "Process persistence failure preserves the operation JSON, error, and verified in-window recovery path");
     Directory.Delete(Path.Combine(failedRecoveryDirectory, "process-profile-recovery.json"));
-    var newerFailedDirectoryService = new LiveDataService(new BackendLocator(), failedRecoveryDirectory);
-    await newerFailedDirectoryService.ApplyProcessProfileResultAsync();
-    var newerFailedDirectoryProcess = newerFailedDirectoryService.ProcessProfileRecovery;
+    var applyCountBeforeFailedPointer = Counter("process-apply-count.txt");
+    var blockedByFailedPointer = await new LiveDataService(new BackendLocator(), failedRecoveryDirectory)
+        .ApplyProcessProfileResultAsync();
     var processRestoreCount = Counter("process-restore-count.txt");
-    var rejectedFailedHandle = await failedPersistenceService.RestoreProcessProfileResultAsync(failedProcessHandle!);
-    Check(newerFailedDirectoryProcess is not null && newerFailedDirectoryProcess != failedProcessHandle
-            && rejectedFailedHandle.Error?.Contains("no longer current", StringComparison.OrdinalIgnoreCase) == true
-            && Counter("process-restore-count.txt") == processRestoreCount,
-        "A newer process operation invalidates an in-memory handle created after pointer persistence failed");
+    var restoredFailedHandle = await failedPersistenceService.RestoreProcessProfileResultAsync(failedProcessHandle!);
+    Check(blockedByFailedPointer.Error == "Restore the last change first"
+            && Counter("process-apply-count.txt") == applyCountBeforeFailedPointer
+            && restoredFailedHandle.Error is null && Counter("process-restore-count.txt") == processRestoreCount + 1
+            && new LiveDataService(new BackendLocator(), failedRecoveryDirectory).ProcessProfileRecovery is null
+            && !File.Exists(Path.Combine(failedRecoveryDirectory, "process-profile-apply.json")),
+        "A process recovery whose pointer could not be saved blocks a later apply and restores through its handle");
     Environment.SetEnvironmentVariable("ROO_INDUSTRIES_ACTION_RECOVERY_DIRECTORY", recoveryDirectory);
 
     var firstNvidiaApply = service.ApplyNvidiaProfileResultAsync("framesync", true, true, true);
@@ -300,11 +325,19 @@ finally
 static class FixtureScripts
 {
 public const string ProcessApply = """
-param([switch]$ConfirmApply)
+param([switch]$ConfirmApply, [string]$Preset, [string]$RecoveryJournal, [string]$RecoveryGeneration)
 $root = $env:ROO_INDUSTRIES_ACTION_FIXTURE_ROOT
 $countPath = Join-Path $root 'process-apply-count.txt'
 $count = if (Test-Path -LiteralPath $countPath) { [int](Get-Content -LiteralPath $countPath -Raw) + 1 } else { 1 }
 Set-Content -LiteralPath $countPath -Value $count -Encoding ascii
+$journalLock = [IO.FileStream]::new($RecoveryJournal + '.lock', 'OpenOrCreate', 'ReadWrite', 'None', 4096, 'DeleteOnClose')
+if (-not $ConfirmApply -or -not (Test-Path -LiteralPath $RecoveryJournal -PathType Leaf)) {
+    throw 'The app already closed this apply. Nothing was changed.'
+}
+$journal = Get-Content -LiteralPath $RecoveryJournal -Raw | ConvertFrom-Json
+if ([string]$journal.generation -cne $RecoveryGeneration) {
+    throw 'This process apply is no longer current. Nothing was changed.'
+}
 if ($count -eq 1) {
     Set-Content -LiteralPath (Join-Path $root 'process-apply-started') -Value started -Encoding ascii
     $release = Join-Path $root 'process-apply-release'
@@ -316,7 +349,8 @@ if ($env:ROO_INDUSTRIES_ACTION_PROCESS_NO_CHANGE -eq '1') {
     exit 0
 }
 $backupId = 'process-backup-' + $count
-$backupPath = Join-Path $root ($backupId + '.json')
+$backupPath = [string]$journal.path
+New-Item -ItemType Directory -Path (Split-Path $backupPath -Parent) -Force | Out-Null
 @{ actionId='performance.applyProfile'; backupId=$backupId; profileId='fixture-profile'; dryRun=$false; snapshots=@(@{ processId=100+$count }) } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $backupPath -Encoding utf8
 if ($env:ROO_INDUSTRIES_ACTION_SABOTAGE_PROCESS_POINTER -eq '1') {
     $pointer = Join-Path $env:ROO_INDUSTRIES_ACTION_RECOVERY_DIRECTORY 'process-profile-recovery.json'
