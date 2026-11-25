@@ -501,7 +501,9 @@
         "tools/validation/Update/Invoke-UpdateScenario.ps1",
         "tools/validation/Update/Invoke-UpgradeRehearsal.ps1",
         "tools/validation/Update/UpgradeRehearsal.State.ps1",
-        "tools/validation/Update/run_shipped.py"
+        "tools/validation/Update/run_shipped.py",
+        "tools/validation/License/README.md",
+        "tools/validation/License/Invoke-LicenseRows.ps1"
       ],
       "reason": "Legacy data directory, registry root, process image and scheduled-task prefix from BrandCompatibility; migration, ownership and historical recovery must recognize the existing identities."
     },
