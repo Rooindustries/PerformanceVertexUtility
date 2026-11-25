@@ -346,8 +346,8 @@ The **31 selected session and application options** provide additional evidence 
 | Inferred option |
 | --- |
 | Apply Gaming Power Plan |
-| Boost Game Priority |
-| Clear Standby Memory |
+| Raise Game Process Priority |
+| Standby Memory Purge |
 | Close App After Launch |
 | Custom Affinity Mask |
 | Disable Search Ui |
