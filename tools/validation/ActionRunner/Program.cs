@@ -319,7 +319,11 @@ finally
     Environment.SetEnvironmentVariable("ROO_INDUSTRIES_ACTION_NVIDIA_MODE", previousNvidiaMode);
     Environment.SetEnvironmentVariable("ROO_INDUSTRIES_ACTION_SLOW_PROCESS_RESTORE", null);
     Environment.SetEnvironmentVariable("ROO_INDUSTRIES_ACTION_SLOW_NVIDIA_RESTORE", null);
-    if (Directory.Exists(root)) Directory.Delete(root, true);
+    for (var attempt = 0; Directory.Exists(root); attempt++)
+    {
+        try { Directory.Delete(root, true); }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException && attempt < 80) { Thread.Sleep(250); }
+    }
 }
 
 static class FixtureScripts
