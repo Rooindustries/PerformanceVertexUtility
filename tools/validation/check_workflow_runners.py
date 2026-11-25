@@ -1,43 +1,51 @@
-import re
+import yaml
 
 RUNNERS = {"ubuntu-24.04", "windows-2025"}
 ALLOWED = "use exactly ubuntu-24.04 or windows-2025"
-KEY = re.compile(r"^( *)([^\s#:][^:]*):(.*)$")
+STRING = "tag:yaml.org,2002:str"
+
+
+def entries(node):
+    if not isinstance(node, yaml.MappingNode):
+        return None
+    names = [key.value for key, _ in node.value if isinstance(key, yaml.ScalarNode) and key.tag == STRING]
+    if len(names) < len(node.value) or len(set(names)) < len(names):
+        return None
+    return {key.value: (key, value) for key, value in node.value}
 
 
 def check(root):
     failures = []
     for path in sorted((root / ".github/workflows").glob("*.y*ml")):
         relative = path.relative_to(root).as_posix()
-        jobs = []
-        job = None
-        in_jobs = False
-        job_indent = None
-        property_indent = None
-        for number, line in enumerate(path.read_text(encoding="utf-8-sig").splitlines(), 1):
-            match = KEY.match(line)
-            if not match:
+        text = path.read_text(encoding="utf-8-sig")
+        try:
+            document = yaml.compose(text, Loader=yaml.BaseLoader)
+        except yaml.YAMLError as error:
+            mark = getattr(error, "problem_mark", None)
+            failures.append(f"{relative}:{mark.line + 1 if mark else 1}: cannot be read as YAML; {ALLOWED}")
+            continue
+        workflow = entries(document)
+        if workflow is None or "jobs" not in workflow:
+            failures.append(f"{relative}:1: has no jobs mapping with unique plain names; {ALLOWED}")
+            continue
+        jobs_key, jobs_node = workflow["jobs"]
+        jobs = entries(jobs_node)
+        if jobs is None:
+            failures.append(f"{relative}:{jobs_key.start_mark.line + 1}: jobs are not unique plain names; {ALLOWED}")
+            continue
+        for name, (job_key, job_node) in jobs.items():
+            job = entries(job_node)
+            where = f"{relative}:{job_key.start_mark.line + 1}: job {name}"
+            if job is None:
+                failures.append(f"{where} is not a mapping with unique plain names; {ALLOWED}")
                 continue
-            indent = len(match.group(1))
-            key = match.group(2).strip()
-            if indent == 0:
-                in_jobs = key == "jobs"
-                job_indent = None
-                job = None
-            elif in_jobs and job_indent in (None, indent):
-                job_indent = indent
-                property_indent = None
-                job = {"name": key, "line": number, "runs_on": None}
-                jobs.append(job)
-            elif job and indent > job_indent:
-                property_indent = property_indent or indent
-                if indent == property_indent and key == "runs-on":
-                    job["runs_on"] = (number, match.group(3).split(" #")[0].strip())
-        for job in jobs:
-            if job["runs_on"] is None:
-                failures.append(f"{relative}:{job['line']}: job {job['name']} has no runs-on; {ALLOWED}")
+            if "runs-on" not in job:
+                failures.append(f"{where} has no runs-on; {ALLOWED}")
                 continue
-            number, value = job["runs_on"]
-            if value.strip("'\"") not in RUNNERS:
-                failures.append(f"{relative}:{number}: job {job['name']} runs on {value or 'a nested value'}; {ALLOWED}")
+            runs_on_key, runs_on = job["runs-on"]
+            if isinstance(runs_on, yaml.ScalarNode) and runs_on.tag == STRING and runs_on.value in RUNNERS:
+                continue
+            value = " ".join(text[runs_on.start_mark.index:runs_on.end_mark.index].split())
+            failures.append(f"{relative}:{runs_on_key.start_mark.line + 1}: job {name} runs on {value}; {ALLOWED}")
     return failures

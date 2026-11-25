@@ -126,7 +126,7 @@ This project is under active development. High-risk workflows remain preview, co
 
 Linux is the development host. Windows compilation and runtime checks run from isolated source copies on the NVIDIA and AMD test PCs. See [backend validation](backend/README.md#validation) for the repeatable commands and [development workflow](docs/development-workflow.md) for the baseline boundaries.
 
-Pull requests, including those from forks, and pushes to `main` run the baseline contracts, the validation unit tests, the PowerShell parse and Windows PowerShell 5.1 syntax check, and a Linux build of the C# projects on GitHub-hosted Linux runners. The Windows regression suite runs in three parallel shards on GitHub-hosted Windows on manual runs of the Baseline workflow, and on pushes to `main` while the repository variable `HOSTED_WINDOWS_CI` is `true`.
+Pushes to `main` and the pull requests GitHub runs, from this repository or from a fork, run the baseline contracts, the validation unit tests, the PowerShell parse and Windows PowerShell 5.1 syntax check, and a Linux build of the C# projects on GitHub-hosted Linux runners. The Windows regression suite runs in three parallel shards on GitHub-hosted Windows on manual runs of the Baseline workflow, and on pushes to `main` while the repository variable `HOSTED_WINDOWS_CI` is `true`.
 
 The desktop project is under `docs/internal/frontend/RooIndustries.OptimizationSuite.App`. Build it with `tools/scripts/Build-Frontend.ps1`; the .NET 8 SDK is required. Building does not launch the app. Capture and inspect screenshots whenever the app is launched for a UI check.
 
