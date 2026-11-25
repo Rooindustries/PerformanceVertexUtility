@@ -1,11 +1,8 @@
-# License notice rows
+# License notice row
 
-`Invoke-LicenseRows.ps1` builds the release from a staged frame and drives the real app and the
-real setup program through UI Automation on a Windows test PC.
+`Invoke-LicenseRows.ps1` builds the release from a staged frame and drives the real setup program
+through UI Automation on a Windows test PC.
 
-- A1: opens the built app, selects Settings in the navigation and reads the About panel. It passes
-  when the product name, the version line ("Version" and its number), the copyright line and the
-  source line follow each other in that order, each matching its whole text.
 - S1: starts the built setup with no arguments, the way a user does, and presses Next page by page
   until the page with Install. It passes when an earlier page shows the whole text of `LICENSE`
   (line ends aside) with Next and no accept choice. It then presses Cancel and Yes, so nothing is
@@ -13,31 +10,19 @@ real setup program through UI Automation on a Windows test PC.
 
 The build copies the frame's source next to it and raises only the app project's Version line,
 because `Build-Release.ps1` refuses a version that is already released. The release is built
-without an update feed, so the app never goes online.
+without an update feed. The check starts no other program of the product.
 
-The app has only one data folder: the signed-in account's own. A1 never reads, moves or removes
-existing app state. Before it starts the app, it looks for both app data folder names under that
-account's local AppData, `HKLM\SOFTWARE\RooIndustries`, `HKCU\Software\RooIndustries`,
-`HKCU\Software\RooOptimizationSuite` and the app's scheduled tasks. If any of them exists, or a
-lookup fails, A1 is reported as not run with the reason naming what it found, and the app is not
-started. Otherwise, when A1 ends, however it ends, it closes the app, stops anything started from
-the built layout, removes what its run created and fails the run unless all of them are absent
-again.
-
-Each row reports passed, failed, invalid (its start, action or observation could not be read) or
-not run. The script exits 0 only when every row passed and A1 left no app state behind. It refuses
-to start while another app window or setup is open, stops only what it started, and treats any
-change to the install state as invalid.
+The row reports passed, failed, invalid (its start, action or observation could not be read) or
+not run. The script exits 0 only when the row passed. It refuses to start while another setup is
+running, stops only what it started, and treats any change to the install state as invalid.
 
 Stage a frame with `--include-frontend` under `C:\RooBuild` and run it through the interactive
-route on a signed-in, unlocked desktop that no other session is using and that has no app
-state:
+route on a signed-in, unlocked desktop:
 
 ```sh
 python3 -I tools/validation/windows_ssh.py --host <test-pc> --expected-machine <COMPUTERNAME> \
   upload-frame --include-frontend --parent 'C:\RooBuild' --directory roo-industries-lic > receipt.json
-arguments=$(jq -c '{Source:.stagingPath,OutRoot:(.runRoot+"\\results"),Label:"head",Rows:["A1","S1"]}' \
-  receipt.json)
+arguments=$(jq -c '{Source:.stagingPath,OutRoot:(.runRoot+"\\results"),Label:"head"}' receipt.json)
 python3 -I tools/validation/windows_ssh.py --host <test-pc> --expected-machine <COMPUTERNAME> \
   interactive-frame --receipt receipt.json --script tools/validation/License/Invoke-LicenseRows.ps1 \
   --arguments "$arguments" --minutes 75

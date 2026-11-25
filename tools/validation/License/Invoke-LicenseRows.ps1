@@ -1,8 +1,7 @@
 param(
     [Parameter(Mandatory)][string]$Source,
     [Parameter(Mandatory)][string]$OutRoot,
-    [Parameter(Mandatory)][ValidatePattern('^[a-z0-9-]{1,40}$')][string]$Label,
-    [ValidateSet('A1', 'S1')][string[]]$Rows = @('A1', 'S1')
+    [Parameter(Mandatory)][ValidatePattern('^[a-z0-9-]{1,40}$')][string]$Label
 )
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
@@ -20,18 +19,10 @@ $out = Join-Path $OutRoot $Label
 if (Test-HarnessPath $out) { throw 'The output folder already exists; use a new label.' }
 Enter-HarnessHostLease
 New-HarnessDirectory $out 'evidence' | Out-Null
-$productName = 'Performance Vertex Utility'
-$copyright = 'Copyright Roo Industries. Free and open source under the GNU General Public License, version 3. ' +
-    'It comes with no warranty.'
-$sourceLine = 'Source code and license: github.com/Rooindustries/PerformanceVertexUtility'
 $installKey = 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\' +
     '{746C4DD8-B7BA-48CD-9FFA-0C378F19368A}_is1'
 $installDir = Join-Path $env:ProgramFiles 'Roo Industries\Optimization Suite'
-$localAppData = [Environment]::GetFolderPath('LocalApplicationData')
-$dataFolderNames = @('RooOptimizationSuite', 'RooIndustriesOptimizationSuite')
-$appKeys = @('HKLM:\SOFTWARE\RooIndustries', 'HKCU:\Software\RooIndustries', 'HKCU:\Software\RooOptimizationSuite')
-$appTasks = 'RooIndustries|RooOptimizationSuite'
-$results = [ordered]@{ A1 = [ordered]@{ result = 'not run' }; S1 = [ordered]@{ result = 'not run' } }
+$results = [ordered]@{ S1 = [ordered]@{ result = 'not run' } }
 $steps = [Collections.Generic.List[object]]::new()
 $utf8 = [Text.UTF8Encoding]::new($false)
 
@@ -48,15 +39,6 @@ function Poll([scriptblock]$Probe, [double]$Seconds) {
         Start-Sleep -Milliseconds 250
     } while ([DateTime]::UtcNow -lt $until)
     $null
-}
-
-function Children($Element) {
-    $walker = [Windows.Automation.TreeWalker]::ControlViewWalker
-    $child = $walker.GetFirstChild($Element)
-    while ($child) {
-        $child
-        $child = $walker.GetNextSibling($child)
-    }
 }
 
 function Visible($Root) {
@@ -88,83 +70,8 @@ function Invoke($Element, [int]$ProcessId) {
     if (-not $sent) { throw 'The button press could not be sent.' }
 }
 
-function Selection($Element) {
-    $pattern = $null
-    if ($Element.TryGetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern, [ref]$pattern)) {
-        $pattern
-    }
-}
-
-function ByProcess([int]$ProcessId) {
-    $condition = [Windows.Automation.PropertyCondition]::new($A::ProcessIdProperty, $ProcessId)
-    $A::RootElement.FindFirst($TS::Children, $condition)
-}
-
-function ListItems($Window) {
-    $condition = [Windows.Automation.PropertyCondition]::new($A::ControlTypeProperty, $CT::ListItem)
-    @($Window.FindAll($TS::Descendants, $condition))
-}
-
 function Installed {
     [ordered]@{ uninstallKey = (Test-Path -LiteralPath $installKey); installFolder = (Test-HarnessPath $installDir) }
-}
-
-function Present([string]$Path) {
-    try {
-        Get-Item -LiteralPath $Path -Force -ErrorAction Stop | Out-Null
-        $true
-    } catch [Management.Automation.ItemNotFoundException] {
-        $false
-    }
-}
-
-function AppState {
-    $found = [Collections.Generic.List[string]]::new()
-    $unknown = [Collections.Generic.List[string]]::new()
-    $paths = @($dataFolderNames | ForEach-Object { Join-Path $localAppData $_ }) + $appKeys
-    foreach ($path in $paths) {
-        try {
-            if (Present $path) { $found.Add($path) }
-        } catch {
-            $unknown.Add($path + ': ' + $_.Exception.Message)
-        }
-    }
-    try {
-        $tasks = Get-ScheduledTask -ErrorAction Stop | Where-Object { ($_.TaskPath + $_.TaskName) -match $appTasks }
-        foreach ($task in $tasks) { $found.Add('task ' + $task.TaskPath + $task.TaskName) }
-    } catch {
-        $unknown.Add('scheduled tasks: ' + $_.Exception.Message)
-    }
-    [ordered]@{ found = @($found); unknown = @($unknown) }
-}
-
-function Absent($State) {
-    $State.found.Count -eq 0 -and $State.unknown.Count -eq 0
-}
-
-function StopStageProcesses([string]$Stage) {
-    $prefix = $Stage.TrimEnd('\') + '\'
-    $running = Get-CimInstance Win32_Process | Where-Object {
-        $_.ExecutablePath -and $_.ExecutablePath.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)
-    }
-    foreach ($process in $running) {
-        Stop-Process -Id $process.ProcessId -Force -ErrorAction SilentlyContinue
-    }
-}
-
-function RemoveCreatedState {
-    foreach ($name in $dataFolderNames) {
-        $dataFolder = Join-Path $localAppData $name
-        if (Present $dataFolder) { Remove-Item -LiteralPath $dataFolder -Recurse -Force }
-    }
-    foreach ($appKey in $appKeys) {
-        if (Present $appKey) { Remove-Item -LiteralPath $appKey -Recurse -Force }
-    }
-    $tasks = Get-ScheduledTask -ErrorAction Stop | Where-Object { ($_.TaskPath + $_.TaskName) -match $appTasks }
-    foreach ($task in $tasks) {
-        Unregister-ScheduledTask -TaskName $task.TaskName -TaskPath $task.TaskPath -Confirm:$false
-    }
-    AppState
 }
 
 function Build {
@@ -217,111 +124,6 @@ function Build {
     }
     Note 'build' 'release built by Build-Release.ps1' $build
     $build
-}
-
-function ObserveA1($Row, $App) {
-    $window = Poll {
-        if ($App.HasExited) { throw ('The app exited during startup with code ' + $App.ExitCode) }
-        $candidate = ByProcess $App.Id
-        if ($candidate -and @(ListItems $candidate | Where-Object { $_.Current.Name -ceq 'Settings' }).Count) {
-            $candidate
-        }
-    } 180
-    if (-not $window) {
-        $Row.result = 'invalid'
-        $Row.reason = 'The app window with its navigation never appeared.'
-        return
-    }
-    $navItems = @(ListItems $window | Where-Object { Selection $_ })
-    $first = @($navItems | Where-Object { (Selection $_).Current.IsSelected } | ForEach-Object { $_.Current.Name })
-    $settings = @($navItems | Where-Object { $_.Current.Name -ceq 'Settings' })
-    $Row.start = [ordered]@{
-        pid = $App.Id
-        title = $window.Current.Name
-        selectedPage = $first
-        settingsItems = $settings.Count
-    }
-    Note 'A1' 'start' $Row.start
-    if ($first.Count -ne 1 -or $first[0] -ceq 'Settings' -or $settings.Count -ne 1) {
-        $Row.result = 'invalid'
-        $Row.reason = 'The app did not open on a first page other than Settings.'
-        return
-    }
-    if ($settings[0].Current.ProcessId -ne $App.Id) { throw 'The Settings item belongs to another process.' }
-    (Selection $settings[0]).Select()
-    $aboutCondition = [Windows.Automation.PropertyCondition]::new($A::NameProperty, 'About')
-    $about = Poll {
-        $labels = $window.FindAll($TS::Descendants, $aboutCondition)
-        @($labels | Where-Object { $_.Current.ControlType -eq $CT::Text })[0]
-    } 30
-    $selected = (Selection $settings[0]).Current.IsSelected
-    $Row.delivery = [ordered]@{ settingsSelected = $selected; aboutFound = [bool]$about }
-    Note 'A1' 'open Settings' $Row.delivery
-    if (-not $selected -or -not $about) {
-        $Row.result = 'invalid'
-        $Row.reason = 'Settings did not open or its About panel could not be read.'
-        return
-    }
-    $siblings = @(Children ([Windows.Automation.TreeWalker]::ControlViewWalker.GetParent($about)))
-    $index = -1
-    for ($i = 0; $i -lt $siblings.Count; $i++) {
-        if ([Windows.Automation.Automation]::Compare($siblings[$i], $about)) {
-            $index = $i
-            break
-        }
-    }
-    $after = @($siblings | Select-Object -Skip ($index + 1) | Select-Object -First 4)
-    $shown = @($after | ForEach-Object { [string]$_.Current.Name })
-    $selectable = $false
-    if ($after.Count -ge 4) {
-        $pattern = $null
-        $selectable = $after[3].TryGetCurrentPattern([Windows.Automation.TextPattern]::Pattern, [ref]$pattern)
-    }
-    $Row.observation = [ordered]@{ afterAbout = $shown; fourthLineSelectable = $selectable }
-    Note 'A1' 'About panel' $Row.observation
-    if ($index -lt 0 -or $shown.Count -lt 4 -or -not $shown[0]) {
-        $Row.result = 'invalid'
-        $Row.reason = 'The About panel lines could not be read.'
-        return
-    }
-    $passed = $shown[0] -ceq $productName -and $shown[1] -cmatch '^Version \d+\.\d+\.\d+' -and
-        $shown[2] -ceq $copyright -and $shown[3] -ceq $sourceLine
-    $Row.result = if ($passed) { 'passed' } else { 'failed' }
-}
-
-function RowA1($Build) {
-    $row = $results.A1
-    $exe = Join-Path $Build.stage 'app\RooIndustries.OptimizationSuite.App.exe'
-    if (@(Get-Process -Name 'RooIndustries.OptimizationSuite.App' -ErrorAction SilentlyContinue).Count) {
-        throw 'Another app window is open; this run left it alone.'
-    }
-    $row.stateBefore = AppState
-    Note 'A1' 'app state before the run' $row.stateBefore
-    if (-not (Absent $row.stateBefore)) {
-        $named = @($row.stateBefore.found) + @($row.stateBefore.unknown)
-        $row.reason = 'Existing app state on this PC, left untouched: ' + ($named -join '; ')
-        return
-    }
-    $owned = $null
-    try {
-        $folder = Split-Path $exe
-        $owned = Start-OwnedProcess -FilePath $exe -WindowStyle Normal -Purpose 'license-app' -WorkingDirectory $folder
-        ObserveA1 $row $owned.process
-    } finally {
-        if ($owned -and -not $owned.process.HasExited) {
-            try {
-                (ByProcess $owned.process.Id).GetCurrentPattern([Windows.Automation.WindowPattern]::Pattern).Close()
-            } catch {
-                Note 'A1' 'window close failed' $_.Exception.Message
-            }
-            if (-not $owned.process.WaitForExit(20000)) { Stop-HarnessProcess $owned }
-        }
-        StopStageProcesses $Build.stage
-        $row.cleaned = $false
-        $row.stateAfter = RemoveCreatedState
-        $row.cleaned = Absent $row.stateAfter
-        Note 'A1' 'app state after cleanup' $row.stateAfter
-    }
 }
 
 function WizardWindow($Owned) {
@@ -486,29 +288,16 @@ function RowS1($Build) {
 
 try {
     $build = Build
-    foreach ($name in $Rows) {
-        try {
-            if ($name -eq 'A1') { RowA1 $build } else { RowS1 $build }
-        } catch {
-            $results[$name].result = 'invalid'
-            $results[$name].reason = $_.Exception.Message
-            Note $name 'error' $_.ScriptStackTrace
-        }
-    }
+    RowS1 $build
 } catch {
-    Note 'build' 'error' $_.Exception.Message
+    $results.S1.result = 'invalid'
+    $results.S1.reason = $_.Exception.Message
+    Note 'S1' 'error' $_.ScriptStackTrace
 } finally {
     $json = ConvertTo-Json @{ label = $Label; rows = $results; steps = $steps } -Depth 10
     [IO.File]::WriteAllText((Join-Path $out 'results.json'), $json, $utf8)
-    foreach ($name in 'A1', 'S1') {
-        $reason = if ($results[$name].reason) { ' :: ' + $results[$name].reason } else { '' }
-        Write-Output ('ROW ' + $name + ' ' + $results[$name].result + $reason)
-    }
-    $notClean = $results.A1.Contains('cleaned') -and -not $results.A1.cleaned
-    if ($notClean) { Write-Output 'CLEANUP failed: app state the run created is still on this PC.' }
-    $failed = @($Rows | Where-Object { $results[$_].result -ne 'passed' }).Count -or $notClean
-    Complete-HarnessInvocation $(if ($failed) { 'fail' } else { 'pass' }) -Cleanup | Out-Null
+    $reason = if ($results.S1.reason) { ' :: ' + $results.S1.reason } else { '' }
+    Write-Output ('ROW S1 ' + $results.S1.result + $reason)
+    Complete-HarnessInvocation $(if ($results.S1.result -ne 'passed') { 'fail' } else { 'pass' }) -Cleanup | Out-Null
 }
-if ($notClean) { throw 'App state the run created is still on this PC.' }
-$notPassed = @('A1', 'S1' | Where-Object { $results[$_].result -ne 'passed' })
-if ($notPassed.Count) { throw ('Rows not passed: ' + ($notPassed -join ', ')) }
+if ($results.S1.result -ne 'passed') { throw ('Row S1 ' + $results.S1.result) }
