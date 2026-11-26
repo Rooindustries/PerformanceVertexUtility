@@ -319,20 +319,36 @@ def reparse_walk_negative_controls():
     ps = 'tools/validation/Example/Test-Example.ps1'
     py = 'tools/validation/example.py'
     every = 'Directory.EnumerateFiles(root, "*", SearchOption.All' + 'Directories);'
-    entry = {'file': cs, 'walk': 'All' + 'Directories', 'reason': 'fixture'}
+    item = 'Copy-' + 'Item'
+    mount = 'mk' + 'link'
+    entry = {'file': cs, 'line': every, 'reason': 'fixture'}
     cases = {
         'enumeration that follows links': ([], {cs: every}, [f'{cs}:1:']),
         'enumeration that stays local': ([], {cs: 'LocalTree.Entries(root);'}, []),
+        'enumeration with a numbered option': ([], {cs: 'Directory.Enumerate' + 'Files(root, "*", 1);'}, [f'{cs}:1:']),
+        'enumeration with a variable recurse flag': ([], {cs: 'var o = new EnumerationOptions { Recurse' + 'Subdirectories = deep };'}, [f'{cs}:1:']),
         'python tree that follows links': ([], {py: 'files = root.rgl' + 'ob("*")'}, [f'{py}:1:']),
-        'recursive copy': ([], {ps: 'Copy-Item -LiteralPath $a -Destination $b -Re' + 'curse'}, [f'{ps}:1:']),
-        'purging mirror copy': ([], {ps: "robo" + "copy.exe $a $b /MIR /XJ"}, [f'{ps}:1:']),
-        'mirror copy without link exclusion': ([], {ps: "robo" + "copy.exe $a $b /E /R:0"}, [f'{ps}:1:']),
-        'mirror copy excluding links': ([], {ps: "robo" + "copy.exe $a $b /E /XJ /R:0"}, []),
-        'tree permission change': ([], {ps: "ica" + "cls.exe $a /reset /T /C"}, [f'{ps}:1:']),
+        'python double-star pattern': ([], {py: "files = root.gl" + "ob('**/*')"}, [f'{py}:1:']),
+        'recursive item duplicate': ([], {ps: item + ' -LiteralPath $a -Destination $b -Re' + 'curse'}, [f'{ps}:1:']),
+        'recursive duplicate by alias and short flag': ([], {ps: 'c' + 'pi $a $b -r'}, [f'{ps}:1:']),
+        'recursive duplicate across lines': ([], {ps: item + ' $a `\n  -Destination $b `\n  -Re' + 'curse'}, [f'{ps}:1:']),
+        'recursive duplicate by splat': ([], {ps: '$p=@{Path=$a;Re' + 'curse=$true}\n' + item + ' @p'}, [f'{ps}:2:']),
+        'purging mirror copy': ([], {ps: 'robo' + 'copy.exe $a $b /MIR /XJ'}, [f'{ps}:1:']),
+        'mirror copy without link exclusion': ([], {ps: 'robo' + 'copy.exe $a $b /E /R:0'}, [f'{ps}:1:']),
+        'mirror copy flags on a later line': ([], {ps: 'robo' + 'copy.exe $a $b `\n  /E /R:0'}, [f'{ps}:1:']),
+        'mirror copy excluding links': ([], {ps: 'robo' + 'copy.exe $a $b /E /XJ /R:0'}, []),
+        'tree permission change': ([], {ps: "& (Join-Path $s 'ica" + "cls.exe') $a /reset /T /C"}, [f'{ps}:1:']),
+        'symbolic link to a drive root': ([], {cs: 'Directory.CreateSymbolic' + 'Link(link, @"C:\\");'}, [f'{cs}:1:']),
+        'own helper that sets a reparse point': ([], {cs: 'DeviceIoControl(handle, 0x' + '900A4, data, size, IntPtr.Zero, 0, out _, IntPtr.Zero);'}, [f'{cs}:1:']),
+        'python link': ([], {py: "link.symlink" + "_to('C:/')"}, [f'{py}:1:']),
+        'junction made by the shell': ([], {ps: f'cmd.exe /d /c {mount} /J "$link" "C:\\"'}, [f'{ps}:1:']),
+        'junction made by New-Item': ([], {ps: "New-Item -ItemType Junc" + "tion -Path $link -Target ($env:SystemDrive + '\\')"}, [f'{ps}:1:']),
         'fixture on a real volume': ([], {cs: 'GetVolumeNameFor' + 'VolumeMountPoint(drive, name, 64);'}, [f'{cs}:1:']),
-        'listed reason': ([entry], {cs: every}, []),
+        'guarded fixture link': ([], {cs: 'TestFixtures.Junction(link, root);'}, []),
+        'listed line': ([entry], {cs: every}, []),
+        'listed line used once': ([entry], {cs: every + '\n' + every}, [f'{cs}:2:']),
         'listed without a reason': ([dict(entry, reason=' ')], {cs: every}, [f'{location}:']),
-        'stale listed reason': ([entry], {cs: 'LocalTree.Entries(root);'}, [f'{location}: stale']),
+        'stale listed line': ([entry], {cs: 'LocalTree.Entries(root);'}, [f'{location}: stale']),
     }
     results = {}
     for label, (entries_listed, files, expected) in cases.items():
@@ -343,6 +359,21 @@ def reparse_walk_negative_controls():
                 (temporary / relative).write_text(source, encoding='utf-8')
             failures = check(temporary)
             results[label] = len(failures) == len(expected) and all(any(f.startswith(e) for f in failures) for e in expected)
+    with tempfile.TemporaryDirectory() as folder:
+        outside = Path(folder, 'outside')
+        (outside / 'deep').mkdir(parents=True)
+        (outside / 'deep' / 'kept.txt').write_text('outside', encoding='utf-8')
+        walked = Path(folder, 'walked')
+        walked.mkdir()
+        (walked / 'own.txt').write_text('own', encoding='utf-8')
+        link = walked / 'link'
+        if sys.platform == 'win32':
+            import _winapi
+            _winapi.CreateJunction(str(outside), str(link))
+        else:
+            link.symlink_to(outside, target_is_directory=True)
+        seen = sorted(path.relative_to(walked).as_posix() for path in local_tree(walked))
+        results['local tree stops at a link'] = seen == ['link', 'own.txt']
     return results
 
 

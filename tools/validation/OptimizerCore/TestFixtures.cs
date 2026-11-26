@@ -7,12 +7,12 @@ using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.Win32;
 using Microsoft.Win32.SafeHandles;
-using RooIndustries.Optimizer;
 
 static class TestFixtures
 {
     public const string VolumeFile = "roo-industries-fixture.vhdx";
     private static readonly Dictionary<string, FileStream> Runs = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly HashSet<string> Volumes = new(StringComparer.OrdinalIgnoreCase);
 
     public static string InheritingRoot(string label)
     {
@@ -34,7 +34,7 @@ static class TestFixtures
     {
         var mount = Directory.CreateDirectory(Path.Combine(root, "volume")).FullName;
         var file = Path.Combine(root, VolumeFile);
-        DiskPart(root,
+        DiskPart(root, true,
             "create vdisk file=\"" + file + "\" maximum=16 type=expandable",
             "select vdisk file=\"" + file + "\"",
             "attach vdisk",
@@ -44,22 +44,161 @@ static class TestFixtures
             "assign mount=\"" + mount + "\"");
         var name = new StringBuilder(64);
         if (!GetVolumeNameForVolumeMountPoint(mount + "\\", name, (uint)name.Capacity)) throw new Win32Exception();
+        lock (Volumes) Volumes.Add(name.ToString());
         return (mount, name.ToString());
+    }
+
+    public static void Junction(string path, string target)
+    {
+        Contain(path, target);
+        var substitute = Encoding.Unicode.GetBytes(@"\??\" + (target.StartsWith(@"\\?\", StringComparison.Ordinal) ? target[4..] : target));
+        var print = Encoding.Unicode.GetBytes(target);
+        var data = new byte[16 + substitute.Length + 2 + print.Length + 2];
+        BitConverter.GetBytes(0xA0000003u).CopyTo(data, 0);
+        BitConverter.GetBytes(checked((ushort)(data.Length - 8))).CopyTo(data, 4);
+        BitConverter.GetBytes(checked((ushort)substitute.Length)).CopyTo(data, 10);
+        BitConverter.GetBytes(checked((ushort)(substitute.Length + 2))).CopyTo(data, 12);
+        BitConverter.GetBytes(checked((ushort)print.Length)).CopyTo(data, 14);
+        substitute.CopyTo(data, 16);
+        print.CopyTo(data, 18 + substitute.Length);
+        Directory.CreateDirectory(path);
+        using var handle = CreateFile(path, 0x2, 7, IntPtr.Zero, 3, 0x02200000, IntPtr.Zero);
+        if (handle.IsInvalid || !SetReparsePoint(handle, 0x900A4, data, (uint)data.Length, IntPtr.Zero, 0, out _, IntPtr.Zero))
+            throw new IOException("Could not create the disposable junction: " + Marshal.GetLastWin32Error());
+    }
+
+    public static void Symlink(string path, string target)
+    {
+        Contain(path, target);
+        Directory.CreateSymbolicLink(path, target);
+    }
+
+    public static string Map(string target)
+    {
+        Contain(target, target);
+        for (var letter = 'Z'; letter >= 'I'; letter--)
+        {
+            var name = letter + ":";
+            if (QueryDosDevice(name, new StringBuilder(32768), 32768) != 0 || Marshal.GetLastWin32Error() != 2) continue;
+            if (!DefineDosDevice(9, name, @"\??\" + target)) throw new IOException("Could not create disposable DOS mapping.");
+            return name;
+        }
+        throw new IOException("No unused drive letter for the disposable alias fixture.");
+    }
+
+    public static void Unmap(string name, string target)
+    {
+        if (!DefineDosDevice(15, name, @"\??\" + target)) throw new IOException("Could not remove own DOS mapping.");
+    }
+
+    public static void Contain(string path, string target)
+    {
+        var full = target.StartsWith(@"\??\", StringComparison.Ordinal) ? @"\\?\" + target[4..] : target;
+        if (!Path.IsPathFullyQualified(full)) full = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(Path.GetFullPath(path))!, full));
+        if (Unroutable(full)) return;
+        var resolved = Resolve(full);
+        lock (Volumes) if (Volumes.Any(volume => resolved.StartsWith(volume, StringComparison.OrdinalIgnoreCase))) return;
+        var areas = new[] { Path.GetTempPath(), Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData) };
+        foreach (var area in areas.Select(area => Resolve(area).TrimEnd('\\') + "\\"))
+        {
+            if (!resolved.StartsWith(area, StringComparison.OrdinalIgnoreCase)) continue;
+            var fixture = resolved[area.Length..].Split('\\')[0];
+            if (fixture.StartsWith("roo-industries-", StringComparison.Ordinal)) return;
+            if (fixture.StartsWith("RooIndustriesDataFix-", StringComparison.Ordinal)) return;
+        }
+        var message = "A fixture link must stay inside its own fixture folder or disposable volume: ";
+        throw new InvalidOperationException(message + path + " -> " + target);
+    }
+
+    private static bool Unroutable(string path)
+    {
+        if (!path.StartsWith(@"\\", StringComparison.Ordinal)) return false;
+        if (path.StartsWith(@"\\?\", StringComparison.Ordinal) || path.StartsWith(@"\\.\", StringComparison.Ordinal)) return false;
+        if (!System.Net.IPAddress.TryParse(path[2..].Split('\\')[0], out var address)) return false;
+        var bytes = address.GetAddressBytes();
+        return bytes.Length == 4 && (bytes[0], bytes[1], bytes[2]) is (192, 0, 2) or (198, 51, 100) or (203, 0, 113);
+    }
+
+    private static string Resolve(string path)
+    {
+        var root = Regex.Match(path, @"^(?:\\\\\?\\(?:GLOBALROOT\\Device\\[^\\]+|Volume\{[0-9A-Fa-f-]+\}|[A-Za-z]:)|[A-Za-z]:)\\").Value;
+        if (root.Length == 0) throw new InvalidOperationException("A fixture link target must be a local path: " + path);
+        var probe = root;
+        foreach (var part in path[root.Length..].Split('\\', StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (part is "." or "..") throw new InvalidOperationException("A fixture link target must not step out of a folder: " + path);
+            var next = probe.EndsWith('\\') ? probe + part : probe + "\\" + part;
+            var attributes = GetFileAttributes(next);
+            if (attributes == uint.MaxValue || (attributes & 0x400) != 0) break;
+            probe = next;
+        }
+        using var handle = CreateFile(probe, 0, 7, IntPtr.Zero, 3, 0x02000000, IntPtr.Zero);
+        var name = new StringBuilder(32768);
+        if (handle.IsInvalid || GetFinalPathNameByHandle(handle, name, (uint)name.Capacity, 1) == 0) throw new Win32Exception();
+        return name.ToString().TrimEnd('\\') + "\\";
     }
 
     public static void Remove(string root)
     {
-        lock (Runs) if (Runs.Remove(root, out var run)) run.Dispose();
-        if (Directory.Exists(root))
+        FileStream? run;
+        lock (Runs) Runs.Remove(root, out run);
+        try
         {
-            var links = LocalTree.Entries(root, links: true).Where(entry => entry.Attributes.HasFlag(FileAttributes.ReparsePoint));
-            foreach (var link in links.ToArray()) Unlink(link.FullName);
-            foreach (var volume in LocalTree.Entries(root, VolumeFile).OfType<FileInfo>().ToArray())
-                DiskPart(root, "select vdisk file=\"" + volume.FullName + "\"", "detach vdisk noerr");
-            Directory.Delete(root, true);
+            if (Directory.Exists(root))
+            {
+                var (links, volumes) = Scan(root);
+                foreach (var link in links) Unlink(link);
+                foreach (var volume in volumes) DiskPart(root, false, "select vdisk file=\"" + volume + "\" noerr", "detach vdisk noerr");
+                Directory.Delete(root, true);
+            }
+            if (Path.Exists(root)) throw new IOException("The fixture is still on disk after cleanup: " + root);
         }
-        File.Delete(root + ".run");
-        if (Path.Exists(root)) throw new IOException("The fixture is still on disk after cleanup: " + root);
+        finally { run?.Dispose(); }
+    }
+
+    private static (List<string> Links, List<string> Volumes) Scan(string root)
+    {
+        var links = new List<string>();
+        var volumes = new List<string>();
+        var pending = new Stack<string>([root]);
+        while (pending.TryPop(out var folder))
+        {
+            Unlock(folder);
+            var listing = new EnumerationOptions { AttributesToSkip = 0, IgnoreInaccessible = false };
+            foreach (var entry in new DirectoryInfo(folder).EnumerateFileSystemInfos("*", listing))
+            {
+                if (entry is DirectoryInfo && !entry.Attributes.HasFlag(FileAttributes.ReparsePoint))
+                {
+                    pending.Push(entry.FullName);
+                    continue;
+                }
+                Unlock(entry.FullName);
+                if (entry.Attributes.HasFlag(FileAttributes.ReparsePoint)) links.Add(entry.FullName);
+                else if (entry.Name.Equals(VolumeFile, StringComparison.OrdinalIgnoreCase)) volumes.Add(entry.FullName);
+            }
+        }
+        return (links, volumes);
+    }
+
+    private static void Unlock(string path)
+    {
+        using var handle = CreateFile(path, 0x60000, 7, IntPtr.Zero, 3, 0x02200000, IntPtr.Zero);
+        if (handle.IsInvalid) return;
+        GetKernelObjectSecurity(handle, 4, null, 0, out var size);
+        var bytes = new byte[size];
+        if (!GetKernelObjectSecurity(handle, 4, bytes, size, out _)) throw new Win32Exception();
+        var descriptor = new RawSecurityDescriptor(bytes, 0);
+        var user = WindowsIdentity.GetCurrent().User!;
+        var acl = descriptor.DiscretionaryAcl;
+        if (acl is null) return;
+        var denied = Enumerable.Range(0, acl.Count)
+            .Where(index => acl[index] is CommonAce { AceQualifier: AceQualifier.AccessDenied } ace && ace.SecurityIdentifier == user)
+            .Reverse().ToArray();
+        if (denied.Length == 0) return;
+        foreach (var index in denied) acl.RemoveAce(index);
+        var result = new byte[descriptor.BinaryLength];
+        descriptor.GetBinaryForm(result, 0);
+        if (!SetKernelObjectSecurity(handle, 4, result)) throw new Win32Exception();
     }
 
     private static void Unlink(string link)
@@ -84,13 +223,15 @@ static class TestFixtures
         foreach (var stale in Directory.GetDirectories(Path.GetTempPath(), "roo-industries-" + label + "-*"))
         {
             if (!name.IsMatch(Path.GetFileName(stale))) continue;
-            try { new FileStream(stale + ".run", FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None).Dispose(); }
+            FileStream held;
+            try { held = new FileStream(stale + ".run", FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None, 1, FileOptions.DeleteOnClose); }
             catch (IOException error) when (error.HResult == unchecked((int)0x80070020)) { continue; }
+            lock (Runs) Runs[stale] = held;
             Remove(stale);
         }
     }
 
-    private static void DiskPart(string root, params string[] commands)
+    private static void DiskPart(string root, bool check, params string[] commands)
     {
         var script = Path.Combine(root, "diskpart-" + Guid.NewGuid().ToString("N") + ".txt");
         File.WriteAllLines(script, commands);
@@ -108,7 +249,7 @@ static class TestFixtures
                 diskpart.Kill();
                 throw new IOException("diskpart did not finish within two minutes.");
             }
-            if (diskpart.ExitCode != 0)
+            if (check && diskpart.ExitCode != 0)
                 throw new IOException("diskpart could not manage the disposable fixture volume: " + output.Result);
         }
         catch (Win32Exception error) when (error.NativeErrorCode == 740)
@@ -123,6 +264,22 @@ static class TestFixtures
     private static extern bool GetVolumeNameForVolumeMountPoint(string mount, StringBuilder name, uint length);
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern bool DeleteVolumeMountPoint(string mount);
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern uint QueryDosDevice(string name, StringBuilder target, uint length);
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern bool DefineDosDevice(uint flags, string name, string target);
+    [DllImport("kernel32.dll", EntryPoint = "GetFileAttributesW", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern uint GetFileAttributes(string path);
+    [DllImport("kernel32.dll", EntryPoint = "CreateFileW", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern SafeFileHandle CreateFile(string path, uint access, uint share, IntPtr security, uint disposition, uint flags, IntPtr template);
+    [DllImport("kernel32.dll", EntryPoint = "GetFinalPathNameByHandleW", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern uint GetFinalPathNameByHandle(SafeFileHandle handle, StringBuilder name, uint length, uint flags);
+    [DllImport("kernel32.dll", EntryPoint = "DeviceIoControl", SetLastError = true)]
+    private static extern bool SetReparsePoint(SafeFileHandle handle, uint control, byte[] input, uint inputLength, IntPtr output, uint outputLength, out uint returned, IntPtr overlapped);
+    [DllImport("advapi32.dll", SetLastError = true)]
+    private static extern bool GetKernelObjectSecurity(SafeFileHandle handle, uint information, byte[]? descriptor, uint length, out uint needed);
+    [DllImport("advapi32.dll", SetLastError = true)]
+    private static extern bool SetKernelObjectSecurity(SafeFileHandle handle, uint information, byte[] descriptor);
 }
 
 sealed class OwnedRegistryKey : IDisposable

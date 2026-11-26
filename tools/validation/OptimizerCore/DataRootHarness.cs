@@ -13,11 +13,7 @@ static class DataRootHarness
 
     public static string Quote(string value) => "'" + value.Replace("'", "''") + "'";
 
-    public static void Junction(string link, string target)
-    {
-        var (exit, output) = Run("cmd.exe", "/c mklink /J \"" + link + "\" \"" + target + "\"");
-        if (exit != 0) throw new InvalidOperationException("mklink /J failed for " + link + ": " + output);
-    }
+    public static void Junction(string link, string target) => TestFixtures.Junction(link, target);
 
     public static (int Exit, string Output) Run(string file, string arguments, int timeout = 60000)
     {
@@ -106,6 +102,7 @@ static class DataRootHarness
 
     public static string Standard(params string[] args)
     {
+        if (args[0] is "junction" or "junction-new") TestFixtures.Contain(args[1], args[2]);
         var result = Path.Combine(Local, "RooIndustriesDataFix-std-" + Guid.NewGuid().ToString("N") + ".txt");
         var dotnet = Path.Combine(Environment.GetEnvironmentVariable("DOTNET_ROOT") ?? Path.GetDirectoryName(Environment.ProcessPath)!, "dotnet.exe");
         var dll = System.Reflection.Assembly.GetEntryAssembly()!.Location;

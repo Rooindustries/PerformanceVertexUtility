@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Reflection;
 using System.Runtime.InteropServices;
@@ -24,7 +25,8 @@ static class FixtureWalkChecks
             var canary = Directory.CreateDirectory(Path.Combine(outside, "canary")).FullName;
             File.WriteAllText(Path.Combine(canary, "kept.txt"), "canary");
             var before = Canary(canary);
-            foreach (var scenario in new Action<Action<bool, string>, string, string>[] { Unremovable, Killed, Walks })
+            var scenarios = new Action<Action<bool, string>, string, string>[] { Guarded, Unremovable, Killed, Shared, Jammed, Walks };
+            foreach (var scenario in scenarios)
             {
                 try { scenario(check, canary, before); }
                 catch (Exception error)
@@ -41,9 +43,9 @@ static class FixtureWalkChecks
     {
         var volume = TestFixtures.Volume(root);
         File.WriteAllText(Path.Combine(volume.Mount, "kept.txt"), "volume canary");
-        AliasOwnershipChecks.Junction(Path.Combine(root, "junction"), canary);
-        Directory.CreateSymbolicLink(Path.Combine(root, "symlink"), canary);
-        AliasOwnershipChecks.Junction(Path.Combine(root, "mount"), volume.Name);
+        TestFixtures.Junction(Path.Combine(root, "junction"), canary);
+        TestFixtures.Symlink(Path.Combine(root, "symlink"), canary);
+        TestFixtures.Junction(Path.Combine(root, "mount"), volume.Name);
         Directory.CreateDirectory(Path.Combine(root, "plain"));
         File.WriteAllText(Path.Combine(root, "plain", "owned.txt"), "fixture");
         return volume;
@@ -59,7 +61,9 @@ static class FixtureWalkChecks
         return path + "|" + content + "|" + sddl;
     }));
 
-    private static void Killed(Action<bool, string> check, string canary, string before)
+    public static void SweepFor(string label) => TestFixtures.Remove(TestFixtures.InheritingRoot(label));
+
+    private static ProcessStartInfo Child(params string[] arguments)
     {
         var executable = Environment.ProcessPath
             ?? throw new InvalidOperationException("The suite executable is unavailable.");
@@ -67,10 +71,84 @@ static class FixtureWalkChecks
         start.RedirectStandardOutput = true;
         if (Path.GetFileNameWithoutExtension(executable).Equals("dotnet", StringComparison.OrdinalIgnoreCase))
             start.ArgumentList.Add(Assembly.GetExecutingAssembly().Location);
-        start.ArgumentList.Add("--fixture-hold");
-        start.ArgumentList.Add(canary);
+        foreach (var argument in arguments) start.ArgumentList.Add(argument);
+        return start;
+    }
+
+    private static void Guarded(Action<bool, string> check, string canary, string before)
+    {
+        var root = TestFixtures.InheritingRoot("link-guard");
+        try
+        {
+            var link = Path.Combine(root, "link");
+            var device = new System.Text.StringBuilder(32768);
+            if (QueryDosDevice(root[..2], device, (uint)device.Capacity) == 0) throw new Win32Exception();
+            string[] refused =
+            [
+                Path.GetPathRoot(root)!, @"\\?\GLOBALROOT" + device + @"\", Environment.GetFolderPath(Environment.SpecialFolder.Windows),
+                Path.GetTempPath(), Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "RooIndustriesOptimizationSuite"),
+                @"\\localhost\" + root[0] + "$", @"..\..\..", Path.Combine(root, "..", "..", ".."),
+            ];
+            var passed = refused.Where(target =>
+            {
+                try { TestFixtures.Contain(link, target); return true; }
+                catch (InvalidOperationException) { return false; }
+            }).ToArray();
+            check(passed.Length == 0, "A fixture link to a drive root, a device root, Windows, Temp, the app's data folder "
+                + "or a loopback share is refused: " + string.Join(", ", passed));
+            TestFixtures.Contain(link, root);
+            TestFixtures.Contain(link, "inside");
+            TestFixtures.Contain(link, Path.Combine(canary, "kept.txt"));
+            TestFixtures.Contain(link, @"\\192.0.2.139\Share");
+            check(!Path.Exists(link),
+                "A fixture link inside its own fixture or to an unroutable share is allowed, and checking creates nothing");
+        }
+        finally { TestFixtures.Remove(root); }
+    }
+
+    private static void Shared(Action<bool, string> check, string canary, string before)
+    {
+        var live = TestFixtures.InheritingRoot("live-fixture");
+        try
+        {
+            using var child = Process.Start(Child("--fixture-sweep", "live-fixture"))!;
+            child.StandardOutput.ReadToEnd();
+            var finished = child.WaitForExit(120000) && child.ExitCode == 0;
+            check(finished && Directory.Exists(live), "Another run's start leaves a live run's fixture in place");
+        }
+        finally { TestFixtures.Remove(live); }
+    }
+
+    private static void Jammed(Action<bool, string> check, string canary, string before)
+    {
+        string Stale() => Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "roo-industries-jammed-fixture-" + Guid.NewGuid().ToString("N")))
+            .FullName;
+        var garbage = Stale();
+        File.WriteAllBytes(Path.Combine(garbage, TestFixtures.VolumeFile), new byte[65536]);
+        var locked = Stale();
+        TestFixtures.Volume(locked);
+        var opaque = Directory.CreateDirectory(Path.Combine(locked, "opaque-peer"));
+        var unreadable = Directory.CreateDirectory(Path.Combine(opaque.FullName, "unreadable-peer"));
+        TestFixtures.Junction(Path.Combine(unreadable.FullName, "alias"), locked);
+        var user = WindowsIdentity.GetCurrent().User!;
+        var inherit = InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit;
+        var denied = unreadable.GetAccessControl();
+        var hidden = FileSystemRights.ReadAttributes | FileSystemRights.ListDirectory;
+        denied.AddAccessRule(new FileSystemAccessRule(user, hidden, inherit, PropagationFlags.None, AccessControlType.Deny));
+        unreadable.SetAccessControl(denied);
+        var opaqueDenied = opaque.GetAccessControl();
+        var closed = FileSystemRights.ListDirectory | FileSystemRights.Traverse;
+        opaqueDenied.AddAccessRule(new FileSystemAccessRule(user, closed, AccessControlType.Deny));
+        opaque.SetAccessControl(opaqueDenied);
+        PrivilegeChecks.WithoutPrivileges(() => SweepFor("jammed-fixture"), "SeBackupPrivilege", "SeRestorePrivilege");
+        check(!Path.Exists(garbage) && !Path.Exists(locked) && Canary(canary) == before,
+            "The next run start clears a half-written volume file and a fixture a dead run left unreadable, with its volume");
+    }
+
+    private static void Killed(Action<bool, string> check, string canary, string before)
+    {
         string? root;
-        using (var child = Process.Start(start)!)
+        using (var child = Process.Start(Child("--fixture-hold", canary))!)
         {
             var line = child.StandardOutput.ReadLineAsync();
             root = line.Wait(TimeSpan.FromMinutes(2)) ? line.Result : null;
@@ -151,6 +229,8 @@ static class FixtureWalkChecks
         check(Canary(canary) == before, "The canary outside the walked fixture keeps its content, owner and ACL");
     }
 
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern uint QueryDosDevice(string name, System.Text.StringBuilder target, uint length);
     [DllImport("kernel32.dll", EntryPoint = "CreateFileW", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern SafeFileHandle CreateFile(
         string path, uint access, uint share, IntPtr security, uint disposition, uint flags, IntPtr template);

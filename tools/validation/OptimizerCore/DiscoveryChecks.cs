@@ -76,7 +76,7 @@ static class DiscoveryChecks
         Directory.CreateDirectory(shared);
         try
         {
-            AliasOwnershipChecks.Junction(alias, real);
+            TestFixtures.Junction(alias, real);
             check(Directory.Exists(Path.Combine(alias, "Roo Industries Example")) && (File.GetAttributes(alias) & FileAttributes.ReparsePoint) != 0, "Junction fixture shows the same folder under a second path");
             var application = new CleanupApplication { AppId = "fixture:junction", DisplayName = "Roo Industries Example", Publisher = "Roo Industries", InstallLocation = shared, PackageFamilyName = null };
             var peer = new CleanupApplication { AppId = "fixture:alias", DisplayName = "Independent alias tool", Publisher = "Other", InstallLocation = Path.Combine(alias, "Roo Industries Example"), PackageFamilyName = null };
@@ -93,7 +93,7 @@ static class DiscoveryChecks
             check(!nulScan.Candidates.Single(item => item.Target == shared).SharedOwners.Contains(broken.DisplayName), "An app whose install path has an embedded NUL never becomes an owner of the folder before the NUL");
             var nas = Path.Combine(root, "nas");
             var linked = false;
-            try { Directory.CreateSymbolicLink(nas, @"\\192.0.2.1\OfflineShare"); linked = true; }
+            try { TestFixtures.Symlink(nas, @"\\192.0.2.1\OfflineShare"); linked = true; }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException) { Console.WriteLine("SKIP A local link to an unreachable network share does not stall leftover discovery (" + error.Message.Trim() + ")"); }
             if (linked)
             {
@@ -105,7 +105,7 @@ static class DiscoveryChecks
                 check(!linkedScan.Candidates.Single(item => item.Target == shared).OwnershipComplete,
                     "An uninspected network share cannot certify exclusive local ownership");
                 var chain = Path.Combine(root, "chain");
-                AliasOwnershipChecks.Junction(chain, Path.Combine(nas, "Tool"));
+                TestFixtures.Junction(chain, Path.Combine(nas, "Tool"));
                 var chainedTool = new CleanupApplication { AppId = "fixture:chained", DisplayName = "Chained share tool", Publisher = "Other", InstallLocation = chain, PackageFamilyName = null };
                 var chainWatch = Stopwatch.StartNew();
                 var chainScan = new LeftoverDiscovery(application, [chainedTool]).Scan(CancellationToken.None, [], []);
@@ -113,9 +113,9 @@ static class DiscoveryChecks
                 check((File.GetAttributes(chain) & FileAttributes.ReparsePoint) != 0 && chainWatch.ElapsedMilliseconds < 500 && !chainScan.Candidates.Single(item => item.Target == shared).OwnershipComplete,
                     "A local junction whose target goes through a link to a network share is never followed (" + chainWatch.ElapsedMilliseconds + " ms)");
                 var volume = TestFixtures.Volume(root);
-                Directory.CreateSymbolicLink(Path.Combine(volume.Mount, "nas"), @"\\192.0.2.1\OfflineShare");
+                TestFixtures.Symlink(Path.Combine(volume.Mount, "nas"), @"\\192.0.2.1\OfflineShare");
                 var volumeChain = Path.Combine(root, "volume-chain");
-                AliasOwnershipChecks.Junction(volumeChain, volume.Name + @"nas\Tool");
+                TestFixtures.Junction(volumeChain, volume.Name + @"nas\Tool");
                 if (IsLink(volumeChain))
                 {
                     var volumeTool = new CleanupApplication { AppId = "fixture:volume", DisplayName = "Volume path share tool", Publisher = "Other", InstallLocation = volumeChain, PackageFamilyName = null };

@@ -47,6 +47,7 @@ if (args is ["--alias-ownership-probe", var aliasRoot, var aliasPeer]) { AliasOw
 if (args is ["--alias-ownership"]) { AliasOwnershipChecks.Run(Check); return; }
 if (args is ["--fixture-hold", var heldCanary]) { FixtureWalkChecks.Hold(heldCanary); return; }
 if (args is ["--fixture-walks"]) { FixtureWalkChecks.Run(Check); return; }
+if (args is ["--fixture-sweep", var sweptLabel]) { FixtureWalkChecks.SweepFor(sweptLabel); return; }
 if (args is ["--discovery"]) { DiscoveryChecks.Run(Check); return; }
 if (args is ["--path-spelling-probe", .. var spellingPaths]) { PathSpellingChecks.ProtectedProbe(spellingPaths); return; }
 if (args is ["--path-spelling"]) { PathSpellingChecks.Run(Check); return; }
@@ -59,6 +60,7 @@ if (args.Length != 0 && !processOnly) throw new ArgumentException("Unknown valid
 if (!processOnly)
 {
 BrandCompatibilityChecks.Run(Check);
+FixtureWalkChecks.Run(Check);
 DataFolderChecks.Run(Check, []);
 using (var self = Process.GetCurrentProcess())
 {

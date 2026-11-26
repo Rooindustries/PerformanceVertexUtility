@@ -24,7 +24,7 @@ static class FileConflictChecks
             Directory.CreateDirectory(outside);
             File.WriteAllText(Path.Combine(outside, "sentinel.txt"), "outside data");
             var directoryLink = Path.Combine(root, "directory-link");
-            Directory.CreateSymbolicLink(directoryLink, outside);
+            TestFixtures.Symlink(directoryLink, outside);
             directoryLinks.Add(directoryLink);
             foreach (var target in new[] { directoryLink, Path.Combine(directoryLink, "sentinel.txt") })
             {
@@ -36,7 +36,7 @@ static class FileConflictChecks
             var linkedTree = Path.Combine(root, "tree-with-link");
             Directory.CreateDirectory(linkedTree);
             var descendant = Path.Combine(linkedTree, "redirect");
-            Directory.CreateSymbolicLink(descendant, outside);
+            TestFixtures.Symlink(descendant, outside);
             directoryLinks.Add(descendant);
             var treeBlocked = false;
             try { engine.Preview(authority.AppId, authority.ProviderIdentityHash, [linkedTree], true); }

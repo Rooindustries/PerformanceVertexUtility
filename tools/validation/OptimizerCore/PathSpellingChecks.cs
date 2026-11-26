@@ -154,7 +154,7 @@ static class PathSpellingChecks
     {
         var modes = new[] { "network", "cycle" };
         var probe = Path.Combine(root, "Changing Link Capability");
-        try { Directory.CreateSymbolicLink(probe, root); }
+        try { TestFixtures.Symlink(probe, root); }
         catch (Exception error) when (error is UnauthorizedAccessException ||
             error is IOException && (error.HResult & 0xFFFF) is 1 or 50 or 1314)
         {
@@ -193,7 +193,7 @@ static class PathSpellingChecks
                     {
                         absences++;
                         Directory.Delete(parent);
-                        Directory.CreateSymbolicLink(parent, link);
+                        TestFixtures.Symlink(parent, link);
                         linked = true;
                     }
                     else if (string.Equals(path, parent, StringComparison.OrdinalIgnoreCase) && linked)
@@ -220,7 +220,7 @@ static class PathSpellingChecks
                 }
                 T Unsafe<T>(Func<T> action)
                 {
-                    Directory.Delete(parent); Directory.CreateSymbolicLink(parent, link);
+                    Directory.Delete(parent); TestFixtures.Symlink(parent, link);
                     try { return action(); }
                     finally { Directory.Delete(parent); Directory.CreateDirectory(parent); }
                 }
@@ -351,7 +351,7 @@ static class PathSpellingChecks
         var keyPath = scope + "\\Retarget App";
         using (var created = hive.CreateSubKey(keyPath)) created.SetValue("Plugin", "\"" + Path.Combine(shared, "plugin.dll") + "\"");
         var before = Snapshot(hive, keyPath);
-        AliasOwnershipChecks.Junction(link, elsewhere);
+        TestFixtures.Junction(link, elsewhere);
         try
         {
             var application = new CleanupApplication { AppId = "fixture:retarget-registry", DisplayName = "Retarget App", Publisher = "Fixture", InstallLocation = target, PackageFamilyName = null };
@@ -367,7 +367,7 @@ static class PathSpellingChecks
             var reviewPath = Path.Combine(root, "retarget-registry", "review.json");
             var review = engine.Preview(reviewPath, [key.ItemId], true, true);
             reviews.Add(review);
-            Directory.Delete(link); AliasOwnershipChecks.Junction(link, shared);
+            Directory.Delete(link); TestFixtures.Junction(link, shared);
             var rescanned = engine.Scan(CancellationToken.None).Candidates.Single(item => item.Kind == "registryKey");
             var result = engine.Apply(reviewPath, OperationFiles.HashFile(reviewPath), Path.Combine(root, "retarget-registry", "journal.json"));
             Console.WriteLine("MEASURE retargetedPeer " + JsonSerializer.Serialize(new { Reviewed = key.SharedOwners, Rescanned = rescanned.SharedOwners, result.Status, result.Errors }));

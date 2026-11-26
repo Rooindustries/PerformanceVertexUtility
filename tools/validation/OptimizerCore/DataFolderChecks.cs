@@ -64,7 +64,7 @@ static partial class DataFolderChecks
             Directory.CreateDirectory(outside);
             File.WriteAllText(Path.Combine(outside, "secret.txt"), "outside bytes");
             check(CreateHardLink(Path.Combine(root, "linked.txt"), Path.Combine(outside, "secret.txt"), IntPtr.Zero), "The fixture hard link to a file outside the data folder exists");
-            Directory.CreateSymbolicLink(Path.Combine(root, "link"), outside);
+            TestFixtures.Symlink(Path.Combine(root, "link"), outside);
             var oldManifest = Path.Combine(Directory.CreateDirectory(Path.Combine(root, "cleanup-runs", "old")).FullName, "rollback-manifest.json");
             File.WriteAllText(oldManifest, "manifest from before protection");
             var planted = Directory.CreateDirectory(root + ".legacy-planted").FullName;
