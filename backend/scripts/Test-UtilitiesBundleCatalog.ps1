@@ -146,10 +146,127 @@ function Test-CatalogTool {
     Add-Check ($badClassMatches.Count -eq 0) "Catalog $ToolId entries use executionClass $ExpectedClass" "Catalog $ToolId executionClass mismatch at $((@($badClassMatches | ForEach-Object { [string](Get-PropertyValue $_ 'archivePath' '') })) -join ', ')"
 }
 
-function Test-ArchiveExecutableCoverage {
+function ConvertTo-CanonicalJson {
+    param([object]$Value)
+
+    if ($null -eq $Value) { return 'null' }
+    if ($Value -is [bool]) { if ($Value) { return 'true' } else { return 'false' } }
+    if ($Value -is [string]) { return (ConvertTo-Json -InputObject $Value -Compress) }
+    if ($Value -is [datetime]) { return 'date:' + $Value.ToUniversalTime().ToString('o') }
+    if ($Value -is [System.Management.Automation.PSCustomObject]) {
+        $names = [string[]]@($Value.PSObject.Properties | ForEach-Object { $_.Name })
+        [Array]::Sort($names, [StringComparer]::Ordinal)
+        $members = @(foreach ($name in $names) { (ConvertTo-Json -InputObject $name -Compress) + ':' + (ConvertTo-CanonicalJson $Value.PSObject.Properties[$name].Value) })
+        return '{' + ($members -join ',') + '}'
+    }
+    if ($Value -is [System.Collections.IList]) {
+        $items = @(foreach ($item in $Value) { ConvertTo-CanonicalJson $item })
+        return '[' + ($items -join ',') + ']'
+    }
+    if ($Value -is [ValueType]) { return ([decimal]$Value).ToString([System.Globalization.CultureInfo]::InvariantCulture) }
+    return 'unsupported:' + $Value.GetType().FullName
+}
+
+function Get-DifferentFields {
+    param(
+        [object]$Expected,
+        [object]$Actual,
+        [string[]]$Exclude = @()
+    )
+
+    if (-not ($Expected -is [System.Management.Automation.PSCustomObject]) -or -not ($Actual -is [System.Management.Automation.PSCustomObject])) { return @('<whole value>') }
+    $names = @(@($Expected.PSObject.Properties) + @($Actual.PSObject.Properties) | ForEach-Object { $_.Name } | Where-Object { $Exclude -cnotcontains $_ } | Sort-Object -CaseSensitive -Unique)
+    return @($names | Where-Object {
+        $name = $_
+        $expectedProperty = @($Expected.PSObject.Properties | Where-Object { $_.Name -ceq $name })
+        $actualProperty = @($Actual.PSObject.Properties | Where-Object { $_.Name -ceq $name })
+        if ($expectedProperty.Count -eq 0 -or $actualProperty.Count -eq 0) { return $true }
+        (ConvertTo-CanonicalJson $expectedProperty[0].Value) -cne (ConvertTo-CanonicalJson $actualProperty[0].Value)
+    })
+}
+
+function Get-EntryLabel {
+    param([object]$Entry)
+
+    if ($Entry -is [System.Management.Automation.PSCustomObject]) { return [string](Get-PropertyValue $Entry 'archivePath' '<no archivePath>') }
+    return ConvertTo-CanonicalJson $Entry
+}
+
+function Test-RecordHeader {
+    param(
+        [string]$Label,
+        [object]$Record,
+        [string]$EntriesField,
+        [object]$Generated
+    )
+
+    $exclude = @('generatedAtUtc', $EntriesField, 'catalogEntries')
+    $fields = @(Get-DifferentFields $Generated $Record $exclude)
+    Add-Check ($fields.Count -eq 0) "$Label header fields match the live archive" "$Label header fields differ from the live archive: $($fields -join ', ')"
+}
+
+function Test-RecordEntries {
+    param(
+        [string]$Label,
+        [object]$Record,
+        [string]$EntriesField,
+        [object[]]$GeneratedEntries,
+        [bool]$Complete
+    )
+
+    $property = $Record.PSObject.Properties[$EntriesField]
+    if ($null -eq $property -or -not ($property.Value -is [System.Collections.IList])) {
+        Add-Failure "$Label $EntriesField is not a list, so it cannot match the live archive"
+        return
+    }
+
+    $available = New-Object 'System.Collections.Generic.Dictionary[string,int]'
+    $generatedByPath = @{}
+    foreach ($entry in $GeneratedEntries) {
+        $key = ConvertTo-CanonicalJson $entry
+        if ($available.ContainsKey($key)) { $available[$key]++ } else { $available[$key] = 1 }
+        $generatedByPath[(Get-EntryLabel $entry)] = $entry
+    }
+
+    $unmatched = New-Object System.Collections.Generic.List[string]
+    foreach ($entry in $property.Value) {
+        $key = ConvertTo-CanonicalJson $entry
+        if ($available.ContainsKey($key) -and $available[$key] -gt 0) {
+            $available[$key]--
+            continue
+        }
+        $path = Get-EntryLabel $entry
+        if ($generatedByPath.ContainsKey($path)) {
+            $fields = @(Get-DifferentFields $generatedByPath[$path] $entry)
+            $reason = if ($fields.Count -eq 0) { 'repeated' } else { "different: $($fields -join ', ')" }
+            $unmatched.Add("$path ($reason)") | Out-Null
+        } else {
+            $unmatched.Add("$path (not in the live archive)") | Out-Null
+        }
+    }
+
+    $missing = New-Object System.Collections.Generic.List[string]
+    if ($Complete) {
+        foreach ($entry in $GeneratedEntries) {
+            $key = ConvertTo-CanonicalJson $entry
+            if ($available[$key] -gt 0) {
+                $available[$key]--
+                $missing.Add((Get-EntryLabel $entry)) | Out-Null
+            }
+        }
+    }
+
+    $problems = @()
+    if ($unmatched.Count -gt 0) { $problems += "recorded entries that do not match: $($unmatched -join '; ')" }
+    if ($missing.Count -gt 0) { $problems += "live entries not recorded exactly once: $($missing -join '; ')" }
+    Add-Check ($problems.Count -eq 0) "$Label $($property.Value.Count) $EntriesField match the live archive" "$Label $EntriesField differ from the live archive: $($problems -join ' | ')"
+}
+
+function Test-RecordMatchesArchive {
     param(
         [string]$ResolvedArchivePath,
-        [object]$Catalog
+        [object]$Catalog,
+        [object]$Sample
     )
 
     if ([string]::IsNullOrWhiteSpace($ResolvedArchivePath) -or -not (Test-Path -LiteralPath $ResolvedArchivePath -PathType Leaf)) {
@@ -157,28 +274,20 @@ function Test-ArchiveExecutableCoverage {
         return
     }
 
-    Add-Type -AssemblyName System.IO.Compression.FileSystem
-    $zip = [System.IO.Compression.ZipFile]::OpenRead($ResolvedArchivePath)
     try {
-        $fileEntries = @($zip.Entries | Where-Object { -not [string]::IsNullOrWhiteSpace($_.Name) })
-        $execExts = @('.exe', '.msi', '.msu', '.bat', '.cmd', '.ps1', '.psm1', '.psd1', '.vbs', '.js', '.reg')
-        $archiveExecutablePaths = @($fileEntries |
-            Where-Object { $execExts -contains ([System.IO.Path]::GetExtension($_.FullName).ToLowerInvariant()) } |
-            ForEach-Object { $_.FullName -replace '/', '\' } |
-            Sort-Object)
-        $catalogExecutablePaths = @((Get-PropertyValue $Catalog 'catalogEntries' @()) |
-            Where-Object { [string](Get-PropertyValue $_ 'entryKind' '') -eq 'executable-script' } |
-            ForEach-Object { [string](Get-PropertyValue $_ 'archivePath' '') } |
-            Sort-Object)
+        $generatedJson = (& (Join-Path $PSScriptRoot 'Get-UtilitiesBundleInventory.ps1') -ArchivePath $ResolvedArchivePath) -join "`n"
+        $generated = $generatedJson | ConvertFrom-Json
+    } catch {
+        Add-Failure "Could not read the live archive: $($_.Exception.Message)"
+        return
+    }
+    $generatedEntries = @($generated.PSObject.Properties['catalogEntries'].Value)
 
-        Add-Check ((Get-Item -LiteralPath $ResolvedArchivePath).Length -eq [uint64](Get-PropertyValue $Catalog 'sourceArchiveSizeBytes' 0)) 'Catalog sourceArchiveSizeBytes matches live archive' 'Catalog sourceArchiveSizeBytes does not match live archive'
-        Add-Check ($fileEntries.Count -eq [int](Get-PropertyValue $Catalog 'entryCount' 0)) 'Catalog entryCount matches live archive' "Catalog entryCount mismatch: live=$($fileEntries.Count) catalog=$([int](Get-PropertyValue $Catalog 'entryCount' 0))"
-        Add-Check ($archiveExecutablePaths.Count -eq [int](Get-PropertyValue $Catalog 'executableScriptCount' 0)) 'Catalog executableScriptCount matches live archive' "Catalog executableScriptCount mismatch: live=$($archiveExecutablePaths.Count) catalog=$([int](Get-PropertyValue $Catalog 'executableScriptCount' 0))"
-
-        $diff = @(Compare-Object -ReferenceObject $archiveExecutablePaths -DifferenceObject $catalogExecutablePaths)
-        Add-Check ($diff.Count -eq 0) 'Catalog covers every executable/script archive path exactly' "Executable/script catalog path mismatch: $((@($diff | ForEach-Object { $_.SideIndicator + ':' + $_.InputObject })) -join ', ')"
-    } finally {
-        $zip.Dispose()
+    Test-RecordHeader 'Catalog' $Catalog 'catalogEntries' $generated
+    Test-RecordEntries 'Catalog' $Catalog 'catalogEntries' $generatedEntries $true
+    if ($null -ne $Sample) {
+        Test-RecordHeader 'Utilities sample' $Sample 'sampleCatalogEntries' $generated
+        Test-RecordEntries 'Utilities sample' $Sample 'sampleCatalogEntries' $generatedEntries $false
     }
 }
 
@@ -268,7 +377,7 @@ if ($null -ne $catalog) {
     Test-CatalogTool $entries 'intel-proset-setupbd' 1 'manual-launcher'
     Test-CatalogTool $entries 'intel-proset-prounstl' 1 'dangerous-manual-only'
 
-    Test-ArchiveExecutableCoverage (Get-OptionalArchivePath) $catalog
+    Test-RecordMatchesArchive (Get-OptionalArchivePath) $catalog $sample
 }
 
 if ($null -ne $manifest) {
