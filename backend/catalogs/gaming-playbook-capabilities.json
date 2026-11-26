@@ -17076,7 +17076,7 @@
         "path": "HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\OEMInformation",
         "value": "SupportURL",
         "type": "REG_SZ",
-        "data": "https://discord.gg/FSL"
+        "data": "{source}"
       }
     },
     {
