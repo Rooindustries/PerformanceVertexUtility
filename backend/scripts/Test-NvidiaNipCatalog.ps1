@@ -268,11 +268,11 @@ if ($manifest) {
         Add-Check ($tool.autoRunAllowed -eq $false) 'Utilities manifest forbids NVPI auto-run' 'Utilities manifest allows NVPI auto-run'
         Add-Check ($tool.appRole -eq 'profile-import-and-test') 'Utilities manifest keeps NVPI as profile import/test tool' "Unexpected NVPI appRole: $($tool.appRole)"
         $profileFile = @($tool.profileFiles | Where-Object { $_.id -eq 'base-profile' })
-        Add-Check ($profileFile.Count -eq 1) 'Utilities manifest has one base-profile profile file' "Utilities manifest base-profile profile file count is $($profileFile.Count)"
+        Add-Check ($profileFile.Count -eq 1) 'Utilities manifest has one base profile file' "Utilities manifest base profile file count is $($profileFile.Count)"
         if ($profileFile.Count -eq 1) {
-            Add-Check ($profileFile[0].autoImportAllowed -eq $false) 'Utilities manifest forbids base-profile auto-import' 'Utilities manifest allows base-profile auto-import'
-            Add-Check ($profileFile[0].manualApplyRequired -eq $true) 'Utilities manifest requires manual base-profile apply' 'Utilities manifest does not require manual base-profile apply'
-            Add-Check ($profileFile[0].requiresExportFirst -eq $true) 'Utilities manifest requires export before base-profile import' 'Utilities manifest does not require export before base-profile import'
+            Add-Check ($profileFile[0].autoImportAllowed -eq $false) 'Utilities manifest forbids base profile auto-import' 'Utilities manifest allows base profile auto-import'
+            Add-Check ($profileFile[0].manualApplyRequired -eq $true) 'Utilities manifest requires manual base profile apply' 'Utilities manifest does not require manual base profile apply'
+            Add-Check ($profileFile[0].requiresExportFirst -eq $true) 'Utilities manifest requires export before base profile import' 'Utilities manifest does not require export before base profile import'
         }
     }
 }

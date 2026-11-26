@@ -11,11 +11,11 @@ Research was checked against primary sources on 2026-09-14. Comparisons in the t
 | [Process polling](process-polling.md) | Measured identity-buffer allocations, long-path regression and access contracts |
 | [Performance evidence](parity-validation.md) | CPU, storage, GPU and stock-reference comparisons with explicit limits |
 | [Current removal audit](removal-parity-audit.md) | Executed multi-app cleanup, shared ownership repair, discovery scope and remaining Revo features |
-| [Windows settings](windows-settings.md) | WinUtil's maintained configuration, {source} R11H2 playbook, bundled Dash, source risk and coverage crosswalk |
+| [Windows settings](windows-settings.md) | WinUtil's maintained configuration, gaming playbook R11H2, bundled gaming toggles, source risk and coverage crosswalk |
 
-The machine-readable [upstream inventory](../../backend/catalogs/upstream-settings-inventory.json) records 376 settings/control records, 267 application/package entries and 1,319 playbook action records. These totals describe different kinds of records, not a count of implemented product toggles. WinUtil is pinned to commit `fc60cbde09d669178bda1665be9cb1a703516fca`. The {source} R11H2 download matched its published SHA-256; it bundled Dash 2.4.9. Dash symbols indicate potential controls, not proven behavior or an exhaustive public specification.
+The machine-readable [upstream inventory](../../backend/catalogs/upstream-settings-inventory.json) records 376 settings/control records, 267 application/package entries and 1,319 playbook action records. These totals describe different kinds of records, not a count of implemented product toggles. WinUtil is pinned to commit `fc60cbde09d669178bda1665be9cb1a703516fca`. The gaming playbook R11H2 bundled gaming toggles 2.4.9. Those toggles indicate potential controls, not proven behavior or an exhaustive public specification.
 
-WinUtil's repository declares MIT licensing. {source} declares {license}. The inventory contains factual metadata and references; the new Windows executors are independent implementations rather than copied {source} code. Asset redistribution and any commercial source reuse require a separate licensing assessment.
+WinUtil's repository declares MIT licensing. The inventory contains factual metadata and references; the new Windows executors are independent implementations rather than copied upstream code. Asset redistribution and any commercial source reuse require a separate licensing assessment.
 
 ## Initial implementation at the research baseline
 

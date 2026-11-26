@@ -190,7 +190,7 @@ if ($stateBefore -eq $stateAfter -and $stateAfter -eq 0) {
     Add-Failure "backend/state is not empty or changed during stutter real executor validation: before=$stateBefore after=$stateAfter"
 }
 
-Add-Pass 'Stutter real executor validation did not launch {source}, WinUtil, cleanup, registry, service edit, driver, or forbidden tweak utilities'
+Add-Pass 'Stutter real executor validation did not launch gaming toggles, WinUtil, cleanup, registry, service edit, driver, or forbidden tweak utilities'
 
 Write-Host ''
 if ($failures.Count -eq 0) {

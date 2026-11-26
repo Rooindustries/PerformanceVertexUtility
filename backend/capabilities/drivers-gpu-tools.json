@@ -259,7 +259,7 @@
       "testEvidence": [
         {
           "test": "backend/scripts/Test-NvidiaNipCatalog.ps1",
-          "proves": "base-profile NIP catalog matches source XML, Reference.xml evidence, hardware gate, and no-auto-import policy"
+          "proves": "Base profile NIP catalog matches source XML, Reference.xml evidence, hardware gate, and no-auto-import policy"
         }
       ]
     },

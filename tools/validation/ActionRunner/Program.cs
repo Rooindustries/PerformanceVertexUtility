@@ -327,6 +327,67 @@ try
         "A newer durable NVIDIA generation outranks stale in-process caches across service instances");
     Environment.SetEnvironmentVariable("ROO_INDUSTRIES_ACTION_RECOVERY_DIRECTORY", recoveryDirectory);
 
+    var formerId = "legacy-fixture";
+    var formerDigest = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(formerId)));
+    Directory.CreateDirectory(Path.Combine(root, "backend/catalogs"));
+    await File.WriteAllTextAsync(Path.Combine(root, "backend/catalogs/nvidia-profile-inspector-nip-catalog.json"),
+        "{\"profiles\":[{\"profileId\":\"base-profile\",\"formerProfileIdSha256\":[\"" + formerDigest + "\"]}]}");
+    async Task<NvidiaProfileRecovery> SaveNvidia(string directory, string profileId)
+    {
+        var folder = Path.Combine(directory, "nvidia-profile-recovery", profileId);
+        Directory.CreateDirectory(folder);
+        var export = Path.Combine(folder, "before.nip");
+        var manifest = Path.Combine(folder, "rollback.json");
+        await File.WriteAllTextAsync(export, "saved NVIDIA export");
+        await File.WriteAllTextAsync(manifest, JsonSerializer.Serialize(new
+        {
+            actionId = "drivers.nvidiaNip.rollbackManifest", restoreActionId = "drivers.nvidiaNip.restoreProfile", profileId,
+            rollbackSupported = true, exportCompleted = true, importAttempted = true, exportPath = export,
+        }));
+        var saved = new NvidiaProfileRecovery(profileId, manifest, export, profileId + "-generation");
+        OperationFiles.Write(Path.Combine(directory, "nvidia-profile-operation-generation.json"), new RecoveryOperationGeneration(saved.Generation!));
+        OperationFiles.Write(Path.Combine(directory, "nvidia-profile-recovery.json"), saved);
+        return saved;
+    }
+
+    var formerDirectory = Path.Combine(root, "nvidia-former-id");
+    var formerSaved = await SaveNvidia(formerDirectory, formerId);
+    var formerService = new LiveDataService(new BackendLocator(), formerDirectory);
+    var formerPending = await formerService.ReadNvidiaProfileRecoveryAsync("base-profile");
+    var formerRestoreCount = Counter("nvidia-restore-count.txt");
+    var formerRestore = formerPending is null ? null : await formerService.RestoreNvidiaProfileResultAsync(formerPending, true);
+    Check(formerPending == formerSaved && formerRestore is { Error: null } && Counter("nvidia-restore-count.txt") == formerRestoreCount + 1
+            && await formerService.ReadNvidiaProfileRecoveryAsync("base-profile") is null
+            && File.Exists(formerSaved.RollbackManifestPath) && File.Exists(formerSaved.ExportPath),
+        "A recovery saved under the profile's former ID is pending for the current profile and restores through it, keeping its files");
+
+    var unknownDirectory = Path.Combine(root, "nvidia-unknown-id");
+    var unknownSaved = await SaveNvidia(unknownDirectory, "unknown-fixture");
+    var unknownService = new LiveDataService(new BackendLocator(), unknownDirectory);
+    var unknownRestoreCount = Counter("nvidia-restore-count.txt");
+    var unknownRestore = await unknownService.RestoreNvidiaProfileResultAsync(unknownSaved, true);
+    Check(await unknownService.ReadNvidiaProfileRecoveryAsync("base-profile") is null
+            && unknownRestore.Error?.Contains("no longer current", StringComparison.OrdinalIgnoreCase) == true
+            && Counter("nvidia-restore-count.txt") == unknownRestoreCount,
+        "A recovery saved under an ID the profile never had is not offered and cannot restore");
+
+    var racedDirectory = Path.Combine(root, "nvidia-former-id-race");
+    Environment.SetEnvironmentVariable("ROO_INDUSTRIES_ACTION_RECOVERY_DIRECTORY", racedDirectory);
+    await SaveNvidia(racedDirectory, formerId);
+    var racedPage = new LiveDataService(new BackendLocator(), racedDirectory);
+    var racedSelected = await racedPage.ReadNvidiaProfileRecoveryAsync("base-profile");
+    var racedOther = new LiveDataService(new BackendLocator(), racedDirectory);
+    await racedOther.ApplyNvidiaProfileResultAsync("base-profile", true, true, true);
+    var racedNewer = await racedOther.ReadNvidiaProfileRecoveryAsync("base-profile");
+    var racedRestoreCount = Counter("nvidia-restore-count.txt");
+    var racedRestore = await racedPage.RestoreNvidiaProfileResultAsync(racedSelected!, true);
+    Check(racedSelected?.ProfileId == formerId && racedNewer?.ProfileId == "base-profile"
+            && racedRestore.Error?.Contains("no longer current", StringComparison.OrdinalIgnoreCase) == true
+            && Counter("nvidia-restore-count.txt") == racedRestoreCount
+            && await racedPage.ReadNvidiaProfileRecoveryAsync("base-profile") == racedNewer,
+        "A former-ID selection cannot restore or clear a newer apply saved under the current ID");
+    Environment.SetEnvironmentVariable("ROO_INDUSTRIES_ACTION_RECOVERY_DIRECTORY", recoveryDirectory);
+
     Console.WriteLine($"Passed {checks} native action runner checks.");
 }
 finally

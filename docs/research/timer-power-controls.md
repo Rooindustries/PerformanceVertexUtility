@@ -2,7 +2,7 @@
 
 Date: 2026-09-19. This is backend research and a private ownership prototype. No timer request, power-plan creation/activation/deletion, registry change, scheduled task, service change or reboot was performed on the the i5-14600K test PCXT. Native declarations were compiled and probe syntax was checked without invoking their setters.
 
-Private artifacts: `<private work folder>/four-tool-tweaks-20260919/gaming/timer-power/`.
+Private artifacts are kept outside the repository.
 
 ## Existing backend behavior
 
@@ -16,9 +16,9 @@ The documented user-mode multimedia interface takes **whole milliseconds**. Call
 
 For an owned helper, the documented `PROCESS_POWER_THROTTLING_IGNORE_TIMER_RESOLUTION` control can opt out of ignoring its requests. That is a separate process-state operation requiring its own captured state and result check; it does not establish a request for another game. [SetProcessInformation](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-setprocessinformation).
 
-{source}'s bundled `SetTimerResolution.exe` imports `NtSetTimerResolution` and `NtQueryTimerResolution`; Dash launches it with a request of 5,000 units of 100 ns, or 0.5 ms. This comes from static inspection of the pinned {source} binary and toggle, not a Microsoft user-mode API guarantee. No public Microsoft user-mode contract for that 0.5 ms export was identified in this research. The documented `ExSetTimerResolution` interface is a **kernel-driver** interface, clamps requests to platform support, and requires release of the driver's own request. It is not callable as the same documented API from an ordinary app. [ExSetTimerResolution](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/wdm/nf-wdm-exsettimerresolution), [pinned {source} source archive](gaming-toggles-r11h2).
+The gaming playbook's bundled `SetTimerResolution.exe` uses the native timer-resolution calls; the gaming toggles launch it with a request of 5,000 units of 100 ns, or 0.5 ms. This comes from static inspection of the pinned helper and toggle, not a Microsoft user-mode API guarantee. No public Microsoft user-mode contract for that 0.5 ms export was identified in this research. The documented `ExSetTimerResolution` interface is a **kernel-driver** interface, clamps requests to platform support, and requires release of the driver's own request. It is not callable as the same documented API from an ordinary app. [ExSetTimerResolution](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/wdm/nf-wdm-exsettimerresolution).
 
-High-resolution waitable timers are a supported way to schedule the app's own timed work, but creating one is not equivalent to applying {source}'s persistent timer-resolution request to other applications. [CreateWaitableTimerEx](https://learn.microsoft.com/en-us/windows/win32/api/synchapi/nf-synchapi-createwaitabletimerexw).
+High-resolution waitable timers are a supported way to schedule the app's own timed work, but creating one is not equivalent to applying the gaming toggles' persistent timer-resolution request to other applications. [CreateWaitableTimerEx](https://learn.microsoft.com/en-us/windows/win32/api/synchapi/nf-synchapi-createwaitabletimerexw).
 
 Read-only native observations on `the i5-14600K test PC` at `2026-09-19T17:17:48Z` were:
 
@@ -39,7 +39,7 @@ The helper remains alive while the lease remains wanted, including when the UI c
 
 Stop must address only the identified helper/session. A PID match alone is insufficient. Release the app's request; do not attempt to force the aggregate interval back to the sampled starting value, since other processes can acquire/release their own requests meanwhile. A crashed helper must be detected and shown as inactive/recovery-needed. OS cleanup on abnormal termination and a fresh helper's reacquisition need an explicit native regression; the file fixture does not establish those kernel semantics.
 
-The native compatibility path should report requested interval, returned interval, status and helper liveness separately. A strictly documented user-mode implementation can offer the WinMM 1 ms request but must not silently label it as equivalent to {source}'s 0.5 ms behavior. {source}'s registry flag, BCD dynamic-tick setting and startup task are separate effects already inventoried; they are not implicit authority to change those targets during this timer probe.
+The native compatibility path should report requested interval, returned interval, status and helper liveness separately. A strictly documented user-mode implementation can offer the WinMM 1 ms request but must not silently label it as equivalent to the gaming toggles' 0.5 ms behavior. Their registry flag, BCD dynamic-tick setting and startup task are separate effects already inventoried; they are not implicit authority to change those targets during this timer probe.
 
 ## Ultimate Performance plan
 

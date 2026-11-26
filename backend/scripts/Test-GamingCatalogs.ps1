@@ -205,24 +205,24 @@ if ($playbook -and $dash -and $gap) {
     )
     $staleHits = @($staleExecutorText | Where-Object { $catalogText -match [regex]::Escape($_) })
     if ($staleHits.Count -eq 0) {
-        Add-Pass '{source} catalogs contain no stale blocked metadata for implemented executor paths'
+        Add-Pass 'Gaming catalogs contain no stale blocked metadata for implemented executor paths'
     } else {
-        Add-Failure "{source} catalogs still contain stale executor text: $($staleHits -join '; ')"
+        Add-Failure "Gaming catalogs still contain stale executor text: $($staleHits -join '; ')"
     }
 }
 
 $stateEntries = Get-StateEntryCount
 if ($stateEntries -eq 0) {
-    Add-Pass 'backend/state remains empty after {source} catalog validation'
+    Add-Pass 'backend/state remains empty after gaming catalog validation'
 } else {
-    Add-Failure "backend/state is not empty after {source} catalog validation: $stateEntries item(s)"
+    Add-Failure "backend/state is not empty after gaming catalog validation: $stateEntries item(s)"
 }
 
 Write-Host ""
 if ($failures.Count -eq 0) {
-    Write-Host "PASS {source} catalog validation completed. $($passes.Count) checks passed."
+    Write-Host "PASS Gaming catalog validation completed. $($passes.Count) checks passed."
     exit 0
 }
 
-Write-Host "FAIL {source} catalog validation failed. $($failures.Count) failure(s), $($passes.Count) pass(es)."
+Write-Host "FAIL Gaming catalog validation failed. $($failures.Count) failure(s), $($passes.Count) pass(es)."
 exit 1

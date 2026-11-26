@@ -212,10 +212,10 @@ try {
     if ($catalogTestExitCode -eq 0) {
         Add-Pass 'Gaming playbook and Dash catalog guardrails passed'
     } else {
-        Add-Failure "{source} catalog guardrails failed with exit code $catalogTestExitCode"
+        Add-Failure "Gaming catalog guardrails failed with exit code $catalogTestExitCode"
     }
 } catch {
-    Add-Failure "{source} catalog guardrails failed: $($_.Exception.Message)"
+    Add-Failure "Gaming catalog guardrails failed: $($_.Exception.Message)"
 }
 
 try {

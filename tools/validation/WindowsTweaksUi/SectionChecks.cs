@@ -64,7 +64,7 @@ static class SectionChecks
         check(model.Rows.Count == 1 && model.Rows[0].Id == "windows.3b7506aee9968d0e" && model.SelectedSection.Id == model.Rows[0].SectionId,
             "A current-policy link selects its target section and exact existing setting");
         model.SelectedSection = model.Sections.Single(section => section.Id == "network"); model.Source = "Gaming toggles";
-        check(model.Rows.Count > 0 && model.Rows.All(row => row.Definition.Sources.Any(source => source.Product == "Gaming toggles")),
+        check(model.Sources.Contains("Gaming toggles") && model.Rows.Count > 0 && model.Rows.All(row => row.Sources.Split(" · ").Contains("Gaming toggles")),
             "Source filters continue to work inside a section");
         check(fixture.Applies == 0 && fixture.Windows.ReadState() is null, "Navigation and review never apply settings or create a backup");
     }

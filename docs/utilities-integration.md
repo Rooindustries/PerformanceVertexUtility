@@ -141,6 +141,7 @@ Required metadata shape:
 ## NIP Profile Testing
 
 - Seed profile: `Utilities/Other/base-profile.nip`.
+- A utilities folder made before this name change needs its profile file renamed to `base-profile.nip`.
 - Future `.nip` files should be added to the profile catalog.
 - Apply profile only on NVIDIA systems.
 - Benchmark each candidate profile against selected games.

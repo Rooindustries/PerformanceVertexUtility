@@ -17,11 +17,11 @@ For all registry operations, retain exact value existence, kind, bytes and creat
 
 ## Classic context menu
 
-The pinned {source} enabling operation writes:
+The pinned gaming toggles enabling operation writes:
 
 `HKCU\Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\InprocServer32`
 
-The unnamed/default value is **REG_SZ with empty data**. That is distinct from a missing value. {source} then force-restarts Explorer; its opposite operation deletes the whole parent CLSID tree. Only the one value is required to reproduce its registration change. [Pinned {source} package](gaming-toggles-r11h2).
+The unnamed/default value is **REG_SZ with empty data**. That is distinct from a missing value. The source then force-restarts Explorer; its opposite operation deletes the whole parent CLSID tree. Only the one value is required to reproduce its registration change.
 
 The independent transaction should snapshot the default value and whether each affected key already existed, write the empty string, and verify its kind/data. Restoration should put the exact original back. If all affected keys were originally absent, remove the restored-to-absent value and then only the newly created empty keys. A pre-existing sibling or a subsequently added value must prevent pruning.
 
@@ -93,7 +93,7 @@ The minimally scoped launch-redirection repair is to inspect and remove only the
 
 Record exact prior type/data/existence and restore just that value if requested, with drift checks. Detect filtered/path-specific IFEO configuration separately; the root-value cleanup must not claim to remove an uninspected effective filter. This audit does not establish a complete supported schema for every filter variant.
 
-Removing a launch override does not by itself enable SmartScreen policy or the Edge component. Show **Launch override removed** for this action, and determine protection status from its separate authoritative policy/runtime state. The source's broad enable/reset operation must not delete unrelated policy choices merely to achieve the IFEO cleanup. [SmartScreen policy](https://learn.microsoft.com/en-us/windows/client-management/mdm/policy-csp-smartscreen), [{source} behavior](gaming-toggles-r11h2).
+Removing a launch override does not by itself enable SmartScreen policy or the Edge component. Show **Launch override removed** for this action, and determine protection status from its separate authoritative policy/runtime state. The source's broad enable/reset operation must not delete unrelated policy choices merely to achieve the IFEO cleanup. [SmartScreen policy](https://learn.microsoft.com/en-us/windows/client-management/mdm/policy-csp-smartscreen).
 
 ## Service-host split threshold
 
@@ -138,12 +138,12 @@ For completion reporting, distinguish these actions:
 | Verify FTH behavior for a selected application | Post-restart observation bound to that application's PID, image and creation time; existing learned applications need their own case | Registry readback alone is insufficient |
 | Reset FTH tracked applications | Separate reviewed global reset, verified on a disposable Windows image | No supported exact inverse was established; backing up only a guessed `FTH\State` subtree is not proof of complete recovery |
 
-The first row implements Microsoft's documented disable sequence without deleting learned state. It must not claim the third row as completed. {source}'s source combines both operations, so inventory them as separate effects rather than treating the destructive reset as an implicit part of normal apply or restore.
+The first row implements Microsoft's documented disable sequence without deleting learned state. It must not claim the third row as completed. The gaming toggles source combines both operations, so inventory them as separate effects rather than treating the destructive reset as an implicit part of normal apply or restore.
 
 ## Completion semantics: Explorer defaults and saved views
 
 Microsoft's view-state API distinguishes per-folder property bags from user/global defaults and inherited defaults. Default lookup can occur when a folder-specific bag is absent. This supports treating a default preference and existing saved views as different state, but it does **not** document the raw `FolderType="NotSpecified"` registry string or its precedence on current Windows. [SHGetViewStatePropertyBag](https://learn.microsoft.com/en-us/windows/win32/api/shlwapi/nf-shlwapi-shgetviewstatepropertybag).
 
-The minimum WinUtil-derived preference remains the one `FolderType` string already identified above. Omitting Bags/BagMRU deletion preserves cached state; it is not demonstrated full parity with WinUtil's broader operation for every previously customized folder. Setting readback supports **Default folder template configured**, while a separate **Reset saved folder views** action must account for removing those saved preferences. Restoring the default string does not restore views erased by a reset. The pinned {source} playbook itself sets this preference as one registry action without a neighboring whole-tree reset, providing another source-level distinction rather than a runtime guarantee. [WinUtil operation](https://github.com/ChrisTitusTech/winutil/blob/fc60cbde09d669178bda1665be9cb1a703516fca/config/tweaks.json#L1208), [{source} playbook](gaming-toggles-r11h2).
+The minimum WinUtil-derived preference remains the one `FolderType` string already identified above. Omitting Bags/BagMRU deletion preserves cached state; it is not demonstrated full parity with WinUtil's broader operation for every previously customized folder. Setting readback supports **Default folder template configured**, while a separate **Reset saved folder views** action must account for removing those saved preferences. Restoring the default string does not restore views erased by a reset. The pinned gaming playbook itself sets this preference as one registry action without a neighboring whole-tree reset, providing another source-level distinction rather than a runtime guarantee. [WinUtil operation](https://github.com/ChrisTitusTech/winutil/blob/fc60cbde09d669178bda1665be9cb1a703516fca/config/tweaks.json#L1208).
 
 Current-build verification should cover a newly visited folder, a folder with an existing customized view and a folder with an explicit content template separately. No Microsoft engineering contract for the exact raw override was identified in this bounded search; community-hosted posts were not promoted to platform documentation. Do not infer its support from the distinct deprecated `FOLDERTYPEID_NotSpecified` GUID. No shell launch, registry change, cache deletion or FTH reset was performed for this follow-up.

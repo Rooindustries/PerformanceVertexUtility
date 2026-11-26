@@ -396,6 +396,71 @@ try {
         Add-Failure 'NVIDIA NIP restore executor did not run the exact manifest-bound rollback import'
     }
 
+    $utilitiesRoot = Join-Path $tempRoot 'Utilities'
+    New-Item -ItemType Directory -Path (Join-Path $utilitiesRoot 'Other') -Force | Out-Null
+    $profileFile = Join-Path $utilitiesRoot 'Other\base-profile.nip'
+    Set-Content -LiteralPath $profileFile -Value 'fixture NVIDIA profile' -Encoding ascii
+    $registryScript = Join-Path $PSScriptRoot 'Get-RooIndustriesCapabilityRegistry.ps1'
+    $inventoryScript = Join-Path $PSScriptRoot 'Get-RooIndustriesUtilitiesInventory.ps1'
+    $registry = ConvertFrom-ScriptJson (& $registryScript -UtilitiesRoot $utilitiesRoot)
+    $inventory = ConvertFrom-ScriptJson (& $inventoryScript -UtilitiesRoot $utilitiesRoot)
+    $profileRules = @(foreach ($entry in @($registry.capabilities)) {
+        $checked = @($entry.resolvedAvailability.checkedRules)
+        $rules = @($checked | Where-Object { [string]$_.target -like '*\Other\base-profile.nip' })
+        foreach ($rule in $rules) {
+            [pscustomobject]@{ capabilityId = $entry.capabilityId; passed = $rule.passed }
+        }
+    })
+    $profileTool = @($inventory.tools | Where-Object { $_.id -eq 'base-profile-nip' })[0]
+    $evidence.cases['profile-file-present'] = [pscustomobject]@{ registry = $profileRules; inventory = $profileTool }
+    $ruleResults = @($profileRules | ForEach-Object { "$($_.capabilityId)=$($_.passed)" }) -join ', '
+    if ($profileRules.Count -eq 3 -and @($profileRules | Where-Object { $_.passed -ne $true }).Count -eq 0 -and
+        $null -ne $profileTool -and $profileTool.present -eq $true) {
+        Add-Pass "The registry and the inventory report the profile file present: $ruleResults, inventory=True"
+    } else {
+        $toolPresent = if ($null -eq $profileTool) { 'missing' } else { $profileTool.present }
+        Add-Failure "The profile file was not reported present everywhere: $ruleResults, inventory=$toolPresent"
+    }
+
+    $legacyId = 'legacy-fixture'
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try { $legacyHash = $sha.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($legacyId)) } finally { $sha.Dispose() }
+    $catalogPath = Join-Path $tempRoot 'nvidia-catalog.json'
+    $shippedCatalog = Join-Path $repoRoot 'backend\catalogs\nvidia-profile-inspector-nip-catalog.json'
+    $catalog = Get-Content -LiteralPath $shippedCatalog -Raw | ConvertFrom-Json
+    $catalog.profiles[0].formerProfileIdSha256 += -join ($legacyHash | ForEach-Object { $_.ToString('X2') })
+    $catalog | ConvertTo-Json -Depth 32 | Set-Content -LiteralPath $catalogPath -Encoding UTF8
+    $legacyManifestPath = Join-Path $tempRoot 'legacy-rollback.json'
+    $unknownManifestPath = Join-Path $tempRoot 'unknown-rollback.json'
+    foreach ($case in @(@($legacyManifestPath, $legacyId), @($unknownManifestPath, 'unknown-fixture'))) {
+        $saved = Get-Content -LiteralPath $rollbackPath -Raw | ConvertFrom-Json
+        $saved.profileId = $case[1]
+        $saved | ConvertTo-Json -Depth 24 | Set-Content -LiteralPath $case[0] -Encoding UTF8
+    }
+    $restoreScript = Join-Path $PSScriptRoot 'Restore-NvidiaNipProfile.ps1'
+    $executorScript = Join-Path $PSScriptRoot 'Invoke-NvidiaNipExecutor.ps1'
+    $selected = @{ CatalogPath = $catalogPath; ProfileId = 'base-profile'; HardwareInventoryPath = $nvidiaHardware }
+    $mock = @{ ExecutorMode = 'Mock'; MockNvpiShimPath = $successShim }
+    $logBeforeIds = @(Read-MockLog $successLog).Count
+    $legacyMetadata = ConvertFrom-ScriptJson (& $restoreScript @selected -RollbackManifestPath $legacyManifestPath)
+    $legacyRestore = ConvertFrom-ScriptJson (& $executorScript @selected @mock -Operation Restore `
+        -RollbackManifestPath $legacyManifestPath -ConfirmApply -UserApproved)
+    $unknownMetadata = ConvertFrom-ScriptJson (& $restoreScript @selected -RollbackManifestPath $unknownManifestPath)
+    $unknownRestore = ConvertFrom-ScriptJson (& $executorScript @selected @mock -Operation Restore `
+        -RollbackManifestPath $unknownManifestPath -ConfirmApply -UserApproved)
+    $evidence.cases['former-id-restore'] = [pscustomobject]@{ metadata = $legacyMetadata; executor = $legacyRestore }
+    $evidence.cases['unknown-id-restore'] = [pscustomobject]@{ metadata = $unknownMetadata; executor = $unknownRestore }
+    $unbound = @(@($unknownMetadata.gates) + @($unknownRestore.gates) |
+        Where-Object { $_.gateId -eq 'rollback-manifest-bound' -and $_.blocking }).Count
+    if ($legacyMetadata.summary.restoreSupported -eq $true -and $legacyRestore.status -eq 'success' -and
+        $legacyRestore.profileId -eq 'base-profile' -and $unknownMetadata.summary.restoreSupported -eq $false -and
+        $unknownRestore.status -eq 'blocked' -and $unbound -eq 2 -and
+        @($unknownRestore.executionSequence).Count -eq 0 -and @(Read-MockLog $successLog).Count -eq $logBeforeIds + 1) {
+        Add-Pass 'Both restore entry points bind a manifest saved under a former profile ID and refuse an unknown ID'
+    } else {
+        Add-Failure 'Restore entry points did not bind the former profile ID or accepted an unknown ID'
+    }
+
     Remove-Item -LiteralPath $tempRoot -Recurse -Force
     $cleanupDone = $true
     if (-not (Test-Path -LiteralPath $tempRoot)) {

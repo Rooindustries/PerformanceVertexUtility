@@ -45,6 +45,9 @@
   "profiles": [
     {
       "profileId": "base-profile",
+      "formerProfileIdSha256": [
+        "65D5141808449FD381BC9B11FE56608078A0DC98BC65FACF0FDBE54CEAF4D1F1"
+      ],
       "name": "Base profile",
       "vendor": "NVIDIA",
       "sourceFile": "Utilities\\Other\\base-profile.nip",

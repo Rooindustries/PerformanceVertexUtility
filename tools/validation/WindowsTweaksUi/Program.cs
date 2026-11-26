@@ -118,7 +118,8 @@ try
             Check(shippedModel.HasFpsPreset, "The shipped catalog's FPS preset shows the preset button");
             shippedModel.FilterPresets("Gaming toggles · Hyper-V"); var hyperV = shippedModel.Presets.Select(preset => preset.Id).ToArray();
             shippedModel.FilterPresets("Virtualization-Based Security"); var vbs = shippedModel.Presets.Select(preset => preset.Id).ToArray();
-            Check(ControlPlanning.HiddenPresets.All(id => catalog.Presets.Any(preset => preset.Id == id)) && !hyperV.Concat(vbs).Any(ControlPlanning.HiddenPresets.Contains) && hyperV.Length > 0,
+            Check(ControlPlanning.HiddenPresets.All(id => catalog.Presets.Any(preset => preset.Id == id)) && !hyperV.Concat(vbs).Any(ControlPlanning.HiddenPresets.Contains)
+                    && shippedModel.SelectedSection?.Id == "all" && hyperV.SequenceEqual(["gaming.hyper-v.54.disabled"]),
                 "Presets that always refuse to apply are hidden from the preset list while the rest stay: " + string.Join(", ", hyperV.Concat(vbs)));
             shippedModel.FilterPresets("");
             shippedModel.SelectFpsPresetCommand.Execute(null);

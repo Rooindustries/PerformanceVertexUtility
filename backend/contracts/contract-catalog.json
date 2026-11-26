@@ -369,28 +369,28 @@
     {
       "name": "stutter optimization preview contracts",
       "definitionRef": "roo-industries-backend-contracts.schema.json#/$defs/actionEnvelope",
-      "workflow": "{source} and WinUtil parity",
+      "workflow": "Gaming toggles and WinUtil parity",
       "summary": "Preview contracts for standby memory, timer resolution, power plans, shader cache cleanup, and service pause candidates.",
       "status": "draft"
     },
     {
       "name": "shader cache fixture apply and restore",
       "definitionRef": "roo-industries-backend-contracts.schema.json#/$defs/actionEnvelope",
-      "workflow": "{source} and WinUtil parity",
+      "workflow": "Gaming toggles and WinUtil parity",
       "summary": "Disposable fixture shader cache backup/delete/restore envelope; real user-cache deletion is approval-gated and uses the controlled real executor planning path.",
       "status": "draft"
     },
     {
       "name": "stutter optimization controlled executor",
       "definitionRef": "roo-industries-backend-contracts.schema.json#/$defs/actionEnvelope",
-      "workflow": "{source} and WinUtil parity",
+      "workflow": "Gaming toggles and WinUtil parity",
       "summary": "Mock, disposable-fixture, and real controlled executor envelope for standby memory helper contracts, timer resolution lifecycle, power plan import/select/restore, shader cache cleanup, and service pause/restore.",
       "status": "draft"
     },
     {
       "name": "stutter optimization real and detection executors",
       "definitionRef": "roo-industries-backend-contracts.schema.json#/$defs/actionEnvelope",
-      "workflow": "{source} and WinUtil parity",
+      "workflow": "Gaming toggles and WinUtil parity",
       "summary": "Controlled real/detection executor envelope for bounded timer resolution sessions, temporary power-plan duplicate/select/restore/delete, standby memory helper build/elevation planning, real shader-cache readiness planning, and service status/dependency analysis.",
       "status": "draft"
     },

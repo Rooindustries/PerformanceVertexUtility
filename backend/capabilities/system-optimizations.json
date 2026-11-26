@@ -300,7 +300,7 @@
             "target": "Dnscache"
           }
         ],
-        "notes": "{source} marks this family unsafe; WinUtil DNS ideas require adapter/DNS snapshot, tests, and rollback before any mutation."
+        "notes": "The gaming toggles source marks this family unsafe; WinUtil DNS ideas require adapter/DNS snapshot, tests, and rollback before any mutation."
       },
       "preview": {
         "status": "implemented",

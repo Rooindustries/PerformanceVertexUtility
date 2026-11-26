@@ -2,7 +2,7 @@
 
 Date: 2026-09-19. Scope: contracts for independently implemented, journaled Roo Industries adapters. This research used Microsoft documentation, Microsoft SDK headers, and read-only metadata/settings queries on `the i5-14600K test PC`. No setter, restore operation, reboot, adapter restart or registry write was executed.
 
-Machine-readable facts and the read-only evidence are under `<private work folder>/four-tool-tweaks-20260919/gaming/`. The contract is `native-contracts.json`.
+Machine-readable facts and the read-only evidence are kept outside the repository. The contract is `native-contracts.json`.
 
 ## Result handling and journal identity
 
@@ -44,7 +44,7 @@ The shipped module on the the i5-14600K test PCXT is `ProcessMitigations` 1.0.12
 | `AuditFont` | `FontDisable.Audit` | `FontDisable.OverrideFontDisable` |
 | `BlockRemoteImageLoads` / `AuditRemoteImageLoads` | `ImageLoad.BlockRemoteImageLoads` / `ImageLoad.AuditRemoteImageLoads` | `ImageLoad.OverrideBlockRemoteImageLoads` |
 
-These field names were verified against live read-only objects and the shipped module's parameter map. A flags-only snapshot omits override state and coupled options. Restoration must preserve the entire affected group; whether a particular `-Remove` call resets sibling fields requires a disposable execution regression before relying on that behavior. The module explicitly rejects 14 payload/child-process parameters in system mode using warnings; the Dash mitigation parameters listed above are not in that block list.
+These field names were verified against live read-only objects and the shipped module's parameter map. A flags-only snapshot omits override state and coupled options. Restoration must preserve the entire affected group; whether a particular `-Remove` call resets sibling fields requires a disposable execution regression before relying on that behavior. The module explicitly rejects 14 payload/child-process parameters in system mode using warnings; the gaming toggles mitigation parameters listed above are not in that block list.
 
 ## System Restore
 
@@ -89,7 +89,7 @@ At `2026-09-19T16:28:13Z`, the read-only `GetPwrCapabilities` call succeeded. `S
 | `HiberFileType` | Absent | — |
 | `HibernateEnabledDefault` | Present, DWORD | `1` |
 
-The exact query is `gaming/query-hibernation-readonly.ps1`; the result is `servicing-readonly-windows.json`. The SDK Windows 10+ layout is 76 bytes, with offsets 6/8/18/20/22 for SystemS4/HiberFilePresent/Hiberboot/AoAc/HiberFileType. One-byte Boolean fields and four-byte DWORD/enum fields matter. `power-capabilities-layout.json` records the Microsoft header hash, derived offsets and an independent layout check. This was not compiled against an installed Windows SDK header on the target; the resulting buffer was successfully used with the actual API.
+The exact query is `query-hibernation-readonly.ps1`; the result is `servicing-readonly-windows.json`. The SDK Windows 10+ layout is 76 bytes, with offsets 6/8/18/20/22 for SystemS4/HiberFilePresent/Hiberboot/AoAc/HiberFileType. One-byte Boolean fields and four-byte DWORD/enum fields matter. `power-capabilities-layout.json` records the Microsoft header hash, derived offsets and an independent layout check. This was not compiled against an installed Windows SDK header on the target; the resulting buffer was successfully used with the actual API.
 
 **The registry `HiberFileType` mapping is not established.** It is a separate representation from the SDK capability byte. Do not cast between them or invent registry values from the SDK enum. The current registry value is absent, so this host supplies no observed mapping for a present DWORD. The published `powercfg` contract also does not promise exact retention or reset of the raw `HiberFileType`/`HibernateEnabled` value presence, types or data across on/off/type/size transitions.
 

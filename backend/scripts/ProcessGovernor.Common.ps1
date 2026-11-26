@@ -857,6 +857,6 @@ function New-RooIndustriesProcessGovernorRuntimeEvidence {
         frontendProcessLaunched = $false
         realSystemScope = if ($dryRun) { 'preview-only' } else { 'disposable-or-user-confirmed-process-controls' }
         supportedControls = @('priorityClass','affinityMask','ioPriority','memoryPriority','gpuPriority-when-available')
-        forbiddenUtilityLaunches = @('ProcessLasso','ProcessGovernor.exe-external','Revo','{source}','AME','NVIDIA Profile Inspector')
+        forbiddenUtilityLaunches = @('ProcessLasso','ProcessGovernor.exe-external','Revo','Gaming toggles','AME','NVIDIA Profile Inspector')
     }
 }

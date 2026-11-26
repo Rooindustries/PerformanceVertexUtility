@@ -385,7 +385,7 @@ Logitech download restrictions can create an absent folder, but restore removes
 an owned folder only if it remains unchanged and empty.
 
 The timer control owns a separate 0.5 ms request worker; its sign-in option uses
-a current-user task. This replaces {source}'s system boot task with an interactive
+a current-user task. This replaces the gaming toggles' system boot task with an interactive
 session lifetime. The control reports the worker's request, not a measured game
 benefit or proof that every process uses that interval. Ultimate Performance uses
 an owned clone and restores the captured original selection, preserving external

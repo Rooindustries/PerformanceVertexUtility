@@ -25,6 +25,19 @@ function Get-RooIndustriesNvidiaNipProfile {
     throw "NVIDIA NIP profile not found: $ProfileId"
 }
 
+function Test-RooIndustriesNvidiaProfileId {
+    param(
+        [object]$CatalogProfile,
+        [string]$SavedId
+    )
+    if ($SavedId -ceq [string](Get-RooIndustriesPropertyValue $CatalogProfile 'profileId' '')) { return $true }
+    $bytes = [System.Text.Encoding]::UTF8.GetBytes($SavedId)
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try { $hash = $sha.ComputeHash($bytes) } finally { $sha.Dispose() }
+    $digest = -join ($hash | ForEach-Object { $_.ToString('X2') })
+    return @(Get-RooIndustriesPropertyArray $CatalogProfile 'formerProfileIdSha256') -contains $digest
+}
+
 function ConvertTo-RooIndustriesNvidiaSafeId {
     param([string]$Value)
     if ([string]::IsNullOrWhiteSpace($Value)) { return 'unknown' }
