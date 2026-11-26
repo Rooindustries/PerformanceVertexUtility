@@ -11,23 +11,31 @@ using Microsoft.Win32.SafeHandles;
 static class TestFixtures
 {
     public const string VolumeFile = "roo-industries-fixture.vhdx";
-    private static readonly Dictionary<string, FileStream> Runs = new(StringComparer.OrdinalIgnoreCase);
-    private static readonly HashSet<string> Volumes = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly Dictionary<string, SafeFileHandle> Runs = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly HashSet<string> Owned = new(StringComparer.OrdinalIgnoreCase);
 
     public static string InheritingRoot(string label)
     {
         Sweep(label);
         var root = Path.Combine(Path.GetTempPath(), "roo-industries-" + label + "-" + Guid.NewGuid().ToString("N"));
-        var lockPath = root + ".run";
-        var run = new FileStream(lockPath, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None, 1, FileOptions.DeleteOnClose);
+        var run = Lock(root + ".run", 1) ?? throw new IOException("The fixture lock is already held: " + root);
         lock (Runs) Runs[root] = run;
-        var directory = Directory.CreateDirectory(root);
+        var directory = new DirectoryInfo(Own(root));
         var security = new DirectorySecurity();
         security.SetAccessRuleProtection(true, false);
         foreach (var sid in new[] { new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null), new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null), WindowsIdentity.GetCurrent().User! })
             security.AddAccessRule(new FileSystemAccessRule(sid, FileSystemRights.FullControl, InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit, PropagationFlags.None, AccessControlType.Allow));
         directory.SetAccessControl(security);
         return root;
+    }
+
+    public static string Own(string path)
+    {
+        if (Path.Exists(path)) throw new IOException("A fixture folder must be new: " + path);
+        Directory.CreateDirectory(path);
+        using var handle = Open(path, 0, false);
+        lock (Owned) Owned.Add(Name(handle, 1));
+        return path;
     }
 
     public static (string Mount, string Name) Volume(string root)
@@ -44,13 +52,12 @@ static class TestFixtures
             "assign mount=\"" + mount + "\"");
         var name = new StringBuilder(64);
         if (!GetVolumeNameForVolumeMountPoint(mount + "\\", name, (uint)name.Capacity)) throw new Win32Exception();
-        lock (Volumes) Volumes.Add(name.ToString());
+        lock (Owned) Owned.Add(name.ToString());
         return (mount, name.ToString());
     }
 
     public static void Junction(string path, string target)
     {
-        Contain(path, target);
         var substitute = Encoding.Unicode.GetBytes(@"\??\" + (target.StartsWith(@"\\?\", StringComparison.Ordinal) ? target[4..] : target));
         var print = Encoding.Unicode.GetBytes(target);
         var data = new byte[16 + substitute.Length + 2 + print.Length + 2];
@@ -62,25 +69,38 @@ static class TestFixtures
         substitute.CopyTo(data, 16);
         print.CopyTo(data, 18 + substitute.Length);
         Directory.CreateDirectory(path);
-        using var handle = CreateFile(path, 0x2, 7, IntPtr.Zero, 3, 0x02200000, IntPtr.Zero);
-        if (handle.IsInvalid || !SetReparsePoint(handle, 0x900A4, data, (uint)data.Length, IntPtr.Zero, 0, out _, IntPtr.Zero))
-            throw new IOException("Could not create the disposable junction: " + Marshal.GetLastWin32Error());
+        using (var handle = CreateFile(path, 0x2, 7, IntPtr.Zero, 3, 0x02200000, IntPtr.Zero))
+        {
+            if (handle.IsInvalid || !SetReparsePoint(handle, 0x900A4, data, (uint)data.Length, IntPtr.Zero, 0, out _, IntPtr.Zero))
+                throw new IOException("Could not create the disposable junction: " + Marshal.GetLastWin32Error());
+        }
+        Verify(path);
     }
 
-    public static void Symlink(string path, string target)
+    public static void Symlink(string path, string target, bool file = false)
     {
-        Contain(path, target);
-        Directory.CreateSymbolicLink(path, target);
+        if (file) File.CreateSymbolicLink(path, target);
+        else Directory.CreateSymbolicLink(path, target);
+        Verify(path);
     }
 
     public static string Map(string target)
     {
-        Contain(target, target);
+        var network = Land(Path.GetFullPath(target));
         for (var letter = 'Z'; letter >= 'I'; letter--)
         {
             var name = letter + ":";
             if (QueryDosDevice(name, new StringBuilder(32768), 32768) != 0 || Marshal.GetLastWin32Error() != 2) continue;
             if (!DefineDosDevice(9, name, @"\??\" + target)) throw new IOException("Could not create disposable DOS mapping.");
+            try
+            {
+                if (!network) Through(name + "\\");
+            }
+            catch
+            {
+                Unmap(name, target);
+                throw;
+            }
             return name;
         }
         throw new IOException("No unused drive letter for the disposable alias fixture.");
@@ -91,36 +111,33 @@ static class TestFixtures
         if (!DefineDosDevice(15, name, @"\??\" + target)) throw new IOException("Could not remove own DOS mapping.");
     }
 
-    public static void Contain(string path, string target)
+    public static void Verify(string link)
     {
-        var full = target.StartsWith(@"\??\", StringComparison.Ordinal) ? @"\\?\" + target[4..] : target;
-        if (!Path.IsPathFullyQualified(full)) full = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(Path.GetFullPath(path))!, full));
-        if (Unroutable(full)) return;
-        var resolved = Resolve(full);
-        lock (Volumes) if (Volumes.Any(volume => resolved.StartsWith(volume, StringComparison.OrdinalIgnoreCase))) return;
-        var areas = new[] { Path.GetTempPath(), Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData) };
-        foreach (var area in areas.Select(area => Resolve(area).TrimEnd('\\') + "\\"))
+        try
         {
-            if (!resolved.StartsWith(area, StringComparison.OrdinalIgnoreCase)) continue;
-            var fixture = resolved[area.Length..].Split('\\')[0];
-            if (fixture.StartsWith("roo-industries-", StringComparison.Ordinal)) return;
-            if (fixture.StartsWith("RooIndustriesDataFix-", StringComparison.Ordinal)) return;
+            string target;
+            bool relative;
+            string location;
+            using (var handle = Open(link, 0x80, true))
+            {
+                (target, relative) = Stored(handle);
+                location = Name(handle, 0);
+            }
+            if (Unroutable(target)) return;
+            var full = relative ? Path.GetFullPath(Path.Combine(Path.GetDirectoryName(location[4..])!, target)) : Native(target);
+            if (!Land(full)) Through(link);
         }
-        var message = "A fixture link must stay inside its own fixture folder or disposable volume: ";
-        throw new InvalidOperationException(message + path + " -> " + target);
+        catch (Exception error) when (error is InvalidOperationException or IOException or Win32Exception or ArgumentException)
+        {
+            Unlink(link);
+            var message = "A fixture link must land inside a folder this run made or its own disposable volume, so it was removed: ";
+            throw new InvalidOperationException(message + link, error);
+        }
     }
 
-    private static bool Unroutable(string path)
+    private static bool Land(string path)
     {
-        if (!path.StartsWith(@"\\", StringComparison.Ordinal)) return false;
-        if (path.StartsWith(@"\\?\", StringComparison.Ordinal) || path.StartsWith(@"\\.\", StringComparison.Ordinal)) return false;
-        if (!System.Net.IPAddress.TryParse(path[2..].Split('\\')[0], out var address)) return false;
-        var bytes = address.GetAddressBytes();
-        return bytes.Length == 4 && (bytes[0], bytes[1], bytes[2]) is (192, 0, 2) or (198, 51, 100) or (203, 0, 113);
-    }
-
-    private static string Resolve(string path)
-    {
+        if (Unroutable(path)) return true;
         var root = Regex.Match(path, @"^(?:\\\\\?\\(?:GLOBALROOT\\Device\\[^\\]+|Volume\{[0-9A-Fa-f-]+\}|[A-Za-z]:)|[A-Za-z]:)\\").Value;
         if (root.Length == 0) throw new InvalidOperationException("A fixture link target must be a local path: " + path);
         var probe = root;
@@ -129,26 +146,111 @@ static class TestFixtures
             if (part is "." or "..") throw new InvalidOperationException("A fixture link target must not step out of a folder: " + path);
             var next = probe.EndsWith('\\') ? probe + part : probe + "\\" + part;
             var attributes = GetFileAttributes(next);
-            if (attributes == uint.MaxValue || (attributes & 0x400) != 0) break;
+            if (attributes == uint.MaxValue) break;
+            if ((attributes & 0x400) != 0)
+            {
+                using var link = Open(next, 0x80, true);
+                if (Unroutable(Stored(link).Target)) return true;
+                throw new InvalidOperationException("A fixture link target passes through another link: " + next);
+            }
             probe = next;
         }
-        using var handle = CreateFile(probe, 0, 7, IntPtr.Zero, 3, 0x02000000, IntPtr.Zero);
+        using var handle = Open(probe, 0, false);
+        if (!Inside(Name(handle, 1))) throw new InvalidOperationException("A fixture link target lands outside: " + path);
+        return false;
+    }
+
+    private static void Through(string path)
+    {
+        using var handle = CreateFile(path, 0, 7, IntPtr.Zero, 3, 0x02000000, IntPtr.Zero);
+        if (handle.IsInvalid)
+        {
+            var code = Marshal.GetLastWin32Error();
+            if (code is 2 or 3) return;
+            throw new Win32Exception(code);
+        }
+        if (!Inside(Name(handle, 1))) throw new InvalidOperationException("Opening through the link lands outside: " + path);
+    }
+
+    private static bool Inside(string final)
+    {
+        final = final.TrimEnd('\\') + "\\";
+        lock (Owned) return Owned.Any(own => final.StartsWith(own.TrimEnd('\\') + "\\", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static string Native(string target)
+    {
+        if (target.StartsWith(@"\??\UNC\", StringComparison.Ordinal)) return @"\\" + target[8..];
+        return target.StartsWith(@"\??\", StringComparison.Ordinal) ? @"\\?\" + target[4..] : target;
+    }
+
+    private static bool Unroutable(string path)
+    {
+        path = Native(path);
+        if (path.StartsWith(@"\\?\UNC\", StringComparison.OrdinalIgnoreCase)) path = @"\\" + path[8..];
+        if (!path.StartsWith(@"\\", StringComparison.Ordinal)) return false;
+        if (path.StartsWith(@"\\?\", StringComparison.Ordinal) || path.StartsWith(@"\\.\", StringComparison.Ordinal)) return false;
+        if (!System.Net.IPAddress.TryParse(path[2..].Split('\\')[0], out var address)) return false;
+        var bytes = address.GetAddressBytes();
+        return bytes.Length == 4 && (bytes[0], bytes[1], bytes[2]) is (192, 0, 2) or (198, 51, 100) or (203, 0, 113);
+    }
+
+    private static (string Target, bool Relative) Stored(SafeFileHandle handle)
+    {
+        var data = new byte[16384];
+        if (!GetReparsePoint(handle, 0x900A8, IntPtr.Zero, 0, data, (uint)data.Length, out var length, IntPtr.Zero) || length < 16)
+            throw new Win32Exception();
+        var tag = BitConverter.ToUInt32(data, 0);
+        var start = tag switch { 0xA0000003 => 16, 0xA000000C => 20, _ => throw new InvalidOperationException("Not a junction or symbolic link.") };
+        var relative = tag == 0xA000000C && (BitConverter.ToUInt32(data, 16) & 1) != 0;
+        return (Encoding.Unicode.GetString(data, start + BitConverter.ToUInt16(data, 8), BitConverter.ToUInt16(data, 10)), relative);
+    }
+
+    private static SafeFileHandle Open(string path, uint access, bool reparse, uint share = 7)
+    {
+        var handle = CreateFile(path, access, share, IntPtr.Zero, 3, 0x02000000 | (reparse ? 0x00200000u : 0), IntPtr.Zero);
+        if (handle.IsInvalid) throw new Win32Exception(Marshal.GetLastWin32Error(), path);
+        return handle;
+    }
+
+    private static string Name(SafeFileHandle handle, uint flags)
+    {
         var name = new StringBuilder(32768);
-        if (handle.IsInvalid || GetFinalPathNameByHandle(handle, name, (uint)name.Capacity, 1) == 0) throw new Win32Exception();
-        return name.ToString().TrimEnd('\\') + "\\";
+        if (GetFinalPathNameByHandle(handle, name, (uint)name.Capacity, flags) == 0) throw new Win32Exception();
+        return name.ToString();
+    }
+
+    private static SafeFileHandle? Lock(string path, uint disposition)
+    {
+        var handle = CreateFile(path, 0xC0010000, 0, IntPtr.Zero, disposition, 0x04200000, IntPtr.Zero);
+        if (!handle.IsInvalid) return handle;
+        var code = Marshal.GetLastWin32Error();
+        if (code == 32) return null;
+        throw new Win32Exception(code, path);
     }
 
     public static void Remove(string root)
     {
-        FileStream? run;
+        SafeFileHandle? run;
         lock (Runs) Runs.Remove(root, out run);
         try
         {
-            if (Directory.Exists(root))
+            var attributes = GetFileAttributes(root);
+            if (attributes != uint.MaxValue && (attributes & 0x400) != 0)
             {
-                var (links, volumes) = Scan(root);
-                foreach (var link in links) Unlink(link);
-                foreach (var volume in volumes) DiskPart(root, false, "select vdisk file=\"" + volume + "\" noerr", "detach vdisk noerr");
+                Unlink(root);
+                Console.WriteLine("Removed a link named like a fixture without opening what it points to: " + root);
+            }
+            else if (attributes != uint.MaxValue)
+            {
+                var held = new List<SafeFileHandle>();
+                try
+                {
+                    var (links, volumes) = Scan(root, held);
+                    foreach (var link in links) Unlink(link);
+                    foreach (var volume in volumes) DiskPart(root, false, "select vdisk file=\"" + volume + "\" noerr", "detach vdisk noerr");
+                }
+                finally { held.ForEach(handle => handle.Dispose()); }
                 Directory.Delete(root, true);
             }
             if (Path.Exists(root)) throw new IOException("The fixture is still on disk after cleanup: " + root);
@@ -156,14 +258,23 @@ static class TestFixtures
         finally { run?.Dispose(); }
     }
 
-    private static (List<string> Links, List<string> Volumes) Scan(string root)
+    private static (List<string> Links, List<string> Volumes) Scan(string root, List<SafeFileHandle> held)
     {
         var links = new List<string>();
         var volumes = new List<string>();
+        string? inside = null;
         var pending = new Stack<string>([root]);
         while (pending.TryPop(out var folder))
         {
-            Unlock(folder);
+            var handle = Open(folder, 0x81, true, 3);
+            held.Add(handle);
+            if ((GetFileAttributes(folder) & 0x400) != 0)
+            {
+                links.Add(folder);
+                continue;
+            }
+            inside ??= Name(handle, 1).TrimEnd('\\') + "\\";
+            Unlock(folder, inside);
             var listing = new EnumerationOptions { AttributesToSkip = 0, IgnoreInaccessible = false };
             foreach (var entry in new DirectoryInfo(folder).EnumerateFileSystemInfos("*", listing))
             {
@@ -172,7 +283,7 @@ static class TestFixtures
                     pending.Push(entry.FullName);
                     continue;
                 }
-                Unlock(entry.FullName);
+                Unlock(entry.FullName, inside);
                 if (entry.Attributes.HasFlag(FileAttributes.ReparsePoint)) links.Add(entry.FullName);
                 else if (entry.Name.Equals(VolumeFile, StringComparison.OrdinalIgnoreCase)) volumes.Add(entry.FullName);
             }
@@ -180,10 +291,12 @@ static class TestFixtures
         return (links, volumes);
     }
 
-    private static void Unlock(string path)
+    private static void Unlock(string path, string inside)
     {
         using var handle = CreateFile(path, 0x60000, 7, IntPtr.Zero, 3, 0x02200000, IntPtr.Zero);
         if (handle.IsInvalid) return;
+        if (!(Name(handle, 1).TrimEnd('\\') + "\\").StartsWith(inside, StringComparison.OrdinalIgnoreCase))
+            throw new IOException("A fixture entry is not inside the fixture folder it was listed in: " + path);
         GetKernelObjectSecurity(handle, 4, null, 0, out var size);
         var bytes = new byte[size];
         if (!GetKernelObjectSecurity(handle, 4, bytes, size, out _)) throw new Win32Exception();
@@ -223,9 +336,8 @@ static class TestFixtures
         foreach (var stale in Directory.GetDirectories(Path.GetTempPath(), "roo-industries-" + label + "-*"))
         {
             if (!name.IsMatch(Path.GetFileName(stale))) continue;
-            FileStream held;
-            try { held = new FileStream(stale + ".run", FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None, 1, FileOptions.DeleteOnClose); }
-            catch (IOException error) when (error.HResult == unchecked((int)0x80070020)) { continue; }
+            var held = Lock(stale + ".run", 4);
+            if (held is null) continue;
             lock (Runs) Runs[stale] = held;
             Remove(stale);
         }
@@ -276,6 +388,8 @@ static class TestFixtures
     private static extern uint GetFinalPathNameByHandle(SafeFileHandle handle, StringBuilder name, uint length, uint flags);
     [DllImport("kernel32.dll", EntryPoint = "DeviceIoControl", SetLastError = true)]
     private static extern bool SetReparsePoint(SafeFileHandle handle, uint control, byte[] input, uint inputLength, IntPtr output, uint outputLength, out uint returned, IntPtr overlapped);
+    [DllImport("kernel32.dll", EntryPoint = "DeviceIoControl", SetLastError = true)]
+    private static extern bool GetReparsePoint(SafeFileHandle handle, uint control, IntPtr input, uint inputLength, byte[] output, uint outputLength, out uint returned, IntPtr overlapped);
     [DllImport("advapi32.dll", SetLastError = true)]
     private static extern bool GetKernelObjectSecurity(SafeFileHandle handle, uint information, byte[]? descriptor, uint length, out uint needed);
     [DllImport("advapi32.dll", SetLastError = true)]

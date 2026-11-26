@@ -11,6 +11,7 @@ static class FixtureWalkChecks
 {
     public static void Hold(string canary)
     {
+        File.WriteAllText(Path.Combine(TestFixtures.Own(canary), "kept.txt"), "held");
         var root = TestFixtures.InheritingRoot("held-fixture");
         Plant(root, canary);
         Console.WriteLine(root);
@@ -25,7 +26,7 @@ static class FixtureWalkChecks
             var canary = Directory.CreateDirectory(Path.Combine(outside, "canary")).FullName;
             File.WriteAllText(Path.Combine(canary, "kept.txt"), "canary");
             var before = Canary(canary);
-            var scenarios = new Action<Action<bool, string>, string, string>[] { Guarded, Unremovable, Killed, Shared, Jammed, Walks };
+            var scenarios = new Action<Action<bool, string>, string, string>[] { Guarded, Disguised, Unremovable, Killed, Shared, Jammed, Walks };
             foreach (var scenario in scenarios)
             {
                 try { scenario(check, canary, before); }
@@ -78,32 +79,90 @@ static class FixtureWalkChecks
     private static void Guarded(Action<bool, string> check, string canary, string before)
     {
         var root = TestFixtures.InheritingRoot("link-guard");
+        var lookalike = Path.Combine(Path.GetTempPath(), "roo-industries-lookalike-" + Guid.NewGuid().ToString("N"));
         try
         {
-            var link = Path.Combine(root, "link");
             var device = new System.Text.StringBuilder(32768);
             if (QueryDosDevice(root[..2], device, (uint)device.Capacity) == 0) throw new Win32Exception();
-            string[] refused =
+            var deep = Directory.CreateDirectory(Path.Combine(root, "a", "b", "c", "d", "e", "f", "g")).FullName;
+            var up = Path.Combine(deep, "up");
+            TestFixtures.Junction(up, root);
+            Directory.CreateDirectory(lookalike);
+            TestFixtures.Junction(Path.Combine(lookalike, "mount"), canary);
+            var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            (string Link, string Target, bool Junction)[] refused =
             [
-                Path.GetPathRoot(root)!, @"\\?\GLOBALROOT" + device + @"\", Environment.GetFolderPath(Environment.SpecialFolder.Windows),
-                Path.GetTempPath(), Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "RooIndustriesOptimizationSuite"),
-                @"\\localhost\" + root[0] + "$", @"..\..\..", Path.Combine(root, "..", "..", ".."),
+                (Path.Combine(root, "drive"), Path.GetPathRoot(root)!, true),
+                (Path.Combine(root, "device"), @"\\?\GLOBALROOT" + device + @"\", true),
+                (Path.Combine(root, "windows"), Environment.GetFolderPath(Environment.SpecialFolder.Windows), true),
+                (Path.Combine(root, "temp"), Path.GetTempPath(), true),
+                (Path.Combine(root, "app-data"), Path.Combine(local, "RooIndustriesOptimizationSuite"), true),
+                (Path.Combine(root, "loopback"), @"\\localhost\" + root[0] + "$", false),
+                (Path.Combine(up, "escape"), @"..\" + Path.GetFileName(lookalike), false),
+                (Path.Combine(up, "climb"), string.Join('\\', Enumerable.Repeat("..", 12)), false),
+                (Path.Combine(root, "via-lookalike"), Path.Combine(lookalike, "mount"), true),
             ];
-            var passed = refused.Where(target =>
+            var kept = refused.Where(item =>
             {
-                try { TestFixtures.Contain(link, target); return true; }
-                catch (InvalidOperationException) { return false; }
-            }).ToArray();
-            check(passed.Length == 0, "A fixture link to a drive root, a device root, Windows, Temp, the app's data folder "
-                + "or a loopback share is refused: " + string.Join(", ", passed));
-            TestFixtures.Contain(link, root);
-            TestFixtures.Contain(link, "inside");
-            TestFixtures.Contain(link, Path.Combine(canary, "kept.txt"));
-            TestFixtures.Contain(link, @"\\192.0.2.139\Share");
-            check(!Path.Exists(link),
-                "A fixture link inside its own fixture or to an unroutable share is allowed, and checking creates nothing");
+                try
+                {
+                    if (item.Junction) TestFixtures.Junction(item.Link, item.Target);
+                    else TestFixtures.Symlink(item.Link, item.Target);
+                }
+                catch (InvalidOperationException) { }
+                return Path.Exists(item.Link);
+            }).Select(item => item.Link).ToArray();
+            check(kept.Length == 0, "A link to a drive root, a device root, Windows, Temp, the app's data folder, a loopback share, "
+                + "out of the fixture through a junction, or through a folder only named like a fixture is removed and refused: " + string.Join(", ", kept));
+            TestFixtures.Junction(Path.Combine(root, "self"), root);
+            TestFixtures.Symlink(Path.Combine(root, "missing"), "inside");
+            TestFixtures.Symlink(Path.Combine(root, "canary-file"), Path.Combine(canary, "kept.txt"), file: true);
+            TestFixtures.Symlink(Path.Combine(root, "share"), @"\\192.0.2.139\Share");
+            check(new[] { "self", "missing", "canary-file", "share" }.All(name => Path.Exists(Path.Combine(root, name))),
+                "A link into this run's own fixture, to a missing child, or to an unroutable share is kept");
         }
-        finally { TestFixtures.Remove(root); }
+        finally
+        {
+            TestFixtures.Remove(root);
+            TestFixtures.Remove(lookalike);
+        }
+    }
+
+    private static void Disguised(Action<bool, string> check, string canary, string before)
+    {
+        var holder = TestFixtures.InheritingRoot("disguise-target");
+        var stale = Path.Combine(Path.GetTempPath(), "roo-industries-disguised-fixture-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var victim = Directory.CreateDirectory(Path.Combine(holder, "victim")).FullName;
+            var inner = Path.Combine(victim, "inner");
+            TestFixtures.Junction(inner, Directory.CreateDirectory(Path.Combine(holder, "behind")).FullName);
+            var mount = Path.Combine(victim, "mnt");
+            TestFixtures.Junction(mount, TestFixtures.Volume(holder).Name);
+            var denied = new FileInfo(Path.Combine(victim, "denied.txt"));
+            File.WriteAllText(denied.FullName, "kept");
+            var security = denied.GetAccessControl();
+            security.AddAccessRule(new FileSystemAccessRule(WindowsIdentity.GetCurrent().User!, FileSystemRights.WriteData, AccessControlType.Deny));
+            denied.SetAccessControl(security);
+            var precious = Path.Combine(holder, "precious.txt");
+            File.WriteAllText(precious, "precious");
+            TestFixtures.Junction(stale, victim);
+            TestFixtures.Symlink(stale + ".run", precious, file: true);
+            SweepFor("disguised-fixture");
+            static bool Linked(string path) => File.GetAttributes(path).HasFlag(FileAttributes.ReparsePoint);
+            var deny = denied.GetAccessControl().GetAccessRules(true, false, typeof(SecurityIdentifier)).Cast<FileSystemAccessRule>()
+                .Any(rule => rule.AccessControlType == AccessControlType.Deny);
+            check(!Path.Exists(stale) && Linked(inner), "A run start removes a fixture-named junction without unlinking the junction behind it");
+            check(Linked(mount), "A run start removes a fixture-named junction without unmounting the volume behind it");
+            check(deny, "A run start removes a fixture-named junction without changing permissions behind it");
+            check(File.Exists(precious) && !Path.Exists(stale + ".run"), "A run start removes a fixture lock that is a link without deleting what it points to");
+        }
+        finally
+        {
+            TestFixtures.Remove(stale);
+            if (Path.Exists(stale + ".run")) File.Delete(stale + ".run");
+            TestFixtures.Remove(holder);
+        }
     }
 
     private static void Shared(Action<bool, string> check, string canary, string before)
@@ -121,8 +180,7 @@ static class FixtureWalkChecks
 
     private static void Jammed(Action<bool, string> check, string canary, string before)
     {
-        string Stale() => Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "roo-industries-jammed-fixture-" + Guid.NewGuid().ToString("N")))
-            .FullName;
+        string Stale() => TestFixtures.Own(Path.Combine(Path.GetTempPath(), "roo-industries-jammed-fixture-" + Guid.NewGuid().ToString("N")));
         var garbage = Stale();
         File.WriteAllBytes(Path.Combine(garbage, TestFixtures.VolumeFile), new byte[65536]);
         var locked = Stale();
@@ -148,7 +206,8 @@ static class FixtureWalkChecks
     private static void Killed(Action<bool, string> check, string canary, string before)
     {
         string? root;
-        using (var child = Process.Start(Child("--fixture-hold", canary))!)
+        var held = canary + "-held";
+        using (var child = Process.Start(Child("--fixture-hold", held))!)
         {
             var line = child.StandardOutput.ReadLineAsync();
             root = line.Wait(TimeSpan.FromMinutes(2)) ? line.Result : null;
@@ -161,7 +220,8 @@ static class FixtureWalkChecks
         TestFixtures.Remove(TestFixtures.InheritingRoot("held-fixture"));
         check(!Path.Exists(root!) && !File.Exists(root + ".run"),
             "The next run start unmounts, detaches and removes the killed run's fixture");
-        check(Canary(canary) == before, "Removing the killed run's fixture leaves the canary outside it unchanged");
+        check(Canary(canary) == before && File.ReadAllText(Path.Combine(held, "kept.txt")) == "held",
+            "Removing the killed run's fixture leaves the canaries outside it unchanged");
     }
 
     private static void Unremovable(Action<bool, string> check, string canary, string before)

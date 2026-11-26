@@ -61,7 +61,7 @@ static partial class DataFolderChecks
             var untrusted = Path.Combine(root, "untrusted.json");
             File.WriteAllText(untrusted, "planted bytes");
             var owner = new FileSecurity(); owner.SetOwner(user); new FileInfo(untrusted).SetAccessControl(owner);
-            Directory.CreateDirectory(outside);
+            TestFixtures.Own(outside);
             File.WriteAllText(Path.Combine(outside, "secret.txt"), "outside bytes");
             check(CreateHardLink(Path.Combine(root, "linked.txt"), Path.Combine(outside, "secret.txt"), IntPtr.Zero), "The fixture hard link to a file outside the data folder exists");
             TestFixtures.Symlink(Path.Combine(root, "link"), outside);
@@ -163,7 +163,7 @@ static partial class DataFolderChecks
         var linkedTarget = Path.Combine(H.Local, id + "-target");
         try
         {
-            Directory.CreateDirectory(temp); Directory.CreateDirectory(target);
+            Directory.CreateDirectory(temp); TestFixtures.Own(target);
             File.WriteAllText(Path.Combine(target, "control.lock"), "sentinel"); File.WriteAllText(Path.Combine(target, "startup.lock"), "sentinel two");
             H.Junction(timerPath, target);
             var store = new WindowsControlStore();
@@ -182,7 +182,7 @@ static partial class DataFolderChecks
 
             Directory.CreateDirectory(Path.Combine(operations, "journal-1"));
             File.WriteAllText(Path.Combine(operations, "journal-1", "journal.json"), "journal bytes");
-            Directory.CreateDirectory(linkedTarget);
+            TestFixtures.Own(linkedTarget);
             File.WriteAllText(Path.Combine(linkedTarget, "control.lock"), "sentinel"); File.WriteAllText(Path.Combine(linkedTarget, "session.json"), "{\"launch\":null}");
             H.Junction(Path.Combine(operations, OperationsFolder.TimerFolder), linkedTarget);
             Exception? migrationFailure = null; var migrated = false;
@@ -208,7 +208,7 @@ static partial class DataFolderChecks
         var conversionTarget = Path.Combine(H.Local, id + "-conversion");
         try
         {
-            Directory.CreateDirectory(conversionTarget);
+            TestFixtures.Own(conversionTarget);
             File.WriteAllText(Path.Combine(conversionTarget, "control.lock"), "sentinel");
             var identity = H.Standard("whoami");
             check(identity.Contains("admin-group=False"), "The helper really runs with a standard token: " + identity);

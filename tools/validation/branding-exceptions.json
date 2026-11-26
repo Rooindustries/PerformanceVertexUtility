@@ -125,7 +125,8 @@
         "tools/validation/Update/Harness.Common.ps1",
         "tools/validation/BugReportE2E/shared/OwnedBoundary.cs",
         "tools/validation/BugReportE2E/phases/Contract.Common.ps1",
-        "tools/validation/Background/Invoke-RestoreE2EGates.ps1"
+        "tools/validation/Background/Invoke-RestoreE2EGates.ps1",
+        "tools/validation/reparse-walk-allowlist.json"
       ],
       "reason": "Windows harness staging and host-lease root; existing frames, cleanup ownership and path-length guards depend on this exact path spelling, including its source escaping."
     },

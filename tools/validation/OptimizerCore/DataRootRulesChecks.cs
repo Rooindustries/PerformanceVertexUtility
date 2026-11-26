@@ -86,7 +86,7 @@ static partial class DataFolderChecks
         var linked = Path.Combine(junctioned, BrandCompatibility.LegacyDataFolder);
         try
         {
-            Directory.CreateDirectory(selection); Directory.CreateDirectory(junctioned); Directory.CreateDirectory(target);
+            Directory.CreateDirectory(selection); Directory.CreateDirectory(junctioned); TestFixtures.Own(target);
             File.WriteAllText(Path.Combine(target, "sentinel.txt"), "outside bytes");
             var planted = H.Standard("plant", legacy, @"settings\custom-windows-settings.json|{""catalog"":""planted""}", @"tools\tool.exe|planted program", @"firmware\packages\p1\SCEWIN64.exe|planted package",
                 @"operations\cpu-1\journal.json|planted journal", "cleanup-exclusions.json|planted exclusions", @"process-rules\rules\rule.json|planted rule");
@@ -241,7 +241,7 @@ static partial class DataFolderChecks
             for (var index = 0; index < 50 && !gone; index++) { try { using var process = System.Diagnostics.Process.GetProcessById(worker); gone = process.HasExited; } catch (ArgumentException) { gone = true; } if (!gone) Thread.Sleep(100); }
             check(gone, "The worker has ended");
 
-            Directory.CreateDirectory(victim);
+            TestFixtures.Own(victim);
             File.WriteAllText(Path.Combine(victim, "session.json"), File.ReadAllText(Path.Combine(state, "session.json")));
             var renamed = H.Standard("rename", state, state + "-moved");
             check(renamed == "RENAMED", "A standard user moves the state folder away (" + renamed + ")");

@@ -9,29 +9,22 @@ local_tree = runpy.run_path(str(Path(__file__).with_name('local_tree.py')))['ent
 
 ALLOWLIST = 'tools/validation/reparse-walk-allowlist.json'
 SCOPE = re.compile(r'.*\.(cs|ps1|psm1|py)$')
-WALK = 'this recursive walk follows junctions, symbolic links and mount points'
-LINKED = 'this creates a link, mount or drive mapping outside the guarded TestFixtures helpers'
-FOLLOWS = re.compile('|'.join([
-    r'\bAllDirectories\b',
-    r'\bRecurseSubdirectories\s*=\s*(?!\$?false\b)',
-    r'\bos\.f?walk\(',
-    r'\.rglob\(',
-    r'\.i?glob\(\s*[rbf]*[\'"][^\'"\n]*\*\*',
-    r'\brecursive\s*=\s*True\b',
-    r'\bcopytree\(',
-    r'\bxcopy(?:\.exe)?\b',
-    r'\bdir\s+/s\b',
+WALK = 'this names a recursive walk that can follow junctions, symbolic links and mount points'
+LINKED = 'this names a link, mount or drive mapping primitive outside the TestFixtures helpers'
+WALKS = re.compile('|'.join([
+    r'alldirectories', r'recursesubdirectories', r'\.f?walk\(', r'rglob', r'copytree', r'xcopy', r'robocopy',
+    r'(?<![a-z])i?cacls(?![a-z])', r'(?<![a-z])takeown(?![a-z])', r'\bfor\s+/r\b', r'\bdir\b[^\n]*\s/s\b',
+    r'\.i?glob\(\s*[rbf]*[\'"][^\'"\n]*\*\*', r'\brecursive\s*=\s*True\b',
 ]), re.IGNORECASE)
 NUMBERED = re.compile(r'\b(?:Get|Enumerate)(?:Files|Directories|FileSystemEntries|FileSystemInfos)\s*\(', re.IGNORECASE)
 COPY = re.compile(r'(?<![\w.$-])(?:Copy-Item|cpi|cp|copy)(?![\w-])', re.IGNORECASE)
-TOOLS = re.compile(r'\b(robocopy|icacls|takeown)(?:\.exe)?\b', re.IGNORECASE)
 LINKS = re.compile('|'.join([
-    r'\bCreateSymbolicLinkW?\b', r'\bCreateAsSymbolicLink\b', r'\bCreateJunction\(', r'\bos\.symlink\(', r'\.symlink_to\(', r'\bmklink\b',
-    r'-(?:Item)?Type\s+[\'"]?(?:Junction|SymbolicLink)\b', r'\bDefineDosDevice\b', r'\bsubst(?:\.exe)?\s+[A-Za-z]:',
-    r'\bNew-PSDrive\b[^\n]*\bFileSystem\b', r'\b0x0*900A4\b', r'\bFSCTL_SET_REPARSE_POINT\b',
-    r'\bGetVolumeNameForVolumeMountPoint\b', r'\bSetVolumeMountPoint\b', r'\bmountvol\b', r'\\\?\?\\Volume\{',
-    r'\bassign\s+mount\b', r'\bMount-DiskImage\b', r'\bNew-VHD\b', r'\bAttachVirtualDisk\b',
+    r'symbolic_?link', r'symlink', r'hard_?link', r'mount_?point', r'access_?path', r'dos_?device', r'createjunction', r'mklink',
+    r'mountvol', r'(?<![a-z])subst(?:\.exe)?(?![a-z])', r'ps_?drive', r'vhdx?(?![a-z])', r'vdisk', r'disk_?image',
+    r'virtual_?disk', r'0x0*900a4', r'set_?reparse_?point', r'assign\s+mount',
 ]), re.IGNORECASE)
+JUNCTION = re.compile(r'junction', re.IGNORECASE)
+POWERSHELL = re.compile(r'itemtype|new-item|(?<![\w-])-it(?![\w-])', re.IGNORECASE)
 HELPERS = {
     'backend/native/Optimizer.Core/LocalTree.cs': {WALK},
     'tools/validation/OptimizerCore/TestFixtures.cs': {LINKED},
@@ -39,7 +32,7 @@ HELPERS = {
 }
 
 
-def statement(text, start, nested=True):
+def statement(text, start):
     depth = 0
     index = start
     while index < len(text):
@@ -47,9 +40,9 @@ def statement(text, start, nested=True):
         if char in '([{':
             depth += 1
         elif char in ')]}':
-            if depth == 0 and nested:
+            if depth == 0:
                 break
-            depth = max(depth - 1, 0)
+            depth -= 1
         elif char in ';|' and depth == 0:
             break
         elif char == '\n' and depth == 0 and not text[:index].rstrip('\r').endswith('`'):
@@ -58,35 +51,32 @@ def statement(text, start, nested=True):
     return text[start:index]
 
 
-def tool_walks(name, flags):
-    if name == 'robocopy':
-        return bool(flags & {'MIR', 'PURGE'}) or bool(flags & {'E', 'S'}) and 'XJ' not in flags
-    return ('T' if name == 'icacls' else 'R') in flags
-
-
 def findings(relative, text):
     exempt = HELPERS.get(relative, set())
-    found = []
+    powershell = relative.endswith(('.ps1', '.psm1'))
+    found = {}
     if WALK not in exempt:
-        found += [(match.start(), WALK) for match in FOLLOWS.finditer(text)]
+        for match in WALKS.finditer(text):
+            found.setdefault(match.start(), WALK)
         for match in NUMBERED.finditer(text):
             if re.search(r',\s*(?:\(\s*[\w.]*SearchOption\s*\)\s*)?1\s*\)$', statement(text, match.start())):
-                found.append((match.start(), WALK))
+                found.setdefault(match.start(), WALK)
         for match in COPY.finditer(text):
             if re.search(r'\s(?:-r[a-z]*\b|@[A-Za-z_]\w*)', statement(text, match.start()), re.IGNORECASE):
-                found.append((match.start(), WALK))
-        for match in TOOLS.finditer(text):
-            flags = {flag.upper() for flag in re.findall(r'(?<![\w:])/([A-Za-z]+)\b', statement(text, match.start(), nested=False))}
-            if tool_walks(match.group(1).lower(), flags):
-                found.append((match.start(), WALK))
+                found.setdefault(match.start(), WALK)
     if LINKED not in exempt:
-        found += [(match.start(), LINKED) for match in LINKS.finditer(text)]
+        for match in LINKS.finditer(text):
+            found.setdefault(match.start(), LINKED)
+        for match in JUNCTION.finditer(text):
+            line = text[text.rfind('\n', 0, match.start()) + 1:text.find('\n', match.start()) % (len(text) + 1)]
+            if powershell or POWERSHELL.search(line):
+                found.setdefault(match.start(), LINKED)
     lines = text.splitlines()
-    rows = []
-    for start, message in sorted(found):
+    rows = {}
+    for start, message in sorted(found.items()):
         number = text.count('\n', 0, start) + 1
-        rows.append((number, lines[number - 1].strip(), message))
-    return rows
+        rows.setdefault(number, (number, lines[number - 1].strip(), message))
+    return list(rows.values())
 
 
 def check(root):

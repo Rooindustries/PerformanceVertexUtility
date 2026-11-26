@@ -59,7 +59,7 @@ static partial class DataFolderChecks
         var parent = Path.Combine(H.Local, id);
         var root = Path.Combine(parent, "RooIndustriesOptimizationSuite");
         var hive = Path.Combine(parent, "machine.hive");
-        Directory.CreateDirectory(parent);
+        TestFixtures.Own(parent);
         try
         {
             using (var isolated = new DataRootPrivateHive(hive))
@@ -174,7 +174,7 @@ static partial class DataFolderChecks
         var hive = Path.Combine(parent, "machine.hive");
         var swapped = Path.Combine(parent, "swapped-root");
         var victim = Path.Combine(parent, "unrelated-target");
-        Directory.CreateDirectory(parent); Directory.CreateDirectory(victim);
+        TestFixtures.Own(parent); Directory.CreateDirectory(victim);
         File.WriteAllText(Path.Combine(victim, "keep.txt"), "unrelated target bytes");
         var security = new DirectoryInfo(victim).GetAccessControl().GetSecurityDescriptorSddlForm(AccessControlSections.All);
         try
