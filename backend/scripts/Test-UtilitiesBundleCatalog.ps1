@@ -2,6 +2,7 @@ param(
     [string]$CatalogPath,
     [string]$ManifestPath,
     [string]$SamplePath,
+    [string]$CatalogSamplePath,
     [string]$ArchivePath
 )
 
@@ -15,6 +16,7 @@ $failures = New-Object System.Collections.Generic.List[string]
 if ([string]::IsNullOrWhiteSpace($CatalogPath)) { $CatalogPath = Join-Path $repoRoot 'backend\catalogs\utilities-bundle-catalog.json' }
 if ([string]::IsNullOrWhiteSpace($ManifestPath)) { $ManifestPath = Join-Path $repoRoot 'modules\utilities_manifest.json' }
 if ([string]::IsNullOrWhiteSpace($SamplePath)) { $SamplePath = Join-Path $repoRoot 'backend\samples\utilities-bundle-inventory.sample.json' }
+if ([string]::IsNullOrWhiteSpace($CatalogSamplePath)) { $CatalogSamplePath = Join-Path $repoRoot 'backend\samples\utilities-bundle-catalog.sample.json' }
 
 function Add-Pass {
     param([string]$Message)
@@ -146,10 +148,30 @@ function Test-CatalogTool {
     Add-Check ($badClassMatches.Count -eq 0) "Catalog $ToolId entries use executionClass $ExpectedClass" "Catalog $ToolId executionClass mismatch at $((@($badClassMatches | ForEach-Object { [string](Get-PropertyValue $_ 'archivePath' '') })) -join ', ')"
 }
 
-function Test-ArchiveExecutableCoverage {
+function Get-RecordedArchivePaths {
+    param([object]$Node)
+
+    if ($Node -is [System.Management.Automation.PSCustomObject]) {
+        foreach ($property in $Node.PSObject.Properties) {
+            if ($property.Name -in @('archivePath', 'archivePaths', 'sourceFile')) {
+                foreach ($path in @($property.Value)) {
+                    [pscustomobject]@{ Path = [string]$path; Record = $Node }
+                }
+            } else {
+                Get-RecordedArchivePaths $property.Value
+            }
+        }
+    } elseif ($Node -is [System.Array]) {
+        foreach ($item in $Node) { Get-RecordedArchivePaths $item }
+    }
+}
+
+function Test-LiveArchive {
     param(
         [string]$ResolvedArchivePath,
-        [object]$Catalog
+        [object]$Catalog,
+        [object[]]$Headers,
+        [object[]]$Records
     )
 
     if ([string]::IsNullOrWhiteSpace($ResolvedArchivePath) -or -not (Test-Path -LiteralPath $ResolvedArchivePath -PathType Leaf)) {
@@ -160,7 +182,14 @@ function Test-ArchiveExecutableCoverage {
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     $zip = [System.IO.Compression.ZipFile]::OpenRead($ResolvedArchivePath)
     try {
+        $archiveSize = [uint64](Get-Item -LiteralPath $ResolvedArchivePath).Length
         $fileEntries = @($zip.Entries | Where-Object { -not [string]::IsNullOrWhiteSpace($_.Name) })
+        $liveEntries = New-Object 'System.Collections.Generic.Dictionary[string,object]' ([StringComparer]::Ordinal)
+        foreach ($fileEntry in $fileEntries) { $liveEntries[$fileEntry.FullName] = $fileEntry }
+        $liveExtensionCounts = @{}
+        foreach ($group in @($fileEntries | Group-Object { [System.IO.Path]::GetExtension($_.FullName).ToLowerInvariant() })) {
+            $liveExtensionCounts[$group.Name] = $group.Count
+        }
         $execExts = @('.exe', '.msi', '.msu', '.bat', '.cmd', '.ps1', '.psm1', '.psd1', '.vbs', '.js', '.reg')
         $archiveExecutablePaths = @($fileEntries |
             Where-Object { $execExts -contains ([System.IO.Path]::GetExtension($_.FullName).ToLowerInvariant()) } |
@@ -171,9 +200,59 @@ function Test-ArchiveExecutableCoverage {
             ForEach-Object { [string](Get-PropertyValue $_ 'archivePath' '') } |
             Sort-Object)
 
-        Add-Check ((Get-Item -LiteralPath $ResolvedArchivePath).Length -eq [uint64](Get-PropertyValue $Catalog 'sourceArchiveSizeBytes' 0)) 'Catalog sourceArchiveSizeBytes matches live archive' 'Catalog sourceArchiveSizeBytes does not match live archive'
-        Add-Check ($fileEntries.Count -eq [int](Get-PropertyValue $Catalog 'entryCount' 0)) 'Catalog entryCount matches live archive' "Catalog entryCount mismatch: live=$($fileEntries.Count) catalog=$([int](Get-PropertyValue $Catalog 'entryCount' 0))"
-        Add-Check ($archiveExecutablePaths.Count -eq [int](Get-PropertyValue $Catalog 'executableScriptCount' 0)) 'Catalog executableScriptCount matches live archive' "Catalog executableScriptCount mismatch: live=$($archiveExecutablePaths.Count) catalog=$([int](Get-PropertyValue $Catalog 'executableScriptCount' 0))"
+        foreach ($header in $Headers) {
+            $label = $header.Label
+            $json = $header.Json
+            Add-Check ([uint64](Get-PropertyValue $json 'sourceArchiveSizeBytes' 0) -eq $archiveSize) "$label sourceArchiveSizeBytes matches live archive" "$label sourceArchiveSizeBytes mismatch: live=$archiveSize recorded=$(Get-PropertyValue $json 'sourceArchiveSizeBytes' '<missing>')"
+            Add-Check ([int](Get-PropertyValue $json 'entryCount' 0) -eq $fileEntries.Count) "$label entryCount matches live archive" "$label entryCount mismatch: live=$($fileEntries.Count) recorded=$(Get-PropertyValue $json 'entryCount' '<missing>')"
+            Add-Check ([int](Get-PropertyValue $json 'executableScriptCount' 0) -eq $archiveExecutablePaths.Count) "$label executableScriptCount matches live archive" "$label executableScriptCount mismatch: live=$($archiveExecutablePaths.Count) recorded=$(Get-PropertyValue $json 'executableScriptCount' '<missing>')"
+
+            $recordedExtensionCounts = Get-PropertyValue (Get-PropertyValue $json 'summary' $null) 'extensionCounts' $null
+            $extensionHits = New-Object System.Collections.Generic.List[string]
+            $recordedExtensions = @()
+            if ($null -ne $recordedExtensionCounts) { $recordedExtensions = @($recordedExtensionCounts.PSObject.Properties | ForEach-Object { $_.Name }) }
+            foreach ($extension in @(@($recordedExtensions) + @($liveExtensionCounts.Keys) | Sort-Object -Unique)) {
+                $live = 0
+                if ($liveExtensionCounts.ContainsKey($extension)) { $live = $liveExtensionCounts[$extension] }
+                $recorded = [int](Get-PropertyValue $recordedExtensionCounts $extension 0)
+                if ($recorded -ne $live) { $extensionHits.Add("$extension live=$live recorded=$recorded") | Out-Null }
+            }
+            Add-Check ($extensionHits.Count -eq 0) "$label extensionCounts match live archive" "$label extensionCounts mismatch: $($extensionHits -join ', ')"
+        }
+
+        foreach ($record in $Records) {
+            $label = $record.Label
+            $recorded = @(Get-RecordedArchivePaths $record.Json)
+            $pathHits = New-Object System.Collections.Generic.List[string]
+            foreach ($item in $recorded) {
+                $liveEntry = $null
+                if (-not $liveEntries.TryGetValue(($item.Path -replace '\\', '/'), [ref]$liveEntry)) {
+                    $pathHits.Add("$($item.Path) is not in the archive") | Out-Null
+                    continue
+                }
+                foreach ($size in @(@('lengthBytes', 'Length'), @('sizeBytes', 'Length'), @('sourceSizeBytes', 'Length'), @('compressedLengthBytes', 'CompressedLength'))) {
+                    if (Has-Property $item.Record $size[0]) {
+                        $value = [int64](Get-PropertyValue $item.Record $size[0] 0)
+                        if ($value -ne $liveEntry.($size[1])) { $pathHits.Add("$($item.Path) $($size[0]) recorded=$value live=$($liveEntry.($size[1]))") | Out-Null }
+                    }
+                }
+                foreach ($hashName in @('sha256', 'sourceSha256')) {
+                    if (Has-Property $item.Record $hashName) {
+                        $stream = $liveEntry.Open()
+                        $sha = [System.Security.Cryptography.SHA256]::Create()
+                        try {
+                            $liveHash = [System.BitConverter]::ToString($sha.ComputeHash($stream)) -replace '-', ''
+                        } finally {
+                            $sha.Dispose()
+                            $stream.Dispose()
+                        }
+                        $recordedHash = [string](Get-PropertyValue $item.Record $hashName '')
+                        if ($recordedHash -ne $liveHash) { $pathHits.Add("$($item.Path) $hashName recorded=$recordedHash live=$liveHash") | Out-Null }
+                    }
+                }
+            }
+            Add-Check ($recorded.Count -gt 0 -and $pathHits.Count -eq 0) "$label records $($recorded.Count) archive path(s), all in the live archive with matching sizes and hashes" "$label archive path mismatch: $(if ($recorded.Count -eq 0) { 'no archive paths recorded' } else { $pathHits -join '; ' })"
+        }
 
         $diff = @(Compare-Object -ReferenceObject $archiveExecutablePaths -DifferenceObject $catalogExecutablePaths)
         Add-Check ($diff.Count -eq 0) 'Catalog covers every executable/script archive path exactly' "Executable/script catalog path mismatch: $((@($diff | ForEach-Object { $_.SideIndicator + ':' + $_.InputObject })) -join ', ')"
@@ -188,6 +267,9 @@ Add-Check ($stateBefore -eq 0) 'backend/state is absent or empty before utilitie
 $catalog = Read-JsonFile $CatalogPath 'Utilities bundle catalog'
 $manifest = Read-JsonFile $ManifestPath 'Utilities manifest'
 $sample = Read-JsonFile $SamplePath 'Utilities bundle inventory sample'
+$catalogSample = Read-JsonFile $CatalogSamplePath 'Utilities bundle catalog sample'
+$nipCatalog = Read-JsonFile (Join-Path $repoRoot 'backend\catalogs\nvidia-profile-inspector-nip-catalog.json') 'NVIDIA profile catalog'
+$toolLaunchers = Read-JsonFile (Join-Path $repoRoot 'modules\tool-launchers.json') 'Tool launchers'
 
 if ($null -ne $catalog) {
     $entries = @((Get-PropertyValue $catalog 'catalogEntries' @()))
@@ -267,8 +349,6 @@ if ($null -ne $catalog) {
     Test-CatalogTool $entries 'vcredist-runtime' 1 'manual-launcher'
     Test-CatalogTool $entries 'intel-proset-setupbd' 1 'manual-launcher'
     Test-CatalogTool $entries 'intel-proset-prounstl' 1 'dangerous-manual-only'
-
-    Test-ArchiveExecutableCoverage (Get-OptionalArchivePath) $catalog
 }
 
 if ($null -ne $manifest) {
@@ -310,6 +390,20 @@ if ($null -ne $sample) {
     Add-Check ([string](Get-PropertyValue $sample 'sourceArchive' '') -eq 'vendor\Utilities.zip') 'Utilities sample sourceArchive is repo-relative' 'Utilities sample sourceArchive is not repo-relative'
     Add-Check ([int](Get-PropertyValue $sample 'entryCount' 0) -eq 770) 'Utilities sample entryCount matches captured archive' 'Utilities sample entryCount mismatch'
     Add-Check ([int](Get-PropertyValue $sample 'executableScriptCount' 0) -eq 55) 'Utilities sample executableScriptCount matches captured archive' 'Utilities sample executableScriptCount mismatch'
+}
+
+if ($null -ne $catalog -and $null -ne $sample -and $null -ne $catalogSample -and $null -ne $manifest -and $null -ne $nipCatalog -and $null -ne $toolLaunchers) {
+    $headers = @(
+        [pscustomobject]@{ Label = 'Catalog'; Json = $catalog },
+        [pscustomobject]@{ Label = 'Utilities sample'; Json = $sample }
+    )
+    $records = @($headers) + @(
+        [pscustomobject]@{ Label = 'Utilities catalog sample'; Json = $catalogSample },
+        [pscustomobject]@{ Label = 'Utilities manifest'; Json = $manifest },
+        [pscustomobject]@{ Label = 'NVIDIA profile catalog'; Json = $nipCatalog },
+        [pscustomobject]@{ Label = 'Tool launchers'; Json = $toolLaunchers }
+    )
+    Test-LiveArchive (Get-OptionalArchivePath) $catalog $headers $records
 }
 
 $stateAfter = Get-StateEntryCount
