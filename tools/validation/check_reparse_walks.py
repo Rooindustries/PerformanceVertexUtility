@@ -21,7 +21,7 @@ COPY = re.compile(r'(?<![\w.$-])(?:Copy-Item|cpi|cp|copy)(?![\w-])', re.IGNORECA
 LINKS = re.compile('|'.join([
     r'symbolic_?link', r'symlink', r'hard_?link', r'mount_?point', r'access_?path', r'dos_?device', r'createjunction', r'mklink',
     r'mountvol', r'(?<![a-z])subst(?:\.exe)?(?![a-z])', r'ps_?drive', r'vhdx?(?![a-z])', r'vdisk', r'disk_?image',
-    r'virtual_?disk', r'0x0*900a4', r'set_?reparse_?point', r'assign\s+mount',
+    r'virtual_?disk', r'0x0*900a4', r'(?<!\d)589988(?!\d)', r'set_?reparse_?point', r'assign\s+mount',
 ]), re.IGNORECASE)
 JUNCTION = re.compile(r'junction', re.IGNORECASE)
 POWERSHELL = re.compile(r'itemtype|new-item|(?<![\w-])-it(?![\w-])', re.IGNORECASE)

@@ -353,6 +353,7 @@ def reparse_walk_negative_controls():
         'item type with a colon': ([], {ps: 'New-Item -ItemType:Junc' + 'tion -Path $a -Target $b'}, [f'{ps}:1:']),
         'item type in a splat': ([], {ps: "$p=@{ItemType='Junc" + "tion';Path=$a;Target=$b}\nNew-Item @p"}, [f'{ps}:1:']),
         'short item type': ([], {ps: 'New-Item -it Junc' + 'tion $a -Value $b'}, [f'{ps}:1:']),
+        'reparse control code in decimal': ([], {cs: 'DeviceIoControl(handle, 5899' + '88, data, size, IntPtr.Zero, 0, out _, IntPtr.Zero);'}, [f'{cs}:1:']),
         'virtual disk mount': ([], {ps: 'Mount-V' + 'HD -Path $file'}, [f'{ps}:1:']),
         'python path walk': ([], {py: 'for p, d, f in root.wa' + 'lk(): pass'}, [f'{py}:1:']),
         'legacy permission tree': ([], {ps: 'cac' + 'ls $a /T /E /G Everyone:R'}, [f'{ps}:1:']),
