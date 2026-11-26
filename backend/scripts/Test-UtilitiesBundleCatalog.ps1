@@ -12,9 +12,24 @@ $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $passes = New-Object System.Collections.Generic.List[string]
 $failures = New-Object System.Collections.Generic.List[string]
 
+function Resolve-CallerPath {
+    param([string]$Path)
+
+    try {
+        return $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Path)
+    } catch {
+        return $Path
+    }
+}
+
 if ([string]::IsNullOrWhiteSpace($CatalogPath)) { $CatalogPath = Join-Path $repoRoot 'backend\catalogs\utilities-bundle-catalog.json' }
 if ([string]::IsNullOrWhiteSpace($ManifestPath)) { $ManifestPath = Join-Path $repoRoot 'modules\utilities_manifest.json' }
 if ([string]::IsNullOrWhiteSpace($SamplePath)) { $SamplePath = Join-Path $repoRoot 'backend\samples\utilities-bundle-inventory.sample.json' }
+$catalogFile = Resolve-CallerPath $CatalogPath
+$manifestFile = Resolve-CallerPath $ManifestPath
+$sampleFile = Resolve-CallerPath $SamplePath
+$archiveFile = ''
+if (-not [string]::IsNullOrWhiteSpace($ArchivePath)) { $archiveFile = Resolve-CallerPath $ArchivePath }
 
 function Add-Pass {
     param([string]$Message)
@@ -66,16 +81,17 @@ function Get-PropertyValue {
 function Read-JsonFile {
     param(
         [string]$Path,
-        [string]$Label
+        [string]$Label,
+        [string]$File
     )
 
-    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+    if (-not (Test-Path -LiteralPath $File -PathType Leaf)) {
         Add-Failure "$Label missing: $Path"
         return $null
     }
 
     try {
-        $json = Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json
+        $json = Get-Content -LiteralPath $File -Raw | ConvertFrom-Json
         Add-Pass "$Label parses as JSON"
         return $json
     } catch {
@@ -92,7 +108,7 @@ function Get-StateEntryCount {
 
 function Get-OptionalArchivePath {
     if (-not [string]::IsNullOrWhiteSpace($ArchivePath)) {
-        return [System.IO.Path]::GetFullPath($ArchivePath)
+        return $archiveFile
     }
 
     $repoArchive = Join-Path $repoRoot 'vendor\Utilities.zip'
@@ -101,7 +117,7 @@ function Get-OptionalArchivePath {
     }
 
     if (-not [string]::IsNullOrWhiteSpace($env:ROO_INDUSTRIES_UTILITIES_ARCHIVE)) {
-        return [System.IO.Path]::GetFullPath($env:ROO_INDUSTRIES_UTILITIES_ARCHIVE)
+        return Resolve-CallerPath $env:ROO_INDUSTRIES_UTILITIES_ARCHIVE
     }
 
     return ''
@@ -151,9 +167,80 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
+using System.Text.RegularExpressions;
 
 public static class RooIndustriesBundleJson
 {
+    static readonly Regex UtcTime = new Regex(@"^([0-9]{4}-[0-9]{2}-[0-9]{2})[Tt ]([0-9]{2}:[0-9]{2}:[0-9]{2})(\.[0-9]+)?([Zz]|[+-]00:00)\z", RegexOptions.CultureInvariant);
+
+    public static object Field(object node, string name)
+    {
+        Dictionary<string, object> obj = node as Dictionary<string, object>;
+        object value;
+        if (obj != null && obj.TryGetValue(name, out value)) return value;
+        return null;
+    }
+
+    public static string Label(object entry)
+    {
+        string path = Field(entry, "archivePath") as string;
+        if (path != null && path.Length > 1 && path[0] == '"') return Unquote(path);
+        return Canonical(entry);
+    }
+
+    public static string[] DifferentFields(object expected, object actual)
+    {
+        Dictionary<string, object> e = expected as Dictionary<string, object>;
+        Dictionary<string, object> a = actual as Dictionary<string, object>;
+        if (e == null || a == null) return new string[] { "<whole value>" };
+        SortedSet<string> names = new SortedSet<string>(e.Keys, StringComparer.Ordinal);
+        names.UnionWith(a.Keys);
+        List<string> different = new List<string>();
+        foreach (string name in names)
+        {
+            object ev;
+            object av;
+            if (!e.TryGetValue(name, out ev) || !a.TryGetValue(name, out av) || Canonical(ev) != Canonical(av)) different.Add(Quote(name));
+        }
+        return different.ToArray();
+    }
+
+    public static string[] HeaderProblems(object record, object generated, string entriesField)
+    {
+        Dictionary<string, object> r = (Dictionary<string, object>)record;
+        Dictionary<string, object> g = (Dictionary<string, object>)generated;
+        SortedSet<string> names = new SortedSet<string>(r.Keys, StringComparer.Ordinal);
+        names.UnionWith(g.Keys);
+        names.Remove("catalogEntries");
+        names.Remove(entriesField);
+        List<string> problems = new List<string>();
+        foreach (string name in names)
+        {
+            object rv;
+            object gv;
+            bool inRecord = r.TryGetValue(name, out rv);
+            bool inGenerated = g.TryGetValue(name, out gv);
+            if (name == "generatedAtUtc")
+            {
+                if (!inRecord || !IsUtcTime(rv)) problems.Add(Quote(name) + " (not a UTC time)");
+            }
+            else if (!inRecord) problems.Add(Quote(name) + " (missing)");
+            else if (!inGenerated) problems.Add(Quote(name) + " (unexpected)");
+            else if (Canonical(gv) != Canonical(rv)) problems.Add(Quote(name) + " (different)");
+        }
+        if (entriesField != "catalogEntries" && r.ContainsKey("catalogEntries")) problems.Add(Quote("catalogEntries") + " (unexpected)");
+        return problems.ToArray();
+    }
+
+    public static bool IsUtcTime(object node)
+    {
+        string quoted = node as string;
+        if (quoted == null || quoted.Length < 2 || quoted[0] != '"') return false;
+        Match match = UtcTime.Match(Unquote(quoted));
+        DateTime parsed;
+        return match.Success && DateTime.TryParseExact(match.Groups[1].Value + "T" + match.Groups[2].Value, "yyyy-MM-dd'T'HH:mm:ss", CultureInfo.InvariantCulture, DateTimeStyles.None, out parsed);
+    }
+
     public static object Parse(string text)
     {
         int position = 0;
@@ -370,40 +457,6 @@ function Test-IsJsonObject {
     return ($Node -is [System.Collections.Generic.Dictionary[string,object]])
 }
 
-function Get-EntryLabel {
-    param([object]$Entry)
-
-    if ((Test-IsJsonObject $Entry) -and $Entry.ContainsKey('archivePath') -and $Entry['archivePath'] -is [string] -and $Entry['archivePath'].StartsWith('"', [StringComparison]::Ordinal)) {
-        return [RooIndustriesBundleJson]::Unquote($Entry['archivePath'])
-    }
-    return [RooIndustriesBundleJson]::Canonical($Entry)
-}
-
-function Get-DifferentFields {
-    param(
-        [object]$Expected,
-        [object]$Actual
-    )
-
-    if (-not (Test-IsJsonObject $Expected) -or -not (Test-IsJsonObject $Actual)) { return @('<whole value>') }
-    $names = New-Object 'System.Collections.Generic.SortedSet[string]' ([StringComparer]::Ordinal)
-    $names.UnionWith([string[]]@($Expected.Keys))
-    $names.UnionWith([string[]]@($Actual.Keys))
-    return @(foreach ($name in $names) {
-        if (-not $Expected.ContainsKey($name) -or -not $Actual.ContainsKey($name) -or -not [string]::Equals([RooIndustriesBundleJson]::Canonical($Expected[$name]), [RooIndustriesBundleJson]::Canonical($Actual[$name]), [StringComparison]::Ordinal)) {
-            [RooIndustriesBundleJson]::Quote($name)
-        }
-    })
-}
-
-function Test-GenerationTime {
-    param([object]$Node)
-
-    if (-not ($Node -is [string]) -or $Node -cnotmatch '^"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]{1,7})?Z"$') { return $false }
-    $parsed = [datetime]::MinValue
-    return [datetime]::TryParseExact($Node.Substring(1, $Node.Length - 2), "yyyy-MM-dd'T'HH:mm:ss.FFFFFFF'Z'", [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::AdjustToUniversal -bor [System.Globalization.DateTimeStyles]::AssumeUniversal, [ref]$parsed)
-}
-
 function Test-RecordHeader {
     param(
         [string]$Label,
@@ -412,25 +465,8 @@ function Test-RecordHeader {
         [object]$Generated
     )
 
-    $names = New-Object 'System.Collections.Generic.SortedSet[string]' ([StringComparer]::Ordinal)
-    $names.UnionWith([string[]]@($Record.Keys))
-    $names.UnionWith([string[]]@($Generated.Keys))
-    $names.Remove('catalogEntries') | Out-Null
-    $names.Remove($EntriesField) | Out-Null
-    $problems = @(foreach ($name in $names) {
-        $shown = [RooIndustriesBundleJson]::Quote($name)
-        if ([string]::Equals($name, 'generatedAtUtc', [StringComparison]::Ordinal)) {
-            if (-not $Record.ContainsKey($name) -or -not (Test-GenerationTime $Record[$name])) { "$shown (not a UTC time)" }
-        } elseif (-not $Record.ContainsKey($name)) {
-            "$shown (missing)"
-        } elseif (-not $Generated.ContainsKey($name)) {
-            "$shown (unexpected)"
-        } elseif (-not [string]::Equals([RooIndustriesBundleJson]::Canonical($Generated[$name]), [RooIndustriesBundleJson]::Canonical($Record[$name]), [StringComparison]::Ordinal)) {
-            "$shown (different)"
-        }
-    })
-    if (-not [string]::Equals($EntriesField, 'catalogEntries', [StringComparison]::Ordinal) -and $Record.ContainsKey('catalogEntries')) { $problems += '"catalogEntries" (unexpected)' }
-    Add-Check ($problems.Count -eq 0) "$Label header fields match the live archive" "$Label header fields differ from the live archive: $($problems -join ', ')"
+    $problems = [RooIndustriesBundleJson]::HeaderProblems($Record, $Generated, $EntriesField)
+    Add-Check ($problems.Length -eq 0) "$Label header fields match the live archive" "$Label header fields differ from the live archive: $($problems -join ', ')"
 }
 
 function Test-RecordEntries {
@@ -442,11 +478,11 @@ function Test-RecordEntries {
         [bool]$Complete
     )
 
-    if (-not $Record.ContainsKey($EntriesField) -or -not ($Record[$EntriesField] -is [System.Collections.Generic.List[object]])) {
+    $recordEntries = [RooIndustriesBundleJson]::Field($Record, $EntriesField)
+    if (-not ($recordEntries -is [System.Collections.Generic.List[object]])) {
         Add-Failure "$Label $EntriesField is not a list, so it cannot match the live archive"
         return
     }
-    $recordEntries = $Record[$EntriesField]
 
     $available = New-Object 'System.Collections.Generic.Dictionary[string,int]' ([StringComparer]::Ordinal)
     $generatedByPath = New-Object 'System.Collections.Generic.Dictionary[string,object]' ([StringComparer]::Ordinal)
@@ -455,7 +491,7 @@ function Test-RecordEntries {
         $key = [RooIndustriesBundleJson]::Canonical($entry)
         $generatedKeys.Add($key)
         if ($available.ContainsKey($key)) { $available[$key]++ } else { $available[$key] = 1 }
-        $generatedByPath[(Get-EntryLabel $entry)] = $entry
+        $generatedByPath[[RooIndustriesBundleJson]::Label($entry)] = $entry
     }
 
     $unmatched = New-Object System.Collections.Generic.List[string]
@@ -465,10 +501,10 @@ function Test-RecordEntries {
             $available[$key]--
             continue
         }
-        $path = Get-EntryLabel $entry
+        $path = [RooIndustriesBundleJson]::Label($entry)
         if ($generatedByPath.ContainsKey($path)) {
-            $fields = @(Get-DifferentFields $generatedByPath[$path] $entry)
-            $reason = if ($fields.Count -eq 0) { 'repeated' } else { "different: $($fields -join ', ')" }
+            $fields = [RooIndustriesBundleJson]::DifferentFields($generatedByPath[$path], $entry)
+            $reason = if ($fields.Length -eq 0) { 'repeated' } else { "different: $($fields -join ', ')" }
             $unmatched.Add("$path ($reason)") | Out-Null
         } else {
             $unmatched.Add("$path (not in the live archive)") | Out-Null
@@ -480,7 +516,7 @@ function Test-RecordEntries {
         for ($i = 0; $i -lt $generatedKeys.Count; $i++) {
             if ($available[$generatedKeys[$i]] -gt 0) {
                 $available[$generatedKeys[$i]]--
-                $missing.Add((Get-EntryLabel $GeneratedEntries[$i])) | Out-Null
+                $missing.Add([RooIndustriesBundleJson]::Label($GeneratedEntries[$i])) | Out-Null
             }
         }
     }
@@ -492,10 +528,13 @@ function Test-RecordEntries {
 }
 
 function Test-RecordMatchesArchive {
-    param([string]$ResolvedArchivePath)
+    param(
+        [string]$ResolvedArchivePath,
+        [object]$ParsedCatalog
+    )
 
     if ([string]::IsNullOrWhiteSpace($ResolvedArchivePath) -or -not (Test-Path -LiteralPath $ResolvedArchivePath -PathType Leaf)) {
-        Add-Pass 'Live Utilities.zip comparison skipped because no archive path was available'
+        if ($null -ne $ParsedCatalog) { Add-Pass 'Live Utilities.zip comparison skipped because no archive path was available' }
         return
     }
 
@@ -507,11 +546,11 @@ function Test-RecordMatchesArchive {
     }
 
     foreach ($record in @(
-        @{ Label = 'Catalog'; Path = $CatalogPath; EntriesField = 'catalogEntries'; Complete = $true },
-        @{ Label = 'Utilities sample'; Path = $SamplePath; EntriesField = 'sampleCatalogEntries'; Complete = $false }
+        @{ Label = 'Catalog'; Path = $catalogFile; EntriesField = 'catalogEntries'; Complete = $true },
+        @{ Label = 'Utilities sample'; Path = $sampleFile; EntriesField = 'sampleCatalogEntries'; Complete = $false }
     )) {
         try {
-            $document = [RooIndustriesBundleJson]::Parse([System.IO.File]::ReadAllText([System.IO.Path]::GetFullPath($record.Path)))
+            $document = [RooIndustriesBundleJson]::Parse([System.IO.File]::ReadAllText($record.Path))
         } catch {
             Add-Failure "$($record.Label) cannot be compared with the live archive: $($_.Exception.GetBaseException().Message)"
             continue
@@ -521,16 +560,16 @@ function Test-RecordMatchesArchive {
             continue
         }
         Test-RecordHeader $record.Label $document $record.EntriesField $generated
-        Test-RecordEntries $record.Label $document $record.EntriesField $generated['catalogEntries'] $record.Complete
+        Test-RecordEntries $record.Label $document $record.EntriesField ([RooIndustriesBundleJson]::Field($generated, 'catalogEntries')) $record.Complete
     }
 }
 
 $stateBefore = Get-StateEntryCount
 Add-Check ($stateBefore -eq 0) 'backend/state is absent or empty before utilities catalog validation' "backend/state is not empty before utilities catalog validation: $stateBefore item(s)"
 
-$catalog = Read-JsonFile $CatalogPath 'Utilities bundle catalog'
-$manifest = Read-JsonFile $ManifestPath 'Utilities manifest'
-$sample = Read-JsonFile $SamplePath 'Utilities bundle inventory sample'
+$catalog = Read-JsonFile $CatalogPath 'Utilities bundle catalog' $catalogFile
+$manifest = Read-JsonFile $ManifestPath 'Utilities manifest' $manifestFile
+$sample = Read-JsonFile $SamplePath 'Utilities bundle inventory sample' $sampleFile
 
 if ($null -ne $catalog) {
     $entries = @((Get-PropertyValue $catalog 'catalogEntries' @()))
@@ -612,7 +651,7 @@ if ($null -ne $catalog) {
     Test-CatalogTool $entries 'intel-proset-prounstl' 1 'dangerous-manual-only'
 }
 
-Test-RecordMatchesArchive (Get-OptionalArchivePath)
+Test-RecordMatchesArchive (Get-OptionalArchivePath) $catalog
 
 if ($null -ne $manifest) {
     $allowedManifestClasses = @('native-replacement', 'manual-launcher', 'read-only-detector', 'controlled-reversible-executor', 'dangerous-manual-only', 'excluded')
@@ -648,7 +687,7 @@ if ($null -ne $manifest) {
 }
 
 if ($null -ne $sample) {
-    $sampleText = Get-Content -LiteralPath $SamplePath -Raw
+    $sampleText = Get-Content -LiteralPath $sampleFile -Raw
     Add-Check ($sampleText -notmatch 'C:\\Users\\') 'Utilities sample contains no private absolute user paths' 'Utilities sample contains a private absolute user path'
     Add-Check ([string](Get-PropertyValue $sample 'sourceArchive' '') -eq 'vendor\Utilities.zip') 'Utilities sample sourceArchive is repo-relative' 'Utilities sample sourceArchive is not repo-relative'
     Add-Check ([int](Get-PropertyValue $sample 'entryCount' 0) -eq 770) 'Utilities sample entryCount matches captured archive' 'Utilities sample entryCount mismatch'

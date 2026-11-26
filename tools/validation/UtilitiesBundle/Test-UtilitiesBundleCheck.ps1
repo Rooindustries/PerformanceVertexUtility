@@ -13,11 +13,11 @@ $samplePath = Join-Path $repoRoot 'backend\samples\utilities-bundle-inventory.sa
 $hostPath = [System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
 
 if ([string]::IsNullOrWhiteSpace($ArchivePath)) { $ArchivePath = Join-Path $repoRoot 'vendor\Utilities.zip' }
+$ArchivePath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($ArchivePath)
 if (-not (Test-Path -LiteralPath $ArchivePath -PathType Leaf)) {
     Write-Host "FAIL Utilities.zip not found at $ArchivePath. Pass -ArchivePath or set ROO_INDUSTRIES_UTILITIES_ARCHIVE."
     exit 1
 }
-$ArchivePath = [System.IO.Path]::GetFullPath($ArchivePath)
 
 $failures = New-Object System.Collections.Generic.List[string]
 $workRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('utilities-bundle-check-' + [guid]::NewGuid().ToString('N'))
@@ -66,19 +66,34 @@ function Get-Entry {
     return $found[0]
 }
 
+function ConvertTo-Literal {
+    param([string]$Value)
+    return "'" + $Value.Replace("'", "''") + "'"
+}
+
 function Invoke-Case {
     param(
         [string]$Name,
         [bool]$ExpectPass,
-        [string[]]$Arguments
+        [string[]]$Arguments,
+        [string]$Prefix = '',
+        [string]$Expect = '',
+        [string]$Refuse = ''
     )
 
-    $output = @(& $hostPath -NoProfile -ExecutionPolicy Bypass -File $checkScript @Arguments 2>&1 | ForEach-Object { [string]$_ })
+    if ($Prefix) {
+        $call = @($Arguments | ForEach-Object { if ($_.StartsWith('-')) { $_ } else { ConvertTo-Literal $_ } }) -join ' '
+        $output = @(& $hostPath -NoProfile -ExecutionPolicy Bypass -Command "$Prefix; & $(ConvertTo-Literal $checkScript) $call; exit `$LASTEXITCODE" 2>&1 | ForEach-Object { [string]$_ })
+    } else {
+        $output = @(& $hostPath -NoProfile -ExecutionPolicy Bypass -File $checkScript @Arguments 2>&1 | ForEach-Object { [string]$_ })
+    }
     $exitCode = $LASTEXITCODE
     $failLines = @($output | Where-Object { $_ -like 'FAIL *' -and $_ -notlike 'FAIL Utilities bundle catalog validation failed*' })
 
     if ($ExpectPass) {
         $ok = ($exitCode -eq 0) -and ($failLines.Count -eq 0)
+        if ($Expect) { $ok = $ok -and (@($output | Where-Object { $_ -like "*$Expect*" }).Count -gt 0) }
+        if ($Refuse) { $ok = $ok -and (@($output | Where-Object { $_ -like "*$Refuse*" }).Count -eq 0) }
     } else {
         $foreign = @($failLines | Where-Object { $_ -notlike '*live archive*' })
         $ok = ($exitCode -eq 1) -and ($failLines.Count -gt 0) -and ($foreign.Count -eq 0)
@@ -160,7 +175,41 @@ try {
     }
 
     $absentArchive = Join-Path $workRoot 'absent.zip'
-    Invoke-Case 'no bundle skips the live comparison' $true @('-CatalogPath', $catalogPath, '-ManifestPath', $manifestPath, '-SamplePath', $samplePath, '-ArchivePath', $absentArchive)
+    $skipped = 'comparison skipped'
+    Invoke-Case 'no bundle skips the live comparison' $true @('-CatalogPath', $catalogPath, '-ManifestPath', $manifestPath, '-SamplePath', $samplePath, '-ArchivePath', $absentArchive) -Expect $skipped
+    $nullRecord = Join-Path $workRoot 'null.json'
+    $emptyList = Join-Path $workRoot 'empty-list.json'
+    [System.IO.File]::WriteAllText($nullRecord, 'null')
+    [System.IO.File]::WriteAllText($emptyList, '[]')
+    Invoke-Case 'no bundle with a null catalog reports as before' $true @('-CatalogPath', $nullRecord, '-ManifestPath', $manifestPath, '-SamplePath', $samplePath, '-ArchivePath', $absentArchive) -Refuse $skipped
+    Invoke-Case 'no bundle with an empty list catalog reports as before' $true @('-CatalogPath', $emptyList, '-ManifestPath', $manifestPath, '-SamplePath', $samplePath, '-ArchivePath', $absentArchive) -Refuse $skipped
+    Invoke-Case 'no bundle with a null sample reports as before' $true @('-CatalogPath', $catalogPath, '-ManifestPath', $manifestPath, '-SamplePath', $nullRecord, '-ArchivePath', $absentArchive) -Expect $skipped
+
+    Invoke-TextCase 'UTC time written with +00:00 passes' $true 'sample' {
+        param($t)
+        Edit-First $t '("generatedAtUtc"\s*:\s*"[^"]*)Z"' '${1}+00:00"'
+    }
+    Invoke-TextCase 'UTC time written with -00:00 passes' $true 'catalog' {
+        param($t)
+        Edit-First $t '("generatedAtUtc"\s*:\s*"[^"]*)Z"' '${1}-00:00"'
+    }
+
+    $processFolder = Join-Path $workRoot 'process'
+    $sessionFolder = Join-Path $workRoot 'session'
+    New-Item -ItemType Directory -Path $processFolder, $sessionFolder | Out-Null
+    Copy-Item -LiteralPath $catalogPath -Destination (Join-Path $processFolder 'catalog.json')
+    Copy-Item -LiteralPath $samplePath -Destination (Join-Path $processFolder 'sample.json')
+    $staleCatalog = Read-Record $catalogPath
+    $staleCatalog.catalogEntries[0].lengthBytes = [uint64]$staleCatalog.catalogEntries[0].lengthBytes + 1
+    Set-Content -LiteralPath (Join-Path $sessionFolder 'catalog.json') -Value ($staleCatalog | ConvertTo-Json -Depth 20) -Encoding UTF8
+    $staleSample = Read-Record $samplePath
+    $staleSample.sourceArchiveSizeBytes = [uint64]$staleSample.sourceArchiveSizeBytes + 1
+    Set-Content -LiteralPath (Join-Path $sessionFolder 'sample.json') -Value ($staleSample | ConvertTo-Json -Depth 20) -Encoding UTF8
+    $correctFolder = Join-Path $workRoot 'correct'
+    New-Item -ItemType Directory -Path $correctFolder | Out-Null
+    Copy-Item -LiteralPath $catalogPath -Destination (Join-Path $correctFolder 'catalog.json')
+    $splitLocation = "[System.Environment]::CurrentDirectory = $(ConvertTo-Literal $processFolder); Set-Location -LiteralPath $(ConvertTo-Literal $sessionFolder)"
+    Invoke-Case 'relative catalog path read from the caller location passes when correct' $true @('-CatalogPath', 'catalog.json', '-ArchivePath', $ArchivePath) -Prefix "[System.Environment]::CurrentDirectory = $(ConvertTo-Literal $processFolder); Set-Location -LiteralPath $(ConvertTo-Literal $correctFolder)" -Expect 'catalogEntries match the live archive'
 
     Invoke-FaultCase 'catalog path the archive lacks' 'catalog' {
         param($r)
@@ -279,6 +328,34 @@ try {
     Invoke-FaultCase 'unexpected field in a catalog entry' 'catalog' {
         param($r)
         $r.catalogEntries[0] | Add-Member -NotePropertyName 'note' -NotePropertyValue 'x'
+    }
+    Invoke-Case 'stale catalog given by a path relative to the caller location' $false @('-CatalogPath', 'catalog.json', '-ArchivePath', $ArchivePath) -Prefix $splitLocation
+    Invoke-Case 'stale sample given by a path relative to the caller location' $false @('-SamplePath', 'sample.json', '-ArchivePath', $ArchivePath) -Prefix $splitLocation
+    Invoke-Case 'bundle given through a PowerShell drive with a stale catalog' $false @('-CatalogPath', (Join-Path $sessionFolder 'catalog.json'), '-ArchivePath', ('BundleCase:\' + (Split-Path -Leaf $ArchivePath))) -Prefix "New-PSDrive -Name BundleCase -PSProvider FileSystem -Root $(ConvertTo-Literal (Split-Path -Parent $ArchivePath)) | Out-Null"
+
+    Invoke-TextCase 'sample field named Keys' $false 'sample' {
+        param($t)
+        Edit-First $t '\A(\s*)\{' '${1}{ "Keys": [],'
+    }
+    Invoke-TextCase 'sample fields named Keys and unexpected' $false 'sample' {
+        param($t)
+        Edit-First $t '\A(\s*)\{' '${1}{ "Keys": [], "unexpected": true,'
+    }
+    Invoke-TextCase 'catalog fields named Values and Count' $false 'catalog' {
+        param($t)
+        Edit-First $t '\A(\s*)\{' '${1}{ "Values": [], "Count": 0,'
+    }
+    Invoke-TextCase 'catalog entry field named Item' $false 'catalog' {
+        param($t)
+        Edit-First $t '("catalogEntries"\s*:\s*\[\s*)\{' '${1}{ "Item": null,'
+    }
+    Invoke-TextCase 'generation time with a non-UTC offset' $false 'sample' {
+        param($t)
+        Edit-First $t '("generatedAtUtc"\s*:\s*"[^"]*)Z"' '${1}+01:00"'
+    }
+    Invoke-TextCase 'generation time on a day that does not exist' $false 'catalog' {
+        param($t)
+        Edit-First $t '("generatedAtUtc"\s*:\s*)"[^"]*"' '${1}"2026-02-30T00:00:00Z"'
     }
 } finally {
     Remove-Item -LiteralPath $workRoot -Recurse -Force -ErrorAction SilentlyContinue
