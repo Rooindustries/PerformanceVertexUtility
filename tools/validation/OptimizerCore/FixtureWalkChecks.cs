@@ -149,7 +149,7 @@ static class FixtureWalkChecks
             TestFixtures.Junction(stale, victim);
             TestFixtures.Symlink(stale + ".run", precious, file: true);
             SweepFor("disguised-fixture");
-            static bool Linked(string path) => File.GetAttributes(path).HasFlag(FileAttributes.ReparsePoint);
+            static bool Linked(string path) => Path.Exists(path) && File.GetAttributes(path).HasFlag(FileAttributes.ReparsePoint);
             var deny = denied.GetAccessControl().GetAccessRules(true, false, typeof(SecurityIdentifier)).Cast<FileSystemAccessRule>()
                 .Any(rule => rule.AccessControlType == AccessControlType.Deny);
             check(!Path.Exists(stale) && Linked(inner), "A run start removes a fixture-named junction without unlinking the junction behind it");

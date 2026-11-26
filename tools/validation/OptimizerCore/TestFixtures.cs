@@ -262,19 +262,19 @@ static class TestFixtures
     {
         var links = new List<string>();
         var volumes = new List<string>();
-        string? inside = null;
+        var top = Open(root, 0x81, true, 3);
+        held.Add(top);
+        var inside = Name(top, 1).TrimEnd('\\') + "\\";
         var pending = new Stack<string>([root]);
         while (pending.TryPop(out var folder))
         {
-            var handle = Open(folder, 0x81, true, 3);
-            held.Add(handle);
+            Unlock(folder, inside);
+            if (folder != root) held.Add(Open(folder, 0x81, true, 3));
             if ((GetFileAttributes(folder) & 0x400) != 0)
             {
                 links.Add(folder);
                 continue;
             }
-            inside ??= Name(handle, 1).TrimEnd('\\') + "\\";
-            Unlock(folder, inside);
             var listing = new EnumerationOptions { AttributesToSkip = 0, IgnoreInaccessible = false };
             foreach (var entry in new DirectoryInfo(folder).EnumerateFileSystemInfos("*", listing))
             {
