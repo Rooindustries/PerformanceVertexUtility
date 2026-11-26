@@ -18,7 +18,8 @@ static class TestFixtures
     {
         Sweep(label);
         var root = Path.Combine(Path.GetTempPath(), "roo-industries-" + label + "-" + Guid.NewGuid().ToString("N"));
-        var run = new FileStream(root + ".run", FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None);
+        var lockPath = root + ".run";
+        var run = new FileStream(lockPath, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None, 1, FileOptions.DeleteOnClose);
         lock (Runs) Runs[root] = run;
         var directory = Directory.CreateDirectory(root);
         var security = new DirectorySecurity();
