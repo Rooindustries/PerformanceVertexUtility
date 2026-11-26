@@ -4,7 +4,7 @@
     "catalogId":  "utilities-bundle-catalog",
     "sourceArchive":  "vendor\\Utilities.zip",
     "generatedAtUtc":  "2026-07-05T22:23:42.8883314Z",
-    "sourceArchiveSizeBytes":  3734520739,
+    "sourceArchiveSizeBytes":  3734508425,
     "entryCount":  770,
     "executableScriptCount":  55,
     "catalogedEntryCount":  616,
@@ -6652,6 +6652,26 @@
                                "compressedLengthBytes":  44228104
                            },
                            {
+                               "archivePath":  "Utilities\\Other\\base-profile.nip",
+                               "normalizedId":  "other-base-profile",
+                               "toolId":  "base-profile-nip",
+                               "displayName":  "Base NIP Profile",
+                               "entryKind":  "configuration-metadata",
+                               "extension":  ".nip",
+                               "category":  "nvidia-profile",
+                               "risk":  "medium",
+                               "productRole":  "seed-profile-metadata",
+                               "executionClass":  "manual-launcher",
+                               "allowedExecutionMode":  "metadata-only-manual-apply-required",
+                               "hardwareGates":  [
+                                                     "pci-ven-10de"
+                                                 ],
+                               "restoreBackupRequirement":  "Export current NVIDIA profile before any future manual import.",
+                               "integrationPlan":  "Catalog as seed NIP profile; never auto-import from backend validation.",
+                               "lengthBytes":  6037,
+                               "compressedLengthBytes":  839
+                           },
+                           {
                                "archivePath":  "Utilities\\Other\\DDU v18.0.8.9\\DDU Logs\\2024-12-26__02-21-24_DDULog.xml",
                                "normalizedId":  "other-ddu-v18-0-8-9-ddu-logs-2024-12-26-02-21-24-ddulog",
                                "toolId":  "ddu-log-archive",
@@ -8670,26 +8690,6 @@
                                "integrationPlan":  "Catalog as reference configuration for native dead-device cleanup rules.",
                                "lengthBytes":  423,
                                "compressedLengthBytes":  207
-                           },
-                           {
-                               "archivePath":  "Utilities\\Other\\base-profile.nip",
-                               "normalizedId":  "other-base-profile",
-                               "toolId":  "base-profile-nip",
-                               "displayName":  "Base NIP Profile",
-                               "entryKind":  "configuration-metadata",
-                               "extension":  ".nip",
-                               "category":  "nvidia-profile",
-                               "risk":  "medium",
-                               "productRole":  "seed-profile-metadata",
-                               "executionClass":  "manual-launcher",
-                               "allowedExecutionMode":  "metadata-only-manual-apply-required",
-                               "hardwareGates":  [
-                                                     "pci-ven-10de"
-                                                 ],
-                               "restoreBackupRequirement":  "Export current NVIDIA profile before any future manual import.",
-                               "integrationPlan":  "Catalog as seed NIP profile; never auto-import from backend validation.",
-                               "lengthBytes":  6037,
-                               "compressedLengthBytes":  839
                            },
                            {
                                "archivePath":  "Utilities\\Other\\NVPI\\nvidiaProfileInspector.exe",
