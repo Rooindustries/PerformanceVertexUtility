@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "productName": "Roo Industries Optimization Suite",
   "catalogId": "nvidia-profile-inspector-nip-catalog",
-  "catalogVersion": "2026.07.framesync-source",
+  "catalogVersion": "2026.07.base-profile-source",
   "capturedAtUtc": "2026-07-01T15:30:00Z",
   "sourceBoundary": {
     "mode": "metadata-only",
@@ -44,10 +44,13 @@
   },
   "profiles": [
     {
-      "profileId": "framesync",
-      "name": "FrameSync",
+      "profileId": "base-profile",
+      "formerProfileIdSha256": [
+        "65D5141808449FD381BC9B11FE56608078A0DC98BC65FACF0FDBE54CEAF4D1F1"
+      ],
+      "name": "Base profile",
       "vendor": "NVIDIA",
-      "sourceFile": "Utilities\\Other\\framesync.nip",
+      "sourceFile": "Utilities\\Other\\base-profile.nip",
       "sourceSha256": "D58339DB9678EB342BD38A9F811AC992BCA9B30CC6ED4C0081BF889474FDD201",
       "sourceSizeBytes": 6037,
       "sourceFormat": {

@@ -1,5 +1,5 @@
 param(
-    [string]$ProfileId = 'framesync',
+    [string]$ProfileId = 'base-profile',
     [string]$CatalogPath = '',
     [string]$HardwareInventoryPath = '',
     [string]$NvpiExecutablePath = '',

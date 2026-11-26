@@ -47,8 +47,8 @@ public partial class DriversProfilesViewModel : PageViewModelBase
     [NotifyPropertyChangedFor(nameof(NvidiaGateSummary))]
     private bool _hasNvidiaProfiles;
     [ObservableProperty] private string? _gpuNote;
-    [ObservableProperty] private string _nvidiaProfileId = "framesync";
-    [ObservableProperty] private string _nvidiaProfileName = "FrameSync";
+    [ObservableProperty] private string _nvidiaProfileId = "base-profile";
+    [ObservableProperty] private string _nvidiaProfileName = "Base profile";
     private bool _nvidiaActionShown;
     private long _nvidiaActionGeneration = -1;
     [ObservableProperty] private string _nvidiaActionTitle = "NVIDIA profile";
@@ -154,7 +154,7 @@ public partial class DriversProfilesViewModel : PageViewModelBase
         var firstProfile = NvidiaProfiles.FirstOrDefault();
         if (firstProfile is not null)
         {
-            NvidiaProfileId = string.IsNullOrWhiteSpace(firstProfile.ProfileId) ? "framesync" : firstProfile.ProfileId!;
+            NvidiaProfileId = string.IsNullOrWhiteSpace(firstProfile.ProfileId) ? "base-profile" : firstProfile.ProfileId!;
             NvidiaProfileName = string.IsNullOrWhiteSpace(firstProfile.Name) ? NvidiaProfileId : firstProfile.Name!;
             if (_nvidiaActionShown && !DataGeneration.IsCurrent(_nvidiaActionGeneration) && !DataGeneration.Changing) _nvidiaActionShown = false;
             if (!_nvidiaActionShown)

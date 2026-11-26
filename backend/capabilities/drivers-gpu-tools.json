@@ -24,7 +24,7 @@
           },
           {
             "method": "file-exists",
-            "target": "{utilitiesRoot}\\Other\\framesync.nip"
+            "target": "{utilitiesRoot}\\Other\\base-profile.nip"
           },
           {
             "method": "hardware-gpu-vendor",
@@ -126,7 +126,7 @@
           },
           {
             "method": "file-exists",
-            "target": "{utilitiesRoot}\\Other\\framesync.nip"
+            "target": "{utilitiesRoot}\\Other\\base-profile.nip"
           },
           {
             "method": "hardware-gpu-vendor",
@@ -214,13 +214,13 @@
       ]
     },
     {
-      "capabilityId": "drivers-gpu-tools.nvidia-nip-framesync-catalog",
+      "capabilityId": "drivers-gpu-tools.nvidia-nip-base-catalog",
       "family": "drivers-gpu-tools",
-      "displayName": "FrameSync NIP Profile Catalog",
-      "technicalName": "Static NIP XML catalog entry for Base Profile from Utilities\\Other\\framesync.nip",
+      "displayName": "Base NIP Profile Catalog",
+      "technicalName": "Static NIP XML catalog entry for Base Profile from Utilities\\Other\\base-profile.nip",
       "source": "nvpi",
       "implementedBy": "roo-industries-script",
-      "frontendLabel": "NVIDIA Profile Catalog (FrameSync)",
+      "frontendLabel": "NVIDIA Profile Catalog",
       "frontendTab": "Drivers & Settings",
       "riskLevel": "medium",
       "approvalRequired": false,
@@ -228,7 +228,7 @@
         "detection": [
           {
             "method": "file-exists",
-            "target": "{utilitiesRoot}\\Other\\framesync.nip"
+            "target": "{utilitiesRoot}\\Other\\base-profile.nip"
           },
           {
             "method": "file-exists",
@@ -259,7 +259,7 @@
       "testEvidence": [
         {
           "test": "backend/scripts/Test-NvidiaNipCatalog.ps1",
-          "proves": "framesync NIP catalog matches source XML, Reference.xml evidence, hardware gate, and no-auto-import policy"
+          "proves": "Base profile NIP catalog matches source XML, Reference.xml evidence, hardware gate, and no-auto-import policy"
         }
       ]
     },

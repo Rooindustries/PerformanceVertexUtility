@@ -161,10 +161,10 @@ $requiredFiles = @(
     'backend\scripts\Get-RooIndustriesValidationTempArtifacts.ps1',
     'backend\scripts\Test-RooIndustriesValidationTempArtifacts.ps1',
     'backend\native\StandbyMemoryHelper\RooIndustriesStandbyMemoryHelper.cs',
-    'backend\catalogs\fsosx-playbook-capabilities.json',
-    'backend\catalogs\fsosx-dash-capabilities.json',
-    'backend\catalogs\fsosx-gap-map.json',
-    'backend\scripts\Test-FSOSXCatalogs.ps1',
+    'backend\catalogs\gaming-playbook-capabilities.json',
+    'backend\catalogs\gaming-toggles-capabilities.json',
+    'backend\catalogs\gaming-gap-map.json',
+    'backend\scripts\Test-GamingCatalogs.ps1',
     'backend\catalogs\utilities-bundle-catalog.json',
     'backend\samples\utilities-bundle-inventory.sample.json',
     'backend\samples\utilities-bundle-catalog.sample.json',
@@ -206,16 +206,16 @@ try {
 }
 
 try {
-    $catalogTestOutput = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'Test-FSOSXCatalogs.ps1') 2>&1
+    $catalogTestOutput = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'Test-GamingCatalogs.ps1') 2>&1
     $catalogTestExitCode = $LASTEXITCODE
     $catalogTestOutput | ForEach-Object { Write-Host $_ }
     if ($catalogTestExitCode -eq 0) {
-        Add-Pass 'FSOS-X playbook and Dash catalog guardrails passed'
+        Add-Pass 'Gaming playbook and Dash catalog guardrails passed'
     } else {
-        Add-Failure "FSOS-X catalog guardrails failed with exit code $catalogTestExitCode"
+        Add-Failure "Gaming catalog guardrails failed with exit code $catalogTestExitCode"
     }
 } catch {
-    Add-Failure "FSOS-X catalog guardrails failed: $($_.Exception.Message)"
+    Add-Failure "Gaming catalog guardrails failed: $($_.Exception.Message)"
 }
 
 try {

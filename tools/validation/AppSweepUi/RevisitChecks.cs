@@ -81,7 +81,7 @@ static class RevisitChecks
                 Machine = new() { Manufacturer = "Fixture", Model = "PC", OsCaption = "Windows" },
                 Gpus = [new() { Name = "NVIDIA Fixture GPU", DriverVersion = "1.0", DriverDate = "2026-01-01" }],
             };
-            App.Data.NvidiaProfiles = new NvidiaProfileCatalog { Entries = [new() { ProfileId = "framesync", Name = "Frame sync" }] };
+            App.Data.NvidiaProfiles = new NvidiaProfileCatalog { Entries = [new() { ProfileId = "base-profile", Name = "Base profile" }] };
             var drivers = new DriversProfilesViewModel();
             await drivers.InitializeAsync();
             App.Live.NvidiaProbeText = "{}";

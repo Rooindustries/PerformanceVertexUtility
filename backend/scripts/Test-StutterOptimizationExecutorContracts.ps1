@@ -177,7 +177,7 @@ if ($stateBefore -eq $stateAfter -and $stateAfter -eq 0) {
     Add-Failure "backend/state is not empty or changed during stutter executor validation: before=$stateBefore after=$stateAfter"
 }
 
-Add-Pass 'Stutter executor validation did not launch FSOS, WinUtil, timer, power, service, cleanup, or tweak utilities'
+Add-Pass 'Stutter executor validation did not launch gaming toggles, WinUtil, timer, power, service, cleanup, or tweak utilities'
 
 Write-Host ''
 if ($failures.Count -eq 0) {

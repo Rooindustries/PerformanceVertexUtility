@@ -121,7 +121,7 @@ try
     var processCountBeforeLockFailure = Counter("process-apply-count.txt");
     var nvidiaCountBeforeLockFailure = Counter("nvidia-apply-count.txt");
     var processLockFailure = await lockFailureService.ApplyProcessProfileResultAsync();
-    var nvidiaLockFailure = await lockFailureService.ApplyNvidiaProfileResultAsync("framesync", true, true, true);
+    var nvidiaLockFailure = await lockFailureService.ApplyNvidiaProfileResultAsync("base-profile", true, true, true);
     Check(processLockFailure.Error?.Contains("lock could not be opened", StringComparison.OrdinalIgnoreCase) == true
             && nvidiaLockFailure.Error?.Contains("lock could not be opened", StringComparison.OrdinalIgnoreCase) == true
             && Counter("process-apply-count.txt") == processCountBeforeLockFailure
@@ -143,7 +143,7 @@ try
     processCountBeforeLockFailure = Counter("process-apply-count.txt");
     nvidiaCountBeforeLockFailure = Counter("nvidia-apply-count.txt");
     var processGenerationFailure = await generationFailureService.ApplyProcessProfileResultAsync();
-    var nvidiaGenerationFailure = await generationFailureService.ApplyNvidiaProfileResultAsync("framesync", true, true, true);
+    var nvidiaGenerationFailure = await generationFailureService.ApplyNvidiaProfileResultAsync("base-profile", true, true, true);
     foreach (var path in readOnlyGenerations) File.SetAttributes(path, FileAttributes.Normal);
     Check(processGenerationFailure.Error?.Contains("generation could not be recorded", StringComparison.OrdinalIgnoreCase) == true
             && nvidiaGenerationFailure.Error?.Contains("generation could not be recorded", StringComparison.OrdinalIgnoreCase) == true
@@ -197,40 +197,40 @@ try
         "A new app instance offers no recovery from an unreadable reference and refuses apply before its script");
     Environment.SetEnvironmentVariable("ROO_INDUSTRIES_ACTION_RECOVERY_DIRECTORY", recoveryDirectory);
 
-    var firstNvidiaApply = service.ApplyNvidiaProfileResultAsync("framesync", true, true, true);
+    var firstNvidiaApply = service.ApplyNvidiaProfileResultAsync("base-profile", true, true, true);
     await WaitFor(Path.Combine(root, "nvidia-apply-started"));
-    var rejectedNvidiaApply = await reopened.ApplyNvidiaProfileResultAsync("framesync", true, true, true);
+    var rejectedNvidiaApply = await reopened.ApplyNvidiaProfileResultAsync("base-profile", true, true, true);
     Check(rejectedNvidiaApply.Value is null && rejectedNvidiaApply.Error?.Contains("already in progress", StringComparison.OrdinalIgnoreCase) == true && Counter("nvidia-apply-count.txt") == 1,
         "A second NVIDIA apply loses the cross-instance lease without starting its script");
     File.WriteAllText(Path.Combine(root, "nvidia-apply-release"), "release");
     await firstNvidiaApply;
-    var firstNvidia = await reopened.ReadNvidiaProfileRecoveryAsync("framesync");
+    var firstNvidia = await reopened.ReadNvidiaProfileRecoveryAsync("base-profile");
     Check(firstNvidia is not null && firstNvidia.RollbackManifestPath.StartsWith(recoveryDirectory, StringComparison.OrdinalIgnoreCase)
             && firstNvidia.ExportPath.StartsWith(recoveryDirectory, StringComparison.OrdinalIgnoreCase),
         "Injected recovery storage contains the NVIDIA artifacts and pointer from the completed apply");
 
-    await reopened.ApplyNvidiaProfileResultAsync("framesync", true, true, true);
-    var secondNvidia = await service.ReadNvidiaProfileRecoveryAsync("framesync");
+    await reopened.ApplyNvidiaProfileResultAsync("base-profile", true, true, true);
+    var secondNvidia = await service.ReadNvidiaProfileRecoveryAsync("base-profile");
     Check(secondNvidia is not null && secondNvidia != firstNvidia,
         "A later NVIDIA apply replaces the pointer with its exact artifacts");
     var staleNvidiaRestore = await service.RestoreNvidiaProfileResultAsync(firstNvidia!, true);
     Check(staleNvidiaRestore.Value is null && staleNvidiaRestore.Error?.Contains("no longer current", StringComparison.OrdinalIgnoreCase) == true && Counter("nvidia-restore-count.txt") == 0
-            && await reopened.ReadNvidiaProfileRecoveryAsync("framesync") == secondNvidia,
+            && await reopened.ReadNvidiaProfileRecoveryAsync("base-profile") == secondNvidia,
         "An older NVIDIA recovery cannot run or clear a newer pointer");
 
     Environment.SetEnvironmentVariable("ROO_INDUSTRIES_ACTION_SLOW_NVIDIA_RESTORE", "1");
     var nvidiaRestore = reopened.RestoreNvidiaProfileResultAsync(secondNvidia!, true);
     await WaitFor(Path.Combine(root, "nvidia-restore-started"));
-    var nvidiaApplyDuringRestore = await service.ApplyNvidiaProfileResultAsync("framesync", true, true, true);
+    var nvidiaApplyDuringRestore = await service.ApplyNvidiaProfileResultAsync("base-profile", true, true, true);
     Check(nvidiaApplyDuringRestore.Value is null && nvidiaApplyDuringRestore.Error?.Contains("already in progress", StringComparison.OrdinalIgnoreCase) == true && Counter("nvidia-apply-count.txt") == 2,
         "NVIDIA apply cannot start while another instance is restoring");
     File.WriteAllText(Path.Combine(root, "nvidia-restore-release"), "release");
     var nvidiaRestoreResult = await nvidiaRestore;
     Environment.SetEnvironmentVariable("ROO_INDUSTRIES_ACTION_SLOW_NVIDIA_RESTORE", null);
-    Check(nvidiaRestoreResult.Error is null && nvidiaRestoreResult.RecoveryPath is null && await service.ReadNvidiaProfileRecoveryAsync("framesync") is null,
+    Check(nvidiaRestoreResult.Error is null && nvidiaRestoreResult.RecoveryPath is null && await service.ReadNvidiaProfileRecoveryAsync("base-profile") is null,
         "Confirmed NVIDIA restore clears its exact pointer before releasing the lease");
-    await service.ApplyNvidiaProfileResultAsync("framesync", true, true, true);
-    var thirdNvidia = await new LiveDataService(new BackendLocator(), recoveryDirectory).ReadNvidiaProfileRecoveryAsync("framesync");
+    await service.ApplyNvidiaProfileResultAsync("base-profile", true, true, true);
+    var thirdNvidia = await new LiveDataService(new BackendLocator(), recoveryDirectory).ReadNvidiaProfileRecoveryAsync("base-profile");
     Check(thirdNvidia is not null && thirdNvidia != secondNvidia,
         "A new service instance observes the NVIDIA pointer from the later completed operation");
 
@@ -238,16 +238,16 @@ try
     Environment.SetEnvironmentVariable("ROO_INDUSTRIES_ACTION_RECOVERY_DIRECTORY", failedNvidiaDirectory);
     Environment.SetEnvironmentVariable("ROO_INDUSTRIES_ACTION_SABOTAGE_NVIDIA_POINTER", "1");
     var failedNvidiaService = new LiveDataService(new BackendLocator(), failedNvidiaDirectory);
-    var failedNvidiaPersistence = await failedNvidiaService.ApplyNvidiaProfileResultAsync("framesync", true, true, true);
-    var failedNvidiaHandle = await new LiveDataService(new BackendLocator(), failedNvidiaDirectory).ReadNvidiaProfileRecoveryAsync("framesync");
+    var failedNvidiaPersistence = await failedNvidiaService.ApplyNvidiaProfileResultAsync("base-profile", true, true, true);
+    var failedNvidiaHandle = await new LiveDataService(new BackendLocator(), failedNvidiaDirectory).ReadNvidiaProfileRecoveryAsync("base-profile");
     Environment.SetEnvironmentVariable("ROO_INDUSTRIES_ACTION_SABOTAGE_NVIDIA_POINTER", null);
     Check(failedNvidiaPersistence.Value is not null && failedNvidiaPersistence.Error?.Contains("could not be saved", StringComparison.OrdinalIgnoreCase) == true
             && failedNvidiaPersistence.RecoveryPath == failedNvidiaHandle?.RollbackManifestPath,
         "NVIDIA pointer persistence failure preserves the exact validated artifact across page service instances");
     Directory.Delete(Path.Combine(failedNvidiaDirectory, "nvidia-profile-recovery.json"));
     var newerFailedNvidiaService = new LiveDataService(new BackendLocator(), failedNvidiaDirectory);
-    await newerFailedNvidiaService.ApplyNvidiaProfileResultAsync("framesync", true, true, true);
-    var newerFailedNvidia = await newerFailedNvidiaService.ReadNvidiaProfileRecoveryAsync("framesync");
+    await newerFailedNvidiaService.ApplyNvidiaProfileResultAsync("base-profile", true, true, true);
+    var newerFailedNvidia = await newerFailedNvidiaService.ReadNvidiaProfileRecoveryAsync("base-profile");
     var nvidiaRestoreCount = Counter("nvidia-restore-count.txt");
     var rejectedFailedNvidia = await failedNvidiaService.RestoreNvidiaProfileResultAsync(failedNvidiaHandle!, true);
     Check(newerFailedNvidia is not null && newerFailedNvidia != failedNvidiaHandle
@@ -259,32 +259,32 @@ try
     var noImportDirectory = Path.Combine(root, "nvidia-no-import");
     Environment.SetEnvironmentVariable("ROO_INDUSTRIES_ACTION_RECOVERY_DIRECTORY", noImportDirectory);
     var noImportService = new LiveDataService(new BackendLocator(), noImportDirectory);
-    await noImportService.ApplyNvidiaProfileResultAsync("framesync", true, true, true);
-    var beforeNoImport = await noImportService.ReadNvidiaProfileRecoveryAsync("framesync");
+    await noImportService.ApplyNvidiaProfileResultAsync("base-profile", true, true, true);
+    var beforeNoImport = await noImportService.ReadNvidiaProfileRecoveryAsync("base-profile");
     Environment.SetEnvironmentVariable("ROO_INDUSTRIES_ACTION_NVIDIA_MODE", "NoImport");
-    await noImportService.ApplyNvidiaProfileResultAsync("framesync", true, true, true);
+    await noImportService.ApplyNvidiaProfileResultAsync("base-profile", true, true, true);
     Environment.SetEnvironmentVariable("ROO_INDUSTRIES_ACTION_NVIDIA_MODE", null);
-    Check(beforeNoImport is not null && await noImportService.ReadNvidiaProfileRecoveryAsync("framesync") == beforeNoImport,
+    Check(beforeNoImport is not null && await noImportService.ReadNvidiaProfileRecoveryAsync("base-profile") == beforeNoImport,
         "Identity-bound explicit no-import evidence preserves the prior NVIDIA generation and recovery");
 
     var missingProofDirectory = Path.Combine(root, "nvidia-missing-no-import-proof");
     Environment.SetEnvironmentVariable("ROO_INDUSTRIES_ACTION_RECOVERY_DIRECTORY", missingProofDirectory);
     var missingProofService = new LiveDataService(new BackendLocator(), missingProofDirectory);
-    await missingProofService.ApplyNvidiaProfileResultAsync("framesync", true, true, true);
+    await missingProofService.ApplyNvidiaProfileResultAsync("base-profile", true, true, true);
     Environment.SetEnvironmentVariable("ROO_INDUSTRIES_ACTION_NVIDIA_MODE", "MissingProof");
-    await missingProofService.ApplyNvidiaProfileResultAsync("framesync", true, true, true);
+    await missingProofService.ApplyNvidiaProfileResultAsync("base-profile", true, true, true);
     Environment.SetEnvironmentVariable("ROO_INDUSTRIES_ACTION_NVIDIA_MODE", null);
-    Check(await missingProofService.ReadNvidiaProfileRecoveryAsync("framesync") is null,
+    Check(await missingProofService.ReadNvidiaProfileRecoveryAsync("base-profile") is null,
         "Missing no-import evidence leaves the newer NVIDIA generation unknown instead of reviving the prior pointer");
 
     var contradictoryProofDirectory = Path.Combine(root, "nvidia-contradictory-no-import-proof");
     Environment.SetEnvironmentVariable("ROO_INDUSTRIES_ACTION_RECOVERY_DIRECTORY", contradictoryProofDirectory);
     var contradictoryProofService = new LiveDataService(new BackendLocator(), contradictoryProofDirectory);
-    await contradictoryProofService.ApplyNvidiaProfileResultAsync("framesync", true, true, true);
+    await contradictoryProofService.ApplyNvidiaProfileResultAsync("base-profile", true, true, true);
     Environment.SetEnvironmentVariable("ROO_INDUSTRIES_ACTION_NVIDIA_MODE", "ContradictoryProof");
-    await contradictoryProofService.ApplyNvidiaProfileResultAsync("framesync", true, true, true);
+    await contradictoryProofService.ApplyNvidiaProfileResultAsync("base-profile", true, true, true);
     Environment.SetEnvironmentVariable("ROO_INDUSTRIES_ACTION_NVIDIA_MODE", null);
-    Check(await contradictoryProofService.ReadNvidiaProfileRecoveryAsync("framesync") is null,
+    Check(await contradictoryProofService.ReadNvidiaProfileRecoveryAsync("base-profile") is null,
         "Contradictory manifest evidence leaves the newer NVIDIA generation unknown instead of reviving the prior pointer");
     Environment.SetEnvironmentVariable("ROO_INDUSTRIES_ACTION_RECOVERY_DIRECTORY", recoveryDirectory);
 
@@ -306,25 +306,86 @@ try
             && Counter("process-restore-count.txt") == independentRestoreCount,
         "A newer durable process generation outranks stale in-process caches across service instances");
 
-    await independentService.ApplyNvidiaProfileResultAsync("framesync", true, true, true);
-    var cachedNvidia = (await independentService.ReadNvidiaProfileRecoveryAsync("framesync"))!;
+    await independentService.ApplyNvidiaProfileResultAsync("base-profile", true, true, true);
+    var cachedNvidia = (await independentService.ReadNvidiaProfileRecoveryAsync("base-profile"))!;
     var externalNvidiaRoot = Path.Combine(root, "external-nvidia");
     Directory.CreateDirectory(externalNvidiaRoot);
     var externalNvidiaExport = Path.Combine(externalNvidiaRoot, "before.nip");
     var externalNvidiaManifest = Path.Combine(externalNvidiaRoot, "rollback.json");
     await File.WriteAllTextAsync(externalNvidiaExport, "external NVIDIA export");
-    await File.WriteAllTextAsync(externalNvidiaManifest, "{\"actionId\":\"drivers.nvidiaNip.rollbackManifest\",\"restoreActionId\":\"drivers.nvidiaNip.restoreProfile\",\"profileId\":\"framesync\",\"rollbackSupported\":true,\"exportCompleted\":true,\"importAttempted\":true,\"exportPath\":" + JsonSerializer.Serialize(externalNvidiaExport) + "}");
-    var externalNvidia = new NvidiaProfileRecovery("framesync", externalNvidiaManifest, externalNvidiaExport, "external-nvidia-generation");
+    await File.WriteAllTextAsync(externalNvidiaManifest, "{\"actionId\":\"drivers.nvidiaNip.rollbackManifest\",\"restoreActionId\":\"drivers.nvidiaNip.restoreProfile\",\"profileId\":\"base-profile\",\"rollbackSupported\":true,\"exportCompleted\":true,\"importAttempted\":true,\"exportPath\":" + JsonSerializer.Serialize(externalNvidiaExport) + "}");
+    var externalNvidia = new NvidiaProfileRecovery("base-profile", externalNvidiaManifest, externalNvidiaExport, "external-nvidia-generation");
     OperationFiles.Write(Path.Combine(independentDirectory, "nvidia-profile-operation-generation.json"), new RecoveryOperationGeneration(externalNvidia.Generation!));
     OperationFiles.Write(Path.Combine(independentDirectory, "nvidia-profile-recovery.json"), externalNvidia);
     var independentNvidiaReader = new LiveDataService(new BackendLocator(), independentDirectory);
     var independentNvidiaRestoreCount = Counter("nvidia-restore-count.txt");
     var independentStaleNvidia = await independentService.RestoreNvidiaProfileResultAsync(cachedNvidia, true);
-    Check(await independentService.ReadNvidiaProfileRecoveryAsync("framesync") == externalNvidia
-            && await independentNvidiaReader.ReadNvidiaProfileRecoveryAsync("framesync") == externalNvidia
+    Check(await independentService.ReadNvidiaProfileRecoveryAsync("base-profile") == externalNvidia
+            && await independentNvidiaReader.ReadNvidiaProfileRecoveryAsync("base-profile") == externalNvidia
             && independentStaleNvidia.Error?.Contains("no longer current", StringComparison.OrdinalIgnoreCase) == true
             && Counter("nvidia-restore-count.txt") == independentNvidiaRestoreCount,
         "A newer durable NVIDIA generation outranks stale in-process caches across service instances");
+    Environment.SetEnvironmentVariable("ROO_INDUSTRIES_ACTION_RECOVERY_DIRECTORY", recoveryDirectory);
+
+    var formerId = "legacy-fixture";
+    var formerDigest = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(formerId)));
+    Directory.CreateDirectory(Path.Combine(root, "backend/catalogs"));
+    await File.WriteAllTextAsync(Path.Combine(root, "backend/catalogs/nvidia-profile-inspector-nip-catalog.json"),
+        "{\"profiles\":[{\"profileId\":\"base-profile\",\"formerProfileIdSha256\":[\"" + formerDigest + "\"]}]}");
+    async Task<NvidiaProfileRecovery> SaveNvidia(string directory, string profileId)
+    {
+        var folder = Path.Combine(directory, "nvidia-profile-recovery", profileId);
+        Directory.CreateDirectory(folder);
+        var export = Path.Combine(folder, "before.nip");
+        var manifest = Path.Combine(folder, "rollback.json");
+        await File.WriteAllTextAsync(export, "saved NVIDIA export");
+        await File.WriteAllTextAsync(manifest, JsonSerializer.Serialize(new
+        {
+            actionId = "drivers.nvidiaNip.rollbackManifest", restoreActionId = "drivers.nvidiaNip.restoreProfile", profileId,
+            rollbackSupported = true, exportCompleted = true, importAttempted = true, exportPath = export,
+        }));
+        var saved = new NvidiaProfileRecovery(profileId, manifest, export, profileId + "-generation");
+        OperationFiles.Write(Path.Combine(directory, "nvidia-profile-operation-generation.json"), new RecoveryOperationGeneration(saved.Generation!));
+        OperationFiles.Write(Path.Combine(directory, "nvidia-profile-recovery.json"), saved);
+        return saved;
+    }
+
+    var formerDirectory = Path.Combine(root, "nvidia-former-id");
+    var formerSaved = await SaveNvidia(formerDirectory, formerId);
+    var formerService = new LiveDataService(new BackendLocator(), formerDirectory);
+    var formerPending = await formerService.ReadNvidiaProfileRecoveryAsync("base-profile");
+    var formerRestoreCount = Counter("nvidia-restore-count.txt");
+    var formerRestore = formerPending is null ? null : await formerService.RestoreNvidiaProfileResultAsync(formerPending, true);
+    Check(formerPending == formerSaved && formerRestore is { Error: null } && Counter("nvidia-restore-count.txt") == formerRestoreCount + 1
+            && await formerService.ReadNvidiaProfileRecoveryAsync("base-profile") is null
+            && File.Exists(formerSaved.RollbackManifestPath) && File.Exists(formerSaved.ExportPath),
+        "A recovery saved under the profile's former ID is pending for the current profile and restores through it, keeping its files");
+
+    var unknownDirectory = Path.Combine(root, "nvidia-unknown-id");
+    var unknownSaved = await SaveNvidia(unknownDirectory, "unknown-fixture");
+    var unknownService = new LiveDataService(new BackendLocator(), unknownDirectory);
+    var unknownRestoreCount = Counter("nvidia-restore-count.txt");
+    var unknownRestore = await unknownService.RestoreNvidiaProfileResultAsync(unknownSaved, true);
+    Check(await unknownService.ReadNvidiaProfileRecoveryAsync("base-profile") is null
+            && unknownRestore.Error?.Contains("no longer current", StringComparison.OrdinalIgnoreCase) == true
+            && Counter("nvidia-restore-count.txt") == unknownRestoreCount,
+        "A recovery saved under an ID the profile never had is not offered and cannot restore");
+
+    var racedDirectory = Path.Combine(root, "nvidia-former-id-race");
+    Environment.SetEnvironmentVariable("ROO_INDUSTRIES_ACTION_RECOVERY_DIRECTORY", racedDirectory);
+    await SaveNvidia(racedDirectory, formerId);
+    var racedPage = new LiveDataService(new BackendLocator(), racedDirectory);
+    var racedSelected = await racedPage.ReadNvidiaProfileRecoveryAsync("base-profile");
+    var racedOther = new LiveDataService(new BackendLocator(), racedDirectory);
+    await racedOther.ApplyNvidiaProfileResultAsync("base-profile", true, true, true);
+    var racedNewer = await racedOther.ReadNvidiaProfileRecoveryAsync("base-profile");
+    var racedRestoreCount = Counter("nvidia-restore-count.txt");
+    var racedRestore = await racedPage.RestoreNvidiaProfileResultAsync(racedSelected!, true);
+    Check(racedSelected?.ProfileId == formerId && racedNewer?.ProfileId == "base-profile"
+            && racedRestore.Error?.Contains("no longer current", StringComparison.OrdinalIgnoreCase) == true
+            && Counter("nvidia-restore-count.txt") == racedRestoreCount
+            && await racedPage.ReadNvidiaProfileRecoveryAsync("base-profile") == racedNewer,
+        "A former-ID selection cannot restore or clear a newer apply saved under the current ID");
     Environment.SetEnvironmentVariable("ROO_INDUSTRIES_ACTION_RECOVERY_DIRECTORY", recoveryDirectory);
 
     Console.WriteLine($"Passed {checks} native action runner checks.");

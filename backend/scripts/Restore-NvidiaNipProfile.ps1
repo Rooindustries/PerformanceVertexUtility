@@ -1,6 +1,6 @@
 param(
     [string]$RollbackManifestPath = '',
-    [string]$ProfileId = 'framesync',
+    [string]$ProfileId = 'base-profile',
     [string]$CatalogPath = '',
     [string]$HardwareInventoryPath = '',
     [string]$NvpiExecutablePath = '',
@@ -23,10 +23,11 @@ try {
     if (-not [string]::IsNullOrWhiteSpace($RollbackManifestPath)) {
         $manifest = Read-RooIndustriesJsonFile (Resolve-RooIndustriesPath $RollbackManifestPath $RollbackManifestPath)
         $manifestExportPath = [string](Get-RooIndustriesPropertyValue $manifest 'exportPath' '')
+        $savedProfileId = [string](Get-RooIndustriesPropertyValue $manifest 'profileId' '')
         $manifestBound = (
             [string](Get-RooIndustriesPropertyValue $manifest 'actionId' '') -ceq 'drivers.nvidiaNip.rollbackManifest' -and
             [string](Get-RooIndustriesPropertyValue $manifest 'restoreActionId' '') -ceq 'drivers.nvidiaNip.restoreProfile' -and
-            [string](Get-RooIndustriesPropertyValue $manifest 'profileId' '') -ceq $ProfileId -and
+            (Test-RooIndustriesNvidiaProfileId $profile $savedProfileId) -and
             [bool](Get-RooIndustriesPropertyValue $manifest 'rollbackSupported' $false) -and
             [bool](Get-RooIndustriesPropertyValue $manifest 'exportCompleted' $false) -and
             -not [string]::IsNullOrWhiteSpace($manifestExportPath) -and

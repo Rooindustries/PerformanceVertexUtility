@@ -1,7 +1,7 @@
 param(
     [ValidateSet('Apply','Restore')]
     [string]$Operation = 'Apply',
-    [string]$ProfileId = 'framesync',
+    [string]$ProfileId = 'base-profile',
     [string]$CatalogPath = '',
     [string]$HardwareInventoryPath = '',
     [string]$NvpiExecutablePath = '',
@@ -113,11 +113,13 @@ try {
         $resolvedRequestedRollbackManifestPath = Resolve-RooIndustriesPath $RollbackManifestPath $RollbackManifestPath
         if (Test-Path -LiteralPath $resolvedRequestedRollbackManifestPath) {
             $persistedRollbackManifest = Read-RooIndustriesJsonFile $resolvedRequestedRollbackManifestPath
+            $catalogProfile = Get-RooIndustriesNvidiaNipProfile (Read-RooIndustriesNvidiaNipCatalog $CatalogPath) $ProfileId
             $manifestExportPath = [string](Get-RooIndustriesPropertyValue $persistedRollbackManifest 'exportPath' '')
+            $savedProfileId = [string](Get-RooIndustriesPropertyValue $persistedRollbackManifest 'profileId' '')
             $rollbackManifestBound = (
                 [string](Get-RooIndustriesPropertyValue $persistedRollbackManifest 'actionId' '') -ceq 'drivers.nvidiaNip.rollbackManifest' -and
                 [string](Get-RooIndustriesPropertyValue $persistedRollbackManifest 'restoreActionId' '') -ceq 'drivers.nvidiaNip.restoreProfile' -and
-                [string](Get-RooIndustriesPropertyValue $persistedRollbackManifest 'profileId' '') -ceq $ProfileId -and
+                (Test-RooIndustriesNvidiaProfileId $catalogProfile $savedProfileId) -and
                 [bool](Get-RooIndustriesPropertyValue $persistedRollbackManifest 'rollbackSupported' $false) -and
                 [bool](Get-RooIndustriesPropertyValue $persistedRollbackManifest 'exportCompleted' $false) -and
                 -not [string]::IsNullOrWhiteSpace($manifestExportPath) -and

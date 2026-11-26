@@ -79,7 +79,7 @@ static class PolicyEditionChecks
         reject(() => current.Preview("saved", saved.Profiles.Single().Selections), "Saved consumer blocking cannot bypass edition support when applied");
         check(choices.Read().Profiles.Single().Selections.SequenceEqual(new[] { selected }) && OperationFiles.HashFile(proPath) == beforeSaved, "Unavailable saved choices remain saved without changing Windows");
         check(choices.Save(catalog, "saved", [], saved.Revision).Profiles.Length == 0, "An unavailable saved choice can still be removed");
-        var mixed = catalog.Presets.Single(preset => preset.Id == "fsos.consumer-features.35.disabled");
+        var mixed = catalog.Presets.Single(preset => preset.Id == "gaming.consumer-features.35.disabled");
         var definitions = mixed.Selections.Select(selection => catalog.Resolve(selection).Definition).ToArray();
         var sibling = catalog.Resolve(mixed.Selections.First(selection => selection != selected)).Option.Changes.Single().Address;
         foreach (var (edition, unreadable) in new[] { ("Professional", sibling), ("Enterprise", sibling), ("Enterprise", address) })

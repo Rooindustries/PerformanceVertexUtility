@@ -1,7 +1,7 @@
 # Windows settings
 
 The app combines source controls from O&O ShutUp10, Chris Titus Tech
-WinUtil, FSOS-X Dash and WPD into a shared catalog. The current development
+WinUtil, Gaming toggles and WPD into a shared catalog. The current development
 catalog contains 1,026 setting resources and 1,255 presets derived from 632
 version/control records. These are catalog counts, not a claim that every
 upstream action or visible Windows effect has been verified.
@@ -73,7 +73,7 @@ Update CSP lists the same editions from build 14393 for the deferral and build 1
 for the target version, Windows 11 included. Home, Windows 10 S and Windows 11 SE,
 and older builds, show these rows as **Not available here**; Server keeps them. A
 policy's `minimumBuild` raises each gate of the limited choice to that build. So the
-**FSOS-X Dash · Windows Update · disabled** preset skips those three settings where
+**Gaming toggles · Windows Update · disabled** preset skips those three settings where
 Windows ignores them.
 
 The lock screen policy is listed under `unlimited` with its reference: the CSP lists
@@ -385,7 +385,7 @@ Logitech download restrictions can create an absent folder, but restore removes
 an owned folder only if it remains unchanged and empty.
 
 The timer control owns a separate 0.5 ms request worker; its sign-in option uses
-a current-user task. This replaces FSOS-X's system boot task with an interactive
+a current-user task. This replaces the gaming toggles' system boot task with an interactive
 session lifetime. The control reports the worker's request, not a measured game
 benefit or proof that every process uses that interval. Ultimate Performance uses
 an owned clone and restores the captured original selection, preserving external

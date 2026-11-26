@@ -21,7 +21,7 @@ This document records which tools from `Utilities.zip` should become app feature
 | MSI Afterburner | Used | Startup-capable runtime after user-approved profiles; no default overclock. |
 | DDU | Used for fresh driver installs | Manual guided workflow only. |
 | NVCleanstall | Used | NVIDIA-only manual driver build workflow. |
-| NVIDIA Profile Inspector | Used with `framesync.nip`; future NIP testing desired | Profile catalog, import/export, benchmark testing, top-five recommendations. |
+| NVIDIA Profile Inspector | Used with `base-profile.nip`; future NIP testing desired | Profile catalog, import/export, benchmark testing, top-five recommendations. |
 | OOSU10 | Used | Manual launcher/reference; native safe privacy toggles in app. |
 | WPD | Used | Manual launcher/reference; native safe privacy toggles in app. |
 | Revo Uninstaller | Used, but wants replacement | Native bulk uninstaller module. |
@@ -140,7 +140,8 @@ Required metadata shape:
 
 ## NIP Profile Testing
 
-- Seed profile: `Utilities/Other/framesync.nip`.
+- Seed profile: `Utilities/Other/base-profile.nip`.
+- A utilities folder made before this name change needs its profile file renamed to `base-profile.nip`.
 - Future `.nip` files should be added to the profile catalog.
 - Apply profile only on NVIDIA systems.
 - Benchmark each candidate profile against selected games.

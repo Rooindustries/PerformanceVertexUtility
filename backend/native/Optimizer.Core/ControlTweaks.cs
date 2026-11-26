@@ -99,7 +99,7 @@ public interface IControlStore
 
 public static class ControlPlanning
 {
-    public static readonly IReadOnlySet<string> HiddenPresets = new HashSet<string>(["fsos.hyper-v.54.enabled", "fsos.vbs.76.enabled"], StringComparer.Ordinal);
+    public static readonly IReadOnlySet<string> HiddenPresets = new HashSet<string>(["gaming.hyper-v.54.enabled", "gaming.vbs.76.enabled"], StringComparer.Ordinal);
     public const string HypervisorTogether = "Hyper-V features and Hypervisor at startup can't change in the same apply. Apply one, restart Windows, then apply the other.";
     public const string HypervisorOwned = "Undo the FPS preset (or set Hypervisor at startup back to No override) first, apply, restart Windows, then change Hyper-V features. Windows resets Hypervisor at startup when it finishes Hyper-V changes.";
     public const string HypervisorPending = "Restart Windows first, then change Hypervisor at startup. A Windows feature change is still waiting for restart and can reset it.";

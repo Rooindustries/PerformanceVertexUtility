@@ -8672,10 +8672,10 @@
                                "compressedLengthBytes":  207
                            },
                            {
-                               "archivePath":  "Utilities\\Other\\framesync.nip",
-                               "normalizedId":  "other-framesync",
-                               "toolId":  "framesync-nip",
-                               "displayName":  "FrameSync NIP Profile",
+                               "archivePath":  "Utilities\\Other\\base-profile.nip",
+                               "normalizedId":  "other-base-profile",
+                               "toolId":  "base-profile-nip",
+                               "displayName":  "Base NIP Profile",
                                "entryKind":  "configuration-metadata",
                                "extension":  ".nip",
                                "category":  "nvidia-profile",

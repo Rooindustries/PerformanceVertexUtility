@@ -19,8 +19,8 @@ SHIPPED = (
 )
 RESEARCH = (
     "backend/catalogs/upstream-settings-inventory.json",
-    "backend/catalogs/fsosx-",
-    "backend/catalogs/sources/fsos.json",
+    "backend/catalogs/gaming-",
+    "backend/catalogs/sources/gaming.json",
 )
 TEST_SCRIPT = re.compile(r"^backend/scripts/(?:.*/)?(?:Test-[^/]*|[^/]*\.Tests)\.ps1$|^backend/scripts/GovernorScenarios/")
 PRODUCT = re.compile(r"Roo Industries|rooindustries\.com|Lean Client Optimizer")

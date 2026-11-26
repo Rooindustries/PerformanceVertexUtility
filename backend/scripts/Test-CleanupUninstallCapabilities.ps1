@@ -146,7 +146,7 @@ function Invoke-DetectionRule {
 $stateBefore = Get-StateEntryCount
 
 $allowedFamilies = @('process-controls', 'cleanup-uninstall', 'drivers-gpu-tools', 'system-optimizations')
-$allowedSources = @('process-lasso', 'revo', 'nvpi', 'fsosx-dash', 'winutil', 'utilities-folder', 'roo-industries-native')
+$allowedSources = @('process-lasso', 'revo', 'nvpi', 'gaming-toggles', 'winutil', 'utilities-folder', 'roo-industries-native')
 $allowedImplementedBy = @('roo-industries-native', 'roo-industries-script', 'external-tool', 'not-implemented')
 $allowedRiskLevels = @('safe', 'low', 'medium', 'high', 'critical')
 $allowedPreviewStatuses = @('implemented', 'not-implemented')

@@ -170,8 +170,8 @@
           "evidence": "target-reference; this is one member of the source option"
         },
         {
-          "product": "FSOS-X playbook R11H2",
-          "reference": "fsosx-playbook-r11h2.action.phase7-privacy-0031",
+          "product": "Gaming playbook R11H2",
+          "reference": "gaming-playbook-r11h2.action.phase7-privacy-0031",
           "evidence": "target-reference; desired values verified against the Windows contract"
         }
       ]
@@ -943,8 +943,8 @@
           "evidence": "source-confirmed registry preference"
         },
         {
-          "product": "FSOS-X playbook R11H2",
-          "reference": "fsosx-playbook-r11h2.action.phase5-apply-0060",
+          "product": "Gaming playbook R11H2",
+          "reference": "gaming-playbook-r11h2.action.phase5-apply-0060",
           "evidence": "target-reference; desired values verified against the Windows contract"
         }
       ]

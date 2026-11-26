@@ -381,7 +381,7 @@ def assignment(effect):
     if method == 'service-startup':
         return native('service', effect['target'], 'startup', {'Automatic': 2, 'Manual': 3, 'Disabled': 4}[effect['startupType']])
     if method == 'scheduled-task':
-        if effect['path'].lstrip('\\').startswith('FSOS-'):
+        if effect['path'].lstrip('\\').startswith('{source}-'):
             return None
         value = effect['value'] if effect['operation'] == 'set-enabled' else effect['operation'] == 'enable'
         return native('scheduled-task', '\\' + effect['path'].lstrip('\\'), 'enabled', value)

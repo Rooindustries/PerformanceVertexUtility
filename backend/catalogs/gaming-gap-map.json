@@ -1,21 +1,21 @@
 {
   "schemaVersion": 1,
-  "catalogId": "fsosx-gap-map",
+  "catalogId": "gaming-gap-map",
   "productName": "Roo Industries Optimization Suite",
   "sourceSeparation": {
     "requiredSeparateProducts": true,
     "products": [
       {
-        "sourceKind": "fsosx-playbook",
-        "sourceProduct": "FSOS-X APBX playbook",
-        "catalogPath": "backend/catalogs/fsosx-playbook-capabilities.json",
+        "sourceKind": "gaming-playbook",
+        "sourceProduct": "Gaming playbook",
+        "catalogPath": "backend/catalogs/gaming-playbook-capabilities.json",
         "definition": "OS-level optimization source parsed from APBX YAML and bundled assets."
       },
       {
-        "sourceKind": "fsosx-dash",
-        "sourceProduct": "FSOS-X Dash",
-        "catalogPath": "backend/catalogs/fsosx-dash-capabilities.json",
-        "definition": "Bundled app inspected from FSOSXDash.exe metadata/strings only."
+        "sourceKind": "gaming-toggles",
+        "sourceProduct": "Gaming toggles",
+        "catalogPath": "backend/catalogs/gaming-toggles-capabilities.json",
+        "definition": "Bundled app inspected from {source}.exe metadata/strings only."
       }
     ],
     "mergedBucketAllowed": false
@@ -105,10 +105,10 @@
   },
   "capabilityStatusMap": [
     {
-      "sourceKind": "fsosx-playbook",
-      "sourceProduct": "FSOS-X APBX playbook",
+      "sourceKind": "gaming-playbook",
+      "sourceProduct": "Gaming playbook",
       "capabilityId": "playbook-install-gate-and-source-orchestration",
-      "title": "Admin-gated FSOS-X phase orchestration",
+      "title": "Admin-gated playbook phase orchestration",
       "backendStatus": "missing",
       "risk": "medium",
       "backendEvidence": {
@@ -118,8 +118,8 @@
       }
     },
     {
-      "sourceKind": "fsosx-playbook",
-      "sourceProduct": "FSOS-X APBX playbook",
+      "sourceKind": "gaming-playbook",
+      "sourceProduct": "Gaming playbook",
       "capabilityId": "playbook-vcredist-directx-and-browser-installers",
       "title": "VC++ redist, DirectX runtime, and browser installer bootstrap",
       "backendStatus": "missing",
@@ -131,8 +131,8 @@
       }
     },
     {
-      "sourceKind": "fsosx-playbook",
-      "sourceProduct": "FSOS-X APBX playbook",
+      "sourceKind": "gaming-playbook",
+      "sourceProduct": "Gaming playbook",
       "capabilityId": "playbook-power-plan-import-and-selection",
       "title": "Balanced, AMD, and Intel power-plan import/selection",
       "backendStatus": "preview-only",
@@ -150,8 +150,8 @@
       }
     },
     {
-      "sourceKind": "fsosx-playbook",
-      "sourceProduct": "FSOS-X APBX playbook",
+      "sourceKind": "gaming-playbook",
+      "sourceProduct": "Gaming playbook",
       "capabilityId": "playbook-appx-bloat-ai-store-xbox-removal",
       "title": "Appx deprovision/removal for bloat, AI, Store, and Xbox/Game Bar",
       "backendStatus": "unsafe",
@@ -175,8 +175,8 @@
       }
     },
     {
-      "sourceKind": "fsosx-playbook",
-      "sourceProduct": "FSOS-X APBX playbook",
+      "sourceKind": "gaming-playbook",
+      "sourceProduct": "Gaming playbook",
       "capabilityId": "playbook-edge-onedrive-webview2-strip",
       "title": "Edge, OneDrive, and WebView2 removal/cleanup scripts",
       "backendStatus": "unsafe",
@@ -200,8 +200,8 @@
       }
     },
     {
-      "sourceKind": "fsosx-playbook",
-      "sourceProduct": "FSOS-X APBX playbook",
+      "sourceKind": "gaming-playbook",
+      "sourceProduct": "Gaming playbook",
       "capabilityId": "playbook-defender-smartscreen-mitigations-removal",
       "title": "Defender, SmartScreen, UAC, and security mitigation disable/removal",
       "backendStatus": "unsafe",
@@ -213,8 +213,8 @@
       }
     },
     {
-      "sourceKind": "fsosx-playbook",
-      "sourceProduct": "FSOS-X APBX playbook",
+      "sourceKind": "gaming-playbook",
+      "sourceProduct": "Gaming playbook",
       "capabilityId": "playbook-service-and-scheduled-task-pruning",
       "title": "Windows service and scheduled-task disable/delete matrix",
       "backendStatus": "unsafe",
@@ -226,8 +226,8 @@
       }
     },
     {
-      "sourceKind": "fsosx-playbook",
-      "sourceProduct": "FSOS-X APBX playbook",
+      "sourceKind": "gaming-playbook",
+      "sourceProduct": "Gaming playbook",
       "capabilityId": "playbook-privacy-telemetry-and-policy-registry-hardening",
       "title": "Privacy, telemetry, cloud content, search, activity history, and policy registry hardening",
       "backendStatus": "unsafe",
@@ -239,8 +239,8 @@
       }
     },
     {
-      "sourceKind": "fsosx-playbook",
-      "sourceProduct": "FSOS-X APBX playbook",
+      "sourceKind": "gaming-playbook",
+      "sourceProduct": "Gaming playbook",
       "capabilityId": "playbook-gaming-registry-kernel-memory-and-graphics-tweaks",
       "title": "Gaming registry/kernel/memory/graphics tweaks",
       "backendStatus": "missing",
@@ -252,8 +252,8 @@
       }
     },
     {
-      "sourceKind": "fsosx-playbook",
-      "sourceProduct": "FSOS-X APBX playbook",
+      "sourceKind": "gaming-playbook",
+      "sourceProduct": "Gaming playbook",
       "capabilityId": "playbook-network-and-usb-device-tuning",
       "title": "Network adapter and USB device tuning",
       "backendStatus": "unsafe",
@@ -265,8 +265,8 @@
       }
     },
     {
-      "sourceKind": "fsosx-playbook",
-      "sourceProduct": "FSOS-X APBX playbook",
+      "sourceKind": "gaming-playbook",
+      "sourceProduct": "Gaming playbook",
       "capabilityId": "playbook-timer-resolution-scheduled-task",
       "title": "SetTimerResolution boot scheduled task",
       "backendStatus": "preview-only",
@@ -284,8 +284,8 @@
       }
     },
     {
-      "sourceKind": "fsosx-playbook",
-      "sourceProduct": "FSOS-X APBX playbook",
+      "sourceKind": "gaming-playbook",
+      "sourceProduct": "Gaming playbook",
       "capabilityId": "playbook-shell-ui-personalization-and-context-tools",
       "title": "Shell personalization, dark mode, wallpaper, taskbar/start cleanup, and context-menu tools",
       "backendStatus": "missing",
@@ -297,8 +297,8 @@
       }
     },
     {
-      "sourceKind": "fsosx-playbook",
-      "sourceProduct": "FSOS-X APBX playbook",
+      "sourceKind": "gaming-playbook",
+      "sourceProduct": "Gaming playbook",
       "capabilityId": "playbook-cross-device-phone-link-and-known-folder-cleanup",
       "title": "Cross-device/Phone Link purge and known-folder restore cleanup",
       "backendStatus": "unsafe",
@@ -310,10 +310,10 @@
       }
     },
     {
-      "sourceKind": "fsosx-playbook",
-      "sourceProduct": "FSOS-X APBX playbook",
-      "capabilityId": "playbook-fsosx-dash-bundled-app-install",
-      "title": "Bundle and install FSOS-X Dash as a separate app",
+      "sourceKind": "gaming-playbook",
+      "sourceProduct": "Gaming playbook",
+      "capabilityId": "playbook-gaming-toggles-bundled-app-install",
+      "title": "Bundle and install Gaming toggles as a separate app",
       "backendStatus": "blocked",
       "risk": "medium",
       "backendEvidence": {
@@ -323,8 +323,8 @@
       }
     },
     {
-      "sourceKind": "fsosx-dash",
-      "sourceProduct": "FSOS-X Dash",
+      "sourceKind": "gaming-toggles",
+      "sourceProduct": "Gaming toggles",
       "capabilityId": "dash-game-competitive-mode-process-controls",
       "title": "Competitive Mode game process priority, I/O priority, and CPU affinity controls",
       "backendStatus": "implemented-live",
@@ -353,8 +353,8 @@
       }
     },
     {
-      "sourceKind": "fsosx-dash",
-      "sourceProduct": "FSOS-X Dash",
+      "sourceKind": "gaming-toggles",
+      "sourceProduct": "Gaming toggles",
       "capabilityId": "dash-background-process-demotion-and-governor",
       "title": "Lower other processes and govern background CPU contention",
       "backendStatus": "implemented-live",
@@ -383,8 +383,8 @@
       }
     },
     {
-      "sourceKind": "fsosx-dash",
-      "sourceProduct": "FSOS-X Dash",
+      "sourceKind": "gaming-toggles",
+      "sourceProduct": "Gaming toggles",
       "capabilityId": "dash-clear-standby-memory",
       "title": "Clear standby memory for memory-heavy game stutter",
       "backendStatus": "preview-only",
@@ -402,8 +402,8 @@
       }
     },
     {
-      "sourceKind": "fsosx-dash",
-      "sourceProduct": "FSOS-X Dash",
+      "sourceKind": "gaming-toggles",
+      "sourceProduct": "Gaming toggles",
       "capabilityId": "dash-shader-cache-cleanup",
       "title": "DirectX/NVIDIA/AMD/Intel/Steam shader cache cleanup",
       "backendStatus": "preview-only",
@@ -424,8 +424,8 @@
       }
     },
     {
-      "sourceKind": "fsosx-dash",
-      "sourceProduct": "FSOS-X Dash",
+      "sourceKind": "gaming-toggles",
+      "sourceProduct": "Gaming toggles",
       "capabilityId": "dash-pause-non-essential-services",
       "title": "Temporarily pause non-essential services while gaming",
       "backendStatus": "preview-only",
@@ -443,8 +443,8 @@
       }
     },
     {
-      "sourceKind": "fsosx-dash",
-      "sourceProduct": "FSOS-X Dash",
+      "sourceKind": "gaming-toggles",
+      "sourceProduct": "Gaming toggles",
       "capabilityId": "dash-network-latency-and-adapter-toggles",
       "title": "Network latency, TCP, offload, throttling, Nagle, LLMNR, NetBIOS, and adapter toggles",
       "backendStatus": "unsafe",
@@ -456,8 +456,8 @@
       }
     },
     {
-      "sourceKind": "fsosx-dash",
-      "sourceProduct": "FSOS-X Dash",
+      "sourceKind": "gaming-toggles",
+      "sourceProduct": "Gaming toggles",
       "capabilityId": "dash-power-plan-and-power-state-controls",
       "title": "Power plan switcher and high-performance power-state pinning",
       "backendStatus": "preview-only",
@@ -475,8 +475,8 @@
       }
     },
     {
-      "sourceKind": "fsosx-dash",
-      "sourceProduct": "FSOS-X Dash",
+      "sourceKind": "gaming-toggles",
+      "sourceProduct": "Gaming toggles",
       "capabilityId": "dash-windows-toggle-library",
       "title": "Large Windows tweak/toggle library",
       "backendStatus": "missing",
@@ -488,8 +488,8 @@
       }
     },
     {
-      "sourceKind": "fsosx-dash",
-      "sourceProduct": "FSOS-X Dash",
+      "sourceKind": "gaming-toggles",
+      "sourceProduct": "Gaming toggles",
       "capabilityId": "dash-timer-resolution-toggle",
       "title": "Global timer resolution toggle",
       "backendStatus": "preview-only",
@@ -507,8 +507,8 @@
       }
     },
     {
-      "sourceKind": "fsosx-dash",
-      "sourceProduct": "FSOS-X Dash",
+      "sourceKind": "gaming-toggles",
+      "sourceProduct": "Gaming toggles",
       "capabilityId": "dash-uninstaller-and-leftover-cleanup",
       "title": "Installed app uninstaller and leftover review",
       "backendStatus": "preview-only",
@@ -532,8 +532,8 @@
       }
     },
     {
-      "sourceKind": "fsosx-dash",
-      "sourceProduct": "FSOS-X Dash",
+      "sourceKind": "gaming-toggles",
+      "sourceProduct": "Gaming toggles",
       "capabilityId": "dash-store-app-restore",
       "title": "Restore removed UWP/Microsoft Store apps",
       "backendStatus": "missing",
@@ -545,8 +545,8 @@
       }
     },
     {
-      "sourceKind": "fsosx-dash",
-      "sourceProduct": "FSOS-X Dash",
+      "sourceKind": "gaming-toggles",
+      "sourceProduct": "Gaming toggles",
       "capabilityId": "dash-profile-import-export-and-settings",
       "title": "Dash profile import/export and app settings",
       "backendStatus": "blocked",
@@ -558,8 +558,8 @@
       }
     },
     {
-      "sourceKind": "fsosx-dash",
-      "sourceProduct": "FSOS-X Dash",
+      "sourceKind": "gaming-toggles",
+      "sourceProduct": "Gaming toggles",
       "capabilityId": "dash-system-restore-and-update-downloads",
       "title": "System restore, downloads, updates, links, and app lifecycle",
       "backendStatus": "missing",
@@ -582,7 +582,7 @@
     {
       "rank": 1,
       "capabilityId": "dash-clear-standby-memory",
-      "sourceProduct": "FSOS-X Dash",
+      "sourceProduct": "Gaming toggles",
       "backendStatus": "preview-only",
       "whyFor16GbObsDiscordOverwatch": "Dash explicitly targets flushing standby memory for memory-heavy game stutter; 16 GB with OBS and Discord makes memory pressure a first-order suspect.",
       "safeBackendNeeded": "Read-only memory pressure evidence, standby list size capture, confirmed clear action, before/after validation, and no persistent state write."
@@ -590,7 +590,7 @@
     {
       "rank": 2,
       "capabilityId": "playbook-timer-resolution-scheduled-task",
-      "sourceProduct": "FSOS-X APBX playbook",
+      "sourceProduct": "Gaming playbook",
       "backendStatus": "preview-only",
       "whyFor16GbObsDiscordOverwatch": "Timer resolution can affect input/audio/frame pacing; APBX bundles a dedicated SetTimerResolution executable and Dash exposes a timer toggle.",
       "safeBackendNeeded": "Backend-owned timer lifecycle with process/task cleanup, measured current/min/max timer evidence, rollback, and validation."
@@ -598,7 +598,7 @@
     {
       "rank": 3,
       "capabilityId": "playbook-power-plan-import-and-selection",
-      "sourceProduct": "FSOS-X APBX playbook / FSOS-X Dash",
+      "sourceProduct": "Gaming playbook / Gaming toggles",
       "backendStatus": "preview-only",
       "whyFor16GbObsDiscordOverwatch": "Power plan and power-state pinning directly affect CPU clock residency and frame-time consistency while streaming.",
       "safeBackendNeeded": "Capture current active plan, import/apply only reviewed plans, restore previous GUID, and validate active scheme."
@@ -606,7 +606,7 @@
     {
       "rank": 4,
       "capabilityId": "dash-shader-cache-cleanup",
-      "sourceProduct": "FSOS-X Dash",
+      "sourceProduct": "Gaming toggles",
       "backendStatus": "preview-only",
       "whyFor16GbObsDiscordOverwatch": "Dash names DirectX/NVIDIA/AMD/Intel/Steam shader caches; stale shader caches can present as game stutter after driver/game changes.",
       "safeBackendNeeded": "Preview per-cache paths, protect active game/OBS files, backup/delete manifest, and validation by path count/bytes only after confirmation."
@@ -614,7 +614,7 @@
     {
       "rank": 5,
       "capabilityId": "dash-network-latency-and-adapter-toggles",
-      "sourceProduct": "FSOS-X Dash / FSOS-X APBX playbook",
+      "sourceProduct": "Gaming toggles / Gaming playbook",
       "backendStatus": "unsafe",
       "whyFor16GbObsDiscordOverwatch": "OBS upload and Discord voice make network jitter visible; Dash/playbook both target TCP/offload/throttling/adapter settings.",
       "safeBackendNeeded": "Adapter-specific inventory, original advanced-property snapshot, allowlist by NIC/vendor, rollback, and latency/packet-loss validation."
@@ -622,7 +622,7 @@
     {
       "rank": 6,
       "capabilityId": "playbook-gaming-registry-kernel-memory-and-graphics-tweaks",
-      "sourceProduct": "FSOS-X APBX playbook",
+      "sourceProduct": "Gaming playbook",
       "backendStatus": "missing",
       "whyFor16GbObsDiscordOverwatch": "Contains graphics, memory-management, GameDVR/Game Bar, WER, and scheduler-adjacent settings likely related to frame pacing.",
       "safeBackendNeeded": "Registry snapshot/restore, reboot requirement tracking, anti-cheat compatibility gates, and benchmark/ETW validation."
@@ -630,7 +630,7 @@
     {
       "rank": 7,
       "capabilityId": "dash-pause-non-essential-services",
-      "sourceProduct": "FSOS-X Dash",
+      "sourceProduct": "Gaming toggles",
       "backendStatus": "preview-only",
       "whyFor16GbObsDiscordOverwatch": "Background services can compete with CPU/memory/disk while streaming, but blanket service stops are risky.",
       "safeBackendNeeded": "Per-service allowlist, dependency graph, state snapshot, time-boxed session restore, and OBS/Discord/game protection."
@@ -638,24 +638,22 @@
   ],
   "sourceCounts": {
     "primaryArchive": {
-      "path": "source-archive:FSOS-XR7.apbx",
+      "path": "source-archive:{source}R7.apbx",
       "role": "primary",
       "listedEntries": 195,
       "extractedFiles": 195,
       "extractedDirectories": 5,
-      "extractedBytes": 246258449,
       "configurationFiles": 8,
       "taskYamlFiles": 7,
       "mainYamlActions": 8,
       "taskActions": 1319
     },
     "comparisonArchive": {
-      "path": "source-archive:FSOS-XR6.5.apbx",
+      "path": "source-archive:{source}R6.5.apbx",
       "role": "older-comparison-only",
       "listedEntries": 199,
       "extractedFiles": 194,
-      "extractedDirectories": 5,
-      "extractedBytes": 243179584
+      "extractedDirectories": 5
     },
     "assetCategoryCounts": {
       "configuration": 8,
@@ -672,57 +670,21 @@
       ],
       "removedInR7": [],
       "changedSize": [
-        {
-          "path": "Configuration/Tasks/phase1-prepare.yml",
-          "r65Bytes": 16937,
-          "r7Bytes": 21294
-        },
-        {
-          "path": "Configuration/Tasks/phase4-gaming.yml",
-          "r65Bytes": 22204,
-          "r7Bytes": 21054
-        },
-        {
-          "path": "Configuration/Tasks/phase5-apply.yml",
-          "r65Bytes": 44646,
-          "r7Bytes": 45054
-        },
-        {
-          "path": "Configuration/Tasks/phase6-extended.yml",
-          "r65Bytes": 82899,
-          "r7Bytes": 83063
-        },
-        {
-          "path": "Configuration/Tasks/phase7-privacy.yml",
-          "r65Bytes": 30943,
-          "r7Bytes": 30939
-        },
-        {
-          "path": "Executables/FSOSXDash.exe",
-          "r65Bytes": 136182772,
-          "r7Bytes": 136219608
-        },
-        {
-          "path": "Executables/lockscreen.png",
-          "r65Bytes": 1002516,
-          "r7Bytes": 2519928
-        },
-        {
-          "path": "Executables/wallpaper.png",
-          "r65Bytes": 1002516,
-          "r7Bytes": 2519928
-        },
-        {
-          "path": "playbook.conf",
-          "r65Bytes": 10735,
-          "r7Bytes": 10763
-        }
+        "Configuration/Tasks/phase1-prepare.yml",
+        "Configuration/Tasks/phase4-gaming.yml",
+        "Configuration/Tasks/phase5-apply.yml",
+        "Configuration/Tasks/phase6-extended.yml",
+        "Configuration/Tasks/phase7-privacy.yml",
+        "Executables/{source}.exe",
+        "Executables/lockscreen.png",
+        "Executables/wallpaper.png",
+        "playbook.conf"
       ],
       "changedSizeCount": 9
     }
   },
   "safetyNotes": [
-    "No WinUI app launch, AME Wizard run, FSOS-X application, FSOSXDash.exe execution, registry/service/driver/cleanup/uninstall/privacy/power/network/security mutation was performed.",
+    "No WinUI app launch, AME Wizard run, playbook application, {source}.exe execution, registry/service/driver/cleanup/uninstall/privacy/power/network/security mutation was performed.",
     "backend/state is intentionally not used by these catalogs or tests.",
     "Capabilities marked implemented-live must retain executable backend scripts, rollback/backup rules, and validation evidence."
   ]

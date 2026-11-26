@@ -75,7 +75,7 @@ try {
     }
 
     $enumFamily = @('process-controls','cleanup-uninstall','drivers-gpu-tools','system-optimizations')
-    $enumSource = @('process-lasso','revo','nvpi','fsosx-dash','winutil','utilities-folder','roo-industries-native')
+    $enumSource = @('process-lasso','revo','nvpi','gaming-toggles','winutil','utilities-folder','roo-industries-native')
     $enumImplementedBy = @('roo-industries-native','roo-industries-script','external-tool','not-implemented')
     $enumRisk = @('safe','low','medium','high','critical')
     $enumPreviewStatus = @('implemented','not-implemented')

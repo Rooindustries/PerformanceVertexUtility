@@ -374,9 +374,9 @@ function New-Classification {
             $defaults.executionClass = 'read-only-detector'
             break
         }
-        '^utilities/other/framesync\.nip$' {
-            $defaults.toolId = 'framesync-nip'
-            $defaults.displayName = 'FrameSync NIP Profile'
+        '^utilities/other/base-profile\.nip$' {
+            $defaults.toolId = 'base-profile-nip'
+            $defaults.displayName = 'Base NIP Profile'
             $defaults.category = 'nvidia-profile'
             $defaults.risk = 'medium'
             $defaults.productRole = 'seed-profile-metadata'

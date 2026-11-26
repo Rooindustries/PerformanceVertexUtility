@@ -376,7 +376,7 @@ def check(root):
         if validator.is_valid(invalid):
             failures.append('Catalog negative control accepted ' + name)
     coverage = json.loads((root / 'backend/catalogs/windows-tweak-coverage.json').read_text())
-    expected = {'O&O ShutUp10': 376, 'WPD': 110, 'FSOS-X Dash': 79, 'Chris Titus Tech WinUtil': 67}
+    expected = {'O&O ShutUp10': 376, 'WPD': 110, 'Gaming toggles': 79, 'Chris Titus Tech WinUtil': 67}
     actual = {product: sum(record['product'] == product for record in coverage['records']) for product in expected}
     if actual != expected:
         failures.append('Pinned source inventory coverage changed: ' + str(actual))

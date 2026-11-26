@@ -135,9 +135,9 @@
       "risk": "medium",
       "profileFiles": [
         {
-          "id": "framesync",
-          "name": "FrameSync",
-          "archivePath": "Utilities/Other/framesync.nip",
+          "id": "base-profile",
+          "name": "Base profile",
+          "archivePath": "Utilities/Other/base-profile.nip",
           "catalogPath": "backend/catalogs/nvidia-profile-inspector-nip-catalog.json",
           "sourceSha256": "D58339DB9678EB342BD38A9F811AC992BCA9B30CC6ED4C0081BF889474FDD201",
           "status": "seed-profile",

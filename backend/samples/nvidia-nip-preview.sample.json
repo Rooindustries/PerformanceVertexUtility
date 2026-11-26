@@ -3,15 +3,15 @@
   "schemaVersion": 1,
   "productName": "Roo Industries Optimization Suite",
   "capturedAtUtc": "2026-07-01T10:00:00Z",
-  "profileId": "framesync",
+  "profileId": "base-profile",
   "dryRun": true,
   "status": "preview",
   "executionMode": "preview-only",
   "profile": {
-    "profileId": "framesync",
-    "name": "FrameSync",
+    "profileId": "base-profile",
+    "name": "Base profile",
     "profileNameInNip": "Base Profile",
-    "sourceFile": "Utilities\\Other\\framesync.nip",
+    "sourceFile": "Utilities\\Other\\base-profile.nip",
     "settingCount": 24,
     "supportedHardware": [
       "PCI\\VEN_10DE"
@@ -38,7 +38,7 @@
       "arguments": [
         "-exportProfile",
         "Base Profile",
-        "%TEMP%\\roo-industries-nvidia-nip-export-framesync-before.nip"
+        "%TEMP%\\roo-industries-nvidia-nip-export-base-profile-before.nip"
       ],
       "launchAllowedNow": false,
       "processStarted": false
@@ -49,7 +49,7 @@
       "executablePath": "Utilities\\Other\\NVPI\\nvidiaProfileInspector.exe",
       "arguments": [
         "-importProfile",
-        "Utilities\\Other\\framesync.nip"
+        "Utilities\\Other\\base-profile.nip"
       ],
       "launchAllowedNow": false,
       "processStarted": false

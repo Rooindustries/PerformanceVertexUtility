@@ -37,7 +37,7 @@ Use the brand layer already captured in this repo:
 - DDU, NVCleanstall, OOSU10, WPD, driver installers, and destructive cleanup flows remain manual or confirmation-gated.
 - Implement the Chris Titus Tech Windows Utility feature set as a source-backed catalog, routed through the app's preview, confirmation, backup, and rollback flows instead of remote script execution.
 - Driver recommendations should be hardware-aware and game-aware, with tested game-logo tags.
-- NVIDIA Profile Inspector should start from `framesync.nip`, then later score candidate `.nip` profiles and expose the top tested options.
+- NVIDIA Profile Inspector should start from `base-profile.nip`, then later score candidate `.nip` profiles and expose the top tested options.
 
 ## Repo Roles
 

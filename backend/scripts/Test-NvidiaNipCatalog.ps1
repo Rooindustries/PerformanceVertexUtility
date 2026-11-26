@@ -237,7 +237,7 @@ if ($catalog) {
     Add-Check ($profiles.Count -eq 1) 'Catalog has one seed profile' "Catalog expected one seed profile, found $($profiles.Count)"
     if ($profiles.Count -ge 1) {
         $profile = $profiles[0]
-        Add-Check ($profile.profileId -eq 'framesync') 'Seed profile ID is framesync' "Unexpected seed profile ID: $($profile.profileId)"
+        Add-Check ($profile.profileId -eq 'base-profile') 'Seed profile ID is base-profile' "Unexpected seed profile ID: $($profile.profileId)"
         Add-Check ($profile.status -eq 'seed-profile') 'Seed profile status is not promoted' "Seed profile status is unexpectedly $($profile.status)"
         Add-Check ($profile.manualApplyRequired -eq $true) 'Seed profile requires manual apply' 'Seed profile does not require manual apply'
         Add-Check ($profile.benchmarkStatus -eq 'needs-local-benchmark') 'Seed profile requires local benchmark before recommendation' "Unexpected benchmarkStatus: $($profile.benchmarkStatus)"
@@ -245,7 +245,7 @@ if ($catalog) {
 
         Test-CatalogSettingShape $profile
         Test-NipSourceAgainstCatalog $NipSourcePath $profile
-        Test-Hash $NipSourcePath $profile.sourceSha256 'framesync.nip'
+        Test-Hash $NipSourcePath $profile.sourceSha256 'base-profile.nip'
     }
 
     Test-ReferenceSourceAgainstCatalog $ReferenceXmlPath $catalog
@@ -267,12 +267,12 @@ if ($manifest) {
         $tool = $tool[0]
         Add-Check ($tool.autoRunAllowed -eq $false) 'Utilities manifest forbids NVPI auto-run' 'Utilities manifest allows NVPI auto-run'
         Add-Check ($tool.appRole -eq 'profile-import-and-test') 'Utilities manifest keeps NVPI as profile import/test tool' "Unexpected NVPI appRole: $($tool.appRole)"
-        $profileFile = @($tool.profileFiles | Where-Object { $_.id -eq 'framesync' })
-        Add-Check ($profileFile.Count -eq 1) 'Utilities manifest has one framesync profile file' "Utilities manifest framesync profile file count is $($profileFile.Count)"
+        $profileFile = @($tool.profileFiles | Where-Object { $_.id -eq 'base-profile' })
+        Add-Check ($profileFile.Count -eq 1) 'Utilities manifest has one base profile file' "Utilities manifest base profile file count is $($profileFile.Count)"
         if ($profileFile.Count -eq 1) {
-            Add-Check ($profileFile[0].autoImportAllowed -eq $false) 'Utilities manifest forbids framesync auto-import' 'Utilities manifest allows framesync auto-import'
-            Add-Check ($profileFile[0].manualApplyRequired -eq $true) 'Utilities manifest requires manual framesync apply' 'Utilities manifest does not require manual framesync apply'
-            Add-Check ($profileFile[0].requiresExportFirst -eq $true) 'Utilities manifest requires export before framesync import' 'Utilities manifest does not require export before framesync import'
+            Add-Check ($profileFile[0].autoImportAllowed -eq $false) 'Utilities manifest forbids base profile auto-import' 'Utilities manifest allows base profile auto-import'
+            Add-Check ($profileFile[0].manualApplyRequired -eq $true) 'Utilities manifest requires manual base profile apply' 'Utilities manifest does not require manual base profile apply'
+            Add-Check ($profileFile[0].requiresExportFirst -eq $true) 'Utilities manifest requires export before base profile import' 'Utilities manifest does not require export before base profile import'
         }
     }
 }

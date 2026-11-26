@@ -46,7 +46,7 @@ Depth can continue after launch, but risky automation still needs preview, backu
   - Installed GPU driver version.
   - Driver catalog UI with game tags and stability notes.
   - Manual install launch flow with warnings.
-  - NVIDIA Profile Inspector catalog seeded by `framesync.nip`.
+  - NVIDIA Profile Inspector catalog seeded by `base-profile.nip`.
   - Tested/recommended profile slots, even if full automated benchmarking continues after launch.
 - Installer/package, release notes, app screenshots, and basic user guide.
 
@@ -103,7 +103,7 @@ These can appear as preview/manual workflows, but should not ship as aggressive 
 - Build hardware and installed driver detection.
 - Build driver catalog schema and UI.
 - Add game-tagged driver recommendations.
-- Add NVIDIA Profile Inspector profile catalog seeded by `framesync.nip`.
+- Add NVIDIA Profile Inspector profile catalog seeded by `base-profile.nip`.
 - Keep DDU/NVCleanstall/manual driver install flows gated.
 - Start benchmark/provider integration if stable.
 

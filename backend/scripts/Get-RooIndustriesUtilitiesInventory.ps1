@@ -123,8 +123,8 @@ $toolDefinitions = @(
         (New-RooIndustriesPathSpec 'tool-executable' 'Other\NVPI\nvidiaProfileInspector.exe'),
         (New-RooIndustriesPathSpec 'reference-metadata' 'Other\NVPI\Reference.xml')
     ) 'NVPI is inspected by file metadata only.'),
-    (New-RooIndustriesInventoryTool 'framesync-nip' 'FrameSync NIP Profile' 'nvidia-profile' 'medium' @(
-        (New-RooIndustriesPathSpec 'profile-file' 'Other\framesync.nip')
+    (New-RooIndustriesInventoryTool 'base-profile-nip' 'Base NIP Profile' 'nvidia-profile' 'medium' @(
+        (New-RooIndustriesPathSpec 'profile-file' 'Other\base-profile.nip')
     ) 'Seed NIP profile source file; no import is attempted.'),
     (New-RooIndustriesInventoryTool 'nvidia-59579-no-app' 'NVIDIA 595.79 Driver Package (No NVIDIA App)' 'driver-package' 'high' @(
         (New-RooIndustriesPathSpec 'installer-package' 'Drivers\Graphics\NVIDIA_595.79_NO_Nvidia_App.exe')

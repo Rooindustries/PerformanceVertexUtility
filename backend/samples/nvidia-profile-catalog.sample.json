@@ -11,10 +11,10 @@
   },
   "entries": [
     {
-      "profileId": "framesync",
-      "name": "FrameSync",
+      "profileId": "base-profile",
+      "name": "Base profile",
       "vendor": "NVIDIA",
-      "sourceFile": "Utilities\\Other\\framesync.nip",
+      "sourceFile": "Utilities\\Other\\base-profile.nip",
       "sourceTool": "NVIDIA Profile Inspector",
       "status": "seed-profile",
       "supportedHardware": [
