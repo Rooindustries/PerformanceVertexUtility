@@ -173,6 +173,11 @@ static class DataRootHarness
 
     private static void Take(string path)
     {
+        if (!TestFixtures.Alone(path))
+        {
+            Console.WriteLine("Left the permissions of a fixture entry that is a link or has another name unchanged: " + path);
+            return;
+        }
         Run("takeown.exe", "/F \"" + path.Replace(@"\\?\", "") + "\" /A");
         Run("icacls.exe", "\"" + path.Replace(@"\\?\", "") + "\" /reset /C /Q");
     }

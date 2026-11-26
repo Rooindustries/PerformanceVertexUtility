@@ -314,55 +314,37 @@ def fixture_cleanup_negative_controls():
 
 def reparse_walk_negative_controls():
     check = runpy.run_path(str(Path(__file__).with_name('check_reparse_walks.py')))['check']
+    table = json.loads(Path(__file__).with_name('reparse-walk-names.json').read_text(encoding='utf-8'))
     location = 'tools/validation/reparse-walk-allowlist.json'
     cs = 'tools/validation/Example/Checks.cs'
-    ps = 'tools/validation/Example/Test-Example.ps1'
     py = 'tools/validation/example.py'
     every = 'Directory.EnumerateFiles(root, "*", SearchOption.All' + 'Directories);'
-    item = 'Copy-' + 'Item'
-    mount = 'mk' + 'link'
     entry = {'file': cs, 'line': every, 'reason': 'fixture'}
     cases = {
-        'enumeration that follows links': ([], {cs: every}, [f'{cs}:1:']),
-        'enumeration that stays local': ([], {cs: 'LocalTree.Entries(root);'}, []),
         'enumeration with a numbered option': ([], {cs: 'Directory.Enumerate' + 'Files(root, "*", 1);'}, [f'{cs}:1:']),
-        'enumeration with a variable recurse flag': ([], {cs: 'var o = new EnumerationOptions { Recurse' + 'Subdirectories = deep };'}, [f'{cs}:1:']),
-        'python tree that follows links': ([], {py: 'files = root.rgl' + 'ob("*")'}, [f'{py}:1:']),
+        'enumeration that stays local': ([], {cs: 'LocalTree.Entries(root);'}, []),
         'python double-star pattern': ([], {py: "files = root.gl" + "ob('**/*')"}, [f'{py}:1:']),
-        'recursive item duplicate': ([], {ps: item + ' -LiteralPath $a -Destination $b -Re' + 'curse'}, [f'{ps}:1:']),
-        'recursive duplicate by alias and short flag': ([], {ps: 'c' + 'pi $a $b -r'}, [f'{ps}:1:']),
-        'recursive duplicate across lines': ([], {ps: item + ' $a `\n  -Destination $b `\n  -Re' + 'curse'}, [f'{ps}:1:']),
-        'recursive duplicate by splat': ([], {ps: '$p=@{Path=$a;Re' + 'curse=$true}\n' + item + ' @p'}, [f'{ps}:2:']),
-        'purging mirror copy': ([], {ps: 'robo' + 'copy.exe $a $b /MIR /XJ'}, [f'{ps}:1:']),
-        'mirror copy without link exclusion': ([], {ps: 'robo' + 'copy.exe $a $b /E /R:0'}, [f'{ps}:1:']),
-        'mirror copy flags on a later line': ([], {ps: 'robo' + 'copy.exe $a $b `\n  /E /R:0'}, [f'{ps}:1:']),
-        'mirror copy even with links excluded': ([], {ps: 'robo' + 'copy.exe $a $b /E /XJ /R:0'}, [f'{ps}:1:']),
-        'tree permission change': ([], {ps: "& (Join-Path $s 'ica" + "cls.exe') $a /reset /T /C"}, [f'{ps}:1:']),
-        'symbolic link to a drive root': ([], {cs: 'Directory.CreateSymbolic' + 'Link(link, @"C:\\");'}, [f'{cs}:1:']),
-        'own helper that sets a reparse point': ([], {cs: 'DeviceIoControl(handle, 0x' + '900A4, data, size, IntPtr.Zero, 0, out _, IntPtr.Zero);'}, [f'{cs}:1:']),
-        'python link': ([], {py: "link.symlink" + "_to('C:/')"}, [f'{py}:1:']),
-        'junction made by the shell': ([], {ps: f'cmd.exe /d /c {mount} /J "$link" "C:\\"'}, [f'{ps}:1:']),
-        'junction made by New-Item': ([], {ps: "New-Item -ItemType Junc" + "tion -Path $link -Target ($env:SystemDrive + '\\')"}, [f'{ps}:1:']),
-        'fixture on a real volume': ([], {cs: 'GetVolumeNameFor' + 'VolumeMountPoint(drive, name, 64);'}, [f'{cs}:1:']),
+        'python recursive glob': ([], {py: "files = glob.glob(pattern, recur" + "sive=True)"}, [f'{py}:1:']),
         'guarded fixture link': ([], {cs: 'TestFixtures.Junction(link, root);'}, []),
-        'wide volume mount call': ([], {cs: 'static extern bool SetVolumeMount' + 'PointW(string mount, string volume);'}, [f'{cs}:1:']),
-        'python volume mount call': ([], {py: 'kernel32.SetVolumeMount' + 'PointW(mount, volume)'}, [f'{py}:1:']),
-        'partition access path': ([], {ps: 'Get-Partition -DriveLetter C | Add-PartitionAccess' + 'Path -AccessPath $f'}, [f'{ps}:1:']),
-        'volume mount by CIM': ([], {ps: "Invoke-CimMethod $v -MethodName AddMount" + "Point -Arguments @{Directory=$f}"}, [f'{ps}:1:']),
-        'wide DOS mapping call': ([], {cs: 'DefineDos' + 'DeviceW(0, "X:", target);'}, [f'{cs}:1:']),
-        'item type with a colon': ([], {ps: 'New-Item -ItemType:Junc' + 'tion -Path $a -Target $b'}, [f'{ps}:1:']),
-        'item type in a splat': ([], {ps: "$p=@{ItemType='Junc" + "tion';Path=$a;Target=$b}\nNew-Item @p"}, [f'{ps}:1:']),
-        'short item type': ([], {ps: 'New-Item -it Junc' + 'tion $a -Value $b'}, [f'{ps}:1:']),
-        'reparse control code in decimal': ([], {cs: 'DeviceIoControl(handle, 5899' + '88, data, size, IntPtr.Zero, 0, out _, IntPtr.Zero);'}, [f'{cs}:1:']),
-        'virtual disk mount': ([], {ps: 'Mount-V' + 'HD -Path $file'}, [f'{ps}:1:']),
-        'python path walk': ([], {py: 'for p, d, f in root.wa' + 'lk(): pass'}, [f'{py}:1:']),
-        'legacy permission tree': ([], {ps: 'cac' + 'ls $a /T /E /G Everyone:R'}, [f'{ps}:1:']),
-        'shell loop over a tree': ([], {ps: 'cmd /c for /' + 'r $a %f in (*) do echo %f'}, [f'{ps}:1:']),
+        'file type nobody listed': ([], {'tools/validation/Example/run.foo': 'echo'}, ['tools/validation/Example/run.foo:']),
         'listed line': ([entry], {cs: every}, []),
         'listed line used once': ([entry], {cs: every + '\n' + every}, [f'{cs}:2:']),
         'listed without a reason': ([dict(entry, reason=' ')], {cs: every}, [f'{location}:']),
         'stale listed line': ([entry], {cs: 'LocalTree.Entries(root);'}, [f'{location}: stale']),
     }
+    for index, row in enumerate(table['rows']):
+        sample = 'tools/validation/Example/sample.' + row.get('file', 'ps1')
+        variants = [row['sample'], row['sample'].upper()]
+        if ' ' in row['name']:
+            variants.append('[' + ', '.join(repr(part) for part in row['name'].split() + ['$a']) + ']')
+        if 'switch' in row:
+            switch = row['switch']
+            variants += [row['name'] + '/' + switch + ' $a', row['name'] + ' /q /' + switch.upper() + ' $a', row['name'] + ' $a /q/' + switch]
+        for alias in [row['name'], *row.get('aliases', [])]:
+            if 'parameter' in row:
+                variants += [alias + ' $a $b -' + row['parameter'][:1], alias + ' $a `\n  -' + row['parameter'], '$p=@{Path=$a}; ' + alias + ' @p']
+        for number, variant in enumerate(variants):
+            cases[f'table row {index} {row["name"]} variant {number}'] = ([], {sample: variant}, [f'{sample}:1:'])
     results = {}
     for label, (entries_listed, files, expected) in cases.items():
         with tempfile.TemporaryDirectory() as folder:

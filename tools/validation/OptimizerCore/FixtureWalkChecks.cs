@@ -26,7 +26,7 @@ static class FixtureWalkChecks
             var canary = Directory.CreateDirectory(Path.Combine(outside, "canary")).FullName;
             File.WriteAllText(Path.Combine(canary, "kept.txt"), "canary");
             var before = Canary(canary);
-            var scenarios = new Action<Action<bool, string>, string, string>[] { Guarded, Disguised, Unremovable, Killed, Shared, Jammed, Walks };
+            var scenarios = new Action<Action<bool, string>, string, string>[] { Guarded, Disguised, Hardlinked, Unremovable, Killed, Shared, Jammed, Walks };
             foreach (var scenario in scenarios)
             {
                 try { scenario(check, canary, before); }
@@ -120,11 +120,42 @@ static class FixtureWalkChecks
             TestFixtures.Symlink(Path.Combine(root, "share"), @"\\192.0.2.139\Share");
             check(new[] { "self", "missing", "canary-file", "share" }.All(name => Path.Exists(Path.Combine(root, name))),
                 "A link into this run's own fixture, to a missing child, or to an unroutable share is kept");
+            Directory.CreateDirectory(Path.Combine(root, "spaced"));
+            Directory.CreateSymbolicLink(@"\\?\" + Path.Combine(root, "spaced "), lookalike);
+            var spaced = Path.Combine(root, "through-space");
+            try { TestFixtures.Symlink(spaced, "spaced "); }
+            catch (InvalidOperationException) { }
+            check(!Path.Exists(spaced), "A link whose spelled target is inside but which Windows opens outside, through a name ending in a space, is removed and refused");
         }
         finally
         {
             TestFixtures.Remove(root);
             TestFixtures.Remove(lookalike);
+        }
+    }
+
+    private static void Hardlinked(Action<bool, string> check, string canary, string before)
+    {
+        var holder = TestFixtures.InheritingRoot("hardlink-target");
+        var stale = Path.Combine(Path.GetTempPath(), "roo-industries-hardlinked-fixture-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var shared = new FileInfo(Path.Combine(holder, "shared.txt"));
+            File.WriteAllText(shared.FullName, "kept");
+            var security = shared.GetAccessControl();
+            security.AddAccessRule(new FileSystemAccessRule(WindowsIdentity.GetCurrent().User!, FileSystemRights.WriteData, AccessControlType.Deny));
+            shared.SetAccessControl(security);
+            TestFixtures.HardLink(Path.Combine(TestFixtures.Own(stale), "shared.txt"), shared.FullName);
+            SweepFor("hardlinked-fixture");
+            var deny = shared.GetAccessControl().GetAccessRules(true, false, typeof(SecurityIdentifier)).Cast<FileSystemAccessRule>()
+                .Any(rule => rule.AccessControlType == AccessControlType.Deny);
+            check(!Path.Exists(stale) && File.ReadAllText(shared.FullName) == "kept" && deny,
+                "A run start removes a dead fixture's hard link without changing the permissions of the file it shares");
+        }
+        finally
+        {
+            TestFixtures.Remove(stale);
+            TestFixtures.Remove(holder);
         }
     }
 

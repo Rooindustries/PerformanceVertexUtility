@@ -8,31 +8,28 @@ import subprocess
 local_tree = runpy.run_path(str(Path(__file__).with_name('local_tree.py')))['entries']
 
 ALLOWLIST = 'tools/validation/reparse-walk-allowlist.json'
-SCOPE = re.compile(r'.*\.(cs|ps1|psm1|py)$')
-WALK = 'this names a recursive walk that can follow junctions, symbolic links and mount points'
-LINKED = 'this names a link, mount or drive mapping primitive outside the TestFixtures helpers'
-WALKS = re.compile('|'.join([
-    r'alldirectories', r'recursesubdirectories', r'\.f?walk\(', r'rglob', r'copytree', r'xcopy', r'robocopy',
-    r'(?<![a-z])i?cacls(?![a-z])', r'(?<![a-z])takeown(?![a-z])', r'\bfor\s+/r\b', r'\bdir\b[^\n]*\s/s\b',
-    r'\.i?glob\(\s*[rbf]*[\'"][^\'"\n]*\*\*', r'\brecursive\s*=\s*True\b',
-]), re.IGNORECASE)
-NUMBERED = re.compile(r'\b(?:Get|Enumerate)(?:Files|Directories|FileSystemEntries|FileSystemInfos)\s*\(', re.IGNORECASE)
-COPY = re.compile(r'(?<![\w.$-])(?:Copy-Item|cpi|cp|copy)(?![\w-])', re.IGNORECASE)
-LINKS = re.compile('|'.join([
-    r'symbolic_?link', r'symlink', r'hard_?link', r'mount_?point', r'access_?path', r'dos_?device', r'createjunction', r'mklink',
-    r'mountvol', r'(?<![a-z])subst(?:\.exe)?(?![a-z])', r'ps_?drive', r'vhdx?(?![a-z])', r'vdisk', r'disk_?image',
-    r'virtual_?disk', r'0x0*900a4', r'(?<!\d)589988(?!\d)', r'set_?reparse_?point', r'assign\s+mount',
-]), re.IGNORECASE)
-JUNCTION = re.compile(r'junction', re.IGNORECASE)
-POWERSHELL = re.compile(r'itemtype|new-item|(?<![\w-])-it(?![\w-])', re.IGNORECASE)
+TABLE = json.loads(Path(__file__).with_name('reparse-walk-names.json').read_text(encoding='utf-8'))
+SCANNED = set(TABLE['scanned'])
+DATA = set(TABLE['data'])
 HELPERS = {
-    'backend/native/Optimizer.Core/LocalTree.cs': {WALK},
-    'tools/validation/OptimizerCore/TestFixtures.cs': {LINKED},
-    'tools/validation/check_reparse_walks.py': {WALK, LINKED},
+    'backend/native/Optimizer.Core/LocalTree.cs': {'recursive walk, copy, delete, permission and ownership'},
+    'tools/validation/OptimizerCore/TestFixtures.cs': {'drive mapping and drive letters', 'links', 'mount points and access paths', 'virtual disk attach'},
+    'tools/validation/check_reparse_walks.py': {row['category'] for row in TABLE['rows']},
 }
+SHAPES = [
+    re.compile(r'\.i?glob\(\s*[rbf]*[\'"][^\'"\n]*\*\*'),
+    re.compile(r'\brecursive\s*=\s*True\b', re.IGNORECASE),
+]
+NUMBERED = re.compile(r'\b(?:Get|Enumerate)(?:Files|Directories|FileSystemEntries|FileSystemInfos)\s*\(', re.IGNORECASE)
+POWERSHELL = re.compile(r'itemtype|new-item|(?<![\w-])-it(?![\w-])', re.IGNORECASE)
 
 
-def statement(text, start):
+def extension(relative):
+    name = relative.rsplit('/', 1)[-1]
+    return name.rsplit('.', 1)[-1].lower() if '.' in name else ''
+
+
+def statement(text, start, nested=True):
     depth = 0
     index = start
     while index < len(text):
@@ -40,37 +37,61 @@ def statement(text, start):
         if char in '([{':
             depth += 1
         elif char in ')]}':
-            if depth == 0:
+            if depth == 0 and nested:
                 break
-            depth -= 1
+            depth = max(depth - 1, 0)
         elif char in ';|' and depth == 0:
             break
-        elif char == '\n' and depth == 0 and not text[:index].rstrip('\r').endswith('`'):
+        elif char == '\n' and depth == 0 and not text[:index].rstrip('\r').endswith(('`', '^')):
             break
         index += 1
     return text[start:index]
 
 
+def spelled(name, word):
+    pattern = r'[\s\'",]*'.join(re.escape(part) for part in name.split())
+    return re.compile((r'(?<![\w-])' + pattern + r'(?![\w-])') if word else pattern, re.IGNORECASE)
+
+
+RULES = []
+for row in TABLE['rows']:
+    names = [row['name'], *row.get('aliases', [])]
+    word = row.get('word', False) or 'switch' in row or 'parameter' in row
+    RULES.append((row, [spelled(name, word) for name in names]))
+
+
+def named(row, patterns, text, powershell):
+    for pattern in patterns:
+        for match in pattern.finditer(text):
+            line = text[text.rfind('\n', 0, match.start()) + 1:text.find('\n', match.start()) % (len(text) + 1)]
+            tail = statement(text, match.end(), nested=False)
+            if row.get('where') == 'powershell' and not (powershell or POWERSHELL.search(line)):
+                continue
+            if 'switch' in row and row['switch'] not in {flag.lower() for flag in re.findall(r'/([A-Za-z]+)', tail)}:
+                continue
+            if 'parameter' in row:
+                prefixes = '|'.join(re.escape(row['parameter'][:size]) for size in range(1, len(row['parameter']) + 1))
+                if not re.search(r'(?<![\w-])-(?:' + prefixes + r')(?![\w-])|\s@[A-Za-z_]\w*', statement(text, match.end()), re.IGNORECASE):
+                    continue
+            yield match.start()
+
+
 def findings(relative, text):
     exempt = HELPERS.get(relative, set())
-    powershell = relative.endswith(('.ps1', '.psm1'))
+    powershell = extension(relative) in ('ps1', 'psm1', 'psd1', 'cmd', 'bat')
     found = {}
-    if WALK not in exempt:
-        for match in WALKS.finditer(text):
-            found.setdefault(match.start(), WALK)
+    for row, patterns in RULES:
+        if row['category'] in exempt:
+            continue
+        for start in named(row, patterns, text, powershell):
+            found.setdefault(start, row['category'] + ' name ' + row['name'])
+    if 'recursive walk, copy, delete, permission and ownership' not in exempt:
+        for shape in SHAPES:
+            for match in shape.finditer(text):
+                found.setdefault(match.start(), 'recursive walk shape')
         for match in NUMBERED.finditer(text):
             if re.search(r',\s*(?:\(\s*[\w.]*SearchOption\s*\)\s*)?1\s*\)$', statement(text, match.start())):
-                found.setdefault(match.start(), WALK)
-        for match in COPY.finditer(text):
-            if re.search(r'\s(?:-r[a-z]*\b|@[A-Za-z_]\w*)', statement(text, match.start()), re.IGNORECASE):
-                found.setdefault(match.start(), WALK)
-    if LINKED not in exempt:
-        for match in LINKS.finditer(text):
-            found.setdefault(match.start(), LINKED)
-        for match in JUNCTION.finditer(text):
-            line = text[text.rfind('\n', 0, match.start()) + 1:text.find('\n', match.start()) % (len(text) + 1)]
-            if powershell or POWERSHELL.search(line):
-                found.setdefault(match.start(), LINKED)
+                found.setdefault(match.start(), 'recursive walk shape')
     lines = text.splitlines()
     rows = {}
     for start, message in sorted(found.items()):
@@ -96,14 +117,18 @@ def check(root):
                 failures.append(f'{ALLOWLIST}: {entry.get("file")} {entry.get("line")!r} needs the reason its root or target stays inside a fixture')
             allowed.append(entry)
     used = set()
-    for relative in sorted(path for path in paths if path and SCOPE.match(path)):
+    for relative in sorted(path for path in paths if path):
         if {'bin', 'obj'}.intersection(relative.split('/')) or not (root / relative).is_file():
+            continue
+        if extension(relative) not in SCANNED:
+            if extension(relative) not in DATA:
+                failures.append(f'{relative}: its file type is neither scanned nor listed as data in reparse-walk-names.json')
             continue
         for number, line, message in findings(relative, (root / relative).read_text(encoding='utf-8-sig', errors='replace')):
             match = next((i for i, e in enumerate(allowed) if i not in used and e.get('file') == relative and e.get('line') == line), None)
             if match is None:
-                failures.append(f'{relative}:{number}: {message}: {line[:160]}; use LocalTree.Entries, local_tree, TestFixtures.Junction, '
-                                f'TestFixtures.Symlink or Get-ChildItem -Recurse, or list why it stays inside a fixture in {ALLOWLIST}')
+                failures.append(f'{relative}:{number}: this names a {message}: {line[:160]}; use LocalTree.Entries, local_tree, '
+                                f'TestFixtures.Junction or TestFixtures.Symlink, or list why it stays inside a fixture in {ALLOWLIST}')
             else:
                 used.add(match)
     for i, entry in enumerate(allowed):

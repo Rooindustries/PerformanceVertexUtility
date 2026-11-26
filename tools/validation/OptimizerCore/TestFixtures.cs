@@ -151,10 +151,16 @@ static class TestFixtures
             if (attributes == uint.MaxValue) break;
             if ((attributes & 0x400) != 0)
             {
-                using var link = Open(next, 0x80, true);
-                if (self is not null && Name(link, 1) == self && Inside(self)) return true;
-                if (Unroutable(Stored(link).Target)) return true;
-                throw new InvalidOperationException("A fixture link target passes through another link: " + next);
+                using (var link = Open(next, 0x80, true))
+                {
+                    if (self is not null && Name(link, 1) == self && Inside(self)) return true;
+                    if (Unroutable(Stored(link).Target)) return true;
+                }
+                using var through = CreateFile(next, 0, 7, IntPtr.Zero, 3, 0x02000000, IntPtr.Zero);
+                if (through.IsInvalid || !Toward(Name(through, 1)))
+                    throw new InvalidOperationException("A fixture link target passes through a link that leads away from this run's folders: " + next);
+                probe = Name(through, 1);
+                continue;
             }
             probe = next;
         }
@@ -173,6 +179,33 @@ static class TestFixtures
             throw new Win32Exception(code);
         }
         if (!Inside(Name(handle, 1))) throw new InvalidOperationException("Opening through the link lands outside: " + path);
+    }
+
+    private static bool Toward(string final)
+    {
+        final = final.TrimEnd('\\') + "\\";
+        lock (Owned) return Inside(final) || Owned.Any(own => (own.TrimEnd('\\') + "\\").StartsWith(final, StringComparison.OrdinalIgnoreCase));
+    }
+
+    public static bool Alone(string path)
+    {
+        using var handle = Open(path, 0x80, true);
+        return Alone(handle);
+    }
+
+    private static bool Alone(SafeFileHandle handle)
+    {
+        if (!GetFileInformationByHandle(handle, out var information)) throw new Win32Exception();
+        return (information.Attributes & 0x400) == 0 && information.Links <= 1;
+    }
+
+    public static void HardLink(string path, string existing)
+    {
+        using (var handle = Open(existing, 0, false))
+        {
+            if (!Inside(Name(handle, 1))) throw new InvalidOperationException("A fixture hard link must share a file this run made: " + existing);
+        }
+        if (!CreateHardLink(path, existing, IntPtr.Zero)) throw new Win32Exception(Marshal.GetLastWin32Error(), path);
     }
 
     private static bool Inside(string final)
@@ -249,9 +282,9 @@ static class TestFixtures
                 var held = new List<SafeFileHandle>();
                 try
                 {
-                    var (links, volumes) = Scan(root, held);
+                    var (links, volumes) = Scan(@"\\?\" + Path.GetFullPath(root), held);
                     foreach (var link in links) Unlink(link);
-                    foreach (var volume in volumes) DiskPart(root, false, "select vdisk file=\"" + volume + "\" noerr", "detach vdisk noerr");
+                    foreach (var volume in volumes) DiskPart(root, false, "select vdisk file=\"" + volume[4..] + "\" noerr", "detach vdisk noerr");
                 }
                 finally { held.ForEach(handle => handle.Dispose()); }
                 Directory.Delete(root, true);
@@ -300,6 +333,11 @@ static class TestFixtures
         if (handle.IsInvalid) return;
         if (!(Name(handle, 1).TrimEnd('\\') + "\\").StartsWith(inside, StringComparison.OrdinalIgnoreCase))
             throw new IOException("A fixture entry is not inside the fixture folder it was listed in: " + path);
+        if (!Directory.Exists(path) && !Alone(handle))
+        {
+            Console.WriteLine("Left the permissions of a fixture file that is a link or has another name unchanged: " + path);
+            return;
+        }
         GetKernelObjectSecurity(handle, 4, null, 0, out var size);
         var bytes = new byte[size];
         if (!GetKernelObjectSecurity(handle, 4, bytes, size, out _)) throw new Win32Exception();
@@ -393,10 +431,21 @@ static class TestFixtures
     private static extern bool SetReparsePoint(SafeFileHandle handle, uint control, byte[] input, uint inputLength, IntPtr output, uint outputLength, out uint returned, IntPtr overlapped);
     [DllImport("kernel32.dll", EntryPoint = "DeviceIoControl", SetLastError = true)]
     private static extern bool GetReparsePoint(SafeFileHandle handle, uint control, IntPtr input, uint inputLength, byte[] output, uint outputLength, out uint returned, IntPtr overlapped);
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool GetFileInformationByHandle(SafeFileHandle handle, out FileInformation information);
+    [DllImport("kernel32.dll", EntryPoint = "CreateHardLinkW", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern bool CreateHardLink(string path, string existing, IntPtr security);
     [DllImport("advapi32.dll", SetLastError = true)]
     private static extern bool GetKernelObjectSecurity(SafeFileHandle handle, uint information, byte[]? descriptor, uint length, out uint needed);
     [DllImport("advapi32.dll", SetLastError = true)]
     private static extern bool SetKernelObjectSecurity(SafeFileHandle handle, uint information, byte[] descriptor);
+}
+
+[StructLayout(LayoutKind.Sequential)]
+struct FileInformation
+{
+    public uint Attributes, CreatedLow, CreatedHigh, AccessedLow, AccessedHigh, WrittenLow, WrittenHigh;
+    public uint Volume, SizeHigh, SizeLow, Links, IndexHigh, IndexLow;
 }
 
 sealed class OwnedRegistryKey : IDisposable
