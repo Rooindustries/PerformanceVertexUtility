@@ -12,6 +12,7 @@
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Models/*.cs" Link="Models/%(Filename)%(Extension)" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/BackendLocator.cs" Link="BackendLocator.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/LiveDataService.cs" Link="LiveDataService.cs" />
+    <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/LiveDataService.NvidiaProfiles.cs" Link="LiveDataService.NvidiaProfiles.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/SettingsStore.cs" Link="SettingsStore.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/SampleDataService.cs" Link="SampleDataService.cs" />
     <Compile Include="../../../docs/internal/frontend/RooIndustries.OptimizationSuite.App/Services/BackendScriptPolicy.cs" Link="BackendScriptPolicy.cs" />

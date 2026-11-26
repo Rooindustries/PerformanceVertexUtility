@@ -18,7 +18,7 @@ public sealed record LiveDataResult<T>(T? Value, string? Error, string? Recovery
 }
 public sealed record NvidiaProfileRecovery(string ProfileId, string RollbackManifestPath, string ExportPath, string? Generation = null);
 
-public sealed class LiveDataService
+public sealed partial class LiveDataService
 {
     private readonly BackendLocator _locator;
     private readonly string _recoveryDirectory;
@@ -538,10 +538,7 @@ public sealed class LiveDataService
         catch (RooIndustries.Optimizer.EarlierVersionException error) { return new(null, error.Message); }
         using var operation = TryOperationLease(NvidiaOperationPath, "NVIDIA profile", out var leaseError);
         if (operation is null) return new(null, leaseError);
-        if (NvidiaCatalogProfileId(recovery.ProfileId) is not { } profileId)
-            return new(null, "The selected NVIDIA recovery is no longer current.");
-        var current = await ReadNvidiaProfileRecoveryAsync(profileId).ConfigureAwait(false);
-        if (!ValidNvidiaRecovery(recovery, profileId) || current != recovery)
+        if (await CurrentNvidiaProfileIdAsync(recovery).ConfigureAwait(false) is not { } profileId)
             return new(null, "The selected NVIDIA recovery is no longer current.");
         if (!TryWriteGeneration(NvidiaGenerationPath, recovery.Generation!, "NVIDIA profile", out var generationError))
             return new(null, generationError);
@@ -1079,36 +1076,6 @@ public sealed class LiveDataService
     {
         var recovery = new NvidiaProfileRecovery(profileId, rollbackManifestPath, exportPath, generation);
         return ValidateNvidiaRecovery(recovery, profileId) ? recovery : null;
-    }
-
-    private bool ValidNvidiaRecovery(NvidiaProfileRecovery? recovery, string profileId)
-        => recovery is not null && NvidiaCatalogProfileId(recovery.ProfileId) == profileId
-            && ValidateNvidiaRecovery(recovery, recovery.ProfileId);
-
-    private string? NvidiaCatalogProfileId(string savedId)
-    {
-        if (_locator.CatalogsDirectory is not { } catalogs) return savedId;
-        var bytes = Encoding.UTF8.GetBytes(savedId);
-        var digest = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes));
-        try
-        {
-            var path = Path.Combine(catalogs, "nvidia-profile-inspector-nip-catalog.json");
-            using var doc = JsonDocument.Parse(File.ReadAllText(path));
-            foreach (var profile in doc.RootElement.GetProperty("profiles").EnumerateArray())
-            {
-                var current = NvidiaString(profile, "profileId");
-                if (current == savedId) return current;
-                if (profile.TryGetProperty("formerProfileIdSha256", out var former)
-                    && former.EnumerateArray()
-                        .Any(item => digest.Equals(item.GetString(), StringComparison.OrdinalIgnoreCase)))
-                    return current;
-            }
-            return null;
-        }
-        catch
-        {
-            return savedId;
-        }
     }
 
     private static bool ValidateNvidiaRecovery(NvidiaProfileRecovery? recovery, string profileId)
