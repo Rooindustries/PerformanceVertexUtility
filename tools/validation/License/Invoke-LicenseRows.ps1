@@ -24,6 +24,7 @@ $installKey = 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\' +
 $installDir = Join-Path $env:ProgramFiles 'Roo Industries\Optimization Suite'
 $results = [ordered]@{ S1 = [ordered]@{ result = 'not run' } }
 $steps = [Collections.Generic.List[object]]::new()
+$setupStarted = $false
 $utf8 = [Text.UTF8Encoding]::new($false)
 
 function Note([string]$Row, [string]$Step, $Detail) {
@@ -243,8 +244,10 @@ function WalkWizard($Row, $Build, $Owned, [string]$License, $Pages) {
 function CloseSetup($Row, $Owned) {
     $cancel = $Row['cancel']
     $Row.Remove('cancel')
+    $cancelled = $false
     if ($cancel -and -not $Owned.process.HasExited) {
         Invoke $cancel ([int]$cancel.Current.ProcessId)
+        $cancelled = $true
         $dialogs = [Windows.Automation.PropertyCondition]::new($A::ClassNameProperty, '#32770')
         $yesCondition = [Windows.Automation.PropertyCondition]::new($A::NameProperty, 'Yes')
         $yes = Poll {
@@ -255,7 +258,11 @@ function CloseSetup($Row, $Owned) {
         } 15
         if ($yes) { Invoke $yes ([int]$yes.Current.ProcessId) }
     }
-    if (-not $Owned.process.WaitForExit(30000)) { Stop-HarnessProcess $Owned }
+    $exited = $Owned.process.WaitForExit(30000)
+    if (-not $exited) { Stop-HarnessProcess $Owned }
+    if ($cancelled -and $exited) { return }
+    $Row.result = 'invalid'
+    $Row.reason = (@($Row['reason'], 'Setup did not close on Cancel.') | Where-Object { $_ }) -join ' '
 }
 
 function RowS1($Build) {
@@ -266,6 +273,7 @@ function RowS1($Build) {
     }
     $row.installedBefore = Installed
     $owned = Start-OwnedProcess -FilePath $Build.installer -WindowStyle Normal -Purpose 'hand-run-setup'
+    $script:setupStarted = $true
     $pages = [Collections.Generic.List[object]]::new()
     try {
         WalkWizard $row $Build $owned $license $pages
@@ -290,7 +298,7 @@ try {
     $build = Build
     RowS1 $build
 } catch {
-    $results.S1.result = 'invalid'
+    $results.S1.result = if ($setupStarted) { 'invalid' } else { 'not run' }
     $results.S1.reason = $_.Exception.Message
     Note 'S1' 'error' $_.ScriptStackTrace
 } finally {
