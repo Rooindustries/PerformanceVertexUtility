@@ -27297,38 +27297,6 @@
       ]
     }
   ],
-  "binaryInspection": [
-    {
-      "path": "Executables/{source}.exe",
-      "machine": "0x8664",
-      "numberOfSections": 10,
-      "timestamp": 1777505335,
-      "subsystem": 2,
-      "imageBase": "0x140000000",
-      "entryPoint": "0x5c3990",
-      "versionInfo": {}
-    },
-    {
-      "path": "Executables/SetTimerResolution.exe",
-      "machine": "0x8664",
-      "numberOfSections": 6,
-      "timestamp": 1719526427,
-      "subsystem": 3,
-      "imageBase": "0x140000000",
-      "entryPoint": "0x16c50",
-      "versionInfo": {}
-    },
-    {
-      "path": "Executables/dxredist/DXSETUP.exe",
-      "machine": "0x14c",
-      "numberOfSections": 4,
-      "timestamp": 1301485200,
-      "subsystem": 2,
-      "imageBase": "0x1000000",
-      "entryPoint": "0x709f",
-      "versionInfo": {}
-    }
-  ],
   "capabilities": [
     {
       "capabilityId": "playbook-install-gate-and-source-orchestration",

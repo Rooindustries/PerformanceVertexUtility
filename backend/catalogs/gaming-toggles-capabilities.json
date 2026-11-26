@@ -17,16 +17,6 @@
     "unsafe": "Source action is destructive or security-sensitive and must not be implemented without a dedicated safety design.",
     "blocked": "Capability cannot be safely mapped from source-only inspection, usually because Dash internals were not decompiled or third-party installers/binaries are opaque."
   },
-  "binaryInspection": {
-    "path": "Executables/{source}.exe",
-    "machine": "0x8664",
-    "numberOfSections": 10,
-    "timestamp": 1777505335,
-    "subsystem": 2,
-    "imageBase": "0x140000000",
-    "entryPoint": "0x5c3990",
-    "versionInfo": {}
-  },
   "capabilities": [
     {
       "capabilityId": "dash-game-competitive-mode-process-controls",
