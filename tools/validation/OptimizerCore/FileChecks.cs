@@ -89,7 +89,7 @@ static class FileChecks
         }
         finally
         {
-            foreach (var file in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)) File.SetAttributes(file, FileAttributes.Normal);
+            foreach (var file in LocalTree.Entries(root).OfType<FileInfo>()) file.Attributes = FileAttributes.Normal;
             Directory.Delete(root, true);
         }
         check(!Directory.Exists(root), "File validation removes its reviewed, backup and mirror fixtures");

@@ -2,7 +2,10 @@ import argparse
 import json
 from pathlib import Path
 import re
+import runpy
 import subprocess
+
+local_tree = runpy.run_path(str(Path(__file__).with_name('local_tree.py')))['entries']
 
 SHIPPED = (
     "docs/internal/frontend/RooIndustries.OptimizationSuite.App/",
@@ -48,7 +51,7 @@ def check(root):
     if (root / ".git").exists():
         paths = subprocess.check_output(["git", "ls-files", "-z"], cwd=root).decode().split("\0")
     else:
-        paths = [path.relative_to(root).as_posix() for path in root.rglob("*") if path.is_file() and not {"bin", "obj", "artifacts", "state", "__pycache__", ".git"}.intersection(path.parts)]
+        paths = [path.relative_to(root).as_posix() for path in local_tree(root) if path.is_file() and not {"bin", "obj", "artifacts", "state", "__pycache__", ".git"}.intersection(path.parts)]
     for relative in paths:
         path = root / relative
         if not relative or not shipped(relative) or not path.is_file():

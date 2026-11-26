@@ -45,6 +45,8 @@ if (args is ["--registry"]) { RegistryChecks.Run(Check); RegistryConflictChecks.
 if (args is ["--policies"]) { ProcessIdentityChecks.Run(Check); PolicyChecks.Run(Check); return; }
 if (args is ["--alias-ownership-probe", var aliasRoot, var aliasPeer]) { AliasOwnershipChecks.Probe(aliasRoot, aliasPeer); return; }
 if (args is ["--alias-ownership"]) { AliasOwnershipChecks.Run(Check); return; }
+if (args is ["--fixture-hold", var heldCanary]) { FixtureWalkChecks.Hold(heldCanary); return; }
+if (args is ["--fixture-walks"]) { FixtureWalkChecks.Run(Check); return; }
 if (args is ["--discovery"]) { DiscoveryChecks.Run(Check); return; }
 if (args is ["--path-spelling-probe", .. var spellingPaths]) { PathSpellingChecks.ProtectedProbe(spellingPaths); return; }
 if (args is ["--path-spelling"]) { PathSpellingChecks.Run(Check); return; }

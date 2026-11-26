@@ -189,7 +189,7 @@ static class DataRootHarness
 
     public static string? Read(string path) { try { return File.ReadAllText(Long(path)); } catch (Exception error) when (error is IOException or UnauthorizedAccessException) { return null; } }
 
-    public static string[] Names(string folder) => Directory.Exists(folder) ? Directory.EnumerateFileSystemEntries(folder, "*", SearchOption.AllDirectories).Select(path => Path.GetRelativePath(folder, path)).OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToArray() : [];
+    public static string[] Names(string folder) => Directory.Exists(folder) ? LocalTree.Entries(folder, links: true).Select(entry => Path.GetRelativePath(folder, entry.FullName)).OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToArray() : [];
 
     public static object? Api(Type type, string name, params object?[] arguments)
     {

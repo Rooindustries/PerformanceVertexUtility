@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import re
+import runpy
 import shutil
 import subprocess
 import sys
@@ -14,6 +15,7 @@ import zipfile
 import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[3]
+local_tree = runpy.run_path(str(ROOT / 'tools/validation/local_tree.py'))['entries']
 EMPTY = hashlib.sha256(b'').hexdigest()
 
 
@@ -242,7 +244,7 @@ $files=@(($roots|Where-Object path -eq $data).files)
         self.command([binary, '-d', directory, installer], self.out / 'p0/innoextract.log')
         app = directory / 'app'
         values = []
-        for path in sorted(app.rglob('*')):
+        for path in sorted(local_tree(app)):
             if path.is_file():
                 with path.open('rb') as source:
                     sha = hashlib.file_digest(source, 'sha256').hexdigest()

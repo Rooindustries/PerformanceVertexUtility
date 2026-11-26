@@ -2,8 +2,11 @@ from __future__ import annotations
 
 from pathlib import Path
 import re
+import runpy
 import subprocess
 import tempfile
+
+local_tree = runpy.run_path(str(Path(__file__).with_name('local_tree.py')))['entries']
 
 AGENT_FILES = re.compile(r'\b(?:AGENTS|CL[A]UDE|GEMINI)(?:\.md\b|["\']\s*\+\s*["\']\.md\b)', re.IGNORECASE)
 DOCS = {'.md'}
@@ -16,7 +19,7 @@ def files(root: Path) -> list[Path]:
     if (root / '.git').exists():
         listed = subprocess.run(['git', '-C', str(root), 'ls-files', '-z'], capture_output=True, check=True).stdout.decode('utf-8')
         return [root / name for name in listed.split('\0') if name]
-    return [path for path in root.rglob('*') if path.is_file() and not SKIP.intersection(path.relative_to(root).parts)]
+    return [path for path in local_tree(root) if path.is_file() and not SKIP.intersection(path.relative_to(root).parts)]
 
 
 def check(root: Path | str) -> list[str]:

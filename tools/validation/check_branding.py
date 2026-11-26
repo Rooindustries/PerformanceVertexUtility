@@ -2,7 +2,10 @@ import argparse
 import json
 from pathlib import Path
 import re
+import runpy
 import subprocess
+
+local_tree = runpy.run_path(str(Path(__file__).with_name('local_tree.py')))['entries']
 
 COMPATIBILITY = {
     "backend/native/Optimizer.Core/BrandCompatibility.cs",
@@ -40,7 +43,7 @@ def check(root):
     elif (root / "source-verification.json").exists():
         paths = json.loads((root / "source-verification.json").read_text(encoding="utf-8-sig"))["files"]
     else:
-        paths = [path.relative_to(root).as_posix() for path in root.rglob("*") if path.is_file() and not {"bin", "obj", "artifacts", "state", "__pycache__", ".git"}.intersection(path.parts)]
+        paths = [path.relative_to(root).as_posix() for path in local_tree(root) if path.is_file() and not {"bin", "obj", "artifacts", "state", "__pycache__", ".git"}.intersection(path.parts)]
     for relative in paths:
         path = root / relative
         if not relative or not path.is_file() or relative in COMPATIBILITY | {EXCEPTIONS}:

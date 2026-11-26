@@ -148,6 +148,10 @@ try {
         $outside = @($items | Where-Object { -not (Test-RooIndustriesPathInsideRoot ([string](Get-RooIndustriesUninstallPropertyValue $_ 'target' '')) $resolvedFixtureRoot) })
         $targetsInsideFixture = ($outside.Count -eq 0)
     }
+    $linkedItems = @($items | Where-Object {
+        $target = [string](Get-RooIndustriesUninstallPropertyValue $_ 'target' '')
+        $target -and (Test-RooIndustriesCleanupReparsePath $target -Recurse)
+    })
 
     $gates = @(
         (New-RooIndustriesCleanupExecutionGate 'confirm-apply' 'Confirmed apply requested' $true ([bool]$ConfirmApply) 'Execution remains a dry-run until -ConfirmApply is supplied.' $null),
@@ -156,6 +160,7 @@ try {
         (New-RooIndustriesCleanupExecutionGate 'targets-inside-fixture' 'All cleanup targets are inside fixture root' $true $targetsInsideFixture 'Every live deletion target must resolve inside the disposable fixture root.' ([pscustomobject]@{ itemCount = $items.Count })),
         (New-RooIndustriesCleanupExecutionGate 'official-command-approved' 'Official uninstall command approved' $true ([bool]$OfficialUninstallCommandApproved) 'The official command must be reviewed and approved before the cleanup sequence is considered executable.' ([pscustomobject]@{ commandPreviewCount = $commands.Count; willRunUninstallers = $false })),
         (New-RooIndustriesCleanupExecutionGate 'cleanup-manifest-approved' 'Cleanup deletion manifest approved' $true ([bool]$CleanupDeletionManifestApproved) 'The selected leftover manifest must be approved before fixture deletion.' ([pscustomobject]@{ cleanupManifestId = Get-RooIndustriesUninstallPropertyValue $cleanupManifest 'manifestId' $null })),
+        (New-RooIndustriesCleanupExecutionGate 'targets-without-links' 'No cleanup target is or holds a link' $true ($linkedItems.Count -eq 0) 'A target reached through or holding a junction, mount point or symbolic link is never copied or deleted.' ([pscustomobject]@{ linkedSelectedCount = $linkedItems.Count })),
         (New-RooIndustriesCleanupExecutionGate 'protected-items-excluded' 'Protected cleanup items excluded' $true ($protectedItems.Count -eq 0) 'Protected leftover items cannot be selected for deletion.' ([pscustomobject]@{ protectedSelectedCount = $protectedItems.Count })),
         (New-RooIndustriesCleanupExecutionGate 'fixture-supported-types' 'Fixture executor supports selected item types' $true ($unsupportedItems.Count -eq 0) 'Disposable fixture execution supports file and folder targets only; registry, service, task, and startup changes remain preview-only.' ([pscustomobject]@{ unsupportedItemCount = $unsupportedItems.Count })),
         (New-RooIndustriesCleanupExecutionGate 'real-uninstaller-disabled' 'Real official uninstaller execution disabled' $false $true 'This executor never launches official uninstall commands; fixture validation starts after approved metadata review.' ([pscustomobject]@{ willRunUninstallers = $false }))

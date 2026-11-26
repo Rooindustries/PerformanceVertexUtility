@@ -10,6 +10,8 @@ import sys
 import tempfile
 import xml.etree.ElementTree as ET
 
+local_tree = runpy.run_path(str(Path(__file__).with_name('local_tree.py')))['entries']
+
 try:
     from jsonschema import Draft202012Validator
 except ImportError:
@@ -310,6 +312,40 @@ def fixture_cleanup_negative_controls():
     return results
 
 
+def reparse_walk_negative_controls():
+    check = runpy.run_path(str(Path(__file__).with_name('check_reparse_walks.py')))['check']
+    location = 'tools/validation/reparse-walk-allowlist.json'
+    cs = 'tools/validation/Example/Checks.cs'
+    ps = 'tools/validation/Example/Test-Example.ps1'
+    py = 'tools/validation/example.py'
+    every = 'Directory.EnumerateFiles(root, "*", SearchOption.All' + 'Directories);'
+    entry = {'file': cs, 'walk': 'All' + 'Directories', 'reason': 'fixture'}
+    cases = {
+        'enumeration that follows links': ([], {cs: every}, [f'{cs}:1:']),
+        'enumeration that stays local': ([], {cs: 'LocalTree.Entries(root);'}, []),
+        'python tree that follows links': ([], {py: 'files = root.rgl' + 'ob("*")'}, [f'{py}:1:']),
+        'recursive copy': ([], {ps: 'Copy-Item -LiteralPath $a -Destination $b -Re' + 'curse'}, [f'{ps}:1:']),
+        'purging mirror copy': ([], {ps: "robo" + "copy.exe $a $b /MIR /XJ"}, [f'{ps}:1:']),
+        'mirror copy without link exclusion': ([], {ps: "robo" + "copy.exe $a $b /E /R:0"}, [f'{ps}:1:']),
+        'mirror copy excluding links': ([], {ps: "robo" + "copy.exe $a $b /E /XJ /R:0"}, []),
+        'tree permission change': ([], {ps: "ica" + "cls.exe $a /reset /T /C"}, [f'{ps}:1:']),
+        'fixture on a real volume': ([], {cs: 'GetVolumeNameFor' + 'VolumeMountPoint(drive, name, 64);'}, [f'{cs}:1:']),
+        'listed reason': ([entry], {cs: every}, []),
+        'listed without a reason': ([dict(entry, reason=' ')], {cs: every}, [f'{location}:']),
+        'stale listed reason': ([entry], {cs: 'LocalTree.Entries(root);'}, [f'{location}: stale']),
+    }
+    results = {}
+    for label, (entries_listed, files, expected) in cases.items():
+        with tempfile.TemporaryDirectory() as folder:
+            temporary = Path(folder)
+            for relative, source in {location: json.dumps(entries_listed), **files}.items():
+                (temporary / relative).parent.mkdir(parents=True, exist_ok=True)
+                (temporary / relative).write_text(source, encoding='utf-8')
+            failures = check(temporary)
+            results[label] = len(failures) == len(expected) and all(any(f.startswith(e) for f in failures) for e in expected)
+    return results
+
+
 def validate(root: Path, contracts_only: bool = False):
     failures = []
     failures.extend(code_loading_failures(root))
@@ -355,10 +391,14 @@ def validate(root: Path, contracts_only: bool = False):
         for label, passed in fixture_cleanup_negative_controls().items():
             if not passed:
                 failures.append(f'Negative control failed: {label} did not match the fixture cleanup check result')
+        failures.extend(runpy.run_path(str(Path(__file__).with_name('check_reparse_walks.py')))['check'](root))
+        for label, passed in reparse_walk_negative_controls().items():
+            if not passed:
+                failures.append(f'Negative control failed: {label} did not match the reparse walk check result')
         failures.extend(runpy.run_path(str(Path(__file__).with_name('check_workflow_runners.py')))['check'](root))
     documents = {}
     for folder in ('backend/contracts', 'backend/samples', 'backend/profiles', 'backend/uninstall', 'backend/catalogs', 'backend/capabilities', 'modules'):
-        for path in sorted((root / folder).rglob('*.json')):
+        for path in sorted(local_tree(root / folder, '*.json')):
             try:
                 documents[path.relative_to(root).as_posix()] = read_json(path)
             except (ValueError, OSError) as error:
@@ -421,7 +461,7 @@ def validate(root: Path, contracts_only: bool = False):
     if not contracts_only:
         frontend = root / 'docs/internal/frontend'
         for extension in ('*.xaml', '*.csproj', '*.manifest'):
-            for path in frontend.rglob(extension):
+            for path in local_tree(frontend, extension):
                 if {'bin', 'obj'}.intersection(path.parts):
                     continue
                 try:
@@ -430,7 +470,7 @@ def validate(root: Path, contracts_only: bool = False):
                 except ET.ParseError as error:
                     failures.append(f'{path.relative_to(root)}: {error}')
         for folder in ('backend', 'modules', 'tools', 'docs'):
-            for path in (root / folder).rglob('*'):
+            for path in local_tree(root / folder):
                 if not path.is_file() or path.suffix not in ('.ps1', '.cs', '.json', '.md', '.py', '.xaml'):
                     continue
                 relative = path.relative_to(root).as_posix()
@@ -442,7 +482,7 @@ def validate(root: Path, contracts_only: bool = False):
                 hygiene_source = public_hygiene_text(relative, source)
                 if not relative.startswith('docs/internal/') and re.search(trace_pattern, hygiene_source, re.I):
                     failures.append(f'{relative}: public tool trace requires review')
-        if any((root / 'backend/state').rglob('*')):
+        if any(local_tree(root / 'backend/state')):
             failures.append('backend/state is not empty')
     result = {'jsonFiles': len(documents), 'schemaCases': cases, 'domainTestSamples': len(mapping['domainTests']), 'xmlFiles': xml_count, 'negativeControl': True, 'failures': failures}
     return result

@@ -126,37 +126,38 @@ static class AliasOwnershipChecks
         var target = Path.Combine(root, "Roo Industries Example");
         Directory.CreateDirectory(target);
         File.WriteAllText(Path.Combine(target, "settings.txt"), "fixture");
-        var links = new List<string>();
         var mapping = ""; var mappedTarget = "";
         try
         {
             var elsewhere = Path.Combine(root, "Elsewhere", "Leaf");
             Directory.CreateDirectory(elsewhere);
             var alias = Path.Combine(root, "alias");
-            links.Add(alias); Junction(alias, elsewhere);
+            Junction(alias, elsewhere);
             CheckPeer(check, root, Path.Combine(alias, "..", "Roo Industries Example"), "dotdot-after-junction", true);
 
             var scanAlias = Path.Combine(root, "scan-alias");
-            links.Add(scanAlias); Junction(scanAlias, root);
+            Junction(scanAlias, root);
             var scanned = new CleanupApplication { AppId = "fixture:scan-alias", DisplayName = "Roo Industries Example", Publisher = "Fixture", InstallLocation = Path.Combine(scanAlias, "Roo Industries Example"), PackageFamilyName = null };
             var scan = new LeftoverDiscovery(scanned, []).Scan(CancellationToken.None, [scanAlias], []);
             check(scan.Complete && scan.Candidates.Length == 1 && scan.Candidates[0].Target == scanned.InstallLocation,
                 "A junctioned scan root preserves lexical candidate identity and avoids duplicate rows");
 
             var relative = Path.Combine(root, "relative-alias");
-            links.Add(relative); Directory.CreateSymbolicLink(relative, Path.GetRelativePath(root, target));
+            Directory.CreateSymbolicLink(relative, Path.GetRelativePath(root, target));
             CaptureReparse(relative);
             CheckPeer(check, root, relative, "relative-symlink-alias", true);
             CheckPeer(check, root, Path.Combine(relative, "missing-child"), "missing-folder-through-alias", false);
             using (var renamed = JsonDocument.Parse(ProbeOutput(check, root, "parent-handle-rename", "renamed-parent-open")))
                 check(renamed.RootElement.GetProperty("Preserved").GetBoolean(), "An opened parent keeps child lookup and directory enumeration local after its old path becomes an offline network link");
 
-            var volume = new StringBuilder(64);
-            check(GetVolumeNameForVolumeMountPoint(Path.GetPathRoot(root)!, volume, (uint)volume.Capacity), "A real local volume GUID is available for alias fixtures");
+            var volume = TestFixtures.Volume(root);
+            check(volume.Name.StartsWith(@"\\?\Volume{", StringComparison.Ordinal), "The alias fixtures mount their own disposable volume");
+            Directory.CreateDirectory(Path.Combine(volume.Mount, "Roo Industries Example"));
+            Directory.CreateSymbolicLink(Path.Combine(volume.Mount, "nas"), @"\\192.0.2.139\AliasOwnershipFixture");
             var mount = Path.Combine(root, "mount");
-            links.Add(mount); Junction(mount, volume.ToString());
+            Junction(mount, volume.Name);
             Console.WriteLine("MEASURE mountTarget " + JsonSerializer.Serialize(new { LinkTarget = new DirectoryInfo(mount).LinkTarget }));
-            CheckPeer(check, root, Path.Combine(mount, target[Path.GetPathRoot(target)!.Length..]), "volume-guid-mount", false);
+            CheckPeer(check, root, Path.Combine(mount, "Roo Industries Example"), "volume-guid-mount", false);
 
             mappedTarget = @"\??\" + target; mapping = Map(mappedTarget);
             CheckPeer(check, root, mapping + @"\", "subst-root", false);
@@ -164,14 +165,14 @@ static class AliasOwnershipChecks
             mapping = "";
 
             var nas = Path.Combine(root, "nas");
-            links.Add(nas); Directory.CreateSymbolicLink(nas, @"\\192.0.2.139\AliasOwnershipFixture");
+            Directory.CreateSymbolicLink(nas, @"\\192.0.2.139\AliasOwnershipFixture");
             var volumeBridge = Path.Combine(root, "volume-bridge");
-            links.Add(volumeBridge); Junction(volumeBridge, volume + Path.Combine(nas, "Tool")[Path.GetPathRoot(nas)!.Length..]);
+            Junction(volumeBridge, volume.Name + @"nas\Tool");
             CheckPeer(check, root, volumeBridge, "volume-guid-bridge-to-unc", false);
             var device = new StringBuilder(32768);
             check(QueryDosDevice(root[..2], device, (uint)device.Capacity) != 0, "Local fixture volume has a native DOS-device mapping");
             var namespaced = Path.Combine(root, "namespace-alias");
-            links.Add(namespaced); Junction(namespaced, @"\\?\GLOBALROOT" + device + target[2..]);
+            Junction(namespaced, @"\\?\GLOBALROOT" + device + target[2..]);
             CaptureReparse(namespaced);
             check(File.ReadAllText(Path.Combine(namespaced, "settings.txt")) == "fixture", "A GLOBALROOT alias actually reaches the disposable shared folder");
             CheckPeer(check, root, namespaced, "non-dos-namespace-alias", false);
@@ -194,7 +195,7 @@ static class AliasOwnershipChecks
             var opaque = Directory.CreateDirectory(Path.Combine(root, "opaque-peer"));
             var unreadable = Directory.CreateDirectory(Path.Combine(opaque.FullName, "unreadable-peer"));
             var hidden = Path.Combine(unreadable.FullName, "alias");
-            links.Add(hidden); Junction(hidden, target);
+            Junction(hidden, target);
             var opaqueSecurity = opaque.GetAccessControl();
             var opaqueDenied = opaque.GetAccessControl();
             opaqueDenied.AddAccessRule(new FileSystemAccessRule(WindowsIdentity.GetCurrent().User!, FileSystemRights.ListDirectory | FileSystemRights.Traverse, AccessControlType.Deny));
@@ -220,7 +221,7 @@ static class AliasOwnershipChecks
             finally { opaque.SetAccessControl(opaqueSecurity); unreadable.SetAccessControl(security); }
 
             var retarget = Path.Combine(root, "retarget-peer");
-            links.Add(retarget); Junction(retarget, elsewhere);
+            Junction(retarget, elsewhere);
             var application = new CleanupApplication { AppId = "fixture:retarget", DisplayName = "Roo Industries Example", Publisher = "Fixture", InstallLocation = target, PackageFamilyName = null };
             var peer = application with { AppId = "fixture:retarget-peer", DisplayName = "Independent alias tool", InstallLocation = retarget };
             var authority = new CleanupAuthority { AppId = application.AppId, ProviderIdentityHash = new string('A', 64), Owner = OperationOwner.Current(), ProviderQueryComplete = true, RegistrationPresent = false, RebootPending = false, RemoverRunning = false, RemovalResolved = true };
@@ -236,17 +237,15 @@ static class AliasOwnershipChecks
         }
         finally
         {
-            if (mapping.Length != 0 && !DefineDosDevice(15, mapping, mappedTarget)) throw new IOException("Could not remove own DOS mapping.");
-            foreach (var link in links.AsEnumerable().Reverse())
-                try { Directory.Delete(link); } catch (Exception error) when (error is FileNotFoundException or DirectoryNotFoundException) { }
-            Directory.Delete(root, true);
+            try { if (mapping.Length != 0 && !DefineDosDevice(15, mapping, mappedTarget)) throw new IOException("Could not remove own DOS mapping."); }
+            finally { TestFixtures.Remove(root); }
         }
         check(!Directory.Exists(root), "Alias ownership checks remove their mappings, links, ACLs and fixtures");
+        FixtureWalkChecks.Run(check);
     }
 
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)] private static extern uint QueryDosDevice(string name, StringBuilder target, uint length);
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)] private static extern bool DefineDosDevice(uint flags, string name, string target);
-    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)] private static extern bool GetVolumeNameForVolumeMountPoint(string mount, StringBuilder name, uint length);
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)] private static extern uint GetShortPathName(string path, StringBuilder name, uint length);
     [DllImport("kernel32.dll", EntryPoint = "SetFileShortNameW", CharSet = CharSet.Unicode, SetLastError = true)] private static extern bool SetFileShortName(SafeFileHandle file, string name);
     [DllImport("kernel32.dll", EntryPoint = "CreateFileW", CharSet = CharSet.Unicode, SetLastError = true)] private static extern SafeFileHandle CreateFile(string path, uint access, uint share, IntPtr security, uint disposition, uint flags, IntPtr template);

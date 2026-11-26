@@ -2,14 +2,14 @@ import argparse
 from pathlib import Path
 import sys,json,hashlib,subprocess,tarfile,io,tempfile
 root=Path(__file__).resolve().parents[3]
-sys.path.insert(0,str(root/'tools/validation'));import windows_ssh as w
+sys.path.insert(0,str(root/'tools/validation'));import windows_ssh as w;from local_tree import entries as local_tree
 parser=argparse.ArgumentParser()
 parser.add_argument('phase')
 parser.add_argument('--host',required=True)
 parser.add_argument('--expected-machine',required=True)
 args=parser.parse_args()
 host,machine=args.host,args.expected_machine;remote=r'C:\Windows\Temp\roo-industries-f10-implementation';phase=args.phase
-files=[p for area in ['backend/native/Optimizer.Core','backend/native/CpuSets','backend/catalogs','tools/validation/RedirectedFolders'] for p in (root/area).rglob('*') if p.is_file() and not any(x in p.parts for x in ['bin','obj','__pycache__'])]
+files=[p for area in ['backend/native/Optimizer.Core','backend/native/CpuSets','backend/catalogs','tools/validation/RedirectedFolders'] for p in local_tree(root/area) if p.is_file() and not any(x in p.parts for x in ['bin','obj','__pycache__'])]
 files += [root/p for p in ['backend/scripts/BrandCompatibility.Common.ps1','backend/scripts/Invoke-GovernorSetup.ps1','tools/release/SetupProcess.iss','tools/release/SetupProcess.Test.iss','tools/validation/Governor/Test-GovernorSetupFallbacks.ps1']]
 manifest={str(p.relative_to(root)):hashlib.sha256(p.read_bytes()).hexdigest() for p in files}
 local=root/'artifacts/continuation/redirected-folders-implementation';local.mkdir(exist_ok=True)

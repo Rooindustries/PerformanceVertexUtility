@@ -2,7 +2,10 @@ import argparse
 import json
 from pathlib import Path
 import re
+import runpy
 import subprocess
+
+local_tree = runpy.run_path(str(Path(__file__).with_name('local_tree.py')))['entries']
 
 FAKE_SIDS = {"S-1-5-21-111111111-222222222-333333333"}
 PLACEHOLDER_USERS = {"alice", "all users", "bob", "carol", "client", "default", "default user", "example", "fixture", "jos", "josé", "john smith", "jsmith", "public"}
@@ -26,7 +29,7 @@ def tracked_paths(root):
         return subprocess.check_output(["git", "ls-files", "-z"], cwd=root).decode().split("\0")
     if (root / "source-verification.json").exists():
         return json.loads((root / "source-verification.json").read_text(encoding="utf-8-sig"))["files"]
-    return [path.relative_to(root).as_posix() for path in root.rglob("*") if path.is_file() and not {"bin", "obj", "artifacts", "state", "__pycache__", ".git"}.intersection(path.parts)]
+    return [path.relative_to(root).as_posix() for path in local_tree(root) if path.is_file() and not {"bin", "obj", "artifacts", "state", "__pycache__", ".git"}.intersection(path.parts)]
 
 
 def findings(relative, source):

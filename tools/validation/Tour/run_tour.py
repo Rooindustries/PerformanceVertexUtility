@@ -19,6 +19,7 @@ def load(name, path):
 
 memory = load('tour_memory', ROOT / 'tools/validation/Memory/run_memory.py')
 windows = load('tour_paths', ROOT / 'tools/validation/windows_ssh.py')
+local_tree = load('tour_local_tree', ROOT / 'tools/validation/local_tree.py').entries
 
 
 def movie_relative(folder):
@@ -153,7 +154,7 @@ class Tour(memory.Measurement):
 def encode(out, capture, hold, accepted):
     from PIL import Image, ImageDraw
     extracted = out / 'evidence'
-    action_files = list(extracted.rglob(Path(capture['actionLog']['path'].replace('\\', '/')).name))
+    action_files = list(local_tree(extracted, Path(capture['actionLog']['path'].replace('\\', '/')).name))
     if len(action_files) != 1 or memory.identity(action_files[0])['sha256'].upper() != capture['actionLog']['sha256']:
         raise ValueError('Action log identity differs')
     screens, installer = out / 'screens', out / 'installer'
@@ -162,7 +163,7 @@ def encode(out, capture, hold, accepted):
     listing = []
     for shot in capture['screens']:
         origin = Path(shot.get('evidenceRoot', extracted))
-        matches = list(origin.rglob(shot['file']))
+        matches = list(local_tree(origin, shot['file']))
         if len(matches) != 1 or memory.identity(matches[0])['sha256'].upper() != shot['sha256']:
             raise ValueError('Screenshot identity differs: ' + shot['file'])
         target = (installer if shot['pass'] == 'installer' else screens) / shot['file']
@@ -247,7 +248,7 @@ def encode(out, capture, hold, accepted):
     lines += ['- [' + path + '](' + path + '): ' + description for path, description in listing]
     lines += ['', '## Not captured', ''] + ['- ' + str(item.get('pass', 'All')) + ': ' + item['state'] + '. ' + item['reason'] for item in capture['notCaptured']]
     lines += ['', '## Evidence', '', 'The nonce-bound capture receipt and actions.json contain every exact target identity, cursor position, UIA pattern/result, DWM bound and screenshot hash. Raw 15 fps window frames and UIA trees are retained in evidence.zip. cleanup-audit.json records published-build, file-data and raw-registry restoration.']
-    for path in sorted(out.rglob('*')):
+    for path in sorted(local_tree(out)):
         if path.is_file() and path.relative_to(out).as_posix() not in {p for p, _ in listing} and path.name != 'index.md':
             lines.append('- [' + path.relative_to(out).as_posix() + '](' + path.relative_to(out).as_posix() + '): ' + ('UIA tree or raw capture provenance' if path.is_relative_to(extracted) else 'Run evidence'))
     (out / 'index.md').write_text('\n'.join(lines) + '\n')
@@ -282,7 +283,7 @@ def main():
         if set(args.passes) & {s['pass'] for s in prior['screens']}:
             parser.error('Completed and requested passes overlap')
         for shot in prior['screens']:
-            matches = list(Path(shot['evidenceRoot']).rglob(shot['file']))
+            matches = list(local_tree(Path(shot['evidenceRoot']), shot['file']))
             if len(matches) != 1 or memory.identity(matches[0])['sha256'].upper() != shot['sha256']:
                 parser.error('Completed screenshot identity differs')
         for source in prior['captureSources']:

@@ -4,9 +4,6 @@ using RooIndustries.Optimizer;
 
 static class DiscoveryChecks
 {
-    [System.Runtime.InteropServices.DllImport("kernel32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode, SetLastError = true)]
-    private static extern bool GetVolumeNameForVolumeMountPoint(string mountPoint, System.Text.StringBuilder volumeName, uint length);
-
     private static bool IsLink(string path)
     {
         try { return (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0; }
@@ -72,7 +69,7 @@ static class DiscoveryChecks
 
     private static void JunctionAlias(Action<bool, string> check)
     {
-        var root = Path.Combine(Path.GetTempPath(), "roo-industries-discovery-junction-" + Guid.NewGuid().ToString("N"));
+        var root = TestFixtures.InheritingRoot("discovery-junction");
         var real = Path.Combine(root, "real");
         var alias = Path.Combine(root, "alias");
         var shared = Path.Combine(real, "Roo Industries Example");
@@ -115,32 +112,23 @@ static class DiscoveryChecks
                 chainWatch.Stop();
                 check((File.GetAttributes(chain) & FileAttributes.ReparsePoint) != 0 && chainWatch.ElapsedMilliseconds < 500 && !chainScan.Candidates.Single(item => item.Target == shared).OwnershipComplete,
                     "A local junction whose target goes through a link to a network share is never followed (" + chainWatch.ElapsedMilliseconds + " ms)");
-                var volumeName = new System.Text.StringBuilder(64);
-                if (GetVolumeNameForVolumeMountPoint(Path.GetPathRoot(nas)!, volumeName, (uint)volumeName.Capacity))
+                var volume = TestFixtures.Volume(root);
+                Directory.CreateSymbolicLink(Path.Combine(volume.Mount, "nas"), @"\\192.0.2.1\OfflineShare");
+                var volumeChain = Path.Combine(root, "volume-chain");
+                AliasOwnershipChecks.Junction(volumeChain, volume.Name + @"nas\Tool");
+                if (IsLink(volumeChain))
                 {
-                    var volumeChain = Path.Combine(root, "volume-chain");
-                    AliasOwnershipChecks.Junction(volumeChain, volumeName + Path.Combine(nas, "Tool")[Path.GetPathRoot(nas)!.Length..]);
-                    if (IsLink(volumeChain))
-                    {
-                        var volumeTool = new CleanupApplication { AppId = "fixture:volume", DisplayName = "Volume path share tool", Publisher = "Other", InstallLocation = volumeChain, PackageFamilyName = null };
-                        var volumeWatch = Stopwatch.StartNew();
-                        var volumeScan = new LeftoverDiscovery(application, [volumeTool]).Scan(CancellationToken.None, [], []);
-                        volumeWatch.Stop();
-                        check(volumeWatch.ElapsedMilliseconds < 500 && !volumeScan.Candidates.Single(item => item.Target == shared).OwnershipComplete,
-                            "An unproved volume path stays unknown without following its link to a network share (" + volumeWatch.ElapsedMilliseconds + " ms)");
-                    }
-                    else check(false, "The volume-path junction fixture must be created");
+                    var volumeTool = new CleanupApplication { AppId = "fixture:volume", DisplayName = "Volume path share tool", Publisher = "Other", InstallLocation = volumeChain, PackageFamilyName = null };
+                    var volumeWatch = Stopwatch.StartNew();
+                    var volumeScan = new LeftoverDiscovery(application, [volumeTool]).Scan(CancellationToken.None, [], []);
+                    volumeWatch.Stop();
+                    check(volumeWatch.ElapsedMilliseconds < 500 && !volumeScan.Candidates.Single(item => item.Target == shared).OwnershipComplete,
+                        "An unproved volume path stays unknown without following its link to a network share (" + volumeWatch.ElapsedMilliseconds + " ms)");
                 }
+                else check(false, "The volume-path junction fixture must be created");
             }
         }
-        finally
-        {
-            if (Directory.Exists(alias)) Directory.Delete(alias);
-            try { Directory.Delete(Path.Combine(root, "chain")); } catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
-            try { Directory.Delete(Path.Combine(root, "volume-chain")); } catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
-            try { Directory.Delete(Path.Combine(root, "nas")); } catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
-            Directory.Delete(root, true);
-        }
+        finally { TestFixtures.Remove(root); }
         check(!Directory.Exists(root), "Junction validation leaves no file fixtures");
         var offline = new CleanupApplication { AppId = "fixture:offline", DisplayName = "Offline share tool", Publisher = "Other", InstallLocation = @"\\192.0.2.1\OfflineShare\Tool", PackageFamilyName = null };
         var watch = Stopwatch.StartNew();

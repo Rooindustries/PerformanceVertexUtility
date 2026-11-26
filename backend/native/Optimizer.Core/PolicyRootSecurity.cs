@@ -444,7 +444,7 @@ public static class PolicyRootSecurity
     private static void Seal(string temporary, Run run, Manifest? manifest, string? legacy)
     {
         if (legacy is not null)
-            foreach (var stale in Directory.EnumerateFileSystemEntries(temporary, "*", new EnumerationOptions { RecurseSubdirectories = true, AttributesToSkip = 0 }).OrderByDescending(path => path.Length).ToArray())
+            foreach (var stale in LocalTree.Entries(temporary, links: true, skipInaccessible: true).Select(entry => entry.FullName).OrderByDescending(path => path.Length).ToArray())
             {
                 var relative = Path.GetRelativePath(temporary, stale);
                 if (relative is ".migrated" or ".migrating" || run.Kept.Contains(relative) || !Path.Exists(stale)) continue;
@@ -936,7 +936,7 @@ public static class PolicyRootSecurity
     private static void RequireMigratable(string root, ProtectedFolder kind)
     {
         var directory = new DirectoryInfo(root);
-        foreach (var entry in new FileSystemInfo[] { directory }.Concat(directory.EnumerateFileSystemInfos("*", new EnumerationOptions { RecurseSubdirectories = true, AttributesToSkip = 0, IgnoreInaccessible = false })))
+        foreach (var entry in new FileSystemInfo[] { directory }.Concat(LocalTree.Entries(root, links: true)))
         {
             if (entry.Attributes.HasFlag(FileAttributes.ReparsePoint))
                 throw new UnauthorizedAccessException("The " + kind.Label + " contains a link (" + entry.FullName + "), so it is not trusted. Delete " + root + " and " + kind.Restart + ".");

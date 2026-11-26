@@ -3,7 +3,10 @@ import argparse
 import json
 from pathlib import Path
 import re
+import runpy
 import subprocess
+
+local_tree = runpy.run_path(str(Path(__file__).with_name('local_tree.py')))['entries']
 
 ALLOWLIST = 'tools/validation/fixture-cleanup-allowlist.json'
 SCOPE = re.compile(r'^tools/validation/.+\.(?:cs|ps1)$|^backend/scripts/(?:Test-[^/]+\.ps1|GovernorScenarios/[^/]+\.(?:cs|ps1))$|^tools/scripts/Test-[^/]+\.ps1$')
@@ -209,7 +212,7 @@ def check(root):
     if (root / '.git').exists():
         paths = subprocess.check_output(['git', 'ls-files', '-z'], cwd=root).decode().split('\0')
     else:
-        paths = [p.relative_to(root).as_posix() for p in root.rglob('*') if p.is_file() and not {'bin', 'obj', '.git'}.intersection(p.parts)]
+        paths = [p.relative_to(root).as_posix() for p in local_tree(root) if p.is_file() and not {'bin', 'obj', '.git'}.intersection(p.parts)]
     sources = {}
     for relative in paths:
         if relative and SCOPE.match(relative) and not {'bin', 'obj'}.intersection(relative.split('/')) and (root / relative).is_file():

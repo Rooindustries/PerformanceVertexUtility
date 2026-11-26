@@ -454,6 +454,23 @@ try {
         Add-Failure 'Cleanup executor did not block missing disposable-fixture flag'
     }
 
+    $kept = Join-Path $fixtureRoot 'kept'
+    New-Item -ItemType Directory -Path $kept | Out-Null
+    'kept outside the targets' | Set-Content -LiteralPath (Join-Path $kept 'canary.txt') -Encoding UTF8
+    $link = Join-Path $cacheFolder 'kept-link'
+    & cmd.exe /d /c mklink /J "$link" "$kept" | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'The fixture junction could not be created.' }
+    $linkedApply = & (Join-Path $PSScriptRoot 'Invoke-UninstallCleanupExecution.ps1') -OfficialPreviewPath $officialFixturePath -CleanupManifestPath $manifestFixturePath -FixtureRoot $fixtureRoot -ConfirmApply -AllowDisposableFixtureApply -OfficialUninstallCommandApproved -CleanupDeletionManifestApproved
+    $linkedJson = ($linkedApply -join [Environment]::NewLine) | ConvertFrom-Json
+    $copiedThroughLink = @(Get-ChildItem -LiteralPath $fixtureRoot -Recurse -Force -Filter 'canary.txt').Count -ne 1
+    if ($linkedJson.status -eq 'blocked' -and $linkedJson.summary.deletedCount -eq 0 -and -not $copiedThroughLink -and (Test-Path -LiteralPath (Join-Path $kept 'canary.txt'))) {
+        Add-Pass 'Cleanup executor refuses a fixture target that holds a junction before copying or deleting through it'
+    } else {
+        Add-Failure 'Cleanup executor copied or deleted a fixture target that holds a junction'
+    }
+    & cmd.exe /d /c rmdir "$link"
+    if ($LASTEXITCODE -ne 0) { throw 'The fixture junction could not be removed.' }
+
     $fixtureApply = & (Join-Path $PSScriptRoot 'Invoke-UninstallCleanupExecution.ps1') -OfficialPreviewPath $officialFixturePath -CleanupManifestPath $manifestFixturePath -FixtureRoot $fixtureRoot -ConfirmApply -AllowDisposableFixtureApply -OfficialUninstallCommandApproved -CleanupDeletionManifestApproved
     $fixtureApplyJson = ($fixtureApply -join [Environment]::NewLine) | ConvertFrom-Json
     if ($fixtureApplyJson.status -eq 'success' -and $fixtureApplyJson.summary.deletedCount -eq 2 -and $fixtureApplyJson.capabilities.canRunUninstallers -eq $false -and (Test-Path -LiteralPath $fixtureApplyJson.rollback.rollbackManifestPath) -and -not (Test-Path -LiteralPath $cacheFolder) -and -not (Test-Path -LiteralPath $looseFile)) {
