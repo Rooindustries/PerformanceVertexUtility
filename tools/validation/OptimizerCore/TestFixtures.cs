@@ -118,14 +118,16 @@ static class TestFixtures
             string target;
             bool relative;
             string location;
+            string self;
             using (var handle = Open(link, 0x80, true))
             {
                 (target, relative) = Stored(handle);
                 location = Name(handle, 0);
+                self = Name(handle, 1);
             }
             if (Unroutable(target)) return;
             var full = relative ? Path.GetFullPath(Path.Combine(Path.GetDirectoryName(location[4..])!, target)) : Native(target);
-            if (!Land(full)) Through(link);
+            if (!Land(full, self)) Through(link);
         }
         catch (Exception error) when (error is InvalidOperationException or IOException or Win32Exception or ArgumentException)
         {
@@ -135,7 +137,7 @@ static class TestFixtures
         }
     }
 
-    private static bool Land(string path)
+    private static bool Land(string path, string? self = null)
     {
         if (Unroutable(path)) return true;
         var root = Regex.Match(path, @"^(?:\\\\\?\\(?:GLOBALROOT\\Device\\[^\\]+|Volume\{[0-9A-Fa-f-]+\}|[A-Za-z]:)|[A-Za-z]:)\\").Value;
@@ -150,6 +152,7 @@ static class TestFixtures
             if ((attributes & 0x400) != 0)
             {
                 using var link = Open(next, 0x80, true);
+                if (self is not null && Name(link, 1) == self && Inside(self)) return true;
                 if (Unroutable(Stored(link).Target)) return true;
                 throw new InvalidOperationException("A fixture link target passes through another link: " + next);
             }
