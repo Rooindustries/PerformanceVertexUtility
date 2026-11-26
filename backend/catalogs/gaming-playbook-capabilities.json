@@ -16445,8 +16445,7 @@
       "raw": {
         "path": "HKCR\\DesktopBackground\\Shell\\BootMode\\Shell\\001-Normal\\command",
         "value": "",
-        "type": "REG_SZ",
-        "data": "powershell -windowstyle hidden -command \"Start-Process cmd -ArgumentList '/s,/c,bcdedit /deletevalue {current} safeboot & bcdedit /deletevalue {current} safebootalternateshell & shutdown -r -t 00 -f' -Verb runAs\""
+        "type": "REG_SZ"
       }
     },
     {
@@ -16465,8 +16464,7 @@
       "raw": {
         "path": "HKCR\\DesktopBackground\\Shell\\BootMode\\Shell\\003-SafeNet\\command",
         "value": "",
-        "type": "REG_SZ",
-        "data": "powershell -windowstyle hidden -command \"Start-Process cmd -ArgumentList '/s,/c,bcdedit /set {current} safeboot network & bcdedit /deletevalue {current} safebootalternateshell & shutdown -r -t 00 -f' -Verb runAs\""
+        "type": "REG_SZ"
       }
     },
     {
@@ -16505,8 +16503,7 @@
       "raw": {
         "path": "HKCR\\DesktopBackground\\Shell\\BootMode\\Shell\\002-Safe\\command",
         "value": "",
-        "type": "REG_SZ",
-        "data": "powershell -windowstyle hidden -command \"Start-Process cmd -ArgumentList '/s,/c,bcdedit /set {current} safeboot minimal & bcdedit /deletevalue {current} safebootalternateshell & shutdown -r -t 00 -f' -Verb runAs\""
+        "type": "REG_SZ"
       }
     },
     {
@@ -16585,8 +16582,7 @@
       "raw": {
         "path": "HKCR\\DesktopBackground\\Shell\\BootMode\\Shell\\004-SafeCmd\\command",
         "value": "",
-        "type": "REG_SZ",
-        "data": "powershell -windowstyle hidden -command \"Start-Process cmd -ArgumentList '/s,/c,bcdedit /set {current} safeboot minimal & bcdedit /set {current} safebootalternateshell yes & shutdown -r -t 00 -f' -Verb runAs\""
+        "type": "REG_SZ"
       }
     },
     {
@@ -16685,8 +16681,7 @@
       "raw": {
         "path": "HKCR\\Drive\\Shell\\DriveTools\\shell\\002-OptOne\\command",
         "value": "",
-        "type": "REG_SZ",
-        "data": "PowerShell -windowstyle hidden -command \"Start-Process cmd -ArgumentList '/s,/k, defrag %1 /O /H' -Verb runAs\""
+        "type": "REG_SZ"
       }
     },
     {
@@ -16725,8 +16720,7 @@
       "raw": {
         "path": "HKCR\\Drive\\Shell\\DriveTools\\shell\\003-OptAll\\command",
         "value": "",
-        "type": "REG_SZ",
-        "data": "PowerShell -windowstyle hidden -command \"Start-Process cmd -ArgumentList '/s,/k, defrag /C /O /H' -Verb runAs\""
+        "type": "REG_SZ"
       }
     },
     {
@@ -16785,8 +16779,7 @@
       "raw": {
         "path": "HKCR\\Drive\\Shell\\DriveTools\\shell\\001-Analyze\\command",
         "value": "",
-        "type": "REG_SZ",
-        "data": "PowerShell -windowstyle hidden -command \"Start-Process cmd -ArgumentList '/s,/k, defrag %1 /A' -Verb runAs\""
+        "type": "REG_SZ"
       }
     },
     {
@@ -20679,8 +20672,7 @@
       "raw": {
         "path": "HKCR\\Directory\\shell\\runas\\command",
         "value": "IsolatedCommand",
-        "type": "REG_SZ",
-        "data": "cmd.exe /c takeown /f %1 /r /d y && icacls %1 /grant administrators:F"
+        "type": "REG_SZ"
       }
     },
     {
@@ -20818,8 +20810,7 @@
       "raw": {
         "path": "HKEY_CLASSES_ROOT\\Microsoft.PowerShellScript.1\\Shell\\Open\\Command",
         "value": "@",
-        "type": "REG_SZ",
-        "data": "\"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe\" -File \"%1\""
+        "type": "REG_SZ"
       }
     },
     {
