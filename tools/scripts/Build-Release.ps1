@@ -196,10 +196,11 @@ foreach ($native in @('CpuSets', 'ProcessGovernor', 'ProcessOutput', 'StandbyMem
 Copy-Tree (Join-Path $repoRoot 'assets\brand\roo-industries') (Join-Path $stage 'assets\brand\roo-industries') @('favicon-96x96.png', 'web-app-manifest-192x192.png', 'embed_logo.png', 'favicon.ico')
 [IO.File]::WriteAllText((Join-Path $stage 'README-BETA.txt'), [IO.File]::ReadAllText((Join-Path $releaseTools 'README-BETA.txt')).Replace('{Version}', $version), [Text.UTF8Encoding]::new($false))
 Copy-Item -LiteralPath (Get-ReleaseToolPath (Join-Path $repoRoot 'CREDITS.md')) -Destination (Get-ReleaseToolPath (Join-Path $stage 'CREDITS.md'))
+Copy-Item -LiteralPath (Get-ReleaseToolPath (Join-Path $repoRoot 'LICENSE')) -Destination (Get-ReleaseToolPath (Join-Path $stage 'LICENSE.txt'))
 
 Assert-ReleasePathBound -OutputRoots $boundedOutputs
 Get-ChildItem -LiteralPath (Get-ReleaseToolPath $stage) -Recurse -File -Filter '*.pdb' | Remove-Item -Force
-foreach ($required in @('app\RooIndustries.OptimizationSuite.App.exe', 'backend\bin\optimizer\Optimizer.Host.exe', 'backend\bin\optimizer\hostpolicy.dll', 'backend\bin\optimizer\session\RooIndustries.SessionHost.exe', 'backend\scripts\Start-RooIndustriesHelper.cmd', 'backend\scripts\Invoke-GovernorSetup.ps1', 'backend\scripts\BrandCompatibility.Common.ps1', 'backend\samples', 'backend\catalogs\windows-tweaks.json', 'app\Microsoft.WindowsAppRuntime.dll', 'app\RooIndustries.OptimizationSuite.App.pri', 'CREDITS.md')) {
+foreach ($required in @('app\RooIndustries.OptimizationSuite.App.exe', 'backend\bin\optimizer\Optimizer.Host.exe', 'backend\bin\optimizer\hostpolicy.dll', 'backend\bin\optimizer\session\RooIndustries.SessionHost.exe', 'backend\scripts\Start-RooIndustriesHelper.cmd', 'backend\scripts\Invoke-GovernorSetup.ps1', 'backend\scripts\BrandCompatibility.Common.ps1', 'backend\samples', 'backend\catalogs\windows-tweaks.json', 'app\Microsoft.WindowsAppRuntime.dll', 'app\RooIndustries.OptimizationSuite.App.pri', 'CREDITS.md', 'LICENSE.txt')) {
     if (-not (Test-Path -LiteralPath (Get-ReleaseToolPath (Join-Path $stage $required)))) { throw "The release layout is missing $required." }
 }
 

@@ -31,6 +31,7 @@ DefaultGroupName=Performance Vertex Utility
 DisableProgramGroupPage=yes
 UsePreviousGroup=no
 DisableDirPage=yes
+InfoBeforeFile={#SourceDir}\LICENSE.txt
 PrivilegesRequired=admin
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
