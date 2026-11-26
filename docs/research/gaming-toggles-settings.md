@@ -34,19 +34,19 @@ The direct evidence follows each toggle's enable and disable paths and the helpe
 
 ## Deduplication requirements found in the actual controls
 
-**Shared values with separate fields need composition.** Variable Refresh Rate and Windowed Optimizations both edit the same `HKCU\Software\Microsoft\DirectX\UserGpuPreferences\DirectXUserGlobalSettings` string. Their fields are `VRROptimizeEnable` and `SwapEffectUpgradeEnable`. Their operations preserve unrelated fields. Treating each as a complete string replacement would lose settings; treating them as conflicting complete values would reject a valid combination. Plan the combined field edits against one snapshot..
+**Shared values with separate fields need composition.** Variable Refresh Rate and Windowed Optimizations both edit the same `HKCU\Software\Microsoft\DirectX\UserGpuPreferences\DirectXUserGlobalSettings` string. Their fields are `VRROptimizeEnable` and `SwapEffectUpgradeEnable`. Their operations preserve unrelated fields. Treating each as a complete string replacement would lose settings; treating them as conflicting complete values would reject a valid combination. Plan the combined field edits against one snapshot.
 
-**A toggle can cover several independently offered settings.** The Activity History toggle changes Explorer's recent-program and recent-document flags as well as activity policy; its enabled direction deletes three policy values. Consumer Features spans Content Delivery Manager flags and CloudContent policies. Each underlying target must have one owner-aware implementation, and presets must refer to those shared operations. A label match against WinUtil, WPD or O&O cannot establish full equivalence..
+**A toggle can cover several independently offered settings.** The Activity History toggle changes Explorer's recent-program and recent-document flags as well as activity policy; its enabled direction deletes three policy values. Consumer Features spans Content Delivery Manager flags and CloudContent policies. Each underlying target must have one owner-aware implementation, and presets must refer to those shared operations. A label match against WinUtil, WPD or O&O cannot establish full equivalence.
 
-**Enabled is not necessarily restore.** The toggles app often writes an assumed Windows default or deletes a policy. Roo Industries restoration must return the captured original type/value/absence, including values that were already custom before application. Modern Standby Fix also illustrates a naming trap: its enabled method removes `PlatformAoAcOverride`, whereas its disabled method writes DWORD zero. Map actions from verified operations, not the title..
+**Enabled is not necessarily restore.** The toggles app often writes an assumed Windows default or deletes a policy. Roo Industries restoration must return the captured original type/value/absence, including values that were already custom before application. Modern Standby Fix also illustrates a naming trap: its enabled method removes `PlatformAoAcOverride`, whereas its disabled method writes DWORD zero. Map actions from verified operations, not the title.
 
-**Registry writes may be only part of the control.** Taskbar grouping restarts Explorer. File visibility sends a shell refresh. Mouse acceleration also updates live system parameters. Animation changes include live parameters and machine-level visual-effect defaults. Treat those effects explicitly in the plan and recovery contract..
+**Registry writes may be only part of the control.** Taskbar grouping restarts Explorer. File visibility sends a shell refresh. Mouse acceleration also updates live system parameters. Animation changes include live parameters and machine-level visual-effect defaults. Treat those effects explicitly in the plan and recovery contract.
 
-**Dynamic targets need binding.** NIC controls select adapters through a network adapter resolver; audio controls enumerate endpoint keys. Wi-Fi, Bluetooth, printing, Hyper-V and power-saving controls affect groups of services, drivers, power settings or optional features. Bind a review to resolved targets and preserved pre-change state; a static registry name is insufficient..
+**Dynamic targets need binding.** NIC controls select adapters through a network adapter resolver; audio controls enumerate endpoint keys. Wi-Fi, Bluetooth, printing, Hyper-V and power-saving controls affect groups of services, drivers, power settings or optional features. Bind a review to resolved targets and preserved pre-change state; a static registry name is insufficient.
 
 ## Playbook comparison
 
-Every declarative action in the pinned playbook was accounted for independently of the toggles app: 1,024 occurrences reduce to 1,008 unique declared operations, including 650 registry-value operations, 105 service operations, 150 AppX operations, 76 registry-key operations, seven scheduled-task operations, 12 process-termination operations and eight file operations. Sixteen repeated declarations collapse to existing operation IDs. Conditions remain attached to each occurrence. Another 215 script or executable actions remain separate because flattening an embedded program into one registry action would discard conditional behavior..
+Every declarative action in the pinned playbook was accounted for independently of the toggles app: 1,024 occurrences reduce to 1,008 unique declared operations, including 650 registry-value operations, 105 service operations, 150 AppX operations, 76 registry-key operations, seven scheduled-task operations, 12 process-termination operations and eight file operations. Sixteen repeated declarations collapse to existing operation IDs. Conditions remain attached to each occurrence. Another 215 script or executable actions remain separate because flattening an embedded program into one registry action would discard conditional behavior.
 
 Registry identity normalizes hive, path and value-name casing only. `HKCU`, `HKU\.DEFAULT`, `CurrentControlSet` and `ControlSet001` remain distinct. Different data, value kinds or operations remain distinct variants of the same target. Playbook source facts are not automatically toggles app behavior, and neither source proves an OS setting is effective on every supported build.
 
@@ -146,7 +146,7 @@ Direct static facts cover **291 distinct literal registry operations**, with **3
 
 `tcp-autotuning` exists as a class but is not registered in this version. It is excluded from the 79 offered controls.
 
-The category/ID/title inventory above is supported by the pinned app registration and each control type..
+The category/ID/title inventory above is supported by the pinned app registration and each control type.
 
 ## Compound-control completion
 
@@ -162,7 +162,7 @@ Additional findings that affect a faithful, non-overlapping implementation:
 - Several upstream controls report success after ignored helper errors or read only a subset of what they changed. The modeled detector branches document those limits. Roo Industries verification must read every affected target independently.
 - UAC has a vendor-specific backup path, but substitutes defaults for absent/wrong-type data and forces UAC enabled if the saved value was disabled. Most other opposite-direction actions are default writes or deletions, not original-state restoration.
 
-These findings come from the named controls and their registry ACL, service control, network adapter, core isolation, native API and UAC helpers in the pinned app..
+These findings come from the named controls and their registry ACL, service control, network adapter, core isolation, native API and UAC helpers in the pinned app.
 
 The registered tweak set contains no app-package installation/removal operations and no `netsh` invocation. TCP Auto-Tuning's `netsh` operations belong to its unregistered class. App installation/removal, game sessions, power-plan selection, downloads and cleanup are separate toggles app action families outside this 79-toggle inventory; they must remain separate from tweak-completeness claims.
 

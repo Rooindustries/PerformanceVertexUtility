@@ -27,15 +27,15 @@ function Get-RooIndustriesNvidiaNipProfile {
 
 function Test-RooIndustriesNvidiaProfileId {
     param(
-        [object]$Profile,
+        [object]$CatalogProfile,
         [string]$SavedId
     )
-    if ($SavedId -ceq [string](Get-RooIndustriesPropertyValue $Profile 'profileId' '')) { return $true }
+    if ($SavedId -ceq [string](Get-RooIndustriesPropertyValue $CatalogProfile 'profileId' '')) { return $true }
     $bytes = [System.Text.Encoding]::UTF8.GetBytes($SavedId)
     $sha = [System.Security.Cryptography.SHA256]::Create()
     try { $hash = $sha.ComputeHash($bytes) } finally { $sha.Dispose() }
     $digest = -join ($hash | ForEach-Object { $_.ToString('X2') })
-    return @(Get-RooIndustriesPropertyArray $Profile 'formerProfileIdSha256') -contains $digest
+    return @(Get-RooIndustriesPropertyArray $CatalogProfile 'formerProfileIdSha256') -contains $digest
 }
 
 function ConvertTo-RooIndustriesNvidiaSafeId {
