@@ -87,8 +87,8 @@ static class FixtureWalkChecks
             var deep = Directory.CreateDirectory(Path.Combine(root, "a", "b", "c", "d", "e", "f", "g")).FullName;
             var up = Path.Combine(deep, "up");
             TestFixtures.Junction(up, root);
-            Directory.CreateDirectory(lookalike);
-            TestFixtures.Junction(Path.Combine(lookalike, "mount"), canary);
+            var behind = Directory.CreateDirectory(Path.Combine(lookalike, "behind")).FullName;
+            Directory.CreateSymbolicLink(Path.Combine(lookalike, "mount"), behind);
             var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
             (string Link, string Target, bool Junction)[] refused =
             [

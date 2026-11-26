@@ -284,7 +284,12 @@ static class TestFixtures
                 {
                     var (links, volumes) = Scan(@"\\?\" + Path.GetFullPath(root), held);
                     foreach (var link in links) Unlink(link);
-                    foreach (var volume in volumes) DiskPart(root, false, "select vdisk file=\"" + volume[4..] + "\" noerr", "detach vdisk noerr");
+                    foreach (var volume in volumes)
+                    {
+                        string real;
+                        using (var handle = Open(volume, 0x80, true)) real = Name(handle, 0)[4..];
+                        DiskPart(root, false, "select vdisk file=\"" + real + "\" noerr", "detach vdisk noerr");
+                    }
                 }
                 finally { held.ForEach(handle => handle.Dispose()); }
                 Directory.Delete(root, true);
