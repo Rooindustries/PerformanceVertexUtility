@@ -146,50 +146,262 @@ function Test-CatalogTool {
     Add-Check ($badClassMatches.Count -eq 0) "Catalog $ToolId entries use executionClass $ExpectedClass" "Catalog $ToolId executionClass mismatch at $((@($badClassMatches | ForEach-Object { [string](Get-PropertyValue $_ 'archivePath' '') })) -join ', ')"
 }
 
-function ConvertTo-CanonicalJson {
-    param([object]$Value)
+Add-Type -TypeDefinition @'
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.Text;
 
-    if ($null -eq $Value) { return 'null' }
-    if ($Value -is [bool]) { if ($Value) { return 'true' } else { return 'false' } }
-    if ($Value -is [string]) { return (ConvertTo-Json -InputObject $Value -Compress) }
-    if ($Value -is [datetime]) { return 'date:' + $Value.ToUniversalTime().ToString('o') }
-    if ($Value -is [System.Management.Automation.PSCustomObject]) {
-        $names = [string[]]@($Value.PSObject.Properties | ForEach-Object { $_.Name })
-        [Array]::Sort($names, [StringComparer]::Ordinal)
-        $members = @(foreach ($name in $names) { (ConvertTo-Json -InputObject $name -Compress) + ':' + (ConvertTo-CanonicalJson $Value.PSObject.Properties[$name].Value) })
-        return '{' + ($members -join ',') + '}'
+public static class RooIndustriesBundleJson
+{
+    public static object Parse(string text)
+    {
+        int position = 0;
+        object node = ReadValue(text, ref position);
+        SkipSpace(text, ref position);
+        if (position != text.Length) throw new FormatException("more JSON follows the first value at offset " + position);
+        return node;
     }
-    if ($Value -is [System.Collections.IList]) {
-        $items = @(foreach ($item in $Value) { ConvertTo-CanonicalJson $item })
-        return '[' + ($items -join ',') + ']'
+
+    public static string Canonical(object node)
+    {
+        StringBuilder builder = new StringBuilder();
+        Write(builder, node);
+        return builder.ToString();
     }
-    if ($Value -is [ValueType]) { return ([decimal]$Value).ToString([System.Globalization.CultureInfo]::InvariantCulture) }
-    return 'unsupported:' + $Value.GetType().FullName
+
+    public static string Quote(string value)
+    {
+        StringBuilder builder = new StringBuilder("\"");
+        foreach (char c in value)
+        {
+            if (c >= 0x20 && c <= 0x7e && c != '"' && c != '\\') builder.Append(c);
+            else builder.Append("\\u").Append(((int)c).ToString("x4", CultureInfo.InvariantCulture));
+        }
+        return builder.Append('"').ToString();
+    }
+
+    public static string Unquote(string quoted)
+    {
+        int position = 0;
+        return ReadString(quoted, ref position);
+    }
+
+    static void Write(StringBuilder builder, object node)
+    {
+        Dictionary<string, object> obj = node as Dictionary<string, object>;
+        if (obj != null)
+        {
+            List<string> names = new List<string>(obj.Keys);
+            names.Sort(StringComparer.Ordinal);
+            builder.Append('{');
+            for (int i = 0; i < names.Count; i++)
+            {
+                if (i > 0) builder.Append(',');
+                builder.Append(Quote(names[i])).Append(':');
+                Write(builder, obj[names[i]]);
+            }
+            builder.Append('}');
+            return;
+        }
+        List<object> list = node as List<object>;
+        if (list != null)
+        {
+            builder.Append('[');
+            for (int i = 0; i < list.Count; i++)
+            {
+                if (i > 0) builder.Append(',');
+                Write(builder, list[i]);
+            }
+            builder.Append(']');
+            return;
+        }
+        builder.Append((string)node);
+    }
+
+    static void SkipSpace(string text, ref int position)
+    {
+        while (position < text.Length && (text[position] == ' ' || text[position] == '\t' || text[position] == '\r' || text[position] == '\n')) position++;
+    }
+
+    static bool Take(string text, ref int position, char expected)
+    {
+        SkipSpace(text, ref position);
+        if (position < text.Length && text[position] == expected)
+        {
+            position++;
+            return true;
+        }
+        return false;
+    }
+
+    static bool IsDigit(string text, int position)
+    {
+        return position < text.Length && text[position] >= '0' && text[position] <= '9';
+    }
+
+    static object ReadValue(string text, ref int position)
+    {
+        SkipSpace(text, ref position);
+        if (position >= text.Length) throw new FormatException("the JSON ends early");
+        char c = text[position];
+        if (c == '{')
+        {
+            position++;
+            Dictionary<string, object> obj = new Dictionary<string, object>(StringComparer.Ordinal);
+            if (Take(text, ref position, '}')) return obj;
+            do
+            {
+                SkipSpace(text, ref position);
+                if (position >= text.Length || text[position] != '"') throw new FormatException("a member name is expected at offset " + position);
+                string name = ReadString(text, ref position);
+                if (!Take(text, ref position, ':')) throw new FormatException("a colon is expected after " + Quote(name));
+                if (obj.ContainsKey(name)) throw new FormatException("the member name " + Quote(name) + " appears twice");
+                obj.Add(name, ReadValue(text, ref position));
+            } while (Take(text, ref position, ','));
+            if (!Take(text, ref position, '}')) throw new FormatException("an object is not closed at offset " + position);
+            return obj;
+        }
+        if (c == '[')
+        {
+            position++;
+            List<object> list = new List<object>();
+            if (Take(text, ref position, ']')) return list;
+            do
+            {
+                list.Add(ReadValue(text, ref position));
+            } while (Take(text, ref position, ','));
+            if (!Take(text, ref position, ']')) throw new FormatException("a list is not closed at offset " + position);
+            return list;
+        }
+        if (c == '"') return Quote(ReadString(text, ref position));
+        if (c == '-' || (c >= '0' && c <= '9')) return ReadNumber(text, ref position);
+        foreach (string literal in new string[] { "true", "false", "null" })
+        {
+            if (string.CompareOrdinal(text, position, literal, 0, literal.Length) == 0)
+            {
+                position += literal.Length;
+                return literal;
+            }
+        }
+        throw new FormatException("unexpected character at offset " + position);
+    }
+
+    static string ReadString(string text, ref int position)
+    {
+        StringBuilder builder = new StringBuilder();
+        int start = position;
+        position++;
+        while (true)
+        {
+            if (position >= text.Length) throw new FormatException("a string starting at offset " + start + " is not closed");
+            char c = text[position++];
+            if (c == '"') return builder.ToString();
+            if (c < 0x20) throw new FormatException("a control character is inside the string at offset " + start);
+            if (c != '\\')
+            {
+                builder.Append(c);
+                continue;
+            }
+            char escape = position < text.Length ? text[position++] : '\0';
+            int code;
+            switch (escape)
+            {
+                case '"': builder.Append('"'); break;
+                case '\\': builder.Append('\\'); break;
+                case '/': builder.Append('/'); break;
+                case 'b': builder.Append('\b'); break;
+                case 'f': builder.Append('\f'); break;
+                case 'n': builder.Append('\n'); break;
+                case 'r': builder.Append('\r'); break;
+                case 't': builder.Append('\t'); break;
+                case 'u':
+                    if (position + 4 > text.Length || !int.TryParse(text.Substring(position, 4), NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out code)) throw new FormatException("an escape in the string at offset " + start + " is not valid");
+                    builder.Append((char)code);
+                    position += 4;
+                    break;
+                default: throw new FormatException("an escape in the string at offset " + start + " is not valid");
+            }
+        }
+    }
+
+    static string ReadNumber(string text, ref int position)
+    {
+        int start = position;
+        bool negative = text[position] == '-';
+        if (negative) position++;
+        int integerStart = position;
+        if (position < text.Length && text[position] == '0') position++;
+        else if (IsDigit(text, position)) while (IsDigit(text, position)) position++;
+        else throw new FormatException("a number at offset " + start + " is not valid");
+        string digits = text.Substring(integerStart, position - integerStart);
+        decimal exponent = 0;
+        if (position < text.Length && text[position] == '.')
+        {
+            position++;
+            int fractionStart = position;
+            while (IsDigit(text, position)) position++;
+            if (position == fractionStart) throw new FormatException("a number at offset " + start + " is not valid");
+            digits += text.Substring(fractionStart, position - fractionStart);
+            exponent -= position - fractionStart;
+        }
+        if (position < text.Length && (text[position] == 'e' || text[position] == 'E'))
+        {
+            position++;
+            int exponentStart = position;
+            if (position < text.Length && (text[position] == '+' || text[position] == '-')) position++;
+            int exponentDigits = position;
+            while (IsDigit(text, position)) position++;
+            if (position == exponentDigits) throw new FormatException("a number at offset " + start + " is not valid");
+            exponent += decimal.Parse(text.Substring(exponentStart, position - exponentStart), NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture);
+        }
+        digits = digits.TrimStart('0');
+        if (digits.Length == 0) return "0";
+        string significant = digits.TrimEnd('0');
+        exponent += digits.Length - significant.Length;
+        return (negative ? "-" : "") + significant + "e" + exponent.ToString(CultureInfo.InvariantCulture);
+    }
 }
+'@
 
-function Get-DifferentFields {
-    param(
-        [object]$Expected,
-        [object]$Actual,
-        [string[]]$Exclude = @()
-    )
+function Test-IsJsonObject {
+    param([object]$Node)
 
-    if (-not ($Expected -is [System.Management.Automation.PSCustomObject]) -or -not ($Actual -is [System.Management.Automation.PSCustomObject])) { return @('<whole value>') }
-    $names = @(@($Expected.PSObject.Properties) + @($Actual.PSObject.Properties) | ForEach-Object { $_.Name } | Where-Object { $Exclude -cnotcontains $_ } | Sort-Object -CaseSensitive -Unique)
-    return @($names | Where-Object {
-        $name = $_
-        $expectedProperty = @($Expected.PSObject.Properties | Where-Object { $_.Name -ceq $name })
-        $actualProperty = @($Actual.PSObject.Properties | Where-Object { $_.Name -ceq $name })
-        if ($expectedProperty.Count -eq 0 -or $actualProperty.Count -eq 0) { return $true }
-        (ConvertTo-CanonicalJson $expectedProperty[0].Value) -cne (ConvertTo-CanonicalJson $actualProperty[0].Value)
-    })
+    return ($Node -is [System.Collections.Generic.Dictionary[string,object]])
 }
 
 function Get-EntryLabel {
     param([object]$Entry)
 
-    if ($Entry -is [System.Management.Automation.PSCustomObject]) { return [string](Get-PropertyValue $Entry 'archivePath' '<no archivePath>') }
-    return ConvertTo-CanonicalJson $Entry
+    if ((Test-IsJsonObject $Entry) -and $Entry.ContainsKey('archivePath') -and $Entry['archivePath'] -is [string] -and $Entry['archivePath'].StartsWith('"', [StringComparison]::Ordinal)) {
+        return [RooIndustriesBundleJson]::Unquote($Entry['archivePath'])
+    }
+    return [RooIndustriesBundleJson]::Canonical($Entry)
+}
+
+function Get-DifferentFields {
+    param(
+        [object]$Expected,
+        [object]$Actual
+    )
+
+    if (-not (Test-IsJsonObject $Expected) -or -not (Test-IsJsonObject $Actual)) { return @('<whole value>') }
+    $names = New-Object 'System.Collections.Generic.SortedSet[string]' ([StringComparer]::Ordinal)
+    $names.UnionWith([string[]]@($Expected.Keys))
+    $names.UnionWith([string[]]@($Actual.Keys))
+    return @(foreach ($name in $names) {
+        if (-not $Expected.ContainsKey($name) -or -not $Actual.ContainsKey($name) -or -not [string]::Equals([RooIndustriesBundleJson]::Canonical($Expected[$name]), [RooIndustriesBundleJson]::Canonical($Actual[$name]), [StringComparison]::Ordinal)) {
+            [RooIndustriesBundleJson]::Quote($name)
+        }
+    })
+}
+
+function Test-GenerationTime {
+    param([object]$Node)
+
+    if (-not ($Node -is [string]) -or $Node -cnotmatch '^"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]{1,7})?Z"$') { return $false }
+    $parsed = [datetime]::MinValue
+    return [datetime]::TryParseExact($Node.Substring(1, $Node.Length - 2), "yyyy-MM-dd'T'HH:mm:ss.FFFFFFF'Z'", [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::AdjustToUniversal -bor [System.Globalization.DateTimeStyles]::AssumeUniversal, [ref]$parsed)
 }
 
 function Test-RecordHeader {
@@ -200,9 +412,25 @@ function Test-RecordHeader {
         [object]$Generated
     )
 
-    $exclude = @('generatedAtUtc', $EntriesField, 'catalogEntries')
-    $fields = @(Get-DifferentFields $Generated $Record $exclude)
-    Add-Check ($fields.Count -eq 0) "$Label header fields match the live archive" "$Label header fields differ from the live archive: $($fields -join ', ')"
+    $names = New-Object 'System.Collections.Generic.SortedSet[string]' ([StringComparer]::Ordinal)
+    $names.UnionWith([string[]]@($Record.Keys))
+    $names.UnionWith([string[]]@($Generated.Keys))
+    $names.Remove('catalogEntries') | Out-Null
+    $names.Remove($EntriesField) | Out-Null
+    $problems = @(foreach ($name in $names) {
+        $shown = [RooIndustriesBundleJson]::Quote($name)
+        if ([string]::Equals($name, 'generatedAtUtc', [StringComparison]::Ordinal)) {
+            if (-not $Record.ContainsKey($name) -or -not (Test-GenerationTime $Record[$name])) { "$shown (not a UTC time)" }
+        } elseif (-not $Record.ContainsKey($name)) {
+            "$shown (missing)"
+        } elseif (-not $Generated.ContainsKey($name)) {
+            "$shown (unexpected)"
+        } elseif (-not [string]::Equals([RooIndustriesBundleJson]::Canonical($Generated[$name]), [RooIndustriesBundleJson]::Canonical($Record[$name]), [StringComparison]::Ordinal)) {
+            "$shown (different)"
+        }
+    })
+    if (-not [string]::Equals($EntriesField, 'catalogEntries', [StringComparison]::Ordinal) -and $Record.ContainsKey('catalogEntries')) { $problems += '"catalogEntries" (unexpected)' }
+    Add-Check ($problems.Count -eq 0) "$Label header fields match the live archive" "$Label header fields differ from the live archive: $($problems -join ', ')"
 }
 
 function Test-RecordEntries {
@@ -210,27 +438,29 @@ function Test-RecordEntries {
         [string]$Label,
         [object]$Record,
         [string]$EntriesField,
-        [object[]]$GeneratedEntries,
+        [object]$GeneratedEntries,
         [bool]$Complete
     )
 
-    $property = $Record.PSObject.Properties[$EntriesField]
-    if ($null -eq $property -or -not ($property.Value -is [System.Collections.IList])) {
+    if (-not $Record.ContainsKey($EntriesField) -or -not ($Record[$EntriesField] -is [System.Collections.Generic.List[object]])) {
         Add-Failure "$Label $EntriesField is not a list, so it cannot match the live archive"
         return
     }
+    $recordEntries = $Record[$EntriesField]
 
-    $available = New-Object 'System.Collections.Generic.Dictionary[string,int]'
-    $generatedByPath = @{}
+    $available = New-Object 'System.Collections.Generic.Dictionary[string,int]' ([StringComparer]::Ordinal)
+    $generatedByPath = New-Object 'System.Collections.Generic.Dictionary[string,object]' ([StringComparer]::Ordinal)
+    $generatedKeys = New-Object System.Collections.Generic.List[string]
     foreach ($entry in $GeneratedEntries) {
-        $key = ConvertTo-CanonicalJson $entry
+        $key = [RooIndustriesBundleJson]::Canonical($entry)
+        $generatedKeys.Add($key)
         if ($available.ContainsKey($key)) { $available[$key]++ } else { $available[$key] = 1 }
         $generatedByPath[(Get-EntryLabel $entry)] = $entry
     }
 
     $unmatched = New-Object System.Collections.Generic.List[string]
-    foreach ($entry in $property.Value) {
-        $key = ConvertTo-CanonicalJson $entry
+    foreach ($entry in $recordEntries) {
+        $key = [RooIndustriesBundleJson]::Canonical($entry)
         if ($available.ContainsKey($key) -and $available[$key] -gt 0) {
             $available[$key]--
             continue
@@ -247,11 +477,10 @@ function Test-RecordEntries {
 
     $missing = New-Object System.Collections.Generic.List[string]
     if ($Complete) {
-        foreach ($entry in $GeneratedEntries) {
-            $key = ConvertTo-CanonicalJson $entry
-            if ($available[$key] -gt 0) {
-                $available[$key]--
-                $missing.Add((Get-EntryLabel $entry)) | Out-Null
+        for ($i = 0; $i -lt $generatedKeys.Count; $i++) {
+            if ($available[$generatedKeys[$i]] -gt 0) {
+                $available[$generatedKeys[$i]]--
+                $missing.Add((Get-EntryLabel $GeneratedEntries[$i])) | Out-Null
             }
         }
     }
@@ -259,15 +488,11 @@ function Test-RecordEntries {
     $problems = @()
     if ($unmatched.Count -gt 0) { $problems += "recorded entries that do not match: $($unmatched -join '; ')" }
     if ($missing.Count -gt 0) { $problems += "live entries not recorded exactly once: $($missing -join '; ')" }
-    Add-Check ($problems.Count -eq 0) "$Label $($property.Value.Count) $EntriesField match the live archive" "$Label $EntriesField differ from the live archive: $($problems -join ' | ')"
+    Add-Check ($problems.Count -eq 0) "$Label $($recordEntries.Count) $EntriesField match the live archive" "$Label $EntriesField differ from the live archive: $($problems -join ' | ')"
 }
 
 function Test-RecordMatchesArchive {
-    param(
-        [string]$ResolvedArchivePath,
-        [object]$Catalog,
-        [object]$Sample
-    )
+    param([string]$ResolvedArchivePath)
 
     if ([string]::IsNullOrWhiteSpace($ResolvedArchivePath) -or -not (Test-Path -LiteralPath $ResolvedArchivePath -PathType Leaf)) {
         Add-Pass 'Live Utilities.zip comparison skipped because no archive path was available'
@@ -275,19 +500,28 @@ function Test-RecordMatchesArchive {
     }
 
     try {
-        $generatedJson = (& (Join-Path $PSScriptRoot 'Get-UtilitiesBundleInventory.ps1') -ArchivePath $ResolvedArchivePath) -join "`n"
-        $generated = $generatedJson | ConvertFrom-Json
+        $generated = [RooIndustriesBundleJson]::Parse(((& (Join-Path $PSScriptRoot 'Get-UtilitiesBundleInventory.ps1') -ArchivePath $ResolvedArchivePath) -join "`n"))
     } catch {
         Add-Failure "Could not read the live archive: $($_.Exception.Message)"
         return
     }
-    $generatedEntries = @($generated.PSObject.Properties['catalogEntries'].Value)
 
-    Test-RecordHeader 'Catalog' $Catalog 'catalogEntries' $generated
-    Test-RecordEntries 'Catalog' $Catalog 'catalogEntries' $generatedEntries $true
-    if ($null -ne $Sample) {
-        Test-RecordHeader 'Utilities sample' $Sample 'sampleCatalogEntries' $generated
-        Test-RecordEntries 'Utilities sample' $Sample 'sampleCatalogEntries' $generatedEntries $false
+    foreach ($record in @(
+        @{ Label = 'Catalog'; Path = $CatalogPath; EntriesField = 'catalogEntries'; Complete = $true },
+        @{ Label = 'Utilities sample'; Path = $SamplePath; EntriesField = 'sampleCatalogEntries'; Complete = $false }
+    )) {
+        try {
+            $document = [RooIndustriesBundleJson]::Parse([System.IO.File]::ReadAllText([System.IO.Path]::GetFullPath($record.Path)))
+        } catch {
+            Add-Failure "$($record.Label) cannot be compared with the live archive: $($_.Exception.GetBaseException().Message)"
+            continue
+        }
+        if (-not (Test-IsJsonObject $document)) {
+            Add-Failure "$($record.Label) is not a JSON object, so it cannot match the live archive"
+            continue
+        }
+        Test-RecordHeader $record.Label $document $record.EntriesField $generated
+        Test-RecordEntries $record.Label $document $record.EntriesField $generated['catalogEntries'] $record.Complete
     }
 }
 
@@ -376,9 +610,9 @@ if ($null -ne $catalog) {
     Test-CatalogTool $entries 'vcredist-runtime' 1 'manual-launcher'
     Test-CatalogTool $entries 'intel-proset-setupbd' 1 'manual-launcher'
     Test-CatalogTool $entries 'intel-proset-prounstl' 1 'dangerous-manual-only'
-
-    Test-RecordMatchesArchive (Get-OptionalArchivePath) $catalog $sample
 }
+
+Test-RecordMatchesArchive (Get-OptionalArchivePath)
 
 if ($null -ne $manifest) {
     $allowedManifestClasses = @('native-replacement', 'manual-launcher', 'read-only-detector', 'controlled-reversible-executor', 'dangerous-manual-only', 'excluded')

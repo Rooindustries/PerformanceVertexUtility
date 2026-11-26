@@ -94,6 +94,19 @@ function Invoke-Case {
     }
 }
 
+function Invoke-RecordCase {
+    param(
+        [string]$Name,
+        [bool]$ExpectPass,
+        [string]$Record,
+        [string]$Path
+    )
+
+    $catalog = if ($Record -eq 'catalog') { $Path } else { $catalogPath }
+    $sample = if ($Record -eq 'sample') { $Path } else { $samplePath }
+    Invoke-Case $Name $ExpectPass @('-CatalogPath', $catalog, '-ManifestPath', $manifestPath, '-SamplePath', $sample, '-ArchivePath', $ArchivePath)
+}
+
 function Invoke-FaultCase {
     param(
         [string]$Name,
@@ -103,12 +116,33 @@ function Invoke-FaultCase {
 
     $copy = Read-Record $(if ($Record -eq 'catalog') { $catalogPath } else { $samplePath })
     & $Change $copy
-    $path = Write-Record $copy "$Record-fault.json"
-    if ($Record -eq 'catalog') {
-        Invoke-Case $Name $false @('-CatalogPath', $path, '-ManifestPath', $manifestPath, '-SamplePath', $samplePath, '-ArchivePath', $ArchivePath)
-    } else {
-        Invoke-Case $Name $false @('-CatalogPath', $catalogPath, '-ManifestPath', $manifestPath, '-SamplePath', $path, '-ArchivePath', $ArchivePath)
-    }
+    Invoke-RecordCase $Name $false $Record (Write-Record $copy "$Record-fault.json")
+}
+
+function Invoke-TextCase {
+    param(
+        [string]$Name,
+        [bool]$ExpectPass,
+        [string]$Record,
+        [scriptblock]$Change
+    )
+
+    $text = [System.IO.File]::ReadAllText($(if ($Record -eq 'catalog') { $catalogPath } else { $samplePath }))
+    $path = Join-Path $workRoot "$Record-text.json"
+    [System.IO.File]::WriteAllText($path, [string](& $Change $text), (New-Object System.Text.UTF8Encoding $false))
+    Invoke-RecordCase $Name $ExpectPass $Record $path
+}
+
+function Edit-First {
+    param(
+        [string]$Text,
+        [string]$Pattern,
+        [string]$Replacement
+    )
+
+    $regex = New-Object System.Text.RegularExpressions.Regex $Pattern
+    if (-not $regex.IsMatch($Text)) { throw "No match for $Pattern" }
+    return $regex.Replace($Text, $Replacement, 1)
 }
 
 New-Item -ItemType Directory -Path $workRoot | Out-Null
@@ -119,6 +153,11 @@ try {
     $reorderedCatalog = Write-Record (Get-ReversedFields (Read-Record $catalogPath)) 'catalog-reordered.json'
     $reorderedSample = Write-Record (Get-ReversedFields (Read-Record $samplePath)) 'sample-reordered.json'
     Invoke-Case 'record with every field order reversed passes' $true @('-CatalogPath', $reorderedCatalog, '-ManifestPath', $manifestPath, '-SamplePath', $reorderedSample, '-ArchivePath', $ArchivePath)
+
+    Invoke-TextCase 'the same number written another way passes' $true 'sample' {
+        param($t)
+        Edit-First $t '("entryCount"\s*:\s*)770,' '${1}7.70e2,'
+    }
 
     $absentArchive = Join-Path $workRoot 'absent.zip'
     Invoke-Case 'no bundle skips the live comparison' $true @('-CatalogPath', $catalogPath, '-ManifestPath', $manifestPath, '-SamplePath', $samplePath, '-ArchivePath', $absentArchive)
@@ -174,6 +213,72 @@ try {
         param($r)
         $entry = Get-Entry $r 'sampleCatalogEntries' { @($_.hardwareGates).Count -eq 1 }
         $entry.hardwareGates = [string]@($entry.hardwareGates)[0]
+    }
+
+    Invoke-TextCase 'catalog that is null' $false 'catalog' { param($t) 'null' }
+    Invoke-TextCase 'sample that is null' $false 'sample' { param($t) 'null' }
+    Invoke-TextCase 'sample that is an empty list' $false 'sample' { param($t) '[]' }
+    Invoke-TextCase 'catalog wrapped in a list' $false 'catalog' { param($t) '[' + $t + ']' }
+    Invoke-TextCase 'sample wrapped in a list' $false 'sample' { param($t) '[' + $t + ']' }
+    Invoke-TextCase 'fractional entry count in the sample' $false 'sample' {
+        param($t)
+        Edit-First $t '("entryCount"\s*:\s*)770,' '${1}770.0000000000001,'
+    }
+    Invoke-TextCase 'fractional archive size in the sample' $false 'sample' {
+        param($t)
+        Edit-First $t '("sourceArchiveSizeBytes"\s*:\s*)3734508425,' '${1}3734508425.000001,'
+    }
+    Invoke-TextCase 'fractional byte length in a catalog entry' $false 'catalog' {
+        param($t)
+        Edit-First $t '("lengthBytes"\s*:\s*)54864,' '${1}54864.00000000001,'
+    }
+    Invoke-TextCase 'count written as a string in the sample' $false 'sample' {
+        param($t)
+        Edit-First $t '("entryCount"\s*:\s*)770,' '${1}"770",'
+    }
+    Invoke-TextCase 'boolean written as a string in the catalog' $false 'catalog' {
+        param($t)
+        Edit-First $t '("archiveMetadataOnly"\s*:\s*)true' '${1}"true"'
+    }
+    Invoke-TextCase 'repeated header field in the sample' $false 'sample' {
+        param($t)
+        Edit-First $t '("entryCount"\s*:\s*770,)' ('"entryCount":  1,' + [Environment]::NewLine + '    ${1}')
+    }
+    Invoke-TextCase 'invisible character in a sample header name' $false 'sample' {
+        param($t)
+        Edit-First $t '"productName"' '"product\u00adName"'
+    }
+    Invoke-TextCase 'invisible character in a sample summary name' $false 'sample' {
+        param($t)
+        Edit-First $t '"\.exe"(\s*:)' '".e\u00adxe"${1}'
+    }
+    Invoke-TextCase 'invisible character in a sample header value' $false 'sample' {
+        param($t)
+        Edit-First $t 'Optimization Suite' ('Optimi' + [char]0x00AD + 'zation Suite')
+    }
+    Invoke-TextCase 'invisible character in a catalog entry value' $false 'catalog' {
+        param($t)
+        Edit-First $t '"AffTool intPolicy"' ('"AffTool int' + [char]0x00AD + 'Policy"')
+    }
+    Invoke-FaultCase 'catalog entry list inside the sample' 'sample' {
+        param($r)
+        $r | Add-Member -NotePropertyName 'catalogEntries' -NotePropertyValue @('not an entry')
+    }
+    Invoke-FaultCase 'catalog without its generation time' 'catalog' {
+        param($r)
+        $r.PSObject.Properties.Remove('generatedAtUtc')
+    }
+    Invoke-FaultCase 'sample generation time turned into a list' 'sample' {
+        param($r)
+        $r.generatedAtUtc = @('bogus')
+    }
+    Invoke-FaultCase 'sample generation time that is not a time' 'sample' {
+        param($r)
+        $r.generatedAtUtc = 'yesterday'
+    }
+    Invoke-FaultCase 'unexpected field in a catalog entry' 'catalog' {
+        param($r)
+        $r.catalogEntries[0] | Add-Member -NotePropertyName 'note' -NotePropertyValue 'x'
     }
 } finally {
     Remove-Item -LiteralPath $workRoot -Recurse -Force -ErrorAction SilentlyContinue
