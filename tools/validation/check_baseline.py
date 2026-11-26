@@ -317,43 +317,57 @@ def reparse_walk_negative_controls():
     table = json.loads(Path(__file__).with_name('reparse-walk-names.json').read_text(encoding='utf-8'))
     location = 'tools/validation/reparse-walk-allowlist.json'
     cs = 'tools/validation/Example/Checks.cs'
-    py = 'tools/validation/example.py'
     every = 'Directory.EnumerateFiles(root, "*", SearchOption.All' + 'Directories);'
     entry = {'file': cs, 'line': every, 'reason': 'fixture'}
+
+    def refused(files, rows=None, entries=()):
+        with tempfile.TemporaryDirectory() as folder:
+            temporary = Path(folder)
+            for relative, source in {location: json.dumps(list(entries)), **files}.items():
+                (temporary / relative).parent.mkdir(parents=True, exist_ok=True)
+                (temporary / relative).write_bytes(source if isinstance(source, bytes) else source.encode('utf-8'))
+            return check(temporary, rows)
+
+    def control(extension):
+        return 'tools/validation/Example/sample' + ('.' + extension if extension else '')
+
     cases = {
-        'enumeration with a numbered option': ([], {cs: 'Directory.Enumerate' + 'Files(root, "*", 1);'}, [f'{cs}:1:']),
-        'enumeration that stays local': ([], {cs: 'LocalTree.Entries(root);'}, []),
-        'python double-star pattern': ([], {py: "files = root.gl" + "ob('**/*')"}, [f'{py}:1:']),
-        'python recursive glob': ([], {py: "files = glob.glob(pattern, recur" + "sive=True)"}, [f'{py}:1:']),
-        'guarded fixture link': ([], {cs: 'TestFixtures.Junction(link, root);'}, []),
-        'file type nobody listed': ([], {'tools/validation/Example/run.foo': 'echo'}, ['tools/validation/Example/run.foo:']),
-        'listed line': ([entry], {cs: every}, []),
-        'listed line used once': ([entry], {cs: every + '\n' + every}, [f'{cs}:2:']),
-        'listed without a reason': ([dict(entry, reason=' ')], {cs: every}, [f'{location}:']),
-        'stale listed line': ([entry], {cs: 'LocalTree.Entries(root);'}, [f'{location}: stale']),
+        'enumeration that stays local': ({cs: 'LocalTree.Entries(root);'}, [], []),
+        'guarded fixture link': ({cs: 'TestFixtures.Junction(link, root);'}, [], []),
+        'file type nobody listed': ({'tools/validation/Example/run.foo': 'echo'}, [], ['tools/validation/Example/run.foo:']),
+        'file that is neither UTF-8 nor UTF-16': ({'tools/validation/Example/bad.ps1': b'\xff\x00\xd8\x00\xff'}, [], ['tools/validation/Example/bad.ps1:']),
+        'listed line': ({cs: every}, [entry], []),
+        'listed line used once': ({cs: every + '\n' + every}, [entry], [f'{cs}:2:']),
+        'listed without a reason': ({cs: every}, [dict(entry, reason=' ')], [f'{location}:']),
+        'stale listed line': ({cs: 'LocalTree.Entries(root);'}, [entry], [f'{location}: stale']),
     }
+    results = {}
+    for label, (files, entries, expected) in cases.items():
+        failures = refused(files, entries=entries)
+        results[label] = len(failures) == len(expected) and all(any(f.startswith(e) for f in failures) for e in expected)
+    for rule in table['cleaning']:
+        for number, item in enumerate(rule['controls']):
+            source = item['text'].encode('utf-16-le')
+            source = b'\xff\xfe' + source if item.get('encoding') == 'utf-16-le-bom' else source if item.get('encoding') else item['text']
+            path = control(item['file'])
+            results[f'cleaning rule "{rule["rule"]}" control {number}'] = any(f.startswith(path + ':') for f in refused({path: source}))
     for index, row in enumerate(table['rows']):
-        sample = 'tools/validation/Example/sample.' + row.get('file', 'ps1')
+        path = control(row.get('file', 'ps1'))
         variants = [row['sample'], row['sample'].upper()]
-        if ' ' in row['name']:
+        if ' ' in row['name'] and 'pattern' not in row:
             variants.append('[' + ', '.join(repr(part) for part in row['name'].split() + ['$a']) + ']')
         if 'switch' in row:
             switch = row['switch']
-            variants += [row['name'] + '/' + switch + ' $a', row['name'] + ' /q /' + switch.upper() + ' $a', row['name'] + ' $a /q/' + switch]
+            variants += [row['name'] + '/' + switch + ' $a', row['name'] + ' -q -' + switch.upper() + ' $a', row['name'] + ' $a /q/' + switch]
         for alias in [row['name'], *row.get('aliases', [])]:
             if 'parameter' in row:
                 variants += [alias + ' $a $b -' + row['parameter'][:1], alias + ' $a `\n  -' + row['parameter'], '$p=@{Path=$a}; ' + alias + ' @p']
+        others = [other for number, other in enumerate(table['rows']) if number != index]
+        needed = False
         for number, variant in enumerate(variants):
-            cases[f'table row {index} {row["name"]} variant {number}'] = ([], {sample: variant}, [f'{sample}:1:'])
-    results = {}
-    for label, (entries_listed, files, expected) in cases.items():
-        with tempfile.TemporaryDirectory() as folder:
-            temporary = Path(folder)
-            for relative, source in {location: json.dumps(entries_listed), **files}.items():
-                (temporary / relative).parent.mkdir(parents=True, exist_ok=True)
-                (temporary / relative).write_text(source, encoding='utf-8')
-            failures = check(temporary)
-            results[label] = len(failures) == len(expected) and all(any(f.startswith(e) for f in failures) for e in expected)
+            results[f'table row {index} {row["name"]} variant {number}'] = any(f.startswith(path + ':') for f in refused({path: variant}))
+            needed = needed or not refused({path: variant}, others)
+        results[f'table row {index} {row["name"]} is the only row that refuses one of its controls'] = needed
     with tempfile.TemporaryDirectory() as folder:
         outside = Path(folder, 'outside')
         (outside / 'deep').mkdir(parents=True)
