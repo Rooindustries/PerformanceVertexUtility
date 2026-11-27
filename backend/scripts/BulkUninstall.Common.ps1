@@ -55,7 +55,7 @@ function Test-RooIndustriesBulkAppPresent {
 function Get-RooIndustriesBulkExecutableHash {
     param([string]$Path)
     if (-not [IO.Path]::IsPathRooted($Path) -or -not [IO.File]::Exists($Path)) {throw 'Removal executable must be an existing absolute file path.'}
-    if (Test-RooIndustriesCleanupReparsePath $Path -Ancestors) {throw 'Removal executable cannot be reached through a reparse path.'}
+    if (Test-RooIndustriesCleanupReparsePath $Path) {throw 'Removal executable cannot be reached through a reparse path.'}
     return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
 }
 
@@ -312,7 +312,7 @@ function Invoke-RooIndustriesBulkEntry {
         $sha=[Security.Cryptography.SHA256]::Create()
         try {$digest=([BitConverter]::ToString($sha.ComputeHash($executableLease))).Replace('-','').ToLowerInvariant()} finally {$sha.Dispose()}
         if ($digest -cne $Entry.executableSha256) {throw 'Removal executable changed after review.'}
-        if (Test-RooIndustriesCleanupReparsePath ([string]$Entry.executable) -Ancestors) {throw 'The removal executable is now reached through a link. Create a fresh plan.'}
+        if (Test-RooIndustriesCleanupReparsePath ([string]$Entry.executable)) {throw 'The removal executable is now reached through a link. Create a fresh plan.'}
         $JournalEntry.state='dispatching'; $JournalEntry.attemptCount++; $JournalEntry.updatedAtUtc=Get-RooIndustriesUtcStamp
         Write-RooIndustriesOperationJson $Journal $JournalPath
         Write-RooIndustriesOperationJson ([pscustomobject]@{queueId=$Journal.plan.queueId;entryId=$Entry.entryId;journalPath=$JournalPath}) $claimPath

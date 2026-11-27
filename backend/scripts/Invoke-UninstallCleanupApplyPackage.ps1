@@ -177,7 +177,7 @@ try {
         $reviewedCommandLine = [string](Get-RooIndustriesUninstallPropertyValue $command 'commandLine' '')
         $commandLineReviewed = -not [string]::IsNullOrWhiteSpace($reviewedCommandLine) -and (Get-RooIndustriesUninstallCommandLine $commandExecutable $argumentText) -ceq $reviewedCommandLine
         $reviewedExecutableSha256 = [string](Get-RooIndustriesUninstallPropertyValue $command 'executableSha256' '')
-        $executableReviewed = -not [string]::IsNullOrWhiteSpace($reviewedExecutableSha256) -and -not (Test-RooIndustriesCleanupReparsePath $commandExecutable -Ancestors) -and (Get-RooIndustriesReviewedUninstallExecutableHash $commandExecutable) -ceq $reviewedExecutableSha256
+        $executableReviewed = -not [string]::IsNullOrWhiteSpace($reviewedExecutableSha256) -and -not (Test-RooIndustriesCleanupReparsePath $commandExecutable) -and (Get-RooIndustriesReviewedUninstallExecutableHash $commandExecutable) -ceq $reviewedExecutableSha256
     }
     if ($AllowFixtureClaims -and ([string]::IsNullOrWhiteSpace($claimRoot) -or ($hasOfficialCommand -and -not (Test-RooIndustriesCleanupPathWithin $commandExecutable $claimRoot)))) { throw 'Fixture claims apply only to removers inside the fixture root.' }
     $officialExecutableAllowlisted = (-not $hasOfficialCommand) -or (-not [string]::IsNullOrWhiteSpace($AllowedOfficialExecutablePath) -and $commandExecutable.Equals([System.IO.Path]::GetFullPath($AllowedOfficialExecutablePath), [System.StringComparison]::OrdinalIgnoreCase))
@@ -293,7 +293,7 @@ try {
                         $sha = [Security.Cryptography.SHA256]::Create()
                         try { $digest = ([BitConverter]::ToString($sha.ComputeHash($executableLease))).Replace('-', '').ToLowerInvariant() } finally { $sha.Dispose() }
                         if ($digest -cne $reviewedExecutableSha256) { throw 'The remover file changed after review. Check the removal path again.' }
-                        if (Test-RooIndustriesCleanupReparsePath $commandExecutable -Ancestors) { throw 'The remover is now reached through a link. Check the removal path again.' }
+                        if (Test-RooIndustriesCleanupReparsePath $commandExecutable) { throw 'The remover is now reached through a link. Check the removal path again.' }
                         $officialResult = Invoke-RooIndustriesObservedRemover $commandExecutable $argumentText $OfficialRunnerWorkingDirectory $TimeoutSeconds {
                             param($invocation)
                             Write-RooIndustriesOperationJson ([pscustomobject]@{ kind = 'cleanup-apply'; appId = $appId; rollbackManifestPath = $resolvedRollbackManifestPath; launchConfirmed = [bool]$invocation.resumed; invocation = $invocation }) $claimPath

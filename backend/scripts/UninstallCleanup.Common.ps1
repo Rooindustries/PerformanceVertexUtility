@@ -118,12 +118,12 @@ function Test-RooIndustriesCleanupPathWithin {
 }
 
 function Test-RooIndustriesCleanupReparsePath {
-    param([string]$Path, [switch]$Recurse, [switch]$Ancestors)
+    param([string]$Path, [switch]$Recurse, [switch]$SkipAncestors)
     $current = [System.IO.Path]::GetFullPath($Path)
     while (-not [string]::IsNullOrWhiteSpace($current)) {
         $item = Get-Item -LiteralPath $current -Force -ErrorAction SilentlyContinue
         if ($null -ne $item -and ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint)) { return $true }
-        if (-not $Ancestors) { break }
+        if ($SkipAncestors) { break }
         $parent = Split-Path $current -Parent
         if ($parent -eq $current) { break }
         $current = $parent

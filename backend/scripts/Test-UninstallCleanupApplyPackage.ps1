@@ -126,6 +126,28 @@ try {
         $result=Read-Result (& $applyScript @a)
         Assert ($result.status -eq 'blocked' -and $result.dryRun -and (Test-Path $case.targets[0]) -and (Test-Path $case.targets[1]) -and -not (Test-Path $a.RollbackManifestPath)) "Invalid $scenario input cannot delete or create recovery state"
     }
+    foreach ($phase in @('apply','restore')) {
+        $case=New-Case ('linked-parent-' + $phase); $a=$case.args
+        $parent=Join-Path $case.root 'parent'; $elsewhere=Join-Path $case.root 'elsewhere'
+        New-Item -ItemType Directory -Path $parent, $elsewhere | Out-Null
+        Move-Item -LiteralPath $case.targets -Destination $parent
+        $targets=@((Join-Path $parent 'cache'), (Join-Path $parent 'loose.txt'))
+        $case.manifest.items[0].target=$targets[0]; $case.manifest.items[1].target=$targets[1]; $a.ExactTargetAllowlist=$targets; Refresh-Hashes $case
+        if ($phase -eq 'apply') {
+            Move-Item -LiteralPath $targets -Destination $elsewhere
+            Remove-Item -LiteralPath $parent
+            cmd.exe /c mklink /J "$parent" "$elsewhere" | Out-Null
+            $result=Read-Result (& $applyScript @a)
+            Assert ($result.status -eq 'blocked' -and (Test-Path -LiteralPath (Join-Path $elsewhere 'cache\nested\data.txt')) -and (Test-Path -LiteralPath (Join-Path $elsewhere 'loose.txt')) -and -not (Test-Path -LiteralPath $a.RollbackManifestPath)) "A cleanup target whose parent folder is a junction is refused before anything is backed up or deleted ($($result.status))"
+        } else {
+            $applied=Read-Result (& $applyScript @a)
+            Remove-Item -LiteralPath $parent
+            cmd.exe /c mklink /J "$parent" "$elsewhere" | Out-Null
+            $result=Read-Result (& $restoreScript -RollbackManifestPath $a.RollbackManifestPath -ConfirmApply -AllowRealSystemExecution -UserApproved)
+            Assert ($applied.status -eq 'success' -and $result.status -eq 'blocked' -and @(Get-ChildItem -LiteralPath $elsewhere -Force).Count -eq 0) "Restore refuses a target whose parent folder became a junction after cleanup and writes nothing behind it ($($applied.status), $($result.status))"
+        }
+        cmd.exe /c rmdir "$parent" | Out-Null
+    }
     $case=New-Case 'success'; $a=$case.args
     $case.official.commands[0].reviewRequired=$true; Refresh-Hashes $case; $a.ManualReviewApproved=$true
     $result=Read-Result (& $applyScript @a)
