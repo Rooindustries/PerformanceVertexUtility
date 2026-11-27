@@ -184,7 +184,7 @@
   {"file": ".github/no-new-comments-e2e.sh", "line": "mkdir -p web", "kind": "program", "starts": "mkdir"},
   {"file": ".github/no-new-comments-e2e.sh", "line": "commit \"feat: add b\" && git commit -q --amend -m \"feat: add b\" -m \"Co-authored-by: Helper <noreply@example.com>\"", "kind": "program", "starts": "git"},
   {"file": ".github/no-new-comments-e2e.sh", "line": "git commit -q --amend -m \"feat: add b with $name\"", "kind": "program", "starts": "git"},
-  {"file": ".github/no-new-comments-e2e.sh", "line": "git commit -q --amend -m \"feat: add b\" -m \"Generated with Copilot\"", "kind": "program", "starts": "git"},
+  {"file": ".github/no-new-comments-e2e.sh", "line": "git commit -q --amend -m \"feat: add b\" -m \"$credit\"", "kind": "program", "starts": "git"},
   {"file": ".github/no-new-comments-e2e.sh", "line": "git commit -q --amend -m \"fix: convert the disk to GPT\"", "kind": "program", "starts": "git"},
   {"file": ".github/no-new-comments-e2e.sh", "line": "git commit -q --amend -m \"feat: add b\"", "kind": "program", "starts": "git"},
   {"file": ".github/no-new-comments-e2e.sh", "line": "git rm -q docs/guide.md", "kind": "program", "starts": "git"},
