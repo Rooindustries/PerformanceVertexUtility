@@ -505,6 +505,29 @@ try {
     & cmd.exe /d /c rmdir "$redirected"
     if ($LASTEXITCODE -ne 0) { throw 'The fixture junction could not be removed.' }
 
+    $innerRoot = Join-Path $fixtureRoot 'inner'
+    $outsideFolder = Join-Path $fixtureRoot 'outside'
+    $innerLink = Join-Path $innerRoot 'sub'
+    New-Item -ItemType Directory -Path $innerRoot, (Join-Path $outsideFolder 'victim') | Out-Null
+    'outside the fixture root' | Set-Content -LiteralPath (Join-Path $outsideFolder 'victim\canary.txt') -Encoding UTF8
+    & cmd.exe /d /c mklink /J "$innerLink" "$outsideFolder" | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'The fixture junction could not be created.' }
+    $cleanupFixture.items = @($cleanupFixture.items[0])
+    $cleanupFixture.items[0].target = Join-Path $innerLink 'victim'
+    $cleanupFixture.rollback.backupRoot = Join-Path $innerRoot '_roo-cleanup-backup'
+    $innerManifestPath = Join-Path $innerRoot 'cleanup-manifest.json'
+    ($cleanupFixture | ConvertTo-Json -Depth 16) | Set-Content -LiteralPath $innerManifestPath -Encoding UTF8
+    $innerApply = & (Join-Path $PSScriptRoot 'Invoke-UninstallCleanupExecution.ps1') -OfficialPreviewPath $officialFixturePath -CleanupManifestPath $innerManifestPath -FixtureRoot $innerRoot -ConfirmApply -AllowDisposableFixtureApply -OfficialUninstallCommandApproved -CleanupDeletionManifestApproved
+    $innerJson = ($innerApply -join [Environment]::NewLine) | ConvertFrom-Json
+    $innerBlocked = @($innerJson.gates | Where-Object { $_.blocking } | ForEach-Object { $_.gateId })
+    if ($innerJson.status -eq 'blocked' -and $innerBlocked -contains 'targets-without-links' -and (Test-Path -LiteralPath (Join-Path $outsideFolder 'victim\canary.txt')) -and -not (Test-Path -LiteralPath (Join-Path $innerRoot '_roo-cleanup-backup'))) {
+        Add-Pass 'Cleanup executor refuses a target reached through a junction between the fixture root and the target'
+    } else {
+        Add-Failure "Cleanup executor reached through a junction inside the fixture root: $($innerJson.status) $($innerBlocked -join ', ')"
+    }
+    & cmd.exe /d /c rmdir "$innerLink"
+    if ($LASTEXITCODE -ne 0) { throw 'The fixture junction could not be removed.' }
+
     Remove-Item -LiteralPath $fixtureRoot -Recurse -Force
     $fixtureCleanupDone = $true
     if (-not (Test-Path -LiteralPath $fixtureRoot)) {

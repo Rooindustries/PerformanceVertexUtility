@@ -150,7 +150,7 @@ try {
     }
     $linkedItems = @($items | Where-Object {
         $target = [string](Get-RooIndustriesUninstallPropertyValue $_ 'target' '')
-        $target -and (Test-RooIndustriesCleanupReparsePath $target -Recurse -SkipAncestors)
+        $target -and (Test-RooIndustriesCleanupReparsePath $target -Recurse -StopAt $resolvedFixtureRoot)
     })
 
     $gates = @(
