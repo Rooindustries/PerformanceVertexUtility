@@ -483,6 +483,10 @@ def reparse_walk_negative_controls():
                     kind, lang = kinds[section]
                     found = classifier.classify({'file': 'x', 'line': 1, 'text': '', 'kind': kind, 'name': name, 'args': args, 'language': lang})
                     results[f'table rule {index + 1} of {section} {name} refuses when broken'] = bool(found)
+        members = [(section, name) for section in ('dotnet', 'python') for name in table[section]]
+        unapproved = [section + ' ' + name for section, name in members
+                      if not classifier.classify({'file': 'x', 'line': 1, 'text': '', 'kind': 'call', 'name': name + '.Zqvx', 'args': [], 'language': 'python' if section == 'python' else 'csharp'})]
+        results[f'a member under any of the {len(members)} approved names is refused'] = not unapproved
         outside = root / 'outside'
         (outside / 'deep').mkdir(parents=True)
         (outside / 'deep' / 'kept.txt').write_text('outside', encoding='utf-8')
