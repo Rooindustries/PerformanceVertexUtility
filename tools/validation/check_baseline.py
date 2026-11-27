@@ -660,7 +660,7 @@ def validate(root: Path, contracts_only: bool = False):
                 hygiene_source = public_hygiene_text(relative, source)
                 if not relative.startswith('docs/internal/') and re.search(trace_pattern, hygiene_source, re.I):
                     failures.append(f'{relative}: public tool trace requires review')
-        if any(local_tree(root / 'backend/state')):
+        if any(local_tree(root / 'backend/state', links=True)):
             failures.append('backend/state is not empty')
     result = {'jsonFiles': len(documents), 'schemaCases': cases, 'domainTestSamples': len(mapping['domainTests']), 'xmlFiles': xml_count, 'negativeControl': True, 'failures': failures}
     return result

@@ -28,6 +28,7 @@ static partial class DataFolderChecks
         scenarios.Add(("claims-carry", ClaimsCarry));
         scenarios.Add(("old-carveout", OldCarveOut));
         scenarios.Add(("orphan-temp", OrphanTemp));
+        scenarios.Add(("rules-links", RulesLinks));
         scenarios.Add(("schtasks-hang", SchtasksHang));
         scenarios.Add(("migration-time", MigrationTime));
         scenarios.Add(("timer-split", TimerSplit));
@@ -359,6 +360,37 @@ static partial class DataFolderChecks
             check(recovered["generation"] == 7 && File.Exists(Path.Combine(root, "operations", "host.json")), "The next read of the missing file recovers the carried write");
         }
         finally { H.Forget(root, Path.Combine(root, "operations")); H.Delete(root); H.Sweep(id); }
+    }
+
+    private static void RulesLinks(Action<bool, string> check)
+    {
+        var id = H.Name("rules-links");
+        var root = Path.Combine(H.Local, id);
+        var target = Path.Combine(H.Local, id + "-target");
+        var link = Path.Combine(root, "link");
+        var require = typeof(PolicyRootSecurity).GetMethod("RequireMigratable", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!;
+        Exception? Refusal(Action action) { try { action(); return null; } catch (System.Reflection.TargetInvocationException error) { return error.InnerException; } catch (Exception error) { return error; } }
+        string Linked(string path) => "The saved rules folder contains a link (" + path + "), so it is not trusted. Delete " + root + " and save your rules again.";
+        try
+        {
+            TestFixtures.Own(target);
+            File.WriteAllText(Path.Combine(target, "kept.txt"), "outside bytes");
+            var missing = Refusal(() => require.Invoke(null, [root, ProtectedFolder.Rules]));
+            check(missing is DirectoryNotFoundException && missing.Message == "Could not find a part of the path '" + root + "'.", "A missing saved rules folder is refused as a missing folder: " + missing?.GetType().Name + " " + missing?.Message);
+            H.Junction(root, target);
+            var linkedRoot = Refusal(() => require.Invoke(null, [root, ProtectedFolder.Rules]));
+            check(linkedRoot is UnauthorizedAccessException && linkedRoot.Message == Linked(root), "A saved rules folder that is itself a link is refused as untrusted and named: " + linkedRoot?.GetType().Name + " " + linkedRoot?.Message);
+            H.Delete(root);
+            Directory.CreateDirectory(root);
+            var owner = new DirectorySecurity();
+            owner.SetOwner(new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null));
+            new DirectoryInfo(root).SetAccessControl(owner);
+            H.Junction(link, target);
+            var holding = Refusal(() => PolicyRootSecurity.Secure(root));
+            check(holding is UnauthorizedAccessException && holding.Message == Linked(link), "A saved rules folder holding a link is refused as untrusted and names the link: " + holding?.GetType().Name + " " + holding?.Message);
+            check(H.Read(Path.Combine(target, "kept.txt")) == "outside bytes" && H.Names(target).SequenceEqual(["kept.txt"]), "Nothing changed in the folder the links point to: " + string.Join(", ", H.Names(target)));
+        }
+        finally { H.Delete(root, target); H.Sweep(id); }
     }
 
     private static void SchtasksHang(Action<bool, string> check)
