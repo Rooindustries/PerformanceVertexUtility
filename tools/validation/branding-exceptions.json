@@ -360,14 +360,16 @@
       "files": [
         "tools/validation/Background/Invoke-DesktopScenario.ps1",
         "tools/validation/Background/REVIEW2.md",
-        "tools/validation/Background/Test-Review2.ps1"
+        "tools/validation/Background/Test-Review2.ps1",
+        "tools/validation/reparse-walk-allowlist.json"
       ],
       "reason": "On-disk fixture executable/process identity used by process profiles, UI selection and ownership or restoration readbacks; the harness may find an earlier run by this image name."
     },
     {
       "text": "RooFixtureOwnedUpdater.exe",
       "files": [
-        "tools/validation/Background/Test-MemoryOwnership.ps1"
+        "tools/validation/Background/Test-MemoryOwnership.ps1",
+        "tools/validation/reparse-walk-allowlist.json"
       ],
       "reason": "On-disk fixture executable/process identity used by process profiles, UI selection and ownership or restoration readbacks; the harness may find an earlier run by this image name."
     },
@@ -399,7 +401,8 @@
     {
       "text": "RooFixtureUpdaterAuto.exe",
       "files": [
-        "tools/validation/Background/Test-GovernorAutoRestore.ps1"
+        "tools/validation/Background/Test-GovernorAutoRestore.ps1",
+        "tools/validation/reparse-walk-allowlist.json"
       ],
       "reason": "On-disk fixture executable/process identity used by process profiles, UI selection and ownership or restoration readbacks; the harness may find an earlier run by this image name."
     },
@@ -437,7 +440,8 @@
     {
       "text": "RooFixtureWebHelperIdentity.exe",
       "files": [
-        "tools/validation/Background/Test-GovernorRestoreIdentity.ps1"
+        "tools/validation/Background/Test-GovernorRestoreIdentity.ps1",
+        "tools/validation/reparse-walk-allowlist.json"
       ],
       "reason": "On-disk fixture executable/process identity used by process profiles, UI selection and ownership or restoration readbacks; the harness may find an earlier run by this image name."
     },
@@ -788,6 +792,20 @@
         "tools/validation/Background/README.md"
       ],
       "reason": "Linear issue key for the restore test-harness repair that moves the harness-blocked scenarios back into the default group."
+    },
+    {
+      "text": "Global\\\\\\\\RooProtectedSession-",
+      "files": [
+        "tools/validation/reparse-walk-allowlist.json"
+      ],
+      "reason": "The protected-session job name from the brand compatibility checks, quoted as that line's text in the walk check's known list."
+    },
+    {
+      "text": "C:\\\\ProgramData\\\\RooHistoricalLive-",
+      "files": [
+        "tools/validation/reparse-walk-allowlist.json"
+      ],
+      "reason": "Private on-disk historical recovery folder from Test-HistoricalBlackwell.ps1, quoted as that line's text in the walk check's known list."
     }
   ]
 }

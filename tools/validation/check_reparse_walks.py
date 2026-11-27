@@ -759,21 +759,6 @@ def workflow_facts(relative, data, texts):
     return facts
 
 
-LAUNCHERS = set("""
-cmd command powershell powershell_ise pwsh bash sh dash zsh ksh csh tcsh fish wsl wslhost python python3 py pythonw node nodejs deno bun perl ruby php lua
-tclsh java javaw dotnet msbuild csc vbc fsi cscript wscript mshta rundll32 regsvr32 regasm installutil msiexec conhost runas sudo doas su pkexec env nice
-nohup timeout stdbuf ionice setsid chroot xargs parallel watch time exec eval source . trap call start explorer schtasks at sc wmic psexec winrs ssh rsh
-telnet iscc makensis winget choco scoop apt apt-get dpkg rpm yum dnf pip pip3 pipx npm npx yarn pnpm make cmake ninja git gh awk gawk mawk nawk sed gsed
-docker podman kubectl for <shell>
-""".split())
-TREE_TOOLS = set("""
-robocopy xcopy copy move del erase rd rmdir mklink junction linkd subst mountvol diskpart fsutil icacls cacls xcacls takeown attrib compact cipher expand
-extrac32 makecab tar bsdtar 7z 7za 7zr 7zz unzip zip gzip gunzip bzip2 bunzip2 xz unxz zstd cpio pax rar unrar winrar forfiles where tree dir ls du find
-findstr grep egrep fgrep rg ag ack diff rm cp mv ln rsync scp sftp install ditto shred sdelete chmod chown chgrp chattr chflags setfacl getfacl mount umount
-losetup mkfs format label chkdsk defrag convert net reg regini vssadmin wbadmin esentutl bitsadmin innoextract lessmsi msidb dism pnputil bcdboot
-""".split())
-SCRIPTS = ('.cmd', '.bat', '.ps1', '.psm1', '.psd1', '.py', '.pyw', '.sh', '.vbs', '.vbe', '.js', '.jse', '.wsf', '.wsh', '.msi', '.msc', '.lnk', '.url', '.hta',
-           '.cpl', '.scr', '.jar')
 PS_ALIASES = dict(pair.split('=') for pair in """
 ac=add-content cat=get-content cd=set-location chdir=set-location clc=clear-content clear=clear-host cli=clear-item clp=clear-itemproperty cls=clear-host
 clv=clear-variable compare=compare-object copy=copy-item cp=copy-item cpi=copy-item cpp=copy-itemproperty curl=invoke-webrequest cvpa=convert-path
@@ -792,34 +777,44 @@ tee=tee-object type=get-content wget=invoke-webrequest where=where-object ?=wher
 """.split())
 
 
-DANGER = re.compile(r'(?i)delet|remov|rmtree|unlink|rmdir|erase|purge|clean|cop(y|ies)|move|renam|replac|link|junction|mount|volume|vdisk|vhd|subst|dosdevice|acl\b|acl[A-Z_]|'
-                    r'securit|owner|permission|grant|revoke|accesscontrol|enumerat|getfiles|getdirectories|filesystem|walk|glob|scandir|listdir|iterdir|recurs|tree|'
-                    r'extract|archive|zip|tar[a-z]*file|compress|start|exec|spawn|popen|system|shell|invoke|load|compile|emit|reflect|assembly|activator|delegate|'
-                    r'expression|marshal|native|interop|process|kill|install|restore|reset|sync|mirror|format|reparse|fsctl|deviceiocontrol|createfile|registry|'
-                    r'regkey|hive|service|task|schedul|wmi|cim|dynamic|getmethod|getproperty|getfield|getmember|getvalue|setvalue|createinstance|callsite|elevat|'
-                    r'impersonat|token|privilege|ctypes|runpy|importlib|__import__|getattr|setattr|eval|pickle|marshal|script|definetype|createtype|encrypt|spec_from_file|'
-                    r'transport|^\.?run$|simplehttp')
-RISKY_TYPES = re.compile(r'(?i)^(System\.Reflection(?!\.Metadata|\.PortableExecutable)|System\.Type\.|System\.Activator|System\.Delegate|System\.Runtime\.CompilerServices\.RuntimeHelpers|'
-                         r'System\.Runtime\.Loader|System\.Management|Microsoft\.Diagnostics\.Runtime|Microsoft\.CodeAnalysis\.(Diagnostics|GeneratorDriver|CSharp\.CSharpGeneratorDriver)|'
-                         r'ctypes|importlib|runpy|sys\.path|http\.server)')
+HARM = CLASSES['harm']
+REASONS = ('R1', 'R2', 'R3')
+NEEDS = REASONS + ('R4',)
+NAMES = re.compile('|'.join(f'(?:{pattern})' for pattern in HARM['names']), re.IGNORECASE)
 
 
-def unlisted(name, what):
-    parts = re.sub(r'\.\.ctor$', '', name).split('.')
-    if RISKY_TYPES.search(name) or DANGER.search(parts[-1] if name.endswith('..ctor') or len(parts) < 2 else parts[-2] + '.' + parts[-1]):
-        return (f'{what}, which the table does not list and which may work on trees, links, permissions, processes or loaded code', 'other', None)
-    return (f'{what}, which the table does not list', 'launch', name.lower())
+def harm_of(program, tokens):
+    lowered = program.lower()
+    head, slash, switches = lowered.partition('/')
+    harms = [harm_named(re.split(r'[\\/]', lowered)[-1], tokens)] + ([harm_named(head, ['/' + switches] + list(tokens or []))] if head and slash else [])
+    return next((harm for harm in harms if harm in REASONS), harms[0])
 
 
-def launch(program):
+def harm_named(program, tokens):
+    base = re.sub(r'\.(exe|com)$', '', program)
+    harm = next((harm for harm in REASONS if base in HARM['programs'][harm]), None)
+    rule = HARM['flagged programs'].get(base, {})
+    words = [t for t in tokens or [] if isinstance(t, str)]
+    lowered = [word.lower() for word in words]
+    options = [word.split('=')[0] for word in lowered if word.startswith('--') and len(word.split('=')[0]) > 2]
+    flagged = (lowered[:1] and lowered[0] in rule.get('first', [])
+               or any(letter in rule.get('switches', '') for word in lowered if word.startswith('/') for letter in word.replace('/', ''))
+               or any(long.startswith(option) for option in options for long in rule.get('long', []))
+               or any(re.fullmatch(r'-[a-z]+', word, re.I) and set(word[1:]) & set(rule.get('letters', '')) for word in words))
+    return harm or (rule['harm'] if flagged else HARM['known programs'].get(base, 'program'))
+
+
+def launch(program, tokens=None):
     if not program:
-        return ('this starts a program the check cannot name', 'other', None)
-    base = re.sub(r'\.(exe|com)$', '', program.lower())
-    if base in LAUNCHERS or program.lower().endswith(SCRIPTS):
-        return (f'this starts {program}, a shell, interpreter or launcher that runs what it is given', 'risky', base)
-    if base in TREE_TOOLS or re.fullmatch(r'unins\d+', base):
-        return (f'this starts {program}, a tool for folder trees, links, volumes or permissions', 'risky', base)
-    return (f'this starts {program}', 'launch', base)
+        return ('this starts a program the check cannot name', 'program named by a value the check cannot read', '')
+    harm = harm_of(program, tokens)
+    text = ' '.join(t if isinstance(t, str) else ''.join(p for p in t if p not in MARKERS) for t in tokens or [] if isinstance(t, (str, list)))
+    return (f'this starts {program}', 'R4' if harm not in REASONS and NAMES.search(text) else harm, program.lower())
+
+
+def call_harm(name):
+    lowered = name.lower()
+    return next((harm for harm in REASONS if name in HARM['calls'][harm] or lowered in HARM['calls'][harm]), None)
 
 
 class Classifier:
@@ -903,36 +898,42 @@ class Classifier:
         return 'value' in found[0] and found[0]['value'] in condition['in']
 
     def verdict(self, entry, args=None):
-        if isinstance(entry, str) or 'safe' in entry and all(self.holds(c, args, None) for c in entry['safe']):
+        if isinstance(entry, str):
             return None
-        return entry['does']
+        broken = next((c for c in entry.get('safe', []) if not self.holds(c, args, None)), None)
+        if 'safe' in entry and broken is None:
+            return None
+        rule = broken if broken and ('harm' in broken or 'known' in broken) else entry
+        return entry['does'], rule.get('harm') or rule.get('known') or 'call'
 
     def called(self, section, name, args):
         entry = self.lookup(section, name)
         if entry is None:
-            return [unlisted(name, f'this calls {name}')]
-        does = self.verdict(entry, args)
-        return [(f'this calls {name}, which {does}', 'other', None)] if does else []
+            return [(f'this calls {name}, which the table does not list', call_harm(name) or 'call the table does not list', name.lower())]
+        found = self.verdict(entry, args)
+        return [(f'this calls {name}, which {found[0]}', found[1], name.lower())] if found else []
 
     def classify(self, item):
         kind, name, language = item['kind'], item['name'], item.get('language', '')
         if kind == 'unreadable':
-            return [(name, 'file' if name.startswith(UNREADABLE_FILE) else 'other', None)]
+            return [(name, 'file' if name.startswith(UNREADABLE_FILE) else name, '')]
         if kind == 'native':
-            return [(f'this calls native code {name}', 'other', None)]
+            return [(f'this calls native code {name}', call_harm(name) or 'native call', name.lower())]
         if kind == 'call' and name.startswith('com:'):
-            return [(f'this uses the COM class {name[4:]}', 'other', None)]
+            return [(f'this uses the COM class {name[4:]}', call_harm(name) or 'COM class', name.lower())]
         if kind == 'call' and name == 'msbuild:item glob':
-            return [('this MSBuild item glob walks every folder its wildcard folder matches when the project is evaluated', 'other', None)]
+            return [('this MSBuild item glob walks every folder its wildcard folder matches when the project is evaluated', 'R1', '')]
         if kind == 'call' and name == 'msbuild:import':
-            return [('this imports MSBuild code the check does not read', 'other', None)]
+            return [('this imports MSBuild code the check does not read', 'MSBuild import', '')]
         if kind == 'call' and language == 'powershell' and re.sub(r'\.(\.ctor|[^.]+)$', '', name).lower() in self.types:
             return []
         if kind in ('call', 'method'):
             section = 'workflow' if name.startswith(('action:', 'msbuild:')) else f'{language} methods' if kind == 'method' else 'python' if language == 'python' else 'dotnet'
             return self.called(section, name.lower() if kind == 'method' else name, item['args'])
         if kind != 'command':
-            return [(f'the check does not know the kind {kind}', 'other', None)]
+            return [(f'the check does not know the kind {kind}', 'file', '')]
+        tokens = [t for t in item['args'] or [] if not isinstance(t, dict) or 'param' not in t] if language != 'powershell' else \
+            [('-' + a['param']) if isinstance(a, dict) and 'param' in a else a.get('pieces') if isinstance(a, dict) else a for a in item['args'] or []]
         if language == 'powershell':
             if not name:
                 pieces = pieces_of(item['pieces'])
@@ -940,35 +941,40 @@ class Classifier:
                     return []
                 if item.get('operator') in ('Dot', 'Ampersand') and len(pieces) == 1 and re.fullmatch(r'[A-Za-z]+-\w+', pieces[0]):
                     return self.classify(dict(item, name=pieces[0]))
-                return [launch(program_of(pieces))]
+                return [launch(program_of(pieces), tokens)]
             lowered = name.lower()
             if re.search(r'[\\/]|\.\w+$', lowered):
-                return [launch(Path(name.replace('\\', '/')).name)]
+                return [launch(Path(name.replace('\\', '/')).name, tokens)]
             if lowered in self.visible(item['file']):
                 return []
             cmdlet = PS_ALIASES.get(lowered, lowered)
             if lowered in self.aliased(item['file']) or '*' in self.aliased(item['file']):
-                return [(f'{name} may be renamed by Set-Alias in this scope', 'other', None)]
+                return [(f'{name} may be renamed by Set-Alias in this scope', 'command renamed by Set-Alias in its scope', lowered)]
             if cmdlet in CLASSES['powershell']:
-                does = self.verdict(CLASSES['powershell'][cmdlet], item['args'])
-                return [(f'{name} {does}', 'other', None)] if does else []
+                found = self.verdict(CLASSES['powershell'][cmdlet], item['args'])
+                return [(f'{name} {found[0]}', found[1], cmdlet)] if found else []
             if any(lowered in names for names in self.defined.values()):
-                found = launch(lowered)
-                return [found if found[1] == 'risky' else (f'this runs {name}, a function defined in another checked repo file that this file reaches through its caller', 'launch', lowered)]
+                found = launch(lowered, tokens)
+                return [found if found[1] in NEEDS else (f'this runs {name}, a function defined in another checked repo file that this file reaches through its caller', 'repo function reached through its caller', lowered)]
+            if cmdlet in ('set-alias', 'new-alias'):
+                words = [t if isinstance(t, str) else ''.join(t) for t in tokens if isinstance(t, (str, list)) and all(p not in MARKERS for p in t)]
+                harm = next((h for word in words if not word.startswith('-') for h in [harm_of(word, [])] if h in REASONS), None)
+                if harm:
+                    return [(f'this makes an alias for a program that is {harm}', harm, cmdlet)]
             if re.fullmatch(r'[a-z]+-[a-z0-9]+', cmdlet):
-                return [(f'this runs {name}, a command the table does not list and the check cannot find defined in the repo', 'other', None)]
-            return [launch(name)]
+                return [(f'this runs {name}, a command the table does not list', call_harm(cmdlet) or 'command the table does not list', cmdlet)]
+            return [launch(name, tokens)]
         if language in ('bash', 'cmd') and name in CLASSES[language]:
-            does = self.verdict(CLASSES[language][name], None)
-            return [(f'{language} {name} {does}', 'other', None)] if does else []
-        return [launch(name)]
+            found = self.verdict(CLASSES[language][name], None)
+            return [(f'{language} {name} {found[0]}', found[1], name)] if found else []
+        return [launch(name, tokens)]
 
     def run(self, facts):
         findings = {}
         for item in facts:
             if item['file'].startswith(PRODUCT) and item.get('language') != 'msbuild':
                 entry = self.lookup('dotnet', item['name']) if item['kind'] == 'call' else None
-                found = [(f'this calls {item["name"]}, which {entry["does"]}', 'other', None)] if isinstance(entry, dict) and entry.get('walk') and self.verdict(entry, item['args']) else []
+                found = [(f'this calls {item["name"]}, which {entry["does"]}', 'R1', item['name'].lower())] if isinstance(entry, dict) and entry.get('walk') and self.verdict(entry, item['args']) else []
             else:
                 found = self.classify(item)
             if found:
@@ -1011,6 +1017,9 @@ def check(root):
             if extension == 'cs':
                 csharp.append(relative)
             continue
+        if b'\x00' in data and extension not in CLASSES['data'] and not data.startswith((b'\xff\xfe', b'\xfe\xff')):
+            failures.append(f'{relative}: this file holds NUL bytes and no byte order mark, so no reader reads it the way its shell does')
+            continue
         if extension == 'py':
             facts += tagged(PythonReader(relative, data).facts, 'python')
         elif extension in ('ps1', 'psm1', 'psd1'):
@@ -1051,7 +1060,7 @@ def check(root):
 
 def lists(root):
     data = json.loads((root / ALLOWLIST).read_text(encoding='utf-8-sig')) if (root / ALLOWLIST).exists() else {}
-    return data.get('reasoned exceptions', []), data.get('known launches', [])
+    return data.get('reasoned exceptions', []), data.get('known', [])
 
 
 def listed(root):
@@ -1060,36 +1069,35 @@ def listed(root):
 
 
 def report(root, failures, findings, complete=True, cleared=None):
-    reasoned, launches = lists(root)
+    reasoned, known = lists(root)
     failures += [f'{ALLOWLIST}: {e.get("file")} {e.get("line")!r} needs the reason it is safe, written for that line' for e in reasoned if not str(e.get('reason', '')).strip()]
-    used = {'reasoned': set(), 'launches': set()}
+    used = {'reasoned': set(), 'known': set()}
     for (file, number), (text, found) in sorted(findings.items()):
         messages = list(dict.fromkeys(m for m, _, _ in found))
         where = f'{file}:{number}: {"; ".join(messages)}: {text.strip()[:160]}'
-        if any(kind == 'file' for _, kind, _ in found):
+        if any(harm == 'file' for _, harm, _ in found):
             failures.append(f'{where}; no list can clear a file the check cannot read')
             continue
         hits = {}
-        for name, entries in (('reasoned', reasoned), ('launches', launches)):
+        for name, entries in (('reasoned', reasoned), ('known', known)):
             hits[name] = next((i for i, e in enumerate(entries) if i not in used[name] and e.get('file') == file and e.get('line') == text.strip()), None)
             if hits[name] is not None:
                 used[name].add(hits[name])
-        plain = all(kind == 'launch' for _, kind, _ in found)
-        programs = ', '.join(sorted({program for _, _, program in found if program}))
+        harms = sorted({harm for _, harm, _ in found if harm in NEEDS} | ({'R4'} if NAMES.search(text) else set()))
+        kinds = ', '.join(sorted({harm for _, harm, _ in found}))
+        starts = ', '.join(sorted({what for _, _, what in found if what}))
         if hits['reasoned'] is not None:
             cleared is not None and cleared.append(f'{file}:{number}: cleared by a reasoned exception')
-        elif hits['launches'] is not None and plain and launches[hits['launches']].get('program') == programs:
-            cleared is not None and cleared.append(f'{file}:{number}: cleared by known launches ({programs})')
-        elif hits['launches'] is not None and plain:
-            failures.append(f'{where}; its known-launch entry names {launches[hits["launches"]].get("program")!r}, but the line starts {programs}')
-        elif hits['launches'] is not None:
-            failures.append(f'{where}; a known launch cannot clear this, so it needs a reasoned exception in {ALLOWLIST} or a fix')
-        elif plain:
-            failures.append(f'{where}; list it in known launches in {ALLOWLIST} with the program {programs!r} if it was in the repo before this check')
+        elif harms:
+            failures.append(f'{where}; this is {"/".join(harms)}, so only a reasoned exception in {ALLOWLIST} or a fix (LocalTree.Entries, local_tree, TestFixtures) clears it')
+        elif hits['known'] is not None and (known[hits['known']].get('kind'), known[hits['known']].get('starts')) == (kinds, starts):
+            cleared is not None and cleared.append(f'{file}:{number}: cleared by the known list ({kinds}: {starts})')
+        elif hits['known'] is not None:
+            failures.append(f'{where}; its known entry says {known[hits["known"]].get("kind")!r}: {known[hits["known"]].get("starts")!r}, but the line is {kinds!r}: {starts!r}')
         else:
-            failures.append(f'{where}; move it onto LocalTree.Entries, local_tree or a TestFixtures helper, or give it a reasoned exception in {ALLOWLIST}')
+            failures.append(f'{where}; list it in {ALLOWLIST} as known with kind {kinds!r} and starts {starts!r}, or give it a reasoned exception')
     if complete:
-        failures += [f'{ALLOWLIST}: stale entry in {name}: {e.get("file")} {e.get("line")!r}' for name, entries in (('reasoned', reasoned), ('launches', launches))
+        failures += [f'{ALLOWLIST}: stale entry in {name}: {e.get("file")} {e.get("line")!r}' for name, entries in (('reasoned', reasoned), ('known', known))
                      for i, e in enumerate(entries) if i not in used[name]]
     return failures
 
@@ -1108,5 +1116,5 @@ if __name__ == '__main__':
     for line in cleared + problems:
         print(line)
     if not problems:
-        print(f'Reparse walk check passed: {sum("reasoned" in c for c in cleared)} lines cleared by reasoned exceptions, {sum("known launches" in c for c in cleared)} by known launches')
+        print(f'Reparse walk check passed: {sum("reasoned" in c for c in cleared)} lines cleared by reasoned exceptions, {sum("known list" in c for c in cleared)} by the known list')
     raise SystemExit(bool(problems))

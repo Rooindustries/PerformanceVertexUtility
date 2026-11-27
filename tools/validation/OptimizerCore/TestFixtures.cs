@@ -125,7 +125,7 @@ static class TestFixtures
         if (!DefineDosDevice(15, name, @"\??\" + target)) throw new IOException("Could not remove own DOS mapping.");
     }
 
-    private static void Before(string link, string target)
+    public static void Before(string link, string target)
     {
         try
         {

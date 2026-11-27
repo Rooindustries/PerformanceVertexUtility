@@ -102,6 +102,7 @@ static class DataRootHarness
 
     public static string Standard(params string[] args)
     {
+        if (args[0] is "junction" or "junction-new") TestFixtures.Before(args[1], args[2]);
         var result = Path.Combine(Local, "RooIndustriesDataFix-std-" + Guid.NewGuid().ToString("N") + ".txt");
         var dotnet = Path.Combine(Environment.GetEnvironmentVariable("DOTNET_ROOT") ?? Path.GetDirectoryName(Environment.ProcessPath)!, "dotnet.exe");
         var dll = System.Reflection.Assembly.GetEntryAssembly()!.Location;

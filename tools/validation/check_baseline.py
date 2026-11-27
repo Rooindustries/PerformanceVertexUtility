@@ -402,15 +402,12 @@ def reparse_walk_negative_controls():
             cases[f'{extension} {kind}: an unlisted launch is refused'] = (f'{folder(extension)}{name}-launch.{extension}', fill(extension, template, 'zqvx'), True)
             listed = f'{folder(extension)}{name}-listed.{extension}'
             cases[f'{extension} {kind}: a listed launch passes'] = (listed, fill(extension, template, 'zqvx'), False)
-            for tool, why in (('robocopy', 'a tree tool'), ('pwsh', 'a shell')):
-                path = f'{folder(extension)}{name}-{tool}.{extension}'
-                cases[f'{extension} {kind}: {why} on the known-launch list is refused'] = (path, fill(extension, template, tool), True)
-            source = fill(extension, template, 'zqvx')
-            for path, program in ((listed, 'zqvx'), (f'{folder(extension)}{name}-robocopy.{extension}', 'robocopy'), (f'{folder(extension)}{name}-pwsh.{extension}', 'pwsh')):
-                text = fill(extension, template, program)
-                lines = module['lines_of'](text)
-                line = next(l.strip() for l in lines if program in l)
-                known.append({'file': path, 'line': line, 'program': program})
+            for program, why, refused in (('zqvx', None, False), ('robocopy', 'a tree tool', True), ('icacls', 'a permission tool', True), ('mountvol', 'a mount tool', True), ('pwsh', 'a shell', False)):
+                path = f'{folder(extension)}{name}-{program}.{extension}' if why else listed
+                if why:
+                    cases[f'{extension} {kind}: {why} on the known list {"is refused" if refused else "passes"}'] = (path, fill(extension, template, program), refused)
+                line = next(l.strip() for l in module['lines_of'](fill(extension, template, program)) if program in l)
+                known.append({'file': path, 'line': line, 'kind': 'program', 'starts': program + '.exe' if '{0}.exe' in template else program})
     for extension, kinds in always.items():
         for kind, source in kinds.items():
             cases[f'{extension} {kind}: refused'] = (f'{folder(extension)}{kind.replace(" ", "-")}-always.{extension}', source, True)
@@ -423,8 +420,9 @@ def reparse_walk_negative_controls():
     cases['a one-folder listing in product code passes'] = ('backend/native/Control/List.cs', cs('System.IO.Directory.GetFiles(dir, "*", System.IO.SearchOption.TopDirectoryOnly);'), False)
     cases['a file type with no reader is refused'] = ('tools/validation/Control/run.foo', 'zqvx a', True)
     cases['an extensionless file is refused'] = ('tools/validation/Control/run', '#!/bin/sh\nzqvx a', True)
-    cases['a file Python cannot read is refused'] = ('tools/validation/Control/null.py', b'x = 1\n\x00\n', True)
+    cases['a file Python cannot read is refused'] = ('tools/validation/Control/broken.py', 'def (', True)
     cases['a file PowerShell cannot read is refused'] = ('tools/validation/Control/broken.ps1', 'function {', True)
+    cases['a file with NUL bytes and no byte order mark is refused'] = ('tools/validation/Control/nul.cmd', b'rem \x00\r\n', True)
     cases['a UTF-16 file without a byte order mark is refused'] = ('tools/validation/Control/wide.ps1', 'robocopy C:\\ D:\\x /MIR'.encode('utf-16-be'), True)
     listed = 'tools/validation/Control/listed.ps1'
     cases['a reasoned line passes'] = (listed, 'Get-ChildItem -Recurse $a', False)
@@ -433,15 +431,29 @@ def reparse_walk_negative_controls():
     reasoned.append({'file': 'tools/validation/Control/twice.ps1', 'line': 'Get-ChildItem -Recurse $a', 'reason': 'control'})
     cases['an entry without a reason is refused'] = ('tools/validation/Control/unexplained.ps1', 'Get-ChildItem -Recurse $a', True)
     reasoned.append({'file': 'tools/validation/Control/unexplained.ps1', 'line': 'Get-ChildItem -Recurse $a', 'reason': ' '})
-    cases['a known launch never clears a tree walk'] = ('tools/validation/Control/walk-as-launch.ps1', 'Get-ChildItem -Recurse $a', True)
-    known.append({'file': 'tools/validation/Control/walk-as-launch.ps1', 'line': 'Get-ChildItem -Recurse $a', 'program': 'get-childitem'})
-    cases['a known launch names the program it starts'] = ('tools/validation/Control/wrong-program.ps1', 'zqvx.exe $a', True)
-    known.append({'file': 'tools/validation/Control/wrong-program.ps1', 'line': 'zqvx.exe $a', 'program': 'whoami'})
-    for extension, source, line, program in (('py', 'import shutil\nshutil.move(a, b)', 'shutil.move(a, b)', 'shutil.move'),
-                                             ('ps1', "[System.IO.Directory]::Move('a', 'b')", "[System.IO.Directory]::Move('a', 'b')", 'system.io.directory.move')):
-        assert program not in table['python'] and 'System.IO.Directory.Move' not in table['dotnet']
-        cases[f'{extension}: a risky call on the known-launch list is refused'] = (f'tools/validation/Control/risky-call.{extension}', source, True)
-        known.append({'file': f'tools/validation/Control/risky-call.{extension}', 'line': line, 'program': program})
+    for label, extension, source, line, kind, starts, refused in (
+            ('a walk that follows links', 'ps1', 'Copy-Item -Recurse $a $b', None, 'R1', 'copy-item', True),
+            ('a measured tree delete', 'ps1', 'Remove-Item -Recurse $a', None, 'tree delete, does not follow links (measured)', 'remove-item', False),
+            ('a measured tree listing', 'ps1', 'Get-ChildItem -Recurse $a', None, 'tree listing, does not follow links (measured)', 'get-childitem', False),
+            ('a line naming a link tool', 'ps1', "$x = 'mklink'; zqvx.exe $a", None, 'program', 'zqvx.exe', True),
+            ('an entry with the wrong kind', 'ps1', 'Remove-Item -Recurse $b', None, 'program', 'remove-item', True),
+            ('an entry with the wrong start', 'ps1', 'zqvx.exe $b', None, 'program', 'whoami', True),
+            ('a shortened long option', 'sh', 'rm --recur -f a', None, 'program', 'rm', True),
+            ('a recursive short switch', 'sh', 'ls -lR a', None, 'program', 'ls', True),
+            ('a switch joined to its command', 'cmd', 'attrib/s a', None, 'program', 'attrib/s', True),
+            ('a link tool on a later argument line', 'py', "import subprocess\nsubprocess.run(['powershell', '-c', 'zqvx', a,\n    'mklink'])", "subprocess.run(['powershell', '-c', 'zqvx', a,", 'program', 'powershell', True),
+            ('a first word that makes a tree tool', 'sh', 'git clean -fdx a', None, 'program', 'git', True),
+            ('an unreadable file', 'ps1', 'function {', None, 'file', '', True),
+            ('an alias for a tree tool', 'ps1', 'Set-Alias -Name q -Value cpio', None, 'command the table does not list', 'set-alias', True)):
+        path = f'tools/validation/Control/known-{label.replace(" ", "-")}.{extension}'
+        cases[f'{label} on the known list {"is refused" if refused else "passes"}'] = (path, source, refused)
+        known.append({'file': path, 'line': line or source, 'kind': kind, 'starts': starts})
+    for extension, source, line, harm, starts in (('py', 'import os\nos.link(a, b)', 'os.link(a, b)', 'R3', 'os.link'),
+                                                  ('ps1', "[System.IO.File]::CreateSymbolicLink('a', 'b')", "[System.IO.File]::CreateSymbolicLink('a', 'b')", 'R3', 'system.io.file.createsymboliclink'),
+                                                  ('cs', cs('new System.IO.DirectoryInfo(dir).SetAccessControl(null!);', 'using System.IO;'), 'SetAccessControl', 'R2', 'system.io.filesystemaclextensions.setaccesscontrol')):
+        cases[f'{extension}: a {harm} call on the known list is refused'] = (f'tools/validation/Control/{harm}-call.{extension}', source, True)
+        line = next(l.strip() for l in module['lines_of'](source) if line in l)
+        known.append({'file': f'tools/validation/Control/{harm}-call.{extension}', 'line': line, 'kind': 'call the table does not list', 'starts': starts})
     reasoned.append({'file': 'tools/validation/Control/missing.ps1', 'line': 'Get-ChildItem -Recurse', 'reason': 'control'})
     results = {}
     for projects in (True, False):
@@ -452,7 +464,7 @@ def reparse_walk_negative_controls():
                 (root / relative).parent.mkdir(parents=True, exist_ok=True)
                 (root / relative).write_bytes(source if isinstance(source, bytes) else source.encode('utf-8'))
             (root / allowlist).write_text(json.dumps({'reasoned exceptions': [e for e in reasoned if e['file'].endswith('.targets') == projects],
-                                                      'known launches': [e for e in known if e['file'].endswith('.targets') == projects]}), encoding='utf-8')
+                                                      'known': [e for e in known if e['file'].endswith('.targets') == projects]}), encoding='utf-8')
             failures = module['verify'](root)
             for label, (relative, _, refused) in chosen.items():
                 hit = any(f.startswith(relative + ':') for f in failures)
