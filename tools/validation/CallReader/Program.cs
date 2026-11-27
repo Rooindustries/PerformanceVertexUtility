@@ -36,6 +36,7 @@ sealed class Unit
     readonly Dictionary<(ISymbol, string), List<IOperation>> writes = new();
     readonly HashSet<ISymbol> grouped = new(SymbolEqualityComparer.Default);
     readonly HashSet<ISymbol> visiting = new(SymbolEqualityComparer.Default);
+    readonly HashSet<ISymbol> escaped = new(SymbolEqualityComparer.Default);
 
     public Unit(JsonNode unit, string root, JsonArray facts)
     {
@@ -75,9 +76,20 @@ sealed class Unit
         {
             var path = Path.GetFullPath(reference.Reference, dir);
             var producer = units.FirstOrDefault(u => u.Output is not null && u != this && Path.GetFileName(u.Output) == Path.GetFileName(path) && path.StartsWith(u.dir + Path.DirectorySeparatorChar));
+            if (producer is null && !File.Exists(path))
+                continue;
             references.Add(producer is not null ? producer.Build(units).ToMetadataReference(reference.Properties.Aliases) : MetadataReference.CreateFromFile(path, reference.Properties));
         }
         CSharpCompilation result = CSharpCompilation.Create(Output is null ? "reader" : Path.GetFileNameWithoutExtension(Output), trees, references, parsed.CompilationOptions);
+        var markup = trees.SelectMany(tree => tree.GetRoot().DescendantNodes().OfType<Microsoft.CodeAnalysis.CSharp.Syntax.ClassDeclarationSyntax>()
+                .Where(type => type.Modifiers.Any(m => m.Text == "partial") && File.Exists(Path.ChangeExtension(tree.FilePath, null))
+                    && type.DescendantNodes().OfType<Microsoft.CodeAnalysis.CSharp.Syntax.InvocationExpressionSyntax>().Any(call => call.Expression.ToString() == "InitializeComponent"))
+                .Select(type => result.GetSemanticModel(tree).GetDeclaredSymbol(type)))
+            .OfType<INamedTypeSymbol>().Where(type => type.GetMembers("InitializeComponent").IsEmpty).ToList();
+        if (markup.Count > 0)
+            result = result.AddSyntaxTrees(markup.Select(type => CSharpSyntaxTree.ParseText(
+                (type.ContainingNamespace.IsGlobalNamespace ? "" : "namespace " + type.ContainingNamespace.ToDisplayString() + ";") + " partial class " + type.Name + " { void InitializeComponent() { } }",
+                parsed.ParseOptions, Path.Combine(dir, type.Name + ".markup.g.cs"))));
         var loader = new Loader();
         var generators = parsed.AnalyzerReferences.SelectMany(r => new Microsoft.CodeAnalysis.Diagnostics.AnalyzerFileReference(Path.GetFullPath(r.FilePath, dir), loader).GetGenerators(LanguageNames.CSharp)).ToList();
         if (generators.Count > 0)
@@ -106,8 +118,7 @@ sealed class Unit
                 (parsed, framework, built, compilation) = (variants[0].Parsed, false, first, first);
         }
         foreach (var reference in compilation.References)
-            if (compilation.GetAssemblyOrModuleSymbol(reference) is IAssemblySymbol assembly
-                && (reference is CompilationReference || reference is PortableExecutableReference { FilePath: { } path } && path.StartsWith(root + Path.DirectorySeparatorChar)))
+            if (compilation.GetAssemblyOrModuleSymbol(reference) is IAssemblySymbol assembly && reference is CompilationReference)
                 repo.Add(assembly);
         var trees = compilation.SyntaxTrees.Where(t => parsed.SourceFiles.Any(s => s.Path == t.FilePath)).ToList();
         foreach (var tree in trees)
@@ -133,6 +144,8 @@ sealed class Unit
     {
         foreach (var operation in Operations(tree))
         {
+            if (Escapes(operation) && Key(Holder(operation)) is { } holder)
+                escaped.Add(holder.Item1);
             switch (operation)
             {
                 case IInvocationOperation invocation:
@@ -166,6 +179,38 @@ sealed class Unit
                     break;
             }
         }
+    }
+
+    static bool Starting(ITypeSymbol? type) => type?.ToDisplayString(TypeFormat) is "System.Diagnostics.Process" or "System.Diagnostics.ProcessStartInfo";
+
+    static IOperation Holder(IOperation operation)
+    {
+        while (operation is IPropertyReferenceOperation { Instance: { } instance } && Starting(instance.Type))
+            operation = instance;
+        return operation;
+    }
+
+    static bool Escapes(IOperation operation)
+    {
+        if (operation is not (ILocalReferenceOperation or IParameterReferenceOperation or IFieldReferenceOperation or IPropertyReferenceOperation))
+            return false;
+        var type = operation.Type?.ToDisplayString(TypeFormat);
+        var list = operation is IPropertyReferenceOperation { Property.Name: "ArgumentList" or "Environment" or "EnvironmentVariables" } property && Starting(property.Instance?.Type);
+        if (!Starting(operation.Type) && !list)
+            return false;
+        var parent = operation.Parent;
+        while (parent is IConversionOperation)
+            parent = parent.Parent;
+        return parent switch
+        {
+            IPropertyReferenceOperation { Instance: not null } or IEventReferenceOperation => false,
+            IInvocationOperation { Instance: not null } call => list && call.TargetMethod.Name != "Add",
+            IArgumentOperation { Parent: IInvocationOperation start } when IsStart(start.TargetMethod) => false,
+            ISimpleAssignmentOperation assignment when assignment.Target == operation => false,
+            ISimpleAssignmentOperation { Target: IPropertyReferenceOperation { Property.Name: "StartInfo" } } => !Starting(operation.Type) || list,
+            IReturnOperation or IBinaryOperation or IIsTypeOperation or IIsPatternOperation => false,
+            _ => true,
+        };
     }
 
     static void Add<TKey>(Dictionary<TKey, List<IOperation>> map, TKey key, IOperation value) where TKey : notnull
@@ -228,21 +273,13 @@ sealed class Unit
                     Launch(file, line, invocation);
                     break;
                 case IInvocationOperation invocation:
-                    if (invocation.TargetMethod.ContainingType.ToDisplayString(TypeFormat) == "System.IO.File" && invocation.TargetMethod.Name is "Copy" or "Move")
-                        foreach (var source in Resolve(invocation.Arguments[0].Value))
-                            foreach (var target in Resolve(invocation.Arguments[1].Value))
-                                if (Program(target) is { } made)
-                                    Emit(file, line, "copy", made, null, new JsonObject { ["from"] = Program(source) });
-                    if (invocation.TargetMethod.Name is "Invoke" or "GetValue" or "SetValue" && invocation.TargetMethod.ContainingNamespace.ToDisplayString() == "System.Reflection"
-                        && invocation.Instance is { } member && Reflected(member, 0))
-                        break;
                     Use(file, line, invocation.TargetMethod, Arguments(invocation.Arguments));
                     break;
                 case IObjectCreationOperation { Constructor: { } constructor } creation:
                     Use(file, line, constructor, Arguments(creation.Arguments));
                     break;
                 case IMethodReferenceOperation reference:
-                    Use(file, line, reference.Method, null);
+                    Use(file, line, reference.Method, new JsonArray(reference.Method.Parameters.Select(p => (JsonNode?)new JsonObject { ["i"] = p.Ordinal, ["name"] = p.Name, ["type"] = p.Type.ToDisplayString(TypeFormat) }).ToArray()));
                     break;
                 case IPropertyReferenceOperation property:
                     var write = operation.Parent is IAssignmentOperation assignment && assignment.Target == operation ? assignment : null;
@@ -261,32 +298,6 @@ sealed class Unit
                     break;
             }
         }
-    }
-
-    bool Repo(ITypeSymbol? type) =>
-        type is not null && (SymbolEqualityComparer.Default.Equals(type.ContainingAssembly, compilation.Assembly) || repo.Contains(type.ContainingAssembly));
-
-    bool Reflected(IOperation operation, int depth)
-    {
-        while (operation is IConversionOperation conversion)
-            operation = conversion.Operand;
-        if (depth > 8)
-            return false;
-        switch (operation)
-        {
-            case IInvocationOperation { TargetMethod.Name: "GetType", Instance: { } instance } when instance.Type is not null:
-                return Repo(instance.Type);
-            case IInvocationOperation call when call.TargetMethod.ContainingType.ToDisplayString(TypeFormat) == "System.Type" && call.Instance is { } owner:
-                return owner is ITypeOfOperation type ? Repo(type.TypeOperand) : Reflected(owner, depth + 1);
-            case IInvocationOperation call when call.TargetMethod.ContainingType.ToDisplayString(TypeFormat) == "System.Linq.Enumerable" && call.Arguments.Length > 0:
-                return Reflected(call.Arguments[0].Value, depth + 1);
-            case ILocalReferenceOperation or IParameterReferenceOperation or IFieldReferenceOperation when Key(operation) is { } key && key.Item2.Length == 0:
-                var origins = Origins(key.Item1) ?? (key.Item1 is IFieldSymbol && Initializer(key.Item1) is { } initial ? [initial] : null);
-                return origins is { Count: > 0 } && origins.All(origin => origin is not IArgumentOperation && Reflected(origin, depth + 1));
-            case IPropertyReferenceOperation property when property.Instance is { } holder:
-                return Reflected(holder, depth + 1);
-        }
-        return false;
     }
 
     static bool IsStart(IMethodSymbol method) =>
@@ -373,7 +384,7 @@ sealed class Unit
         var method = invocation.SemanticModel?.GetEnclosingSymbol(invocation.Syntax.SpanStart) as IMethodSymbol;
         var sites = method is not null && method.MethodKind != MethodKind.AnonymousFunction && !grouped.Contains(method.OriginalDefinition)
             && !method.IsVirtual && !method.IsOverride && !method.IsAbstract && calls.TryGetValue(method.OriginalDefinition, out var found) ? found : [];
-        var emitted = 0;
+        var emitted = new HashSet<string>();
         foreach (var site in sites.Count > 0 ? sites.Cast<IOperation?>() : [null])
         {
             binding = site is null ? null : (site is IInvocationOperation i ? i.Arguments : ((IObjectCreationOperation)site).Arguments)
@@ -386,7 +397,7 @@ sealed class Unit
             foreach (var start in starts)
                 foreach (var program in start.Programs.DefaultIfEmpty([Hole]))
                     foreach (var raw in start.Raws.DefaultIfEmpty(null))
-                        if (emitted++ < 32)
+                        if (emitted.Add(string.Join("\u0004", program) + "\u0005" + string.Join("\u0004", raw ?? []) + "\u0005" + string.Join("\u0006", start.List.Select(i => string.Join("\u0004", i)))))
                             Command(file, line, program, raw, start.List);
         }
     }
@@ -433,7 +444,7 @@ sealed class Unit
             binding = null;
             try { return Info(bound, member); } finally { binding = saved; }
         }
-        if (Key(operation) is not { } key || key.Item2.Length > 0 || !visiting.Add(key.Item1))
+        if (Key(operation) is not { } key || key.Item2.Length > 0 || escaped.Contains(key.Item1) || !visiting.Add(key.Item1))
             return [Unknown];
         try
         {

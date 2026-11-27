@@ -4,7 +4,17 @@ from pathlib import Path
 import stat
 
 
-def entries(root, pattern='*'):
+def linked(info):
+    return stat.S_ISLNK(info.st_mode) or getattr(info, 'st_file_attributes', 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT
+
+
+def entries(root, pattern='*', links=False):
+    try:
+        top = os.lstat(root)
+    except FileNotFoundError:
+        return
+    if linked(top):
+        raise NotADirectoryError(f'a walk does not start at a link: {root}')
     pending = [os.fspath(root)]
     while pending:
         try:
@@ -14,8 +24,9 @@ def entries(root, pattern='*'):
         with listing:
             for entry in listing:
                 info = entry.stat(follow_symlinks=False)
-                linked = getattr(info, 'st_file_attributes', 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT
-                if stat.S_ISDIR(info.st_mode) and not linked:
+                if linked(info) and not links:
+                    continue
+                if stat.S_ISDIR(info.st_mode) and not linked(info):
                     pending.append(entry.path)
                 if fnmatch.fnmatch(entry.name, pattern):
                     yield Path(entry.path)

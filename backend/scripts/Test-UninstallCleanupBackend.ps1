@@ -479,6 +479,32 @@ try {
         Add-Failure 'Cleanup executor fixture apply did not produce expected backup/delete result'
     }
 
+    $redirected = Join-Path $fixtureRoot 'redirected'
+    $redirectedTarget = Join-Path $fixtureRoot 'redirected-target'
+    New-Item -ItemType Directory -Path $redirectedTarget | Out-Null
+    & cmd.exe /d /c mklink /J "$redirected" "$redirectedTarget" | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'The fixture junction could not be created.' }
+    $linkedRoot = Join-Path $redirected 'fixture'
+    $linkedCache = Join-Path $linkedRoot 'FakeAppCache'
+    $linkedLoose = Join-Path $linkedRoot 'loose-cache.bin'
+    New-Item -ItemType Directory -Path $linkedCache | Out-Null
+    'fixture cache file' | Set-Content -LiteralPath (Join-Path $linkedCache 'cache.txt') -Encoding UTF8
+    'fixture loose file' | Set-Content -LiteralPath $linkedLoose -Encoding UTF8
+    $cleanupFixture.items[0].target = $linkedCache
+    $cleanupFixture.items[1].target = $linkedLoose
+    $cleanupFixture.rollback.backupRoot = Join-Path $linkedRoot '_roo-cleanup-backup'
+    $linkedManifestPath = Join-Path $linkedRoot 'cleanup-manifest.json'
+    ($cleanupFixture | ConvertTo-Json -Depth 16) | Set-Content -LiteralPath $linkedManifestPath -Encoding UTF8
+    $redirectedApply = & (Join-Path $PSScriptRoot 'Invoke-UninstallCleanupExecution.ps1') -OfficialPreviewPath $officialFixturePath -CleanupManifestPath $linkedManifestPath -FixtureRoot $linkedRoot -ConfirmApply -AllowDisposableFixtureApply -OfficialUninstallCommandApproved -CleanupDeletionManifestApproved
+    $redirectedJson = ($redirectedApply -join [Environment]::NewLine) | ConvertFrom-Json
+    if ($redirectedJson.status -eq 'success' -and $redirectedJson.summary.deletedCount -eq 2 -and -not (Test-Path -LiteralPath (Join-Path $redirectedTarget 'fixture\FakeAppCache')) -and -not (Test-Path -LiteralPath (Join-Path $redirectedTarget 'fixture\loose-cache.bin'))) {
+        Add-Pass 'Cleanup executor cleans an ordinary target whose parent folder is redirected through a junction'
+    } else {
+        Add-Failure "Cleanup executor refused an ordinary target under a redirected parent: $(@($redirectedJson.gates | Where-Object { $_.blocking } | ForEach-Object { $_.gateId }) -join ', ')"
+    }
+    & cmd.exe /d /c rmdir "$redirected"
+    if ($LASTEXITCODE -ne 0) { throw 'The fixture junction could not be removed.' }
+
     Remove-Item -LiteralPath $fixtureRoot -Recurse -Force
     $fixtureCleanupDone = $true
     if (-not (Test-Path -LiteralPath $fixtureRoot)) {

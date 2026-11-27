@@ -26,13 +26,17 @@ static class FixtureWalkChecks
             var canary = Directory.CreateDirectory(Path.Combine(outside, "canary")).FullName;
             File.WriteAllText(Path.Combine(canary, "kept.txt"), "canary");
             var before = Canary(canary);
-            var scenarios = new Action<Action<bool, string>, string, string>[] { Guarded, Disguised, Hardlinked, Unremovable, Killed, Shared, Jammed, Walks };
+            var scenarios = new (string Name, Action<Action<bool, string>, string, string> Run)[]
+            {
+                (nameof(Guarded), Guarded), (nameof(Disguised), Disguised), (nameof(Unmarked), Unmarked), (nameof(Hardlinked), Hardlinked), (nameof(SharedDisk), SharedDisk),
+                (nameof(Unremovable), Unremovable), (nameof(Killed), Killed), (nameof(Shared), Shared), (nameof(Jammed), Jammed), (nameof(Walks), Walks),
+            };
             foreach (var scenario in scenarios)
             {
-                try { scenario(check, canary, before); }
+                try { scenario.Run(check, canary, before); }
                 catch (Exception error)
                 {
-                    check(false, scenario.Method.Name + " fixture scenario stopped: " + error.Message);
+                    check(false, scenario.Name + " fixture scenario stopped: " + error.Message);
                 }
             }
             check(Canary(canary) == before, "The canary outside every fixture keeps its content, owner and ACL");
@@ -89,17 +93,18 @@ static class FixtureWalkChecks
             TestFixtures.Junction(up, root);
             var behind = Directory.CreateDirectory(Path.Combine(lookalike, "behind")).FullName;
             Directory.CreateSymbolicLink(Path.Combine(lookalike, "mount"), behind);
-            var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            var unowned = TestFixtures.Volume(lookalike, own: false);
+            var nested = TestFixtures.Own(Path.Combine(lookalike, "nested"));
+            var temp = Path.GetFileName(Path.GetTempPath().TrimEnd('\\'));
             (string Link, string Target, bool Junction)[] refused =
             [
-                (Path.Combine(root, "drive"), Path.GetPathRoot(root)!, true),
-                (Path.Combine(root, "device"), @"\\?\GLOBALROOT" + device + @"\", true),
-                (Path.Combine(root, "windows"), Environment.GetFolderPath(Environment.SpecialFolder.Windows), true),
-                (Path.Combine(root, "temp"), Path.GetTempPath(), true),
-                (Path.Combine(root, "app-data"), Path.Combine(local, "RooIndustriesOptimizationSuite"), true),
-                (Path.Combine(root, "loopback"), @"\\localhost\" + root[0] + "$", false),
+                (Path.Combine(root, "volume-root"), unowned.Name, true),
+                (Path.Combine(root, "plain"), lookalike, true),
+                (Path.Combine(root, "device"), @"\\?\GLOBALROOT" + device + lookalike[2..], true),
+                (Path.Combine(nested, "parent"), lookalike, true),
+                (Path.Combine(root, "loopback"), @"\\localhost\" + lookalike[0] + "$" + lookalike[2..], false),
                 (Path.Combine(up, "escape"), @"..\" + Path.GetFileName(lookalike), false),
-                (Path.Combine(up, "climb"), string.Join('\\', Enumerable.Repeat("..", 12)), false),
+                (Path.Combine(up, "climb"), @"..\..\" + temp + @"\" + Path.GetFileName(lookalike), false),
                 (Path.Combine(root, "via-lookalike"), Path.Combine(lookalike, "mount"), true),
             ];
             var kept = refused.Where(item =>
@@ -112,8 +117,15 @@ static class FixtureWalkChecks
                 catch (InvalidOperationException) { }
                 return Path.Exists(item.Link);
             }).Select(item => item.Link).ToArray();
-            check(kept.Length == 0, "A link to a drive root, a device root, Windows, Temp, the app's data folder, a loopback share, "
-                + "out of the fixture through a junction, or through a folder only named like a fixture is removed and refused: " + string.Join(", ", kept));
+            check(kept.Length == 0, "A link to a volume this run did not make, a folder it did not make by path, device path, loopback share or as a parent, "
+                + "out of the fixture through a junction, or through a folder only named like a fixture is refused: " + string.Join(", ", kept));
+            var via = Path.Combine(root, "via-link");
+            Directory.CreateSymbolicLink(via, lookalike);
+            var shared = Path.Combine(root, "shared.txt");
+            File.WriteAllText(shared, "kept");
+            try { TestFixtures.HardLink(Path.Combine(via, "escaped.txt"), shared); }
+            catch (InvalidOperationException) { }
+            check(!File.Exists(Path.Combine(lookalike, "escaped.txt")), "A hard link whose folder leads out of this run's folders is refused before it is made");
             TestFixtures.Junction(Path.Combine(root, "self"), root);
             TestFixtures.Symlink(Path.Combine(root, "missing"), "inside");
             TestFixtures.Symlink(Path.Combine(root, "canary-file"), Path.Combine(canary, "kept.txt"), file: true);
@@ -137,7 +149,8 @@ static class FixtureWalkChecks
     private static void Hardlinked(Action<bool, string> check, string canary, string before)
     {
         var holder = TestFixtures.InheritingRoot("hardlink-target");
-        var stale = Path.Combine(Path.GetTempPath(), "roo-industries-hardlinked-fixture-" + Guid.NewGuid().ToString("N"));
+        var stale = TestFixtures.InheritingRoot("hardlinked-fixture");
+        TestFixtures.Abandon(stale);
         try
         {
             var shared = new FileInfo(Path.Combine(holder, "shared.txt"));
@@ -145,7 +158,7 @@ static class FixtureWalkChecks
             var security = shared.GetAccessControl();
             security.AddAccessRule(new FileSystemAccessRule(WindowsIdentity.GetCurrent().User!, FileSystemRights.WriteData, AccessControlType.Deny));
             shared.SetAccessControl(security);
-            TestFixtures.HardLink(Path.Combine(TestFixtures.Own(stale), "shared.txt"), shared.FullName);
+            TestFixtures.HardLink(Path.Combine(stale, "shared.txt"), shared.FullName);
             SweepFor("hardlinked-fixture");
             var deny = shared.GetAccessControl().GetAccessRules(true, false, typeof(SecurityIdentifier)).Cast<FileSystemAccessRule>()
                 .Any(rule => rule.AccessControlType == AccessControlType.Deny);
@@ -179,14 +192,13 @@ static class FixtureWalkChecks
             File.WriteAllText(precious, "precious");
             TestFixtures.Junction(stale, victim);
             TestFixtures.Symlink(stale + ".run", precious, file: true);
-            SweepFor("disguised-fixture");
+            var output = Sweep("disguised-fixture");
             static bool Linked(string path) => Path.Exists(path) && File.GetAttributes(path).HasFlag(FileAttributes.ReparsePoint);
             var deny = denied.GetAccessControl().GetAccessRules(true, false, typeof(SecurityIdentifier)).Cast<FileSystemAccessRule>()
                 .Any(rule => rule.AccessControlType == AccessControlType.Deny);
-            check(!Path.Exists(stale) && Linked(inner), "A run start removes a fixture-named junction without unlinking the junction behind it");
-            check(Linked(mount), "A run start removes a fixture-named junction without unmounting the volume behind it");
-            check(deny, "A run start removes a fixture-named junction without changing permissions behind it");
-            check(File.Exists(precious) && !Path.Exists(stale + ".run"), "A run start removes a fixture lock that is a link without deleting what it points to");
+            check(Linked(stale) && Linked(inner) && Linked(mount) && deny && output.Contains(stale, StringComparison.OrdinalIgnoreCase),
+                "A run start leaves a fixture-named junction it did not make in place, names it, and changes nothing behind it");
+            check(File.Exists(precious) && Linked(stale + ".run"), "A run start leaves the lock link of a junction it did not make and what it points to");
         }
         finally
         {
@@ -194,6 +206,50 @@ static class FixtureWalkChecks
             if (Path.Exists(stale + ".run")) File.Delete(stale + ".run");
             TestFixtures.Remove(holder);
         }
+    }
+
+    private static void Unmarked(Action<bool, string> check, string canary, string before)
+    {
+        var lookalike = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "roo-industries-lookalike-fixture-" + Guid.NewGuid().ToString("N"))).FullName;
+        try
+        {
+            File.WriteAllText(Path.Combine(lookalike, "canary.txt"), "another program's folder");
+            var output = Sweep("lookalike-fixture");
+            check(File.ReadAllText(Path.Combine(lookalike, "canary.txt")) == "another program's folder" && output.Contains(lookalike, StringComparison.OrdinalIgnoreCase),
+                "A run start leaves a folder only named like a fixture, with no proof this suite made it, and names it");
+        }
+        finally { TestFixtures.Remove(lookalike); }
+    }
+
+    private static void SharedDisk(Action<bool, string> check, string canary, string before)
+    {
+        var holder = TestFixtures.InheritingRoot("disk-owner");
+        var stale = TestFixtures.InheritingRoot("shared-disk");
+        TestFixtures.Abandon(stale);
+        var second = Path.Combine(stale, TestFixtures.VolumeFile);
+        try
+        {
+            var volume = TestFixtures.Volume(holder);
+            File.WriteAllText(Path.Combine(volume.Mount, "kept.txt"), "attached");
+            TestFixtures.HardLink(second, Path.Combine(holder, TestFixtures.VolumeFile));
+            var output = Sweep("shared-disk");
+            check(File.ReadAllText(Path.Combine(volume.Mount, "kept.txt")) == "attached" && output.Contains(second, StringComparison.OrdinalIgnoreCase),
+                "A run start leaves a virtual disk attached when the disk file in a dead fixture has another name, and names it");
+        }
+        finally
+        {
+            if (File.Exists(second)) File.Delete(second);
+            TestFixtures.Remove(holder);
+            TestFixtures.Remove(stale);
+        }
+    }
+
+    private static string Sweep(string label)
+    {
+        using var child = Process.Start(Child("--fixture-sweep", label))!;
+        var output = child.StandardOutput.ReadToEnd();
+        if (!child.WaitForExit(120000) || child.ExitCode != 0) throw new InvalidOperationException("The sweep child did not finish: " + output);
+        return output;
     }
 
     private static void Shared(Action<bool, string> check, string canary, string before)
@@ -211,10 +267,10 @@ static class FixtureWalkChecks
 
     private static void Jammed(Action<bool, string> check, string canary, string before)
     {
-        string Stale() => TestFixtures.Own(Path.Combine(Path.GetTempPath(), "roo-industries-jammed-fixture-" + Guid.NewGuid().ToString("N")));
-        var garbage = Stale();
+        var garbage = TestFixtures.InheritingRoot("jammed-fixture");
         File.WriteAllBytes(Path.Combine(garbage, TestFixtures.VolumeFile), new byte[65536]);
-        var locked = Stale();
+        var locked = TestFixtures.InheritingRoot("jammed-fixture");
+        TestFixtures.Abandon(garbage);
         TestFixtures.Volume(locked);
         var opaque = Directory.CreateDirectory(Path.Combine(locked, "opaque-peer"));
         var unreadable = Directory.CreateDirectory(Path.Combine(opaque.FullName, "unreadable-peer"));
@@ -229,6 +285,7 @@ static class FixtureWalkChecks
         var closed = FileSystemRights.ListDirectory | FileSystemRights.Traverse;
         opaqueDenied.AddAccessRule(new FileSystemAccessRule(user, closed, AccessControlType.Deny));
         opaque.SetAccessControl(opaqueDenied);
+        TestFixtures.Abandon(locked);
         PrivilegeChecks.WithoutPrivileges(() => SweepFor("jammed-fixture"), "SeBackupPrivilege", "SeRestorePrivilege");
         check(!Path.Exists(garbage) && !Path.Exists(locked) && Canary(canary) == before,
             "The next run start clears a half-written volume file and a fixture a dead run left unreadable, with its volume");
@@ -311,6 +368,10 @@ static class FixtureWalkChecks
             var copied = Directory.GetFiles(copy).Select(Path.GetFileName).Order(StringComparer.Ordinal);
             check(copied.SequenceEqual(["plain_owned.txt", TestFixtures.VolumeFile]),
                 "A copy walk over a fixture copies only the fixture's own files: " + string.Join(", ", copied));
+            var started = new List<string>();
+            try { started.AddRange(LocalTree.Entries(Path.Combine(root, "junction")).Select(entry => entry.FullName)); }
+            catch (IOException) { started = null; }
+            check(started is null, "A walk that starts at a link refuses instead of listing what it points to");
         }
         finally
         {

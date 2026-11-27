@@ -52,6 +52,7 @@ string RealDataFolderState()
     return string.Join("\n", entries.Concat(values));
 }
 var realBefore = RealDataFolderState();
+Exception? failed = null;
 try
 {
     var scripts = Path.Combine(fixture, "backend", "scripts");
@@ -89,8 +90,10 @@ try
     var fixtureData = Directory.CreateDirectory(Path.Combine(fixture, "data")).FullName;
     fixtureOperations = Directory.CreateDirectory(Path.Combine(fixtureData, "operations")).FullName;
     service = new LiveDataService(new BackendLocator(), Path.Combine(fixtureData, "settings"), fixtureOperations);
-    Check(await service.GetOfficialUninstallPreviewAsync(appId) is not null, "Client reads the reviewed removal route");
-    Check(await service.GetCleanupManifestAsync(appId) is not null, "Client reads the reviewed cleanup list");
+    var route = await service.GetOfficialUninstallPreviewResultAsync(appId);
+    Check(route.Value is not null, "Client reads the reviewed removal route" + (route.Value is null ? ": " + route.Error : ""));
+    var list = await service.GetCleanupManifestResultAsync(appId);
+    Check(list.Value is not null, "Client reads the reviewed cleanup list" + (list.Value is null ? ": " + list.Error : ""));
     // Change the discovery response after review; execution must still use the approved snapshot.
     File.WriteAllText(Path.Combine(scripts, "cleanup.json"), JsonSerializer.Serialize(Manifest(later)));
     // Hold Apply after it takes its snapshot, then switch to and review another app before it continues.
@@ -182,6 +185,11 @@ try
     finally { if (!sleeper.HasExited) { sleeper.Kill(); await sleeper.WaitForExitAsync(); } }
     Check(RealDataFolderState() == realBefore, "The run left the real data folder and its protection markers exactly as it found them");
 }
+catch (Exception error)
+{
+    failed = error;
+    throw;
+}
 finally
 {
     if (service is not null)
@@ -199,7 +207,8 @@ finally
     if (recoveryRoot is not null && Directory.Exists(recoveryRoot)) Directory.Delete(recoveryRoot, true);
     var hostLink = Path.Combine(fixture, "backend", "bin");
     if (Directory.Exists(hostLink) && new DirectoryInfo(hostLink).LinkTarget is not null) Directory.Delete(hostLink, false);
-    if (Directory.Exists(fixture)) Directory.Delete(fixture, true);
+    try { if (Directory.Exists(fixture)) Directory.Delete(fixture, true); }
+    catch (IOException error) when (failed is not null) { Console.Error.WriteLine("The fixture could not be removed after the failure above: " + error.Message); }
     foreach (var protectedRoot in new[] { fixtureOperations, gateRoot })
     {
         if (protectedRoot is null) continue;

@@ -1397,6 +1397,7 @@ public sealed partial class LiveDataService
             if (!process.HasExited)
             {
                 process.Kill(entireProcessTree: entireTree);
+                process.WaitForExit(TimeSpan.FromSeconds(10));
             }
         }
         catch

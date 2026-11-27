@@ -314,95 +314,176 @@ def fixture_cleanup_negative_controls():
 
 def reparse_walk_negative_controls():
     module = runpy.run_path(str(Path(__file__).with_name('check_reparse_walks.py')), run_name='controls')
+    table = module['CLASSES']
     sharp = 'using System; using System.Diagnostics; using System.Runtime.InteropServices; {0}\nstatic class Control {{\n  [DllImport("kernel32.dll")] static extern uint GetCurrentProcessId();\n  [DllImport("kernel32.dll")] static extern void {1}();\n  static void M(string dir, object x) {{ {2} }}\n}}'
-    constructs = {
+    cs = lambda body, using='', native='Zqvx': sharp.format(using, native, body)
+    language = {
         'ps1': {
             'command': ('{0}-Item $a', 'Write-Host $a'),
             'pipeline': ('$a | {0}-Item', '$a | Write-Host'),
-            'call operator on a string': ("& '{0}.exe' $a", "& 'whoami.exe'"),
-            'call operator on a variable': ("$p = '{0}.exe'; & $p", "$p = 'whoami.exe'; & $p"),
-            'dot-source': ('. {0}.exe', '. whoami.exe'),
-            'alias': ('Set-Alias q {0}.exe; q $a', 'function r {{ Write-Host $args }}; r $a'),
             'splat': ('$p = @{{Path = $a}}; {0}-Item @p', '$p = @{{Object = $a}}; Write-Host @p'),
-            'launched cmd string': ('cmd /c "{0} $a"', 'cmd /c "echo hi"'),
-            'launched PowerShell text': ("powershell -NoProfile -Command '{0}-Item'", "powershell -NoProfile -Command 'Write-Host hi'"),
-            'Invoke-Expression text': ("Invoke-Expression '{0}-Item'", "Invoke-Expression 'Write-Host hi'"),
-            'script block from text': ("& ([scriptblock]::Create('{0}-Item'))", "& ([scriptblock]::Create('Write-Host hi'))"),
-            'Start-Process': ('Start-Process {0}.exe', 'Start-Process whoami.exe'),
-            'interpolated program': ('& "$env:SystemRoot\\{0}.exe"', '& "$env:SystemRoot\\System32\\whoami.exe"'),
+            'alias': ('Set-Alias q {0}; q $a', 'function r {{ Write-Host $args }}; r $a'),
             'continuation': ('{0}-Item `\n  $a', 'Write-Host `\n  $a'),
             'static .NET call': ('[System.Data.DataTable]::new()', '[System.Math]::Abs(1)'),
+            'static member on a type variable': ('$t = [System.Data.DataTable]; $t::new()', '$t = [System.Math]; $t::Abs(1)'),
             'instance method': ('$x.{0}()', '$x.ToString()'),
             'ForEach-Object member': ('$x | ForEach-Object {0}', '$x | ForEach-Object ToString'),
-            'Add-Type source': ("Add-Type -TypeDefinition 'public static class Q {{ public static object M() {{ return new System.Data.DataTable(); }} }}'", "Add-Type -TypeDefinition 'public static class Q {{ public static int M() {{ return System.Math.Abs(1); }} }}'"),
+            'command named by a string': ("& '{0}-Item' $a", "& 'Write-Host' $a"),
+            'parameter default': ('function f {{ param($c = "{0}-Item") & $c }}; f', 'function f {{ param($c = "Write-Host") & $c hi }}; f'),
         },
         'py': {
             'imported module member': ('import os\nos.{0}(a)', 'import os\nos.getpid()'),
             'from-import alias': ('from os import {0} as w\nw(a)', 'from os import getpid as w\nw()'),
             'method on an unknown value': ('x.{0}()', 'x = []\nx.append(1)'),
             'reference passed as a value': ('import os\nlist(map(os.{0}, a))', 'import os\nlist(map(os.fspath, a))'),
-            'program list': ("import subprocess\nsubprocess.run(['{0}', a])", "import subprocess\nsubprocess.run(['whoami'])"),
-            'shell string': ("import subprocess\nsubprocess.run(f'{0} {{a}}', shell=True)", "import subprocess\nsubprocess.run('whoami', shell=True)"),
-            'os.system': ("import os\nos.system('{0}')", "import os\nos.system('whoami')"),
-            'getattr': ("import os\ngetattr(os, '{0}')(a)", "import os\ngetattr(os, 'getpid')()"),
             'continuation': ('import os\nos.{0}(\n    a)', 'import os\nos.getpid(\n    )'),
             'name bound nowhere': ('{0}(a)', 'print(a)'),
-            'launched Python text': ("import subprocess\nsubprocess.run(['python', '-c', 'import os; os.{0}()'])", "import subprocess\nsubprocess.run(['python', '-c', 'import os; os.getpid()'])"),
+            'glob folder wildcard': ("import glob\nglob.glob('*/{0}')", "import glob\nglob.glob('{0}/*.txt')"),
         },
         'cs': {
-            'call': (sharp.format('', 'Zqvx', 'new System.Data.DataTable();'), sharp.format('', 'Zqvx', 'Math.Abs(1);')),
-            'method group': (sharp.format('', 'Zqvx', 'Func<System.Data.DataTable> f = System.Data.Common.DbProviderFactories.GetFactoryClasses;'), sharp.format('', 'Zqvx', 'Func<int, int> f = Math.Abs;')),
-            'using alias': (sharp.format('using Q = System.Data.DataTable;', 'Zqvx', 'new Q();'), sharp.format('using Q = System.Math;', 'Zqvx', 'Q.Abs(1);')),
-            'using static': (sharp.format('using static System.Data.Common.DbProviderFactories;', 'Zqvx', 'GetFactoryClasses();'), sharp.format('using static System.Math;', 'Zqvx', 'Abs(1);')),
-            'program': (sharp.format('', 'Zqvx', 'Process.Start("{0}.exe");'), sharp.format('', 'Zqvx', 'Process.Start("whoami.exe");')),
-            'interpolated program': (sharp.format('', 'Zqvx', 'Process.Start($"{dir}\\\\{0}.exe");'), sharp.format('', 'Zqvx', 'Process.Start($"{dir}\\\\whoami.exe");')),
-            'launched cmd string': (sharp.format('', 'Zqvx', 'Process.Start("cmd.exe", "/c {0}");'), sharp.format('', 'Zqvx', 'Process.Start("cmd.exe", "/c echo hi");')),
-            'dynamic': (sharp.format('', 'Zqvx', 'dynamic d = x; d.{0}();'), sharp.format('', 'Zqvx', 'object d = x; d.ToString();')),
-            'native entry point': (sharp.format('', '{0}', '{0}();'), sharp.format('', 'Zqvx', 'GetCurrentProcessId();')),
-            'code the compiler cannot read': (sharp.format('', 'Zqvx', '{0}.Run();'), sharp.format('', 'Zqvx', 'Math.Abs(1);')),
+            'call': (cs('new System.Data.DataTable();'), cs('Math.Abs(1);')),
+            'method group': (cs('Func<System.Data.DataTable> f = System.Data.Common.DbProviderFactories.GetFactoryClasses;'), cs('Func<int, int> f = Math.Abs;')),
+            'using alias': (cs('new Q();', 'using Q = System.Data.DataTable;'), cs('Q.Abs(1);', 'using Q = System.Math;')),
+            'using static': (cs('GetFactoryClasses();', 'using static System.Data.Common.DbProviderFactories;'), cs('Abs(1);', 'using static System.Math;')),
+            'dynamic': (cs('dynamic d = x; d.{0}();'), cs('object d = x; d.ToString();')),
+            'native entry point': (cs('{0}();', native='{0}'), cs('Math.Abs(1);')),
+            'code the compiler cannot read': (cs('{0}.Run();'), cs('Math.Abs(1);')),
         },
-        'cmd': {'command': ('{0} a', 'echo hi'), 'chained command': ('echo hi & {0} a', 'echo hi & echo there')},
-        'sh': {'command': ('{0} a', 'echo hi'), 'command substitution': ('x=$({0} a)', 'x=$(echo hi)'), 'launched bash text': ("bash -c '{0} a'", "bash -c 'echo hi'")},
         'targets': {'task': ('<Project><Target Name="T"><{0} /></Target></Project>', '<Project><Target Name="T"><Message Text="hi" /></Target></Project>')},
-        'yml': {'action': ('jobs:\n  j:\n    runs-on: ubuntu-24.04\n    steps:\n      - uses: zq/{0}@v1', 'jobs:\n  j:\n    runs-on: ubuntu-24.04\n    steps:\n      - uses: actions/checkout@v4'),
-                'run step': ('jobs:\n  j:\n    runs-on: ubuntu-24.04\n    steps:\n      - run: {0} a', 'jobs:\n  j:\n    runs-on: ubuntu-24.04\n    steps:\n      - run: echo hi')},
+        'yml': {'action': ('jobs:\n  j:\n    runs-on: ubuntu-24.04\n    steps:\n      - uses: zq/{0}@v1', 'jobs:\n  j:\n    runs-on: ubuntu-24.04\n    steps:\n      - uses: actions/checkout@v4')},
+    }
+    siblings = {
+        'ps1': ('[System.Math]::BigMul(1, 2)', 'System.Math.BigMul'),
+        'py': ('import os\nos.getppid()', 'os.getppid'),
+        'cs': (cs('Math.BigMul(1, 2);'), 'System.Math.BigMul'),
+    }
+    for _, (source, name) in siblings.items():
+        assert name.rpartition('.')[0] + '.Abs' in table['dotnet'] or name.startswith('os.') and 'os.getpid' in table['python']
+        assert name not in table['dotnet'] and name not in table['python']
+    launches = {
+        'ps1': {'call operator': "& '{0}.exe' $a", 'bare program': '{0}.exe $a', 'Start-Process': 'Start-Process {0}.exe', 'Process.Start': "[Diagnostics.Process]::Start('{0}.exe', 'x')"},
+        'py': {'program list': "import subprocess\nsubprocess.run(['{0}', a])"},
+        'cs': {'Process.Start': cs('Process.Start("{0}.exe");'), 'start settings': cs('Process.Start(new ProcessStartInfo("{0}.exe"));')},
+        'cmd': {'command': '{0} a', 'after a condition': 'if exist a {0} a', 'after echo off': '@echo off & {0} a'},
+        'sh': {'command': '{0} a', 'command substitution': 'x=$({0} a)'},
+        'targets': {'Exec': '<Project><Target Name="T"><Exec Command="{0} a" /></Target></Project>'},
+        'yml': {'bash step': 'jobs:\n  j:\n    runs-on: ubuntu-24.04\n    steps:\n      - run: {0} a', 'cmd step': 'jobs:\n  j:\n    runs-on: windows-2025\n    steps:\n      - shell: cmd\n        run: {0} a'},
+    }
+    always = {
+        'ps1': {'Add-Type source': "Add-Type -TypeDefinition 'public class Q {}'", 'Add-Type path': 'Add-Type -Path a.cs', 'Add-Type native': "Add-Type -Name N -MemberDefinition '[DllImport(\"kernel32.dll\")] public static extern bool SetVolumeMountPointW(string a, string b);'",
+                'Invoke-Expression': "Invoke-Expression 'Write-Host hi'", 'script block from text': "& ([scriptblock]::Create('Write-Host hi'))", 'default parameter values': "$PSDefaultParameterValues['Copy-Item:Recurse'] = $true",
+                'method group invoke': "[System.IO.Directory]::GetFiles.Invoke('a')", 'function drive': "Set-Item -Path function:Write-Output -Value { }", 'module-qualified COM': 'Microsoft.PowerShell.Utility\\New-Object -ComObject WScript.Shell',
+                'renamed cmdlet': "Set-Alias -Name Write-Output -Value find\nWrite-Output $a", 'parameter prefix with a value': 'Invoke-Command -FileP:x.ps1', 'recursive listing': 'Get-ChildItem -Rec $a'},
+        'py': {'getattr': "import os\ngetattr(os, 'getpid')()", 'ctypes': "import ctypes\nctypes.windll.kernel32.CreateSymbolicLinkW('a', 'b', 1)", 'runpy': "import runpy\nrunpy.run_path('x.py')",
+               'eval': "eval('1')", 'operator': "import operator\noperator.methodcaller('walk')", 'changed program list': "import subprocess\nc = ['whoami']\nc[0] = 'find'\nsubprocess.run(c)"},
+        'cs': {'reflection': cs('typeof(System.IO.Directory).GetMethod("GetFiles")!.Invoke(null, null);'), 'compiled expression': cs('System.Linq.Expressions.Expression.Lambda(System.Linq.Expressions.Expression.Empty()).Compile();')},
+        'sh': {'trap': "trap 'rm -rf a' EXIT", 'eval': 'eval x', 'command': 'command find -L a', 'function defined later': 'find a\nfind() { :; }'},
+        'targets': {'entity in a property function': '<Project><PropertyGroup><P>$([System.IO.Directory]::&#x47;etFiles(\'a\'))</P></PropertyGroup></Project>', 'item glob': '<Project><ItemGroup><I Include="$(TEMP)\\**\\*" /></ItemGroup></Project>'},
+        'yml': {'job-level workflow': 'jobs:\n  j:\n    uses: zq/x/.github/workflows/y.yml@v1'},
+    }
+    harmless = {
+        'yml': {'workflow default python shell': 'defaults:\n  run:\n    shell: python\njobs:\n  j:\n    runs-on: ubuntu-24.04\n    steps:\n      - run: print(1)'},
+        'ps1': {'later assignment': "$c = 'Write-Output'\n& $c hi\n$c = 'Zqvx-Item'"},
     }
     allowlist = 'tools/validation/reparse-walk-allowlist.json'
-    listed = 'tools/validation/Control/listed.ps1'
-    cases, entries = {}, []
-    for extension, kinds in constructs.items():
-        folder = '.github/workflows/' if extension == 'yml' else 'tools/validation/Control/'
-        fill = (lambda text: text.replace('{0}', 'zqvx')) if extension == 'cs' else (lambda text: text.format('zqvx'))
+    cases, reasoned, known = {}, [], []
+    def folder(extension):
+        return '.github/workflows/' if extension == 'yml' else 'tools/validation/Control/'
+    fill = lambda extension, text, name: text.replace('{0}', name) if extension == 'cs' else text.format(name)
+    for extension, kinds in language.items():
         for kind, (refused, kept) in kinds.items():
             name = kind.replace(' ', '-')
-            cases[f'{extension} {kind}: an unknown name is refused'] = (f'{folder}{name}-unknown.{extension}', fill(refused), True)
-            cases[f'{extension} {kind}: a classified name passes'] = (f'{folder}{name}-known.{extension}', fill(kept), False)
+            cases[f'{extension} {kind}: an unknown name is refused'] = (f'{folder(extension)}{name}-unknown.{extension}', fill(extension, refused, 'zqvx'), True)
+            cases[f'{extension} {kind}: a listed name passes'] = (f'{folder(extension)}{name}-known.{extension}', fill(extension, kept, 'zqvx'), False)
+    for extension, (source, _) in siblings.items():
+        cases[f'{extension}: a member of an approved type is refused'] = (f'tools/validation/Control/sibling.{extension}', source, True)
+    for extension, kinds in launches.items():
+        for kind, template in kinds.items():
+            name = kind.replace(' ', '-')
+            cases[f'{extension} {kind}: an unlisted launch is refused'] = (f'{folder(extension)}{name}-launch.{extension}', fill(extension, template, 'zqvx'), True)
+            listed = f'{folder(extension)}{name}-listed.{extension}'
+            cases[f'{extension} {kind}: a listed launch passes'] = (listed, fill(extension, template, 'zqvx'), False)
+            for tool, why in (('robocopy', 'a tree tool'), ('pwsh', 'a shell')):
+                path = f'{folder(extension)}{name}-{tool}.{extension}'
+                cases[f'{extension} {kind}: {why} on the known-launch list is refused'] = (path, fill(extension, template, tool), True)
+            source = fill(extension, template, 'zqvx')
+            for path, program in ((listed, 'zqvx'), (f'{folder(extension)}{name}-robocopy.{extension}', 'robocopy'), (f'{folder(extension)}{name}-pwsh.{extension}', 'pwsh')):
+                text = fill(extension, template, program)
+                lines = module['lines_of'](text)
+                line = next(l.strip() for l in lines if program in l)
+                known.append({'file': path, 'line': line, 'program': program})
+    for extension, kinds in always.items():
+        for kind, source in kinds.items():
+            cases[f'{extension} {kind}: refused'] = (f'{folder(extension)}{kind.replace(" ", "-")}-always.{extension}', source, True)
+    for extension, kinds in harmless.items():
+        for kind, source in kinds.items():
+            cases[f'{extension} {kind}: passes'] = (f'{folder(extension)}{kind.replace(" ", "-")}-harmless.{extension}', source, False)
+    cases['a line in a helper file is refused'] = ('tools/validation/OptimizerCore/TestFixtures.cs', cs('System.IO.Directory.GetFiles(dir, "*", System.IO.SearchOption.AllDirectories);'), True)
+    cases['a line in the Python walk helper is refused'] = ('tools/validation/local_tree.py', "import os\nos.walk('a')", True)
+    cases['a recursive walk in product code is refused'] = ('backend/native/Control/Walk.cs', cs('System.IO.Directory.GetFiles(dir, "*", System.IO.SearchOption.AllDirectories);'), True)
+    cases['a one-folder listing in product code passes'] = ('backend/native/Control/List.cs', cs('System.IO.Directory.GetFiles(dir, "*", System.IO.SearchOption.TopDirectoryOnly);'), False)
     cases['a file type with no reader is refused'] = ('tools/validation/Control/run.foo', 'zqvx a', True)
     cases['an extensionless file is refused'] = ('tools/validation/Control/run', '#!/bin/sh\nzqvx a', True)
     cases['a file Python cannot read is refused'] = ('tools/validation/Control/null.py', b'x = 1\n\x00\n', True)
     cases['a file PowerShell cannot read is refused'] = ('tools/validation/Control/broken.ps1', 'function {', True)
     cases['a UTF-16 file without a byte order mark is refused'] = ('tools/validation/Control/wide.ps1', 'robocopy C:\\ D:\\x /MIR'.encode('utf-16-be'), True)
-    cases['a listed line passes'] = (listed, 'robocopy C:\\x D:\\y /MIR', False)
-    entries.append({'file': listed, 'line': 'robocopy C:\\x D:\\y /MIR', 'reason': 'control'})
-    cases['a listed line is listed once'] = ('tools/validation/Control/twice.ps1', 'robocopy C:\\x D:\\y /MIR\nrobocopy C:\\x D:\\y /MIR', True)
-    entries.append({'file': 'tools/validation/Control/twice.ps1', 'line': 'robocopy C:\\x D:\\y /MIR', 'reason': 'control'})
-    entries += [{'file': 'tools/validation/Control/missing.ps1', 'line': 'robocopy', 'reason': 'control'},
-                {'file': 'tools/validation/Control/unexplained.ps1', 'line': 'robocopy C:\\x D:\\y /MIR', 'reason': ' '}]
-    cases['an entry without a reason is refused'] = ('tools/validation/Control/unexplained.ps1', 'robocopy C:\\x D:\\y /MIR', True)
+    listed = 'tools/validation/Control/listed.ps1'
+    cases['a reasoned line passes'] = (listed, 'Get-ChildItem -Recurse $a', False)
+    reasoned.append({'file': listed, 'line': 'Get-ChildItem -Recurse $a', 'reason': 'control'})
+    cases['a listed line is listed once'] = ('tools/validation/Control/twice.ps1', 'Get-ChildItem -Recurse $a\nGet-ChildItem -Recurse $a', True)
+    reasoned.append({'file': 'tools/validation/Control/twice.ps1', 'line': 'Get-ChildItem -Recurse $a', 'reason': 'control'})
+    cases['an entry without a reason is refused'] = ('tools/validation/Control/unexplained.ps1', 'Get-ChildItem -Recurse $a', True)
+    reasoned.append({'file': 'tools/validation/Control/unexplained.ps1', 'line': 'Get-ChildItem -Recurse $a', 'reason': ' '})
+    cases['a known launch never clears a tree walk'] = ('tools/validation/Control/walk-as-launch.ps1', 'Get-ChildItem -Recurse $a', True)
+    known.append({'file': 'tools/validation/Control/walk-as-launch.ps1', 'line': 'Get-ChildItem -Recurse $a', 'program': 'get-childitem'})
+    cases['a known launch names the program it starts'] = ('tools/validation/Control/wrong-program.ps1', 'zqvx.exe $a', True)
+    known.append({'file': 'tools/validation/Control/wrong-program.ps1', 'line': 'zqvx.exe $a', 'program': 'whoami'})
+    for extension, source, line, program in (('py', 'import shutil\nshutil.move(a, b)', 'shutil.move(a, b)', 'shutil.move'),
+                                             ('ps1', "[System.IO.Directory]::Move('a', 'b')", "[System.IO.Directory]::Move('a', 'b')", 'system.io.directory.move')):
+        assert program not in table['python'] and 'System.IO.Directory.Move' not in table['dotnet']
+        cases[f'{extension}: a risky call on the known-launch list is refused'] = (f'tools/validation/Control/risky-call.{extension}', source, True)
+        known.append({'file': f'tools/validation/Control/risky-call.{extension}', 'line': line, 'program': program})
+    reasoned.append({'file': 'tools/validation/Control/missing.ps1', 'line': 'Get-ChildItem -Recurse', 'reason': 'control'})
     results = {}
-    with tempfile.TemporaryDirectory() as folder:
-        root = Path(folder)
-        for relative, source, _ in cases.values():
-            (root / relative).parent.mkdir(parents=True, exist_ok=True)
-            (root / relative).write_bytes(source if isinstance(source, bytes) else source.encode('utf-8'))
-        (root / allowlist).write_text(json.dumps(entries), encoding='utf-8')
-        failures = module['verify'](root)
-        for label, (relative, _, refused) in cases.items():
-            hit = any(f.startswith(relative + ':') for f in failures)
-            if label == 'an entry without a reason is refused':
-                hit = any(f.startswith(allowlist + ':') and 'unexplained.ps1' in f for f in failures)
-            results[label] = hit == refused
-        results['a stale entry is refused'] = any('stale entry' in f and 'missing.ps1' in f for f in failures)
+    for projects in (True, False):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            chosen = {label: case for label, case in cases.items() if case[0].endswith('.targets') == projects}
+            for relative, source, _ in chosen.values():
+                (root / relative).parent.mkdir(parents=True, exist_ok=True)
+                (root / relative).write_bytes(source if isinstance(source, bytes) else source.encode('utf-8'))
+            (root / allowlist).write_text(json.dumps({'reasoned exceptions': [e for e in reasoned if e['file'].endswith('.targets') == projects],
+                                                      'known launches': [e for e in known if e['file'].endswith('.targets') == projects]}), encoding='utf-8')
+            failures = module['verify'](root)
+            for label, (relative, _, refused) in chosen.items():
+                hit = any(f.startswith(relative + ':') for f in failures)
+                if label == 'an entry without a reason is refused':
+                    hit = any(f.startswith(allowlist + ':') and 'unexplained.ps1' in f for f in failures)
+                results[label] = hit == refused
+            if projects:
+                results['a refused project file stops the check before any project is evaluated'] = any('stopped before evaluating any project' in f for f in failures)
+            else:
+                results['a stale entry is refused'] = any('stale entry' in f and 'missing.ps1' in f for f in failures)
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        classifier = module['Classifier']([], {'functions': {}, 'aliases': {}})
+        kinds = {'dotnet': ('call', 'csharp'), 'python': ('call', 'python'), 'python methods': ('method', 'python'), 'powershell methods': ('method', 'powershell'), 'powershell': ('command', 'powershell')}
+        for section, entries in table.items():
+            for name, entry in entries.items() if section in kinds else []:
+                for index, condition in enumerate(entry.get('safe', []) if isinstance(entry, dict) else []):
+                    if 'without' in condition:
+                        args = [{'param': condition['without'][0][:3]}]
+                    elif 'param' in condition:
+                        args = [{'param': condition['param'][0], 'value': 'zqvx'}]
+                    elif 'blocks' in condition:
+                        args = [{'param': 'FileP'}]
+                    elif 'one folder' in condition:
+                        args = [{'i': condition['arg'], 'value': '*/x'}]
+                    else:
+                        args = [{'i': condition['arg'], 'name': condition['arg'], 'value': 'zqvx', 'type': condition.get('type', 'zqvx')}]
+                    kind, lang = kinds[section]
+                    found = classifier.classify({'file': 'x', 'line': 1, 'text': '', 'kind': kind, 'name': name, 'args': args, 'language': lang})
+                    results[f'table rule {index + 1} of {section} {name} refuses when broken'] = bool(found)
         outside = root / 'outside'
         (outside / 'deep').mkdir(parents=True)
         (outside / 'deep' / 'kept.txt').write_text('outside', encoding='utf-8')
@@ -415,8 +496,16 @@ def reparse_walk_negative_controls():
             _winapi.CreateJunction(str(outside), str(link))
         else:
             link.symlink_to(outside, target_is_directory=True)
+        (walked / 'leaf').symlink_to(outside / 'deep' / 'kept.txt')
         seen = sorted(path.relative_to(walked).as_posix() for path in local_tree(walked))
-        results['local tree stops at a link'] = seen == ['link', 'own.txt']
+        results['local tree neither enters nor yields a link'] = seen == ['own.txt']
+        named = sorted(path.relative_to(walked).as_posix() for path in local_tree(walked, links=True))
+        results['local tree names links only when asked'] = named == ['leaf', 'link', 'own.txt']
+        try:
+            entered = list(local_tree(link))
+        except NotADirectoryError:
+            entered = None
+        results['local tree refuses a root that is a link'] = entered is None
     return results
 
 

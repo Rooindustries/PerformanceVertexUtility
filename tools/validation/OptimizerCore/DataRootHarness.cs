@@ -146,40 +146,9 @@ static class DataRootHarness
         foreach (var path in paths)
         {
             var directory = new DirectoryInfo(Long(path));
-            if (directory.Exists) Remove(directory);
+            if (directory.Exists) TestFixtures.Remove(directory.FullName[4..]);
             else if (File.Exists(Long(path))) { File.SetAttributes(Long(path), FileAttributes.Normal); File.Delete(Long(path)); }
         }
-    }
-
-    private static void Remove(DirectoryInfo root)
-    {
-        var folders = new Stack<DirectoryInfo>();
-        var visited = new List<DirectoryInfo>();
-        folders.Push(root);
-        while (folders.Count > 0)
-        {
-            var folder = folders.Pop();
-            if (folder.Attributes.HasFlag(FileAttributes.ReparsePoint)) { folder.Delete(); continue; }
-            visited.Add(folder);
-            foreach (var entry in folder.EnumerateFileSystemInfos("*", new EnumerationOptions { AttributesToSkip = 0, IgnoreInaccessible = true }))
-            {
-                if (entry is DirectoryInfo child) folders.Push(child);
-                else { try { entry.Attributes = FileAttributes.Normal; entry.Delete(); } catch (Exception error) when (error is IOException or UnauthorizedAccessException) { Take(entry.FullName); entry.Attributes = FileAttributes.Normal; entry.Delete(); } }
-            }
-        }
-        visited.Reverse();
-        foreach (var folder in visited) { try { folder.Attributes = FileAttributes.Directory; folder.Delete(); } catch (Exception error) when (error is IOException or UnauthorizedAccessException) { Take(folder.FullName); folder.Delete(); } }
-    }
-
-    private static void Take(string path)
-    {
-        if (!TestFixtures.Alone(path))
-        {
-            Console.WriteLine("Left the permissions of a fixture entry that is a link or has another name unchanged: " + path);
-            return;
-        }
-        Run("takeown.exe", "/F \"" + path.Replace(@"\\?\", "") + "\" /A");
-        Run("icacls.exe", "\"" + path.Replace(@"\\?\", "") + "\" /reset /C /Q");
     }
 
     public static void Sweep(string name)
