@@ -1,220 +1,1073 @@
 import argparse
+import ast
+import builtins
+import fnmatch
+import io
 import json
+import os
 from pathlib import Path
 import re
 import runpy
 import subprocess
+import tempfile
+import tokenize
+import xml.parsers.expat
 
-local_tree = runpy.run_path(str(Path(__file__).with_name('local_tree.py')))['entries']
+import yaml
 
+HERE = Path(__file__).resolve().parent
+local_tree = runpy.run_path(str(HERE / 'local_tree.py'))['entries']
 ALLOWLIST = 'tools/validation/reparse-walk-allowlist.json'
-TABLE = json.loads(Path(__file__).with_name('reparse-walk-names.json').read_text(encoding='utf-8'))
-SCANNED = set(TABLE['scanned'])
-DATA = set(TABLE['data'])
-DATA_FILES = set(TABLE['data files'])
-SHELLS = set(TABLE['shell types'])
-HELPERS = {
-    'backend/native/Optimizer.Core/LocalTree.cs': {'recursive walk, copy, delete, permission and ownership'},
-    'tools/validation/OptimizerCore/TestFixtures.cs': {'drive mapping and drive letters', 'links', 'mount points and access paths', 'virtual disk attach'},
-    'tools/validation/check_reparse_walks.py': {row['category'] for row in TABLE['rows']},
-}
-SHELL_LINE = re.compile(r'new-item|(?<![\w-])ni(?![\w-])|itemtype|(?<![\w-])-it(?![\w-])|(?<![\w-])-type(?![\w-])')
-COMMAND = re.compile(r'(?:^|[(,&|;={\[]|run:|(?<![\w-])(?:-c|/c|-command|call|start))\s*$')
+CLASSES = json.loads((HERE / 'reparse-walk-calls.json').read_text(encoding='utf-8'))
+SCOPE = ('tools/validation/', 'tools/scripts/', 'backend/scripts/')
+PRODUCT = ('backend/native/', 'docs/internal/frontend/')
+HELPERS = {'backend/native/Optimizer.Core/LocalTree.cs', 'tools/validation/OptimizerCore/TestFixtures.cs', 'tools/validation/local_tree.py'}
+HOLE, PATH, SELF, BLOCK = '\0', '\1', '\2', '\3'
+MARKERS = (HOLE, PATH, SELF, BLOCK)
 
 
-def extension(relative):
-    name = relative.rsplit('/', 1)[-1]
-    return name.rsplit('.', 1)[-1].lower() if '.' in name else ''
+def fact(file, line, text, kind, name, args=None, **extra):
+    return {'file': file, 'line': line, 'text': text, 'kind': kind, 'name': name, 'args': args, **extra}
 
 
-def decode(data):
-    if data.startswith(b'\xef\xbb\xbf'):
-        return data[3:].decode('utf-8')
-    if data.startswith((b'\xff\xfe', b'\xfe\xff')):
-        return data.decode('utf-16')
-    if b'\x00' in data:
-        for codec in ('utf-16-le', 'utf-16-be'):
-            text = data.decode(codec, errors='replace')
-            if '\x00' not in text and '�' not in text:
-                return text
-        raise ValueError('it decodes as neither UTF-8 nor UTF-16')
-    return data.decode('utf-8')
+def tagged(facts, language):
+    return [dict(f, language=f.get('language', language)) for f in facts]
 
 
-def rewrite(text, origin, pattern, replace):
-    out, lines, last = [], [], 0
-    for match in pattern.finditer(text):
-        out.append(text[last:match.start()])
-        lines.extend(origin[last:match.start()])
-        new = replace(match)
-        out.append(new)
-        lines.extend([origin[match.start()]] * len(new))
-        last = match.end()
-    out.append(text[last:])
-    lines.extend(origin[last:])
-    return ''.join(out), lines
+def lines_of(text):
+    return re.split(r'\r\n|\r|\n', text)
 
 
-def clean(text):
-    text = text.lower()
-    imported = {}
-    for module, names in re.findall(r'^[ \t]*from[ \t]+([\w.]+)[ \t]+import[ \t]+\(?([\w \t,]+)\)?[ \t]*$', text, re.M):
-        for part in names.split(','):
-            words = part.split()
-            if words:
-                imported[words[-1]] = module + '.' + words[0]
-    for module, alias in re.findall(r'^[ \t]*import[ \t]+([\w.]+)[ \t]+as[ \t]+(\w+)', text, re.M):
-        imported[alias + '.'] = module + '.'
-    out, origin, line, index = [], [], 1, 0
-    while index < len(text):
-        char = text[index]
-        rest = text[index + 1:index + 3]
-        if char in '`^\\' and (rest.startswith('\n') or rest == '\r\n'):
-            out.append(' ')
-            origin.append(line)
-            line += 1
-            index += 2 if rest.startswith('\n') else 3
+def concat(left, right):
+    if len(left) * len(right) > 16:
+        return [[HOLE]]
+    out = []
+    for a in left:
+        for b in right:
+            merged = list(a)
+            for piece in b:
+                if merged and piece and merged[-1] and piece not in MARKERS and merged[-1] not in MARKERS:
+                    merged[-1] += piece
+                elif piece:
+                    merged.append(piece)
+            out.append(merged)
+    return out
+
+
+def union(*values):
+    out = [v for value in values for v in value]
+    return out if len(out) <= 16 else [[HOLE]]
+
+
+def as_path(values):
+    return [[PATH if piece == HOLE else piece for piece in value] for value in values]
+
+
+def pieces_of(text):
+    return [p for p in re.split('([\0-\3])', text) if p]
+
+
+def program_of(pieces):
+    if pieces == [SELF]:
+        return '<self>'
+    if not pieces or pieces[-1] in MARKERS:
+        return None
+    last = pieces[-1]
+    cut = max(last.rfind('\\'), last.rfind('/'))
+    if cut < 0 and len(pieces) > 1:
+        return None
+    return last[cut + 1:] or None
+
+
+def token_of(pieces):
+    if all(p not in MARKERS for p in pieces):
+        return ''.join(pieces)
+    name = program_of(pieces)
+    if pieces and pieces[0] == PATH:
+        return {'path': True, 'name': name}
+    if pieces and pieces[0] not in (HOLE, SELF, BLOCK):
+        return {'prefix': pieces[0], 'name': name}
+    return None
+
+
+def split_command_line(pieces):
+    tokens, current, quoted = [], None, False
+    for piece in pieces:
+        if piece in MARKERS:
+            current = (current or []) + [piece]
             continue
-        if char not in '`^"\'':
-            out.append('-' if char in '–—―' else char)
-            origin.append(line)
-        line += char == '\n'
-        index += 1
-    cleaned = ''.join(out)
-    cleaned, origin = rewrite(cleaned, origin, re.compile(r'(?<=\w)\.(?:exe|com|cmd|bat)(?!\w)'), lambda match: '')
-    cleaned, origin = rewrite(cleaned, origin, re.compile(r'[ \t]+(?=[(.])|(?<=\.)[ \t]+'), lambda match: '')
-    if imported:
-        names = '|'.join(re.escape(name) for name in sorted(imported, key=len, reverse=True))
-        pattern = re.compile(r'(?<![\w.])(?:' + names + r')(?=\(|(?<=\.))')
-        cleaned, origin = rewrite(cleaned, origin, pattern, lambda match: imported[match.group(0)])
-    return cleaned, origin
+        for letter in piece:
+            if letter == '"':
+                quoted = not quoted
+                current = current or []
+            elif letter.isspace() and not quoted:
+                if current is not None:
+                    tokens.append(current)
+                current = None
+            else:
+                current = current or []
+                if current and current[-1] not in MARKERS:
+                    current[-1] += letter
+                else:
+                    current.append(letter)
+    if current is not None:
+        tokens.append(current)
+    return tokens
 
 
-def statement(text, start, nested=True):
-    depth = 0
-    index = start
-    while index < len(text):
-        char = text[index]
-        if char in '([{':
-            depth += 1
-        elif char in ')]}':
-            if depth == 0 and nested:
-                break
-            depth = max(depth - 1, 0)
-        elif char in ';|' and depth == 0:
-            break
-        elif char == '\n' and depth == 0:
-            break
-        index += 1
-    return text[start:index]
+class PythonReader:
+    LAUNCHERS = {'subprocess.run', 'subprocess.call', 'subprocess.check_call', 'subprocess.check_output', 'subprocess.Popen', 'os.system'}
+    SCOPES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)
+    repo_modules = set()
 
+    def __init__(self, relative, data):
+        self.relative = relative
+        self.facts = []
+        try:
+            encoding, _ = tokenize.detect_encoding(io.BytesIO(data).readline)
+            self.lines = lines_of(data.decode(encoding))
+            self.tree = ast.parse(data, relative)
+        except (SyntaxError, ValueError, UnicodeDecodeError) as error:
+            self.facts.append(fact(relative, getattr(error, 'lineno', None) or 1, '', 'unreadable', f'Python cannot read this file: {error}'))
+            return
+        self.parent = {child: node for node in ast.walk(self.tree) for child in ast.iter_child_nodes(node)}
+        self.scopes = {}
+        self.read()
 
-def compile_rows(rows):
-    rules = []
-    for row in rows:
-        if 'pattern' in row:
-            rules.append((row, [re.compile(row['pattern'])]))
-            continue
-        word = row.get('word', False) or 'switch' in row or 'parameter' in row or 'where' in row
-        patterns = []
-        for name in [row['name'], *row.get('aliases', [])]:
-            body = r'[\s,]*'.join(re.escape(clean(part)[0]) for part in name.split())
-            patterns.append(re.compile((r'(?<![\w.$-])' + body + r'(?![\w-])') if word else body))
-        rules.append((row, patterns))
-    return rules
+    def add(self, node, kind, name, args=None, **extra):
+        line = getattr(node, 'lineno', 1)
+        self.facts.append(fact(self.relative, line, self.lines[line - 1] if line <= len(self.lines) else '', kind, name, args, **extra))
 
+    def scope_of(self, node):
+        node = self.parent.get(node)
+        while node is not None and not isinstance(node, self.SCOPES + (ast.Module,)):
+            node = self.parent.get(node)
+        return node
 
-RULES = compile_rows(TABLE['rows'])
+    def own(self, scope):
+        pending = list(ast.iter_child_nodes(scope))
+        while pending:
+            node = pending.pop()
+            yield node
+            if not isinstance(node, self.SCOPES):
+                pending += list(ast.iter_child_nodes(node))
 
+    def binds(self, scope):
+        if scope in self.scopes:
+            return self.scopes[scope]
+        found = {}
+        def bind(name, value):
+            found.setdefault(name, []).append(value)
+        if isinstance(scope, (ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)):
+            for generator in scope.generators:
+                for name in ast.walk(generator.target):
+                    if isinstance(name, ast.Name) and isinstance(name.ctx, ast.Store):
+                        for element in generator.iter.elts if isinstance(generator.iter, (ast.List, ast.Tuple)) and name is generator.target else [None]:
+                            bind(name.id, ('value', element) if element is not None else ('unknown',))
+        elif isinstance(scope, self.SCOPES):
+            arguments = scope.args
+            for argument in arguments.posonlyargs + arguments.args + arguments.kwonlyargs + [a for a in (arguments.vararg, arguments.kwarg) if a]:
+                bind(argument.arg, ('param', scope))
+        for node in self.own(scope):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    module = alias.name if alias.asname else alias.name.split('.')[0]
+                    bind(alias.asname or alias.name.split('.')[0], ('repo', node) if module.split('.')[0] in self.repo_modules else ('module', module))
+            elif isinstance(node, ast.ImportFrom):
+                for alias in node.names:
+                    if alias.name == '*' or node.level:
+                        self.add(node, 'unreadable', 'a star or relative import binds names the check cannot list')
+                    else:
+                        bind(alias.asname or alias.name, ('repo', node) if node.module.split('.')[0] in self.repo_modules else ('import', f'{node.module}.{alias.name}'))
+            elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and node is not scope:
+                bind(node.name, ('repo', node))
+            elif isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign, ast.NamedExpr)) and getattr(node, 'value', None) is not None:
+                for target in node.targets if isinstance(node, ast.Assign) else [node.target]:
+                    for name in ast.walk(target):
+                        if isinstance(name, ast.Name) and isinstance(name.ctx, ast.Store):
+                            bind(name.id, ('value', node.value) if name is target and not isinstance(node, ast.AugAssign) else ('unknown',))
+            elif isinstance(node, (ast.For, ast.AsyncFor)):
+                for name in ast.walk(node.target):
+                    if isinstance(name, ast.Name) and isinstance(name.ctx, ast.Store):
+                        for element in node.iter.elts if isinstance(node.iter, (ast.List, ast.Tuple)) and name is node.target else [None]:
+                            bind(name.id, ('value', element) if element is not None else ('unknown',))
+            elif isinstance(node, (ast.With, ast.AsyncWith)):
+                for item in node.items:
+                    for name in ast.walk(item.optional_vars) if item.optional_vars else []:
+                        if isinstance(name, ast.Name) and isinstance(name.ctx, ast.Store):
+                            bind(name.id, ('unknown',))
+            elif isinstance(node, ast.ExceptHandler) and node.name:
+                bind(node.name, ('unknown',))
+            elif isinstance(node, (ast.Global, ast.Nonlocal)):
+                for name in node.names:
+                    found[name] = [('outer',)]
+        self.scopes[scope] = found
+        return found
 
-def named(row, patterns, text, shell):
-    for pattern in patterns:
-        for match in pattern.finditer(text):
-            begin = text.rfind('\n', 0, match.start()) + 1
-            line = text[begin:text.find('\n', match.start()) % (len(text) + 1)]
-            if row.get('where') == 'powershell' and not (shell or SHELL_LINE.search(line)):
+    def lookup(self, name, node):
+        scope = self.scope_of(node)
+        while scope is not None:
+            bindings = self.binds(scope).get(name)
+            if bindings and bindings != [('outer',)]:
+                return bindings
+            scope = self.scope_of(scope) if not isinstance(scope, ast.Module) else None
+        return None
+
+    def qualified(self, node, seen=frozenset()):
+        if len(seen) > 40:
+            return {None}
+        if isinstance(node, ast.Name):
+            bindings = self.lookup(node.id, node)
+            if bindings is None:
+                return {'builtins.' + node.id} if hasattr(builtins, node.id) else {None}
+            found = set()
+            for binding in bindings:
+                if binding[0] in ('import', 'module'):
+                    found.add(binding[1])
+                elif binding[0] == 'repo':
+                    found.add('<repo>')
+                elif binding[0] == 'value' and (id(binding[1])) not in seen:
+                    found |= self.callable(binding[1], seen | {id(binding[1])})
+                else:
+                    found.add(None)
+            return found
+        if isinstance(node, ast.Attribute):
+            if isinstance(node.value, ast.Name):
+                libraries = self.libraries(node.value, seen)
+                if libraries:
+                    return {f'{library}!{node.attr}' for library in libraries}
+                if node.value.id in ('self', 'cls'):
+                    return {'<repo>'} if self.method_defined(node.attr) else {'.' + node.attr}
+            base = self.qualified(node.value, seen) if isinstance(node.value, (ast.Name, ast.Attribute)) else {None}
+            if isinstance(node.value, ast.Name) and self.lookup(node.value.id, node.value) is None and not hasattr(builtins, node.value.id):
+                return {None}
+            if base == {'<repo>'} and isinstance(node.value, ast.Name) and all(b[0] == 'repo' and isinstance(b[1], (ast.Import, ast.ImportFrom)) for b in self.lookup(node.value.id, node.value) or []):
+                return {'<repo>'}
+            if base and None not in base and '<repo>' not in base and all('!' not in b and not b.startswith('.') for b in base):
+                return {b + '.' + node.attr for b in base}
+            return {'.' + node.attr}
+        return {None}
+
+    def libraries(self, name, seen=frozenset()):
+        found = set()
+        for binding in self.lookup(name.id, name) or []:
+            value = binding[1] if binding[0] == 'value' else None
+            if isinstance(value, ast.Call) and id(value) not in seen and value.args and isinstance(value.args[0], ast.Constant) \
+                    and self.qualified(value.func, seen | {id(value)}) & {'ctypes.WinDLL', 'ctypes.CDLL', 'ctypes.OleDLL'}:
+                found.add(Path(str(value.args[0].value)).stem.lower())
+        return found
+
+    def method_defined(self, name):
+        return any(isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name == name for c in ast.walk(self.tree) if isinstance(c, ast.ClassDef) for n in c.body)
+
+    def callable(self, value, seen):
+        if isinstance(value, ast.Lambda):
+            return {'<repo>'}
+        if isinstance(value, (ast.Name, ast.Attribute)):
+            return self.qualified(value, seen)
+        if isinstance(value, ast.IfExp):
+            return self.callable(value.body, seen) | self.callable(value.orelse, seen)
+        if isinstance(value, ast.BoolOp):
+            return set().union(*(self.callable(v, seen) for v in value.values))
+        if isinstance(value, ast.Subscript) and self.loaded(value.value, seen):
+            return {'<repo>'}
+        if isinstance(value, ast.Call) and self.qualified(value.func, seen) == {'functools.partial'} and value.args:
+            return self.callable(value.args[0], seen)
+        if isinstance(value, ast.Call) and self.qualified(value.func, seen) == {'builtins.getattr'} and len(value.args) >= 2 \
+                and isinstance(value.args[1], ast.Constant) and isinstance(value.args[1].value, str):
+            return self.qualified(ast.Attribute(value=value.args[0], attr=value.args[1].value, ctx=ast.Load()), seen)
+        return {None}
+
+    def loaded(self, node, seen=frozenset()):
+        values = [b[1] if b[0] == 'value' else None for b in self.lookup(node.id, node) or [('unknown',)]] if isinstance(node, ast.Name) else [node]
+        return all(isinstance(v, ast.Call) and id(v) not in seen and self.qualified(v.func, seen | {id(v)}) == {'runpy.run_path'} and self.repo_path(v.args[0] if v.args else None) for v in values)
+
+    def traced(self, node, seen=frozenset()):
+        if id(node) in seen:
+            return False
+        seen = seen | {id(node)}
+        if isinstance(node, (ast.IfExp, ast.BoolOp)):
+            return all(self.traced(v, seen) for v in ([node.body, node.orelse] if isinstance(node, ast.IfExp) else node.values))
+        if isinstance(node, ast.Lambda):
+            return True
+        if isinstance(node, ast.Subscript):
+            return self.loaded(node.value)
+        if isinstance(node, ast.Call) and self.qualified(node.func) == {'functools.partial'} and node.args:
+            return self.traced(node.args[0], seen)
+        if isinstance(node, ast.Call) and self.callable(node, frozenset()) != {None}:
+            names = self.callable(node, frozenset())
+            for name in names - {None, '<repo>'}:
+                self.add(node, 'native' if '!' in name else 'method' if name.startswith('.') else 'call', name, None, reference=True)
+            return None not in names
+        if not isinstance(node, (ast.Name, ast.Attribute)):
+            return False
+        names = self.qualified(node)
+        for name in names - {None, '<repo>'}:
+            self.add(node, 'native' if '!' in name else 'method' if name.startswith('.') else 'call', name, None, reference=True)
+        if None not in names:
+            return True
+        if not isinstance(node, ast.Name) or self.lookup(node.id, node) is None:
+            return False
+        for binding in self.lookup(node.id, node):
+            if binding[0] == 'value':
+                if not self.traced(binding[1], seen):
+                    return False
+            elif binding[0] == 'param':
+                function = binding[1]
+                if isinstance(function, ast.Lambda):
+                    return False
+                names = [a.arg for a in function.args.posonlyargs + function.args.args]
+                index = names.index(node.id) if node.id in names else None
+                calls = [c for c in ast.walk(self.tree) if isinstance(c, ast.Call) and (
+                    isinstance(c.func, ast.Name) and any(b == ('repo', function) for b in self.lookup(c.func.id, c.func) or [])
+                    or isinstance(c.func, ast.Attribute) and c.func.attr == function.name)]
+                if not calls:
+                    return False
+                for call in calls:
+                    if any(isinstance(a, ast.Starred) for a in call.args) or any(k.arg is None for k in call.keywords):
+                        return False
+                    offset = 1 if isinstance(call.func, ast.Attribute) and names[:1] in (['self'], ['cls']) else 0
+                    value = next((k.value for k in call.keywords if k.arg == node.id), None)
+                    if value is None and index is not None and 0 <= index - offset < len(call.args):
+                        value = call.args[index - offset]
+                    if value is not None and not self.traced(value, seen):
+                        return False
+            elif binding[0] != 'repo':
+                return False
+        return True
+
+    def repo_path(self, node):
+        values = self.resolve(node)
+        return all(v and v[0] == PATH and v[-1] not in (HOLE, PATH) and v[-1].lower().endswith('.py') for v in values)
+
+    def resolve(self, node, depth=0, seen=frozenset()):
+        if node is None or depth > 12:
+            return [[HOLE]]
+        if isinstance(node, ast.Constant):
+            value = node.value.decode('utf-8', 'replace') if isinstance(node.value, bytes) else node.value
+            return [[value]] if isinstance(value, str) else [[HOLE]]
+        if isinstance(node, ast.JoinedStr):
+            out = [[]]
+            for part in node.values:
+                if isinstance(part, ast.FormattedValue):
+                    out = concat(out, self.resolve(part.value, depth + 1, seen) if part.format_spec is None and part.conversion == -1 else [[HOLE]])
+                else:
+                    out = concat(out, self.resolve(part, depth + 1, seen))
+            return out
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+            return concat(self.resolve(node.left, depth + 1, seen), self.resolve(node.right, depth + 1, seen))
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Div):
+            return concat(concat(as_path(self.resolve(node.left, depth + 1, seen)), [['\\']]), self.resolve(node.right, depth + 1, seen))
+        if isinstance(node, ast.IfExp):
+            return union(self.resolve(node.body, depth + 1, seen), self.resolve(node.orelse, depth + 1, seen))
+        if isinstance(node, ast.BoolOp) and isinstance(node.op, ast.Or):
+            return union(*(self.resolve(v, depth + 1, seen) for v in node.values))
+        if isinstance(node, ast.Name):
+            if node.id == '__file__':
+                return [[PATH, '\\' + Path(self.relative).name]]
+            bindings = self.lookup(node.id, node) or []
+            if bindings and id(node) not in seen and all(b[0] == 'value' for b in bindings):
+                return union(*(self.resolve(b[1], depth + 1, seen | {id(node)}) for b in bindings))
+            return [[HOLE]]
+        if isinstance(node, ast.Attribute):
+            if self.qualified(node) == {'sys.executable'}:
+                return [['python']]
+            if node.attr in ('parent', 'parents'):
+                return [[PATH]]
+        if isinstance(node, ast.Subscript) and isinstance(node.value, ast.Attribute) and node.value.attr == 'parents':
+            return [[PATH]]
+        if isinstance(node, ast.Call):
+            function = self.qualified(node.func)
+            if function & {'builtins.str', 'os.fspath', 'pathlib.Path', 'os.path.abspath', 'os.path.realpath', 'os.path.normpath'} and len(node.args) == 1:
+                return self.resolve(node.args[0], depth + 1, seen)
+            if function == {'pathlib.Path'} and not node.args:
+                return [[PATH]]
+            if function == {'os.path.join'}:
+                out = as_path(self.resolve(node.args[0], depth + 1, seen)) if node.args else [[HOLE]]
+                for part in node.args[1:]:
+                    out = concat(concat(out, [['\\']]), self.resolve(part, depth + 1, seen))
+                return out
+            if isinstance(node.func, ast.Attribute) and node.func.attr in ('resolve', 'absolute') and not node.args:
+                return as_path(self.resolve(node.func.value, depth + 1, seen))
+            if isinstance(node.func, ast.Attribute) and node.func.attr in ('with_name', 'joinpath') and node.args:
+                head = [[PATH]] if node.func.attr == 'with_name' else as_path(self.resolve(node.func.value, depth + 1, seen))
+                return concat(concat(head, [['\\']]), self.resolve(node.args[-1], depth + 1, seen))
+            if function & {'tempfile.gettempdir', 'tempfile.mkdtemp', 'os.getcwd'}:
+                return [[PATH]]
+        return [[HOLE]]
+
+    def arguments(self, node):
+        args = [{'i': index, 'value': self.constant(value)} for index, value in enumerate(node.args) if not isinstance(value, ast.Starred)]
+        args += [{'name': keyword.arg, 'value': self.constant(keyword.value)} for keyword in node.keywords if keyword.arg]
+        if any(isinstance(value, ast.Starred) for value in node.args) or any(keyword.arg is None for keyword in node.keywords):
+            args.append({'splat': True})
+        return [a if a.get('value') != {'unknown': True} else {k: v for k, v in a.items() if k != 'value'} for a in args]
+
+    @staticmethod
+    def constant(node):
+        return node.value if isinstance(node, ast.Constant) and isinstance(node.value, (str, bool, int, float, type(None))) else {'unknown': True}
+
+    def read(self):
+        skipped = set()
+        for node in ast.walk(self.tree):
+            if isinstance(node, ast.Attribute):
+                skipped.add(id(node.value))
+            if not isinstance(node, ast.Call):
                 continue
-            if row.get('where') == 'command' and not (COMMAND.search(text[begin:match.start()]) and text[match.end():match.end() + 1] in (' ', '\t', ',')):
-                continue
-            tail = statement(text, match.end(), nested=False)
-            if 'switch' in row and row['switch'] not in re.findall(r'[/-]([a-z]+)', tail) and not re.search(r'@\w', tail):
-                continue
-            if 'parameter' in row:
-                parameter = row['parameter'].lower()
-                prefixes = '|'.join(re.escape(parameter[:size]) for size in range(1, len(parameter) + 1))
-                if not re.search(r'(?<![\w-])-(?:' + prefixes + r')(?![\w-])|@\w', statement(text, match.end())):
+            skipped.add(id(node.func))
+            names = self.qualified(node.func)
+            if None in names and not self.traced(node.func):
+                self.add(node, 'unreadable', 'this calls a value the check cannot trace to a function it can classify')
+            for name in names - {None, '<repo>'}:
+                if name in self.LAUNCHERS:
+                    self.launch(node, name)
+                elif name in ('shutil.copy', 'shutil.copyfile', 'shutil.copy2') and len(node.args) >= 2:
+                    for target in self.resolve(node.args[1]):
+                        for source in self.resolve(node.args[0]):
+                            if program_of(target):
+                                self.add(node, 'copy', program_of(target), None, **{'from': program_of(source)})
+                    self.add(node, 'call', name, self.arguments(node))
+                elif name in ('runpy.run_path', 'importlib.util.spec_from_file_location'):
+                    where = 0 if name == 'runpy.run_path' else 1
+                    if not self.repo_path(node.args[where] if len(node.args) > where else None):
+                        self.add(node, 'unreadable', 'this loads Python code from a path the check cannot find in the repo')
+                elif name == 'builtins.getattr' and len(node.args) >= 2:
+                    if isinstance(node.args[1], ast.Constant) and isinstance(node.args[1].value, str):
+                        for member in self.qualified(ast.Attribute(value=node.args[0], attr=node.args[1].value, ctx=ast.Load())) - {None, '<repo>'}:
+                            if not member.startswith('.'):
+                                self.add(node, 'call', member, None, reference=True)
+                    else:
+                        self.add(node, 'unreadable', 'getattr with a computed name reads a member the check cannot name')
+                else:
+                    self.add(node, 'native' if '!' in name else 'method' if name.startswith('.') else 'call', name, self.arguments(node))
+        for node in ast.walk(self.tree):
+            if isinstance(node, (ast.Name, ast.Attribute)) and id(node) not in skipped and isinstance(node.ctx, ast.Load):
+                if isinstance(node, ast.Name) and all(b[0] == 'module' for b in self.lookup(node.id, node) or [('none',)]):
                     continue
-            yield match.start()
+                for name in self.qualified(node) - {None, '<repo>'}:
+                    if not name.startswith('.') and not (isinstance(node, ast.Name) and name.startswith('builtins.') and not hasattr(builtins, node.id)):
+                        self.add(node, 'native' if '!' in name else 'call', name, None, reference=True)
+
+    def launch(self, node, name):
+        first = node.args[0] if node.args else next((k.value for k in node.keywords if k.arg in ('args', 'command')), None)
+        shell = name == 'os.system' or any(k.arg == 'shell' and not (isinstance(k.value, ast.Constant) and k.value.value is False) for k in node.keywords)
+        executable = next((k.value for k in node.keywords if k.arg == 'executable'), None)
+        if any(k.arg is None for k in node.keywords) or any(isinstance(a, ast.Starred) for a in node.args):
+            self.add(node, 'unreadable', 'arguments passed with * or ** hide the program this starts')
+            return
+        candidates = [first]
+        if isinstance(first, ast.Name):
+            bindings = self.lookup(first.id, first) or []
+            if bindings and all(b[0] == 'value' for b in bindings):
+                candidates = [b[1] for b in bindings]
+        for value in candidates:
+            if isinstance(value, (ast.List, ast.Tuple)):
+                if any(isinstance(e, ast.Starred) for e in value.elts):
+                    self.add(node, 'unreadable', 'a starred program list hides what this starts')
+                    continue
+                pieces = [t[0] if len(t) == 1 else [HOLE] for t in (self.resolve(e) for e in value.elts)]
+                if shell:
+                    known = all(isinstance(token_of(p), str) for p in pieces)
+                    self.command(node, ['cmd'], ['/c'] if known else ['/c', None], ' '.join(''.join(p) for p in pieces) if known else None)
+                else:
+                    self.command(node, self.resolve(executable)[0] if executable else (pieces[0] if pieces else [HOLE]), [token_of(p) for p in pieces[1:]], None)
+            else:
+                for text in self.resolve(value):
+                    if shell:
+                        known = all(p not in MARKERS for p in text)
+                        self.command(node, ['cmd'], ['/c'] if known else ['/c', None], ''.join(text) if known else None)
+                    else:
+                        split = split_command_line(text)
+                        self.command(node, self.resolve(executable)[0] if executable else (split[0] if split else [HOLE]), [token_of(t) for t in split[1:]], None)
+
+    def command(self, node, program, tokens, raw):
+        name = program_of(program)
+        if name is None:
+            self.add(node, 'unreadable', 'the program this starts is built from values the check cannot read')
+        else:
+            self.add(node, 'command', name, tokens, raw=raw)
 
 
-def findings(relative, raw, rules=None):
-    exempt = HELPERS.get(relative, set())
-    shell = extension(relative) in SHELLS
-    text, origin = clean(raw)
-    found = {}
-    for row, patterns in rules or RULES:
-        if row['category'] in exempt:
-            continue
-        for start in named(row, patterns, text, shell):
-            found.setdefault(origin[start], row['category'] + ' name ' + row['name'])
-    lines = raw.splitlines()
-    return [(number, lines[number - 1].strip(), message) for number, message in sorted(found.items())]
+def git(root, *arguments):
+    return subprocess.check_output(['git', *arguments], cwd=root).decode('utf-8')
 
 
-def check(root, rows=None):
-    root = Path(root)
-    rules = compile_rows(rows) if rows is not None else RULES
+def read_powershell(root, files, texts, definitions=()):
+    with tempfile.TemporaryDirectory() as folder:
+        request = Path(folder, 'request.json')
+        request.write_text(json.dumps({'root': str(root), 'files': files, 'texts': texts, 'definitions': list(definitions),
+                                       'passthrough': list(CLASSES['powershell path functions']), 'joiners': list(CLASSES['powershell argument joiners'])}), encoding='utf-8')
+        output = subprocess.run(['pwsh', '-NoProfile', '-NonInteractive', '-File', str(HERE / 'read_powershell.ps1'), str(request)], capture_output=True, text=True, encoding='utf-8')
+    if output.returncode:
+        raise SystemExit('The PowerShell reader failed: ' + output.stdout + output.stderr)
+    return json.loads(output.stdout)
+
+
+def compiler_arguments(root, project, properties):
+    output = subprocess.run(['dotnet', 'msbuild', project, '-restore', '-t:Compile', '-nologo', '-p:Configuration=Release', '-p:EnableWindowsTargeting=true',
+                             '-p:SkipCompilerExecution=true', '-p:ProvideCommandLineArgs=true', '-p:NonExistentFile=__reader_missing__', '-p:BuildProjectReferences=false', '-getItem:CscCommandLineArgs', *properties],
+                            cwd=root, capture_output=True, text=True)
+    if output.returncode:
+        return None, output.stdout + output.stderr
+    return [item['Identity'] for item in json.loads(output.stdout)['Items']['CscCommandLineArgs']], None
+
+
+def read_csharp(root, paths, sources, snippets):
+    facts, units, compiled = [], [], set()
+    with tempfile.TemporaryDirectory() as folder:
+        stand_in = Path(folder, 'binding.cs')
+        stand_in.write_text('', encoding='utf-8')
+        template, _ = compiler_arguments(HERE.parents[1], 'tools/validation/OptimizerCore/OptimizerCore.csproj', [])
+        for project in sorted(p for p in paths if p.endswith('.csproj')):
+            if not project.startswith(SCOPE + PRODUCT):
+                continue
+            arguments, error = compiler_arguments(root, project, [f'-p:RooIndustriesBindingFile={stand_in}'])
+            if arguments is None:
+                facts.append(fact(project, 1, '', 'unreadable', 'MSBuild cannot give the compiler arguments for this project: ' + error[-400:]))
+                continue
+            directory = (root / project).parent
+            files = {str((directory / a).resolve()) for a in arguments if not a.startswith('/')}
+            report = {path: {'file': Path(path).relative_to(root).as_posix(), 'offset': 0} for path in files
+                      if Path(path).is_relative_to(root) and Path(path).relative_to(root).as_posix() in sources and Path(path).relative_to(root).as_posix() not in compiled}
+            compiled |= {item['file'] for item in report.values()}
+            units.append({'args': arguments, 'dir': str(directory), 'report': report})
+        loose = [s for s in sources if s not in compiled]
+        for index, item in enumerate([{'file': s, 'line': 1, 'source': None} for s in loose] + snippets):
+            path = str(root / item['file']) if item['source'] is None else str(Path(folder, f'snippet{index}.cs'))
+            if item['source'] is not None:
+                Path(path).write_text(item['source'], encoding='utf-8')
+            options = [a for a in template if a.startswith('/') and not a.startswith(('/target:', '/out:', '/refout:', '/embed', '/doc', '/sourcelink', '/warnaserror', '/nullable', '/analyzer'))]
+            usings = [str((HERE / 'OptimizerCore' / a).resolve()) for a in template if a.endswith('GlobalUsings.g.cs')]
+            units.append({'args': options + ['/target:library', path, *usings], 'dir': str(HERE / 'OptimizerCore'), 'report': {path: {'file': item['file'], 'offset': item['line'] - 1}},
+                          'framework': [a for a in options if not a.startswith(('/reference', '/define', '/langversion'))] + ['/target:library', '/unsafe+', path]})
+        request = Path(folder, 'request.json')
+        request.write_text(json.dumps({'root': str(root), 'units': units}), encoding='utf-8')
+        output = subprocess.run(['dotnet', 'run', '--project', str(HERE / 'CallReader'), '-c', 'Release', '--', str(request)], capture_output=True, text=True, encoding='utf-8')
+    if output.returncode:
+        raise SystemExit('The C# reader failed: ' + output.stdout + output.stderr)
+    found = json.loads(output.stdout)
+    texts = {}
+    for item in found:
+        if item['file'] not in texts:
+            texts[item['file']] = lines_of((root / item['file']).read_bytes().decode('utf-8-sig', 'replace'))
+        lines = texts[item['file']]
+        item['text'] = lines[item['line'] - 1] if item['line'] <= len(lines) else ''
+    return facts + found
+
+
+def cmd_facts(relative, line, text, source):
+    out = []
+    if re.search(r'[%^!`\r\n]', source):
+        return [fact(relative, line, text, 'unreadable', 'cmd expands %, ! or ^ or breaks at a new line in this command line, so the check cannot read it')]
+    for part in re.split(r'&&|\|\||[&|]', source):
+        words = [w for w in split_command_line([re.sub(r'\d?>>?\s*\S+|<\s*\S+', ' ', part)]) if w]
+        if words and not ''.join(words[0]).startswith(':'):
+            out.append(fact(relative, line, text, 'command', ''.join(words[0]).lower(), [token_of(w) for w in words[1:]], shell='cmd', language='cmd'))
+    return out
+
+
+def bash_facts(relative, text, offset=0, lines=None):
+    shfmt = os.environ.get('SHFMT', 'shfmt')
+    output = subprocess.run([shfmt, '--to-json', '--filename', relative], input=text, capture_output=True, text=True, encoding='utf-8')
+    if output.returncode:
+        return [fact(relative, 1 + offset, '', 'unreadable', 'bash cannot read this: ' + output.stderr.strip()[:200])]
+    tree = json.loads(output.stdout)
+    lines = lines or lines_of(text)
+    functions, calls = set(), []
+    pending = [tree]
+    while pending:
+        node = pending.pop()
+        if isinstance(node, list):
+            pending += node
+        elif isinstance(node, dict):
+            if node.get('Type') == 'FuncDecl':
+                functions.add(node['Name'].get('Value', ''))
+            if node.get('Type') == 'CallExpr' and node.get('Args'):
+                calls.append(node)
+            pending += [v for k, v in node.items() if k not in ('Pos', 'End')]
+
+    def pieces(word):
+        out = [[]]
+        for part in word.get('Parts', []):
+            kind = part.get('Type')
+            value = [[part.get('Value', '')]] if kind in ('Lit', 'SglQuoted') else pieces(part) if kind == 'DblQuoted' else [[HOLE]]
+            out = concat(out, value)
+        return out[0] if len(out) == 1 else [HOLE]
+
+    facts = []
+    for call in calls:
+        line = call['Pos']['Line'] + offset
+        words = [pieces(word) for word in call['Args']]
+        program = program_of(words[0]) if words[0] and all(p not in (HOLE, PATH) for p in words[0]) else None
+        source = lines[line - 1] if line <= len(lines) else ''
+        if program is None:
+            facts.append(fact(relative, line, source, 'unreadable', 'bash runs a command built from values the check cannot read'))
+        elif program not in functions:
+            facts.append(fact(relative, line, source, 'command', program, [token_of(w) for w in words[1:]], shell='bash', language='bash'))
+    return facts
+
+
+def msbuild_facts(relative, data):
+    facts, stack = [], []
+    lines = lines_of(data.decode('utf-8-sig', 'replace'))
+    parser = xml.parsers.expat.ParserCreate()
+
+    def start(name, attributes):
+        line = parser.CurrentLineNumber
+        source = lines[line - 1] if line <= len(lines) else ''
+        if name == 'UsingTask':
+            facts.append(fact(relative, line, source, 'unreadable', 'an MSBuild task defined here runs code the check cannot read'))
+        elif name == 'Import' or (name == 'Project' and 'Sdk' in attributes and not re.fullmatch(r'Microsoft\.NET\.Sdk(\.\w+)*', attributes['Sdk'])):
+            facts.append(fact(relative, line, source, 'call', 'msbuild:import', None))
+        elif stack and stack[-1] == 'Target' and name not in ('PropertyGroup', 'ItemGroup', 'OnError'):
+            if name == 'Exec':
+                facts.extend(cmd_facts(relative, line, source, attributes.get('Command', '')))
+            else:
+                facts.append(fact(relative, line, source, 'call', 'msbuild:' + name, None))
+        for value in attributes.values():
+            for match in re.finditer(r'\$\(\[([\w.]+)\]::(\w+)', value):
+                facts.append(fact(relative, line, source, 'call', match.group(1) + '.' + match.group(2), None))
+        stack.append(name)
+
+    def text(content):
+        for match in re.finditer(r'\$\(\[([\w.]+)\]::(\w+)', content):
+            line = parser.CurrentLineNumber
+            facts.append(fact(relative, line, lines[line - 1] if line <= len(lines) else '', 'call', match.group(1) + '.' + match.group(2), None))
+
+    parser.StartElementHandler = start
+    parser.EndElementHandler = lambda name: stack.pop()
+    parser.CharacterDataHandler = text
+    try:
+        parser.Parse(data, True)
+    except xml.parsers.expat.ExpatError as error:
+        return [fact(relative, error.lineno, '', 'unreadable', f'MSBuild cannot read this project: {error}')]
+    return facts
+
+
+def workflow_facts(relative, data, texts):
+    source = data.decode('utf-8')
+    lines = lines_of(source)
+    try:
+        document = yaml.compose(source)
+    except yaml.YAMLError as error:
+        return [fact(relative, 1, '', 'unreadable', f'YAML cannot read this workflow: {error}')]
+    facts = []
+    mapping = lambda node: {k.value: v for k, v in node.value} if isinstance(node, yaml.MappingNode) else {}
+    for job in mapping(mapping(document).get('jobs')).values():
+        fields = mapping(job)
+        runner = fields['runs-on'].value if isinstance(fields.get('runs-on'), yaml.ScalarNode) else ''
+        default = mapping(mapping(mapping(fields.get('defaults')).get('run'))).get('shell')
+        for step in fields.get('steps').value if isinstance(fields.get('steps'), yaml.SequenceNode) else []:
+            step = mapping(step)
+            if 'uses' in step:
+                line = step['uses'].start_mark.line + 1
+                facts.append(fact(relative, line, lines[line - 1], 'call', 'action:' + step['uses'].value.split('@')[0], None))
+            if 'run' not in step:
+                continue
+            node = step['run']
+            offset = node.start_mark.line + (1 if node.style in ('|', '>') else 0)
+            shell = (step.get('shell') or default).value if (step.get('shell') or default) else ('pwsh' if 'windows' in runner else 'bash')
+            text = re.sub(r'\$\{\{.*?\}\}', '$GITHUB_EXPRESSION', node.value)
+            if shell == 'bash':
+                facts += tagged(bash_facts(relative, text, offset, lines), 'bash')
+            elif shell in ('pwsh', 'powershell'):
+                texts.append({'file': relative, 'line': offset + 1, 'source': text})
+            elif shell == 'python':
+                facts += [dict(f, line=f['line'] + offset, text=lines[f['line'] + offset - 1]) for f in tagged(PythonReader(relative, text.encode('utf-8')).facts, 'python')]
+            else:
+                facts.append(fact(relative, offset + 1, lines[offset], 'unreadable', f'the check has no reader for the {shell} shell'))
+    return facts
+
+
+class Classifier:
+    def __init__(self, root, paths, defined, types):
+        functions = {name.lower() for names in defined['functions'].values() for name in names}
+        self.aliases = {file: {name.lower() for name in names} for file, names in defined['aliases'].items()}
+        self.everywhere = functions - set().union(*self.aliases.values())
+        self.types = {name.lower() for name in types}
+        self.paths = [p.lower() for p in paths]
+        self.copies = {}
+        self.repo = {Path(p).name.lower() for p in paths if p.lower().endswith(('.ps1', '.psm1', '.py', '.cmd', '.bat', '.sh'))}
+        for project in (p for p in paths if p.endswith('.csproj')):
+            names = re.findall(r'<AssemblyName>([^<]+)</AssemblyName>', (root / project).read_text(encoding='utf-8-sig')) or [Path(project).stem]
+            self.repo |= {n.lower() + suffix for n in names for suffix in ('.exe', '.dll')}
+        self.texts = []
+
+    @staticmethod
+    def lookup(section, name):
+        table = CLASSES.get(section, {})
+        name = name[:-6] if name.endswith('..ctor') and name not in table else name
+        while name:
+            if name in table:
+                return table[name]
+            name = name.rsplit('.', 1)[0] if '.' in name.strip('.') else ''
+        return None
+
+    @staticmethod
+    def holds(condition, args, tokens):
+        if 'without' in condition:
+            return args is not None and not any('splat' in a or 'param' in a and any(w.lower().startswith(a['param'].lower()) for w in condition['without']) for a in args)
+        if 'no switch' in condition:
+            listed = {w.lower() for w in condition['no switch']}
+            tokens = tokens[:tokens.index('--')] if tokens and '--' in tokens else tokens
+            return tokens is not None and all(isinstance(t, dict) and ('path' in t or t.get('prefix', '/')[:1] not in '/-') or isinstance(t, str) and t.lower() not in listed for t in tokens)
+        if 'first' in condition:
+            rest = list(tokens or [])
+            while len(rest) > 1 and isinstance(rest[0], str) and rest[0] in condition.get('skip', []):
+                rest = rest[2:]
+            return bool(rest) and isinstance(rest[0], str) and rest[0].lower() in condition['first']
+        if 'lacks' in condition:
+            found = [a for a in args or [] if a.get('i') == condition['arg']]
+            return bool(found) and isinstance(found[0].get('value'), str) and condition['lacks'] not in found[0]['value']
+        if args is None or any('splat' in a for a in args):
+            return False
+        if 'blocks' in condition:
+            return all('block' in a or 'param' in a and a['param'].lower() not in ('membername', 'filepath', 'file') for a in args)
+        if 'param' in condition:
+            for index, a in enumerate(args):
+                if 'param' in a and any(n.lower().startswith(a['param'].lower()) for n in condition['param']):
+                    value = a.get('value') if 'value' in a else args[index + 1].get('pieces') if index + 1 < len(args) else None
+                    return isinstance(value, str) and value.lower() in condition['in']
+            return condition.get('absent', False)
+        found = [a for a in args if a.get('i') == condition['arg'] or a.get('name') == condition['arg']]
+        if not found:
+            return condition.get('absent', False)
+        if 'types' in condition:
+            return found[0].get('type') in condition['types']
+        if 'type' in condition and found[0].get('type') not in (None, condition['type']):
+            return True
+        return 'value' in found[0] and found[0]['value'] in condition['in']
+
+    def verdict(self, entry, args=None, tokens=None):
+        if isinstance(entry, str) or 'safe' in entry and all(self.holds(c, args, tokens) for c in entry['safe']):
+            return None
+        return entry['does']
+
+    def tokens(self, item):
+        if 'operator' not in item:
+            return item['args'] or []
+        out = []
+        for element in item['args'] or []:
+            if 'param' in element:
+                out.append('-' + element['param'] + (':' + element['value'] if isinstance(element.get('value'), str) and '\0' not in element['value'] else ''))
+            elif 'pieces' in element:
+                out.append(token_of(pieces_of(element['pieces'])))
+            elif 'many' in element:
+                out += [token_of(pieces_of(m)) for m in element['many']]
+            elif 'line' in element:
+                out += [token_of(t) for t in split_command_line(pieces_of(element['line']))]
+            else:
+                out.append(None)
+        return out
+
+    def repo_script(self, pieces):
+        while pieces and pieces[0] in (HOLE, PATH):
+            pieces = pieces[1:]
+        if not pieces or pieces[0] in MARKERS or pieces[-1] in MARKERS or not re.search(r'\.(ps1|psm1)$', pieces[-1].lower()):
+            return False
+        pattern = ''.join('*' if p in (HOLE, PATH) else p for p in pieces).replace('\\', '/').strip('/').lower()
+        return '/' in pattern.split('*')[0] and any(fnmatch.fnmatchcase(path, pattern) or fnmatch.fnmatchcase(path, '*/' + pattern) for path in self.paths)
+
+    def learn(self, facts):
+        for item in facts:
+            if item['kind'] == 'copy':
+                self.copies.setdefault(item['name'].lower(), set()).add((item.get('from') or '?').lower())
+            elif item['kind'] == 'command' and 'operator' in item and (item['name'] or '').lower() == 'copy-item':
+                args = item['args'] or []
+                values = lambda element: [program_of(pieces_of(v)) for v in element.get('values') or [element.get('pieces', HOLE)]]
+                named = {}
+                positional = []
+                for index, element in enumerate(args):
+                    if 'param' in element:
+                        if index + 1 < len(args) and 'param' not in args[index + 1]:
+                            named[element['param'].lower()] = args[index + 1]
+                    elif not (index and 'param' in args[index - 1] and args[index - 1]['param'].lower() in named):
+                        positional.append(element)
+                source = named.get('literalpath') or named.get('path') or (positional[0] if positional else None)
+                target = named.get('destination') or (positional[1] if len(positional) > 1 else None)
+                if source and target:
+                    for made in values(target):
+                        if made:
+                            for origin in values(source):
+                                self.copies.setdefault(made.lower(), set()).add((origin or '?').lower())
+        for item in facts:
+            if item['kind'] == 'command' and self.compiler(item):
+                for token in self.tokens(item):
+                    text = token if isinstance(token, str) else (token or {}).get('prefix', '')
+                    if text.lower().startswith('/out:'):
+                        made = Path(text[5:].replace('\\', '/')).name if isinstance(token, str) else token.get('name')
+                        if made:
+                            self.copies.setdefault(made.lower(), set()).add('<compiled>')
+
+    def compiler(self, item):
+        if 'operator' in item and not item['name']:
+            name = program_of(pieces_of(item['pieces'])) or ''
+        else:
+            name = item['name'] or ''
+        return Path(name.replace('\\', '/')).name.lower() in ('csc.exe', 'csc')
+
+    def program(self, item, name, tokens, seen=frozenset()):
+        name = name.lower()
+        if name in ('<self>', '<compiled>') or name in self.repo:
+            return None
+        origins = self.copies.get(name, set()) - {name} if name not in seen else set()
+        for origin in sorted(origins):
+            message = self.program(item, origin, tokens, seen | {name})
+            if message:
+                return f'{name} is a copy of {origin}: {message}'
+        bare = re.sub(r'\.(exe|com)$', '', name)
+        entry = CLASSES['programs'].get(bare)
+        if entry is None:
+            return None if origins else f'this starts {name}, a program the check has not classified'
+        if isinstance(entry, dict) and 'reads' in entry:
+            return self.launched(item, entry['reads'], tokens)
+        message = self.verdict(entry, None, tokens)
+        return message and f'this starts {name}, which {message}'
+
+    def launched(self, item, shell, tokens):
+        words = list(tokens)
+        if shell == 'cmd':
+            switch = next((i for i, t in enumerate(words) if isinstance(t, str) and t.lower() in ('/c', '/k')), None)
+            raw = item.get('raw')
+            if 'raw' in item and raw is None and switch is not None and switch + 1 == len(words):
+                return 'this hands cmd a command line the check cannot read'
+            if raw is not None and switch is not None:
+                text = re.split(r'(?i)\s/[ck]\s', ' ' + raw, maxsplit=1)[-1]
+            elif switch is not None and all(isinstance(t, str) for t in words[switch + 1:]):
+                text = ' '.join(words[switch + 1:])
+            else:
+                return 'this hands cmd a command line the check cannot read'
+            self.texts.append(('cmd', item, text))
+            return None
+        if shell == 'powershell':
+            index = 0
+            while index < len(words):
+                word = words[index]
+                if not isinstance(word, str):
+                    return 'this hands PowerShell arguments the check cannot read'
+                option = word.lower()
+                if option in ('-file', '-f'):
+                    target = words[index + 1] if index + 1 < len(words) else None
+                    named = target if isinstance(target, str) else (target or {}).get('name') or ''
+                    return None if Path(named.replace('\\', '/')).name.lower() in self.repo else 'this hands PowerShell a script file the check cannot find in the repo'
+                if option in ('-e', '-ec', '-en', '-enc', '-encodedcommand'):
+                    return 'this hands PowerShell encoded script text the check cannot read'
+                if option in ('-executionpolicy', '-ex', '-ep', '-windowstyle', '-w', '-outputformat', '-o', '-inputformat', '-if', '-configurationname', '-psconsolefile', '-version', '-workingdirectory', '-wd'):
+                    index += 2
+                    continue
+                if option.startswith('-') and option not in ('-command', '-c'):
+                    index += 1
+                    continue
+                rest = words[index + 1:] if option in ('-command', '-c') else words[index:]
+                if not all(isinstance(t, str) for t in rest):
+                    return 'this hands PowerShell script text the check cannot read'
+                self.texts.append(('powershell', item, ' '.join(rest)))
+                return None
+            return 'this starts PowerShell with no -Command or -File, so it reads a script from input the check cannot read'
+        if shell == 'bash':
+            if len(words) > 1 and words[0] == '-c' and isinstance(words[1], str):
+                self.texts.append(('bash', item, words[1]))
+                return None
+            target = words[0] if words else None
+            named = target if isinstance(target, str) else (target or {}).get('name') or ''
+            return None if Path(named.replace('\\', '/')).name.lower() in self.repo else 'this hands bash a script the check cannot find in the repo'
+        if shell == 'program':
+            rest = [t for t in words if not (isinstance(t, str) and t.startswith(('-', '/')))]
+            if not rest or not isinstance(rest[0], str):
+                return 'this starts a program the check cannot read'
+            split = split_command_line([rest[0]]) if ' ' in rest[0] and len(rest) == 1 else [[rest[0]]] + [[t] if isinstance(t, str) else [HOLE] for t in rest[1:]]
+            return self.program(item, Path(''.join(split[0]).replace('\\', '/')).name, [token_of(t) for t in split[1:]])
+        if shell == 'python':
+            rest = [w for w in words if not (isinstance(w, str) and w in ('-I', '-u', '-B', '-E', '-s', '-S', '-O', '-X', 'utf8'))]
+            if rest and rest[0] == '-c' and len(rest) > 1 and isinstance(rest[1], str):
+                self.texts.append(('python', item, rest[1]))
+                return None
+            if len(rest) > 1 and rest[0] == '-m' and isinstance(rest[1], str):
+                entry = CLASSES['python'].get('-m ' + rest[1])
+                return None if isinstance(entry, str) else f'this runs the Python module {rest[1]}, which the check has not classified'
+            if rest and isinstance(rest[0], str) and Path(rest[0].replace('\\', '/')).name.lower() in self.repo:
+                return None
+            if rest and isinstance(rest[0], dict) and Path((rest[0].get('name') or '').replace('\\', '/')).name.lower() in self.repo:
+                return None
+            return 'this hands Python a script the check cannot find in the repo'
+        return f'this hands {shell} text the check cannot read'
+
+    def classify(self, item):
+        kind, name = item['kind'], item['name']
+        language = item.get('language', '')
+        if kind == 'unreadable':
+            return name
+        if kind == 'call' and language == 'powershell' and re.sub(r'\.(\.ctor|[^.]+)$', '', name).lower() in self.types:
+            return None
+        if kind in ('call', 'native', 'method'):
+            section = 'native' if kind == 'native' else 'com' if name.startswith('com:') else 'workflow' if name.startswith(('action:', 'msbuild:')) else f'{language} methods' if kind == 'method' or name.startswith('.') else 'python' if language == 'python' else 'dotnet'
+            entry = self.lookup(section, name if kind != 'native' else name.lower()) if not name.startswith('.') else CLASSES.get(section, {}).get(name)
+            if entry is None and section == 'dotnet' and not name.startswith('System.'):
+                entry = self.lookup(section, 'System.' + name)
+            if entry is None:
+                return f'this calls {name}, which the check has not classified'
+            message = self.verdict(entry, item['args'])
+            return message and f'this calls {name}, which {message}'
+        if kind == 'command':
+            tokens = self.tokens(item)
+            if language in ('cmd', 'bash'):
+                entry = CLASSES[language].get(name)
+                if entry is not None:
+                    if isinstance(entry, dict) and entry.get('reads') == 'cmd':
+                        rest = [t for t in tokens if isinstance(t, str)]
+                        if len(rest) != len(tokens):
+                            return f'{language} {name} runs a command line the check cannot read'
+                        self.texts.append(('cmd', item, ' '.join(rest)))
+                        return None
+                    if isinstance(entry, dict) and 'reads' in entry:
+                        return self.launched(item, entry['reads'], tokens)
+                    message = self.verdict(entry, None, tokens)
+                    return message and f'{language} {name} {message}'
+                return self.program(item, name, tokens)
+            if language == 'powershell':
+                if not name:
+                    pieces = pieces_of(item['pieces'])
+                    program = program_of(pieces)
+                    if program is None and self.repo_script(pieces):
+                        return None
+                    if program is None:
+                        return 'this runs a command built from values the check cannot read'
+                    if len(pieces) > 1 or re.search(r'[\\/.]', program):
+                        return self.program(item, program, tokens)
+                    name = program
+                prefix, _, rest = name.rpartition('\\')
+                if prefix and re.fullmatch(r'[A-Za-z][\w.]*', prefix):
+                    name = rest
+                elif prefix or '/' in name or re.search(r'\.\w+$', name):
+                    return self.program(item, Path(name.replace('\\', '/')).name, tokens)
+                if name.lower() in self.everywhere and '*' not in self.aliases.get(item['file'], set()):
+                    return None
+                entry = CLASSES['powershell'].get(name.lower())
+                if entry is None:
+                    return self.program(item, name, tokens)
+                message = self.verdict(entry, item['args'], tokens)
+                return message and f'{name} {message}'
+            return self.program(item, name, tokens)
+        return f'the check does not know the kind {kind}'
+
+
+def check(root):
+    root = Path(root).resolve()
     failures = []
     if (root / '.git').exists():
-        paths = subprocess.check_output(['git', 'ls-files', '-z'], cwd=root).decode().split('\0')
-        staged = subprocess.check_output(['git', 'ls-files', '-s', '-z'], cwd=root).decode().split('\0')
+        staged = git(root, 'ls-files', '-s', '-z').split('\0')
         failures += [f'{row.split(chr(9))[1]}: a tracked link lets a copy of the repo reach outside it' for row in staged if row.startswith('120000 ')]
+        paths = sorted(row.split('\t', 1)[1] for row in staged if row and not row.startswith('120000 '))
     else:
-        paths = [p.relative_to(root).as_posix() for p in local_tree(root) if p.is_file() and not {'bin', 'obj', '.git'}.intersection(p.parts)]
-    allowed = []
-    manifest = root / ALLOWLIST
-    if manifest.exists():
-        for entry in json.loads(manifest.read_text(encoding='utf-8-sig')):
-            if not str(entry.get('reason', '')).strip():
-                failures.append(f'{ALLOWLIST}: {entry.get("file")} {entry.get("line")!r} needs the reason its root or target stays inside a fixture')
-            allowed.append(entry)
-    used = set()
-    for relative in sorted(path for path in paths if path):
-        if {'bin', 'obj'}.intersection(relative.split('/')) or not (root / relative).is_file():
+        entries = [p for p in local_tree(root) if p.is_symlink() or p.is_file()]
+        failures += [f'{p.relative_to(root).as_posix()}: a link lets a copy of the repo reach outside it' for p in entries if p.is_symlink()]
+        paths = sorted(p.relative_to(root).as_posix() for p in entries if not p.is_symlink())
+    facts, powershell, csharp = [], [], []
+    PythonReader.repo_modules = {Path(p).stem for p in paths if p.endswith('.py') and p.startswith(SCOPE)}
+    texts = []
+    for relative in paths:
+        if relative.startswith('.github/workflows/') and relative.endswith(('.yml', '.yaml')):
+            facts += workflow_facts(relative, (root / relative).read_bytes(), texts)
             continue
-        if relative in DATA_FILES or extension(relative) in DATA:
+        if relative.startswith('.github/') and relative.endswith('.sh'):
+            facts += tagged(bash_facts(relative, (root / relative).read_bytes().decode('utf-8')), 'bash')
             continue
-        if extension(relative) not in SCANNED:
-            failures.append(f'{relative}: its file type is neither scanned nor listed as data in reparse-walk-names.json')
+        if not relative.startswith(SCOPE + PRODUCT) or relative in HELPERS:
             continue
-        try:
-            raw = decode((root / relative).read_bytes())
-        except (ValueError, UnicodeDecodeError) as error:
-            failures.append(f'{relative}: it cannot be scanned because {error}')
+        extension = relative.rsplit('.', 1)[-1].lower() if '.' in relative.rsplit('/', 1)[-1] else ''
+        data = (root / relative).read_bytes()
+        if relative.startswith(PRODUCT):
+            if extension == 'cs':
+                csharp.append(relative)
             continue
-        for number, line, message in findings(relative, raw, rules):
-            match = next((i for i, e in enumerate(allowed) if i not in used and e.get('file') == relative and e.get('line') == line), None)
-            if match is None:
-                failures.append(f'{relative}:{number}: this names a {message}: {line[:160]}; use LocalTree.Entries, local_tree, '
-                                f'TestFixtures.Junction or TestFixtures.Symlink, or list why it stays inside a fixture in {ALLOWLIST}')
+        if extension == 'py':
+            facts += tagged(PythonReader(relative, data).facts, 'python')
+        elif extension in ('ps1', 'psm1', 'psd1'):
+            powershell.append(relative)
+        elif extension == 'cs':
+            csharp.append(relative)
+        elif extension == 'sh':
+            facts += tagged(bash_facts(relative, data.decode('utf-8')), 'bash')
+        elif extension in ('csproj', 'props', 'targets'):
+            facts += tagged(msbuild_facts(relative, data), 'msbuild')
+        elif extension in ('cmd', 'bat'):
+            try:
+                source = data.decode('ascii')
+            except UnicodeDecodeError:
+                facts.append(fact(relative, 1, '', 'unreadable', 'cmd reads this file in the console code page, so only ASCII is readable'))
+                continue
+            for number, line in enumerate(lines_of(source), 1):
+                stripped = line.strip()
+                if stripped and not re.match(r'(?i)(@?echo off|@?rem\b|::|:\w+$)', stripped):
+                    facts += cmd_facts(relative, number, line, stripped.lstrip('@'))
+        elif extension not in CLASSES['data']:
+            failures.append(f'{relative}: no reader reads this file type, so the check cannot see what it runs')
+    read = read_powershell(root, powershell, texts, [p for p in paths if p.lower().endswith(('.ps1', '.psm1')) and p not in powershell])
+    found = tagged(read['facts'], 'powershell')
+    snippets = [f for f in found if f['kind'] == 'csharp']
+    facts += [f for f in found if f['kind'] != 'csharp']
+    facts += tagged(read_csharp(root, paths, set(csharp), [{'file': s['file'], 'line': s['line'], 'source': s['name']} for s in snippets]), 'csharp')
+    workflow_lines = {}
+    for item in facts:
+        if item['file'].startswith('.github/workflows/'):
+            lines = workflow_lines.setdefault(item['file'], lines_of((root / item['file']).read_text(encoding='utf-8')))
+            item['text'] = lines[item['line'] - 1] if item['line'] <= len(lines) else ''
+    classifier = Classifier(root, paths, read, {f['name'] for f in facts if f['kind'] == 'type'})
+    classifier.learn(facts)
+    facts = [f for f in facts if f['kind'] not in ('type', 'copy')]
+    findings = {}
+    pending = facts
+    while pending:
+        for item in pending:
+            if item['file'].startswith(PRODUCT):
+                entry = Classifier.lookup('dotnet', item['name']) if item['kind'] == 'call' else None
+                message = isinstance(entry, dict) and entry.get('walks') and classifier.verdict(entry, item['args'])
             else:
-                used.add(match)
-    for i, entry in enumerate(allowed):
-        if i not in used:
-            failures.append(f'{ALLOWLIST}: stale entry {entry.get("file")} {entry.get("line")!r}')
+                message = classifier.classify(item)
+            if message:
+                findings.setdefault((item['file'], item['line']), (item['text'], []))[1].append(message)
+        texts, classifier.texts = classifier.texts, []
+        pending = []
+        for shell, item, text in texts:
+            if shell == 'cmd':
+                pending += cmd_facts(item['file'], item['line'], item['text'], text)
+            elif shell == 'bash':
+                pending += [dict(f, line=item['line'], text=item['text']) for f in tagged(bash_facts(item['file'], text), 'bash')]
+            elif shell == 'python':
+                pending += [dict(f, line=item['line'], text=item['text'], file=item['file']) for f in tagged(PythonReader(item['file'], text.encode('utf-8')).facts, 'python')]
+            else:
+                inner = read_powershell(root, [], [{'file': item['file'], 'line': item['line'], 'source': text}])
+                pending += [dict(f, line=item['line'], text=item['text']) for f in tagged(inner['facts'], 'powershell') if f['kind'] != 'csharp']
+    return failures, facts, findings
+
+
+def report(root, failures, findings):
+    allowed = json.loads((root / ALLOWLIST).read_text(encoding='utf-8-sig')) if (root / ALLOWLIST).exists() else []
+    used = set()
+    for entry in allowed:
+        if not str(entry.get('reason', '')).strip():
+            failures.append(f'{ALLOWLIST}: {entry.get("file")} {entry.get("line")!r} needs the reason it stays inside a fixture')
+    for (file, number), (text, messages) in sorted(findings.items()):
+        match = next((i for i, e in enumerate(allowed) if i not in used and e.get('file') == file and e.get('line') == text.strip()), None)
+        if match is None:
+            failures.append(f'{file}:{number}: {"; ".join(dict.fromkeys(messages))}: {text.strip()[:160]}; use LocalTree.Entries, local_tree '
+                            f'or a TestFixtures helper, or list why it stays inside a fixture in {ALLOWLIST}')
+        else:
+            used.add(match)
+    failures += [f'{ALLOWLIST}: stale entry {e.get("file")} {e.get("line")!r}' for i, e in enumerate(allowed) if i not in used]
     return failures
+
+
+def verify(root):
+    failures, _, findings = check(root)
+    return report(Path(root), failures, findings)
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--root', type=Path, default=Path(__file__).resolve().parents[2])
-    parser.add_argument('--rules', action='store_true', help='print the cleaning rules every scanned file goes through')
+    parser.add_argument('--root', type=Path, default=HERE.parents[1])
     arguments = parser.parse_args()
-    if arguments.rules:
-        for rule in TABLE['cleaning']:
-            print('- ' + rule['rule'])
-        raise SystemExit(0)
-    problems = check(arguments.root)
+    problems = verify(arguments.root)
     for problem in problems:
         print(problem)
     if not problems:

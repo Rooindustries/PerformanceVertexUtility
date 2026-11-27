@@ -1,0 +1,2472 @@
+{
+ "bash": {
+  ".": {
+   "does": "loads code the check cannot read"
+  },
+  ":": "inert",
+  "[": "inert",
+  "apt-get": {
+   "does": "installs packages, whose install scripts run as root"
+  },
+  "awk": "inert",
+  "base64": "inert",
+  "basename": "inert",
+  "bash": {
+   "reads": "bash"
+  },
+  "break": "inert",
+  "cat": "inert",
+  "cd": "inert",
+  "cmp": "inert",
+  "comm": "inert",
+  "command": "inert",
+  "continue": "inert",
+  "cp": {
+   "does": "with -r copies a folder tree",
+   "safe": [
+    {
+     "no switch": [
+      "-r",
+      "-R",
+      "-a",
+      "--recursive",
+      "--archive"
+     ]
+    }
+   ]
+  },
+  "cut": "inert",
+  "date": "inert",
+  "declare": "inert",
+  "diff": "inert",
+  "dirname": "inert",
+  "echo": "inert",
+  "env": "inert",
+  "eval": {
+   "does": "runs text the check cannot read"
+  },
+  "exit": "inert",
+  "export": "inert",
+  "false": "inert",
+  "find": {
+   "does": "walks a folder tree, and -L follows links",
+   "safe": [
+    {
+     "no switch": [
+      "-L",
+      "-H",
+      "-follow",
+      "-delete",
+      "-exec",
+      "-execdir"
+     ]
+    }
+   ]
+  },
+  "git": {
+   "does": "runs git, whose clean, rm and worktree commands delete folder trees",
+   "safe": [
+    {
+     "first": [
+      "status",
+      "rev-parse",
+      "ls-files",
+      "branch",
+      "diff",
+      "show",
+      "log",
+      "cat-file",
+      "ls-tree",
+      "config",
+      "describe",
+      "init",
+      "add",
+      "commit",
+      "checkout",
+      "switch",
+      "merge-base",
+      "symbolic-ref",
+      "rev-list",
+      "tag",
+      "apply",
+      "hash-object"
+     ],
+     "skip": [
+      "-C",
+      "-c"
+     ]
+    }
+   ]
+  },
+  "grep": "inert",
+  "head": "inert",
+  "jq": "inert",
+  "kill": "inert",
+  "ln": {
+   "does": "makes a link"
+  },
+  "local": "inert",
+  "mapfile": "inert",
+  "mkdir": "inert",
+  "mktemp": "inert",
+  "mv": "inert",
+  "perl": {
+   "does": "runs Perl the check cannot read"
+  },
+  "printenv": "inert",
+  "printf": "inert",
+  "pwd": "inert",
+  "python": {
+   "reads": "python"
+  },
+  "python3": {
+   "reads": "python"
+  },
+  "read": "inert",
+  "readonly": "inert",
+  "realpath": "inert",
+  "return": "inert",
+  "rm": {
+   "does": "with -r deletes a folder tree",
+   "safe": [
+    {
+     "no switch": [
+      "-r",
+      "-rf",
+      "-fr",
+      "-R",
+      "--recursive"
+     ]
+    }
+   ]
+  },
+  "scp": {
+   "does": "copies files to and from another machine"
+  },
+  "sed": "inert",
+  "seq": "inert",
+  "set": "inert",
+  "sh": {
+   "reads": "bash"
+  },
+  "sha256sum": "inert",
+  "shift": "inert",
+  "sleep": "inert",
+  "sort": "inert",
+  "source": {
+   "does": "loads code the check cannot read"
+  },
+  "ssh": {
+   "does": "runs commands on another machine"
+  },
+  "sudo": {
+   "reads": "program"
+  },
+  "tail": "inert",
+  "tee": "inert",
+  "test": "inert",
+  "touch": "inert",
+  "tr": "inert",
+  "trap": "inert",
+  "true": "inert",
+  "type": "inert",
+  "uniq": "inert",
+  "unset": "inert",
+  "wait": "inert",
+  "wc": "inert"
+ },
+ "cmd": {
+  "call": {
+   "reads": "cmd"
+  },
+  "cd": "inert",
+  "copy": "inert",
+  "del": {
+   "does": "with /S deletes files through a folder tree",
+   "safe": [
+    {
+     "no switch": [
+      "/s"
+     ]
+    }
+   ]
+  },
+  "dir": {
+   "does": "with /S walks a folder tree",
+   "safe": [
+    {
+     "no switch": [
+      "/s"
+     ]
+    }
+   ]
+  },
+  "echo": "inert",
+  "endlocal": "inert",
+  "erase": {
+   "does": "with /S deletes files through a folder tree",
+   "safe": [
+    {
+     "no switch": [
+      "/s"
+     ]
+    }
+   ]
+  },
+  "exit": "inert",
+  "for": {
+   "does": "repeats a command over values the check cannot read"
+  },
+  "goto": "inert",
+  "if": "inert",
+  "md": "inert",
+  "mkdir": "inert",
+  "mklink": {
+   "does": "makes a link"
+  },
+  "move": "inert",
+  "popd": "inert",
+  "pushd": "inert",
+  "rd": {
+   "does": "with /S deletes a folder tree",
+   "safe": [
+    {
+     "no switch": [
+      "/s"
+     ]
+    }
+   ]
+  },
+  "rem": "inert",
+  "ren": "inert",
+  "rmdir": {
+   "does": "with /S deletes a folder tree",
+   "safe": [
+    {
+     "no switch": [
+      "/s"
+     ]
+    }
+   ]
+  },
+  "set": "inert",
+  "setlocal": "inert",
+  "start": {
+   "does": "starts a program the check cannot read"
+  },
+  "type": "inert",
+  "ver": "inert"
+ },
+ "com": {
+  "com:Schedule.Service": {
+   "does": "registers scheduled tasks, which start programs the check cannot read"
+  },
+  "com:Scripting.FileSystemObject": {
+   "does": "copies, moves and deletes whole folder trees"
+  },
+  "com:Shell.Application": {
+   "does": "starts programs and copies folder trees through the Windows shell"
+  },
+  "com:WScript.Shell": {
+   "does": "runs command lines the check cannot read"
+  }
+ },
+ "data": {
+  "csv": "data the code reads; nothing runs it",
+  "ico": "an image",
+  "json": "data the code reads; nothing runs it",
+  "manifest": "a Windows application manifest; settings, no code",
+  "md": "documentation; nothing runs it",
+  "png": "an image",
+  "svg": "an image the app shows",
+  "txt": "a package list pip reads; it names packages and runs nothing",
+  "xaml": "WinUI markup; WinUI has no inline code, so its code is the .xaml.cs file beside it"
+ },
+ "dotnet": {
+  "Accessibility.IAccessible": "inert",
+  "CommunityToolkit": "inert",
+  "Json.Schema": "inert",
+  "Microsoft.CodeAnalysis": "inert",
+  "Microsoft.Diagnostics.Runtime": "inert",
+  "Microsoft.UI": "inert",
+  "Microsoft.Win32.Registry": "inert",
+  "Microsoft.Win32.RegistryKey": "inert",
+  "Microsoft.Win32.RegistryKey.DeleteSubKeyTree": {
+   "does": "deletes a whole registry key tree"
+  },
+  "Microsoft.Win32.SafeHandles": "inert",
+  "SharpGen.Runtime": "inert",
+  "System.Action": "inert",
+  "System.Activator": {
+   "does": "calls a member chosen at run time, so the check cannot see what it runs"
+  },
+  "System.AggregateException": "inert",
+  "System.AppContext": "inert",
+  "System.AppDomain": "inert",
+  "System.AppDomain.CreateInstance": {
+   "does": "calls a member chosen at run time, so the check cannot see what it runs"
+  },
+  "System.AppDomain.CreateInstanceAndUnwrap": {
+   "does": "calls a member chosen at run time, so the check cannot see what it runs"
+  },
+  "System.AppDomain.CreateInstanceFrom": {
+   "does": "loads code the check cannot read"
+  },
+  "System.AppDomain.CreateInstanceFromAndUnwrap": {
+   "does": "loads code the check cannot read"
+  },
+  "System.AppDomain.ExecuteAssembly": {
+   "does": "loads code the check cannot read"
+  },
+  "System.AppDomain.ExecuteAssemblyByName": {
+   "does": "loads code the check cannot read"
+  },
+  "System.AppDomain.Load": {
+   "does": "loads code the check cannot read"
+  },
+  "System.ArgumentException": "inert",
+  "System.ArgumentNullException": "inert",
+  "System.ArgumentOutOfRangeException": "inert",
+  "System.Array": "inert",
+  "System.BitConverter": "inert",
+  "System.Boolean": "inert",
+  "System.Buffer": "inert",
+  "System.Byte": "inert",
+  "System.Char": "inert",
+  "System.Collections": "inert",
+  "System.Collections.Generic.KeyNotFoundException": "inert",
+  "System.Collections.Immutable": "inert",
+  "System.ComponentModel": "inert",
+  "System.Console": "inert",
+  "System.Convert": "inert",
+  "System.DateTime": "inert",
+  "System.DateTimeOffset": "inert",
+  "System.Decimal": "inert",
+  "System.Delegate": "inert",
+  "System.Delegate.CreateDelegate": {
+   "does": "calls a member chosen at run time, so the check cannot see what it runs"
+  },
+  "System.Delegate.DynamicInvoke": {
+   "does": "calls a member chosen at run time, so the check cannot see what it runs"
+  },
+  "System.Diagnostics": "inert",
+  "System.Diagnostics.Process.Start": {
+   "does": "starts a program from arguments the check cannot read"
+  },
+  "System.Double": "inert",
+  "System.Drawing": "inert",
+  "System.Enum": "inert",
+  "System.Environment": "inert",
+  "System.EventHandler": "inert",
+  "System.Exception": "inert",
+  "System.FormatException": "inert",
+  "System.Func": "inert",
+  "System.GC": "inert",
+  "System.Globalization": "inert",
+  "System.Guid": "inert",
+  "System.IDisposable": "inert",
+  "System.IO.BinaryReader": "inert",
+  "System.IO.BinaryWriter": "inert",
+  "System.IO.Compression": "inert",
+  "System.IO.Compression.ZipFile.CreateFromDirectory": {
+   "does": "walks a folder tree, entering links",
+   "walk": true
+  },
+  "System.IO.Compression.ZipFile.ExtractToDirectory": {
+   "does": "writes a whole archive into a folder tree"
+  },
+  "System.IO.Compression.ZipFileExtensions.ExtractToDirectory": {
+   "does": "writes a whole archive into a folder tree"
+  },
+  "System.IO.Directory": "inert",
+  "System.IO.Directory.CreateSymbolicLink": {
+   "does": "makes a link"
+  },
+  "System.IO.Directory.Delete": "measured on Windows: removes a junction, directory link or mount point as a link and never deletes through it",
+  "System.IO.Directory.EnumerateDirectories": {
+   "does": "walks every folder below, entering links",
+   "safe": [
+    {
+     "absent": true,
+     "arg": "searchOption",
+     "in": [
+      "TopDirectoryOnly"
+     ]
+    },
+    {
+     "absent": true,
+     "arg": 2,
+     "in": [
+      "TopDirectoryOnly",
+      0
+     ],
+     "type": "System.IO.SearchOption"
+    }
+   ],
+   "walk": true
+  },
+  "System.IO.Directory.EnumerateFileSystemEntries": {
+   "does": "walks every folder below, entering links",
+   "safe": [
+    {
+     "absent": true,
+     "arg": "searchOption",
+     "in": [
+      "TopDirectoryOnly"
+     ]
+    },
+    {
+     "absent": true,
+     "arg": 2,
+     "in": [
+      "TopDirectoryOnly",
+      0
+     ],
+     "type": "System.IO.SearchOption"
+    }
+   ],
+   "walk": true
+  },
+  "System.IO.Directory.EnumerateFileSystemInfos": {
+   "does": "walks every folder below, entering links",
+   "safe": [
+    {
+     "absent": true,
+     "arg": "searchOption",
+     "in": [
+      "TopDirectoryOnly"
+     ]
+    },
+    {
+     "absent": true,
+     "arg": 2,
+     "in": [
+      "TopDirectoryOnly",
+      0
+     ],
+     "type": "System.IO.SearchOption"
+    }
+   ],
+   "walk": true
+  },
+  "System.IO.Directory.EnumerateFiles": {
+   "does": "walks every folder below, entering links",
+   "safe": [
+    {
+     "absent": true,
+     "arg": "searchOption",
+     "in": [
+      "TopDirectoryOnly"
+     ]
+    },
+    {
+     "absent": true,
+     "arg": 2,
+     "in": [
+      "TopDirectoryOnly",
+      0
+     ],
+     "type": "System.IO.SearchOption"
+    }
+   ],
+   "walk": true
+  },
+  "System.IO.Directory.GetDirectories": {
+   "does": "walks every folder below, entering links",
+   "safe": [
+    {
+     "absent": true,
+     "arg": "searchOption",
+     "in": [
+      "TopDirectoryOnly"
+     ]
+    },
+    {
+     "absent": true,
+     "arg": 2,
+     "in": [
+      "TopDirectoryOnly",
+      0
+     ],
+     "type": "System.IO.SearchOption"
+    }
+   ],
+   "walk": true
+  },
+  "System.IO.Directory.GetFileSystemEntries": {
+   "does": "walks every folder below, entering links",
+   "safe": [
+    {
+     "absent": true,
+     "arg": "searchOption",
+     "in": [
+      "TopDirectoryOnly"
+     ]
+    },
+    {
+     "absent": true,
+     "arg": 2,
+     "in": [
+      "TopDirectoryOnly",
+      0
+     ],
+     "type": "System.IO.SearchOption"
+    }
+   ],
+   "walk": true
+  },
+  "System.IO.Directory.GetFileSystemInfos": {
+   "does": "walks every folder below, entering links",
+   "safe": [
+    {
+     "absent": true,
+     "arg": "searchOption",
+     "in": [
+      "TopDirectoryOnly"
+     ]
+    },
+    {
+     "absent": true,
+     "arg": 2,
+     "in": [
+      "TopDirectoryOnly",
+      0
+     ],
+     "type": "System.IO.SearchOption"
+    }
+   ],
+   "walk": true
+  },
+  "System.IO.Directory.GetFiles": {
+   "does": "walks every folder below, entering links",
+   "safe": [
+    {
+     "absent": true,
+     "arg": "searchOption",
+     "in": [
+      "TopDirectoryOnly"
+     ]
+    },
+    {
+     "absent": true,
+     "arg": 2,
+     "in": [
+      "TopDirectoryOnly",
+      0
+     ],
+     "type": "System.IO.SearchOption"
+    }
+   ],
+   "walk": true
+  },
+  "System.IO.DirectoryInfo": "inert",
+  "System.IO.DirectoryInfo.Delete": "measured on Windows: removes a junction, directory link or mount point as a link and never deletes through it",
+  "System.IO.DirectoryInfo.EnumerateDirectories": {
+   "does": "walks every folder below, entering links",
+   "safe": [
+    {
+     "absent": true,
+     "arg": "searchOption",
+     "in": [
+      "TopDirectoryOnly"
+     ]
+    },
+    {
+     "absent": true,
+     "arg": 1,
+     "in": [
+      "TopDirectoryOnly",
+      0
+     ],
+     "type": "System.IO.SearchOption"
+    }
+   ],
+   "walk": true
+  },
+  "System.IO.DirectoryInfo.EnumerateFileSystemEntries": {
+   "does": "walks every folder below, entering links",
+   "safe": [
+    {
+     "absent": true,
+     "arg": "searchOption",
+     "in": [
+      "TopDirectoryOnly"
+     ]
+    },
+    {
+     "absent": true,
+     "arg": 1,
+     "in": [
+      "TopDirectoryOnly",
+      0
+     ],
+     "type": "System.IO.SearchOption"
+    }
+   ],
+   "walk": true
+  },
+  "System.IO.DirectoryInfo.EnumerateFileSystemInfos": {
+   "does": "walks every folder below, entering links",
+   "safe": [
+    {
+     "absent": true,
+     "arg": "searchOption",
+     "in": [
+      "TopDirectoryOnly"
+     ]
+    },
+    {
+     "absent": true,
+     "arg": 1,
+     "in": [
+      "TopDirectoryOnly",
+      0
+     ],
+     "type": "System.IO.SearchOption"
+    }
+   ],
+   "walk": true
+  },
+  "System.IO.DirectoryInfo.EnumerateFiles": {
+   "does": "walks every folder below, entering links",
+   "safe": [
+    {
+     "absent": true,
+     "arg": "searchOption",
+     "in": [
+      "TopDirectoryOnly"
+     ]
+    },
+    {
+     "absent": true,
+     "arg": 1,
+     "in": [
+      "TopDirectoryOnly",
+      0
+     ],
+     "type": "System.IO.SearchOption"
+    }
+   ],
+   "walk": true
+  },
+  "System.IO.DirectoryInfo.GetDirectories": {
+   "does": "walks every folder below, entering links",
+   "safe": [
+    {
+     "absent": true,
+     "arg": "searchOption",
+     "in": [
+      "TopDirectoryOnly"
+     ]
+    },
+    {
+     "absent": true,
+     "arg": 1,
+     "in": [
+      "TopDirectoryOnly",
+      0
+     ],
+     "type": "System.IO.SearchOption"
+    }
+   ],
+   "walk": true
+  },
+  "System.IO.DirectoryInfo.GetFileSystemEntries": {
+   "does": "walks every folder below, entering links",
+   "safe": [
+    {
+     "absent": true,
+     "arg": "searchOption",
+     "in": [
+      "TopDirectoryOnly"
+     ]
+    },
+    {
+     "absent": true,
+     "arg": 1,
+     "in": [
+      "TopDirectoryOnly",
+      0
+     ],
+     "type": "System.IO.SearchOption"
+    }
+   ],
+   "walk": true
+  },
+  "System.IO.DirectoryInfo.GetFileSystemInfos": {
+   "does": "walks every folder below, entering links",
+   "safe": [
+    {
+     "absent": true,
+     "arg": "searchOption",
+     "in": [
+      "TopDirectoryOnly"
+     ]
+    },
+    {
+     "absent": true,
+     "arg": 1,
+     "in": [
+      "TopDirectoryOnly",
+      0
+     ],
+     "type": "System.IO.SearchOption"
+    }
+   ],
+   "walk": true
+  },
+  "System.IO.DirectoryInfo.GetFiles": {
+   "does": "walks every folder below, entering links",
+   "safe": [
+    {
+     "absent": true,
+     "arg": "searchOption",
+     "in": [
+      "TopDirectoryOnly"
+     ]
+    },
+    {
+     "absent": true,
+     "arg": 1,
+     "in": [
+      "TopDirectoryOnly",
+      0
+     ],
+     "type": "System.IO.SearchOption"
+    }
+   ],
+   "walk": true
+  },
+  "System.IO.DirectoryNotFoundException": "inert",
+  "System.IO.DriveInfo": "inert",
+  "System.IO.EnumerationOptions": "inert",
+  "System.IO.EnumerationOptions.set_RecurseSubdirectories": {
+   "does": "makes an enumeration walk every folder below, entering links",
+   "safe": [
+    {
+     "arg": "value",
+     "in": [
+      false
+     ]
+    },
+    {
+     "arg": 0,
+     "in": [
+      false
+     ]
+    }
+   ],
+   "walk": true
+  },
+  "System.IO.File": "inert",
+  "System.IO.File.CreateSymbolicLink": {
+   "does": "makes a link"
+  },
+  "System.IO.FileInfo": "inert",
+  "System.IO.FileNotFoundException": "inert",
+  "System.IO.FileStream": "inert",
+  "System.IO.FileSystemAclExtensions": "inert",
+  "System.IO.FileSystemAclExtensions.SetAccessControl": {
+   "does": "sets permissions that Windows passes down into every folder below, through mount points",
+   "safe": [
+    {
+     "arg": 0,
+     "types": [
+      "System.IO.FileInfo",
+      "System.IO.FileStream"
+     ]
+    }
+   ]
+  },
+  "System.IO.FileSystemInfo": "inert",
+  "System.IO.FileSystemInfo.CreateAsSymbolicLink": {
+   "does": "makes a link"
+  },
+  "System.IO.FileSystemWatcher": "inert",
+  "System.IO.IOException": "inert",
+  "System.IO.InvalidDataException": "inert",
+  "System.IO.MemoryStream": "inert",
+  "System.IO.Path": "inert",
+  "System.IO.PathTooLongException": "inert",
+  "System.IO.Pipes": "inert",
+  "System.IO.Stream": "inert",
+  "System.IO.StreamReader": "inert",
+  "System.IO.StreamWriter": "inert",
+  "System.IO.StringReader": "inert",
+  "System.IO.StringWriter": "inert",
+  "System.IO.TextReader": "inert",
+  "System.IO.TextWriter": "inert",
+  "System.IndexOutOfRangeException": "inert",
+  "System.Int16": "inert",
+  "System.Int32": "inert",
+  "System.Int64": "inert",
+  "System.IntPtr": "inert",
+  "System.InvalidOperationException": "inert",
+  "System.KeyNotFoundException": "inert",
+  "System.Lazy": "inert",
+  "System.Linq": "inert",
+  "System.Management.Automation.CommandNotFoundException": "inert",
+  "System.Management.Automation.Language": "inert",
+  "System.Management.Automation.PowerShell": "inert",
+  "System.Management.Automation.PowerShell.AddCommand": {
+   "does": "runs a PowerShell command the check cannot read"
+  },
+  "System.Management.Automation.PowerShell.AddScript": {
+   "does": "runs PowerShell text the check cannot read"
+  },
+  "System.Management.EventArrivedEventArgs": "inert",
+  "System.Management.ManagementBaseObject": "inert",
+  "System.Management.ManagementDateTimeConverter": "inert",
+  "System.Management.ManagementEventWatcher": "inert",
+  "System.Management.ManagementObject.get_Item": "inert",
+  "System.Management.ManagementScope": "inert",
+  "System.Management.StoppedEventArgs": "inert",
+  "System.Management.WqlEventQuery": "inert",
+  "System.Math": "inert",
+  "System.Memory": "inert",
+  "System.MemoryExtensions": "inert",
+  "System.MissingFieldException": "inert",
+  "System.MissingMethodException": "inert",
+  "System.Net": "inert",
+  "System.NotImplementedException": "inert",
+  "System.NotSupportedException": "inert",
+  "System.Nullable": "inert",
+  "System.Numerics": "inert",
+  "System.Object": "inert",
+  "System.ObjectDisposedException": "inert",
+  "System.OperatingSystem": "inert",
+  "System.OperationCanceledException": "inert",
+  "System.PlatformNotSupportedException": "inert",
+  "System.Progress": "inert",
+  "System.Random": "inert",
+  "System.ReadOnlyMemory": "inert",
+  "System.ReadOnlySpan": "inert",
+  "System.Reflection.Assembly": "inert",
+  "System.Reflection.Assembly.CreateInstance": {
+   "does": "calls a member chosen at run time, so the check cannot see what it runs"
+  },
+  "System.Reflection.Assembly.Load": {
+   "does": "loads code the check cannot read"
+  },
+  "System.Reflection.Assembly.LoadFile": {
+   "does": "loads code the check cannot read"
+  },
+  "System.Reflection.Assembly.LoadFrom": {
+   "does": "loads code the check cannot read"
+  },
+  "System.Reflection.Assembly.UnsafeLoadFrom": {
+   "does": "loads code the check cannot read"
+  },
+  "System.Reflection.AssemblyMetadataAttribute": "inert",
+  "System.Reflection.AssemblyName": "inert",
+  "System.Reflection.ConstructorInfo": "inert",
+  "System.Reflection.ConstructorInfo.Invoke": {
+   "does": "calls a member chosen at run time, so the check cannot see what it runs"
+  },
+  "System.Reflection.CustomAttributeExtensions": "inert",
+  "System.Reflection.Emit.OpCode": "inert",
+  "System.Reflection.FieldInfo": "inert",
+  "System.Reflection.MemberInfo": "inert",
+  "System.Reflection.Metadata": "inert",
+  "System.Reflection.MethodBase": "inert",
+  "System.Reflection.MethodBase.Invoke": {
+   "does": "calls a member chosen at run time, so the check cannot see what it runs"
+  },
+  "System.Reflection.MethodBody": "inert",
+  "System.Reflection.MethodInfo": "inert",
+  "System.Reflection.MethodInfo.Invoke": {
+   "does": "calls a member chosen at run time, so the check cannot see what it runs"
+  },
+  "System.Reflection.Module": "inert",
+  "System.Reflection.ParameterInfo": "inert",
+  "System.Reflection.PortableExecutable": "inert",
+  "System.Reflection.PropertyInfo": "inert",
+  "System.Reflection.PropertyInfo.GetValue": {
+   "does": "calls a member chosen at run time, so the check cannot see what it runs"
+  },
+  "System.Reflection.PropertyInfo.SetValue": {
+   "does": "calls a member chosen at run time, so the check cannot see what it runs"
+  },
+  "System.Runtime.CompilerServices": "inert",
+  "System.Runtime.ExceptionServices": "inert",
+  "System.Runtime.InteropServices": "inert",
+  "System.Runtime.InteropServices.Marshal.GetDelegateForFunctionPointer": {
+   "does": "calls native code by address, so the check cannot see which function runs"
+  },
+  "System.Runtime.InteropServices.NativeLibrary": {
+   "does": "calls native code by address, so the check cannot see which function runs"
+  },
+  "System.Runtime.Loader.AssemblyLoadContext": "inert",
+  "System.Runtime.Loader.AssemblyLoadContext.LoadFromAssemblyName": {
+   "does": "loads code the check cannot read"
+  },
+  "System.Runtime.Loader.AssemblyLoadContext.LoadFromAssemblyPath": {
+   "does": "loads code the check cannot read"
+  },
+  "System.Runtime.Loader.AssemblyLoadContext.LoadFromNativeImagePath": {
+   "does": "loads code the check cannot read"
+  },
+  "System.Runtime.Loader.AssemblyLoadContext.LoadFromStream": {
+   "does": "loads code the check cannot read"
+  },
+  "System.Runtime.Remoting.Metadata.W3cXsd2001.SoapHexBinary": "inert",
+  "System.Security.AccessControl": "inert",
+  "System.Security.Cryptography": "inert",
+  "System.Security.Principal": "inert",
+  "System.Security.SecurityElement": "inert",
+  "System.ServiceProcess": "inert",
+  "System.Single": "inert",
+  "System.Span": "inert",
+  "System.String": "inert",
+  "System.StringComparer": "inert",
+  "System.Text": "inert",
+  "System.Threading": "inert",
+  "System.TimeSpan": "inert",
+  "System.TimeZoneInfo": "inert",
+  "System.TimeoutException": "inert",
+  "System.Tuple": "inert",
+  "System.Type": "inert",
+  "System.Type.InvokeMember": {
+   "does": "calls a member chosen at run time, so the check cannot see what it runs"
+  },
+  "System.UInt16": "inert",
+  "System.UInt32": "inert",
+  "System.UInt64": "inert",
+  "System.UIntPtr": "inert",
+  "System.UnauthorizedAccessException": "inert",
+  "System.Uri": "inert",
+  "System.ValueTuple": "inert",
+  "System.Version": "inert",
+  "System.Web.Script.Serialization": "inert",
+  "System.Windows.Application": "inert",
+  "System.Windows.Automation": "inert",
+  "System.Windows.Controls": "inert",
+  "System.Windows.Forms": "inert",
+  "System.Windows.FrameworkElement": "inert",
+  "System.Windows.Input": "inert",
+  "System.Windows.Interop": "inert",
+  "System.Windows.Media": "inert",
+  "System.Windows.Threading": "inert",
+  "System.Windows.UIElement": "inert",
+  "System.Windows.Window": "inert",
+  "System.Xml": "inert",
+  "Vortice": "inert",
+  "WinRT.Interop": "inert",
+  "Windows.Graphics": "inert",
+  "Windows.UI": "inert",
+  "nint": "inert",
+  "nuint": "inert"
+ },
+ "native": {
+  "advapi32!adjusttokenprivileges": "inert",
+  "advapi32!checktokenmembership": "inert",
+  "advapi32!convertsecuritydescriptortostringsecuritydescriptor": "inert",
+  "advapi32!convertsecuritydescriptortostringsecuritydescriptorw": "inert",
+  "advapi32!convertstringsecuritydescriptortosecuritydescriptor": "inert",
+  "advapi32!convertstringsecuritydescriptortosecuritydescriptorw": "inert",
+  "advapi32!convertstringsidtosid": "inert",
+  "advapi32!createprocessasuser": {
+   "does": "starts a program the check cannot read"
+  },
+  "advapi32!createprocessasuserw": {
+   "does": "starts a program the check cannot read"
+  },
+  "advapi32!createprocesswithlogonw": {
+   "does": "starts a program the check cannot read"
+  },
+  "advapi32!createprocesswithtokenw": {
+   "does": "starts a program the check cannot read"
+  },
+  "advapi32!createrestrictedtoken": "inert",
+  "advapi32!duplicatetoken": "inert",
+  "advapi32!duplicatetokenex": "inert",
+  "advapi32!getkernelobjectsecurity": "inert",
+  "advapi32!getlengthsid": "inert",
+  "advapi32!getsecuritydescriptordacl": "inert",
+  "advapi32!getsecurityinfo": "inert",
+  "advapi32!getsidsubauthority": "inert",
+  "advapi32!getsidsubauthoritycount": "inert",
+  "advapi32!gettokeninformation": "inert",
+  "advapi32!lookupprivilegevalue": "inert",
+  "advapi32!lookupprivilegevaluew": "inert",
+  "advapi32!openprocesstoken": "inert",
+  "advapi32!regclosekey": "inert",
+  "advapi32!regcreatekeyex": "inert",
+  "advapi32!regcreatekeyexw": "inert",
+  "advapi32!regdeletevaluew": "inert",
+  "advapi32!registerservicectrlhandler": "inert",
+  "advapi32!regloadappkeyw": "inert",
+  "advapi32!regopenkeyex": "inert",
+  "advapi32!regopenkeyexw": "inert",
+  "advapi32!regopenkeytransacted": "inert",
+  "advapi32!regoverridepredefkey": "inert",
+  "advapi32!regqueryvalueex": "inert",
+  "advapi32!regqueryvalueexw": "inert",
+  "advapi32!regsetkeysecurity": "inert",
+  "advapi32!regsetvalueex": "inert",
+  "advapi32!regsetvalueexw": "inert",
+  "advapi32!setentriesinacl": "inert",
+  "advapi32!setfilesecurityw": "inert",
+  "advapi32!setkernelobjectsecurity": "inert",
+  "advapi32!setsecurityinfo": {
+   "does": "sets permissions that Windows passes down into every folder below, through mount points"
+  },
+  "advapi32!setservicestatus": "inert",
+  "advapi32!settokeninformation": "inert",
+  "advapi32!startservicectrldispatcher": "inert",
+  "d3d11!d3d11createdevice": "inert",
+  "dwmapi!dwmgetwindowattribute": "inert",
+  "gdi32!d3dkmtgetprocessschedulingpriorityclass": "inert",
+  "gdi32!d3dkmtsetprocessschedulingpriorityclass": "inert",
+  "gdi32!deleteobject": "inert",
+  "kernel32!assignprocesstojobobject": "inert",
+  "kernel32!closehandle": "inert",
+  "kernel32!createdirectoryw": "inert",
+  "kernel32!createfile": "inert",
+  "kernel32!createfilew": "inert",
+  "kernel32!createhardlink": {
+   "does": "makes a link"
+  },
+  "kernel32!createhardlinkw": {
+   "does": "makes a link"
+  },
+  "kernel32!createjobobject": "inert",
+  "kernel32!createjobobjectw": "inert",
+  "kernel32!createprocess": {
+   "does": "starts a program the check cannot read"
+  },
+  "kernel32!createprocessw": {
+   "does": "starts a program the check cannot read"
+  },
+  "kernel32!createsymboliclink": {
+   "does": "makes a link"
+  },
+  "kernel32!createsymboliclinkw": {
+   "does": "makes a link"
+  },
+  "kernel32!createtoolhelp32snapshot": "inert",
+  "kernel32!createwaitabletimerexw": "inert",
+  "kernel32!deviceiocontrol": {
+   "does": "sends a device control code; 589988 (FSCTL_SET_REPARSE_POINT) makes a link",
+   "safe": [
+    {
+     "arg": 1,
+     "in": [
+      589992,
+      2954240
+     ]
+    }
+   ]
+  },
+  "kernel32!duplicatehandle": "inert",
+  "kernel32!findclose": "inert",
+  "kernel32!findfirststreamw": "inert",
+  "kernel32!findnextstreamw": "inert",
+  "kernel32!getcurrentprocess": "inert",
+  "kernel32!getcurrentprocessid": "inert",
+  "kernel32!getcurrentthreadid": "inert",
+  "kernel32!getexitcodeprocess": "inert",
+  "kernel32!getfileinformationbyhandle": "inert",
+  "kernel32!getfiletype": "inert",
+  "kernel32!getfinalpathnamebyhandle": "inert",
+  "kernel32!getfinalpathnamebyhandlew": "inert",
+  "kernel32!getfullpathnamew": "inert",
+  "kernel32!getpriorityclass": "inert",
+  "kernel32!getprivateprofilestringw": "inert",
+  "kernel32!getprocessaffinitymask": "inert",
+  "kernel32!getprocessdefaultcpusets": "inert",
+  "kernel32!getprocesshandlecount": "inert",
+  "kernel32!getprocessinformation": "inert",
+  "kernel32!getprocesspriorityboost": "inert",
+  "kernel32!getprocesstimes": "inert",
+  "kernel32!getshortpathname": "inert",
+  "kernel32!getshortpathnamew": "inert",
+  "kernel32!getstdhandle": "inert",
+  "kernel32!getthreaddescription": "inert",
+  "kernel32!iswow64process": "inert",
+  "kernel32!localfree": "inert",
+  "kernel32!openprocess": "inert",
+  "kernel32!openthread": "inert",
+  "kernel32!process32first": "inert",
+  "kernel32!process32firstw": "inert",
+  "kernel32!process32next": "inert",
+  "kernel32!process32nextw": "inert",
+  "kernel32!processidtosessionid": "inert",
+  "kernel32!querydosdevice": "inert",
+  "kernel32!queryfullprocessimagename": "inert",
+  "kernel32!queryfullprocessimagenamew": "inert",
+  "kernel32!querythreadcycletime": "inert",
+  "kernel32!readprocessmemory": "inert",
+  "kernel32!resumethread": "inert",
+  "kernel32!setfileinformationbyhandle": "inert",
+  "kernel32!setfileshortnamew": "inert",
+  "kernel32!setinformationjobobject": "inert",
+  "kernel32!setprocessdefaultcpusets": "inert",
+  "kernel32!setprocessinformation": "inert",
+  "kernel32!setwaitabletimer": "inert",
+  "kernel32!terminatejobobject": "inert",
+  "kernel32!terminateprocess": "inert",
+  "kernel32!virtualqueryex": "inert",
+  "kernel32!waitforsingleobject": "inert",
+  "kernel32!writeprivateprofilestringw": "inert",
+  "ktmw32!committransaction": "inert",
+  "ktmw32!createtransaction": "inert",
+  "ntdll!ntclose": "inert",
+  "ntdll!ntdeletekey": "inert",
+  "ntdll!ntopensymboliclinkobject": "inert",
+  "ntdll!ntqueryinformationprocess": "inert",
+  "ntdll!ntquerysymboliclinkobject": "inert",
+  "ntdll!ntquerysysteminformation": "inert",
+  "ntdll!ntresumeprocess": "inert",
+  "ntdll!ntsetinformationprocess": "inert",
+  "ntdll!ntsetvaluekey": "inert",
+  "ntdll!ntsuspendprocess": "inert",
+  "ntdll!rtladjustprivilege": "inert",
+  "ntdll!rtlqueryimagemitigationpolicy": "inert",
+  "oleacc!accessibleobjectfromwindow": "inert",
+  "shell32!commandlinetoargvw": "inert",
+  "shell32!shgetknownfolderpath": "inert",
+  "srclient!srremoverestorepoint": "inert",
+  "user32!attachthreadinput": "inert",
+  "user32!bringwindowtotop": "inert",
+  "user32!clienttoscreen": "inert",
+  "user32!closedesktop": "inert",
+  "user32!drawiconex": "inert",
+  "user32!enumchildwindows": "inert",
+  "user32!enumdisplaydevices": "inert",
+  "user32!enumdisplaysettings": "inert",
+  "user32!enumwindows": "inert",
+  "user32!getclassname": "inert",
+  "user32!getclientrect": "inert",
+  "user32!getcursorinfo": "inert",
+  "user32!getcursorpos": "inert",
+  "user32!getdlgctrlid": "inert",
+  "user32!getforegroundwindow": "inert",
+  "user32!geticoninfo": "inert",
+  "user32!getmenu": "inert",
+  "user32!getmenuitemcount": "inert",
+  "user32!getmenuitemid": "inert",
+  "user32!getmenuitemrect": "inert",
+  "user32!getmenustring": "inert",
+  "user32!getprocesswindowstation": "inert",
+  "user32!getshellwindow": "inert",
+  "user32!getsubmenu": "inert",
+  "user32!getthreaddesktop": "inert",
+  "user32!getuserobjectinformation": "inert",
+  "user32!getuserobjectsecurity": "inert",
+  "user32!getwindowrect": "inert",
+  "user32!getwindowtext": "inert",
+  "user32!getwindowthreadprocessid": "inert",
+  "user32!ischild": "inert",
+  "user32!iswindow": "inert",
+  "user32!iswindowenabled": "inert",
+  "user32!iswindowvisible": "inert",
+  "user32!mouse_event": "inert",
+  "user32!openinputdesktop": "inert",
+  "user32!postmessage": "inert",
+  "user32!sendinput": "inert",
+  "user32!sendmessage": "inert",
+  "user32!sendmessagetimeout": "inert",
+  "user32!sendmessagew": "inert",
+  "user32!setcursorpos": "inert",
+  "user32!setforegroundwindow": "inert",
+  "user32!setprocessdpiaware": "inert",
+  "user32!setuserobjectsecurity": "inert",
+  "user32!setwindowpos": "inert",
+  "user32!showwindow": "inert",
+  "userenv!createenvironmentblock": "inert",
+  "userenv!destroyenvironmentblock": "inert",
+  "userenv!getuserprofiledirectoryw": "inert"
+ },
+ "powershell": {
+  "add-content": "inert",
+  "add-localgroupmember": "inert",
+  "add-member": "inert",
+  "add-partitionaccesspath": {
+   "does": "mounts a volume in a folder"
+  },
+  "clear-content": "inert",
+  "compare-object": "inert",
+  "compress-archive": {
+   "does": "walks a folder tree into an archive, entering links",
+   "walk": true
+  },
+  "convertfrom-csv": "inert",
+  "convertfrom-json": "inert",
+  "convertto-csv": "inert",
+  "convertto-json": "inert",
+  "convertto-securestring": "inert",
+  "convertto-xml": "inert",
+  "copy-item": {
+   "does": "copies a folder tree, entering links",
+   "safe": [
+    {
+     "without": [
+      "Recurse"
+     ]
+    }
+   ]
+  },
+  "disable-scheduledtask": "inert",
+  "enable-scheduledtask": "inert",
+  "expand-archive": {
+   "does": "writes a whole archive into a folder tree"
+  },
+  "export-clixml": "inert",
+  "export-csv": "inert",
+  "export-scheduledtask": "inert",
+  "foreach-object": {
+   "does": "calls a method named by a string",
+   "safe": [
+    {
+     "blocks": true
+    }
+   ]
+  },
+  "format-list": "inert",
+  "format-table": "inert",
+  "get-acl": "inert",
+  "get-authenticodesignature": "inert",
+  "get-childitem": {
+   "does": "walks a folder tree; measured on Windows PowerShell 5.1 it lists links without entering them, and -FollowSymlink would enter them",
+   "safe": [
+    {
+     "without": [
+      "FollowSymlink"
+     ]
+    }
+   ]
+  },
+  "get-ciminstance": "inert",
+  "get-command": "inert",
+  "get-content": "inert",
+  "get-counter": "inert",
+  "get-culture": "inert",
+  "get-date": "inert",
+  "get-disk": "inert",
+  "get-event": "inert",
+  "get-eventsubscriber": "inert",
+  "get-filehash": "inert",
+  "get-host": "inert",
+  "get-hotfix": "inert",
+  "get-item": "inert",
+  "get-itemproperty": "inert",
+  "get-itempropertyvalue": "inert",
+  "get-job": "inert",
+  "get-localgroupmember": "inert",
+  "get-location": "inert",
+  "get-mppreference": "inert",
+  "get-netadapter": "inert",
+  "get-netfirewallrule": "inert",
+  "get-partition": "inert",
+  "get-process": "inert",
+  "get-processmitigation": "inert",
+  "get-pscallstack": "inert",
+  "get-psdrive": "inert",
+  "get-random": "inert",
+  "get-scheduledtask": "inert",
+  "get-scheduledtaskinfo": "inert",
+  "get-service": "inert",
+  "get-smbshare": "inert",
+  "get-unique": "inert",
+  "get-variable": "inert",
+  "get-volume": "inert",
+  "get-windowsoptionalfeature": "inert",
+  "get-winevent": "inert",
+  "get-wmiobject": "inert",
+  "group-object": "inert",
+  "import-clixml": "inert",
+  "import-csv": "inert",
+  "import-module": {
+   "does": "loads code the check cannot read"
+  },
+  "install-module": {
+   "does": "installs module code from the PowerShell Gallery, which the check cannot read"
+  },
+  "invoke-cimmethod": {
+   "does": "calls a WMI method, which can start programs"
+  },
+  "invoke-command": {
+   "does": "runs a script the check cannot read",
+   "safe": [
+    {
+     "blocks": true
+    }
+   ]
+  },
+  "invoke-scriptanalyzer": "inert",
+  "join-path": "inert",
+  "measure-object": "inert",
+  "mount-diskimage": {
+   "does": "attaches a virtual disk"
+  },
+  "mount-vhd": {
+   "does": "attaches a virtual disk"
+  },
+  "move-item": "inert",
+  "new-alias": "inert",
+  "new-event": "inert",
+  "new-guid": "inert",
+  "new-item": {
+   "does": "makes a link",
+   "safe": [
+    {
+     "absent": true,
+     "in": [
+      "directory",
+      "file"
+     ],
+     "param": [
+      "ItemType",
+      "Type"
+     ]
+    }
+   ]
+  },
+  "new-itemproperty": "inert",
+  "new-localuser": "inert",
+  "new-netfirewallrule": "inert",
+  "new-object": "inert",
+  "new-psdrive": {
+   "does": "maps a drive"
+  },
+  "new-scheduledtaskprincipal": "inert",
+  "new-scheduledtasksettingsset": "inert",
+  "new-scheduledtasktrigger": "inert",
+  "new-selfsignedcertificate": "inert",
+  "new-service": {
+   "does": "registers a program that Windows starts as a service"
+  },
+  "new-smbmapping": {
+   "does": "maps a drive"
+  },
+  "new-smbshare": {
+   "does": "shares a folder as a network drive"
+  },
+  "new-timespan": "inert",
+  "out-file": "inert",
+  "out-host": "inert",
+  "out-null": "inert",
+  "out-string": "inert",
+  "pop-location": "inert",
+  "push-location": "inert",
+  "read-host": "inert",
+  "receive-job": "inert",
+  "register-cimindicationevent": "inert",
+  "register-objectevent": "inert",
+  "register-scheduledtask": {
+   "does": "registers a scheduled task from XML the check cannot read",
+   "safe": [
+    {
+     "without": [
+      "Xml"
+     ]
+    }
+   ]
+  },
+  "remove-event": "inert",
+  "remove-item": "measured under Windows PowerShell 5.1: removes a junction, directory link or mount point as a link and never deletes through it",
+  "remove-itemproperty": "inert",
+  "remove-job": "inert",
+  "remove-localuser": "inert",
+  "remove-netfirewallrule": "inert",
+  "remove-psbreakpoint": "inert",
+  "remove-psdrive": "inert",
+  "remove-smbshare": "inert",
+  "remove-variable": "inert",
+  "rename-item": "inert",
+  "resolve-path": "inert",
+  "select-object": "inert",
+  "select-string": "inert",
+  "select-xml": "inert",
+  "set-acl": {
+   "does": "sets permissions that Windows passes down into every folder below, through mount points"
+  },
+  "set-alias": "inert",
+  "set-content": "inert",
+  "set-date": "inert",
+  "set-item": "inert",
+  "set-itemproperty": "inert",
+  "set-location": "inert",
+  "set-psbreakpoint": "inert",
+  "set-strictmode": "inert",
+  "set-variable": "inert",
+  "sort-object": "inert",
+  "split-path": "inert",
+  "start-job": {
+   "does": "runs a script the check cannot read",
+   "safe": [
+    {
+     "blocks": true
+    }
+   ]
+  },
+  "start-scheduledtask": "inert",
+  "start-sleep": "inert",
+  "start-threadjob": {
+   "does": "runs a script the check cannot read",
+   "safe": [
+    {
+     "blocks": true
+    }
+   ]
+  },
+  "start-transcript": "inert",
+  "stop-job": "inert",
+  "stop-process": "inert",
+  "stop-scheduledtask": "inert",
+  "stop-transcript": "inert",
+  "tee-object": "inert",
+  "test-connection": "inert",
+  "test-json": "inert",
+  "test-path": "inert",
+  "unregister-event": "inert",
+  "unregister-scheduledtask": "inert",
+  "wait-event": "inert",
+  "wait-job": "inert",
+  "wait-process": "inert",
+  "where-object": "inert",
+  "write-error": "inert",
+  "write-host": "inert",
+  "write-output": "inert",
+  "write-progress": "inert",
+  "write-verbose": "inert",
+  "write-warning": "inert"
+ },
+ "powershell argument joiners": {
+  "join-rooindustrieswindowsarguments": "quotes each array item as one Windows argument and joins them with spaces (backend/scripts/ProcessProfile.Common.ps1)"
+ },
+ "powershell methods": {
+  ".acknowledge": "inert",
+  ".activate": "inert",
+  ".add": "inert",
+  ".addaccessrule": "inert",
+  ".addargument": "inert",
+  ".addauditrule": "inert",
+  ".addcommand": {
+   "does": "runs a PowerShell command the check cannot read"
+  },
+  ".adddays": "inert",
+  ".addhours": "inert",
+  ".addmilliseconds": "inert",
+  ".addminutes": "inert",
+  ".addnamespace": "inert",
+  ".addscript": {
+   "does": "runs PowerShell text the check cannot read"
+  },
+  ".addseconds": "inert",
+  ".addticks": "inert",
+  ".addtoselection": "inert",
+  ".addyears": "inert",
+  ".append": "inert",
+  ".arm": "inert",
+  ".atutc": "inert",
+  ".basename": "inert",
+  ".begininvoke": "inert",
+  ".clear": "inert",
+  ".clone": "inert",
+  ".close": "inert",
+  ".closemainwindow": "inert",
+  ".collapse": "inert",
+  ".compareto": "inert",
+  ".complete": "inert",
+  ".computehash": "inert",
+  ".connect": "inert",
+  ".contains": "inert",
+  ".containskey": "inert",
+  ".controlchanges": "inert",
+  ".copy": {
+   "does": "may copy a folder tree"
+  },
+  ".copyfromscreen": "inert",
+  ".copyto": "inert",
+  ".count": "inert",
+  ".create": {
+   "does": "may create a folder with permissions or start a WMI process"
+  },
+  ".createfolder": "inert",
+  ".createshortcut": "inert",
+  ".createsubkey": "inert",
+  ".createtype": {
+   "does": "builds native calls at run time"
+  },
+  ".creationtime": "inert",
+  ".dangerousgethandle": "inert",
+  ".definedynamicassembly": {
+   "does": "builds native calls at run time"
+  },
+  ".definedynamicmodule": {
+   "does": "builds native calls at run time"
+  },
+  ".definepinvokemethod": {
+   "does": "builds native calls at run time"
+  },
+  ".definetype": {
+   "does": "builds native calls at run time"
+  },
+  ".delete": {
+   "does": "may delete a folder tree"
+  },
+  ".deletesubkey": "inert",
+  ".deletesubkeytree": {
+   "does": "deletes a whole registry key tree"
+  },
+  ".deletetask": "inert",
+  ".deletevalue": "inert",
+  ".dequeue": "inert",
+  ".descendants": "inert",
+  ".deserializeobject": "inert",
+  ".directoryname": "inert",
+  ".displayversion": "inert",
+  ".dispose": "inert",
+  ".drawimage": "inert",
+  ".element": "inert",
+  ".endinvoke": "inert",
+  ".endswith": "inert",
+  ".enqueue": "inert",
+  ".equals": "inert",
+  ".evaluate": "inert",
+  ".executablepath": "inert",
+  ".exists": "inert",
+  ".expand": "inert",
+  ".extension": "inert",
+  ".extract": "inert",
+  ".fillrectangle": "inert",
+  ".find": "inert",
+  ".findall": "inert",
+  ".findfirst": "inert",
+  ".finditembyproperty": "inert",
+  ".findwindowsw": "inert",
+  ".flush": "inert",
+  ".fullname": "inert",
+  ".getaccesscontrol": "inert",
+  ".getaccessrules": "inert",
+  ".getattribute": "inert",
+  ".getauditrules": "inert",
+  ".getawaiter": "inert",
+  ".getbaseexception": "inert",
+  ".getbinaryform": "inert",
+  ".getbytecount": "inert",
+  ".getbytes": "inert",
+  ".getcommandname": "inert",
+  ".getconstructor": {
+   "does": "calls a member chosen at run time, so the check cannot see what it runs"
+  },
+  ".getcurrentpattern": "inert",
+  ".getcurrentpropertyvalue": "inert",
+  ".getdirectories": {
+   "does": "walks every folder below, entering links",
+   "safe": [
+    {
+     "absent": true,
+     "arg": 1,
+     "in": [
+      "TopDirectoryOnly",
+      0
+     ]
+    }
+   ]
+  },
+  ".getentry": "inert",
+  ".getenumerator": "inert",
+  ".getfile": "inert",
+  ".getfiles": {
+   "does": "walks every folder below, entering links",
+   "safe": [
+    {
+     "absent": true,
+     "arg": 1,
+     "in": [
+      "TopDirectoryOnly",
+      0
+     ]
+    }
+   ]
+  },
+  ".getfilesysteminfos": {
+   "does": "walks every folder below, entering links",
+   "safe": [
+    {
+     "absent": true,
+     "arg": 1,
+     "in": [
+      "TopDirectoryOnly",
+      0
+     ]
+    }
+   ]
+  },
+  ".getfolder": "inert",
+  ".getfolders": "inert",
+  ".gethdc": "inert",
+  ".getmethod": {
+   "does": "calls a member chosen at run time, so the check cannot see what it runs"
+  },
+  ".getmethods": {
+   "does": "calls a member chosen at run time, so the check cannot see what it runs"
+  },
+  ".getnewclosure": "inert",
+  ".getowner": "inert",
+  ".getparent": "inert",
+  ".getreflectionattributetype": "inert",
+  ".getresult": "inert",
+  ".getruntimeid": "inert",
+  ".getscriptblock": "inert",
+  ".getsddlform": "inert",
+  ".getsecuritydescriptor": "inert",
+  ".getsecuritydescriptorbinaryform": "inert",
+  ".getsecuritydescriptorsddlform": "inert",
+  ".getselection": "inert",
+  ".getstring": "inert",
+  ".getsubkeynames": "inert",
+  ".getsupportedpatterns": "inert",
+  ".gettask": "inert",
+  ".gettasks": "inert",
+  ".gettext": "inert",
+  ".gettype": "inert",
+  ".getunresolvedproviderpathfrompspath": "inert",
+  ".getvalue": "inert",
+  ".getvaluekind": "inert",
+  ".getvaluenames": "inert",
+  ".hasflag": "inert",
+  ".hashtable": "inert",
+  ".id": "inert",
+  ".identity": "inert",
+  ".impersonate": "inert",
+  ".indexof": "inert",
+  ".indexofany": "inert",
+  ".insert": "inert",
+  ".invoke": "clicks a UI pattern or runs a script block or delegate read in this file; reflection lookups are classified where the method is found (.getmethod)",
+  ".isinrole": "inert",
+  ".isinstanceoftype": "inert",
+  ".ismatch": "inert",
+  ".item": "inert",
+  ".key": "inert",
+  ".keys": "inert",
+  ".kill": "inert",
+  ".lastindexof": "inert",
+  ".lastwritetime": "inert",
+  ".length": "inert",
+  ".live": "inert",
+  ".match": "inert",
+  ".matches": "inert",
+  ".mode": "inert",
+  ".moveto": "inert",
+  ".name": "inert",
+  ".newtask": "inert",
+  ".open": "inert",
+  ".opensubkey": "inert",
+  ".operationid": "inert",
+  ".padright": "inert",
+  ".path": "inert",
+  ".pending": "inert",
+  ".polled": "inert",
+  ".pop": "inert",
+  ".processid": "inert",
+  ".protection": "inert",
+  ".pschildname": "inert",
+  ".push": "inert",
+  ".read": "inert",
+  ".readasync": "inert",
+  ".readtext": "inert",
+  ".readtoend": "inert",
+  ".readtoendasync": "inert",
+  ".realize": "inert",
+  ".reason": "inert",
+  ".refresh": "inert",
+  ".registertask": {
+   "does": "registers a scheduled task whose program the check cannot read"
+  },
+  ".registertaskdefinition": {
+   "does": "registers a scheduled task whose program the check cannot read"
+  },
+  ".releasehdc": "inert",
+  ".releasemutex": "inert",
+  ".remove": "inert",
+  ".removeaccessrule": "inert",
+  ".removeat": "inert",
+  ".removechild": "inert",
+  ".removefromselection": "inert",
+  ".removerange": "inert",
+  ".replace": "inert",
+  ".restart": "inert",
+  ".restore": "inert",
+  ".resume": "inert",
+  ".running": "inert",
+  ".save": "inert",
+  ".scroll": "inert",
+  ".scrollintoview": "inert",
+  ".scrollvertical": "inert",
+  ".select": "inert",
+  ".selectnodes": "inert",
+  ".selectsinglenode": "inert",
+  ".serialize": "inert",
+  ".set": "inert",
+  ".setaccesscontrol": {
+   "does": "sets permissions that Windows passes down into every folder below, through mount points"
+  },
+  ".setaccessruleprotection": "inert",
+  ".setflags": "inert",
+  ".setfocus": "inert",
+  ".setimplementationflags": "inert",
+  ".setlength": "inert",
+  ".setowner": "inert",
+  ".setscrollpercent": "inert",
+  ".setsecuritydescriptorsddlform": "inert",
+  ".setvalue": "inert",
+  ".shellexecute": {
+   "does": "starts a program through the Windows shell"
+  },
+  ".show": "inert",
+  ".split": "inert",
+  ".start": {
+   "does": "may start a program the check cannot read"
+  },
+  ".startswith": "inert",
+  ".stop": "inert",
+  ".substring": "inert",
+  ".taskname": "inert",
+  ".throw": "inert",
+  ".toarray": "inert",
+  ".tochararray": "inert",
+  ".tofiletimeutc": "inert",
+  ".toggle": "inert",
+  ".toint64": "inert",
+  ".tolocaltime": "inert",
+  ".tolowerinvariant": "inert",
+  ".topology": "inert",
+  ".tostring": "inert",
+  ".touniversaltime": "inert",
+  ".toupperinvariant": "inert",
+  ".toxml": "inert",
+  ".traced": "inert",
+  ".transformblock": "inert",
+  ".transformfinalblock": "inert",
+  ".translate": "inert",
+  ".trim": "inert",
+  ".trimend": "inert",
+  ".trimstart": "inert",
+  ".trygetcurrentpattern": "inert",
+  ".undo": "inert",
+  ".union": "inert",
+  ".value": "inert",
+  ".values": "inert",
+  ".wait": "inert",
+  ".waitforexit": "inert",
+  ".waitforstatus": "inert",
+  ".waitone": "inert",
+  ".window": "inert",
+  ".windows": "inert",
+  ".write": "inert",
+  ".writeline": "inert"
+ },
+ "powershell path functions": {
+  "get-harnesstoolpath": "returns the plain form of the path it is given (tools/validation/Update/Harness.Common.ps1 and Check-UpgradeRehearsal.ps1)",
+  "get-releasetoolpath": "returns the plain form of the path it is given (tools/scripts/Release.Checks.ps1)"
+ },
+ "programs": {
+  "apt-get": {
+   "does": "installs packages, whose install scripts run as root"
+  },
+  "bcdedit": "inert",
+  "cmd": {
+   "reads": "cmd"
+  },
+  "conhost": {
+   "reads": "program"
+  },
+  "csc": "inert",
+  "diskpart": {
+   "does": "attaches virtual disks and assigns mount points"
+  },
+  "dotnet": {
+   "does": "runs the .NET SDK, which can run other programs",
+   "safe": [
+    {
+     "first": [
+      "build",
+      "publish",
+      "restore",
+      "test",
+      "run",
+      "msbuild",
+      "pack",
+      "--list-sdks",
+      "--info",
+      "--version",
+      "--list-runtimes",
+      "nuget"
+     ]
+    }
+   ]
+  },
+  "explorer": "opens a window in the Windows shell; it walks, copies and deletes nothing",
+  "ffmpeg": "inert",
+  "ffprobe": "inert",
+  "fsutil": {
+   "does": "makes links, mount points and hard links with some subcommands",
+   "safe": [
+    {
+     "first": [
+      "file",
+      "fsinfo",
+      "volume",
+      "behavior"
+     ]
+    }
+   ]
+  },
+  "git": {
+   "does": "runs git, whose clean, rm and worktree commands delete folder trees",
+   "safe": [
+    {
+     "first": [
+      "status",
+      "rev-parse",
+      "ls-files",
+      "branch",
+      "diff",
+      "show",
+      "log",
+      "cat-file",
+      "ls-tree",
+      "config",
+      "describe",
+      "init",
+      "add",
+      "commit",
+      "checkout",
+      "switch",
+      "merge-base",
+      "symbolic-ref",
+      "rev-list",
+      "tag",
+      "apply",
+      "hash-object"
+     ],
+     "skip": [
+      "-C",
+      "-c"
+     ]
+    }
+   ]
+  },
+  "hostname": "inert",
+  "icacls": {
+   "does": "with /T sets permissions on Windows passes down into every folder below, through mount points",
+   "safe": [
+    {
+     "no switch": [
+      "/t",
+      "/restore"
+     ]
+    }
+   ]
+  },
+  "iscc": {
+   "does": "compiles an installer script, which can run programs"
+  },
+  "junction": {
+   "does": "makes a link"
+  },
+  "mklink": {
+   "does": "makes a link"
+  },
+  "mountvol": {
+   "does": "mounts a volume"
+  },
+  "net": {
+   "does": "maps drives and shares folders with net use and net share",
+   "safe": [
+    {
+     "first": [
+      "user",
+      "localgroup",
+      "session",
+      "stop",
+      "accounts",
+      "config"
+     ]
+    }
+   ]
+  },
+  "node": {
+   "does": "runs JavaScript the check cannot read"
+  },
+  "ping": "inert",
+  "powercfg": "inert",
+  "powershell": {
+   "reads": "powershell"
+  },
+  "pwsh": {
+   "reads": "powershell"
+  },
+  "py": {
+   "reads": "python"
+  },
+  "python": {
+   "reads": "python"
+  },
+  "python3": {
+   "reads": "python"
+  },
+  "reg": {
+   "does": "changes the registry; reg delete removes whole key trees and reg load mounts a hive",
+   "safe": [
+    {
+     "first": [
+      "query",
+      "add",
+      "export"
+     ]
+    }
+   ]
+  },
+  "robocopy": {
+   "does": "copies or mirrors a folder tree; its purge deletes through junctions even with /XJ"
+  },
+  "runas": {
+   "reads": "program"
+  },
+  "sc": {
+   "does": "registers or starts a service program",
+   "safe": [
+    {
+     "first": [
+      "query",
+      "queryex",
+      "qc",
+      "stop",
+      "delete",
+      "sdshow",
+      "config",
+      "qfailure"
+     ]
+    }
+   ]
+  },
+  "schtasks": {
+   "does": "registers or runs a scheduled task program",
+   "safe": [
+    {
+     "first": [
+      "/query",
+      "/delete",
+      "/end"
+     ]
+    }
+   ]
+  },
+  "sha256sum": "inert",
+  "subst": {
+   "does": "maps a drive"
+  },
+  "sudo": {
+   "reads": "program"
+  },
+  "takeown": {
+   "does": "with /R takes ownership of a whole folder tree, entering links",
+   "safe": [
+    {
+     "no switch": [
+      "/r"
+     ]
+    }
+   ]
+  },
+  "taskkill": "inert",
+  "tasklist": "inert",
+  "timeout": "inert",
+  "unins000": {
+   "does": "runs the app uninstaller, which deletes the app folder tree"
+  },
+  "whoami": "inert",
+  "winget": {
+   "does": "installs software, which runs installers"
+  },
+  "xcopy": {
+   "does": "copies a folder tree, entering links"
+  }
+ },
+ "python": {
+  "-m json.tool": "inert",
+  "-m pip": "inert",
+  "-m unittest": "inert",
+  "-m venv": "inert",
+  "PIL": "inert",
+  "_winapi.CreateJunction": {
+   "does": "makes a link"
+  },
+  "argparse": "inert",
+  "ast": "inert",
+  "base64": "inert",
+  "builtins": "inert",
+  "builtins.AssertionError": "inert",
+  "builtins.Exception": "inert",
+  "builtins.FileNotFoundError": "inert",
+  "builtins.IndexError": "inert",
+  "builtins.KeyError": "inert",
+  "builtins.KeyboardInterrupt": "inert",
+  "builtins.NotImplementedError": "inert",
+  "builtins.OSError": "inert",
+  "builtins.PermissionError": "inert",
+  "builtins.RuntimeError": "inert",
+  "builtins.StopIteration": "inert",
+  "builtins.SystemExit": "inert",
+  "builtins.TimeoutError": "inert",
+  "builtins.TypeError": "inert",
+  "builtins.UnicodeDecodeError": "inert",
+  "builtins.ValueError": "inert",
+  "builtins.__import__": {
+   "does": "loads code the check cannot read"
+  },
+  "builtins.abs": "inert",
+  "builtins.all": "inert",
+  "builtins.any": "inert",
+  "builtins.bool": "inert",
+  "builtins.bytearray": "inert",
+  "builtins.bytes": "inert",
+  "builtins.chr": "inert",
+  "builtins.compile": {
+   "does": "compiles Python text the check cannot read"
+  },
+  "builtins.dict": "inert",
+  "builtins.divmod": "inert",
+  "builtins.enumerate": "inert",
+  "builtins.eval": {
+   "does": "runs Python text the check cannot read"
+  },
+  "builtins.exec": {
+   "does": "runs Python text the check cannot read"
+  },
+  "builtins.filter": "inert",
+  "builtins.float": "inert",
+  "builtins.format": "inert",
+  "builtins.frozenset": "inert",
+  "builtins.getattr": "inert",
+  "builtins.hasattr": "inert",
+  "builtins.hash": "inert",
+  "builtins.hex": "inert",
+  "builtins.id": "inert",
+  "builtins.int": "inert",
+  "builtins.isinstance": "inert",
+  "builtins.issubclass": "inert",
+  "builtins.iter": "inert",
+  "builtins.len": "inert",
+  "builtins.list": "inert",
+  "builtins.map": "inert",
+  "builtins.max": "inert",
+  "builtins.min": "inert",
+  "builtins.next": "inert",
+  "builtins.object": "inert",
+  "builtins.open": "inert",
+  "builtins.ord": "inert",
+  "builtins.print": "inert",
+  "builtins.range": "inert",
+  "builtins.repr": "inert",
+  "builtins.reversed": "inert",
+  "builtins.round": "inert",
+  "builtins.set": "inert",
+  "builtins.slice": "inert",
+  "builtins.sorted": "inert",
+  "builtins.str": "inert",
+  "builtins.sum": "inert",
+  "builtins.super": "inert",
+  "builtins.tuple": "inert",
+  "builtins.type": "inert",
+  "builtins.zip": "inert",
+  "collections": "inert",
+  "concurrent": "inert",
+  "contextlib": "inert",
+  "copy": "inert",
+  "cryptography": "inert",
+  "csv": "inert",
+  "ctypes": "inert",
+  "dataclasses": "inert",
+  "datetime": "inert",
+  "enum": "inert",
+  "fnmatch": "inert",
+  "functools": "inert",
+  "glob.glob": {
+   "does": "walks every folder below with **, entering links",
+   "safe": [
+    {
+     "absent": true,
+     "arg": "recursive",
+     "in": [
+      false
+     ]
+    },
+    {
+     "arg": 0,
+     "lacks": "**"
+    }
+   ]
+  },
+  "glob.iglob": {
+   "does": "walks every folder below with **, entering links",
+   "safe": [
+    {
+     "absent": true,
+     "arg": "recursive",
+     "in": [
+      false
+     ]
+    },
+    {
+     "arg": 0,
+     "lacks": "**"
+    }
+   ]
+  },
+  "hashlib": "inert",
+  "http": "inert",
+  "importlib.import_module": {
+   "does": "loads code the check cannot read"
+  },
+  "importlib.util.module_from_spec": "inert",
+  "io": "inert",
+  "ipaddress": "inert",
+  "itertools": "inert",
+  "json": "inert",
+  "jsonschema": "inert",
+  "math": "inert",
+  "operator": "inert",
+  "os.SEEK_END": "inert",
+  "os.close": "inert",
+  "os.environ": "inert",
+  "os.fspath": "inert",
+  "os.getcwd": "inert",
+  "os.getpid": "inert",
+  "os.kill": "inert",
+  "os.killpg": "inert",
+  "os.link": {
+   "does": "makes a link"
+  },
+  "os.name": "inert",
+  "os.path": "inert",
+  "os.pathsep": "inert",
+  "os.pidfd_open": "inert",
+  "os.scandir": "inert",
+  "os.sep": "inert",
+  "os.symlink": {
+   "does": "makes a link"
+  },
+  "os.system": {
+   "does": "runs a command line the check cannot read"
+  },
+  "os.urandom": "inert",
+  "os.walk": {
+   "does": "walks a folder tree, entering junctions",
+   "walk": true
+  },
+  "pathlib.Path": "inert",
+  "pathlib.PurePath": "inert",
+  "pathlib.PurePosixPath": "inert",
+  "pathlib.PureWindowsPath": "inert",
+  "random": "inert",
+  "re": "inert",
+  "secrets": "inert",
+  "selectors": "inert",
+  "shutil.copy": "inert",
+  "shutil.copy2": "inert",
+  "shutil.copyfile": "inert",
+  "shutil.copytree": {
+   "does": "copies a folder tree, entering links"
+  },
+  "shutil.move": "inert",
+  "shutil.rmtree": "measured on Windows: removes a junction, directory link or mount point as a link and never deletes through it",
+  "shutil.which": "inert",
+  "signal": "inert",
+  "socket": "inert",
+  "ssl": "inert",
+  "stat": "inert",
+  "statistics": "inert",
+  "string": "inert",
+  "struct": "inert",
+  "subprocess.CalledProcessError": "inert",
+  "subprocess.CompletedProcess": "inert",
+  "subprocess.DEVNULL": "inert",
+  "subprocess.PIPE": "inert",
+  "subprocess.STDOUT": "inert",
+  "subprocess.TimeoutExpired": "inert",
+  "sys.argv": "inert",
+  "sys.executable": "inert",
+  "sys.exit": "inert",
+  "sys.path": "inert",
+  "sys.platform": "inert",
+  "sys.stderr": "inert",
+  "sys.stdin": "inert",
+  "sys.stdout": "inert",
+  "sys.version_info": "inert",
+  "tarfile": "inert",
+  "tarfile.TarFile.extractall": {
+   "does": "writes a whole archive into a folder tree, including links in it"
+  },
+  "tempfile": "inert",
+  "textwrap": "inert",
+  "threading": "inert",
+  "time": "inert",
+  "tokenize": "inert",
+  "types": "inert",
+  "typing": "inert",
+  "unittest": "inert",
+  "urllib": "inert",
+  "uuid": "inert",
+  "xml": "inert",
+  "yaml": "inert",
+  "zipfile": "inert",
+  "zipfile.ZipFile.extractall": {
+   "does": "writes a whole archive into a folder tree"
+  }
+ },
+ "python methods": {
+  ".AssignProcessToJobObject": "inert",
+  ".CLEANUP_TIMEOUT": "inert",
+  ".CloseHandle": "inert",
+  ".CreateJobObjectW": "inert",
+  ".Journey": "inert",
+  ".Parse": "inert",
+  ".SetInformationJobObject": "inert",
+  ".TerminateJobObject": "inert",
+  ".__init__": "inert",
+  ".add": "inert",
+  ".add_argument": "inert",
+  ".add_extension": "inert",
+  ".add_parser": "inert",
+  ".add_subparsers": "inert",
+  ".addfile": "inert",
+  ".append": "inert",
+  ".as_posix": "inert",
+  ".assertAlmostEqual": "inert",
+  ".assertEqual": "inert",
+  ".assertFalse": "inert",
+  ".assertRaisesRegex": "inert",
+  ".assertTrue": "inert",
+  ".assert_external_signing_key": "inert",
+  ".b64decode": "inert",
+  ".b64encode": "inert",
+  ".binding": "inert",
+  ".casefold": "inert",
+  ".check_returncode": "inert",
+  ".chmod": "inert",
+  ".choices": "inert",
+  ".classify": "inert",
+  ".cleanup_checks": "inert",
+  ".clear": "inert",
+  ".close": "inert",
+  ".communicate": "inert",
+  ".completion": "inert",
+  ".copy": {
+   "does": "may copy a folder tree"
+  },
+  ".copy_from": "inert",
+  ".copy_to": "inert",
+  ".count": "inert",
+  ".decode": "inert",
+  ".describe_error": "inert",
+  ".desktop": "inert",
+  ".do_GET": "inert",
+  ".done": "inert",
+  ".dumps": "inert",
+  ".encode": "inert",
+  ".end": "inert",
+  ".end_headers": "inert",
+  ".endswith": "inert",
+  ".enter_host_lease": "inert",
+  ".entries": "inert",
+  ".error": "inert",
+  ".exec_module": "inert",
+  ".exists": "inert",
+  ".extend": "inert",
+  ".extractall": {
+   "does": "writes a whole archive into a folder tree, including links in it"
+  },
+  ".file_identity": "inert",
+  ".final_snapshot": "inert",
+  ".find": "inert",
+  ".findall": "inert",
+  ".finditer": "inert",
+  ".fixed": "inert",
+  ".flush": "inert",
+  ".format": "inert",
+  ".frame": "inert",
+  ".from_bytes": "inert",
+  ".fromhex": "inert",
+  ".fromkeys": "inert",
+  ".get": "inert",
+  ".glob": {
+   "does": "walks every folder below with **, entering links",
+   "safe": [
+    {
+     "arg": 0,
+     "lacks": "**"
+    }
+   ]
+  },
+  ".group": "inert",
+  ".groups": "inert",
+  ".hardlink_to": {
+   "does": "makes a link"
+  },
+  ".harness_tree_helpers": "inert",
+  ".hex": "inert",
+  ".hexdigest": "inert",
+  ".identity": "inert",
+  ".index": "inert",
+  ".infolist": "inert",
+  ".input": "inert",
+  ".inspect": "inert",
+  ".install": "inert",
+  ".interactive": "inert",
+  ".interactive_frame": "inert",
+  ".intersection": "inert",
+  ".invoke": "inert",
+  ".is_absolute": "inert",
+  ".is_dir": "inert",
+  ".is_file": "inert",
+  ".is_relative_to": "inert",
+  ".is_symlink": "inert",
+  ".is_valid": "inert",
+  ".isdecimal": "inert",
+  ".isdigit": "inert",
+  ".isoformat": "inert",
+  ".isspace": "inert",
+  ".issuer_name": "inert",
+  ".items": "inert",
+  ".iter_errors": "inert",
+  ".iterdir": "inert",
+  ".join": "inert",
+  ".keys": "inert",
+  ".kill": "inert",
+  ".learn": "inert",
+  ".link_to": {
+   "does": "makes a link"
+  },
+  ".lint_tree": "inert",
+  ".load_cert_chain": "inert",
+  ".loads": "inert",
+  ".lookup": "inert",
+  ".lower": "inert",
+  ".lstrip": "inert",
+  ".match": "inert",
+  ".mkdir": "inert",
+  ".most_common": "inert",
+  ".move": {
+   "does": "may move a folder tree"
+  },
+  ".named": "inert",
+  ".namelist": "inert",
+  ".not_valid_after": "inert",
+  ".not_valid_before": "inert",
+  ".open": "inert",
+  ".p1": "inert",
+  ".parse_args": "inert",
+  ".partition": "inert",
+  ".paste": "inert",
+  ".poll": "inert",
+  ".pop": "inert",
+  ".preflight": "inert",
+  ".private_bytes": "inert",
+  ".product_version": "inert",
+  ".ps_literal": "inert",
+  ".public_bytes": "inert",
+  ".public_key": "inert",
+  ".read": "inert",
+  ".read_bytes": "inert",
+  ".read_result": "inert",
+  ".read_text": "inert",
+  ".readline": "inert",
+  ".register": "inert",
+  ".relative_to": "inert",
+  ".replace": "inert",
+  ".required_passes": "inert",
+  ".resolve": "inert",
+  ".restore": "inert",
+  ".result": "inert",
+  ".rfind": "inert",
+  ".rglob": {
+   "does": "walks every folder below, entering links",
+   "walk": true
+  },
+  ".rpartition": "inert",
+  ".rsplit": "inert",
+  ".rstrip": "inert",
+  ".run": "inert",
+  ".run_transport": "inert",
+  ".safe_archive_path": "inert",
+  ".save": "inert",
+  ".scope": "inert",
+  ".search": "inert",
+  ".seek": "inert",
+  ".select": "inert",
+  ".send_error": "inert",
+  ".send_header": "inert",
+  ".send_response": "inert",
+  ".serial_number": "inert",
+  ".serve_forever": "inert",
+  ".server_close": "inert",
+  ".setdefault": "inert",
+  ".shipped": "inert",
+  ".shutdown": "inert",
+  ".sign": "inert",
+  ".snapshot": "inert",
+  ".source_version": "inert",
+  ".split": "inert",
+  ".splitlines": "inert",
+  ".start": "inert",
+  ".startswith": "inert",
+  ".stat": "inert",
+  ".strip": "inert",
+  ".sub": "inert",
+  ".subTest": "inert",
+  ".subject_name": "inert",
+  ".submit": "inert",
+  ".summarize": "inert",
+  ".symlink_to": {
+   "does": "makes a link"
+  },
+  ".terminate": "inert",
+  ".text": "inert",
+  ".thumbnail": "inert",
+  ".timestamp": "inert",
+  ".tobytes": "inert",
+  ".translate_path": "inert",
+  ".union": "inert",
+  ".unlink": "inert",
+  ".update": "inert",
+  ".upload": "inert",
+  ".upload_frame": "inert",
+  ".upper": "inert",
+  ".validate_receipt": "inert",
+  ".values": "inert",
+  ".verdict": "inert",
+  ".verified": "inert",
+  ".verify_frame_source": "inert",
+  ".verify_local_source": "inert",
+  ".verify_manifest": "inert",
+  ".verify_source": "inert",
+  ".wait": "inert",
+  ".walk": {
+   "does": "walks a folder tree, entering junctions",
+   "walk": true
+  },
+  ".with_name": "inert",
+  ".with_suffix": "inert",
+  ".wrap_socket": "inert",
+  ".write": "inert",
+  ".write_bytes": "inert",
+  ".write_text": "inert",
+  ".writeheader": "inert",
+  ".writerow": "inert"
+ },
+ "workflow": {
+  "action:actions/checkout": "checks out this repository into the runner workspace",
+  "action:actions/setup-dotnet": "installs the .NET SDK on the runner",
+  "action:actions/setup-python": "installs Python on the runner",
+  "action:actions/upload-artifact": "uploads files the job wrote",
+  "msbuild:Error": "inert",
+  "msbuild:Message": "inert",
+  "msbuild:Warning": "inert"
+ }
+}

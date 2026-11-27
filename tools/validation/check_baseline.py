@@ -313,66 +313,100 @@ def fixture_cleanup_negative_controls():
 
 
 def reparse_walk_negative_controls():
-    check = runpy.run_path(str(Path(__file__).with_name('check_reparse_walks.py')))['check']
-    table = json.loads(Path(__file__).with_name('reparse-walk-names.json').read_text(encoding='utf-8'))
-    location = 'tools/validation/reparse-walk-allowlist.json'
-    cs = 'tools/validation/Example/Checks.cs'
-    every = 'Directory.EnumerateFiles(root, "*", SearchOption.All' + 'Directories);'
-    entry = {'file': cs, 'line': every, 'reason': 'fixture'}
-
-    def refused(files, rows=None, entries=()):
-        with tempfile.TemporaryDirectory() as folder:
-            temporary = Path(folder)
-            for relative, source in {location: json.dumps(list(entries)), **files}.items():
-                (temporary / relative).parent.mkdir(parents=True, exist_ok=True)
-                (temporary / relative).write_bytes(source if isinstance(source, bytes) else source.encode('utf-8'))
-            return check(temporary, rows)
-
-    def control(extension):
-        return 'tools/validation/Example/sample' + ('.' + extension if extension else '')
-
-    cases = {
-        'enumeration that stays local': ({cs: 'LocalTree.Entries(root);'}, [], []),
-        'guarded fixture link': ({cs: 'TestFixtures.Junction(link, root);'}, [], []),
-        'file type nobody listed': ({'tools/validation/Example/run.foo': 'echo'}, [], ['tools/validation/Example/run.foo:']),
-        'file that is neither UTF-8 nor UTF-16': ({'tools/validation/Example/bad.ps1': b'\xff\x00\xd8\x00\xff'}, [], ['tools/validation/Example/bad.ps1:']),
-        'listed line': ({cs: every}, [entry], []),
-        'listed line used once': ({cs: every + '\n' + every}, [entry], [f'{cs}:2:']),
-        'listed without a reason': ({cs: every}, [dict(entry, reason=' ')], [f'{location}:']),
-        'stale listed line': ({cs: 'LocalTree.Entries(root);'}, [entry], [f'{location}: stale']),
+    module = runpy.run_path(str(Path(__file__).with_name('check_reparse_walks.py')), run_name='controls')
+    sharp = 'using System; using System.Diagnostics; using System.Runtime.InteropServices; {0}\nstatic class Control {{\n  [DllImport("kernel32.dll")] static extern uint GetCurrentProcessId();\n  [DllImport("kernel32.dll")] static extern void {1}();\n  static void M(string dir, object x) {{ {2} }}\n}}'
+    constructs = {
+        'ps1': {
+            'command': ('{0}-Item $a', 'Write-Host $a'),
+            'pipeline': ('$a | {0}-Item', '$a | Write-Host'),
+            'call operator on a string': ("& '{0}.exe' $a", "& 'whoami.exe'"),
+            'call operator on a variable': ("$p = '{0}.exe'; & $p", "$p = 'whoami.exe'; & $p"),
+            'dot-source': ('. {0}.exe', '. whoami.exe'),
+            'alias': ('Set-Alias q {0}.exe; q $a', 'function r {{ Write-Host $args }}; r $a'),
+            'splat': ('$p = @{{Path = $a}}; {0}-Item @p', '$p = @{{Object = $a}}; Write-Host @p'),
+            'launched cmd string': ('cmd /c "{0} $a"', 'cmd /c "echo hi"'),
+            'launched PowerShell text': ("powershell -NoProfile -Command '{0}-Item'", "powershell -NoProfile -Command 'Write-Host hi'"),
+            'Invoke-Expression text': ("Invoke-Expression '{0}-Item'", "Invoke-Expression 'Write-Host hi'"),
+            'script block from text': ("& ([scriptblock]::Create('{0}-Item'))", "& ([scriptblock]::Create('Write-Host hi'))"),
+            'Start-Process': ('Start-Process {0}.exe', 'Start-Process whoami.exe'),
+            'interpolated program': ('& "$env:SystemRoot\\{0}.exe"', '& "$env:SystemRoot\\System32\\whoami.exe"'),
+            'continuation': ('{0}-Item `\n  $a', 'Write-Host `\n  $a'),
+            'static .NET call': ('[System.Data.DataTable]::new()', '[System.Math]::Abs(1)'),
+            'instance method': ('$x.{0}()', '$x.ToString()'),
+            'ForEach-Object member': ('$x | ForEach-Object {0}', '$x | ForEach-Object ToString'),
+            'Add-Type source': ("Add-Type -TypeDefinition 'public static class Q {{ public static object M() {{ return new System.Data.DataTable(); }} }}'", "Add-Type -TypeDefinition 'public static class Q {{ public static int M() {{ return System.Math.Abs(1); }} }}'"),
+        },
+        'py': {
+            'imported module member': ('import os\nos.{0}(a)', 'import os\nos.getpid()'),
+            'from-import alias': ('from os import {0} as w\nw(a)', 'from os import getpid as w\nw()'),
+            'method on an unknown value': ('x.{0}()', 'x = []\nx.append(1)'),
+            'reference passed as a value': ('import os\nlist(map(os.{0}, a))', 'import os\nlist(map(os.fspath, a))'),
+            'program list': ("import subprocess\nsubprocess.run(['{0}', a])", "import subprocess\nsubprocess.run(['whoami'])"),
+            'shell string': ("import subprocess\nsubprocess.run(f'{0} {{a}}', shell=True)", "import subprocess\nsubprocess.run('whoami', shell=True)"),
+            'os.system': ("import os\nos.system('{0}')", "import os\nos.system('whoami')"),
+            'getattr': ("import os\ngetattr(os, '{0}')(a)", "import os\ngetattr(os, 'getpid')()"),
+            'continuation': ('import os\nos.{0}(\n    a)', 'import os\nos.getpid(\n    )'),
+            'name bound nowhere': ('{0}(a)', 'print(a)'),
+            'launched Python text': ("import subprocess\nsubprocess.run(['python', '-c', 'import os; os.{0}()'])", "import subprocess\nsubprocess.run(['python', '-c', 'import os; os.getpid()'])"),
+        },
+        'cs': {
+            'call': (sharp.format('', 'Zqvx', 'new System.Data.DataTable();'), sharp.format('', 'Zqvx', 'Math.Abs(1);')),
+            'method group': (sharp.format('', 'Zqvx', 'Func<System.Data.DataTable> f = System.Data.Common.DbProviderFactories.GetFactoryClasses;'), sharp.format('', 'Zqvx', 'Func<int, int> f = Math.Abs;')),
+            'using alias': (sharp.format('using Q = System.Data.DataTable;', 'Zqvx', 'new Q();'), sharp.format('using Q = System.Math;', 'Zqvx', 'Q.Abs(1);')),
+            'using static': (sharp.format('using static System.Data.Common.DbProviderFactories;', 'Zqvx', 'GetFactoryClasses();'), sharp.format('using static System.Math;', 'Zqvx', 'Abs(1);')),
+            'program': (sharp.format('', 'Zqvx', 'Process.Start("{0}.exe");'), sharp.format('', 'Zqvx', 'Process.Start("whoami.exe");')),
+            'interpolated program': (sharp.format('', 'Zqvx', 'Process.Start($"{dir}\\\\{0}.exe");'), sharp.format('', 'Zqvx', 'Process.Start($"{dir}\\\\whoami.exe");')),
+            'launched cmd string': (sharp.format('', 'Zqvx', 'Process.Start("cmd.exe", "/c {0}");'), sharp.format('', 'Zqvx', 'Process.Start("cmd.exe", "/c echo hi");')),
+            'dynamic': (sharp.format('', 'Zqvx', 'dynamic d = x; d.{0}();'), sharp.format('', 'Zqvx', 'object d = x; d.ToString();')),
+            'native entry point': (sharp.format('', '{0}', '{0}();'), sharp.format('', 'Zqvx', 'GetCurrentProcessId();')),
+            'code the compiler cannot read': (sharp.format('', 'Zqvx', '{0}.Run();'), sharp.format('', 'Zqvx', 'Math.Abs(1);')),
+        },
+        'cmd': {'command': ('{0} a', 'echo hi'), 'chained command': ('echo hi & {0} a', 'echo hi & echo there')},
+        'sh': {'command': ('{0} a', 'echo hi'), 'command substitution': ('x=$({0} a)', 'x=$(echo hi)'), 'launched bash text': ("bash -c '{0} a'", "bash -c 'echo hi'")},
+        'targets': {'task': ('<Project><Target Name="T"><{0} /></Target></Project>', '<Project><Target Name="T"><Message Text="hi" /></Target></Project>')},
+        'yml': {'action': ('jobs:\n  j:\n    runs-on: ubuntu-24.04\n    steps:\n      - uses: zq/{0}@v1', 'jobs:\n  j:\n    runs-on: ubuntu-24.04\n    steps:\n      - uses: actions/checkout@v4'),
+                'run step': ('jobs:\n  j:\n    runs-on: ubuntu-24.04\n    steps:\n      - run: {0} a', 'jobs:\n  j:\n    runs-on: ubuntu-24.04\n    steps:\n      - run: echo hi')},
     }
+    allowlist = 'tools/validation/reparse-walk-allowlist.json'
+    listed = 'tools/validation/Control/listed.ps1'
+    cases, entries = {}, []
+    for extension, kinds in constructs.items():
+        folder = '.github/workflows/' if extension == 'yml' else 'tools/validation/Control/'
+        fill = (lambda text: text.replace('{0}', 'zqvx')) if extension == 'cs' else (lambda text: text.format('zqvx'))
+        for kind, (refused, kept) in kinds.items():
+            name = kind.replace(' ', '-')
+            cases[f'{extension} {kind}: an unknown name is refused'] = (f'{folder}{name}-unknown.{extension}', fill(refused), True)
+            cases[f'{extension} {kind}: a classified name passes'] = (f'{folder}{name}-known.{extension}', fill(kept), False)
+    cases['a file type with no reader is refused'] = ('tools/validation/Control/run.foo', 'zqvx a', True)
+    cases['an extensionless file is refused'] = ('tools/validation/Control/run', '#!/bin/sh\nzqvx a', True)
+    cases['a file Python cannot read is refused'] = ('tools/validation/Control/null.py', b'x = 1\n\x00\n', True)
+    cases['a file PowerShell cannot read is refused'] = ('tools/validation/Control/broken.ps1', 'function {', True)
+    cases['a UTF-16 file without a byte order mark is refused'] = ('tools/validation/Control/wide.ps1', 'robocopy C:\\ D:\\x /MIR'.encode('utf-16-be'), True)
+    cases['a listed line passes'] = (listed, 'robocopy C:\\x D:\\y /MIR', False)
+    entries.append({'file': listed, 'line': 'robocopy C:\\x D:\\y /MIR', 'reason': 'control'})
+    cases['a listed line is listed once'] = ('tools/validation/Control/twice.ps1', 'robocopy C:\\x D:\\y /MIR\nrobocopy C:\\x D:\\y /MIR', True)
+    entries.append({'file': 'tools/validation/Control/twice.ps1', 'line': 'robocopy C:\\x D:\\y /MIR', 'reason': 'control'})
+    entries += [{'file': 'tools/validation/Control/missing.ps1', 'line': 'robocopy', 'reason': 'control'},
+                {'file': 'tools/validation/Control/unexplained.ps1', 'line': 'robocopy C:\\x D:\\y /MIR', 'reason': ' '}]
+    cases['an entry without a reason is refused'] = ('tools/validation/Control/unexplained.ps1', 'robocopy C:\\x D:\\y /MIR', True)
     results = {}
-    for label, (files, entries, expected) in cases.items():
-        failures = refused(files, entries=entries)
-        results[label] = len(failures) == len(expected) and all(any(f.startswith(e) for f in failures) for e in expected)
-    for rule in table['cleaning']:
-        for number, item in enumerate(rule['controls']):
-            source = item['text'].encode('utf-16-le')
-            source = b'\xff\xfe' + source if item.get('encoding') == 'utf-16-le-bom' else source if item.get('encoding') else item['text']
-            path = control(item['file'])
-            results[f'cleaning rule "{rule["rule"]}" control {number}'] = any(f.startswith(path + ':') for f in refused({path: source}))
-    for index, row in enumerate(table['rows']):
-        path = control(row.get('file', 'ps1'))
-        variants = [row['sample'], row['sample'].upper()]
-        if ' ' in row['name'] and 'pattern' not in row:
-            variants.append('[' + ', '.join(repr(part) for part in row['name'].split() + ['$a']) + ']')
-        if 'switch' in row:
-            switch = row['switch']
-            variants += [row['name'] + '/' + switch + ' $a', row['name'] + ' -q -' + switch.upper() + ' $a', row['name'] + ' $a /q/' + switch]
-        for alias in [row['name'], *row.get('aliases', [])]:
-            if 'parameter' in row:
-                variants += [alias + ' $a $b -' + row['parameter'][:1], alias + ' $a `\n  -' + row['parameter'], '$p=@{Path=$a}; ' + alias + ' @p']
-        others = [other for number, other in enumerate(table['rows']) if number != index]
-        needed = False
-        for number, variant in enumerate(variants):
-            results[f'table row {index} {row["name"]} variant {number}'] = any(f.startswith(path + ':') for f in refused({path: variant}))
-            needed = needed or not refused({path: variant}, others)
-        results[f'table row {index} {row["name"]} is the only row that refuses one of its controls'] = needed
     with tempfile.TemporaryDirectory() as folder:
-        outside = Path(folder, 'outside')
+        root = Path(folder)
+        for relative, source, _ in cases.values():
+            (root / relative).parent.mkdir(parents=True, exist_ok=True)
+            (root / relative).write_bytes(source if isinstance(source, bytes) else source.encode('utf-8'))
+        (root / allowlist).write_text(json.dumps(entries), encoding='utf-8')
+        failures = module['verify'](root)
+        for label, (relative, _, refused) in cases.items():
+            hit = any(f.startswith(relative + ':') for f in failures)
+            if label == 'an entry without a reason is refused':
+                hit = any(f.startswith(allowlist + ':') and 'unexplained.ps1' in f for f in failures)
+            results[label] = hit == refused
+        results['a stale entry is refused'] = any('stale entry' in f and 'missing.ps1' in f for f in failures)
+        outside = root / 'outside'
         (outside / 'deep').mkdir(parents=True)
         (outside / 'deep' / 'kept.txt').write_text('outside', encoding='utf-8')
-        walked = Path(folder, 'walked')
+        walked = root / 'walked'
         walked.mkdir()
         (walked / 'own.txt').write_text('own', encoding='utf-8')
         link = walked / 'link'
@@ -431,7 +465,7 @@ def validate(root: Path, contracts_only: bool = False):
         for label, passed in fixture_cleanup_negative_controls().items():
             if not passed:
                 failures.append(f'Negative control failed: {label} did not match the fixture cleanup check result')
-        failures.extend(runpy.run_path(str(Path(__file__).with_name('check_reparse_walks.py')))['check'](root))
+        failures.extend(runpy.run_path(str(Path(__file__).with_name('check_reparse_walks.py')), run_name='walks')['verify'](root))
         for label, passed in reparse_walk_negative_controls().items():
             if not passed:
                 failures.append(f'Negative control failed: {label} did not match the reparse walk check result')
