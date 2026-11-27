@@ -690,6 +690,7 @@ def msbuild_facts(relative, data, files=()):
             facts.append(fact(relative, line, source, 'call', 'msbuild:item glob', None))
         elif stack and stack[-1] == 'Target' and name not in ('PropertyGroup', 'ItemGroup', 'OnError'):
             if name == 'Exec':
+                facts.append(fact(relative, line, source, 'command', 'cmd', [], language='cmd'))
                 facts.extend(cmd_facts(relative, line, source, attributes.get('Command', '')))
             else:
                 facts.append(fact(relative, line, source, 'call', 'msbuild:' + name, None))

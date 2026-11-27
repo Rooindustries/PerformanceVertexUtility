@@ -366,7 +366,6 @@ def reparse_walk_negative_controls():
         'cs': {'Process.Start': cs('Process.Start("{0}.exe");'), 'start settings': cs('Process.Start(new ProcessStartInfo("{0}.exe"));')},
         'cmd': {'command': '{0} a', 'after a condition': 'if exist a {0} a', 'after echo off': '@echo off & {0} a'},
         'sh': {'command': '{0} a', 'command substitution': 'x=$({0} a)'},
-        'targets': {'Exec': '<Project><Target Name="T"><Exec Command="{0} a" /></Target></Project>'},
         'yml': {'bash step': 'jobs:\n  j:\n    runs-on: ubuntu-24.04\n    steps:\n      - run: {0} a', 'cmd step': 'jobs:\n  j:\n    runs-on: windows-2025\n    steps:\n      - shell: cmd\n        run: {0} a'},
     }
     always = {
@@ -378,7 +377,7 @@ def reparse_walk_negative_controls():
                'eval': "eval('1')", 'operator': "import operator\noperator.methodcaller('walk')", 'changed program list': "import subprocess\nc = ['whoami']\nc[0] = 'find'\nsubprocess.run(c)"},
         'cs': {'reflection': cs('typeof(System.IO.Directory).GetMethod("GetFiles")!.Invoke(null, null);'), 'compiled expression': cs('System.Linq.Expressions.Expression.Lambda(System.Linq.Expressions.Expression.Empty()).Compile();')},
         'sh': {'trap': "trap 'rm -rf a' EXIT", 'eval': 'eval x', 'command': 'command find -L a', 'function defined later': 'find a\nfind() { :; }'},
-        'targets': {'entity in a property function': '<Project><PropertyGroup><P>$([System.IO.Directory]::&#x47;etFiles(\'a\'))</P></PropertyGroup></Project>', 'item glob': '<Project><ItemGroup><I Include="$(TEMP)\\**\\*" /></ItemGroup></Project>'},
+        'targets': {'Exec of a builtin': '<Project><Target Name="T"><Exec Command="echo hi" /></Target></Project>', 'entity in a property function': '<Project><PropertyGroup><P>$([System.IO.Directory]::&#x47;etFiles(\'a\'))</P></PropertyGroup></Project>', 'item glob': '<Project><ItemGroup><I Include="$(TEMP)\\**\\*" /></ItemGroup></Project>'},
         'yml': {'job-level workflow': 'jobs:\n  j:\n    uses: zq/x/.github/workflows/y.yml@v1'},
     }
     harmless = {
