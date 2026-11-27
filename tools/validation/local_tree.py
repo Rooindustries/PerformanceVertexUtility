@@ -9,13 +9,14 @@ def linked(info):
 
 
 def entries(root, pattern='*', links=False):
+    start = os.path.normpath(os.fspath(root))
     try:
-        top = os.lstat(root)
+        top = os.lstat(start)
     except FileNotFoundError:
         return
     if linked(top):
         raise NotADirectoryError(f'a walk does not start at a link: {root}')
-    pending = [os.fspath(root)]
+    pending = [start]
     while pending:
         try:
             listing = os.scandir(pending.pop())

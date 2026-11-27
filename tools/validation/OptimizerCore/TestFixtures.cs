@@ -441,11 +441,13 @@ static class TestFixtures
                 using var handle = Open(link, 0x80, true);
                 var target = Stored(handle).Target;
                 if (Regex.IsMatch(target, @"^\\\?\?\\Volume\{[0-9A-Fa-f-]+\}\\?$")) volume = @"\\?\" + target[4..].TrimEnd('\\') + "\\";
+                plain = Name(handle, 0)[4..];
             }
             if (volume is not null && Mounted(volume, plain))
             {
                 if (!DeleteVolumeMountPoint(plain.TrimEnd('\\') + "\\")) throw new Win32Exception(Marshal.GetLastWin32Error(), "The volume mount point could not be removed: " + plain);
                 if (Mounted(volume, plain)) throw new IOException("The volume still lists a mount path in the fixture: " + plain);
+                Console.WriteLine("Removed a fixture volume mount point and the volume no longer lists it: " + plain);
             }
             if (Directory.Exists(link)) Directory.Delete(link);
             else File.Delete(link);

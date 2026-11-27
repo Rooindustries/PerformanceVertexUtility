@@ -329,10 +329,17 @@ static class FixtureWalkChecks
         kept &= File.Exists(Path.Combine(root, TestFixtures.VolumeFile));
         check(named && kept,
             "A mount point cleanup cannot remove stops cleanup loudly, names it, and deletes nothing behind it");
-        TestFixtures.Remove(root);
+        var output = new StringWriter();
+        var console = Console.Out;
+        Console.SetOut(output);
+        try { TestFixtures.Remove(root); }
+        finally { Console.SetOut(console); }
+        Console.Write(output.ToString());
         check(!Path.Exists(root) && Canary(canary) == before,
             "Cleanup removes a fixture with a junction, a link and a mount point, which Directory.Delete stops at, "
             + "and the canary keeps its content, owner and ACL");
+        check(output.ToString().Contains("the volume no longer lists it", StringComparison.Ordinal),
+            "Cleanup unmounts the fixture volume with DeleteVolumeMountPoint and the volume confirms it no longer lists the path, with Temp at " + Path.GetTempPath());
     }
 
     private static void Walks(Action<bool, string> check, string canary, string before)
@@ -368,10 +375,13 @@ static class FixtureWalkChecks
             var copied = Directory.GetFiles(copy).Select(Path.GetFileName).Order(StringComparer.Ordinal);
             check(copied.SequenceEqual(["plain_owned.txt", TestFixtures.VolumeFile]),
                 "A copy walk over a fixture copies only the fixture's own files: " + string.Join(", ", copied));
-            var started = new List<string>();
-            try { started.AddRange(LocalTree.Entries(Path.Combine(root, "junction")).Select(entry => entry.FullName)); }
-            catch (IOException) { started = null; }
-            check(started is null, "A walk that starts at a link refuses instead of listing what it points to");
+            foreach (var spelling in new[] { "", "\\", "/", "\\." })
+            {
+                var started = new List<string>();
+                try { started.AddRange(LocalTree.Entries(Path.Combine(root, "junction") + spelling).Select(entry => entry.FullName)); }
+                catch (IOException) { started = null; }
+                check(started is null, "A walk that starts at a link refuses instead of listing what it points to, spelled with '" + spelling + "' at the end");
+            }
         }
         finally
         {

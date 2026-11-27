@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 import re
 import runpy
@@ -516,11 +517,12 @@ def reparse_walk_negative_controls():
         results['local tree neither enters nor yields a link'] = seen == ['own.txt']
         named = sorted(path.relative_to(walked).as_posix() for path in local_tree(walked, links=True))
         results['local tree names links only when asked'] = named == ['leaf', 'link', 'own.txt']
-        try:
-            entered = list(local_tree(link))
-        except NotADirectoryError:
-            entered = None
-        results['local tree refuses a root that is a link'] = entered is None
+        for spelling, start in (('', str(link)), (' written with a trailing separator', str(link) + os.sep), (' written with a trailing dot', os.path.join(str(link), '.'))):
+            try:
+                entered = list(local_tree(start))
+            except NotADirectoryError:
+                entered = None
+            results['local tree refuses a root that is a link' + spelling] = entered is None
     return results
 
 
