@@ -143,6 +143,19 @@ try
     File.Copy(Path.Combine(repo, "backend", "scripts", "Invoke-UninstallCleanupApplyPackage.ps1"), applyScript, true);
     service.DiscardCleanupReview();
 
+    var slowPid = Path.Combine(fixture, "slow.pid");
+    File.WriteAllText(Path.Combine(scripts, "Wait-Fixture.ps1"), "[IO.File]::WriteAllText('" + slowPid.Replace("'", "''") + "', [string]$PID)\nStart-Sleep -Seconds 120\n");
+    using var cancel = new CancellationTokenSource();
+    var slow = service.RunBackendScriptResultAsync("Wait-Fixture.ps1", cancel.Token);
+    var slowId = 0;
+    for (var waited = Stopwatch.StartNew(); waited.Elapsed < TimeSpan.FromSeconds(30) && !(File.Exists(slowPid) && int.TryParse(File.ReadAllText(slowPid), out slowId));) await Task.Delay(100);
+    var cancelled = Stopwatch.StartNew();
+    cancel.Cancel();
+    var stopped = await slow;
+    cancelled.Stop();
+    bool SlowGone() { try { using var child = Process.GetProcessById(slowId); return child.HasExited; } catch (ArgumentException) { return true; } }
+    Check(slowId > 0 && stopped.Value is null && cancelled.Elapsed < TimeSpan.FromSeconds(5) && SlowGone(), "Cancel stops a running backend script within seconds and returns only after it has exited (" + cancelled.ElapsedMilliseconds + " ms)");
+
     var operationsRoot = Path.Combine(fixture, "operations");
     Directory.CreateDirectory(operationsRoot);
     var operations = new OptimizerService(new BackendLocator(), operationsRoot);

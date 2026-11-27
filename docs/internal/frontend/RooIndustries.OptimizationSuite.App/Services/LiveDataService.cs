@@ -1366,7 +1366,7 @@ public sealed partial class LiveDataService
         }
         catch (OperationCanceledException)
         {
-            TryKill(process, BackendScriptPolicy.StopWholeTree(scriptPath));
+            await StopAsync(process, BackendScriptPolicy.StopWholeTree(scriptPath)).ConfigureAwait(false);
             AppLog.Write("backend", "Timed out running " + Path.GetFileName(scriptPath));
             return new(null, AppLog.TimedOut);
         }
@@ -1390,14 +1390,14 @@ public sealed partial class LiveDataService
         return new(stdout, null);
     }
 
-    private static void TryKill(Process process, bool entireTree = true)
+    private static async Task StopAsync(Process process, bool entireTree)
     {
         try
         {
             if (!process.HasExited)
             {
                 process.Kill(entireProcessTree: entireTree);
-                process.WaitForExit(TimeSpan.FromSeconds(10));
+                await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(false);
             }
         }
         catch
