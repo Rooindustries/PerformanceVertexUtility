@@ -296,12 +296,12 @@ try {
     New-Item -ItemType Directory -Path $relaunchRoot -Force | Out-Null
     $probeName = 'RooIndustriesGovernorRelaunchProbe.exe'
     $probeExe = Join-Path $relaunchRoot $probeName
-    Copy-Item -LiteralPath "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -Destination $probeExe -Force
+    Copy-Item -LiteralPath "$env:SystemRoot\System32\cmd.exe" -Destination $probeExe -Force
     $profilePath = Join-Path $relaunchRoot 'governor-relaunch-profile.json'
     $stateRoot = Join-Path $relaunchRoot 'state'
     Write-ReliabilityGovernorProfile -Path $profilePath -CandidateName $probeName
 
-    $relaunchFirst = Start-Process -FilePath $probeExe -ArgumentList (Join-RooIndustriesWindowsArguments @('-NoProfile','-WindowStyle','Hidden','-Command','while ($true) { [Math]::Sqrt(144) | Out-Null }')) -WindowStyle Hidden -PassThru
+    $relaunchFirst = Start-Process -FilePath $probeExe -ArgumentList (Join-RooIndustriesWindowsArguments @('/d','/c','for /l %i in (0,0,1) do @rem')) -WindowStyle Hidden -PassThru
     Start-Sleep -Milliseconds 800
     $beforeFirst = Get-RooIndustriesProcessControlState $relaunchFirst.Id $null
     $sessionOutput = Join-Path $relaunchRoot 'governor-relaunch-session-output.json'
@@ -334,10 +334,8 @@ try {
 
     Stop-ReliabilityProbe -Process $relaunchFirst
     $relaunchFirst = $null
-    Start-Sleep -Milliseconds 700
 
-    $relaunchSecond = Start-Process -FilePath $probeExe -ArgumentList (Join-RooIndustriesWindowsArguments @('-NoProfile','-WindowStyle','Hidden','-Command','Start-Sleep -Seconds 120')) -WindowStyle Hidden -PassThru
-    Start-Sleep -Milliseconds 800
+    $relaunchSecond = Start-Process -FilePath $probeExe -ArgumentList '/d /k' -WindowStyle Hidden -PassThru
     $beforeSecond = Get-RooIndustriesProcessControlState $relaunchSecond.Id $null
 
     Wait-RooIndustriesValidationProcess $relaunchSessionProc 35
