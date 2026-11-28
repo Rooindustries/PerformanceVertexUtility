@@ -203,6 +203,7 @@ sealed class Unit
             parent = parent.Parent;
         return parent switch
         {
+            IPropertyReferenceOperation { Property.IsIndexer: true } when operation is IPropertyReferenceOperation { Property.Name: "ArgumentList" } => true,
             IPropertyReferenceOperation { Instance: not null } or IEventReferenceOperation => false,
             IInvocationOperation { Instance: not null } call => list && call.TargetMethod.Name != "Add",
             IArgumentOperation { Parent: IInvocationOperation start } when IsStart(start.TargetMethod) => false,
@@ -344,9 +345,11 @@ sealed class Unit
     JsonArray Arguments(IEnumerable<IArgumentOperation> arguments) =>
         new(arguments.Where(a => a.Parameter is not null).OrderBy(a => a.Parameter!.Ordinal).Select(a => (JsonNode?)Argument(a.Parameter!.Ordinal, a.Parameter.Name, a.Value)).ToArray());
 
-    static JsonObject Argument(int ordinal, string name, IOperation value)
+    JsonObject Argument(int ordinal, string name, IOperation value)
     {
         var argument = new JsonObject { ["i"] = ordinal, ["name"] = name, ["type"] = value.Type?.ToDisplayString(TypeFormat) };
+        if (Created(value))
+            argument["created"] = true;
         if (value is IConversionOperation { IsImplicit: true } conversion && conversion.Operand.ConstantValue.HasValue)
             value = conversion.Operand;
         if (value.ConstantValue is { HasValue: true, Value: var constant })
@@ -403,6 +406,16 @@ sealed class Unit
     }
 
     Dictionary<IParameterSymbol, IOperation>? binding;
+
+    bool Created(IOperation value)
+    {
+        while (value is IConversionOperation conversion)
+            value = conversion.Operand;
+        if (value is IObjectCreationOperation)
+            return true;
+        return Key(value) is { } key && key.Item2.Length == 0 && key.Item1 is ILocalSymbol && writes.TryGetValue(key, out var made) && made.Count > 0
+            && made.All(write => write is IObjectCreationOperation or IConversionOperation { Operand: IObjectCreationOperation });
+    }
 
     static IOperation? Argument(IEnumerable<IArgumentOperation> arguments, string name) =>
         arguments.FirstOrDefault(a => a.Parameter?.Name == name && a.ArgumentKind != ArgumentKind.DefaultValue)?.Value;

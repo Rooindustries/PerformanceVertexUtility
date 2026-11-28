@@ -526,6 +526,50 @@ def reparse_walk_negative_controls():
     return results
 
 
+def reparse_name_controls(module):
+    named = module['NAMED']
+    wrap = {'ps1': "$x = '{0}'", 'py': "x = '{0}'", 'cs': '    static string X{1} = "{0}";', 'sh': ": '{0}'", 'cmd': 'echo {0}', 'yml': "          : '{0}'", 'targets': '    <Message Text="{0}" />'}
+    head = {'cs': 'static class Control {', 'yml': 'jobs:\n  j:\n    runs-on: ubuntu-24.04\n    steps:\n      - run: |', 'targets': '<Project><Target Name="T">'}
+    tail = {'cs': '}', 'targets': '</Target></Project>'}
+    shells = {'ps1': 'powershell', 'sh': 'bash', 'cmd': 'cmd', 'yml': 'bash', 'targets': 'cmd'}
+    rows = {extension: [] for extension in wrap}
+    for harm in ('R1', 'R2', 'R3'):
+        rules = named[harm]
+        for name in rules['anywhere']:
+            for extension in rows:
+                rows[extension] += [(f'{harm} {name} in {extension}', name, name), (f'{harm} {name} glued in {extension}', name, '9' + name + 'zq')]
+        for name, rule in list(rules['words'].items()) + list(rules['switched'].items()):
+            languages = rule if isinstance(rule, list) else rule['languages']
+            switch = '' if isinstance(rule, list) else ' -' + rule['letters'][0] if 'letters' in rule else ' /' + rule['switches'][0] if 'switches' in rule else ' ' + rule['first'][0]
+            for extension in rows:
+                if shells.get(extension, 'bash' if extension in ('py', 'cs') else None) in languages or extension in ('py', 'cs'):
+                    rows[extension] += [(f'{harm} {name} in {extension}', name, f'{name}{switch} a'), (f'{harm} {name} glued in {extension}', name, f'{name}.exe{switch} a' if extension == 'cs' else f'/zq/{name}.exe{switch} a')]
+        for label, rule in rules['patterns'].items():
+            for extension, language in (('ps1', 'powershell'), ('py', 'python'), ('cs', 'csharp'), ('sh', 'bash'), ('cmd', 'cmd')):
+                if language in rule['languages'] or 'all' in rule['languages']:
+                    rows[extension].append((f'{harm} {label} in {extension}', label, rule['example']))
+    results = {}
+    for projects in (True, False):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            places = {}
+            for extension, lines in rows.items():
+                if (extension == 'targets') != projects:
+                    continue
+                relative = ('.github/workflows/names.yml' if extension == 'yml' else f'tools/validation/Control/names.{extension}')
+                text = head[extension].split('\n') if extension in head else []
+                for index, (label, name, value) in enumerate(lines):
+                    places[label] = (relative, len(text) + 1, name)
+                    text.append(wrap[extension].format(value, index))
+                text += [tail[extension]] if extension in tail else []
+                (root / relative).parent.mkdir(parents=True, exist_ok=True)
+                (root / relative).write_text('\n'.join(text) + '\n', encoding='utf-8')
+            failures = module['verify'](root)
+            for label, (relative, line, name) in places.items():
+                results[f'name control {label} is refused'] = any(f.startswith(f'{relative}:{line}:') and f'names {name},' in f for f in failures)
+    return results
+
+
 def validate(root: Path, contracts_only: bool = False):
     failures = []
     failures.extend(code_loading_failures(root))
@@ -572,7 +616,9 @@ def validate(root: Path, contracts_only: bool = False):
             if not passed:
                 failures.append(f'Negative control failed: {label} did not match the fixture cleanup check result')
         failures.extend(runpy.run_path(str(Path(__file__).with_name('check_reparse_walks.py')), run_name='walks')['verify'](root))
-        for label, passed in reparse_walk_negative_controls().items():
+        controls = reparse_walk_negative_controls()
+        controls.update(reparse_name_controls(runpy.run_path(str(Path(__file__).with_name('check_reparse_walks.py')), run_name='controls')))
+        for label, passed in controls.items():
             if not passed:
                 failures.append(f'Negative control failed: {label} did not match the reparse walk check result')
         failures.extend(runpy.run_path(str(Path(__file__).with_name('check_workflow_runners.py')))['check'](root))

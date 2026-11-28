@@ -221,10 +221,10 @@ function Get-Bound($Command, [string[]]$Names, [int]$Position) {
     return $found
 }
 
-function Read-Literal($Node, [string]$What) {
+function Read-Literal($Node, [string]$What, $At) {
     $values = @(Get-Values $Node)
     if ($values.Count -eq 1 -and $values[0].IndexOfAny([char[]](0, 1, 2, 3, 4)) -lt 0) { return $values[0] }
-    Add-Fact $Node 'unreadable' "the $What is built from values the check cannot read"
+    Add-Fact $At 'unreadable' "the $What is built from values the check cannot read"
     return $null
 }
 
@@ -256,7 +256,7 @@ function Read-Command($Node) {
         '^(ForEach-Object|%|foreach)$' {
             $member = Get-Bound $Node @('MemberName') 0
             if ($member -and $member -isnot [System.Management.Automation.Language.ScriptBlockExpressionAst]) {
-                if ($text = Read-Literal $member 'member name') { Add-Fact $Node 'method' ('.' + $text.ToLowerInvariant()) $null }
+                if ($text = Read-Literal $member 'member name' $Node) { Add-Fact $Node 'method' ('.' + $text.ToLowerInvariant()) $null }
                 return
             }
         }
@@ -269,9 +269,9 @@ function Read-Command($Node) {
         }
         '^New-Object$' {
             $com = Get-Bound $Node @('ComObject') -1
-            if ($com) { if ($progid = Read-Literal $com 'COM class') { Add-Fact $Node 'call' ('com:' + $progid) @() }; return }
+            if ($com) { if ($progid = Read-Literal $com 'COM class' $Node) { Add-Fact $Node 'call' ('com:' + $progid) @() }; return }
             $type = Get-Bound $Node @('TypeName') 0
-            if ($type -and ($typeName = Read-Literal $type 'type name')) { Add-Fact $Node 'call' ((Resolve-TypeName $typeName) + '..ctor') @() }
+            if ($type -and ($typeName = Read-Literal $type 'type name' $Node)) { Add-Fact $Node 'call' ((Resolve-TypeName $typeName) + '..ctor') @() }
             return
         }
     }
@@ -342,6 +342,7 @@ function Read-Ast($Ast, [bool]$Nested) {
             }
             'ConvertExpressionAst' { if ($node.Type.TypeName.Name -eq 'scriptblock' -and $node.Child -isnot [System.Management.Automation.Language.ScriptBlockExpressionAst]) { Add-Fact $node 'unreadable' 'this turns text into a script block' } }
             'VariableExpressionAst' { if ($node.VariablePath.UserPath -match '^((global|script|local|private):)?PSDefaultParameterValues$') { Add-Fact $node 'unreadable' 'this changes $PSDefaultParameterValues, which changes what later commands do' } }
+            'AssignmentStatementAst' { if ($node.Left -is [System.Management.Automation.Language.VariableExpressionAst] -and $node.Left.VariablePath.DriveName -in 'function', 'alias') { Add-Fact $node 'unreadable' 'this defines a command at run time through the function: or alias: drive' } }
             'UsingStatementAst' { if ($node.UsingStatementKind -eq 'Module') { Add-Fact $node 'command' 'Import-Module' @([pscustomobject]@{ pieces = $node.Name.Value; values = @($node.Name.Value) }) @{ operator = '' } } }
             'InvokeMemberExpressionAst' {
                 $given = @(if ($node.Arguments) { $node.Arguments })

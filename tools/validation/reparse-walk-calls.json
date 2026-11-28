@@ -1,27 +1,679 @@
 {
+ "contract": [
+  "1. A name is on this list only if the thing it names itself performs a walk (R1), applies a permission or owner change that propagates or recurses (R2), or makes a link, mount, drive mapping or virtual disk (R3). Calls to the repo's own link and walk helpers (names.helpers) and identifiers that merely contain Junction, Symlink or HardLink do not count. Python add, walk and move count only in qualified forms (shutil.move, os.walk, an archive's add).",
+  "2. R2 is the call that applies a permission or owner to the file system, not the ones that build a security object in memory: SetOwner, SetAccessRuleProtection, AddAccessRule, RemoveAccessRule and their kind are not on the list.",
+  "3. R2 is a change that propagates or recurses. A call that by its definition changes exactly one object and cannot propagate is not on the list: SetKernelObjectSecurity, SetFileSecurity, chmod or os.chmod without -R, File.SetAttributes. chmod -R, chown -R and attrib /s are. Windows SetAccessControl on a folder propagates inheritance, so it is.",
+  "4. R1 is the call that walks or unpacks a tree, not the module it lives in: bare zipfile, tarfile and ZipFile are not on the list; extractall, an archive's add, make_archive, unpack_archive, CreateFromDirectory, ExtractToDirectory, Compress-Archive, Expand-Archive and copytree are. A move that can carry a folder to another volume is a copy and delete, so the moves are R1.",
+  "5. Every scanned file is matched against this list, the check's own source included. The names live here, in data the check does not scan, and not in code.",
+  "Not on the list: tree deletes and listings measured not to follow links (rd /s, rmdir /s, Remove-Item -Recurse, Get-ChildItem -Recurse without -FollowSymlink, Directory.Delete with recursive, shutil.rmtree); they are known kinds named by that measurement. cmd's find is FIND.EXE, a text filter, so find is a walk only in bash.",
+  "How names match: 'anywhere' names match in every scanned language, in any case, with anything glued after them and no letter right before them. 'words' match as whole words in the shells named, and in Python and C# only where a string starts with them or a path in a string ends in them, written in lower case as a command is; in C# the word must also be followed by .exe or by an argument, because C# names a folder with the bare word and starts a program with its file name or a command line. 'switched' programs match as words that are followed on the line by the switch that makes them recurse. 'patterns' are regular expressions for the languages named."
+ ],
+ "names": {
+  "helpers": [
+   "TestFixtures",
+   "DataRootHarness",
+   "H",
+   "FixtureWalkChecks",
+   "LocalTree",
+   "local_tree"
+  ],
+  "R1": {
+   "anywhere": [
+    "robocopy",
+    "xcopy",
+    "forfiles",
+    "rsync",
+    "bsdtar",
+    "cpio",
+    "ditto",
+    "esentutl",
+    "extrac32",
+    "innoextract",
+    "lessmsi",
+    "makecab",
+    "wbadmin",
+    "winrar",
+    "unrar",
+    "unzip",
+    "copytree",
+    "copy_tree",
+    "rglob",
+    "os.walk",
+    "os.fwalk",
+    "AllDirectories",
+    "SearchAllSubDirectories",
+    "RecurseSubdirectories",
+    "FollowSymlink",
+    "followlinks",
+    "CopyDirectory",
+    "DeleteDirectory",
+    "MoveDirectory",
+    "CopyFolder",
+    "DeleteFolder",
+    "MoveFolder",
+    "CreateFromDirectory",
+    "ExtractToDirectory",
+    "Compress-Archive",
+    "Expand-Archive",
+    "extractall",
+    "make_archive",
+    "unpack_archive",
+    "TarFile.add",
+    "SHFileOperation",
+    "IFileOperation",
+    "Move-Item",
+    "File.Move",
+    "Directory.Move",
+    ".MoveTo",
+    "MoveFileEx",
+    "MoveFileW",
+    "MoveFileA",
+    "MoveFileWithProgress",
+    "shutil.move"
+   ],
+   "words": {
+    "find": [
+     "bash"
+    ],
+    "tar": [
+     "bash",
+     "cmd",
+     "powershell"
+    ],
+    "7z": [
+     "bash",
+     "cmd",
+     "powershell"
+    ],
+    "7za": [
+     "bash",
+     "cmd",
+     "powershell"
+    ],
+    "7zr": [
+     "bash",
+     "cmd",
+     "powershell"
+    ],
+    "7zz": [
+     "bash",
+     "cmd",
+     "powershell"
+    ],
+    "zip": [
+     "bash"
+    ],
+    "du": [
+     "bash"
+    ],
+    "tree": [
+     "bash",
+     "cmd"
+    ],
+    "pax": [
+     "bash"
+    ],
+    "sftp": [
+     "bash",
+     "cmd",
+     "powershell"
+    ],
+    "mv": [
+     "bash",
+     "powershell"
+    ],
+    "move": [
+     "cmd",
+     "powershell"
+    ],
+    "mi": [
+     "powershell"
+    ],
+    "expand": [
+     "cmd"
+    ]
+   },
+   "switched": {
+    "cp": {
+     "languages": [
+      "bash"
+     ],
+     "letters": "rRa",
+     "long": [
+      "--recursive",
+      "--archive"
+     ]
+    },
+    "rm": {
+     "languages": [
+      "bash"
+     ],
+     "letters": "rR",
+     "long": [
+      "--recursive"
+     ]
+    },
+    "ls": {
+     "languages": [
+      "bash"
+     ],
+     "letters": "R",
+     "long": [
+      "--recursive"
+     ]
+    },
+    "grep": {
+     "languages": [
+      "bash"
+     ],
+     "letters": "rR",
+     "long": [
+      "--recursive",
+      "--dereference-recursive"
+     ]
+    },
+    "egrep": {
+     "languages": [
+      "bash"
+     ],
+     "letters": "rR",
+     "long": [
+      "--recursive"
+     ]
+    },
+    "diff": {
+     "languages": [
+      "bash"
+     ],
+     "letters": "r",
+     "long": [
+      "--recursive"
+     ]
+    },
+    "scp": {
+     "languages": [
+      "bash",
+      "cmd",
+      "powershell"
+     ],
+     "letters": "r"
+    },
+    "dir": {
+     "languages": [
+      "cmd"
+     ],
+     "switches": "s"
+    },
+    "del": {
+     "languages": [
+      "cmd"
+     ],
+     "switches": "s"
+    },
+    "erase": {
+     "languages": [
+      "cmd"
+     ],
+     "switches": "s"
+    },
+    "attrib": {
+     "languages": [
+      "cmd",
+      "powershell"
+     ],
+     "switches": "s"
+    },
+    "compact": {
+     "languages": [
+      "cmd"
+     ],
+     "switches": "s"
+    },
+    "cipher": {
+     "languages": [
+      "cmd"
+     ],
+     "switches": "s"
+    },
+    "findstr": {
+     "languages": [
+      "cmd"
+     ],
+     "switches": "s"
+    },
+    "where": {
+     "languages": [
+      "cmd"
+     ],
+     "switches": "r"
+    },
+    "git": {
+     "languages": [
+      "bash",
+      "cmd",
+      "powershell"
+     ],
+     "first": [
+      "clean"
+     ]
+    }
+   },
+   "patterns": {
+    "copy with -Recurse": {
+     "languages": [
+      "powershell"
+     ],
+     "pattern": "(?<![\\w-])(copy-item|cpi|copy|cp)\\b[^;|]*\\s-r(e(c(u(r(s(e)?)?)?)?)?)?\\b",
+     "example": "Copy-Item $a $b -Recurse"
+    },
+    "for /r": {
+     "languages": [
+      "cmd"
+     ],
+     "pattern": "\\bfor\\s+(/d\\s+)?/r\\b",
+     "example": "for /r a %f in (x) do echo y"
+    },
+    "an archive add in Python": {
+     "languages": [
+      "python"
+     ],
+     "pattern": "\\b\\w*(tar|archive)\\w*\\.add\\s*\\(",
+     "example": "tar.add(root)"
+    },
+    "$PSDefaultParameterValues Recurse": {
+     "languages": [
+      "powershell"
+     ],
+     "pattern": ":(Recurse|FollowSymlink)\\b",
+     "example": "Copy-Item:Recurse"
+    }
+   }
+  },
+  "R2": {
+   "anywhere": [
+    "icacls",
+    "cacls",
+    "xcacls",
+    "setacl.exe",
+    "setfacl",
+    "subinacl",
+    "Set-Acl",
+    "SetAccessControl",
+    "SetSecurityInfo",
+    "SetNamedSecurityInfo",
+    "TreeSetNamedSecurityInfo",
+    "TreeResetNamedSecurityInfo",
+    "NativeObjectSecurity.Persist"
+   ],
+   "words": {
+    "takeown": [
+     "bash",
+     "cmd",
+     "powershell"
+    ]
+   },
+   "switched": {
+    "chmod": {
+     "languages": [
+      "bash"
+     ],
+     "letters": "R",
+     "long": [
+      "--recursive"
+     ]
+    },
+    "chown": {
+     "languages": [
+      "bash"
+     ],
+     "letters": "R",
+     "long": [
+      "--recursive"
+     ]
+    },
+    "chgrp": {
+     "languages": [
+      "bash"
+     ],
+     "letters": "R",
+     "long": [
+      "--recursive"
+     ]
+    }
+   },
+   "patterns": {}
+  },
+  "R3": {
+   "anywhere": [
+    "mklink",
+    "mountvol",
+    "diskpart",
+    "losetup",
+    "CreateSymbolicLink",
+    "CreateHardLink",
+    "CreateAsSymbolicLink",
+    "CreateJunction",
+    "os.symlink",
+    "os.link",
+    "symlink_to",
+    "hardlink_to",
+    "DefineDosDevice",
+    "SetVolumeMountPoint",
+    "DeleteVolumeMountPoint",
+    "AttachVirtualDisk",
+    "CreateVirtualDisk",
+    "DetachVirtualDisk",
+    "Mount-VHD",
+    "Dismount-VHD",
+    "Mount-DiskImage",
+    "Dismount-DiskImage",
+    "Mount-WindowsImage",
+    "Dismount-WindowsImage",
+    "Mount-Wim",
+    "Mount-Image",
+    "/MountDir",
+    "New-PSDrive",
+    "New-SmbMapping",
+    "Remove-SmbMapping",
+    "New-VirtualDisk",
+    "WNetAddConnection",
+    "Add-PartitionAccessPath",
+    "Remove-PartitionAccessPath",
+    "Set-Partition",
+    "AssignDriveLetter",
+    "NewDriveLetter",
+    "AddMountPoint",
+    "MapNetworkDrive",
+    "WScript.Network",
+    "FSCTL_SET_REPARSE_POINT",
+    "0x900A4",
+    "SetReparsePoint"
+   ],
+   "words": {
+    "junction": [
+     "bash",
+     "cmd",
+     "powershell"
+    ],
+    "subst": [
+     "cmd",
+     "powershell"
+    ],
+    "pushd": [
+     "cmd"
+    ],
+    "mount": [
+     "bash"
+    ],
+    "umount": [
+     "bash"
+    ],
+    "ln": [
+     "bash"
+    ],
+    "linkd": [
+     "bash",
+     "cmd",
+     "powershell"
+    ]
+   },
+   "switched": {
+    "net": {
+     "languages": [
+      "bash",
+      "cmd",
+      "powershell"
+     ],
+     "first": [
+      "use",
+      "share"
+     ]
+    },
+    "fsutil": {
+     "languages": [
+      "cmd",
+      "powershell"
+     ],
+     "first": [
+      "reparsepoint",
+      "hardlink",
+      "volume"
+     ]
+    }
+   },
+   "patterns": {
+    "New-Item makes a link": {
+     "languages": [
+      "all"
+     ],
+     "pattern": "ItemType\\W+(SymbolicLink|Junction|HardLink)\\b",
+     "example": "New-Item -ItemType Junction -Path a"
+    }
+   }
+  },
+  "measured programs": {
+   "rd": "folder delete; rd /s does not follow links (measured)",
+   "rmdir": "folder delete; rd /s does not follow links (measured)"
+  }
+ },
+ "powershell aliases": {
+  "ac": "add-content",
+  "cat": "get-content",
+  "cd": "set-location",
+  "chdir": "set-location",
+  "clc": "clear-content",
+  "clear": "clear-host",
+  "cli": "clear-item",
+  "clp": "clear-itemproperty",
+  "cls": "clear-host",
+  "clv": "clear-variable",
+  "compare": "compare-object",
+  "copy": "copy-item",
+  "cp": "copy-item",
+  "cpi": "copy-item",
+  "cpp": "copy-itemproperty",
+  "curl": "invoke-webrequest",
+  "cvpa": "convert-path",
+  "del": "remove-item",
+  "diff": "compare-object",
+  "dir": "get-childitem",
+  "echo": "write-output",
+  "epal": "export-alias",
+  "epcsv": "export-csv",
+  "erase": "remove-item",
+  "etsn": "enter-pssession",
+  "fc": "format-custom",
+  "fl": "format-list",
+  "foreach": "foreach-object",
+  "%": "foreach-object",
+  "ft": "format-table",
+  "fw": "format-wide",
+  "gal": "get-alias",
+  "gc": "get-content",
+  "gci": "get-childitem",
+  "gcm": "get-command",
+  "gdr": "get-psdrive",
+  "ghy": "get-history",
+  "gi": "get-item",
+  "gjb": "get-job",
+  "gl": "get-location",
+  "gm": "get-member",
+  "gmo": "get-module",
+  "gp": "get-itemproperty",
+  "gps": "get-process",
+  "group": "group-object",
+  "gsv": "get-service",
+  "gu": "get-unique",
+  "gv": "get-variable",
+  "gwmi": "get-wmiobject",
+  "h": "get-history",
+  "history": "get-history",
+  "icm": "invoke-command",
+  "iex": "invoke-expression",
+  "ihy": "invoke-history",
+  "ii": "invoke-item",
+  "ipal": "import-alias",
+  "ipcsv": "import-csv",
+  "ipmo": "import-module",
+  "irm": "invoke-restmethod",
+  "iwmi": "invoke-wmimethod",
+  "iwr": "invoke-webrequest",
+  "kill": "stop-process",
+  "ls": "get-childitem",
+  "man": "help",
+  "md": "mkdir",
+  "measure": "measure-object",
+  "mi": "move-item",
+  "mount": "new-psdrive",
+  "move": "move-item",
+  "mp": "move-itemproperty",
+  "mv": "move-item",
+  "nal": "new-alias",
+  "ndr": "new-psdrive",
+  "ni": "new-item",
+  "nmo": "new-module",
+  "nv": "new-variable",
+  "ogv": "out-gridview",
+  "oh": "out-host",
+  "popd": "pop-location",
+  "ps": "get-process",
+  "pushd": "push-location",
+  "pwd": "get-location",
+  "r": "invoke-history",
+  "rd": "remove-item",
+  "rdr": "remove-psdrive",
+  "ren": "rename-item",
+  "ri": "remove-item",
+  "rjb": "remove-job",
+  "rm": "remove-item",
+  "rmdir": "remove-item",
+  "rmo": "remove-module",
+  "rni": "rename-item",
+  "rnp": "rename-itemproperty",
+  "rp": "remove-itemproperty",
+  "rv": "remove-variable",
+  "rvpa": "resolve-path",
+  "rwmi": "remove-wmiobject",
+  "sajb": "start-job",
+  "sal": "set-alias",
+  "saps": "start-process",
+  "sasv": "start-service",
+  "sc": "set-content",
+  "select": "select-object",
+  "set": "set-variable",
+  "si": "set-item",
+  "sl": "set-location",
+  "sleep": "start-sleep",
+  "sls": "select-string",
+  "sort": "sort-object",
+  "sp": "set-itemproperty",
+  "spjb": "stop-job",
+  "spps": "stop-process",
+  "spsv": "stop-service",
+  "start": "start-process",
+  "sv": "set-variable",
+  "swmi": "set-wmiinstance",
+  "tee": "tee-object",
+  "type": "get-content",
+  "wget": "invoke-webrequest",
+  "where": "where-object",
+  "?": "where-object",
+  "wjb": "wait-job",
+  "write": "write-output"
+ },
+ "powershell wildcard paths": {
+  "add-content": 0,
+  "clear-content": 0,
+  "clear-item": 0,
+  "compress-archive": 0,
+  "convert-path": 0,
+  "copy-item": 0,
+  "expand-archive": 0,
+  "get-acl": 0,
+  "get-authenticodesignature": 0,
+  "get-childitem": 0,
+  "get-content": 0,
+  "get-filehash": 0,
+  "get-item": 0,
+  "get-itemproperty": 0,
+  "get-itempropertyvalue": 0,
+  "invoke-item": 0,
+  "move-item": 0,
+  "push-location": 0,
+  "remove-item": 0,
+  "rename-item": 0,
+  "resolve-path": 0,
+  "select-string": 1,
+  "set-acl": 0,
+  "set-content": 0,
+  "set-item": 0,
+  "set-itemproperty": 0,
+  "set-location": 0,
+  "split-path": 0,
+  "test-path": 0
+ },
+ "powershell switches": [
+  "recurse",
+  "force",
+  "file",
+  "directory",
+  "hidden",
+  "readonly",
+  "system",
+  "name",
+  "followsymlink",
+  "passthru",
+  "whatif",
+  "confirm",
+  "raw",
+  "resolve",
+  "leaf",
+  "parent",
+  "isabsolute",
+  "nonewline",
+  "asbytestream",
+  "wait",
+  "container",
+  "any",
+  "qualifier",
+  "noqualifier",
+  "leafbase",
+  "extension",
+  "relative",
+  "simplematch",
+  "casesensitive",
+  "list",
+  "quiet",
+  "notmatch",
+  "allmatches"
+ ],
+ "msbuild path properties": [
+  "BaseIntermediateOutputPath",
+  "BaseOutputPath",
+  "Configuration",
+  "IntermediateOutputPath",
+  "MSBuildProjectDirectory",
+  "MSBuildProjectName",
+  "MSBuildThisFileDirectory",
+  "OutDir",
+  "OutputPath",
+  "Platform",
+  "ProjectDir",
+  "TargetFramework"
+ ],
  "bash": {
   ":": "a bash builtin that runs no other program and touches no file tree",
-  "[": "a bash builtin that runs no other program and touches no file tree",
   "break": "a bash builtin that runs no other program and touches no file tree",
   "cd": "a bash builtin that runs no other program and touches no file tree",
   "continue": "a bash builtin that runs no other program and touches no file tree",
-  "declare": "a bash builtin that runs no other program and touches no file tree",
   "echo": "a bash builtin that runs no other program and touches no file tree",
   "exit": "a bash builtin that runs no other program and touches no file tree",
-  "export": "a bash builtin that runs no other program and touches no file tree",
   "false": "a bash builtin that runs no other program and touches no file tree",
-  "local": "a bash builtin that runs no other program and touches no file tree",
-  "mapfile": "a bash builtin that runs no other program and touches no file tree",
-  "printf": "a bash builtin that runs no other program and touches no file tree",
   "pwd": "a bash builtin that runs no other program and touches no file tree",
-  "read": "a bash builtin that runs no other program and touches no file tree",
-  "readonly": "a bash builtin that runs no other program and touches no file tree",
   "return": "a bash builtin that runs no other program and touches no file tree",
   "set": "a bash builtin that runs no other program and touches no file tree",
   "shift": "a bash builtin that runs no other program and touches no file tree",
-  "test": "a bash builtin that runs no other program and touches no file tree",
   "true": "a bash builtin that runs no other program and touches no file tree",
-  "unset": "a bash builtin that runs no other program and touches no file tree",
   "wait": "a bash builtin that runs no other program and touches no file tree"
  },
  "cmd": {
@@ -37,7 +689,6 @@
   "mkdir": "a cmd builtin that runs no other program and touches no file tree",
   "pause": "a cmd builtin that runs no other program and touches no file tree",
   "popd": "a cmd builtin that runs no other program and touches no file tree",
-  "pushd": "a cmd builtin that runs no other program and touches no file tree",
   "rem": "a cmd builtin that runs no other program and touches no file tree",
   "set": "a cmd builtin that runs no other program and touches no file tree",
   "setlocal": "a cmd builtin that runs no other program and touches no file tree",
@@ -1121,7 +1772,6 @@
   "System.IO.File.GetAttributes": "inert",
   "System.IO.File.GetCreationTimeUtc": "inert",
   "System.IO.File.GetLastWriteTimeUtc": "inert",
-  "System.IO.File.Move": "inert",
   "System.IO.File.Open": "inert",
   "System.IO.File.OpenRead": "inert",
   "System.IO.File.ReadAllBytes": "inert",
@@ -1840,344 +2490,6 @@
   "nint.get_Size": "inert",
   "nuint.ToUInt64": "inert"
  },
- "harm": {
-  "calls": {
-   "R1": [
-    ".add",
-    ".copyfolder",
-    ".deletefolder",
-    ".extractall",
-    "Microsoft.VisualBasic.FileIO.FileSystem.CopyDirectory",
-    "Microsoft.VisualBasic.FileIO.FileSystem.GetDirectories",
-    "Microsoft.VisualBasic.FileIO.FileSystem.GetFiles",
-    "Microsoft.VisualBasic.FileIO.FileSystem.MoveDirectory",
-    "System.IO.Compression.ZipFile.ExtractToDirectory",
-    "System.IO.Compression.ZipFileExtensions.ExtractToDirectory",
-    "copy-itemproperty",
-    "distutils.dir_util.copy_tree",
-    "expand-archive",
-    "kernel32!findfirstfileexw",
-    "os.fwalk",
-    "pathlib.Path.rglob",
-    "pathlib.Path.walk",
-    "shutil.copytree",
-    "shutil.make_archive",
-    "shutil.unpack_archive",
-    "tarfile.open",
-    "zipfile.ZipFile.extractall"
-   ],
-   "R2": [
-    ".setaccesscontrol",
-    "System.IO.Directory.SetAccessControl",
-    "System.IO.DirectoryInfo.SetAccessControl",
-    "System.IO.File.SetAccessControl",
-    "System.IO.FileInfo.SetAccessControl",
-    "System.IO.FileSystemAclExtensions.SetAccessControl",
-    "System.Security.AccessControl.NativeObjectSecurity.Persist",
-    "advapi32!setnamedsecurityinfoa",
-    "advapi32!setnamedsecurityinfow",
-    "advapi32!setsecurityinfo",
-    "advapi32!treeresetnamedsecurityinfoa",
-    "advapi32!treeresetnamedsecurityinfow",
-    "advapi32!treesetnamedsecurityinfoa",
-    "advapi32!treesetnamedsecurityinfow",
-    "set-acl"
-   ],
-   "R3": [
-    ".hardlink_to",
-    ".symlink_to",
-    "System.IO.Directory.CreateSymbolicLink",
-    "System.IO.File.CreateSymbolicLink",
-    "System.IO.FileSystemInfo.CreateAsSymbolicLink",
-    "_winapi.CreateJunction",
-    "add-partitionaccesspath",
-    "com:WScript.Network",
-    "dismount-diskimage",
-    "dismount-vhd",
-    "kernel32!createhardlinka",
-    "kernel32!createhardlinkw",
-    "kernel32!createsymboliclinka",
-    "kernel32!createsymboliclinkw",
-    "kernel32!definedosdevicea",
-    "kernel32!definedosdevicew",
-    "kernel32!deletevolumemountpointa",
-    "kernel32!deletevolumemountpointw",
-    "kernel32!deviceiocontrol",
-    "kernel32!setvolumemountpointa",
-    "kernel32!setvolumemountpointw",
-    "mount-diskimage",
-    "mount-vhd",
-    "new-psdrive",
-    "new-smbmapping",
-    "new-virtualdisk",
-    "os.link",
-    "os.symlink",
-    "pathlib.Path.hardlink_to",
-    "pathlib.Path.symlink_to",
-    "remove-partitionaccesspath",
-    "remove-smbmapping",
-    "set-partition",
-    "virtdisk!attachvirtualdisk",
-    "virtdisk!createvirtualdisk",
-    "virtdisk!detachvirtualdisk",
-    "virtdisk!openvirtualdisk"
-   ]
-  },
-  "flagged programs": {
-   "attrib": {
-    "harm": "R1",
-    "switches": "s"
-   },
-   "chgrp": {
-    "harm": "R2",
-    "letters": "R",
-    "long": [
-     "--recursive"
-    ]
-   },
-   "chmod": {
-    "harm": "R2",
-    "letters": "R",
-    "long": [
-     "--recursive"
-    ]
-   },
-   "chown": {
-    "harm": "R2",
-    "letters": "R",
-    "long": [
-     "--recursive"
-    ]
-   },
-   "cipher": {
-    "harm": "R1",
-    "switches": "s"
-   },
-   "compact": {
-    "harm": "R1",
-    "switches": "s"
-   },
-   "cp": {
-    "harm": "R1",
-    "letters": "rRa",
-    "long": [
-     "--recursive",
-     "--archive"
-    ]
-   },
-   "del": {
-    "harm": "R1",
-    "switches": "s"
-   },
-   "diff": {
-    "harm": "R1",
-    "letters": "r",
-    "long": [
-     "--recursive"
-    ]
-   },
-   "dir": {
-    "harm": "R1",
-    "switches": "s"
-   },
-   "egrep": {
-    "harm": "R1",
-    "letters": "rR",
-    "long": [
-     "--recursive"
-    ]
-   },
-   "erase": {
-    "harm": "R1",
-    "switches": "s"
-   },
-   "findstr": {
-    "harm": "R1",
-    "switches": "s"
-   },
-   "fsutil": {
-    "first": [
-     "reparsepoint",
-     "hardlink",
-     "volume"
-    ],
-    "harm": "R3"
-   },
-   "git": {
-    "first": [
-     "clean"
-    ],
-    "harm": "R1"
-   },
-   "grep": {
-    "harm": "R1",
-    "letters": "rR",
-    "long": [
-     "--recursive",
-     "--dereference-recursive"
-    ]
-   },
-   "ls": {
-    "harm": "R1",
-    "letters": "R",
-    "long": [
-     "--recursive"
-    ]
-   },
-   "net": {
-    "first": [
-     "share",
-     "use"
-    ],
-    "harm": "R3"
-   },
-   "rm": {
-    "harm": "R1",
-    "letters": "rR",
-    "long": [
-     "--recursive"
-    ]
-   },
-   "where": {
-    "harm": "R1",
-    "switches": "r"
-   }
-  },
-  "known programs": {
-   "rd": "folder delete; rd /s does not follow links (measured)",
-   "rmdir": "folder delete; rd /s does not follow links (measured)"
-  },
-  "names": [
-   "robocopy",
-   "xcopy",
-   "\\btar\\b",
-   "\\b7z",
-   "(?<![$\\w.\\'\"/\\\\-])zip(\\.exe)?\\s",
-   "rsync",
-   "\\bfind\\s+[-/$.\"\\'(]",
-   "forfiles",
-   "copytree",
-   "os\\.walk",
-   "\\brglob\\b",
-   "AllDirectories",
-   "RecurseSubdirectories",
-   "FollowSymlink",
-   "\\bdir\\s*(/[a-z]+\\s*)*/[a-z]*s\\b",
-   "\\bcp\\s+-[a-zA-Z]*[rRa]",
-   "CreateFromDirectory",
-   "ExtractToDirectory",
-   "Compress-Archive",
-   "Expand-Archive",
-   "extractall",
-   "make_archive",
-   "Copy-Item\\b[^\\n]*-Rec",
-   "icacls",
-   "\\bcacls",
-   "takeown",
-   "Set-Acl",
-   "SetAccessControl",
-   "SetSecurityInfo",
-   "SetNamedSecurityInfo",
-   "TreeSetNamedSecurity",
-   "TreeResetNamedSecurity",
-   "\\bchmod\\s+-[a-zA-Z]*R",
-   "\\bchown\\s+-[a-zA-Z]*R",
-   "mklink",
-   "\\bjunction\\b",
-   "\\blinkd\\b",
-   "\\bsubst\\b",
-   "mountvol",
-   "diskpart",
-   "CreateSymbolicLink",
-   "CreateHardLink",
-   "CreateAsSymbolicLink",
-   "symlink",
-   "hardlink",
-   "CreateJunction",
-   "DefineDosDevice",
-   "VolumeMountPoint",
-   "AttachVirtualDisk",
-   "Mount-VHD",
-   "Mount-DiskImage",
-   "New-PSDrive",
-   "New-SmbMapping",
-   "\\bnet(\\.exe)?\\s+(use|share)\\b",
-   "PartitionAccessPath",
-   "FSCTL_SET_REPARSE_POINT",
-   "0x900A4\\b",
-   "SetReparsePoint",
-   "\\bln\\s+-[a-zA-Z]*s",
-   "ItemType\\W+(SymbolicLink|Junction|HardLink)",
-   "\\bfor\\s+(/d\\s+)?/r\\b",
-   "\\bcompact\\b[^\\n]*\\s/s",
-   "Mount-(Wim|Image)",
-   "/MountDir",
-   "AssignDriveLetter",
-   "NewDriveLetter",
-   "\\bDriveLetter\\s*=",
-   "AddMountPoint",
-   "CopyFolder",
-   "DeleteFolder",
-   ":Recurse\\b",
-   ":FollowSymlink\\b",
-   "\\bwalk\\s*\\("
-  ],
-  "programs": {
-   "R1": [
-    "7z",
-    "7za",
-    "7zr",
-    "7zz",
-    "bsdtar",
-    "cpio",
-    "ditto",
-    "du",
-    "esentutl",
-    "expand",
-    "extrac32",
-    "find",
-    "forfiles",
-    "innoextract",
-    "lessmsi",
-    "makecab",
-    "pax",
-    "rar",
-    "robocopy",
-    "rsync",
-    "scp",
-    "sftp",
-    "tar",
-    "tree",
-    "unrar",
-    "unzip",
-    "wbadmin",
-    "winrar",
-    "xcopy",
-    "zip"
-   ],
-   "R2": [
-    "cacls",
-    "icacls",
-    "setacl",
-    "setfacl",
-    "subinacl",
-    "takeown",
-    "xcacls"
-   ],
-   "R3": [
-    "diskpart",
-    "junction",
-    "linkd",
-    "ln",
-    "losetup",
-    "mklink",
-    "mount",
-    "mountvol",
-    "subst",
-    "umount"
-   ]
-  }
- },
  "powershell": {
   "add-content": "inert",
   "add-localgroupmember": "inert",
@@ -2292,7 +2604,6 @@
   "invoke-webrequest": "inert",
   "join-path": "inert",
   "measure-object": "inert",
-  "move-item": "inert",
   "new-item": {
    "does": "makes a link",
    "harm": "R3",
@@ -2324,7 +2635,6 @@
   "pop-location": "inert",
   "push-location": "inert",
   "receive-job": "inert",
-  "register-cimindicationevent": "inert",
   "register-scheduledtask": {
    "does": "registers a scheduled task from XML the check cannot read",
    "known": "registers a scheduled task from XML",
@@ -2363,7 +2673,6 @@
   "set-date": "inert",
   "set-itemproperty": "inert",
   "set-location": "inert",
-  "set-psbreakpoint": "inert",
   "set-strictmode": "inert",
   "set-variable": "inert",
   "sort-object": "inert",
@@ -2532,7 +2841,6 @@
   ".getreflectionattributetype": "inert",
   ".getresult": "inert",
   ".getruntimeid": "inert",
-  ".getscriptblock": "inert",
   ".getsddlform": "inert",
   ".getsecuritydescriptor": "inert",
   ".getsecuritydescriptorbinaryform": "inert",
@@ -2567,7 +2875,6 @@
   ".matches": "inert",
   ".name": "inert",
   ".newtask": "inert",
-  ".open": "inert",
   ".opensubkey": "inert",
   ".operationid": "inert",
   ".padright": "inert",
@@ -2746,7 +3053,6 @@
   "builtins.float": "inert",
   "builtins.format": "inert",
   "builtins.frozenset": "inert",
-  "builtins.getattr": "inert",
   "builtins.hasattr": "inert",
   "builtins.id": "inert",
   "builtins.int": "inert",
@@ -2847,7 +3153,6 @@
   "hashlib.sha256": "inert",
   "http.server.BaseHTTPRequestHandler": "inert",
   "http.server.ThreadingHTTPServer": "inert",
-  "importlib.util.module_from_spec": "inert",
   "io.BytesIO": "inert",
   "ipaddress.ip_address": "inert",
   "json.dump": "inert",
@@ -2936,7 +3241,23 @@
   "sys.exit": "inert",
   "sys.platform": "inert",
   "sys.stderr": "inert",
-  "tempfile.TemporaryDirectory": "inert",
+  "tarfile.TarFile.add": {
+   "does": "adds a folder and every file below it to an archive",
+   "harm": "R1",
+   "safe": [
+    {
+     "arg": "recursive",
+     "in": [
+      false
+     ]
+    }
+   ]
+  },
+  "tarfile.TarFile.addfile": "inert",
+  "tempfile.TemporaryDirectory": {
+   "does": "deletes its whole folder tree when it ends",
+   "known": "tree delete, does not follow links (measured)"
+  },
   "tempfile.gettempdir": "inert",
   "tempfile.mkdtemp": "inert",
   "threading.Thread": "inert",
@@ -2965,7 +3286,10 @@
   "yaml.SequenceNode": "inert",
   "yaml.YAMLError": "inert",
   "yaml.compose": "inert",
-  "zipfile.ZipFile": "inert"
+  "zipfile.ZipFile": "inert",
+  "zipfile.ZipFile.infolist": "inert",
+  "zipfile.ZipFile.namelist": "inert",
+  "zipfile.ZipFile.read": "inert"
  },
  "python methods": {
   ".__init__": "inert",
