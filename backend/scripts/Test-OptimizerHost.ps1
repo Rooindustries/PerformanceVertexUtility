@@ -15,6 +15,12 @@ $apps=@();$reviews=@()
 try {$null=Get-RooIndustriesLocalDataRoot -Protected}
 catch {throw ('This suite exercises the production removal queue, whose claims live in the app''s protected data folder, and that folder is not protected on this PC: '+$_.Exception.Message+' Open the app once as an administrator (or run the verification runner''s validators phase, which protects it inside its backup frame) and run the suite again.')}
 $exclusionPath=Join-Path $root 'cleanup-exclusions.json'
+$claimFolder=Join-Path (Get-RooIndustriesLocalDataRoot -Protected) 'uninstall-claims'
+$claimFolderBefore=Test-Path -LiteralPath $claimFolder
+function Clear-ClaimFolder {
+    if($claimFolderBefore -or -not(Test-Path -LiteralPath $claimFolder)){return}
+    if(@(Get-ChildItem -LiteralPath $claimFolder -Force).Count -eq 0){[IO.Directory]::Delete($claimFolder)}
+}
 $hive=[Microsoft.Win32.RegistryKey]::OpenBaseKey([Microsoft.Win32.RegistryHive]::CurrentUser,[Microsoft.Win32.RegistryView]::Registry64)
 function Assert([bool]$Condition,[string]$Message){if(-not $Condition){throw $Message};Write-Output ('PASS '+$Message)}
 if($Scenario -eq 'RequestFiles'){
@@ -87,12 +93,16 @@ if($Scenario -eq 'RequestFiles'){
         try {$onValue=Invoke-HostRaw $dll 'policy-status' '-' $statusBody} finally {[Environment]::SetEnvironmentVariable('DOTNET_EnableDiagnostics',$null,'Process')}
         Assert ($onValue.exit -ne 0 -and $onValue.message -like '*DOTNET_EnableDiagnostics*') 'A release helper refuses the diagnostics switch when it holds anything but 0'
         $decoy=Join-Path $caseRoot 'cleanup-exclusions.json'
-        $owner=@{machine=[Environment]::MachineName;userSid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value}
-        Write-RooIndustriesOperationJson @{schemaVersion=1;owner=$owner;exclusions=@{paths=@($decoy);registry=@()}} $decoy
+        $sid=([Security.Principal.WindowsIdentity]::GetCurrent()).User.Value
+        $owner=@{machine=[Environment]::MachineName;userSid=$sid}
+        $decoyList=@{schemaVersion=1;owner=$owner;exclusions=@{paths=@($decoy);registry=@()}}
+        Write-RooIndustriesOperationJson $decoyList $decoy
         $env:ROO_INDUSTRIES_TEST_CLEANUP_EXCLUSIONS=$decoy
-        try {$ignored=Invoke-HostRaw $dll 'cleanup-exclusions-status' '-' $statusBody} finally {Remove-Item Env:\ROO_INDUSTRIES_TEST_CLEANUP_EXCLUSIONS}
-        $ignoredRevision=($ignored.text|ConvertFrom-Json).data.revision
-        Assert ($ignored.status -eq 'completed' -and $ignoredRevision -ne (Get-FileHash $decoy).Hash) 'A helper built without test hooks ignores the test exclusion list location'
+        try {$ignored=Invoke-HostRaw $dll 'cleanup-exclusions-status' '-' $statusBody}
+        finally {Remove-Item Env:\ROO_INDUSTRIES_TEST_CLEANUP_EXCLUSIONS}
+        $decoyHash=(Get-FileHash $decoy).Hash
+        $followed=$ignored.status -ne 'completed' -or ($ignored.text|ConvertFrom-Json).data.revision -eq $decoyHash
+        Assert (-not $followed) 'A helper built without test hooks ignores the test exclusion list location'
     } finally {
         foreach($item in $netNames){[Environment]::SetEnvironmentVariable($item.name,$item.value,'Process')}
         if(Test-Path -LiteralPath $caseRoot){Remove-Item -LiteralPath $caseRoot -Recurse -Force}
@@ -169,6 +179,7 @@ public class RooIndustriesHostRemover {
     $queue=Join-Path $root 'removal-journal.json'
     $removal=(& (Join-Path $PSScriptRoot 'Invoke-BulkUninstall.ps1') -Action Apply -InputPath $planPath -ReviewSha256 (Get-FileHash -LiteralPath $planPath -Algorithm SHA256).Hash -JournalPath $queue -ConfirmApply -ManualReviewApproved)|ConvertFrom-Json
     Assert ($removal.status -eq 'cleanup-review-required' -and @($removal.data.entries|Where-Object {$_.attemptCount -ne 1 -or $_.state -ne 'removed'}).Count -eq 0) 'Both disposable vendor removers finish once through the production queue'
+    Clear-ClaimFolder
     if($SharedQueuePaths){
         $fresh=(& (Join-Path $PSScriptRoot 'Get-InstalledAppInventory.ps1'))|ConvertFrom-Json
         Assert ($fresh.complete -eq $true -and @($fresh.apps|Where-Object {$_.appId -in @($apps.appId)}).Count -eq 0) 'Both shared-resource owners are absent from fresh installed inventory'
@@ -254,6 +265,7 @@ public class RooIndustriesHostRemover {
     }
 } finally {
     Remove-Item Env:\ROO_INDUSTRIES_TEST_CLEANUP_EXCLUSIONS -ErrorAction SilentlyContinue
+    Clear-ClaimFolder
     $markers=[Microsoft.Win32.Registry]::LocalMachine.OpenSubKey('SOFTWARE\RooIndustries\OptimizationSuite\GovernorRoots',$true)
     if($markers){$markerName=Get-RooIndustriesDataRootMarkerName $operations;$markers.DeleteValue($markerName,$false);$markers.DeleteValue($markerName+'|protected-at',$false);$markers.Dispose()}
     foreach($app in $apps){$hive.DeleteSubKeyTree($registrationRoot+'\'+$app.keyName,$false)}

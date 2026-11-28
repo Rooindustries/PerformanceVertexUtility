@@ -12,7 +12,8 @@ try {
     [IO.Directory]::CreateDirectory((Split-Path $scripts -Parent))|Out-Null
     Copy-Item -LiteralPath $PSScriptRoot -Destination $scripts -Recurse
     $project=Join-Path (Split-Path $PSScriptRoot -Parent) 'native\Optimizer.Host\Optimizer.Host.csproj'
-    & $DotNetPath publish $project -c Release --self-contained false -p:GovernorTestHooks=true -o (Join-Path $root 'source\backend\bin\optimizer')|Out-Null
+    $hostOutput=Join-Path $root 'source\backend\bin\optimizer'
+    & $DotNetPath publish $project -c Release --self-contained false -p:GovernorTestHooks=true -o $hostOutput|Out-Null
     if($LASTEXITCODE -ne 0){throw 'Cleanup host build failed'}
     $env:ROO_INDUSTRIES_TEST_CLEANUP_EXCLUSIONS=$policy
     $original=(& $command -Action Status -DotNetPath $DotNetPath)|ConvertFrom-Json
