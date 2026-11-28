@@ -25,7 +25,8 @@
     {
       "text": "%ROO_RAW%",
       "files": [
-        "tools/validation/LoadTimes/Test-CleanupOwnership.ps1"
+        "tools/validation/LoadTimes/Test-CleanupOwnership.ps1",
+        "tools/validation/reparse-walk-allowlist.json"
       ],
       "reason": "Literal environment-variable reference stored in registry fixture values; restoration checks compare the original unexpanded bytes."
     },
@@ -53,7 +54,8 @@
     {
       "text": "*RooShipped*",
       "files": [
-        "tools/validation/Memory/Memory.Common.ps1"
+        "tools/validation/Memory/Memory.Common.ps1",
+        "tools/validation/reparse-walk-allowlist.json"
       ],
       "reason": "Existing firewall-rule description matcher used by before/after host-state audits."
     },
@@ -194,8 +196,7 @@
         "tools/validation/Update/Invoke-UpdateFixture.ps1",
         "tools/validation/Update/Invoke-UpgradeRehearsal.ps1",
         "tools/validation/Update/UpdateProbe/Program.cs",
-        "tools/validation/windows_ssh.py",
-        "tools/validation/reparse-walk-allowlist.json"
+        "tools/validation/windows_ssh.py"
       ],
       "reason": "Harness nonce environment variable passed to child processes and read by the memory heap probe to bind their receipts to the owning invocation."
     },
@@ -266,7 +267,8 @@
     {
       "text": "Roo Optimization Suite",
       "files": [
-        "tools/validation/Release/Get-FixRound9070EndState.ps1"
+        "tools/validation/Release/Get-FixRound9070EndState.ps1",
+        "tools/validation/reparse-walk-allowlist.json"
       ],
       "reason": "Legacy uninstall-registry DisplayName queried by historical end-state inspection."
     },
@@ -326,7 +328,8 @@
     {
       "text": "RooFixtureAbsentGame.exe",
       "files": [
-        "tools/validation/Background/Test-FixRound.ps1"
+        "tools/validation/Background/Test-FixRound.ps1",
+        "tools/validation/reparse-walk-allowlist.json"
       ],
       "reason": "On-disk fixture executable/process identity used by process profiles, UI selection and ownership or restoration readbacks; the harness may find an earlier run by this image name."
     },
@@ -334,7 +337,8 @@
       "text": "RooFixtureChild.exe",
       "files": [
         "tools/validation/Background/Test-GpuRelease.ps1",
-        "tools/validation/Background/Test-Review2.ps1"
+        "tools/validation/Background/Test-Review2.ps1",
+        "tools/validation/reparse-walk-allowlist.json"
       ],
       "reason": "On-disk fixture executable/process identity used by process profiles, UI selection and ownership or restoration readbacks; the harness may find an earlier run by this image name."
     },
@@ -351,7 +355,8 @@
         "tools/validation/Background/Invoke-BackgroundScenario.ps1",
         "tools/validation/Background/Invoke-DesktopScenario.ps1",
         "tools/validation/Background/Test-Review2.ps1",
-        "tools/validation/Update/Invoke-ShippedScenario.ps1"
+        "tools/validation/Update/Invoke-ShippedScenario.ps1",
+        "tools/validation/reparse-walk-allowlist.json"
       ],
       "reason": "On-disk fixture executable/process identity used by process profiles, UI selection and ownership or restoration readbacks; the harness may find an earlier run by this image name."
     },
@@ -394,7 +399,8 @@
         "tools/validation/Background/Test-FixRound.ps1",
         "tools/validation/Background/Test-RecoverySlot.ps1",
         "tools/validation/Background/Test-Review2.ps1",
-        "tools/validation/Update/Invoke-ShippedScenario.ps1"
+        "tools/validation/Update/Invoke-ShippedScenario.ps1",
+        "tools/validation/reparse-walk-allowlist.json"
       ],
       "reason": "On-disk fixture executable/process identity used by process profiles, UI selection and ownership or restoration readbacks; the harness may find an earlier run by this image name."
     },
@@ -426,7 +432,8 @@
         "tools/validation/Background/Invoke-BackgroundScenario.ps1",
         "tools/validation/Background/Test-RecoverySlot.ps1",
         "tools/validation/Background/Test-Review2.ps1",
-        "tools/validation/Update/Invoke-ShippedScenario.ps1"
+        "tools/validation/Update/Invoke-ShippedScenario.ps1",
+        "tools/validation/reparse-walk-allowlist.json"
       ],
       "reason": "On-disk fixture executable/process identity used by process profiles, UI selection and ownership or restoration readbacks; the harness may find an earlier run by this image name."
     },
@@ -462,8 +469,7 @@
     {
       "text": "RooHarnessGame.exe",
       "files": [
-        "tools/validation/Update/Invoke-HarnessChecks.ps1",
-        "tools/validation/reparse-walk-allowlist.json"
+        "tools/validation/Update/Invoke-HarnessChecks.ps1"
       ],
       "reason": "Fixture executable path and process image recorded or queried by the harness; preserve the host-visible name."
     },
@@ -540,7 +546,8 @@
     {
       "text": "RooTest-*",
       "files": [
-        "tools/validation/Memory/Memory.Common.ps1"
+        "tools/validation/Memory/Memory.Common.ps1",
+        "tools/validation/reparse-walk-allowlist.json"
       ],
       "reason": "Existing firewall-rule name matcher used by before/after host-state audits."
     },
@@ -555,16 +562,14 @@
     {
       "text": "RooTester",
       "files": [
-        "tools/validation/Update/Invoke-ShippedScenario.ps1",
-        "tools/validation/reparse-walk-allowlist.json"
+        "tools/validation/Update/Invoke-ShippedScenario.ps1"
       ],
       "reason": "Process-image prefix used to collect the existing tester fixture and its descendants from host process-start events."
     },
     {
       "text": "RooTesterGame.exe",
       "files": [
-        "tools/validation/Update/Invoke-ShippedScenario.ps1",
-        "tools/validation/reparse-walk-allowlist.json"
+        "tools/validation/Update/Invoke-ShippedScenario.ps1"
       ],
       "reason": "Fixture executable path and process image recorded or queried by the harness; preserve the host-visible name."
     },
@@ -578,24 +583,21 @@
     {
       "text": "RooTraceForeignParent.exe",
       "files": [
-        "tools/validation/Update/Invoke-TraceOwnershipChecks.ps1",
-        "tools/validation/reparse-walk-allowlist.json"
+        "tools/validation/Update/Invoke-TraceOwnershipChecks.ps1"
       ],
       "reason": "Fixture executable path and process image recorded or queried by the harness; preserve the host-visible name."
     },
     {
       "text": "RooTraceParent",
       "files": [
-        "tools/validation/Update/Invoke-TraceOwnershipChecks.ps1",
-        "tools/validation/reparse-walk-allowlist.json"
+        "tools/validation/Update/Invoke-TraceOwnershipChecks.ps1"
       ],
       "reason": "On-disk trace fixture executable and its compiled entry-point type share this identity; retained conservatively together because later trace and cleanup runs may read the existing image."
     },
     {
       "text": "RooTraceSharedChild.exe",
       "files": [
-        "tools/validation/Update/Invoke-TraceOwnershipChecks.ps1",
-        "tools/validation/reparse-walk-allowlist.json"
+        "tools/validation/Update/Invoke-TraceOwnershipChecks.ps1"
       ],
       "reason": "Fixture executable path and process image recorded or queried by the harness; preserve the host-visible name."
     },
@@ -659,8 +661,7 @@
     {
       "text": "roo-blackwell-uac-approval/v1",
       "files": [
-        "tools/validation/Release/Test-BlackwellInteractiveReadme.ps1",
-        "tools/validation/reparse-walk-allowlist.json"
+        "tools/validation/Release/Test-BlackwellInteractiveReadme.ps1"
       ],
       "reason": "Versioned protocol identifier serialized in an on-disk ledger, handoff or approval receipt and checked by later runs; preserve its existing wire spelling."
     },
@@ -684,8 +685,7 @@
       "files": [
         "tools/validation/Update/Invoke-HarnessChecks.ps1",
         "tools/validation/Update/Invoke-TraceOwnershipChecks.ps1",
-        "tools/validation/windows_ssh.py",
-        "tools/validation/reparse-walk-allowlist.json"
+        "tools/validation/windows_ssh.py"
       ],
       "reason": "Versioned protocol identifier serialized in an on-disk ledger, handoff or approval receipt and checked by later runs; preserve its existing wire spelling."
     },
@@ -799,25 +799,11 @@
       "reason": "Linear issue key for the restore test-harness repair that moves the harness-blocked scenarios back into the default group."
     },
     {
-      "text": "Global\\\\\\\\RooProtectedSession-",
-      "files": [
-        "tools/validation/reparse-walk-allowlist.json"
-      ],
-      "reason": "The protected-session job name from the brand compatibility checks, quoted as that line's text in the walk check's known list."
-    },
-    {
       "text": "C:\\\\ProgramData\\\\RooHistoricalLive-",
       "files": [
         "tools/validation/reparse-walk-allowlist.json"
       ],
       "reason": "Private on-disk historical recovery folder from Test-HistoricalBlackwell.ps1, quoted as that line's text in the walk check's known list."
-    },
-    {
-      "text": "SHORT_NAME = re.compile(r\\\"\\\\bRoo(?!Industries|industries| Industries)(?:\\\\b|[A-Z])|(?<=\\\\w)Roo(?=[A-Z])(?!Industries)|\\\\bROO(?:_(?!INDUSTRIES_)|\\\\b(?! INDUSTRIES))|\\\\broo(?!industries|-industries)(?:[-_.]|\\\\b)\\\")",
-      "files": [
-        "tools/validation/reparse-walk-allowlist.json"
-      ],
-      "reason": "The walk check's allowlist quotes the branding check's own short-name regular expression as the line a reasoned exception covers."
     }
   ]
 }
