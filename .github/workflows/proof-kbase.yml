@@ -1,0 +1,107 @@
+name: proof-kbase
+on:
+  push:
+    branches: ['servi/proof-kbase']
+permissions:
+  contents: read
+jobs:
+  host-early:
+    runs-on: windows-2025
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Protect the app data folder as the app does on first start
+        shell: powershell
+        run: .\tools\scripts\Initialize-CiDataFolder.ps1
+      - name: Seed a user exclusion list
+        shell: powershell
+        run: .\proof.ps1 -Mode Seed
+      - name: Kill Test-OptimizerHost.ps1
+        shell: powershell
+        run: |
+          .\proof.ps1 -Mode Snapshot -Path "$env:RUNNER_TEMP\before.txt"
+          .\proof.ps1 -Mode Kill -Test Test-OptimizerHost.ps1 -Marker 'PASS Production inventory explicitly reports complete ownership-provider reads'
+          .\proof.ps1 -Mode Settle -Path "$env:RUNNER_TEMP\before.txt" -Marker host-early
+  host-exclusions:
+    runs-on: windows-2025
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Protect the app data folder as the app does on first start
+        shell: powershell
+        run: .\tools\scripts\Initialize-CiDataFolder.ps1
+      - name: Seed a user exclusion list
+        shell: powershell
+        run: .\proof.ps1 -Mode Seed
+      - name: Kill Test-OptimizerHost.ps1
+        shell: powershell
+        run: |
+          .\proof.ps1 -Mode Snapshot -Path "$env:RUNNER_TEMP\before.txt"
+          .\proof.ps1 -Mode Kill -Test Test-OptimizerHost.ps1 -Marker 'PASS The public batch endpoint enforces exclusions added after review'
+          .\proof.ps1 -Mode Settle -Path "$env:RUNNER_TEMP\before.txt" -Marker host-exclusions
+  exclusions:
+    runs-on: windows-2025
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Protect the app data folder as the app does on first start
+        shell: powershell
+        run: .\tools\scripts\Initialize-CiDataFolder.ps1
+      - name: Seed a user exclusion list
+        shell: powershell
+        run: .\proof.ps1 -Mode Seed
+      - name: Kill Test-CleanupExclusions.ps1
+        shell: powershell
+        run: |
+          .\proof.ps1 -Mode Snapshot -Path "$env:RUNNER_TEMP\before.txt"
+          .\proof.ps1 -Mode Kill -Test Test-CleanupExclusions.ps1 -Marker 'PASS The public command persists the requested exclusion'
+          .\proof.ps1 -Mode Settle -Path "$env:RUNNER_TEMP\before.txt" -Marker exclusions
+  bulk:
+    runs-on: windows-2025
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Protect the app data folder as the app does on first start
+        shell: powershell
+        run: .\tools\scripts\Initialize-CiDataFolder.ps1
+      - name: Seed a user exclusion list
+        shell: powershell
+        run: .\proof.ps1 -Mode Seed
+      - name: Kill Test-BulkUninstall.ps1
+        shell: powershell
+        run: |
+          .\proof.ps1 -Mode Snapshot -Path "$env:RUNNER_TEMP\before.txt"
+          .\proof.ps1 -Mode Kill -Test Test-BulkUninstall.ps1 -Marker 'PASS MSI removal is reviewed as one unquoted msiexec command line'
+          .\proof.ps1 -Mode Settle -Path "$env:RUNNER_TEMP\before.txt" -Marker bulk
+  leftover:
+    runs-on: windows-2025
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Protect the app data folder as the app does on first start
+        shell: powershell
+        run: .\tools\scripts\Initialize-CiDataFolder.ps1
+      - name: Seed a user exclusion list
+        shell: powershell
+        run: .\proof.ps1 -Mode Seed
+      - name: Kill Test-LeftoverSharedOwnership.ps1
+        shell: powershell
+        run: |
+          .\proof.ps1 -Mode Snapshot -Path "$env:RUNNER_TEMP\before.txt"
+          .\proof.ps1 -Mode Kill -Test Test-LeftoverSharedOwnership.ps1 -Marker 'PASS Post-removal scan protects'
+          .\proof.ps1 -Mode Settle -Path "$env:RUNNER_TEMP\before.txt" -Marker leftover
