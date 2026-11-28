@@ -794,7 +794,7 @@ class Classifier:
         broken = [c for c in entry.get('safe', []) if not self.holds(c, args, None)]
         if 'safe' in entry and not broken:
             return None
-        rule = next((c for c in broken if 'harm' in c or 'known' in c), None) or entry
+        rule = next((c for c in broken if c.get('harm') in REASONS), None) or next((c for c in broken if 'harm' in c or 'known' in c), None) or entry
         return entry['does'], rule.get('harm') or rule.get('known') or 'call'
 
     def called(self, section, name, args):

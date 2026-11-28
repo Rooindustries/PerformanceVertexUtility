@@ -466,6 +466,7 @@ def reparse_walk_negative_controls():
             ('a first word that makes a tree tool', 'sh', 'git clean -fdx a', None, 'program', 'git', True),
             ('an unreadable file', 'ps1', 'function {', None, 'file', '', True),
             ('an alias for a tree tool', 'ps1', 'Set-Alias -Name q -Value cpio', None, 'command the table does not list', 'set-alias', True),
+            ('a splatted tree listing, whose splat can carry FollowSymlink', 'ps1', '$p = @{ Path = $a }\nGet-ChildItem @p', 'Get-ChildItem @p', 'tree listing, does not follow links (measured)', 'get-childitem', True),
             ('a tree listing whose shortened switch follows links', 'ps1', 'Get-ChildItem -Recurse -Fol $a', None, 'tree listing, does not follow links (measured)', 'get-childitem', True),
             ('a full program path joined to its switch', 'cmd', 'C:\\Windows\\System32\\attrib.exe/s a', None, 'program', 'c:\\windows\\system32\\attrib.exe/s', True),
             ('start settings changed through the argument list indexer', 'cs', cs('var p = new ProcessStartInfo("zqvx.exe"); p.ArgumentList.Add("a"); p.ArgumentList[0] = "b"; Process.Start(p);'), 'Process.Start(p);', 'program', 'zqvx.exe', True),
