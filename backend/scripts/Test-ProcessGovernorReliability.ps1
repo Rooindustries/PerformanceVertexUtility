@@ -296,12 +296,14 @@ try {
     New-Item -ItemType Directory -Path $relaunchRoot -Force | Out-Null
     $probeName = 'RooIndustriesGovernorRelaunchProbe.exe'
     $probeExe = Join-Path $relaunchRoot $probeName
-    Copy-Item -LiteralPath "$env:SystemRoot\System32\cmd.exe" -Destination $probeExe -Force
+    $workerPath = Join-Path $relaunchRoot 'RooIndustriesProcessGovernor.exe'
+    & (Join-Path $PSScriptRoot 'Build-NativeProcessGovernor.ps1') -OutputPath $workerPath -Force | Out-Null
+    Copy-Item -LiteralPath $workerPath -Destination $probeExe -Force
     $profilePath = Join-Path $relaunchRoot 'governor-relaunch-profile.json'
     $stateRoot = Join-Path $relaunchRoot 'state'
     Write-ReliabilityGovernorProfile -Path $profilePath -CandidateName $probeName
 
-    $relaunchFirst = Start-Process -FilePath $probeExe -ArgumentList (Join-RooIndustriesWindowsArguments @('/d','/c','for /l %i in (0,0,1) do @rem')) -WindowStyle Hidden -PassThru
+    $relaunchFirst = Start-Process -FilePath $probeExe -ArgumentList (Join-RooIndustriesWindowsArguments @('--probe','busy','120','0')) -WindowStyle Hidden -PassThru
     Start-Sleep -Milliseconds 800
     $beforeFirst = Get-RooIndustriesProcessControlState $relaunchFirst.Id $null
     $sessionOutput = Join-Path $relaunchRoot 'governor-relaunch-session-output.json'
@@ -335,7 +337,7 @@ try {
     Stop-ReliabilityProbe -Process $relaunchFirst
     $relaunchFirst = $null
 
-    $relaunchSecond = Start-Process -FilePath $probeExe -ArgumentList '/d /k' -WindowStyle Hidden -PassThru
+    $relaunchSecond = Start-Process -FilePath $probeExe -ArgumentList (Join-RooIndustriesWindowsArguments @('--probe','sleep','0','120')) -WindowStyle Hidden -PassThru
     $beforeSecond = Get-RooIndustriesProcessControlState $relaunchSecond.Id $null
 
     Wait-RooIndustriesValidationProcess $relaunchSessionProc 35
