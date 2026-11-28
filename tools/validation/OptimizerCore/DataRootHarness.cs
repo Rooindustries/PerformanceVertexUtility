@@ -121,15 +121,6 @@ static class DataRootHarness
         return text;
     }
 
-    public static void StandardBackground(string log, Dictionary<string, string> env, params string[] args)
-    {
-        var dotnet = Path.Combine(Environment.GetEnvironmentVariable("DOTNET_ROOT") ?? Path.GetDirectoryName(Environment.ProcessPath)!, "dotnet.exe");
-        var dll = System.Reflection.Assembly.GetEntryAssembly()!.Location;
-        var script = "$env:DOTNET_ROOT=" + Quote(Path.GetDirectoryName(dotnet)!) + "; " + string.Join("", env.Select(pair => "$env:" + pair.Key + "=" + Quote(pair.Value) + "; ")) + "& " + Quote(dotnet) + " " + Quote(dll) + " " + string.Join(" ", args.Select(Quote)) + " *> " + Quote(log);
-        var system = Environment.SystemDirectory;
-        Run(Path.Combine(system, "runas.exe"), "/trustlevel:0x20000 \"" + Path.Combine(system, "conhost.exe") + " --headless powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand " + Convert.ToBase64String(Encoding.Unicode.GetBytes(script)) + "\"", 30000);
-    }
-
     public static void Forget(params string[] paths)
     {
         using var markers = Registry.LocalMachine.OpenSubKey(PolicyRootSecurity.MarkerKey, true);
@@ -226,6 +217,16 @@ static class DataRootChild
                     return;
                 case "--child-writer": Writer(args[1], int.Parse(args[2]), int.Parse(args[3])); return;
                 case "--child-standard": Standard(args[1..]); return;
+                case "--child-timer-in-job":
+                    Native.EnterEndingJobWithoutShell();
+                    if (args[1] == "sign-in") TimerControl.RunAutostart(args[2]);
+                    else
+                    {
+                        var store = new WindowsControlStore(); var timer = new ControlAddress("timer", "system", "half-millisecond");
+                        store.Write(store.Read(timer), ControlValues.From(true));
+                    }
+                    Console.WriteLine("STARTED");
+                    return;
             }
         }
         catch (Exception error) { Console.WriteLine("FAILED " + error.GetType().Name + ": " + error.Message); Environment.ExitCode = 1; }
@@ -291,6 +292,38 @@ static class DataRootChild
     {
         [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)] private static extern SafeFileHandle CreateFileW(string name, uint access, uint share, IntPtr security, uint disposition, uint flags, IntPtr template);
         [DllImport("kernel32.dll", SetLastError = true)] private static extern bool DeviceIoControl(SafeFileHandle handle, uint code, byte[] input, int inputSize, byte[]? output, int outputSize, out int returned, IntPtr overlapped);
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct JobLimits
+        {
+            public long ProcessTime, JobTime;
+            public uint Flags;
+            public UIntPtr MinimumWorkingSet, MaximumWorkingSet;
+            public uint ActiveProcesses;
+            public UIntPtr Affinity;
+            public uint PriorityClass, SchedulingClass;
+            public ulong ReadOperations, WriteOperations, OtherOperations, ReadBytes, WriteBytes, OtherBytes;
+            public UIntPtr ProcessMemory, JobMemory, PeakProcessMemory, PeakJobMemory;
+        }
+        [DllImport("kernel32.dll", EntryPoint = "CreateJobObjectW", CharSet = CharSet.Unicode, SetLastError = true)] private static extern IntPtr CreateJobObject(IntPtr attributes, string? name);
+        [DllImport("kernel32.dll", SetLastError = true)] private static extern bool SetInformationJobObject(IntPtr job, int kind, ref JobLimits value, uint size);
+        [DllImport("kernel32.dll", SetLastError = true)] private static extern bool AssignProcessToJobObject(IntPtr job, IntPtr process);
+        [DllImport("kernel32.dll")] private static extern IntPtr GetCurrentProcess();
+        [DllImport("user32.dll", EntryPoint = "CreateDesktopW", CharSet = CharSet.Unicode, SetLastError = true)] private static extern IntPtr CreateDesktop(string name, IntPtr device, IntPtr mode, uint flags, uint access, IntPtr attributes);
+        [DllImport("user32.dll", SetLastError = true)] private static extern bool SetThreadDesktop(IntPtr desktop);
+
+        public static void EnterEndingJobWithoutShell()
+        {
+            var job = CreateJobObject(IntPtr.Zero, null);
+            var limits = new JobLimits { Flags = 0x2000 };
+            var limited = job != IntPtr.Zero && SetInformationJobObject(job, 9, ref limits, (uint)Marshal.SizeOf<JobLimits>());
+            if (!limited || !AssignProcessToJobObject(job, GetCurrentProcess()))
+                throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error(), "The disposable job could not be entered.");
+            var desktop = CreateDesktop("RooIndustriesNoShell-" + Environment.ProcessId, IntPtr.Zero, IntPtr.Zero, 0, 0x10000000, IntPtr.Zero);
+            if (desktop == IntPtr.Zero || !SetThreadDesktop(desktop))
+                throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error(), "The desktop without a shell could not be entered.");
+            if (DataRootHarness.GetShellWindow() != IntPtr.Zero) throw new InvalidOperationException("The disposable desktop still has a shell window.");
+        }
 
         public static string Junction(string directory, string target)
         {

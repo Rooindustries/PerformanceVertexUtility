@@ -155,7 +155,7 @@ public static class TimerControl
         var userToken = Split(roots) && PolicyRootSecurity.SplitToken() && !AllowElevatedWorker;
         OperationFiles.Write(path, launch);
         ProcessInfo created;
-        try { created = LaunchWorker(executable, command, userToken); }
+        try { created = LaunchWorker(executable, command, userToken, autostart); }
         catch { File.Delete(path); throw; }
         using var worker = new SafeProcessHandle(created.Process, ownsHandle: true);
         CloseHandle(created.Thread);
@@ -328,7 +328,7 @@ public static class TimerControl
         Start(roots, autostart: true);
     }
     // DETACHED_PROCESS, not CREATE_NO_WINDOW: a console exe started with CREATE_NO_WINDOW gets its own hidden conhost for the whole session.
-    private static ProcessInfo LaunchWorker(string executable, StringBuilder command, bool userToken)
+    private static ProcessInfo LaunchWorker(string executable, StringBuilder command, bool userToken, bool autostart)
     {
         if (userToken) return LaunchFromShell(executable, command) ?? throw new InvalidOperationException("The timer needs Windows to start it with your normal rights, but no desktop shell of your Windows user is running. Sign in to Windows normally, then try again.");
         var startup = new StartupInfo { Size = Marshal.SizeOf<StartupInfo>() };
@@ -337,7 +337,9 @@ public static class TimerControl
         if (error != 5) throw new Win32Exception(error, "CreateProcessW(timer worker) failed with Win32 " + error + ".");
         if (LaunchFromShell(executable, command) is { } shellChild) return shellChild;
         if (!IsProcessInJob(CurrentProcess(), IntPtr.Zero, out var inJob) || !inJob) throw new Win32Exception(error, "CreateProcessW(timer worker) failed with Win32 " + error + ".");
-        if (JobEndsProcessesOnClose()) throw new InvalidOperationException("The timer can't keep running after this app closes because Windows started the app inside a job that ends its processes. Start the app from the Start menu or desktop shortcut and try again.");
+        if (JobEndsProcessesOnClose()) throw new InvalidOperationException(autostart
+            ? "The timer can't start at sign-in because Windows ran the sign-in task inside a job that ends its processes. Turn the timer on in the app instead."
+            : "The timer can't keep running after this app closes because Windows started the app inside a job that ends its processes. Start the app from the Start menu or desktop shortcut and try again.");
         if (CreateProcess(executable, command, IntPtr.Zero, IntPtr.Zero, false, 0x00000008, IntPtr.Zero, null, ref startup, out created)) return created;
         error = Marshal.GetLastWin32Error();
         throw new Win32Exception(error, "CreateProcessW(timer worker) failed with Win32 " + error + ".");
