@@ -89,8 +89,7 @@ def main():
                                             **({'Reads': True} if args.reads else {})}, 30)
         (args.out_dir / 'capture.log').write_text(result.stdout)
         evidence = next(line.split(' ', 2)[2] for line in result.stdout.splitlines() if line.startswith('ROO_INDUSTRIES_ROW_CAPTURE pass '))
-        windows.run_transport(args.host, 'scp', ['-r', args.host + ':' + evidence.replace('\\', '/'), str(args.out_dir / 'evidence')],
-                              timeout=windows.TRANSFER_TIMEOUT, capture_output=True)
+        windows.fetch_folder(args.host, args.expected_machine, evidence, args.out_dir / 'evidence')
         capture = next((args.out_dir / 'evidence').glob('capture-*.json'))
         encode(capture, args.out_dir / 'evidence' / 'frames', args.out_dir / (args.label + '.mp4'))
         status = 'pass'

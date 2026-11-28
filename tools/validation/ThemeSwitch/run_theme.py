@@ -45,7 +45,7 @@ def collect(args, frame, evidence, out):
     with zipfile.ZipFile(local) as archive:
         for name in archive.namelist():
             windows.safe_archive_path(name)
-        if any(p.is_symlink() for p in local_tree(out / 'evidence', links=True)):
+        if any(tree.linked(p.lstat()) for p in local_tree(out / 'evidence', links=True)):
             raise RuntimeError('The evidence folder is or holds a link, so the archive is not extracted into it.')
         archive.extractall(out / 'evidence')
 

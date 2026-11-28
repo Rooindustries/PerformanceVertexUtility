@@ -102,8 +102,7 @@ def main():
             phase = 'encode'
             encode(args, evidence)
             phase = 'download'
-            windows.run_transport(args.host, 'scp', ['-r', args.host + ':' + evidence.replace('\\', '/'), str(args.out_dir / 'evidence')],
-                                  timeout=windows.TRANSFER_TIMEOUT, capture_output=True)
+            windows.fetch_folder(args.host, args.expected_machine, evidence, args.out_dir / 'evidence')
         status = 'pass'
     except subprocess.CalledProcessError as error:
         (args.out_dir / (phase + '.log')).write_text((error.stdout or '') + (error.stderr or ''))

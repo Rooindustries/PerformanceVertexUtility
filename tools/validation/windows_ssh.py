@@ -103,6 +103,11 @@ def invoke(host: str, machine: str, script: str, capture: bool = True, timeout: 
 
 
 
+def fetch_folder(host: str, machine: str, remote: str, local):
+    invoke(host, machine, harness_tree_helpers() + f"\n$null=@(Get-HarnessTree {ps_literal(remote)})")
+    return run_transport(host, 'scp', ['-r', host + ':' + remote.replace('\\', '/'), str(local)], timeout=TRANSFER_TIMEOUT, capture_output=True)
+
+
 def inspect(host: str, machine: str):
     script = (
         "$identity=[Security.Principal.WindowsIdentity]::GetCurrent(); "

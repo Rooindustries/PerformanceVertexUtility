@@ -121,8 +121,7 @@ def main():
             marker = next((line.split(' ', 2) for line in output.splitlines() if line.startswith('ROO_INDUSTRIES_ROW_APPLY ')), None)
             results[label] = marker[1] if marker else 'fail'
             if marker:
-                windows.run_transport(args.host, 'scp', ['-r', args.host + ':' + marker[2].replace('\\', '/'), str(args.out_dir / label)],
-                                      timeout=windows.TRANSFER_TIMEOUT, capture_output=True)
+                windows.fetch_folder(args.host, args.expected_machine, marker[2], args.out_dir / label)
     finally:
         clear = '& ' + windows.ps_literal(receipt['stagingPath'] + r'\tools\validation\Update\Clear-UpdateFrame.ps1') + ' -Frame ' + windows.ps_literal(receipt['runRoot']) + ' -ExpectedMachine ' + windows.ps_literal(args.expected_machine)
         try:

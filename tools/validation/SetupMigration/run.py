@@ -60,7 +60,7 @@ except subprocess.CalledProcessError as error:
     result=error
 (out/'run-output.txt').write_text(result.stdout or '')
 (out/'run-stderr.txt').write_text(result.stderr or '')
-w.invoke(HOST,MACHINE,'Set-Location -LiteralPath '+w.ps_literal(remote)+"; $files=@(Get-ChildItem -File|Where-Object {$_.Extension -in @('.txt','.json','.log')}|ForEach-Object {$_.Name}); if(((Get-Item -LiteralPath evidence -Force).Attributes -band 1024) -or @(Get-ChildItem -LiteralPath evidence -Recurse -Force -Attributes ReparsePoint -ErrorAction Stop).Count){throw 'The evidence folder is or holds a link'}; tar.exe -czf evidence.tar.gz evidence identities @files; if($LASTEXITCODE){throw 'Evidence archive failed'}",timeout=w.EVIDENCE_TIMEOUT)
+w.invoke(HOST,MACHINE,'Set-Location -LiteralPath '+w.ps_literal(remote)+"; $files=@(Get-ChildItem -File|Where-Object {$_.Extension -in @('.txt','.json','.log')}|ForEach-Object {$_.Name}); foreach($archived in @('evidence','identities')+$files){if(((Get-Item -LiteralPath $archived -Force).Attributes -band 1024) -or (Test-Path -LiteralPath $archived -PathType Container) -and @(Get-ChildItem -LiteralPath $archived -Recurse -Force -Attributes ReparsePoint -ErrorAction Stop).Count){throw ('An archived item is or holds a link: '+$archived)}}; tar.exe -czf evidence.tar.gz evidence identities @files; if($LASTEXITCODE){throw 'Evidence archive failed'}",timeout=w.EVIDENCE_TIMEOUT)
 subprocess.run(['scp','-q',*w.SSH_OPTIONS,HOST+':'+remote.replace('\\','/')+'/evidence.tar.gz',str(out/'evidence.tar.gz')],check=True)
 with tarfile.open(out/'evidence.tar.gz') as t:t.extractall(out,filter='data')
 print(json.dumps({'returncode':result.returncode,'remote':remote,'evidence':str(out),'output':result.stdout},indent=2))
