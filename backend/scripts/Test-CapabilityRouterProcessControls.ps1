@@ -345,16 +345,22 @@ try {
     Copy-Item -LiteralPath "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -Destination $busyExe -Force
     Copy-Item -LiteralPath "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -Destination $protectedExe -Force
 
-    $busyCommand = "Add-Type -TypeDefinition 'using System; using System.Threading; public static class RooIndustriesRouterBurn { public static void Run() { while (true) { Thread.SpinWait(1000000); } } }'; `$method = [RooIndustriesRouterBurn].GetMethod('Run'); `$starter = [System.Delegate]::CreateDelegate([System.Threading.ThreadStart], `$method); `$threads = @(); for (`$i = 0; `$i -lt [Environment]::ProcessorCount; `$i++) { `$thread = [System.Threading.Thread]::new(`$starter); `$thread.IsBackground = `$true; `$thread.Start(); `$threads += `$thread }; Start-Sleep -Seconds 120"
+    $busyReady = Join-Path $liveRoot 'busy.ready'
+    $busyCommand = "Add-Type -TypeDefinition 'using System; using System.Threading; public static class RooIndustriesRouterBurn { public static void Run() { while (true) { Thread.SpinWait(1000000); } } }'; `$method = [RooIndustriesRouterBurn].GetMethod('Run'); `$starter = [System.Delegate]::CreateDelegate([System.Threading.ThreadStart], `$method); `$threads = @(); for (`$i = 0; `$i -lt [Environment]::ProcessorCount; `$i++) { `$thread = [System.Threading.Thread]::new(`$starter); `$thread.IsBackground = `$true; `$thread.Start(); `$threads += `$thread }"
+    $busyCommand += "; `$self = [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName"
+    $busyCommand += "; Set-Content -LiteralPath (Join-Path (Split-Path `$self) 'busy.ready') -Value ready"
+    $busyCommand += '; Start-Sleep -Seconds 120'
 
     $busyProbe = Start-Process -FilePath $busyExe -ArgumentList '-NoProfile','-WindowStyle','Hidden','-Command',$busyCommand -WindowStyle Hidden -PassThru
     $protectedProbe = Start-Process -FilePath $protectedExe -ArgumentList '-NoProfile','-WindowStyle','Hidden','-Command','Start-Sleep -Seconds 120' -WindowStyle Hidden -PassThru
-    Start-Sleep -Milliseconds 3500
+    while (-not (Test-Path -LiteralPath $busyReady)) {
+        if ($busyProbe.HasExited) { throw 'Disposable governor busy probe exited before its spin threads started.' }
+        Start-Sleep -Milliseconds 100
+    }
 
     try {
         (Get-Process -Id $busyProbe.Id -ErrorAction Stop).PriorityClass = 'Normal'
     } catch { }
-    Start-Sleep -Milliseconds 500
 
     $before = Get-RooIndustriesProcessControlState $busyProbe.Id $null
     Add-Check ([bool](Get-PropertyValue $before 'exists' $false)) 'Disposable governor busy probe is running before routed apply' 'Disposable governor busy probe was not running before routed apply'
@@ -431,14 +437,19 @@ try {
             foreach ($child in @(Get-CimInstance Win32_Process -Filter "ParentProcessId=$($liveProbe.Id)" -ErrorAction SilentlyContinue)) {
                 Stop-Process -Id ([int]$child.ProcessId) -Force -ErrorAction SilentlyContinue
             }
-            Stop-Process -Id $liveProbe.Id -Force -ErrorAction SilentlyContinue
-            Wait-Process -Id $liveProbe.Id -Timeout 5 -ErrorAction SilentlyContinue
+            $liveProbe.Kill()
+            $liveProbe.WaitForExit()
         }
+        if ($liveProbe) { $liveProbe.Dispose() }
     }
     $tempRoot = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath())
     $fullLiveRoot = [System.IO.Path]::GetFullPath($liveRoot)
     if ($fullLiveRoot.StartsWith($tempRoot, [System.StringComparison]::OrdinalIgnoreCase) -and (Test-Path -LiteralPath $fullLiveRoot)) {
-        Remove-Item -LiteralPath $fullLiveRoot -Recurse -Force -ErrorAction SilentlyContinue
+        try {
+            Remove-Item -LiteralPath $fullLiveRoot -Recurse -Force -ErrorAction Stop
+        } catch {
+            Add-Failure "Disposable router proof temp root could not be removed: $($_.Exception.Message)"
+        }
     }
     $cleanupDone = $true
 }
