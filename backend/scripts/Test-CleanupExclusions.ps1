@@ -4,17 +4,19 @@ $ErrorActionPreference='Stop'
 if(-not $DotNetPath){$DotNetPath=(Get-Command dotnet.exe -ErrorAction Stop).Source}
 $env:ROO_INDUSTRIES_DOTNET_EXE=$DotNetPath
 $root=Join-Path ([IO.Path]::GetTempPath()) ('roo-industries-exclusion-host-'+[Guid]::NewGuid().ToString('N'))
-$scripts=Join-Path $root 'source\backend\scripts'
+$source=Join-Path $root 'source\backend'
+$scripts=Join-Path $source 'scripts'
 $policy=Join-Path $root 'cleanup-exclusions.json'
 $command=Join-Path $scripts 'Invoke-CleanupExclusions.ps1'
 function Assert([bool]$Condition,[string]$Message){if(-not $Condition){throw $Message};Write-Output ('PASS '+$Message)}
 try {
-    [IO.Directory]::CreateDirectory((Split-Path $scripts -Parent))|Out-Null
+    [IO.Directory]::CreateDirectory($source)|Out-Null
     $backend=Split-Path $PSScriptRoot -Parent
-    Copy-Item -LiteralPath $PSScriptRoot -Destination $scripts -Recurse
-    Copy-Item -LiteralPath (Join-Path $backend 'profiles') -Destination (Join-Path $root 'source\backend\profiles') -Recurse
+    foreach($folder in 'scripts','profiles','uninstall'){
+        Copy-Item -LiteralPath (Join-Path $backend $folder) -Destination (Join-Path $source $folder) -Recurse
+    }
     $project=Join-Path $backend 'native\Optimizer.Host\Optimizer.Host.csproj'
-    $hostOutput=Join-Path $root 'source\backend\bin\optimizer'
+    $hostOutput=Join-Path $source 'bin\optimizer'
     & $DotNetPath publish $project -c Release --self-contained false -p:GovernorTestHooks=true -o $hostOutput|Out-Null
     if($LASTEXITCODE -ne 0){throw 'Cleanup host build failed'}
     $env:ROO_INDUSTRIES_TEST_CLEANUP_EXCLUSIONS=$policy
