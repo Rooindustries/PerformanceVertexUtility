@@ -396,8 +396,10 @@ try {
     $pollIndex = 0
     while ($true) {
         $pollIndex++
+        if ($env:ROO_FORCE_FOREGROUND_FILE -and (Test-Path -LiteralPath $env:ROO_FORCE_FOREGROUND_FILE)) { $foregroundPid = [int](Get-Content -LiteralPath $env:ROO_FORCE_FOREGROUND_FILE -Raw) }
         $pollStartedAtUtc = Get-RooIndustriesUtcStamp
         $sample = Get-RooIndustriesGovernorCpuSample -SampleIntervalMilliseconds $SampleIntervalMilliseconds -IncludeCommandLine:$IncludeCommandLine
+        if ($pollIndex -eq 1 -and $env:ROO_FORCE_FIRST_POLL_LAG_MS) { Start-Sleep -Milliseconds ([int]$env:ROO_FORCE_FIRST_POLL_LAG_MS) }
         $pollWouldRestrain = New-Object System.Collections.Generic.List[object]
         $pollChanged = New-Object System.Collections.Generic.List[object]
         $pollSkipped = New-Object System.Collections.Generic.List[object]
