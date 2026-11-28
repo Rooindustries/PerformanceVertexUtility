@@ -9,7 +9,7 @@ if ($Mode -eq 'lag') { $env:ROO_FORCE_FIRST_POLL_LAG_MS = '7000' } else { Remove
 $probeScript = @"
 `$ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Windows.Forms
-Add-Type -TypeDefinition 'using System; using System.Threading; using System.Runtime.InteropServices; public static class ForceProbe { public static void Run() { while (true) { Thread.SpinWait(1000000); } } [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h); [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow(); }'
+Add-Type -TypeDefinition 'using System; using System.Threading; using System.Runtime.InteropServices; public static class ForceProbe { public static void Run() { while (true) { Thread.SpinWait(1000000); } } [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h); [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow(); [DllImport("user32.dll")] public static extern void keybd_event(byte k, byte s, uint f, UIntPtr e); }'
 `$s = [System.Delegate]::CreateDelegate([System.Threading.ThreadStart], [ForceProbe].GetMethod('Run'))
 for (`$i = 0; `$i -lt $threads; `$i++) { `$t = [System.Threading.Thread]::new(`$s); `$t.IsBackground = `$true; `$t.Start() }
 `$dir = Split-Path ([Diagnostics.Process]::GetCurrentProcess().MainModule.FileName)
@@ -20,7 +20,7 @@ while ((Get-Date) -lt `$end) {
     if (`$null -eq `$form -and (Test-Path -LiteralPath (Join-Path `$dir 'go'))) {
         `$form = New-Object System.Windows.Forms.Form
         `$form.Text = 'Force foreground probe'
-        `$form.Show(); `$form.Activate(); [ForceProbe]::SetForegroundWindow(`$form.Handle) | Out-Null
+        [ForceProbe]::keybd_event(0x12, 0, 0, [UIntPtr]::Zero); [ForceProbe]::keybd_event(0x12, 0, 2, [UIntPtr]::Zero); `$form.Show(); `$form.Activate(); [ForceProbe]::SetForegroundWindow(`$form.Handle) | Out-Null
     }
     if (`$form) {
         [System.Windows.Forms.Application]::DoEvents()
@@ -54,6 +54,8 @@ for ($r = 1; $r -le $Rounds; $r++) {
         }
         $session.WaitForExit()
         $result = Get-Content -LiteralPath $out -Raw | ConvertFrom-Json
+        New-Item -ItemType Directory -Path (Join-Path $PWD 'artifacts') -Force | Out-Null
+        Copy-Item -LiteralPath $out -Destination (Join-Path $PWD "artifacts\$Mode-$r-$(Get-Random).json")
         $hit = @($result.changedItems | Where-Object { [int]$_.processId -eq $probe.Id }).Count -gt 0
         if ($hit) { $hits++ }
         $times = @($result.polls | ForEach-Object { ([datetime]$_.capturedAtUtc).ToUniversalTime().ToString('ss.fff') }) -join ','
