@@ -6161,8 +6161,6 @@
   {"file": "tools/validation/check_baseline.py", "line": "for spelling, start in (('', str(link)), (' written with a trailing separator', str(link) + os.sep), (' written with a trailing dot', os.path.join(str(link), '.'))):", "kind": "call the table does not list", "starts": "os.path.join, os.sep"},
   {"file": "tools/validation/local_tree.py", "line": "start = os.path.normpath(os.fspath(root))", "kind": "call the table does not list", "starts": "os.path.normpath"},
   {"file": ".github/no-new-comments-e2e.sh", "line": "printf '%s\\n' 'export const FRAG = /* glsl */ `' '  float a = 1.0;' '  // the glow fades out here' '  vec2 b = vec2(a, a / 2.0);' '`;' >web/shader.ts", "kind": "program", "starts": "printf"},
-  {"file": ".github/no-new-comments-e2e.sh", "line": "printf '%s\\n' 'Adds b.' '' 'AI-generated summary.' >\"$repo/.git/body\"", "kind": "program", "starts": "printf"},
-  {"file": ".github/no-new-comments-e2e.sh", "line": "printf '%s\\n' 'Adds b.' '' '<!-- This is an auto-generated comment: release notes by bot -->' '<!-- bot-ai-generated:v1 -->' 'Summary' '<!-- end of auto-generated comment: release notes by bot -->' >\"$repo/.git/body\"", "kind": "program", "starts": "printf"},
   {"file": ".github/no-new-comments-e2e.sh", "line": "printf 'export const who = \"%s\";\\n' \"$name\" >src/c.js", "kind": "program", "starts": "printf"},
   {"file": ".github/no-new-comments.sh", "line": "while IFS= read -r path; do", "kind": "program", "starts": "read"},
   {"file": ".github/no-new-comments.sh", "line": "IFS='|' read -r glob word _ <<<\"$rule\"", "kind": "program", "starts": "read"},
