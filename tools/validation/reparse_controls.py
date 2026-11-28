@@ -286,7 +286,7 @@ def fixed_cases(cases):
                'implicit index': (implicit('System.Data.DataRowCollection p', 'var b = p[^1];'), implicit('string p', 'var b = p[^1];')),
                'collection expression': (implicit('int p', 'System.Collections.Immutable.ImmutableList<int> b = [p];'), implicit('int p', 'int[] b = [p];')),
                'generic new': ('static class Control { static T Q<T>() where T : new() => new T(); }', implicit('int p', 'var b = p;'))},
-        'sh': {'command': ('zqvx a', 'echo a'), 'arithmetic on a variable': ('x=$((y + 1))', 'x=$((1 + 1))'), 'arithmetic on a parameter that is always a number': ('x=$((y + $#))', 'x=$(($# + $?))'), 'arithmetic comparison': ('[[ $a -eq 1 ]]', '[[ $a == b ]]'),
+        'sh': {'command': ('zqvx a', 'echo a'), 'arithmetic on a variable': ('x=$((y + 1))', 'x=$((1 + 1))'), 'arithmetic on a parameter that is always a number': ('x=$((y + $#))', 'x=$(($# + $?))'), 'arithmetic comparison': ('[[ $a -eq 1 ]]', '[[ $a == b ]]'), 'variable name test': ('[[ -v p ]]', '[[ -n $p ]]'),
                'array index': ('echo "${a[$i]}"', 'echo "${a[0]}"'), 'prompt expansion': ('echo "${p@P}"', 'echo "${p@Q}"'), 'indirect expansion': ('echo "${!p}"', 'echo "${!a[@]}"'),
                'integer declaration': ('declare -i n=1', 'local -r n=1'), 'command in a here-document': ('echo <<EOF\n$(zqvx)\nEOF', 'echo <<EOF\n$(echo a)\nEOF'),
                'function defined later': ('zqvx\nzqvx() { :; }', 'zqvx() { :; }\nzqvx'), 'function defined in a branch': ('if true; then zqvx() { :; }; fi\nzqvx', 'zqvx() { :; }\nzqvx'),

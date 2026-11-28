@@ -632,6 +632,13 @@ def bash_facts(relative, text, offset=0, lines=None):
     lines = lines or lines_of(text)
     facts, functions, changed, calls, spans = [], {}, set(), [], []
     top = {id(stmt.get('Cmd')) for stmt in tree.get('Stmts') or []}
+    data = text.encode('utf-8')
+
+    def operator(node):
+        if 'OpPos' in node:
+            return data[node['OpPos']['Offset']:].split(None, 1)[0].decode('utf-8', 'replace')
+        word = (node.get('Exp') or {}).get('Word')
+        return data[node['Param']['End']['Offset']:word['Pos']['Offset']].decode('utf-8', 'replace') if word and node.get('Param') else ''
 
     def refuse(node, why):
         line = node['Pos']['Line'] + offset
@@ -671,8 +678,8 @@ def bash_facts(relative, text, offset=0, lines=None):
                     value = ''.join(p.get('Value', '') for p in word.get('Parts', []) if p.get('Type') == 'Lit') if all(p.get('Type') == 'Lit' for p in word.get('Parts', [])) else '*'
                     if not value.startswith('-'):
                         changed.add(value.split('=')[0])
-        if kind in ('ArithmExp', 'ArithmCmd', 'LetClause', 'CStyleLoop') and variables(node) or kind == 'BinaryTest' and node.get('Op') in ('-eq', '-ne', '-lt', '-le', '-gt', '-ge') and variables([node.get('X'), node.get('Y')]) \
-                or kind == 'UnaryTest' and node.get('Op') == '-v' or kind == 'ParamExp' and (variables([node.get('Index'), node.get('Slice')]) or (node.get('Exp') or {}).get('Op') == '@' and 'P' in ''.join(p.get('Value', '') for p in (node['Exp'].get('Word') or {}).get('Parts', []))
+        if kind in ('ArithmExp', 'ArithmCmd', 'LetClause', 'CStyleLoop') and variables(node) or kind == 'BinaryTest' and operator(node) in ('-eq', '-ne', '-lt', '-le', '-gt', '-ge') and variables([node.get('X'), node.get('Y')]) \
+                or kind == 'UnaryTest' and operator(node) == '-v' or kind == 'ParamExp' and (variables([node.get('Index'), node.get('Slice')]) or operator(node) == '@' and 'P' in ''.join(p.get('Value', '') for p in (node['Exp'].get('Word') or {}).get('Parts', []))
                                                                                          or node.get('Excl') and not node.get('Names') and (node.get('Index') is None or variables(node.get('Index')))) \
                 or kind == 'DeclClause' and (node.get('Variant', {}).get('Value') == 'nameref' or any(a.get('Naked') and re.fullmatch(r'[-+]\w*[in]\w*', ''.join(p.get('Value', '') for p in (a.get('Value') or {}).get('Parts', []))) for a in node.get('Args') or [])):
             refuse(node, 'bash evaluates this as arithmetic or a variable name, so a value in it can hold text that bash runs as code')
