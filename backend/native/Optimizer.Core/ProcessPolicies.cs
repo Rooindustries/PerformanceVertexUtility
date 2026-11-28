@@ -36,10 +36,6 @@ public sealed class PolicyInstance
     public string? Field { get; init; }
     public string? ErrorKind { get; set; }
     public bool Relinquished { get; set; }
-    public DateTime? CheckStartedAtUtc { get; init; }
-    public DateTime? PreviousCheckStartedAtUtc { get; init; }
-    public double? ProcessorSecondsToApply { get; set; }
-    public DateTime? FailedCheckStartedAtUtc { get; init; }
 }
 
 public sealed class PolicyHostState
@@ -58,9 +54,6 @@ public sealed record PolicyIssue(string RuleId, int? ProcessId, string? Executab
 {
     public string Kind { get; init; } = "error";
     public string? Field { get; init; }
-    public int? Attempts { get; init; }
-    public DateTime? FirstFailedCheckAtUtc { get; init; }
-    public DateTime? LastFailedCheckAtUtc { get; init; }
 }
 
 public sealed record PolicyDiagnostics(int Instances, int Watched, int Retries, int Gates, int RuleChecks, int Hashes, long ProcessOpens, long HashAttempts, long OwnerLookups);
@@ -516,7 +509,7 @@ public sealed class ProcessPolicyStore
     }
 }
 
-public sealed class ProcessPolicyHost
+public sealed partial class ProcessPolicyHost
 {
     public const int TerminalHistory = 50;
     public const string KeepsChanging = "This app keeps changing it back, so the Governor stepped back.";
@@ -546,8 +539,6 @@ public sealed class ProcessPolicyHost
     private PolicyDiagnostics? _diagnostics;
     private PolicyHostState _state;
     private byte[]? _lastSavedState;
-    private DateTime? _checkStartedAtUtc, _previousCheckStartedAtUtc;
-    private TimeSpan _checkProcessorStart;
 
     private sealed class Watch
     {
@@ -557,11 +548,10 @@ public sealed class ProcessPolicyHost
         public List<long> Reasserts { get; } = [];
     }
 
-    private sealed record Retry(string Kind, string Message, string? Field, long RetryAt, int Attempt, string Identity, DateTime? FirstCheck, DateTime? LastCheck);
+    private sealed record Retry(string Kind, string Message, string? Field, long RetryAt, int Attempt, string Identity, long Check);
     private sealed record Gate(string? Kind, string? Message, RunningProcess? Identity, string? Topology);
 
     private static long Now => Monotonic();
-    private static TimeSpan ProcessorTime() { using var self = System.Diagnostics.Process.GetCurrentProcess(); return self.TotalProcessorTime; }
     private static long Delay(int attempt) => attempt < 7 ? 1000L << attempt : 300000;
     private static bool Terminal(PolicyInstance instance) => instance.Status is "restored" or "expired";
     private static string Key(RunningProcess process) => process.ProcessId + "|" + process.CreationTimeFileTimeUtc;
@@ -752,9 +742,8 @@ public sealed class ProcessPolicyHost
 
     public PolicyHostState Tick()
     {
-        _previousCheckStartedAtUtc = _checkStartedAtUtc;
-        _checkStartedAtUtc = DateTime.UtcNow;
-        _checkProcessorStart = ProcessorTime();
+        _previousCheckStarted = _checkStarted;
+        _checkStarted = DateTime.UtcNow.ToFileTimeUtc();
         Progress();
         _state.Errors = [];
         _state.Issues = [];
@@ -977,6 +966,7 @@ public sealed class ProcessPolicyHost
             foreach (var running in processes.Values.Where(process => process.ProcessId != self && string.Equals(process.ImageName, image, StringComparison.OrdinalIgnoreCase)))
             {
                 Progress();
+                Seen(running);
                 var gate = GetGate(running);
                 if (gate.Kind == "ended") continue;
                 var path = gate.Identity?.ExecutablePath ?? ImagePath(running);
@@ -994,10 +984,10 @@ public sealed class ProcessPolicyHost
                     if (Held(identity, field)) continue;
                     if (field == "affinity" && gate.Topology != rule.AffinityTopologyHash) { Issue(rule, running, identity.ExecutablePath, "topology", TopologyChanged, field); continue; }
                     var key = rule.RuleId + "|" + hash + "|" + Key(identity) + "|" + field;
-                    if (_retries.TryGetValue(key, out var waiting) && Now < waiting.RetryAt) { _state.Issues.Add(Retried(rule, identity, waiting, field)); continue; }
+                    if (_retries.TryGetValue(key, out var waiting) && Now < waiting.RetryAt) { Issue(rule, running, identity.ExecutablePath, waiting.Kind, waiting.Message, field); continue; }
                     pending.Add((field, key));
                 }
-                if (pending.Count > 0) Apply(rule, hash, identity, pending);
+                if (pending.Count > 0) LogCheck(identity, pending, Apply(rule, hash, identity, pending));
             }
         }
     }
@@ -1029,9 +1019,10 @@ public sealed class ProcessPolicyHost
         catch (Exception) { return ProcessTarget.ControlNames; }
     }
 
-    private void Apply(SavedProcessRule rule, string hash, RunningProcess identity, List<(string Field, string Key)> fields)
+    private List<string> Apply(SavedProcessRule rule, string hash, RunningProcess identity, List<(string Field, string Key)> fields)
     {
         var created = new List<(PolicyInstance Instance, string Key)>();
+        var done = new List<string>();
         foreach (var (field, key) in fields)
         {
             try
@@ -1048,8 +1039,6 @@ public sealed class ProcessPolicyHost
                 {
                     RuleId = rule.RuleId, RuleHash = hash, Process = identity, PreviewPath = previewPath, Field = field,
                     ReviewHash = OperationFiles.HashFile(previewPath), JournalPath = Path.Combine(directory, "journal.json"), Status = "applying",
-                    CheckStartedAtUtc = _checkStartedAtUtc, PreviousCheckStartedAtUtc = _previousCheckStartedAtUtc,
-                    FailedCheckStartedAtUtc = _retries.TryGetValue(key, out var failed) ? failed.LastCheck : null,
                 };
                 _state.Instances.Add(instance);
                 created.Add((instance, key));
@@ -1058,7 +1047,7 @@ public sealed class ProcessPolicyHost
             catch (RooIndustries.Optimization.CpuSets.NativeFailure error) when (error.Api == "OpenProcess" && error.NativeErrorCode == 87) { break; }
             catch (Exception error) { Rejected(rule, identity, field, key, error); }
         }
-        if (created.Count == 0) return;
+        if (created.Count == 0) return done;
         try { Save(); }
         catch (Exception error)
         {
@@ -1068,7 +1057,7 @@ public sealed class ProcessPolicyHost
                 _pruned.Add(Path.GetDirectoryName(instance.JournalPath)!);
                 Rejected(rule, identity, instance.Field!, key, error);
             }
-            return;
+            return done;
         }
         foreach (var (instance, key) in created)
         {
@@ -1083,7 +1072,7 @@ public sealed class ProcessPolicyHost
                     throw new FieldFailure(failed?.Error ?? "Windows did not accept the requested value.", failed?.ErrorKind == "denied");
                 }
                 instance.Status = "active";
-                instance.ProcessorSecondsToApply = (ProcessorTime() - _checkProcessorStart).TotalSeconds;
+                done.Add(instance.Field!);
                 _watched[instance.JournalPath] = new Watch { Desired = applied.Changes.ToDictionary(change => change.Name, change => change.Desired, StringComparer.Ordinal), NextCheck = Now + Recheck };
                 _retries.Remove(key);
             }
@@ -1096,21 +1085,15 @@ public sealed class ProcessPolicyHost
                 Rejected(rule, identity, instance.Field!, key, error);
             }
         }
+        return done;
     }
 
     private void Rejected(SavedProcessRule rule, RunningProcess identity, string field, string key, Exception error)
     {
         var kind = error is FieldFailure failure ? (failure.Denied ? "denied" : "error") : ProcessFailures.Denied(error) ? "denied" : "error";
         Fail(key, kind, error.Message, field, Key(identity), ProcessFailures.GpuStarting(error));
-        _state.Issues.Add(Retried(rule, identity, _retries[key], field));
+        _state.Issues.Add(new(rule.RuleId, identity.ProcessId, identity.ExecutablePath, error.Message) { Kind = kind, Field = field });
     }
-
-    private static PolicyIssue Retried(SavedProcessRule rule, RunningProcess identity, Retry retry, string field) =>
-        new(rule.RuleId, identity.ProcessId, identity.ExecutablePath, retry.Message)
-        {
-            Kind = retry.Kind, Field = field, Attempts = retry.Attempt + 1,
-            FirstFailedCheckAtUtc = retry.FirstCheck, LastFailedCheckAtUtc = retry.LastCheck,
-        };
 
     private sealed class FieldFailure(string message, bool denied) : Exception(message)
     {
@@ -1203,10 +1186,9 @@ public sealed class ProcessPolicyHost
 
     private void Fail(string key, string kind, string message, string? field, string identity, bool starting = false)
     {
-        var first = !_retries.TryGetValue(key, out var earlier);
-        var attempt = first ? 0 : earlier!.Attempt + 1;
-        var retryAt = first && starting ? Now : Now + Delay(attempt);
-        _retries[key] = new(kind, message, field, retryAt, attempt, identity, first ? _checkStartedAtUtc : earlier!.FirstCheck, _checkStartedAtUtc);
+        var attempt = _retries.TryGetValue(key, out var earlier) ? earlier.Attempt + 1 : 0;
+        var retryAt = attempt == 0 && starting ? Now : Now + Delay(attempt);
+        _retries[key] = new(kind, message, field, retryAt, attempt, identity, _checkStarted);
     }
 
     private bool Due(string key, string identity)
@@ -1223,6 +1205,7 @@ public sealed class ProcessPolicyHost
         foreach (var key in _gates.Keys.Where(key => !alive.Contains(key)).ToArray()) _gates.Remove(key);
         foreach (var key in _imagePaths.Keys.Where(key => !alive.Contains(key)).ToArray()) _imagePaths.Remove(key);
         foreach (var key in _owners.Keys.Where(key => !alive.Contains(key)).ToArray()) _owners.Remove(key);
+        foreach (var key in _launches.Keys.Where(key => !alive.Contains(key)).ToArray()) _launches.Remove(key);
         foreach (var pair in _retries.Where(pair => !alive.Contains(pair.Value.Identity)).ToArray()) _retries.Remove(pair.Key);
         foreach (var key in _ruleChecks.Keys.Where(key => !alive.Contains(key[(key.IndexOf('|') + 1)..])).ToArray()) _ruleChecks.Remove(key);
         foreach (var key in _watched.Keys.Where(key => !journals.Contains(key)).ToArray()) _watched.Remove(key);

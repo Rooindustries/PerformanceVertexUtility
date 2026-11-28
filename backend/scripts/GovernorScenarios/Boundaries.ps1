@@ -400,7 +400,8 @@ function Test-ScenarioGovernorLog {
     $log=Join-Path $script:policyRoot 'logs\governor.log'
     $beside=Join-Path $script:policyParent 'logs\governor.log'
     $hold=[IO.FileStream]::new((Join-Path $script:policyRoot 'host.json'),[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::None)
-    try {$second=Start-Probe $path;$null=Wait-Until {Test-Path -LiteralPath $log} 8 100} finally {$hold.Dispose()}
+    $failed={(Test-Path -LiteralPath $log) -and (Get-Content -LiteralPath $log -Raw) -like '*A governor check failed*'}
+    try {$second=Start-Probe $path;$null=Wait-Until $failed 8 100} finally {$hold.Dispose()}
     Note 'locations' ([ordered]@{insideRulesFolder=(Test-Path -LiteralPath $log);besideRulesFolder=(Test-Path -LiteralPath $beside)})
     Assert ((Test-Path -LiteralPath $log) -and -not (Test-Path -LiteralPath $beside)) 'The governor log is written inside the protected rules folder, not beside it'
     $text=[IO.File]::ReadAllText($log)
