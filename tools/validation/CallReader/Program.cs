@@ -680,6 +680,9 @@ sealed class Unit
         if (pieces.Count == 0 || IsMarker(pieces[^1]))
             return null;
         var last = pieces[^1];
+        var joined = System.Text.RegularExpressions.Regex.Match(last, @"[^\\/]+\.(exe|com)/[^\\/]+$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        if (joined.Success)
+            return joined.Value;
         var cut = last.LastIndexOfAny(['\\', '/']);
         if (cut < 0 && pieces.Count > 1)
             return null;

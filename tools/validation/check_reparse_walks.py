@@ -84,6 +84,9 @@ def program_of(pieces):
     if not pieces or pieces[-1] in MARKERS:
         return None
     last = pieces[-1]
+    joined = re.search(r'[^\\/]+\.(exe|com)/[^\\/]+$', last, re.IGNORECASE)
+    if joined:
+        return joined.group(0)
     cut = max(last.rfind('\\'), last.rfind('/'))
     if cut < 0 and len(pieces) > 1:
         return None
@@ -1071,7 +1074,7 @@ class Classifier:
                 return [launch(program_of(pieces), tokens)]
             lowered = name.lower()
             if re.search(r'[\\/]|\.\w+$', lowered):
-                return [launch(Path(name.replace('\\', '/')).name, tokens)]
+                return [launch(program_of([name]) or name, tokens)]
             if lowered in self.visible(item['file']):
                 return []
             cmdlet = PS_ALIASES.get(lowered, lowered)

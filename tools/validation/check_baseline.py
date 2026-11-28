@@ -463,7 +463,7 @@ def reparse_walk_negative_controls():
             ('start settings changed through the argument list indexer', 'cs', cs('var p = new ProcessStartInfo("zqvx.exe"); p.ArgumentList.Add("a"); p.ArgumentList[0] = "b"; Process.Start(p);'), 'Process.Start(p);', 'program', 'zqvx.exe', True),
             ('a tree tool started through a variable', 'ps1', "$p = '" + tree_tool + "'\n& $p a b", '& $p a b', 'program', tree_tool, True),
             ('a folder move called through a using alias', 'cs', cs('L.Move(dir, dir + "x");', 'using L = System.IO.Directory;'), 'L.Move(', 'call the table does not list', 'system.io.directory.move', True),
-            ('a full program path joined to its switch, started from C#', 'cs', cs('Process.Start(@"C:\\Windows\\System32\\attrib.exe/s");'), 'Process.Start(', 'program', 'c:\\windows\\system32\\attrib.exe/s', True),
+            ('a full program path joined to its switch, started from C#', 'cs', cs('Process.Start(@"C:\\Windows\\System32\\attrib.exe/s");'), 'Process.Start(', 'program', 'attrib.exe/s', True),
             ('an archive add on a typed value', 'py', "import tarfile\nt = tarfile.open(a, 'w')\nt.add(b)", "t = tarfile.open(a, 'w')", 'call the table does not list', 'tarfile.open', True),
             ('a type name built from values the check cannot read, reported on its own line', 'ps1', 'New-Object System.Data.DataTable -Property @{ TableName = $a }', None, 'the type name is built from values the check cannot read', '', False)):
         path = f'tools/validation/Control/known-{label.replace(" ", "-")}.{extension}'
@@ -476,6 +476,7 @@ def reparse_walk_negative_controls():
         line = next(l.strip() for l in module['lines_of'](source) if line in l)
         known.append({'file': f'tools/validation/Control/{harm}-call.{extension}', 'line': line, 'kind': 'call the table does not list', 'starts': starts})
     reasoned.append({'file': 'tools/validation/Control/missing.ps1', 'line': 'Get-ChildItem -Recurse', 'reason': 'control'})
+    reasoned.append({'file': 'tools/validation/Control/known-a-tree-tool-started-through-a-variable.ps1', 'line': "$p = '" + tree_tool + "'", 'reason': 'control'})
     results = {}
     for projects in (True, False):
         with tempfile.TemporaryDirectory() as directory:
