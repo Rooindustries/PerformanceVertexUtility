@@ -58,7 +58,7 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
         "Raises the game CPU priority with normal memory priority, leaves OBS and Discord unchanged, and lowers CPU and memory priority for updaters and browser helpers. Game launchers are left unchanged.";
     [ObservableProperty] private string _governorStatus = "Background limits not checked yet";
     [ObservableProperty] private string _governorDetail =
-        "Watches for background CPU spikes and lowers CPU, I/O and memory priority until CPU use drops.";
+        "Watches background apps for a minute and lowers CPU, I/O and memory priority for ones that keep the CPU busy. It restores them if CPU use drops while watching. Restore puts back any limits still held afterwards.";
     [NotifyPropertyChangedFor(nameof(CanRestoreMatchTune))]
     [ObservableProperty] private bool _matchTuneRestoreAvailable;
     [NotifyPropertyChangedFor(nameof(CanRestoreGovernor))]
@@ -510,22 +510,22 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
         if (!CanStartGovernor) return;
         ActionBusy = true;
         GovernorStatus = "Watching background load";
-        GovernorDetail = "The app is watching for short CPU spikes and can restrain noisy background apps.";
+        GovernorDetail = "Watching for background apps that keep the CPU busy. It restores their controls if CPU use drops while watching.";
         try
         {
-            var response = await App.Live.RunProcessGovernorSessionResultAsync(true, 12, 2, 250);
-            var observedRecovery = ReadSessionRestoreEvidence(response.Value, "governor");
+            var response = await App.Live.RunProcessGovernorSessionResultAsync(true, 60, 2, 250);
+            var observedRecovery = HoldsApps(response.Value) ? ReadSessionRestoreEvidence(response.Value, "governor") : null;
             if (response.Value is null || response.Error is not null
                 || !SessionEnvelopeMatches(response.Value, "performance.governor.startSession", false))
             {
                 GovernorStatus = "Background limits not confirmed";
                 GovernorDetail = response.Error ?? "The background limit session returned invalid operation evidence.";
-                SetGovernorRestore(observedRecovery ?? (_governorRestore is not null && ValidateSessionRestoreEvidence(_governorRestore) ? _governorRestore : null));
+                SetGovernorRestore(observedRecovery ?? await ReadHeldGovernorRestoreAsync(_governorRestore));
                 return;
             }
             GovernorStatus = SessionStatusTitle(response.Value, "Background limits finished");
-            GovernorDetail = SummarizeSessionAction(response.Value, "Ran the background limits and restored priorities after CPU use dropped.");
-            SetGovernorRestore(observedRecovery);
+            GovernorDetail = SummarizeSessionAction(response.Value, "Ran the background limits.");
+            SetGovernorRestore(observedRecovery ?? await ReadHeldGovernorRestoreAsync(_governorRestore));
         }
         finally
         {
@@ -544,38 +544,82 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
             return;
         }
 
-        var evidence = _governorRestore;
-        if (evidence is null || !ValidateSessionRestoreEvidence(evidence))
-        {
-            GovernorStatus = "Background restore unavailable";
-            GovernorDetail = "The saved background-session backup could not be verified.";
-            SetGovernorRestore(null);
-            return;
-        }
-
         ActionBusy = true;
         GovernorStatus = "Restoring background limits";
         GovernorDetail = "Putting restrained apps back to their previous controls.";
         try
         {
-            var response = await App.Live.RestoreProcessGovernorSessionResultAsync(evidence.SessionId, evidence.SessionPath, evidence.BackupManifestPath);
-            if (response.Value is null)
-            {
-                GovernorStatus = "Background restore not confirmed";
-                GovernorDetail = PageWords(response.Error ?? "The background restore returned no result.", profile: false);
-                SetGovernorRestore(ValidateSessionRestoreEvidence(evidence) ? evidence : null);
-                return;
-            }
-            GovernorDetail = SummarizeSessionAction(response.Value, "The background restore result needs review.");
-            if (response.Error is null && SessionRestoreCompleted(response.Value, evidence, "performance.governor.stopSession"))
-            {
-                GovernorStatus = "Background limits restored";
-                SetGovernorRestore(null);
-            }
-            else
+            var newest = await ReadGovernorRestoreChainAsync();
+            if (newest.Error is not null)
             {
                 GovernorStatus = "Background restore needs attention";
-                SetGovernorRestore(ValidateSessionRestoreEvidence(evidence) ? evidence : null);
+                GovernorDetail = newest.Error;
+                return;
+            }
+            var evidence = newest.Evidence;
+            SetGovernorRestore(evidence);
+            if (evidence is null)
+            {
+                GovernorStatus = "Background limits restored";
+                GovernorDetail = "No saved background limits remain to restore." + newest.Unreadable;
+                return;
+            }
+            var restoredSessions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            // Every run's outcome stays on the card, so an older run's result never hides a newer run's kept settings.
+            var outcomes = new List<string>();
+            string Walked(string text) => string.Join("\n", outcomes.Append(text));
+            while (evidence is not null)
+            {
+                if (!restoredSessions.Add(evidence.SessionId))
+                {
+                    GovernorStatus = "Background restore needs attention";
+                    GovernorDetail = Walked("The same saved run still needs recovery. Restore stopped before repeating it.");
+                    SetGovernorRestore(evidence);
+                    return;
+                }
+                var response = await App.Live.RestoreProcessGovernorSessionResultAsync(evidence.SessionId, evidence.SessionPath, evidence.BackupManifestPath);
+                if (response.Value is null)
+                {
+                    GovernorStatus = "Background restore not confirmed";
+                    GovernorDetail = Walked(PageWords(response.Error ?? "The background restore returned no result.", profile: false));
+                    SetGovernorRestore(await ReadHeldGovernorRestoreAsync(evidence));
+                    return;
+                }
+                var outcome = SummarizeSessionAction(response.Value, "The background restore result needs review.");
+                GovernorDetail = Walked(outcome);
+                if (response.Error is null && SessionRestoreCompleted(response.Value, evidence, "performance.governor.stopSession"))
+                {
+                    using var restored = JsonDocument.Parse(response.Value);
+                    if (!TryExtractBool(restored.RootElement, out _, "restorable") || ExtractString(restored.RootElement, "status") != "completed")
+                    {
+                        GovernorStatus = "Background restore needs attention";
+                        SetGovernorRestore(await ReadHeldGovernorRestoreAsync(evidence));
+                        return;
+                    }
+                    outcomes.Add(outcome);
+                    var next = await ReadGovernorRestoreChainAsync();
+                    if (next.Error is not null)
+                    {
+                        GovernorStatus = "Background restore needs attention";
+                        GovernorDetail = Walked(next.Error);
+                        SetGovernorRestore(evidence);
+                        return;
+                    }
+                    evidence = next.Evidence;
+                    SetGovernorRestore(evidence);
+                    // The card says restored only once no older run still holds an app.
+                    if (evidence is null)
+                    {
+                        GovernorStatus = "Background limits restored";
+                        GovernorDetail = string.Join("\n", outcomes) + next.Unreadable;
+                    }
+                }
+                else
+                {
+                    GovernorStatus = "Background restore needs attention";
+                    SetGovernorRestore(await ReadHeldGovernorRestoreAsync(evidence));
+                    return;
+                }
             }
         }
         finally
@@ -657,12 +701,16 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
         var governor = await App.Live.GetProcessGovernorSessionStatusResultAsync();
         var governorValid = governor.Value is not null && governor.Error is null
             && SessionEnvelopeMatches(governor.Value, "performance.governor.sessionStatus", null);
-        GovernorStatus = governorValid ? SessionStatusTitle(governor.Value, "No active background limits") : "Background limits unavailable";
-        GovernorDetail = governorValid
-            ? SummarizeSessionAction(governor.Value, "No background limits session has changed this PC yet.")
-            : governor.Error ?? "The background-session status returned invalid evidence.";
-        var governorRecovery = ReadSessionRestoreEvidence(governor.Value, "governor");
-        SetGovernorRestore(governorRecovery ?? (!governorValid && _governorRestore is not null && ValidateSessionRestoreEvidence(_governorRestore) ? _governorRestore : null));
+        // While status can't be read, keep the way back unchanged; Restore reads the saved runs again before it writes anything.
+        var governorRecovery = ReadSessionRestoreEvidence(governor.Value, "governor") ?? (!governorValid ? _governorRestore : null);
+        if (!Quiet || governorRecovery != _governorRestore)
+        {
+            GovernorStatus = governorValid ? SessionStatusTitle(governor.Value, "No active background limits") : "Background limits unavailable";
+            GovernorDetail = governorValid
+                ? SummarizeSessionAction(governor.Value, "No background limits session has changed this PC yet.") + UnreadableGovernorRuns(governor.Value)
+                : governor.Error ?? "The background-session status returned invalid evidence.";
+        }
+        SetGovernorRestore(governorRecovery);
     }
 
     private static bool TryProcessAction(string json, string expectedAction, out JsonElement result, out string error)
@@ -856,15 +904,28 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
                         (left.TryGetProperty("currentValue", out var keptValue) ? ControlValue(control, keptValue) : "unavailable") + " (left as another program set it)");
                 }
             }
+            var perPoll = actionId == "performance.governor.startSession";
+            var latestPoll = new Dictionary<string, long>(StringComparer.Ordinal);
+            string AppKey(JsonElement item) => ExtractString(item, "processName") + "|" + (item.TryGetProperty("processId", out var pid) ? pid.ToString() : string.Empty);
+            long PollOf(JsonElement item) => item.TryGetProperty("pollIndex", out var poll) && poll.ValueKind == JsonValueKind.Number && poll.TryGetInt64(out var value) ? value : 0;
             if (result.TryGetProperty("skippedItems", out var skipped) && skipped.ValueKind == JsonValueKind.Array)
-            foreach (var item in skipped.EnumerateArray())
-                if (item.ValueKind == JsonValueKind.Object && ExtractString(item, "reason") is { Length: > 0 } reason)
-                {
-                    var name = ExtractString(item, "processName");
-                    if (name is { Length: > 0 } && item.TryGetProperty("processId", out var processId) && processId.ValueKind == JsonValueKind.Number
-                        && processId.TryGetInt64(out var id) && summaryText.Contains(name + " (PID " + id.ToString(CultureInfo.InvariantCulture) + "): " + reason, StringComparison.Ordinal)) continue;
-                    lines.Add((name ?? "App") + ": " + reason);
-                }
+            {
+                if (perPoll)
+                    foreach (var item in skipped.EnumerateArray())
+                        if (item.ValueKind == JsonValueKind.Object)
+                            latestPoll[AppKey(item)] = Math.Max(latestPoll.GetValueOrDefault(AppKey(item)), PollOf(item));
+                foreach (var item in skipped.EnumerateArray())
+                    if (item.ValueKind == JsonValueKind.Object && ExtractString(item, "reason") is { Length: > 0 } reason)
+                    {
+                        if (perPoll && PollOf(item) < latestPoll[AppKey(item)]) continue;
+                        var name = ExtractString(item, "processName");
+                        if (name is { Length: > 0 } && item.TryGetProperty("processId", out var processId) && processId.ValueKind == JsonValueKind.Number
+                            && processId.TryGetInt64(out var id) && summaryText.Contains(name + " (PID " + id.ToString(CultureInfo.InvariantCulture) + "): " + reason, StringComparison.Ordinal)) continue;
+                        var line = (name ?? "App") + ": " + reason;
+                        if (perPoll && lines.Contains(line)) continue;
+                        lines.Add(line);
+                    }
+            }
         }
         return lines.Count == 0 ? string.Empty : "\n" + string.Join("\n", lines.Take(20)) + (lines.Count > 20 ? "\n" + (lines.Count - 20) + " more apps; see the list below." : string.Empty);
     }
@@ -1020,6 +1081,75 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
         GovernorRestoreAvailable = evidence is not null;
     }
 
+    private static async Task<(SessionRestoreEvidence? Evidence, string? Error, string Unreadable)> ReadGovernorRestoreChainAsync()
+    {
+        var status = await App.Live.GetProcessGovernorSessionStatusResultAsync();
+        if (status.Value is null || status.Error is not null || !SessionEnvelopeMatches(status.Value, "performance.governor.sessionStatus", null))
+            return (null, status.Error ?? "The remaining saved background limits could not be checked.", string.Empty);
+        var unreadable = UnreadableGovernorRuns(status.Value);
+        var next = ReadSessionRestoreEvidence(status.Value, "governor");
+        if (next is not null) return (next, null, unreadable);
+        using var doc = JsonDocument.Parse(status.Value);
+        var state = ExtractString(doc.RootElement, "status");
+        if (TryExtractBool(doc.RootElement, out var restorable, "restorable") && !restorable
+            && (state is "notFound" or "completed" || state is "failed" or "active" && TryExtractBool(doc.RootElement, out var dryRun, "dryRun") && !dryRun))
+            return (null, null, unreadable);
+        return (null, "The remaining saved background limits could not be verified.", unreadable);
+    }
+
+    // A run whose saved files can't be read stays pending; the card names it so it never silently disappears.
+    private static string UnreadableGovernorRuns(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return string.Empty;
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            if (!doc.RootElement.TryGetProperty("unreadableRuns", out var runs) || runs.ValueKind != JsonValueKind.Array) return string.Empty;
+            var lines = new List<string>();
+            foreach (var run in runs.EnumerateArray())
+            {
+                if (run.ValueKind != JsonValueKind.Object || ExtractString(run, "reason") is not { Length: > 0 } reason) continue;
+                var when = DateTime.TryParse(ExtractString(run, "createdAtUtc"), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var created)
+                    ? " from " + created.ToLocalTime().ToString("g", CultureInfo.CurrentCulture) : string.Empty;
+                lines.Add("Background limits run" + when + ": " + reason);
+            }
+            return lines.Count == 0 ? string.Empty : "\n" + string.Join("\n", lines);
+        }
+        catch (JsonException)
+        {
+            return string.Empty;
+        }
+    }
+
+    private static async Task<SessionRestoreEvidence?> ReadHeldGovernorRestoreAsync(SessionRestoreEvidence? fallback)
+    {
+        var newest = await ReadGovernorRestoreChainAsync();
+        if (newest.Error is null) return newest.Evidence;
+        // While the saved runs can't be read, keep the way back; Restore reads them again before it writes anything.
+        return fallback;
+    }
+
+    private static bool HoldsApps(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return false;
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            return CountArray(doc.RootElement, "activeRestraints") > 0;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    private static string ReadShared(string path)
+    {
+        using var stream = new System.IO.FileStream(path, System.IO.FileMode.Open, System.IO.FileAccess.Read, System.IO.FileShare.ReadWrite | System.IO.FileShare.Delete);
+        using var reader = new System.IO.StreamReader(stream);
+        return reader.ReadToEnd();
+    }
+
     private static bool SessionEnvelopeMatches(string json, string expectedAction, bool? expectedDryRun)
     {
         try
@@ -1075,7 +1205,7 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
         if (!System.IO.File.Exists(evidence.SessionPath) || !System.IO.File.Exists(evidence.BackupManifestPath)) return false;
         try
         {
-            using var sessionDoc = JsonDocument.Parse(System.IO.File.ReadAllText(evidence.SessionPath));
+            using var sessionDoc = JsonDocument.Parse(ReadShared(evidence.SessionPath));
             var session = sessionDoc.RootElement;
             if (ExtractString(session, "sessionId") != evidence.SessionId
                 || ExtractString(session, "profileId") != evidence.ProfileId
@@ -1083,7 +1213,7 @@ public partial class PerformanceProfilesViewModel : PageViewModelBase
                 || !TryExtractBool(session, out var restorable, "restorable") || !restorable
                 || !PathsEqual(ExtractString(session, "backupManifestPath"), evidence.BackupManifestPath)) return false;
 
-            using var backupDoc = JsonDocument.Parse(System.IO.File.ReadAllText(evidence.BackupManifestPath));
+            using var backupDoc = JsonDocument.Parse(ReadShared(evidence.BackupManifestPath));
             var backup = backupDoc.RootElement;
             var expectedAction = evidence.Kind == "gameTune"
                 ? "performance.gameTune.startSession"

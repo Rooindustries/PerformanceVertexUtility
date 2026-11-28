@@ -733,6 +733,14 @@ function Test-ScenarioClaimsBackgroundLimitsFirst {
     Remove-ClaimsRule $rule
     & $write ([ordered]@{sessionId='process-governor-claims-scenario';status='running';restorable=$true;activeRestraints=@();restoredItems=@()}) ([ordered]@{snapshots=@($snapshot)})
     Assert-Refused {Save-ClaimsRule (New-Rule $path @{cpuPriority='High'}) $script:policyRoot $repo} 'Undo the Background limits change on ClaimsLimits.exe (or close ClaimsLimits.exe) first' 'A running session whose backup still holds the probe refuses'
+    $putBack=[ordered]@{};foreach($key in $snapshot.Keys){$putBack[$key]=$snapshot[$key]}
+    $putBack.controlChanges=@([ordered]@{control='priorityClass';currentValue='Normal';proposedValue='BelowNormal';restoredAtUtc=[DateTime]::UtcNow.ToString('o')})
+    & $write ([ordered]@{sessionId='process-governor-claims-scenario';status='completed';restorable=$true;activeRestraints=@([ordered]@{processId=$probe.Id;processName=$name;executablePath=$path;snapshot=$putBack});restoredItems=@()}) ([ordered]@{sessionId='process-governor-claims-scenario';snapshots=@($putBack)})
+    $rule=New-Rule $path @{cpuPriority='High'}
+    Save-ClaimsRule $rule $script:policyRoot $repo|Out-Null
+    Assert $true 'A CPU priority Background limits already put back no longer blocks, even while the probe reads the lowered value again'
+    Remove-ClaimsRule $rule
+    & $write ([ordered]@{sessionId='process-governor-claims-scenario';status='running';restorable=$true;activeRestraints=@();restoredItems=@()}) ([ordered]@{snapshots=@($snapshot)})
     Set-Field $probe 'cpuPriority' 'Normal'
     $rule=New-Rule $path @{cpuPriority='High'}
     Save-ClaimsRule $rule $script:policyRoot $repo|Out-Null
