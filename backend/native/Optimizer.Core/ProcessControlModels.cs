@@ -22,6 +22,9 @@ public static class ProcessFailures
         _ => false,
     };
 
+    public static bool GpuStarting(Exception error) => error is InvalidDataException { InnerException: ControlReadException read }
+        && read.Error is { Api: "D3DKMTGetProcessSchedulingPriorityClass", CodeKind: "ntstatus", Code: 0xC000000D };
+
     public static bool Refused(Exception error) => Denied(error) || error switch
     {
         System.ComponentModel.Win32Exception win32 => win32.NativeErrorCode is 1300 or 1314,

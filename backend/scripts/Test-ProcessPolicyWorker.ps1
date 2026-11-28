@@ -36,6 +36,21 @@ function Core([string]$CoreAction,[hashtable]$Values=@{},[string]$Folder=$policy
     if($LASTEXITCODE -ne 0 -or $result.status -ne 'completed'){throw $result.error.message}
     return $result.data
 }
+function Get-NewProcessCheck([Diagnostics.Process]$Process){
+    $records=@((Core 'policy-status').state.instances|Where-Object {$_.process.processId -eq $Process.Id -and $null -ne $_.processorSecondsToApply})
+    if($records.Count -eq 0){return [ordered]@{sevenInFirstCheck=$false;gpuOnTime=$false;processorSeconds=$null}}
+    $created=[DateTime]::FromFileTimeUtc([int64]$records[0].process.creationTimeFileTimeUtc)
+    $before={param($Text) $Text -and [DateTimeOffset]::Parse([string]$Text,[Globalization.CultureInfo]::InvariantCulture).UtcDateTime -lt $created}
+    $others=@($records|Where-Object {$_.field -ne 'gpuPriority'})
+    $checks=@($others|ForEach-Object {[string]$_.checkStartedAtUtc}|Sort-Object -Unique)
+    $late=@($others|Where-Object {-not (& $before $_.previousCheckStartedAtUtc)})
+    $gpu=@($records|Where-Object {$_.field -eq 'gpuPriority'})
+    $gpuRefusedJustBefore=$gpu.Count -eq 1 -and $gpu[0].failedCheckStartedAtUtc -and [string]$gpu[0].previousCheckStartedAtUtc -eq [string]$gpu[0].failedCheckStartedAtUtc
+    return [ordered]@{created=$created.ToString('o');checks=$checks;gpu=$gpu
+        sevenInFirstCheck=($others.Count -eq 7 -and $checks.Count -eq 1 -and $late.Count -eq 0)
+        gpuOnTime=($gpu.Count -eq 1 -and ((& $before $gpu[0].previousCheckStartedAtUtc) -or $gpuRefusedJustBefore))
+        processorSeconds=($records|Measure-Object -Property processorSecondsToApply -Maximum).Maximum}
+}
 function Start-Limited([string]$Script){
     $encoded=[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($Script))
     $runas=Start-Process -FilePath (Join-Path $env:SystemRoot 'System32\runas.exe') -ArgumentList ('/trustlevel:0x20000 "'+(Join-Path $env:SystemRoot 'System32\conhost.exe')+' --headless powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand '+$encoded+'"') -WindowStyle Hidden -PassThru
@@ -78,6 +93,11 @@ public static class RooIndustriesGovernorOracle {
     public static string CpuSets(IntPtr p) { uint n; GetProcessDefaultCpuSets(p,null,0,out n); var ids=new uint[n]; if(n>0 && !GetProcessDefaultCpuSets(p,ids,n,out n)) throw new System.ComponentModel.Win32Exception(); return string.Join(",",ids); }
     public static int Io(IntPtr p) { int v; int s=NtQueryInformationProcess(p,33,out v,4,IntPtr.Zero); if(s!=0) throw new InvalidOperationException("NTSTATUS "+s); return v; }
     public static int Gpu(IntPtr p) { int v; int s=D3DKMTGetProcessSchedulingPriorityClass(p,out v); if(s!=0) throw new InvalidOperationException("NTSTATUS "+s); return v; }
+    [StructLayout(LayoutKind.Sequential, CharSet=CharSet.Unicode)] struct Startup { public int cb; public string reserved, desktop, title; public int x, y, w, h, cx, cy, fill, flags; public short show, reserved2; public IntPtr reserved3, input, output, error; }
+    [StructLayout(LayoutKind.Sequential)] struct Started { public IntPtr process, thread; public int id, threadId; }
+    [DllImport("kernel32.dll", SetLastError=true, CharSet=CharSet.Unicode)] static extern bool CreateProcess(string app, string line, IntPtr pa, IntPtr ta, bool inherit, uint flags, IntPtr env, string dir, ref Startup si, out Started pi);
+    [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr handle);
+    public static int StartSuspended(string path) { var si=new Startup{cb=Marshal.SizeOf(typeof(Startup))}; Started pi; if(!CreateProcess(path,null,IntPtr.Zero,IntPtr.Zero,false,0x08000004,IntPtr.Zero,null,ref si,out pi)) throw new System.ComponentModel.Win32Exception(); CloseHandle(pi.thread); CloseHandle(pi.process); return pi.id; }
 }
 '@
 function Read-Controls([Diagnostics.Process]$Process){
@@ -168,17 +188,21 @@ try {
     $newSeconds=Wait-Until {Same (Read-Controls $second) $wanted} 10
     Note 'newProcessSecondsToAllEightControls' $newSeconds
     Assert ($null -ne $newSeconds) 'A newly started matching process receives CPU priority, affinity, CPU Sets, I/O, GPU, memory, power mode and boost controls'
-    $newRecords=@((Core 'policy-status').state.instances|Where-Object {$_.process.processId -eq $second.Id})
-    $utc={param($Text) [DateTimeOffset]::Parse([string]$Text,[Globalization.CultureInfo]::InvariantCulture).UtcDateTime}
-    $newCreated=[DateTime]::FromFileTimeUtc([int64]$newRecords[0].process.creationTimeFileTimeUtc)
-    $newChecks=@($newRecords|ForEach-Object {[string]$_.checkStartedAtUtc}|Sort-Object -Unique)
-    $newPrevious=@($newRecords|ForEach-Object {[string]$_.previousCheckStartedAtUtc}|Sort-Object -Unique)
-    $newProcessor=($newRecords|Measure-Object -Property processorSecondsToApply -Maximum).Maximum
-    Note 'newProcessCheck' ([ordered]@{created=$newCreated.ToString('o');previousCheck=$newPrevious;check=$newChecks;processorSeconds=$newProcessor})
-    $applied=@($newRecords|Where-Object {$null -ne $_.processorSecondsToApply}).Count
-    $firstCheck=$newRecords.Count -eq 8 -and $applied -eq 8 -and $newChecks.Count -eq 1 -and $newPrevious.Count -eq 1 -and $newPrevious[0] -and (& $utc $newPrevious[0]) -lt $newCreated
-    Assert $firstCheck 'A new matching process gets all eight controls in the first governor check that begins after it starts'
+    $newCheck=Get-NewProcessCheck $second
+    Note 'newProcessCheck' $newCheck
+    Assert $newCheck.sevenInFirstCheck 'A new matching process gets seven controls in the first governor check that begins after it starts'
+    Assert $newCheck.gpuOnTime 'Its GPU priority comes no later than the first check after Windows stops refusing it'
+    $newProcessor=$newCheck.processorSeconds
     Assert ($null -ne $newProcessor -and $newProcessor -le 1.0) ('The governor gives a new process its rules within 1 s of its own processor time ('+[Math]::Round($newProcessor,3)+' s)')
+    $heldId=[RooIndustriesGovernorOracle]::StartSuspended((Join-Path $probeDirectory 'RooIndustriesGovernorProbe.exe'))
+    $probes.Add([Diagnostics.Process]::GetProcessById($heldId))
+    $heldIssue={@((Core 'policy-status').state.issues|Where-Object {$_.processId -eq $heldId -and $_.field -eq 'gpuPriority'})|Select-Object -First 1}
+    $null=Wait-Until {(& $heldIssue).attempts -ge 4} 30
+    $refused=& $heldIssue
+    Note 'alwaysRefusedGpu' $refused
+    $span=if($refused.attempts -ge 4){([DateTimeOffset]::Parse($refused.lastFailedCheckAtUtc)-[DateTimeOffset]::Parse($refused.firstFailedCheckAtUtc)).TotalSeconds}
+    Assert ($null -ne $span -and $span -ge 4.0) ('A process Windows keeps refusing GPU priority for is retried on the normal backoff, not every check ('+$span+' s to its 4th try)')
+    $probes[$probes.Count-1].Kill()
     Assert (@(Get-Process -Name 'RooIndustries.OptimizationSuite.App' -ErrorAction SilentlyContinue).Count -eq 0) 'Enforcement happened with the desktop app closed'
 
     $workerIdentity=Get-WorkerIdentity
