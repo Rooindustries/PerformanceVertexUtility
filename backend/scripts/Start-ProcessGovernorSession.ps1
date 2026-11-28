@@ -400,6 +400,7 @@ try {
         $pollStartedAtUtc = Get-RooIndustriesUtcStamp
         $sample = Get-RooIndustriesGovernorCpuSample -SampleIntervalMilliseconds $SampleIntervalMilliseconds -IncludeCommandLine:$IncludeCommandLine
         $sampledAt = Get-Date
+        if ($pollIndex -eq 1 -and $env:ROO_FORCE_FIRST_POLL_LAG_MS) { Start-Sleep -Milliseconds ([int]$env:ROO_FORCE_FIRST_POLL_LAG_MS) }
         $pollWouldRestrain = New-Object System.Collections.Generic.List[object]
         $pollChanged = New-Object System.Collections.Generic.List[object]
         $pollSkipped = New-Object System.Collections.Generic.List[object]
