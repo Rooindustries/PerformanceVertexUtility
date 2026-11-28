@@ -17,6 +17,7 @@ void Check(bool condition, string message)
     if (!condition) throw new InvalidOperationException(message);
     Console.WriteLine("PASS " + message);
 }
+if (args is ["--state-volume", var volumeDirectory, var volumeLabel, var volumePermissions]) { VolumeWriteChecks.Run(Check, volumeDirectory, volumeLabel, volumePermissions == "keeps-permissions"); return; }
 if (args is ["--firmware-provider", var firmwareFixture]) { FirmwareProviderChecks.Run(Check, firmwareFixture); return; }
 if (args is ["--firmware-setup", var setupFixture]) { await ScewinSetupChecks.Run(Check, setupFixture); return; }
 if (args is ["--firmware-download", var downloadDirectory])
