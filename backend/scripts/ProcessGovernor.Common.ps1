@@ -271,6 +271,7 @@ function Get-RooIndustriesGovernorCpuSample {
             }
         }
         $proc.cpuPercent = $cpuPercent
+        $proc | Add-Member -NotePropertyName hadPrior -NotePropertyValue ([bool]$prior) -Force
         $totalCpu += $cpuPercent
         $sampled.Add($proc) | Out-Null
     }

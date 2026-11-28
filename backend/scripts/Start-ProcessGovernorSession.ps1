@@ -396,6 +396,12 @@ try {
     $pollIndex = 0
     while ($true) {
         $pollIndex++
+        $sync = $env:ROO_FORCE_LAUNCH_SYNC_DIR
+        if ($sync -and (Test-Path -LiteralPath (Join-Path $sync 'arm'))) {
+            Set-Content -LiteralPath (Join-Path $sync "poll-$pollIndex") -Value poll
+            $syncEnd = (Get-Date).AddSeconds(5)
+            while (-not (Test-Path -LiteralPath (Join-Path $sync "launched-$pollIndex")) -and (Get-Date) -lt $syncEnd) { Start-Sleep -Milliseconds 5 }
+        }
         $pollStartedAtUtc = Get-RooIndustriesUtcStamp
         $sample = Get-RooIndustriesGovernorCpuSample -SampleIntervalMilliseconds $SampleIntervalMilliseconds -IncludeCommandLine:$IncludeCommandLine
         $pollWouldRestrain = New-Object System.Collections.Generic.List[object]
@@ -404,6 +410,7 @@ try {
         $pollRestored = New-Object System.Collections.Generic.List[object]
         $seenKeys = New-Object 'System.Collections.Generic.HashSet[string]'
         $pollPressureCandidateSeen = $false
+        $pollDiag = New-Object System.Collections.Generic.List[object]
 
         $gate = Enter-RooIndustriesGovernorGate
         if ($null -eq $gate) {
@@ -430,6 +437,7 @@ try {
                     }
 
                     if (-not $decision.candidateMatched) { continue }
+                    $pollDiag.Add([pscustomobject]@{ pid = $processId; cpuPercent = $cpuPercent; pressureMet = $pressureMet; hadPrior = [bool](Get-RooIndustriesPropertyValue $proc 'hadPrior' $false) }) | Out-Null
 
                     $now = Get-Date
                     if ($pressureMet) {
@@ -595,6 +603,7 @@ try {
                     skippedItems = @($pollSkipped.ToArray())
                     restoredItems = @($pollRestored.ToArray())
                     activeRestraintCount = $activeRestraints.Count
+                    candidates = @($pollDiag.ToArray())
                 }
                 $polls.Add($poll) | Out-Null
                 $logEntry = New-RooIndustriesLog "Process governor poll $pollIndex completed with $($pollChanged.Count) restraint(s), $($pollRestored.Count) restore(s), and $($pollSkipped.Count) skip(s)."
