@@ -468,14 +468,41 @@ static partial class DataFolderChecks
             store.Write(before, ControlValues.From(true)); enabled = true;
             check(store.Read(startup).Value.GetBoolean() && File.Exists(Path.Combine(control, "startup.ps1")) && File.Exists(Path.Combine(control, "startup.json")), "The sign-in timer task is registered and its script and receipt are written in the administrators-only control folder");
             check(PolicyRootSecurity.WriterOf(control) is null, "A standard user cannot change the sign-in script or receipt");
-            var log = Path.Combine(H.Local, id + "-autostart.log");
-            H.StandardBackground(log, new() { ["ROO_INDUSTRIES_TEST_TIMER_CONTROL"] = control, ["ROO_INDUSTRIES_TEST_TIMER_STATE"] = state, ["ROO_INDUSTRIES_TEST_SPLIT_TOKEN"] = "0" }, "--timer-autostart", control);
+            var env = new Dictionary<string, string>
+            {
+                ["ROO_INDUSTRIES_TEST_TIMER_CONTROL"] = control, ["ROO_INDUSTRIES_TEST_TIMER_STATE"] = state, ["ROO_INDUSTRIES_TEST_SPLIT_TOKEN"] = "0",
+            };
+            foreach (var (entry, label, message) in new[] { ("sign-in", "A sign-in", SignInJobRefusal), ("app", "An app", AppJobRefusal) })
+            {
+                var refused = H.Child(["--child-timer-in-job", entry, control], env);
+                check(refused.Output == "FAILED InvalidOperationException: " + message && !store.Read(timer).Value.GetBoolean(),
+                    label + " start inside a job that ends its processes, with no breakaway and no desktop shell, " +
+                    "refuses instead of starting a worker that job will end: " + refused.Output);
+            }
+            var script = Path.Combine(control, "startup.ps1");
+            var receipt = Path.Combine(control, "startup.json");
+            var fixture = "$env:ROO_INDUSTRIES_TEST_TIMER_CONTROL=" + H.Quote(control) + "\n" +
+                "$env:ROO_INDUSTRIES_TEST_TIMER_STATE=" + H.Quote(state) + "\n";
+            File.WriteAllText(script, fixture + File.ReadAllText(script), new System.Text.UTF8Encoding(false));
+            var receiptBefore = OperationFiles.Read<TimerStartupReceipt>(receipt);
+            OperationFiles.Write(receipt, receiptBefore with { ScriptHash = OperationFiles.HashFile(script) });
+            var run = H.Run("schtasks.exe", "/Run /TN \"" + task + "\"");
             var clock = System.Diagnostics.Stopwatch.StartNew(); var active = false;
             while (!active && clock.Elapsed < TimeSpan.FromSeconds(40)) { try { active = store.Read(timer).Value.GetBoolean(); } catch (Exception error) when (error is IOException or InvalidDataException) { } if (!active) Thread.Sleep(500); }
-            check(active, "The sign-in timer start, run with a standard token, acquires the 0.5 ms request and the app reads it as active" + (active ? "" : ": " + (H.Read(log) ?? "no output")));
+            check(active, "Task Scheduler runs the registered sign-in task, which acquires the 0.5 ms request " +
+                "and the app reads it as active: " + run.Output.Trim());
             var worker = WorkerId(state);
-            check(worker > 0 && H.AdministratorsEnabled(worker) == false, "The sign-in worker runs without administrator rights, the Administrators group is deny-only in its token (pid " + worker + ", enabled=" + (H.AdministratorsEnabled(worker)?.ToString() ?? "unknown") + ")");
-            check(Directory.EnumerateFileSystemEntries(state).All(entry => OwnerOf(entry) == user), "Everything the sign-in worker keeps in its own folder was created by the signed-in user");
+            var finished = TaskFinished(task);
+            check(finished && store.Read(timer).Value.GetBoolean() && WorkerId(state) == worker && Alive(worker),
+                "After the sign-in task, its script and its launcher have exited, the same worker still holds the request (pid " + worker + ")");
+            var elevated = H.ShellElevated; var admins = H.AdministratorsEnabled(worker);
+            var rights = elevated ? "enabled, as in the user's elevated desktop shell (UAC is off on this PC)" : "deny-only";
+            check(worker > 0 && admins == elevated, "The sign-in worker has the signed-in user's own rights: the Administrators group is " +
+                rights + " (pid " + worker + ", enabled=" + (admins?.ToString() ?? "unknown") + ")");
+            var owners = Directory.EnumerateFileSystemEntries(state).Select(OwnerOf).ToArray();
+            check(owners.All(owner => owner == user || elevated && owner == "S-1-5-32-544"),
+                "Everything the sign-in worker keeps in its own folder is owned by the signed-in user, " +
+                "or by Administrators when their own token is elevated: " + string.Join(", ", owners.Distinct()));
             store.Write(store.Read(timer), ControlValues.From(false));
             check(!store.Read(timer).Value.GetBoolean(), "The app stops the sign-in worker through the administrators-only control folder");
             var gone = false;
@@ -491,8 +518,33 @@ static partial class DataFolderChecks
             if (stray > 0) { try { using var process = System.Diagnostics.Process.GetProcessById(stray); process.Kill(true); } catch (Exception error) when (error is ArgumentException or InvalidOperationException) { } }
             if (enabled) H.Run("schtasks.exe", "/Delete /TN \"" + task + "\" /F");
             Thread.Sleep(300);
-            H.Forget(root, operations); H.Delete(root, state, Path.Combine(H.Local, id + "-autostart.log")); H.Sweep(id);
+            H.Forget(root, operations); H.Delete(root, state); H.Sweep(id);
         }
+    }
+
+    private const string SignInJobRefusal = "The timer can't start at sign-in because Windows ran the sign-in task " +
+        "inside a job that ends its processes. Turn the timer on in the app instead.";
+    private const string AppJobRefusal = "The timer can't keep running after this app closes because Windows started the app " +
+        "inside a job that ends its processes. Start the app from the Start menu or desktop shortcut and try again.";
+
+    private static bool Alive(int id)
+    {
+        try { using var process = System.Diagnostics.Process.GetProcessById(id); return !process.HasExited; }
+        catch (ArgumentException) { return false; }
+    }
+
+    private static bool TaskFinished(string name)
+    {
+        dynamic scheduler = Activator.CreateInstance(Type.GetTypeFromProgID("Schedule.Service", true)!)!;
+        scheduler.Connect();
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        while (clock.Elapsed < TimeSpan.FromSeconds(30))
+        {
+            dynamic task = scheduler.GetFolder(@"\").GetTask(name);
+            if ((int)task.State != 4 && (int)task.LastTaskResult == 0) return true;
+            Thread.Sleep(200);
+        }
+        return false;
     }
 
     private static void OldCarveOut(Action<bool, string> check)
