@@ -18,7 +18,6 @@
     "elapsedRuntimeSeconds": 5.002,
     "idleWindow": {
       "excludesStartup": true,
-      "startsAfterPollIndex": 1,
       "startedAtElapsedSeconds": 1.001,
       "seconds": 4.001
     },

@@ -19,11 +19,11 @@ try {
 
     $repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..\..')
     $budget = Get-RooIndustriesBackendBudgetProfile $BudgetProfilePath
-    $floor = Start-RooIndustriesPowerShellFloor
     $sessionId = "resident-host-$(Get-RooIndustriesFileStamp)"
     $startedAtUtc = Get-RooIndustriesUtcStamp
     $process = Get-Process -Id $PID
     $processCountBefore = Get-RooIndustriesBackendProcessCount
+    $floor = Start-RooIndustriesPowerShellFloor
     $start = Get-RooIndustriesBackendScriptProcessMeasurement $process
     $before = $null
     $windowStartSeconds = 0.0
@@ -84,7 +84,6 @@ try {
         elapsedRuntimeSeconds = [math]::Round($watch.Elapsed.TotalSeconds, 3)
         idleWindow = [pscustomobject]@{
             excludesStartup = $true
-            startsAfterPollIndex = 1
             startedAtElapsedSeconds = $windowStartSeconds
             seconds = $delta.elapsedRuntimeSeconds
         }
