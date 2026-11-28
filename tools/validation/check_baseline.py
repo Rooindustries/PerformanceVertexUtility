@@ -383,7 +383,9 @@ def reparse_walk_negative_controls():
     }
     always['ps1'].update({'wildcard folder in a path': "Remove-Item -Path (Join-Path $a '*\\*') -Force", 'function drive assignment': "${function:Zqvx} = 'Write-Output'",
                           'dot-source of a script the check does not read': ". (Join-Path $PSScriptRoot '..\\..\\..\\Zqvx.ps1')"})
-    always['sh'].update({'glob with a wildcard folder': 'for f in "$a"/*/*; do echo "$f"; done'})
+    always['sh'].update({'glob with a wildcard folder': 'for f in "$a"/*/*; do echo "$f"; done', 'glob with a wildcard inside a folder name': 'for f in "$a"/x*y/z; do :; done'})
+    always['ps1'].update({'wildcard inside a folder name': 'Remove-Item "$a\\x*y\\z"'})
+    always['targets'].update({'item glob with a wildcard inside a folder name': '<Project><ItemGroup><I Include="$(OutDir)x*y\\z" /></ItemGroup></Project>'})
     always['py'].update({'self that is not a method parameter': 'class A:\n    def zqvx(self): pass\nself = object()\nself.zqvx()',
                          'value from a repo function': 'class A:\n    def zqvx(self): pass\ndef make():\n    return object()\nm = make()\nm.zqvx()'})
     always['cs'].update({'options object made elsewhere': cs('var o = System.Text.Json.JsonSerializer.Deserialize<System.IO.EnumerationOptions>("{}")!; System.IO.Directory.GetFiles(dir, "*", o);')})
@@ -392,6 +394,7 @@ def reparse_walk_negative_controls():
         'yml': {'workflow default python shell': 'defaults:\n  run:\n    shell: python\njobs:\n  j:\n    runs-on: ubuntu-24.04\n    steps:\n      - run: print(1)',
                 'runs-on list for Windows': 'jobs:\n  j:\n    runs-on: [self-hosted, windows-2025]\n    steps:\n      - run: Write-Output hi'},
         'ps1': {'later assignment': "$c = 'Write-Output'\n& $c hi\n$c = 'Zqvx-Item'", 'a tool word in a message': "Write-Output 'could not move the folder'"},
+        'cmd': {'a builtin joined to its switch': 'cd/d a'},
         'py': {'a method of the class it is in': 'class A:\n    def zqvx(self):\n        return 1\n    def other(self):\n        return self.zqvx()'},
     }
     allowlist = 'tools/validation/reparse-walk-allowlist.json'
@@ -466,8 +469,11 @@ def reparse_walk_negative_controls():
             ('a full program path joined to its switch', 'cmd', 'C:\\Windows\\System32\\attrib.exe/s a', None, 'program', 'c:\\windows\\system32\\attrib.exe/s', True),
             ('start settings changed through the argument list indexer', 'cs', cs('var p = new ProcessStartInfo("zqvx.exe"); p.ArgumentList.Add("a"); p.ArgumentList[0] = "b"; Process.Start(p);'), 'Process.Start(p);', 'program', 'zqvx.exe', True),
             ('a tree tool started through a variable', 'ps1', "$p = '" + tree_tool + "'\n& $p a b", '& $p a b', 'program', tree_tool, True),
-            ('a folder move called through a using alias', 'cs', cs('L.Move(dir, dir + "x");', 'using L = System.IO.Directory;'), 'L.Move(', 'call the table does not list', 'system.io.directory.move', True),
-            ('a full program path joined to its switch, started from C#', 'cs', cs('Process.Start(@"C:\\Windows\\System32\\attrib.exe/s");'), 'Process.Start(', 'program', 's', True),
+            ('a tree walk called through an import alias', 'py', 'from os import walk as zq\nzq(a)', 'zq(a)', 'call the table does not list', 'os.walk', True),
+            ('a full program path joined to its switch, started from C#', 'cs', cs('Process.Start(@"C:\\zq\\zqvx.exe/q");'), 'Process.Start(', 'program', 'q', True),
+            ('a switched program without its switch', 'sh', 'rm -f a', None, 'program', 'rm', False),
+            ('a link tool started by its bare name', 'py', "import subprocess\nsubprocess.run(f'junction {a} {a}x')", 'subprocess.run(', 'program', 'junction', True),
+            ('a link call named through its entry point', 'cs', 'using System.Runtime.InteropServices;\nstatic class Control {\n  [DllImport("kernel32.dll", EntryPoint = "CreateHardLinkW")] static extern bool Q(string a, string b, System.IntPtr c);\n  static void M() { Q("a", "b", System.IntPtr.Zero); }\n}', 'static void M()', 'native call', 'kernel32!createhardlinkw', True),
             ('an archive add on a typed value', 'py', "import tarfile\nt = tarfile.open(a, 'w')\nt.add(b)", "t = tarfile.open(a, 'w')", 'call the table does not list', 'tarfile.open', True),
             ('a type name built from values the check cannot read, reported on its own line', 'ps1', 'New-Object System.Data.DataTable -Property @{ TableName = $a }', None, 'the type name is built from values the check cannot read', '', False)):
         path = f'tools/validation/Control/known-{label.replace(" ", "-")}.{extension}'
@@ -496,6 +502,8 @@ def reparse_walk_negative_controls():
                 hit = any(f.startswith(relative + ':') for f in failures)
                 if label == 'an entry without a reason is refused':
                     hit = any(f.startswith(allowlist + ':') and 'unexplained.ps1' in f for f in failures)
+                if label == 'a link call named through its entry point on the known list is refused':
+                    hit = any(f.startswith(relative + ':4:') for f in failures)
                 if label == 'start settings changed through the argument list indexer on the known list is refused':
                     hit = any(f.startswith(relative + ':') and 'the program this starts is built from values the check cannot read' in f for f in failures)
                 results[label] = hit == refused
@@ -555,26 +563,76 @@ def reparse_walk_negative_controls():
 
 def reparse_name_controls(module):
     named = module['CLASSES']['names']
-    wrap = {'ps1': "$x = '{0}'", 'py': "x = '{0}'", 'cs': '    static string X{1} = "{0}";', 'sh': ": '{0}'", 'cmd': 'echo {0}', 'yml': "          : '{0}'", 'targets': '    <Message Text="{0}" />'}
+    wrap = {'ps1': "$x = '{0}'", 'py': "x = r'{0}'", 'cs': '    static string X{1} = @"{0}";', 'sh': ": '{0}'", 'cmd': 'echo "{0}"', 'yml': "          : '{0}'", 'targets': '    <Message Text="{0}" />'}
     head = {'cs': 'static class Control {', 'yml': 'jobs:\n  j:\n    runs-on: ubuntu-24.04\n    steps:\n      - run: |', 'targets': '<Project><Target Name="T">'}
     tail = {'cs': '}', 'targets': '</Target></Project>'}
-    shells = {'ps1': 'powershell', 'sh': 'bash', 'cmd': 'cmd', 'yml': 'bash', 'targets': 'cmd'}
     rows = {extension: [] for extension in wrap}
+
+    def forms(rule):
+        out = ['-' + letter for letter in rule.get('letters', '')] + ['-q' + rule.get('letters', ' ')[0]] * ('letters' in rule)
+        out += [option[:5] for option in rule.get('long', [])] + ['-' + name[:3] for name in rule.get('param', [])] + ['-' + name for name in rule.get('param', [])]
+        out += ['/' + letter for letter in rule.get('slash', '')] + ['/b/' + rule.get('slash', ' ')[0], '/' + rule.get('slash', ' ')[0] + ':zq'] * ('slash' in rule)
+        return out + rule.get('words', [])
+
+    def add(label, name, value, extensions=tuple(wrap)):
+        for extension in extensions:
+            rows[extension].append((f'{label} in {extension}', name, value, False))
+
     for harm in ('R1', 'R2', 'R3'):
         rules = named[harm]
         for name in rules['anywhere']:
-            for extension in rows:
-                rows[extension] += [(f'{harm} {name} in {extension}', name, name), (f'{harm} {name} glued in {extension}', name, '9' + name + 'zq')]
-        for name, rule in list(rules['words'].items()) + list(rules['switched'].items()):
-            languages = rule if isinstance(rule, list) else rule['languages']
-            switch = '' if isinstance(rule, list) else ' -' + rule['letters'][0] if 'letters' in rule else ' /' + rule['switches'][0] if 'switches' in rule else ' ' + rule['first'][0]
-            for extension in rows:
-                if shells.get(extension, 'bash' if extension in ('py', 'cs') else None) in languages or extension in ('py', 'cs'):
-                    rows[extension] += [(f'{harm} {name} in {extension}', name, f'{name}{switch} a'), (f'{harm} {name} glued in {extension}', name, f'{name}.exe{switch} a' if extension == 'cs' else f'/zq/{name}.exe{switch} a')]
+            add(f'{harm} {name}', name, name)
+            add(f'{harm} {name} in capitals', name, name.upper())
+            add(f'{harm} {name} with a path glued on', name, 'C:\\zq\\' + name + 'W.exe')
+        for name in rules['words']:
+            add(f'{harm} {name}', name, name + ' a')
+            add(f'{harm} {name} in capitals', name, name.upper() + ' a')
+            add(f'{harm} {name} with a path and .exe glued on', name, '/zq/' + name + '.exe a')
+        for name, rule in rules['switched'].items():
+            for form in forms(rule):
+                add(f'{harm} {name} {form}', name, f'{name} {form} a')
+                add(f'{harm} {name} {form} before the name', name, f'{form} zq zq {name} a')
+            add(f'{harm} {name} in capitals', name, f'{name} {forms(rule)[0]} a'.upper())
+        for name in rules.get('values', []):
+            add(f'{harm} {name} as a quoted value', name, name)
+            add(f'{harm} {name} after a parameter', name, '-ItemType ' + name)
+            add(f'{harm} {name} after =', name, 'Type=' + name.upper())
+        for name in rules.get('programs', []):
+            add(f'{harm} {name} after an opening quote', name, name + ' a b')
+            add(f'{harm} {name} after ;', name, 'zq; ' + name.upper() + ' a')
+            add(f'{harm} {name} after -c', name, 'zq -c ' + name + ' a')
+            add(f'{harm} {name} after a path', name, '/zq/' + name + ' a')
+            add(f'{harm} {name} with .exe glued on', name, 'zq ' + name + '.exe a')
+            add(f'{harm} {name} after ( in a shell', name, '(' + name + ' a)', ('ps1', 'sh', 'cmd', 'yml', 'targets'))
+            add(f'{harm} {name} after ( outside a shell', None, '(' + name + ' a)', ('py', 'cs'))
+            add(f'{harm} {name} in a message', None, 'could not ' + name + ' it')
+            for extension in ('ps1', 'sh'):
+                rows[extension].append((f'{harm} {name} at the start of a line in {extension}', name, f'{name} a b', True))
         for label, rule in rules['patterns'].items():
-            for extension, language in (('ps1', 'powershell'), ('py', 'python'), ('cs', 'csharp'), ('sh', 'bash'), ('cmd', 'cmd')):
-                if language in rule['languages'] or 'all' in rule['languages']:
-                    rows[extension].append((f'{harm} {label} in {extension}', label, rule['example']))
+            add(f'{harm} {label}', label, rule['example'])
+    word, switched = named['R1']['words'][0], next(n for n, r in named['R1']['switched'].items() if 'letters' in r)
+    value, anywhere = named['R3']['values'][0], named['R1']['anywhere'][0]
+    add('a word after an escaped line break', word, 'x\\n' + word + ' a')
+    add('a distinctive name after an escaped line break', anywhere, 'x`n' + anywhere)
+    add('a word inside a longer word', None, 'zq' + word + 'zq')
+    add('a word after a dot', None, 'x.' + word)
+    add('a word after a hyphen', None, 'x-' + word)
+    add('a distinctive name after a letter', None, 'zq' + anywhere)
+    add('a switched name without its switch', None, switched + ' a')
+    add('a switched name with a PowerShell operator', None, switched + ' -' + named['not switches'][0] + ' -or a')
+    add('a value inside a message', None, 'the ' + value + ' folder')
+    add('a value inside a longer word', None, 'Is' + value)
+    for text in named['wildcard folder']['refused']:
+        add(f'a wildcard folder {text}', 'a wildcard folder', text)
+    for text in named['wildcard folder']['passes']:
+        add(f'not a wildcard folder {text}', None, text, ('ps1', 'py', 'cs', 'sh', 'yml', 'targets'))
+    for extension, text in (('cs', '    /{0} zq {0}/'), ('cs', '    /{0}{0} zq {0}/')):
+        rows[extension].append((f'a comment edge {text} in {extension}', None, text.format('*'), True))
+    form = forms(named['R1']['switched'][switched])[0]
+    for extension, text in (('py', "x = ('zq {0}',\n    '{1}')"), ('ps1', "$x = @('zq {0}',\n  '{1}')"), ('sh', 'x=(zq {0}\n  {1})'), ('cs', '    static string Y = "zq {0}" +\n        "{1}";')):
+        rows[extension].append((f'a switch on the next line of the statement in {extension}', switched, text.format(switched, form), True))
+    for extension, text in (('py', "x = ('zq',\n    '{0} a')"), ('ps1', "$x = @('zq',\n  '{0} a')")):
+        rows[extension].append((f'a name on the second line of its statement in {extension}', word, text.format(word), 'second'))
     results = {}
     for projects in (True, False):
         with tempfile.TemporaryDirectory() as directory:
@@ -585,15 +643,21 @@ def reparse_name_controls(module):
                     continue
                 relative = ('.github/workflows/names.yml' if extension == 'yml' else f'tools/validation/Control/names.{extension}')
                 text = head[extension].split('\n') if extension in head else []
-                for index, (label, name, value) in enumerate(lines):
-                    places[label] = (relative, len(text) + 1, name)
-                    text.append(wrap[extension].format(value, index))
+                for index, (label, name, value, raw) in enumerate(lines):
+                    if extension == 'cmd' and re.search(r'[%^!&|<>`]', value):
+                        continue
+                    places[label] = (relative, len(text) + (2 if raw == 'second' else 1), name)
+                    text += (value if raw else wrap[extension].format(value.replace('"', '""') if extension == 'cs' else value, index)).split('\n')
                 text += [tail[extension]] if extension in tail else []
                 (root / relative).parent.mkdir(parents=True, exist_ok=True)
                 (root / relative).write_text('\n'.join(text) + '\n', encoding='utf-8')
             failures = module['verify'](root)
             for label, (relative, line, name) in places.items():
-                results[f'name control {label} is refused'] = any(f.startswith(f'{relative}:{line}:') and f'names {name},' in f for f in failures)
+                hit = [f for f in failures if f.startswith(f'{relative}:{line}:')]
+                if name is None:
+                    results[f'name control {label} passes'] = not any('this line names' in f for f in hit)
+                else:
+                    results[f'name control {label} is refused'] = any(f'names {name},' in f for f in hit)
     return results
 
 

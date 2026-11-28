@@ -147,87 +147,97 @@ NAMED = CLASSES['names']
 REASONS = ('R1', 'R2', 'R3')
 LANGUAGES = {'py': 'python', 'ps1': 'powershell', 'psm1': 'powershell', 'psd1': 'powershell', 'cs': 'csharp', 'sh': 'bash', 'cmd': 'cmd', 'bat': 'cmd', 'yml': 'workflow', 'yaml': 'workflow',
              'csproj': 'msbuild', 'props': 'msbuild', 'targets': 'msbuild'}
-SHELLS = {'workflow': ('bash', 'cmd', 'powershell'), 'msbuild': ('cmd',)}
+SHELL_LANGUAGES = ('bash', 'cmd', 'powershell', 'workflow', 'msbuild')
+TAIL = r'(?:\.exe|\.com)?(?![\w.-])'
+ESCAPED = r'(?<=[\\`][ntr])'
 
 
 def anywhere(name):
-    return re.compile(r'(?<![A-Za-z])' + re.escape(name), re.IGNORECASE)
+    return re.compile(r'(?:(?<![A-Za-z0-9_])|' + ESCAPED + ')' + re.escape(name), re.IGNORECASE)
 
 
-def word(name, quoted=None):
-    if quoted == 'python':
-        return re.compile(r'(?<=[\'"/\\])' + re.escape(name) + r'(?:\.exe)?(?![\w.-])')
-    if quoted == 'csharp':
-        return re.compile(r'(?<=[\'"])' + re.escape(name) + r'(?:\.exe(?![\w.-])|\s)')
-    return re.compile(r'(?<![\w.$-])' + re.escape(name) + r'(?:\.exe)?(?![\w.-])', re.IGNORECASE)
+def word(name):
+    return re.compile(r'(?:(?<![\w.$-])|' + ESCAPED + ')' + re.escape(name) + TAIL, re.IGNORECASE)
+
+
+def prefixes(text):
+    return re.escape(text[0]) + ''.join('(?:' + re.escape(letter) for letter in text[1:]) + ')?' * (len(text) - 1)
+
+
+def switch(rule):
+    parts = [r'(?<![\w-])-(?!(?:' + '|'.join(NAMED['not switches']) + r')(?![\w-]))(?=[a-z0-9]{1,4}(?![\w-]))[a-z0-9]*[' + re.escape(rule['letters']) + ']'] if 'letters' in rule else []
+    parts += [r'(?<![\w-])--' + prefixes(option[2:]) + r'(?![\w-])' for option in rule.get('long', [])]
+    parts += [r'(?<![\w-])-' + prefixes(name) + r'(?![\w-])' for name in rule.get('param', [])]
+    if 'slash' in rule:
+        letters = re.escape(rule['slash'])
+        parts.append(r'(?:/[a-z?]{1,2})*/(?:[a-z]?[' + letters + r']|[' + letters + r'][a-z]?)(?::\S*)?(?:/[a-z?]{1,2})*(?![\w\\./-])')
+    parts += [(r'(?<![\w.$-])' if text[0].isalnum() else r'(?<![\w.$])') + re.escape(text) + r'(?![\w.-])' for text in rule.get('words', [])]
+    return re.compile('|'.join(parts), re.IGNORECASE)
+
+
+def value(name):
+    return re.compile(r'(?<=[\'"])' + re.escape(name) + r'(?=[\'"])|(?:(?<![\w-])-\w+\s*:?\s*|=\s*)' + re.escape(name) + r'(?![\w.-])', re.IGNORECASE)
+
+
+def program(name, shell):
+    name = re.escape(name)
+    position = r'(?:^\s*[@&.]?|[;|&({`]|\$\(|\b(?:then|do|else)\s|(?<![\w-])[-/](?:c|k|command)\s)\s*' if shell else r'(?:[;|&]|(?<![\w-])[-/](?:c|k|command)\s)\s*'
+    return re.compile(name + r'\.(?:exe|com)(?![\w.-])|(?<=[\\/])' + name + TAIL + r'|(?<=[\'"])' + name + TAIL + '|' + position + name + TAIL, re.IGNORECASE)
 
 
 MATCHERS = []
 for _harm in REASONS:
     _rules = NAMED[_harm]
-    MATCHERS += [(_harm, n, None, anywhere(n), None, None) for n in _rules['anywhere']]
-    MATCHERS += [(_harm, n, languages, word(n), {'python': word(n, 'python'), 'csharp': word(n, 'csharp')}, None) for n, languages in _rules['words'].items()]
-    MATCHERS += [(_harm, n, rule['languages'], word(n), {'python': word(n, 'python'), 'csharp': word(n, 'csharp')}, rule) for n, rule in _rules['switched'].items()]
-    MATCHERS += [(_harm, n, rule['languages'], re.compile(rule['pattern'], re.IGNORECASE), None, None) for n, rule in _rules['patterns'].items()]
+    MATCHERS += [(_harm, n, 'anywhere', anywhere(n), None) for n in _rules['anywhere']]
+    MATCHERS += [(_harm, n, 'word', word(n), None) for n in _rules['words']]
+    MATCHERS += [(_harm, n, 'switched', word(n), switch(rule)) for n, rule in _rules['switched'].items()]
+    MATCHERS += [(_harm, n, 'value', value(n), None) for n in _rules.get('values', [])]
+    MATCHERS += [(_harm, n, 'program', None, {True: program(n, True), False: program(n, False)}) for n in _rules.get('programs', [])]
+    MATCHERS += [(_harm, n, 'pattern', re.compile(rule['pattern'], re.IGNORECASE), None) for n, rule in _rules['patterns'].items()]
+WILDCARD = re.compile(NAMED['wildcard folder']['pattern'], re.IGNORECASE)
 
 
-def flagged(rule, tokens):
-    words = [t for t in tokens or [] if isinstance(t, str)]
-    lowered = [w.lower() for w in words]
-    options = [w.split('=')[0] for w in lowered if w.startswith('--') and len(w.split('=')[0]) > 2]
-    return bool(lowered[:1] and lowered[0] in rule.get('first', [])
-                or any(letter in rule.get('switches', '') for w in lowered if w.startswith('/') for letter in w.replace('/', ''))
-                or any(long.startswith(option) for option in options for long in rule.get('long', []))
-                or any(re.fullmatch(r'-[a-z]+', w, re.I) and set(w[1:]) & set(rule.get('letters', '')) for w in words))
+def in_class(text, index):
+    opened = text.rfind('[', 0, index)
+    return opened >= 0 and text[opened + 1:opened + 2] not in ('"', "'") and not re.search(r'[\]\s]', text[opened + 1:index])
 
 
-def prose_blanked(text):
-    out, quote, first = list(text), None, False
-    for index, letter in enumerate(text):
-        if quote is None:
-            if letter in '\'"':
-                quote, first = letter, True
-        elif letter == quote and text[index - 1] not in '\\`':
-            quote = None
-        elif first and letter.isspace() and index > 0 and text[index - 1] not in '\'"':
-            first = False
-        elif not first:
-            out[index] = ' '
-    return ''.join(out)
-
-
-def named(text, language):
-    text = text or ''
-    words = prose_blanked(text)
+def named(text, language, statement):
+    shell = language in SHELL_LANGUAGES
     found = []
-    for harm, name, languages, pattern, quoted, rule in MATCHERS:
-        searched = text if quoted is None else words
-        if languages is not None and 'all' not in languages and not set(SHELLS.get(language, (language,))) & set(languages):
-            if quoted is None or language not in quoted:
-                continue
-            pattern = quoted[language]
-        if any(rule is None or flagged(rule, text[match.end():].split()) for match in pattern.finditer(searched)):
+    for harm, name, kind, pattern, extra in MATCHERS:
+        searched = extra[shell] if kind == 'program' else pattern
+        if searched.search(text) and (kind != 'switched' or extra.search(statement)):
             found.append((harm, name))
+    if any(not in_class(text, match.start()) for match in WILDCARD.finditer(text)):
+        found.append(('R1', 'a wildcard folder'))
     return found
 
 
+def statements(lines):
+    out, start = [], 0
+    while start < len(lines):
+        end, depth = start, 0
+        while True:
+            depth = max(depth + len(re.findall(r'[(\[]', lines[end])) - len(re.findall(r'[)\]]', lines[end])), 0)
+            if not (depth or re.search(r'(?:[\\`^,|+(\[]|&&)\s*$', lines[end])) or end + 1 >= len(lines) or end - start >= 11:
+                break
+            end += 1
+        out.append((start, end))
+        start = end + 1
+    return out
+
+
 def harm_of(program, tokens):
-    base = re.split(r'[\\/]', program.lower())[-1]
-    runner = CLASSES['command runners'].get(re.sub(r'\.(exe|com)$', '', base))
-    harms = [harm_named(base, tokens)]
-    if runner:
-        harms += [harm for harm, _ in named(' '.join(t for t in tokens or [] if isinstance(t, str)), runner)]
-    return next((harm for harm in harms if harm in REASONS), harms[0])
-
-
-def harm_named(program, tokens):
-    base = re.sub(r'\.(exe|com)$', '', program)
+    base = re.sub(r'\.(exe|com)$', '', re.split(r'[\\/]', program.lower())[-1])
+    switches = ' '.join(t for t in tokens or [] if isinstance(t, str))
     for harm in REASONS:
-        if base in NAMED[harm]['words'] or any(base == n.lower() for n in NAMED[harm]['anywhere']):
+        rules = NAMED[harm]
+        if base in (n.lower() for n in rules['anywhere'] + rules['words'] + rules.get('programs', []) + rules.get('values', [])):
             return harm
     for harm in REASONS:
-        rule = NAMED[harm]['switched'].get(base)
-        if rule and flagged(rule, tokens):
+        rule = next((r for n, r in NAMED[harm]['switched'].items() if n.lower() == base), None)
+        if rule and switch(rule).search(switches):
             return harm
     return NAMED['measured programs'].get(base, 'program')
 
@@ -239,7 +249,7 @@ def launch(program, tokens=None):
 
 
 def call_harm(name):
-    return next((harm for harm, _, languages, pattern, _, _ in MATCHERS if languages is None and pattern.search(name)), None)
+    return next((harm for harm, _, kind, pattern, _ in MATCHERS if kind in ('anywhere', 'pattern') and pattern.search(name)), None)
 
 
 def language_of(relative):
@@ -259,7 +269,10 @@ def name_findings(root, paths):
             continue
         data = (root / relative).read_bytes()
         text = data.decode('utf-16') if data.startswith((b'\xff\xfe', b'\xfe\xff')) else data.decode('utf-8-sig', 'replace')
-        for number, line in enumerate(lines_of(text), 1):
-            for harm, name in named(line, language):
-                found.setdefault((relative, number), (line, []))[1].append((f'this line names {name}, which the names list calls {harm}', harm, ''))
+        lines = lines_of(text)
+        for start, end in statements(lines):
+            joined = ' '.join(lines[start:end + 1])
+            for number in range(start, end + 1):
+                for harm, name in named(lines[number], language, joined):
+                    found.setdefault((relative, number + 1), (lines[number], []))[1].append((f'this line names {name}, which the names list calls {harm}', harm, ''))
     return found
