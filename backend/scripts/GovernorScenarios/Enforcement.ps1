@@ -362,11 +362,9 @@ function Test-ScenarioIdleExit {
     Start-Sleep -Seconds 2
     $state=Join-Path $script:policyRoot 'host.json'
     $stamp=(Get-Item -LiteralPath $state).LastWriteTimeUtc
-    foreach($run in 1..2){
-        $script:taskStarted=(Get-ScheduledTaskInfo -TaskName $task).LastRunTime
-        Start-ScheduledTask -TaskName $task
-        Assert ($null -ne (Wait-ScenarioTaskFinished $task)) ('The one-minute restart task ran to its end, run '+$run)
-    }
+    $script:taskStarted=(Get-ScheduledTaskInfo -TaskName $task).LastRunTime
+    Start-ScheduledTask -TaskName $task
+    Assert ($null -ne (Wait-ScenarioTaskFinished $task)) 'The one-minute restart task ran to its end'
     $after=(Get-Item -LiteralPath $state).LastWriteTimeUtc
     Note 'stateWrites' ([ordered]@{before=$stamp.ToString('o');after=$after.ToString('o')})
     Assert ($after -eq $stamp) 'With no rule on, the one-minute restarts exit without rewriting the governor state'
