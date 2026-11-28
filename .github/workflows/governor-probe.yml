@@ -1,0 +1,34 @@
+name: Governor probe
+on:
+  push:
+    branches: ['servi/proof-gcs-modtime']
+permissions:
+  contents: read
+jobs:
+  governor:
+    runs-on: windows-2025
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - run: python -m pip install -r tools/validation/requirements.txt
+      - name: Protect the app data folder as the app does on first start
+        shell: powershell
+        run: .\tools\scripts\Initialize-CiDataFolder.ps1
+      - name: Governor scenarios with timestamps
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force artifacts\probe | Out-Null
+          $clock=[Diagnostics.Stopwatch]::StartNew()
+          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File backend\scripts\Test-GovernorScenarios.ps1 -ContinueAfterFailure 2>&1 | ForEach-Object { '{0:F1} {1}' -f $clock.Elapsed.TotalSeconds, $_ } | Tee-Object -FilePath artifacts\probe\timed.log
+          "exit $LASTEXITCODE"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: governor-probe
+          path: artifacts/probe/
