@@ -1,5 +1,6 @@
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'BulkUninstall.Common.ps1')
+. (Join-Path $PSScriptRoot 'Validation.Common.ps1')
 function Assert([bool]$Condition,[string]$Message){if(-not $Condition){throw $Message};Write-Host "PASS $Message"}
 function Read-Result($Lines){return ($Lines -join [Environment]::NewLine)|ConvertFrom-Json}
 $root=Join-Path ([IO.Path]::GetTempPath()) ('roo-industries-bulk-uninstall-'+[guid]::NewGuid().ToString('N'))
@@ -98,6 +99,9 @@ function Remove-FixtureProtection{
 }
 try {
     [IO.Directory]::CreateDirectory($root)|Out-Null
+    $guardMarker=Get-RooIndustriesDataRootMarkerName $root
+    $guard=@{CurrentUserKeys=@($msiKeyPath);MachineKey=$markerKey;MachineValues=@($guardMarker,($guardMarker+'|protected-at'))}
+    Start-RooIndustriesFixtureGuard @guard -Files @($msiClaim) -Folders @($root)
     Set-FixtureProtection $root
     $script:fixtureExe=Join-Path $root 'RooIndustriesBulkFixture.exe'
     Add-Type -TypeDefinition @'

@@ -2,6 +2,7 @@ param([string]$EvidencePath = '', [switch]$IncludeNetworkAliases)
 
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'BulkUninstall.Common.ps1')
+. (Join-Path $PSScriptRoot 'Validation.Common.ps1')
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $failures = New-Object System.Collections.Generic.List[string]
 $passes = New-Object System.Collections.Generic.List[string]
@@ -307,6 +308,7 @@ try {
     $peerName = 'App B shared ownership fixture ' + [guid]::NewGuid().ToString('N')
     $peerKeyPath = 'Software\Microsoft\Windows\CurrentVersion\Uninstall\' + [guid]::NewGuid().ToString('N')
     $peerRegistered = $false
+    Start-RooIndustriesFixtureGuard -CurrentUserKeys @($peerKeyPath) -Folders @($tempRoot)
     try {
         $peerKey = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey($peerKeyPath)
         $peerRegistered = $true

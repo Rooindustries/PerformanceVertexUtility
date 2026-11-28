@@ -12,6 +12,7 @@ $registrationRoot='Software\Microsoft\Windows\CurrentVersion\Uninstall'
 $dataRoot='Software\RooIndustriesHostFixture-'+$caseId
 $apps=@();$reviews=@()
 . (Join-Path $PSScriptRoot 'BrandCompatibility.Common.ps1')
+. (Join-Path $PSScriptRoot 'Validation.Common.ps1')
 try {$null=Get-RooIndustriesLocalDataRoot -Protected}
 catch {throw ('This suite exercises the production removal queue, whose claims live in the app''s protected data folder, and that folder is not protected on this PC: '+$_.Exception.Message+' Open the app once as an administrator (or run the verification runner''s validators phase, which protects it inside its backup frame) and run the suite again.')}
 $exclusionPath=Join-Path $root 'cleanup-exclusions.json'
@@ -127,6 +128,12 @@ function Core([string]$CoreAction,[object]$Fields){
 }
 try {
     [IO.Directory]::CreateDirectory($root)|Out-Null
+    $guardedKeys=@(foreach($label in 'One','Two'){$registrationRoot+'\RooIndustriesHostFixture-'+$caseId+'-'+$label})+@($dataRoot)
+    $marker=Get-RooIndustriesDataRootMarkerName $operations
+    $guard=@{CurrentUserKeys=$guardedKeys;MachineKey='SOFTWARE\RooIndustries\OptimizationSuite\GovernorRoots'
+        MachineValues=@($marker,($marker+'|protected-at'));Folders=@($root);ReceiptFolder=$root}
+    if(-not $claimFolderBefore){$guard.EmptyFolders=@($claimFolder)}
+    Start-RooIndustriesFixtureGuard @guard
     $env:ROO_INDUSTRIES_TEST_CLEANUP_EXCLUSIONS=$exclusionPath
     $rootSecurity=[Security.AccessControl.DirectorySecurity]::new()
     $rootSecurity.SetAccessRuleProtection($true,$false)
