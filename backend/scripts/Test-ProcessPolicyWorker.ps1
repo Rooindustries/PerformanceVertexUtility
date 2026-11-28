@@ -168,7 +168,17 @@ try {
     $newSeconds=Wait-Until {Same (Read-Controls $second) $wanted} 10
     Note 'newProcessSecondsToAllEightControls' $newSeconds
     Assert ($null -ne $newSeconds) 'A newly started matching process receives CPU priority, affinity, CPU Sets, I/O, GPU, memory, power mode and boost controls'
-    Assert ($newSeconds -le 1.5) ('A new matching process gets its rules within about a second ('+[Math]::Round($newSeconds,2)+' s)')
+    $newRecords=@((Core 'policy-status').state.instances|Where-Object {$_.process.processId -eq $second.Id})
+    $utc={param($Text) [DateTimeOffset]::Parse([string]$Text,[Globalization.CultureInfo]::InvariantCulture).UtcDateTime}
+    $newCreated=[DateTime]::FromFileTimeUtc([int64]$newRecords[0].process.creationTimeFileTimeUtc)
+    $newChecks=@($newRecords|ForEach-Object {[string]$_.checkStartedAtUtc}|Sort-Object -Unique)
+    $newPrevious=@($newRecords|ForEach-Object {[string]$_.previousCheckStartedAtUtc}|Sort-Object -Unique)
+    $newProcessor=($newRecords|Measure-Object -Property processorSecondsToApply -Maximum).Maximum
+    Note 'newProcessCheck' ([ordered]@{created=$newCreated.ToString('o');previousCheck=$newPrevious;check=$newChecks;processorSeconds=$newProcessor})
+    $applied=@($newRecords|Where-Object {$null -ne $_.processorSecondsToApply}).Count
+    $firstCheck=$newRecords.Count -eq 8 -and $applied -eq 8 -and $newChecks.Count -eq 1 -and $newPrevious.Count -eq 1 -and $newPrevious[0] -and (& $utc $newPrevious[0]) -lt $newCreated
+    Assert $firstCheck 'A new matching process gets all eight controls in the first governor check that begins after it starts'
+    Assert ($null -ne $newProcessor -and $newProcessor -le 1.0) ('The governor gives a new process its rules within 1 s of its own processor time ('+[Math]::Round($newProcessor,3)+' s)')
     Assert (@(Get-Process -Name 'RooIndustries.OptimizationSuite.App' -ErrorAction SilentlyContinue).Count -eq 0) 'Enforcement happened with the desktop app closed'
 
     $workerIdentity=Get-WorkerIdentity

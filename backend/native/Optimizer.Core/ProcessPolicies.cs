@@ -36,6 +36,9 @@ public sealed class PolicyInstance
     public string? Field { get; init; }
     public string? ErrorKind { get; set; }
     public bool Relinquished { get; set; }
+    public DateTime? CheckStartedAtUtc { get; init; }
+    public DateTime? PreviousCheckStartedAtUtc { get; init; }
+    public double? ProcessorSecondsToApply { get; set; }
 }
 
 public sealed class PolicyHostState
@@ -539,6 +542,8 @@ public sealed class ProcessPolicyHost
     private PolicyDiagnostics? _diagnostics;
     private PolicyHostState _state;
     private byte[]? _lastSavedState;
+    private DateTime? _checkStartedAtUtc, _previousCheckStartedAtUtc;
+    private TimeSpan _checkProcessorStart;
 
     private sealed class Watch
     {
@@ -552,6 +557,7 @@ public sealed class ProcessPolicyHost
     private sealed record Gate(string? Kind, string? Message, RunningProcess? Identity, string? Topology);
 
     private static long Now => Monotonic();
+    private static TimeSpan ProcessorTime() { using var self = System.Diagnostics.Process.GetCurrentProcess(); return self.TotalProcessorTime; }
     private static long Delay(int attempt) => attempt < 7 ? 1000L << attempt : 300000;
     private static bool Terminal(PolicyInstance instance) => instance.Status is "restored" or "expired";
     private static string Key(RunningProcess process) => process.ProcessId + "|" + process.CreationTimeFileTimeUtc;
@@ -742,6 +748,9 @@ public sealed class ProcessPolicyHost
 
     public PolicyHostState Tick()
     {
+        _previousCheckStartedAtUtc = _checkStartedAtUtc;
+        _checkStartedAtUtc = DateTime.UtcNow;
+        _checkProcessorStart = ProcessorTime();
         Progress();
         _state.Errors = [];
         _state.Issues = [];
@@ -1035,6 +1044,7 @@ public sealed class ProcessPolicyHost
                 {
                     RuleId = rule.RuleId, RuleHash = hash, Process = identity, PreviewPath = previewPath, Field = field,
                     ReviewHash = OperationFiles.HashFile(previewPath), JournalPath = Path.Combine(directory, "journal.json"), Status = "applying",
+                    CheckStartedAtUtc = _checkStartedAtUtc, PreviousCheckStartedAtUtc = _previousCheckStartedAtUtc,
                 };
                 _state.Instances.Add(instance);
                 created.Add((instance, key));
@@ -1068,6 +1078,7 @@ public sealed class ProcessPolicyHost
                     throw new FieldFailure(failed?.Error ?? "Windows did not accept the requested value.", failed?.ErrorKind == "denied");
                 }
                 instance.Status = "active";
+                instance.ProcessorSecondsToApply = (ProcessorTime() - _checkProcessorStart).TotalSeconds;
                 _watched[instance.JournalPath] = new Watch { Desired = applied.Changes.ToDictionary(change => change.Name, change => change.Desired, StringComparer.Ordinal), NextCheck = Now + Recheck };
                 _retries.Remove(key);
             }
