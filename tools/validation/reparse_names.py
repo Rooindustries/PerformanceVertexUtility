@@ -213,10 +213,10 @@ def named(text, language):
 
 def harm_of(program, tokens):
     base = re.split(r'[\\/]', program.lower())[-1]
-    shell = CLASSES['shell programs'].get(re.sub(r'\.(exe|com)$', '', base))
+    runner = CLASSES['command runners'].get(re.sub(r'\.(exe|com)$', '', base))
     harms = [harm_named(base, tokens)]
-    if shell:
-        harms += [harm for harm, _ in named(' '.join(t for t in tokens or [] if isinstance(t, str)), shell)]
+    if runner:
+        harms += [harm for harm, _ in named(' '.join(t for t in tokens or [] if isinstance(t, str)), runner)]
     return next((harm for harm in harms if harm in REASONS), harms[0])
 
 

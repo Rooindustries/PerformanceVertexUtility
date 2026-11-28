@@ -389,9 +389,9 @@ def reparse_walk_negative_controls():
     always['cs'].update({'options object made elsewhere': cs('var o = System.Text.Json.JsonSerializer.Deserialize<System.IO.EnumerationOptions>("{}")!; System.IO.Directory.GetFiles(dir, "*", o);')})
     always['targets'].update({'item from an unknown property': '<Project><ItemGroup><I Include="$(Zqvx)" /></ItemGroup></Project>'})
     harmless = {
-        'yml': {'workflow default python shell': 'defaults:\n  run:\n    shell: python\njobs:\n  j:\n    runs-on: ubuntu-24.04\n    steps:\n      - run: print(1)'},
+        'yml': {'workflow default python shell': 'defaults:\n  run:\n    shell: python\njobs:\n  j:\n    runs-on: ubuntu-24.04\n    steps:\n      - run: print(1)',
+                'runs-on list for Windows': 'jobs:\n  j:\n    runs-on: [self-hosted, windows-2025]\n    steps:\n      - run: Write-Output hi'},
         'ps1': {'later assignment': "$c = 'Write-Output'\n& $c hi\n$c = 'Zqvx-Item'", 'a tool word in a message': "Write-Output 'could not move the folder'"},
-        'yml': {'runs-on list for Windows': 'jobs:\n  j:\n    runs-on: [self-hosted, windows-2025]\n    steps:\n      - run: Write-Output hi'},
         'py': {'a method of the class it is in': 'class A:\n    def zqvx(self):\n        return 1\n    def other(self):\n        return self.zqvx()'},
     }
     allowlist = 'tools/validation/reparse-walk-allowlist.json'
@@ -430,7 +430,7 @@ def reparse_walk_negative_controls():
     cases['a recursive walk in product code that names no tool is refused'] = ('backend/native/Control/Cast.cs', cs('System.IO.Directory.GetFiles(dir, "*", (System.IO.SearchOption)1);'), True)
     cases['a one-folder listing in product code passes'] = ('backend/native/Control/List.cs', cs('System.IO.Directory.GetFiles(dir, "*", System.IO.SearchOption.TopDirectoryOnly);'), False)
     cases['a file type with no reader is refused'] = ('tools/validation/Control/run.foo', 'zqvx a', True)
-    cases['a script outside the read scope is written'] = ('Zqvx.ps1', 'Write-Output hi', False)
+    cases['a script outside the read scope passes'] = ('Zqvx.ps1', 'Write-Output hi', False)
     cases['an extensionless file is refused'] = ('tools/validation/Control/run', '#!/bin/sh\nzqvx a', True)
     cases['a file Python cannot read is refused'] = ('tools/validation/Control/broken.py', 'def (', True)
     cases['a file PowerShell cannot read is refused'] = ('tools/validation/Control/broken.ps1', 'function {', True)
@@ -456,6 +456,7 @@ def reparse_walk_negative_controls():
             ('a switch joined to its command', 'cmd', 'attrib/s a', None, 'program', 'attrib/s', True),
             ('a tree tool inside the command text of a shell', 'ps1', 'cmd.exe /c "echo x & attrib /s a"', None, 'program', 'cmd.exe', True),
             ('a link tool inside the command text of a shell started from Python', 'py', "import subprocess\nsubprocess.run(['powershell', '-c', 'echo x; New-Item -ItemType Junction a'])", 'subprocess.run(', 'program', 'powershell', True),
+            ('a tree tool run through a program that runs its arguments', 'py', "import subprocess\nsubprocess.run(['sudo', '-E cp -r a b'])", 'subprocess.run(', 'program', 'sudo', True),
             ('a shell whose command text names no listed tool', 'ps1', 'cmd.exe /c "echo x & ver"', None, 'program', 'cmd.exe', False),
             ('a link tool on a later argument line', 'py', "import subprocess\nsubprocess.run(['powershell', '-c', 'zqvx', a,\n    'mklink'])", "subprocess.run(['powershell', '-c', 'zqvx', a,", 'program', 'powershell', True),
             ('a first word that makes a tree tool', 'sh', 'git clean -fdx a', None, 'program', 'git', True),

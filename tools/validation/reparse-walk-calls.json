@@ -7,7 +7,7 @@
   "5. Every scanned file is matched against this list, the check's own source included. The names live here, in data the check does not scan, and not in code.",
   "Not on the list: tree deletes and listings measured not to follow links (rd /s, rmdir /s, Remove-Item -Recurse, Get-ChildItem -Recurse without -FollowSymlink, Directory.Delete with recursive, shutil.rmtree); they are known kinds named by that measurement. cmd's find is FIND.EXE, a text filter, so find is a walk only in bash.",
   "How names match: 'anywhere' names match in every scanned language, in any case, with anything glued after them and no letter right before them. 'words' match as whole words in the shells named, and in Python and C# only where a string starts with them or a path in a string ends in them, written in lower case as a command is; in C# the word must also be followed by .exe or by an argument, because C# names a folder with the bare word and starts a program with its file name or a command line. 'switched' programs match as words that are followed on the line by the switch that makes them recurse. 'patterns' are regular expressions for the languages named.",
-  "A shell started with command text ('shell programs': cmd /c, powershell -c, bash -c and the like) has that text matched as a line of the shell's own language, so a known entry for the shell clears only the shell."
+  "A program that runs its arguments as a command ('command runners': a shell given command text, sudo, runas, conhost and the like) has those arguments matched as a line of that program's language, so a known entry for the runner clears only the runner."
  ],
  "names": {
   "R1": {
@@ -654,13 +654,21 @@
   "ProjectDir",
   "TargetFramework"
  ],
- "shell programs": {
+ "command runners": {
   "bash": "bash",
   "cmd": "cmd",
+  "conhost": "cmd",
+  "doas": "bash",
+  "env": "bash",
+  "nice": "bash",
+  "nohup": "bash",
   "powershell": "powershell",
   "pwsh": "powershell",
+  "runas": "cmd",
   "sh": "bash",
-  "wsl": "bash"
+  "sudo": "bash",
+  "wsl": "bash",
+  "xargs": "bash"
  },
  "bash": {
   ":": "a bash builtin that runs no other program and touches no file tree",
