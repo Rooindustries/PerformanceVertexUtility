@@ -71,7 +71,7 @@ sealed class ChildEnv : IDisposable
             ["PATH"] = string.Join(';', System32, Windows, Path.Combine(System32, "Wbem"), Path.Combine(System32, "WindowsPowerShell", "v1.0")),
             ["PATHEXT"] = ".COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC",
             ["TEMP"] = temp, ["TMP"] = temp,
-            ["PSModulePath"] = Path.Combine(programFiles, "WindowsPowerShell", "Modules") + ";" + Path.Combine(System32, "WindowsPowerShell", "v1.0", "Modules"),
+            ["PSModulePath"] = Path.Combine(System32, "WindowsPowerShell", "v1.0", "Modules") + ";" + Path.Combine(programFiles, "WindowsPowerShell", "Modules"),
             ["ProgramFiles"] = programFiles, ["ProgramW6432"] = programFiles, ["ProgramFiles(x86)"] = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
             ["CommonProgramFiles"] = commonFiles, ["CommonProgramW6432"] = commonFiles, ["CommonProgramFiles(x86)"] = Environment.GetFolderPath(Environment.SpecialFolder.CommonProgramFilesX86),
             ["ProgramData"] = programData, ["ALLUSERSPROFILE"] = programData, ["PUBLIC"] = KnownFolder(new Guid("DFDF76A2-C82A-4D63-906A-5644AC457385")),
