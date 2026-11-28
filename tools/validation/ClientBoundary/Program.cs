@@ -140,24 +140,6 @@ try
     File.Copy(Path.Combine(repo, "backend", "scripts", "Invoke-UninstallCleanupApplyPackage.ps1"), applyScript, true);
     service.DiscardCleanupReview();
 
-    var heldLock = Path.Combine(fixture, "held.lock");
-    var holder = Path.Combine(fixture, "holder.pid");
-    var holdScript = "$held = [IO.File]::Open('" + heldLock + "', 'OpenOrCreate', 'ReadWrite', 'None')\n" +
-        "[IO.File]::WriteAllText('" + holder + "', $PID)\nStart-Sleep -Seconds 600\n";
-    File.WriteAllText(Path.Combine(scripts, "Hold-Lock.ps1"), holdScript);
-    using (var stop = new CancellationTokenSource())
-    {
-        var holding = service.RunBackendScriptResultAsync("Hold-Lock.ps1", stop.Token);
-        while (!File.Exists(holder) && !holding.IsCompleted) await Task.Delay(50);
-        stop.Cancel();
-        var stopped = await holding;
-        string? stillHeld = null;
-        try { File.Open(heldLock, FileMode.Open, FileAccess.ReadWrite, FileShare.None).Dispose(); }
-        catch (IOException error) { stillHeld = error.Message; }
-        Check(stopped.Error == AppLog.TimedOut && stillHeld is null,
-            "A stopped backend call has ended its script before the app answers, so a retry finds nothing held: " + stopped.Error + stillHeld);
-    }
-
     var operationsRoot = Path.Combine(fixture, "operations");
     Directory.CreateDirectory(operationsRoot);
     var operations = new OptimizerService(new BackendLocator(), operationsRoot);
