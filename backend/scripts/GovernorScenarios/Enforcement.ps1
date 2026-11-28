@@ -353,7 +353,7 @@ function Test-ScenarioIdleExit {
     $path=Copy-Probe
     $probe=Start-Probe $path
     $rule=New-Rule $path @{cpuPriority='AboveNormal'} 'Idle exit'
-    Use-Rule $rule|Out-Null
+    $task=(Use-Rule $rule).taskName
     Assert ($null -ne (Wait-Field $probe 'cpuPriority' 'AboveNormal')) 'The rule is applied'
     $rule.enabled=$false
     Save-Rule $rule|Out-Null
@@ -362,7 +362,11 @@ function Test-ScenarioIdleExit {
     Start-Sleep -Seconds 2
     $state=Join-Path $script:policyRoot 'host.json'
     $stamp=(Get-Item -LiteralPath $state).LastWriteTimeUtc
-    Start-Sleep -Seconds 130
+    foreach($run in 1..2){
+        $script:taskStarted=(Get-ScheduledTaskInfo -TaskName $task).LastRunTime
+        Start-ScheduledTask -TaskName $task
+        Assert ($null -ne (Wait-ScenarioTaskFinished $task)) ('The one-minute restart task ran to its end, run '+$run)
+    }
     $after=(Get-Item -LiteralPath $state).LastWriteTimeUtc
     Note 'stateWrites' ([ordered]@{before=$stamp.ToString('o');after=$after.ToString('o')})
     Assert ($after -eq $stamp) 'With no rule on, the one-minute restarts exit without rewriting the governor state'
@@ -513,6 +517,8 @@ function Test-ScenarioRuleFileUnreadable {
     Note 'editsWhileDamaged' ([ordered]@{turnOn=$onError;addRule=$addError})
     Assert ($null -eq $onError -and $null -eq $addError) 'Rules can be turned on and added while another rule file is damaged'
     $c=Start-Probe $pathC
+    $settled=Wait-Until {@(Get-Open $c.Id|Where-Object {$_.status -eq 'active'}).Count -gt 0} 15 250
+    Assert ($null -ne $settled -and (Read-Field $c 'ioPriority') -eq 1) 'The rule added while a rule file is damaged applies'
     $operation=Join-Path $script:policyParent ('operations\process-'+[Guid]::NewGuid().ToString('N'))
     $preview=Join-Path $operation 'preview.json'
     $journal=Join-Path $operation 'journal.json'

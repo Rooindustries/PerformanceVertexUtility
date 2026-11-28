@@ -49,6 +49,14 @@ function Save-ClaimsAndRemove($Rule,[string]$Repo,[string]$Message){
     Remove-ClaimsRule $Rule
 }
 
+function Assert-ClaimsMemoryHeld([string]$Path,[string]$Repo,[string]$File,[string]$Feature){
+    $memory=New-Rule $Path @{memoryPriority=3}
+    $message=$Feature+' can change memory priority, so a memory priority rule is refused too'
+    Assert-ClaimsRefusedWith {Save-ClaimsRule $memory $script:policyRoot $Repo} @($File,$Feature,'Memory priority') $message
+    $power=New-Rule $Path @{executionQoS=@{controlMask=1;stateMask=1}}
+    Save-ClaimsAndRemove $power $Repo ($Feature+' never changes Power mode, so a Power mode rule for the same app still saves')
+}
+
 function Test-ScenarioClaimsUnreadableSessionFile {
     $name='ClaimsUnreadable.exe'
     $path=Copy-Probe $name
@@ -66,7 +74,7 @@ function Test-ScenarioClaimsUnreadableSessionFile {
     $clock=[Diagnostics.Stopwatch]::StartNew()
     Assert-ClaimsRefusedWith {Save-ClaimsRule (New-Rule $path @{cpuPriority='High'}) $script:policyRoot $repo} @($sessionFile,'delete it','Game priority','CPU priority') 'A CPU priority rule is refused while the Game priority session file stays locked'
     Assert ($clock.ElapsedMilliseconds -ge 1000) 'The refusal came only after the one second read retry window'
-    Save-ClaimsAndRemove (New-Rule $path @{memoryPriority=3}) $repo 'A memory priority rule for the same app still saves while the file is locked'
+    Assert-ClaimsMemoryHeld $path $repo $sessionFile 'Game priority'
     $off=New-Rule $path @{cpuPriority='High'}
     $off.enabled=$false
     Save-ClaimsAndRemove $off $repo 'A disabled CPU priority rule still saves while the file is locked'
@@ -95,7 +103,7 @@ function Test-ScenarioClaimsDamagedBackupFile {
     Assert-ClaimsRefusedWith {Save-ClaimsRule (New-Rule $otherPath @{cpuPriority='High'}) $script:policyRoot $repo} $parts 'A damaged backup.json of a live-looking session refuses a CPU priority rule, even for an app the file may not concern'
     Assert-ClaimsRefusedWith {Core 'policy-pause' @{paused=$false;repoRoot=$repo}} $parts 'Resuming the governor is refused while the damaged backup.json could hide a held CPU priority'
     Assert ((Core 'policy-summary').paused -eq $true) 'The refused resume left the governor paused'
-    Save-ClaimsAndRemove (New-Rule $path @{memoryPriority=3}) $repo 'A memory priority rule is not affected by the damaged file'
+    Assert-ClaimsMemoryHeld $path $repo $files.backup 'Game priority'
     Remove-Item -LiteralPath $files.backup
     Core 'policy-pause' @{paused=$false;repoRoot=$repo}|Out-Null
     Assert ((Core 'policy-summary').paused -eq $false) 'After the damaged file is deleted the governor resumes'
@@ -178,7 +186,7 @@ function Test-ScenarioClaimsDamagedJournals {
     [IO.Directory]::CreateDirectory((Split-Path $pointer -Parent))|Out-Null
     Write-ClaimsRecord $pointer '{"path":'
     Assert-ClaimsRefusedWith {Save-ClaimsRule (New-Rule $path @{cpuPriority='High'}) $script:policyRoot $repo} @($pointer,'delete it','Background priorities','CPU priority') 'A damaged Background priorities recovery pointer refuses a CPU priority rule'
-    Save-ClaimsAndRemove (New-Rule $path @{memoryPriority=3}) $repo 'A damaged recovery pointer cannot hold memory priority, so that rule saves'
+    Assert-ClaimsMemoryHeld $path $repo $pointer 'Background priorities'
     Remove-Item -LiteralPath $pointer
     Save-ClaimsAndRemove (New-Rule $path @{cpuPriority='High'}) $repo 'After the damaged recovery pointer is deleted the CPU priority rule saves'
 }
