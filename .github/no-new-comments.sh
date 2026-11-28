@@ -29,6 +29,7 @@ exceptions=(
   'scripts/diagnose-repo-skill-harnesses.sh|*|repo skills name the command line tools they run under'
   'tests/repo-skills-e2e.sh|*|repo skills name the command line tools they run under'
   'tools/validation/check_agent_files.py|*|the check that keeps tool instruction files out names them'
+  'tools/validation/reparse-walk-allowlist.json|gemini|the walk check list quotes a line of check_agent_files.py as written'
 )
 
 comment_exceptions=(
