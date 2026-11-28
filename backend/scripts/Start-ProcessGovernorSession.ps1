@@ -419,7 +419,7 @@ try {
                     $processName = [string](Get-RooIndustriesPropertyValue $proc 'name' '')
                     $key = Get-GovernorProcessKey $proc
                     $seenKeys.Add($key) | Out-Null
-                    $decisionKey = "$key|$([string](Get-RooIndustriesPropertyValue $proc 'commandLine' ''))"
+                    $decisionKey = "$key|$foregroundPid|$([string](Get-RooIndustriesPropertyValue $proc 'commandLine' ''))"
                     $decision = $decisions[$decisionKey]
                     if ($null -eq $decision) {
                         $decision = Get-RooIndustriesProcessGovernorDecision $proc $profile $protectedCatalog $foregroundPid $config
