@@ -75,16 +75,28 @@ public static class OperationFiles
             }
             var current = new FileInfo(path);
             if (current.Exists) File.SetCreationTimeUtc(temporary, current.CreationTimeUtc);
-            ReplaceWith(temporary, path);
+            if (!RenamedOver(temporary, path))
+            {
+                try
+                {
+                    if (File.Exists(path)) File.Replace(temporary, path, null, ignoreMetadataErrors: true);
+                    else File.Move(temporary, path);
+                }
+                catch (IOException error) when ((error.HResult & 0xffff) is 1176 or 1177 && !File.Exists(path))
+                {
+                    File.Move(temporary, path);
+                }
+            }
         }
-        finally { File.Delete(temporary); }
+        finally { if (File.Exists(path)) File.Delete(temporary); }
     }
 
     private const uint DeleteAccess = 0x110000;
     private const int RenameInfoEx = 22;
     private const byte ReplacePosix = 3;
+    private const int UnsupportedHere = 87;
 
-    private static void ReplaceWith(string temporary, string path)
+    private static bool RenamedOver(string temporary, string path)
     {
         var share = FileShare.ReadWrite | FileShare.Delete;
         using var file = CreateFile(temporary, DeleteAccess, share, IntPtr.Zero, FileMode.Open, 0, IntPtr.Zero);
@@ -94,8 +106,9 @@ public static class OperationFiles
         rename[0] = ReplacePosix;
         BitConverter.TryWriteBytes(rename.AsSpan(16), name.Length);
         name.CopyTo(rename, 20);
-        if (!SetFileInformationByHandle(file, RenameInfoEx, rename, rename.Length))
-            Marshal.ThrowExceptionForHR(Marshal.GetHRForLastWin32Error());
+        if (SetFileInformationByHandle(file, RenameInfoEx, rename, rename.Length)) return true;
+        if (Marshal.GetLastWin32Error() != UnsupportedHere) Marshal.ThrowExceptionForHR(Marshal.GetHRForLastWin32Error());
+        return false;
     }
 
     [DllImport("kernel32.dll", EntryPoint = "CreateFileW", CharSet = CharSet.Unicode, SetLastError = true)]

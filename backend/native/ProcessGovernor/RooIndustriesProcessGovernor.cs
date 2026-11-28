@@ -16,6 +16,7 @@ public sealed class RooIndustriesProcessGovernor
     private const int DeleteAccess = 0x110000;
     private const int RenameInfoEx = 22;
     private const byte ReplacePosix = 3;
+    private const int UnsupportedHere = 87;
 
     [DllImport("user32.dll")]
     private static extern IntPtr GetForegroundWindow();
@@ -2086,11 +2087,14 @@ public sealed class RooIndustriesProcessGovernor
             rename[0] = ReplacePosix;
             BitConverter.GetBytes(name.Length).CopyTo(rename, 16);
             name.CopyTo(rename, 20);
-            if (!SetFileInformationByHandle(file, RenameInfoEx, rename, rename.Length))
+            if (SetFileInformationByHandle(file, RenameInfoEx, rename, rename.Length)) return;
+            if (Marshal.GetLastWin32Error() != UnsupportedHere)
             {
                 Marshal.ThrowExceptionForHR(Marshal.GetHRForLastWin32Error());
             }
         }
+        if (File.Exists(path)) File.Replace(temporary, path, null);
+        else File.Move(temporary, path);
     }
 
     private static JavaScriptSerializer NewSerializer()

@@ -20,7 +20,7 @@ function Write-RooIndustriesOperationJson {
         $stream = [IO.FileStream]::new($temporary, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
         try { $stream.Write($bytes,0,$bytes.Length); $stream.Flush($true) } finally { $stream.Dispose() }
         Move-RooIndustriesReplacement $temporary $full
-    } finally { if ([IO.File]::Exists($temporary)) { [IO.File]::Delete($temporary) } }
+    } finally { if ([IO.File]::Exists($full) -and [IO.File]::Exists($temporary)) { [IO.File]::Delete($temporary) } }
 }
 
 function Move-RooIndustriesReplacement {
@@ -36,6 +36,7 @@ public static class RooIndustriesAtomicReplace {
     const int DeleteAccess = 0x110000;
     const int RenameInfoEx = 22;
     const byte ReplacePosix = 3;
+    const int UnsupportedHere = 87;
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     static extern SafeFileHandle CreateFileW(
         string name, int access, FileShare share, IntPtr security, FileMode mode, int flags, IntPtr template);
@@ -54,7 +55,16 @@ public static class RooIndustriesAtomicReplace {
             rename[0] = ReplacePosix;
             BitConverter.GetBytes(name.Length).CopyTo(rename, offset - 4);
             name.CopyTo(rename, offset);
-            if (!SetFileInformationByHandle(file, RenameInfoEx, rename, rename.Length)) Fail();
+            if (SetFileInformationByHandle(file, RenameInfoEx, rename, rename.Length)) return;
+            if (Marshal.GetLastWin32Error() != UnsupportedHere) Fail();
+        }
+        try {
+            if (File.Exists(path)) File.Replace(temporary, path, null);
+            else File.Move(temporary, path);
+        } catch (IOException error) {
+            int code = error.HResult & 0xffff;
+            if ((code != 1176 && code != 1177) || File.Exists(path)) throw;
+            File.Move(temporary, path);
         }
     }
     static void Fail() { Marshal.ThrowExceptionForHR(Marshal.GetHRForLastWin32Error()); }
