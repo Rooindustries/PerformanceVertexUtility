@@ -1,6 +1,6 @@
 {
  "contract": [
-  "1. A name is on this list only if the thing it names itself performs a walk (R1), applies a permission or owner change that propagates or recurses (R2), or makes a link, mount, drive mapping or virtual disk (R3). Calls to the repo's own link and walk helpers (names.helpers) and identifiers that merely contain Junction, Symlink or HardLink do not count. Python add, walk and move count only in qualified forms (shutil.move, os.walk, an archive's add).",
+  "1. A name is on this list only if the thing it names itself performs a walk (R1), applies a permission or owner change that propagates or recurses (R2), or makes a link, mount, drive mapping or virtual disk (R3). Calls to the repo's own link and walk helpers and identifiers that merely contain Junction, Symlink or HardLink do not count: those three are words for the shells, not names matched anywhere, and no helper's name holds a listed name. Python add, walk and move count only in qualified forms (shutil.move, os.walk, an archive's add).",
   "2. R2 is the call that applies a permission or owner to the file system, not the ones that build a security object in memory: SetOwner, SetAccessRuleProtection, AddAccessRule, RemoveAccessRule and their kind are not on the list.",
   "3. R2 is a change that propagates or recurses. A call that by its definition changes exactly one object and cannot propagate is not on the list: SetKernelObjectSecurity, SetFileSecurity, chmod or os.chmod without -R, File.SetAttributes. chmod -R, chown -R and attrib /s are. Windows SetAccessControl on a folder propagates inheritance, so it is.",
   "4. R1 is the call that walks or unpacks a tree, not the module it lives in: bare zipfile, tarfile and ZipFile are not on the list; extractall, an archive's add, make_archive, unpack_archive, CreateFromDirectory, ExtractToDirectory, Compress-Archive, Expand-Archive and copytree are. A move that can carry a folder to another volume is a copy and delete, so the moves are R1.",
@@ -9,14 +9,6 @@
   "How names match: 'anywhere' names match in every scanned language, in any case, with anything glued after them and no letter right before them. 'words' match as whole words in the shells named, and in Python and C# only where a string starts with them or a path in a string ends in them, written in lower case as a command is; in C# the word must also be followed by .exe or by an argument, because C# names a folder with the bare word and starts a program with its file name or a command line. 'switched' programs match as words that are followed on the line by the switch that makes them recurse. 'patterns' are regular expressions for the languages named."
  ],
  "names": {
-  "helpers": [
-   "TestFixtures",
-   "DataRootHarness",
-   "H",
-   "FixtureWalkChecks",
-   "LocalTree",
-   "local_tree"
-  ],
   "R1": {
    "anywhere": [
     "robocopy",

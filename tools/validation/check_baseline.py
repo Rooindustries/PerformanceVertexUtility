@@ -379,11 +379,21 @@ def reparse_walk_negative_controls():
         'cs': {'reflection': cs('typeof(System.IO.Directory).GetMethod("GetFiles")!.Invoke(null, null);'), 'compiled expression': cs('System.Linq.Expressions.Expression.Lambda(System.Linq.Expressions.Expression.Empty()).Compile();')},
         'sh': {'trap': "trap 'rm -rf a' EXIT", 'eval': 'eval x', 'command': 'command find -L a', 'function defined later': 'find a\nfind() { :; }'},
         'targets': {'Exec of a builtin': '<Project><Target Name="T"><Exec Command="echo hi" /></Target></Project>', 'entity in a property function': '<Project><PropertyGroup><P>$([System.IO.Directory]::&#x47;etFiles(\'a\'))</P></PropertyGroup></Project>', 'item glob': '<Project><ItemGroup><I Include="$(TEMP)\\**\\*" /></ItemGroup></Project>'},
-        'yml': {'job-level workflow': 'jobs:\n  j:\n    uses: zq/x/.github/workflows/y.yml@v1'},
+        'yml': {'job-level workflow': 'jobs:\n  j:\n    uses: zq/x/.github/workflows/y.yml@v1', 'expression in a run step': 'jobs:\n  j:\n    runs-on: ubuntu-24.04\n    steps:\n      - run: echo ${{ env.X }}'},
     }
+    always['ps1'].update({'wildcard folder in a path': "Remove-Item -Path (Join-Path $a '*\\*') -Force", 'function drive assignment': "${function:Zqvx} = 'Write-Output'",
+                          'options object set from a hashtable': 'New-Object System.Data.DataTable -Property @{ TableName = $a }', 'dot-source of a script the check does not read': ". (Join-Path $PSScriptRoot '..\\..\\..\\Zqvx.ps1')"})
+    always['sh'].update({'glob with a wildcard folder': 'for f in "$a"/*/*; do echo "$f"; done'})
+    always['py'].update({'self that is not a method parameter': 'class A:\n    def zqvx(self): pass\nself = object()\nself.zqvx()',
+                         'value from a repo function': 'class A:\n    def zqvx(self): pass\ndef make():\n    return object()\nm = make()\nm.zqvx()',
+                         'archive add on a typed value': "import tarfile\nt = tarfile.open(a, 'w')\nt.add(b)"})
+    always['cs'].update({'options object made elsewhere': cs('var o = System.Text.Json.JsonSerializer.Deserialize<System.IO.EnumerationOptions>("{}")!; System.IO.Directory.GetFiles(dir, "*", o);')})
+    always['targets'].update({'item from an unknown property': '<Project><ItemGroup><I Include="$(Zqvx)" /></ItemGroup></Project>'})
     harmless = {
         'yml': {'workflow default python shell': 'defaults:\n  run:\n    shell: python\njobs:\n  j:\n    runs-on: ubuntu-24.04\n    steps:\n      - run: print(1)'},
-        'ps1': {'later assignment': "$c = 'Write-Output'\n& $c hi\n$c = 'Zqvx-Item'"},
+        'ps1': {'later assignment': "$c = 'Write-Output'\n& $c hi\n$c = 'Zqvx-Item'", 'a tool word in a message': "Write-Output 'could not move the folder'"},
+        'yml': {'runs-on list for Windows': 'jobs:\n  j:\n    runs-on: [self-hosted, windows-2025]\n    steps:\n      - run: Write-Output hi'},
+        'py': {'a method of the class it is in': 'class A:\n    def zqvx(self):\n        return 1\n    def other(self):\n        return self.zqvx()'},
     }
     allowlist = 'tools/validation/reparse-walk-allowlist.json'
     cases, reasoned, known = {}, [], []
@@ -420,6 +430,7 @@ def reparse_walk_negative_controls():
     cases['a recursive walk in product code is refused'] = ('backend/native/Control/Walk.cs', cs('System.IO.Directory.GetFiles(dir, "*", System.IO.SearchOption.AllDirectories);'), True)
     cases['a one-folder listing in product code passes'] = ('backend/native/Control/List.cs', cs('System.IO.Directory.GetFiles(dir, "*", System.IO.SearchOption.TopDirectoryOnly);'), False)
     cases['a file type with no reader is refused'] = ('tools/validation/Control/run.foo', 'zqvx a', True)
+    cases['a script outside the read scope is written'] = ('Zqvx.ps1', 'Write-Output hi', False)
     cases['an extensionless file is refused'] = ('tools/validation/Control/run', '#!/bin/sh\nzqvx a', True)
     cases['a file Python cannot read is refused'] = ('tools/validation/Control/broken.py', 'def (', True)
     cases['a file PowerShell cannot read is refused'] = ('tools/validation/Control/broken.ps1', 'function {', True)
@@ -445,10 +456,13 @@ def reparse_walk_negative_controls():
             ('a link tool on a later argument line', 'py', "import subprocess\nsubprocess.run(['powershell', '-c', 'zqvx', a,\n    'mklink'])", "subprocess.run(['powershell', '-c', 'zqvx', a,", 'program', 'powershell', True),
             ('a first word that makes a tree tool', 'sh', 'git clean -fdx a', None, 'program', 'git', True),
             ('an unreadable file', 'ps1', 'function {', None, 'file', '', True),
-            ('an alias for a tree tool', 'ps1', 'Set-Alias -Name q -Value cpio', None, 'command the table does not list', 'set-alias', True)):
+            ('an alias for a tree tool', 'ps1', 'Set-Alias -Name q -Value cpio', None, 'command the table does not list', 'set-alias', True),
+            ('a tree listing whose shortened switch follows links', 'ps1', 'Get-ChildItem -Recurse -Fol $a', None, 'tree listing, does not follow links (measured)', 'get-childitem', True),
+            ('a full program path joined to its switch', 'cmd', 'C:\\Windows\\System32\\attrib.exe/s a', None, 'program', 'c:\\windows\\system32\\attrib.exe/s', True),
+            ('start settings changed through the argument list indexer', 'cs', cs('var p = new ProcessStartInfo("zqvx.exe"); p.ArgumentList.Add("a"); p.ArgumentList[0] = "b"; Process.Start(p);'), 'Process.Start(p);', 'program', 'zqvx.exe', True)):
         path = f'tools/validation/Control/known-{label.replace(" ", "-")}.{extension}'
         cases[f'{label} on the known list {"is refused" if refused else "passes"}'] = (path, source, refused)
-        known.append({'file': path, 'line': line or source, 'kind': kind, 'starts': starts})
+        known.append({'file': path, 'line': next(l.strip() for l in module['lines_of'](source) if line in l) if line else source, 'kind': kind, 'starts': starts})
     for extension, source, line, harm, starts in (('py', 'import os\nos.link(a, b)', 'os.link(a, b)', 'R3', 'os.link'),
                                                   ('ps1', "[System.IO.File]::CreateSymbolicLink('a', 'b')", "[System.IO.File]::CreateSymbolicLink('a', 'b')", 'R3', 'system.io.file.createsymboliclink'),
                                                   ('cs', cs('new System.IO.DirectoryInfo(dir).SetAccessControl(null!);', 'using System.IO;'), 'SetAccessControl', 'R2', 'system.io.filesystemaclextensions.setaccesscontrol')):

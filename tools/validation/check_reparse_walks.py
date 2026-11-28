@@ -829,7 +829,6 @@ NEEDS = REASONS
 LANGUAGES = {'py': 'python', 'ps1': 'powershell', 'psm1': 'powershell', 'psd1': 'powershell', 'cs': 'csharp', 'sh': 'bash', 'cmd': 'cmd', 'bat': 'cmd', 'yml': 'workflow', 'yaml': 'workflow',
              'csproj': 'msbuild', 'props': 'msbuild', 'targets': 'msbuild'}
 SHELLS = {'workflow': ('bash', 'cmd', 'powershell'), 'msbuild': ('cmd',)}
-HELPERS = re.compile(r'(?<![\w.])(?:' + '|'.join(map(re.escape, NAMED['helpers'])) + r')\b(?:\.\w+)?')
 
 
 def anywhere(name):
@@ -879,7 +878,7 @@ def prose_blanked(text):
 
 
 def named(text, language):
-    text = HELPERS.sub(' ', text or '')
+    text = text or ''
     words = prose_blanked(text)
     found = []
     for harm, name, languages, pattern, quoted, rule in MATCHERS:
