@@ -20,8 +20,8 @@
     {
       "text": "ProductName = 'Roo Industries Optimization Suite'",
       "files": [
+        "backend/scripts/BackendOutput.Common.ps1",
         "backend/scripts/NvidiaNip.Common.ps1",
-        "backend/scripts/ProcessProfile.Common.ps1",
         "backend/scripts/StutterOptimization.Common.ps1",
         "backend/scripts/UninstallCleanup.Common.ps1"
       ],
