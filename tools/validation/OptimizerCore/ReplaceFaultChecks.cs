@@ -11,15 +11,7 @@ static class ReplaceFaultChecks
         var path = Path.Combine(root, "host.json");
         try
         {
-            OperationFiles.Write(path, new Snapshot(1, "original"));
-            Environment.SetEnvironmentVariable("ROO_INDUSTRIES_TEST_REPLACE_FAULT", "1177");
-            Exception? failure = null;
-            try { OperationFiles.Write(path, new Snapshot(2, "replacement")); }
-            catch (Exception error) { failure = error; }
-            finally { Environment.SetEnvironmentVariable("ROO_INDUSTRIES_TEST_REPLACE_FAULT", null); }
-            check(failure is null && File.Exists(path) && OperationFiles.Read<Snapshot>(path).Generation == 2, "A replace that fails after it removed the old file still publishes the new generation: " + failure?.Message);
-            check(!Directory.GetFiles(root, "*.tmp").Any(), "That replace leaves no temporary file behind");
-            File.Delete(path);
+            Directory.CreateDirectory(root);
             var orphan = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
             File.WriteAllText(orphan, JsonSerializer.Serialize(new Snapshot(3, "orphan"), OperationFiles.Json));
             File.SetLastWriteTimeUtc(orphan, DateTime.UtcNow.AddSeconds(-30));

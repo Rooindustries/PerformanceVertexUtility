@@ -161,7 +161,8 @@ try {
      $tail=$tail.Replace("`$Change.outcome = 'applied'","`$Change.outcome = 'applied'; Wait-RooIndustriesInterruptedBoundary (`$control+'-after')")
      [IO.File]::WriteAllText($commonPath,($commonText.Substring(0,$start)+$tail),$utf8)
      $stateInstrumented=$stateText.Replace('$stream.Flush($true)',"`$stream.Flush(`$true); Wait-RooIndustriesInterruptedBoundary 'backup-flushed'")
-     $stateInstrumented=$stateInstrumented.Replace('[IO.File]::Replace($temporary,$full,[System.Management.Automation.Language.NullString]::Value)',"Wait-RooIndustriesInterruptedBoundary 'backup-replacing'; [IO.File]::Replace(`$temporary,`$full,[System.Management.Automation.Language.NullString]::Value); Wait-RooIndustriesInterruptedBoundary 'backup-replaced'")
+     $move='[Microsoft.VisualBasic.FileIO.FileSystem]::MoveFile($temporary, $full, $true)'
+     $stateInstrumented=$stateInstrumented.Replace($move,"if(`$current.Exists){Wait-RooIndustriesInterruptedBoundary 'backup-replacing'}; $move; if(`$current.Exists){Wait-RooIndustriesInterruptedBoundary 'backup-replaced'}")
      [IO.File]::WriteAllText($statePath,$stateInstrumented,$utf8)
      $app=StartApply $settings ($name+'-apply');$script=ScriptOf $app;$deadline=[DateTime]::UtcNow.AddSeconds(120)
      while(-not(Test-Path -LiteralPath $marker)){if($script.process.HasExited -or [DateTime]::UtcNow -gt $deadline){throw ('The real apply never reached '+$point)};Start-Sleep -Milliseconds 10}
@@ -196,24 +197,17 @@ try {
  if($Cases -contains 'replace-failure'){
   $statePath=Join-Path $root 'backend\scripts\OperationState.Common.ps1';$stateText=[IO.File]::ReadAllText($statePath);$replaceFailures=@()
   try {
-   foreach($mode in '1176','1177','1177-move'){
+   foreach($mode in @('move')){
     $name='replace-'+$mode;$fixtures=Fixtures $name 1;Profile $fixtures;$before=Before $fixtures;$settings=Settings $name
     try {
-     $code=[int]$mode.Split('-')[0];$hresult=-2147024896+$code
-     $displace=if($code -eq 1176){'[IO.File]::Delete($full)'}else{'[IO.File]::Move($full,$full+''.failed-old'')'}
-     $replace='[IO.File]::Replace($temporary,$full,[System.Management.Automation.Language.NullString]::Value)'
-     if(-not$stateText.Contains($replace)){throw 'The real replacement call was not found'}
-     $instrumented=$stateText.Replace($replace,("if(-not`$global:rooReplaceFailed){`$global:rooReplaceFailed=`$true;"+$displace+"; throw [IO.IOException]::new('Fixture replacement failure', $hresult)}; "+$replace))
-     if($mode -eq '1177-move'){
-      $move='[IO.File]::Move($temporary,$full)';$position=$instrumented.LastIndexOf($move)
-      if($position -ne $instrumented.IndexOf($move)){$instrumented=$instrumented.Insert($position,"throw [IO.IOException]::new('Fixture fallback rename failure', -2147024891); ")}
-     }
+     $move='[Microsoft.VisualBasic.FileIO.FileSystem]::MoveFile($temporary, $full, $true)'
+     if(-not$stateText.Contains($move)){throw 'The real replacement call was not found'}
+     $instrumented=$stateText.Replace($move,("if(`$current.Exists -and -not`$global:rooReplaceFailed){`$global:rooReplaceFailed=`$true; throw [IO.IOException]::new('Fixture replacement failure')}; "+$move))
      [IO.File]::WriteAllText($statePath,$instrumented,$utf8)
      $apply=Service 'apply' $settings ($name+'-apply')
      $changed=(Changed $fixtures).Count;Save ($name+'-state') @{changed=$changed;recoveryPath=$apply.result.RecoveryPath}
      if($changed -ne 1){throw ('The replacement failure did not follow a real process change: '+$mode)}
      if(-not$apply.result.RecoveryPath){throw ('Replacement failure lost the restore point: '+$mode)}
-     if($mode -eq '1177-move' -and -not$apply.result.Error -and [string]$apply.result.Value -notmatch 'Fixture fallback rename failure'){throw 'The failed fallback rename was not reported'}
      [IO.File]::WriteAllText($statePath,$stateText,$utf8)
      $null=Offered $settings ($name+'-relaunch');$results[$name]=RestoreAll $fixtures $before $settings ($name+'-restore')
     }catch{$replaceFailures+=($mode+': '+$_.Exception.Message);$results[$name]=$_.Exception.Message}

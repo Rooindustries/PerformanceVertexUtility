@@ -36,7 +36,10 @@ function Write-JsonFile {
         $Value | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $temp -Encoding UTF8
         $stream = [IO.File]::Open($temp, [IO.FileMode]::Open, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None)
         try { $stream.Flush($true) } finally { $stream.Dispose() }
-        if ([IO.File]::Exists($Path)) { [IO.File]::Replace($temp, $Path, [NullString]::Value) } else { [IO.File]::Move($temp, $Path) }
+        $current = [IO.FileInfo]::new($Path)
+        if ($current.Exists) { [IO.File]::SetCreationTimeUtc($temp, $current.CreationTimeUtc) }
+        Add-Type -AssemblyName Microsoft.VisualBasic
+        [Microsoft.VisualBasic.FileIO.FileSystem]::MoveFile($temp, $Path, $true)
     } finally {
         if ([IO.File]::Exists($temp)) { [IO.File]::Delete($temp) }
     }

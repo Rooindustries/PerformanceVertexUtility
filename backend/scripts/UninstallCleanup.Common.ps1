@@ -102,8 +102,10 @@ function Write-RooIndustriesCleanupJournal {
         $bytes = [System.Text.Encoding]::UTF8.GetBytes(($Value | ConvertTo-Json -Depth 32))
         $stream = [System.IO.File]::Open($temporary, [System.IO.FileMode]::CreateNew, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None)
         try { $stream.Write($bytes, 0, $bytes.Length); $stream.Flush($true) } finally { $stream.Dispose() }
-        if (Test-Path -LiteralPath $Path) { [System.IO.File]::Replace($temporary, $Path, [System.Management.Automation.Language.NullString]::Value) }
-        else { [System.IO.File]::Move($temporary, $Path) }
+        $current = [System.IO.FileInfo]::new($Path)
+        if ($current.Exists) { [System.IO.File]::SetCreationTimeUtc($temporary, $current.CreationTimeUtc) }
+        Add-Type -AssemblyName Microsoft.VisualBasic
+        [Microsoft.VisualBasic.FileIO.FileSystem]::MoveFile($temporary, $Path, $true)
     } finally {
         if (Test-Path -LiteralPath $temporary) { Remove-Item -LiteralPath $temporary -Force }
     }

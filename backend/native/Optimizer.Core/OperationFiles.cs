@@ -63,7 +63,6 @@ public static class OperationFiles
         path = Path.GetFullPath(path);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
-        var settled = false;
         try
         {
             using (var output = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
@@ -71,22 +70,11 @@ public static class OperationFiles
                 JsonSerializer.Serialize(output, value, Json);
                 output.Flush(flushToDisk: true);
             }
-            try
-            {
-#if GOVERNOR_TEST_HOOKS
-                if (Environment.GetEnvironmentVariable("ROO_INDUSTRIES_TEST_REPLACE_FAULT") == "1177" && File.Exists(path)) { File.Delete(path); throw new IOException("The replacement file could not be moved into place.", unchecked((int)0x80070499)); }
-#endif
-                if (File.Exists(path)) File.Replace(temporary, path, null, ignoreMetadataErrors: true);
-                else File.Move(temporary, path);
-            }
-            catch (IOException error) when ((error.HResult & 0xffff) is 1176 or 1177)
-            {
-                if (File.Exists(path) || !File.Exists(temporary)) throw;
-                File.Move(temporary, path);
-            }
-            settled = true;
+            var current = new FileInfo(path);
+            if (current.Exists) File.SetCreationTimeUtc(temporary, current.CreationTimeUtc);
+            File.Move(temporary, path, overwrite: true);
         }
-        finally { if (settled || File.Exists(path)) File.Delete(temporary); }
+        finally { File.Delete(temporary); }
     }
 
     public static string? ExternalPathProblem(string? path)

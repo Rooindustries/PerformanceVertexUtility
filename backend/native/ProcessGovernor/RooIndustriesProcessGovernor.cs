@@ -13,6 +13,8 @@ public sealed class RooIndustriesProcessGovernor
     private const string ProductName = "Roo Industries Optimization Suite";
     private const string ActionId = "performance.nativeGovernor.startSession";
     private const int ProcessIoPriorityInformationClass = 33;
+    private const int MoveFileReplaceExisting = 0x1;
+    private const int MoveFileWriteThrough = 0x8;
 
     [DllImport("user32.dll")]
     private static extern IntPtr GetForegroundWindow();
@@ -25,6 +27,9 @@ public sealed class RooIndustriesProcessGovernor
 
     [DllImport("ntdll.dll")]
     private static extern int NtSetInformationProcess(IntPtr process, int informationClass, ref int information, int informationLength);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern bool MoveFileEx(string existingFileName, string newFileName, int flags);
 
     [DllImport("gdi32.dll")]
     private static extern int D3DKMTGetProcessSchedulingPriorityClass(IntPtr process, out int priorityClass);
@@ -2057,8 +2062,12 @@ public sealed class RooIndustriesProcessGovernor
                 stream.Write(bytes, 0, bytes.Length);
                 stream.Flush(true);
             }
-            if (File.Exists(path)) File.Replace(temporary, path, null);
-            else File.Move(temporary, path);
+            FileInfo current = new FileInfo(path);
+            if (current.Exists) File.SetCreationTimeUtc(temporary, current.CreationTimeUtc);
+            if (!MoveFileEx(temporary, path, MoveFileReplaceExisting | MoveFileWriteThrough))
+            {
+                Marshal.ThrowExceptionForHR(Marshal.GetHRForLastWin32Error());
+            }
         }
         finally { if (File.Exists(temporary)) File.Delete(temporary); }
     }
