@@ -35,7 +35,8 @@ if (args is ["--child-env", var fixtureScenario, var fixtureMode, var fixtureDir
 if (args is ["--control-reads"]) { ControlReadFaultChecks.Run(Check); MissingCommandChecks.Run(Check); return; }
 if (args is ["--mitigation-rows", var mitigationRepo, var mitigationEvidence]) { MitigationCommandChecks.RunReal(Check, mitigationRepo, mitigationEvidence); return; }
 if (args is ["--security-rows", var securityRepo, var securityEvidence]) { MissingCommandChecks.RunReal(Check, securityRepo, securityEvidence); return; }
-if (args is ["--operation-files"]) { OperationFileChecks.Run(Check); ReplaceRaceChecks.Run(Check); ReplaceFaultChecks.Run(Check); return; }
+if (args is ["--killed-writer-child", var killedPath]) { KilledWriterChecks.Child(killedPath); return; }
+if (args is ["--operation-files"]) { OperationFileChecks.Run(Check); ReplaceRaceChecks.Run(Check); ReplaceFaultChecks.Run(Check); KilledWriterChecks.Run(Check); return; }
 if (args is ["--branding"]) { BrandCompatibilityChecks.Run(Check); return; }
 if (args is ["--marked-root-start", var markedParent, var markedHive, .. var markedOptions]) { DataFolderChecks.MarkedRootChild(markedParent, markedHive, markedOptions.Contains("acknowledge")); return; }
 if (args is ["--data-folder", .. var scenarios]) { DataFolderChecks.Run(Check, scenarios); return; }
@@ -233,6 +234,7 @@ if (processOnly) return;
 OperationFileChecks.Run(Check);
 ReplaceRaceChecks.Run(Check);
 ReplaceFaultChecks.Run(Check);
+KilledWriterChecks.Run(Check);
 RegistryChecks.Run(Check);
 RegistryConflictChecks.Run(Check);
 RegistryRefusalChecks.Run(Check);

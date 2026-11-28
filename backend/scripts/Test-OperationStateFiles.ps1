@@ -26,6 +26,33 @@ try {
     $writes=[int](Receive-Job -Job $writer -Wait)
     Write-Output ('Operation-state race: writes='+$writes+' reads='+$reads+' failures='+$failures+' '+$failure)
     Assert ($writes -gt 50 -and $reads -gt 50 -and $failures -eq 0) 'PowerShell readers never fail while a writer atomically replaces the same file'
+    $killed=Join-Path $root 'killed.json'
+    Write-RooIndustriesOperationJson @{generation=0;check=0} $killed
+    $common=(Join-Path $PSScriptRoot 'OperationState.Common.ps1').Replace("'","''")
+    $target=$killed.Replace("'","''")
+    $write="Write-RooIndustriesOperationJson @{generation=`$n;check=`$n} '$target'"
+    $loop=". '$common'; for(`$n=1;;`$n++){$write; if(`$n -eq 1){[Console]::Out.WriteLine('ready')}}"
+    $encoded=[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($loop))
+    $samples=0;$absent=0;$kills=0;$unreadable=0;$lost=''
+    for($attempt=0;$attempt -lt 60;$attempt++){
+        $shell="$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
+        $start=[Diagnostics.ProcessStartInfo]::new($shell,"-NoProfile -NonInteractive -EncodedCommand $encoded")
+        $start.UseShellExecute=$false;$start.RedirectStandardOutput=$true;$start.CreateNoWindow=$true
+        $child=[Diagnostics.Process]::Start($start)
+        try {
+            if($child.StandardOutput.ReadLine() -ne 'ready'){throw 'The killed writer never reached its loop'}
+            $until=[DateTime]::UtcNow.AddMilliseconds((Get-Random -Minimum 1 -Maximum 200))
+            while([DateTime]::UtcNow -lt $until){$samples++;if(-not [IO.File]::Exists($killed)){$absent++}}
+        } finally {if(-not $child.HasExited){$child.Kill()};$child.WaitForExit();$child.Dispose()}
+        $kills++
+        try {
+            $saved=[IO.File]::ReadAllText($killed)|ConvertFrom-Json
+            if([int]$saved.check -ne [int]$saved.generation){throw 'The saved generation is mixed'}
+        } catch {$unreadable++;$lost=$_.Exception.Message}
+    }
+    Write-Output ('Killed writer: samples='+$samples+' absent='+$absent+' kills='+$kills+' unreadable='+$unreadable+' '+$lost)
+    Assert ($samples -gt 1000 -and $absent -eq 0) 'A file being replaced by another process is never missing, even for an instant'
+    Assert ($kills -eq 60 -and $unreadable -eq 0) 'A writer killed at any point of a replace leaves a whole readable generation'
     $missing=$false
     try{Read-RooIndustriesOperationJson (Join-Path $root 'absent.json')|Out-Null}catch{$missing=$true}
     Assert $missing 'A missing operation file still fails after its bounded wait'
