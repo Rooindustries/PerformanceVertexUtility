@@ -454,6 +454,9 @@ def reparse_walk_negative_controls():
             ('a shortened long option', 'sh', 'rm --recur -f a', None, 'program', 'rm', True),
             ('a recursive short switch', 'sh', 'ls -lR a', None, 'program', 'ls', True),
             ('a switch joined to its command', 'cmd', 'attrib/s a', None, 'program', 'attrib/s', True),
+            ('a tree tool inside the command text of a shell', 'ps1', 'cmd.exe /c "echo x & attrib /s a"', None, 'program', 'cmd.exe', True),
+            ('a link tool inside the command text of a shell started from Python', 'py', "import subprocess\nsubprocess.run(['powershell', '-c', 'echo x; New-Item -ItemType Junction a'])", 'subprocess.run(', 'program', 'powershell', True),
+            ('a shell whose command text names no listed tool', 'ps1', 'cmd.exe /c "echo x & ver"', None, 'program', 'cmd.exe', False),
             ('a link tool on a later argument line', 'py', "import subprocess\nsubprocess.run(['powershell', '-c', 'zqvx', a,\n    'mklink'])", "subprocess.run(['powershell', '-c', 'zqvx', a,", 'program', 'powershell', True),
             ('a first word that makes a tree tool', 'sh', 'git clean -fdx a', None, 'program', 'git', True),
             ('an unreadable file', 'ps1', 'function {', None, 'file', '', True),
@@ -550,7 +553,7 @@ def reparse_walk_negative_controls():
 
 
 def reparse_name_controls(module):
-    named = module['NAMED']
+    named = module['CLASSES']['names']
     wrap = {'ps1': "$x = '{0}'", 'py': "x = '{0}'", 'cs': '    static string X{1} = "{0}";', 'sh': ": '{0}'", 'cmd': 'echo {0}', 'yml': "          : '{0}'", 'targets': '    <Message Text="{0}" />'}
     head = {'cs': 'static class Control {', 'yml': 'jobs:\n  j:\n    runs-on: ubuntu-24.04\n    steps:\n      - run: |', 'targets': '<Project><Target Name="T">'}
     tail = {'cs': '}', 'targets': '</Target></Project>'}

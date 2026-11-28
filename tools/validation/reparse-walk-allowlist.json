@@ -6259,6 +6259,7 @@
   {"file": "tools/validation/check_reparse_walks.py", "line": "elif isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign, ast.NamedExpr)) and getattr(node, 'value', None) is not None:", "kind": "call the table does not list", "starts": "builtins.getattr"},
   {"file": "tools/validation/check_reparse_walks.py", "line": "with tempfile.TemporaryDirectory() as folder:", "kind": "tree delete, does not follow links (measured)", "starts": "tempfile.temporarydirectory"},
   {"file": "tools/validation/check_reparse_walks.py", "line": "with tempfile.TemporaryDirectory() as folder:", "kind": "tree delete, does not follow links (measured)", "starts": "tempfile.temporarydirectory"},
+  {"file": "tools/validation/check_reparse_walks.py", "line": "sys.path.insert(0, str(HERE))", "kind": "call the table does not list", "starts": "sys.path.insert"},
   {"file": "tools/validation/check_tweak_reads.py", "line": "with tempfile.TemporaryDirectory() as folder:", "kind": "tree delete, does not follow links (measured)", "starts": "tempfile.temporarydirectory"},
   {"file": "tools/validation/check_workflow_runners.py", "line": "mark = getattr(error, \"problem_mark\", None)", "kind": "call the table does not list", "starts": "builtins.getattr"},
   {"file": "tools/validation/local_tree.py", "line": "return stat.S_ISLNK(info.st_mode) or getattr(info, 'st_file_attributes', 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT", "kind": "call the table does not list", "starts": "builtins.getattr"},
