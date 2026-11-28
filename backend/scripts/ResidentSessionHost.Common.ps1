@@ -39,17 +39,21 @@ function Get-RooIndustriesBackendScriptProcessMeasurement {
 function Start-RooIndustriesPowerShellFloor {
     $info = New-Object System.Diagnostics.ProcessStartInfo
     $info.FileName = (Get-Process -Id $PID).Path
-    $command = "[Console]::Out.WriteLine('ready'); [void][Console]::In.ReadLine()"
+    $modules = 'Microsoft.PowerShell.Management, Microsoft.PowerShell.Utility'
+    $report = "[Console]::Out.WriteLine((Get-Module | Sort-Object Name).Name -join ',')"
+    $command = "Import-Module $modules; $report; [void][Console]::In.ReadLine()"
     $info.Arguments = "-NoLogo -NoProfile -NonInteractive -Command `"$command`""
     $info.UseShellExecute = $false
     $info.CreateNoWindow = $true
     $info.RedirectStandardInput = $true
     $info.RedirectStandardOutput = $true
     $floor = [System.Diagnostics.Process]::Start($info)
-    if ($floor.StandardOutput.ReadLine() -ne 'ready') {
+    $loaded = $floor.StandardOutput.ReadLine()
+    if ($loaded -ne ($modules -replace ' ', '')) {
         Stop-RooIndustriesPowerShellFloor $floor
-        throw 'The PowerShell floor process did not start.'
+        throw "The PowerShell floor process did not start with only its built-in modules: $loaded"
     }
+    $floor | Add-Member -NotePropertyName LoadedModules -NotePropertyValue @($loaded -split ',')
     return $floor
 }
 
@@ -60,6 +64,7 @@ function Get-RooIndustriesPowerShellFloorMeasurement {
     return [pscustomobject]@{
         processId = [int]$Floor.Id
         executablePath = $Floor.StartInfo.FileName
+        loadedModules = @($Floor.LoadedModules)
         privateBytes = [int64]$Floor.PrivateMemorySize64
     }
 }
@@ -126,7 +131,7 @@ function New-RooIndustriesBackendBudgetEvaluation {
     if ($null -eq $BudgetProfile) { return $null }
     $budgets = Get-RooIndustriesPropertyValue $BudgetProfile 'budgets' $null
     $cpuMax = [double](Get-RooIndustriesPropertyValue $budgets 'idleBackendCpuAveragePercentMax' 0.5)
-    $overFloorMax = [int64](Get-RooIndustriesPropertyValue $budgets 'backendPrivateBytesOverPowerShellFloorMax' 24MB)
+    $overFloorMax = [int64](Get-RooIndustriesPropertyValue $budgets 'backendPrivateBytesOverPowerShellFloorMax' 16MB)
     $stateMax = [int64](Get-RooIndustriesPropertyValue $budgets 'backendStateEntryCountMaxAfterValidation' 0)
     $idleWithinBudget = ($AverageCpuPercent -le $cpuMax)
     $privateOverFloor = $PrivateBytes - $FloorPrivateBytes

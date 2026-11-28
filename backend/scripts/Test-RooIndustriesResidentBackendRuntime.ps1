@@ -81,17 +81,37 @@ function Test-PowerShellFloor {
     $floor = $Measurement.powerShellFloor
     $floorPid = [int]$floor.processId
     $sameRuntime = [string]$floor.executablePath -eq (Get-Process -Id $PID).Path
+    $builtInModules = 'Microsoft.PowerShell.Management,Microsoft.PowerShell.Utility'
+    $builtInOnly = (@($floor.loadedModules) -join ',') -eq $builtInModules
     $separate = $floorPid -gt 0 -and $floorPid -ne $HostProcessId
     $below = [int64]$floor.privateBytes -gt 0 -and [int64]$floor.privateBytes -lt [int64]$Measurement.privateBytes
     $ownCost = [int64]$Measurement.privateBytes - [int64]$floor.privateBytes
     $consistent = [int64]$Measurement.privateBytesOverPowerShellFloor -eq $ownCost
     $ended = $null -eq (Get-Process -Id $floorPid -ErrorAction SilentlyContinue)
     $numbers = "floor $($floor.privateBytes), host $($Measurement.privateBytes), own cost $ownCost bytes"
-    if ($sameRuntime -and $separate -and $below -and $consistent -and $ended) {
+    if ($sameRuntime -and $builtInOnly -and $separate -and $below -and $consistent -and $ended) {
         Add-Pass "$Label measured a separate PowerShell floor: $numbers"
     } else {
-        $flags = "pid=$floorPid host=$HostProcessId sameRuntime=$sameRuntime consistent=$consistent ended=$ended"
+        $flags = "pid=$floorPid host=$HostProcessId sameRuntime=$sameRuntime builtInOnly=$builtInOnly"
+        $flags += " consistent=$consistent ended=$ended"
         Add-Failure "$Label PowerShell floor is not a separate bare process: $numbers, $flags"
+    }
+}
+
+function Test-IdleWindow {
+    param(
+        [object]$Window,
+        [object[]]$Samples,
+        [double]$ElapsedSeconds,
+        [string]$Label
+    )
+    $firstPoll = @($Samples)[0]
+    $startsAfterFirstPoll = [double]$Window.startedAtElapsedSeconds -eq [double]$firstPoll.elapsedRuntimeSeconds
+    $inside = [double]$Window.seconds -gt 0 -and [double]$Window.seconds -lt $ElapsedSeconds
+    if ($Window.excludesStartup -eq $true -and @($Samples).Count -ge 2 -and $startsAfterFirstPoll -and $inside) {
+        Add-Pass "$Label idle window started after the first poll at $($Window.startedAtElapsedSeconds)s"
+    } else {
+        Add-Failure "$Label idle window does not start after the first poll: $($Window | ConvertTo-Json -Compress)"
     }
 }
 
@@ -164,6 +184,7 @@ try {
     }
     $footprintPid = [int]$footprint.backendScriptProcess.processId
     Test-PowerShellFloor $footprint.backendScriptProcess $footprintPid 'Footprint measurement'
+    Test-IdleWindow $footprint.idleWindow $footprint.samples $footprint.elapsedRuntimeSeconds 'Footprint measurement'
     Test-BudgetEvaluation $footprint.budgetEvaluation 'Footprint measurement'
 
     $residentOut = Join-Path $tempRoot 'resident-output.json'
@@ -210,6 +231,8 @@ try {
         Add-Failure 'Resident host dependency proof was not clean'
     }
     Test-PowerShellFloor $resident.footprint ([int]$resident.host.processId) 'Resident host idle monitor'
+    $residentElapsed = $resident.footprint.elapsedRuntimeSeconds
+    Test-IdleWindow $resident.footprint.idleWindow $resident.samples $residentElapsed 'Resident host idle monitor'
     Test-BudgetEvaluation $resident.footprint.budgetEvaluation 'Resident host idle monitor'
 
     $status = & (Join-Path $PSScriptRoot 'Get-RooIndustriesResidentHostStatus.ps1') -ProcessId $PID | ConvertFrom-Json

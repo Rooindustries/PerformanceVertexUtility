@@ -14,6 +14,8 @@ try {
     if ($MaxDurationSeconds -gt 300) { $MaxDurationSeconds = 300 }
     if ($PollIntervalMilliseconds -lt 500) { $PollIntervalMilliseconds = 500 }
     if ($PollIntervalMilliseconds -gt 60000) { $PollIntervalMilliseconds = 60000 }
+    $halfDurationMs = $MaxDurationSeconds * 500
+    if ($PollIntervalMilliseconds -gt $halfDurationMs) { $PollIntervalMilliseconds = $halfDurationMs }
 
     $repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..\..')
     $budget = Get-RooIndustriesBackendBudgetProfile $BudgetProfilePath
@@ -22,10 +24,12 @@ try {
     $startedAtUtc = Get-RooIndustriesUtcStamp
     $process = Get-Process -Id $PID
     $processCountBefore = Get-RooIndustriesBackendProcessCount
-    $before = Get-RooIndustriesBackendScriptProcessMeasurement $process
+    $start = Get-RooIndustriesBackendScriptProcessMeasurement $process
+    $before = $null
+    $windowStartSeconds = 0.0
     $samples = New-Object System.Collections.Generic.List[object]
-    $peakWorkingSetBytes = [int64]$before.workingSetBytes
-    $peakPrivateBytes = [int64]$before.privateBytes
+    $peakWorkingSetBytes = [int64]$start.workingSetBytes
+    $peakPrivateBytes = [int64]$start.privateBytes
     $watch = [System.Diagnostics.Stopwatch]::StartNew()
     $pollIndex = 0
 
@@ -36,18 +40,23 @@ try {
         if ($sleepMs -gt 0) { Start-Sleep -Milliseconds $sleepMs }
         $pollIndex++
         $sample = Get-RooIndustriesBackendScriptProcessMeasurement $process
+        $sampleSeconds = [math]::Round($watch.Elapsed.TotalSeconds, 3)
         if ([int64]$sample.workingSetBytes -gt $peakWorkingSetBytes) { $peakWorkingSetBytes = [int64]$sample.workingSetBytes }
         if ([int64]$sample.privateBytes -gt $peakPrivateBytes) { $peakPrivateBytes = [int64]$sample.privateBytes }
         $samples.Add([pscustomobject]@{
             pollIndex = $pollIndex
             capturedAtUtc = Get-RooIndustriesUtcStamp
-            elapsedRuntimeSeconds = [math]::Round($watch.Elapsed.TotalSeconds, 3)
+            elapsedRuntimeSeconds = $sampleSeconds
             workingSetBytes = $sample.workingSetBytes
             privateBytes = $sample.privateBytes
             cpuSeconds = $sample.cpuSeconds
             handleCount = $sample.handleCount
             handleCountAvailable = $sample.handleCountAvailable
         }) | Out-Null
+        if ($null -eq $before) {
+            $before = $sample
+            $windowStartSeconds = $sampleSeconds
+        }
     }
 
     $watch.Stop()
@@ -58,7 +67,7 @@ try {
     $processCountAfter = Get-RooIndustriesBackendProcessCount
     if ([int64]$after.workingSetBytes -gt $peakWorkingSetBytes) { $peakWorkingSetBytes = [int64]$after.workingSetBytes }
     if ([int64]$after.privateBytes -gt $peakPrivateBytes) { $peakPrivateBytes = [int64]$after.privateBytes }
-    $delta = Get-RooIndustriesBackendFootprintDelta $before $after $watch.Elapsed.TotalSeconds
+    $delta = Get-RooIndustriesBackendFootprintDelta $before $after ($watch.Elapsed.TotalSeconds - $windowStartSeconds)
     $stateEntryCount = Get-RooIndustriesBackendStateEntryCount $repoRoot.Path
     $budgetEvaluation = if ($budget.profile) {
         New-RooIndustriesBackendBudgetEvaluation `
@@ -72,7 +81,13 @@ try {
         $null
     }
     $footprint = [pscustomobject]@{
-        elapsedRuntimeSeconds = $delta.elapsedRuntimeSeconds
+        elapsedRuntimeSeconds = [math]::Round($watch.Elapsed.TotalSeconds, 3)
+        idleWindow = [pscustomobject]@{
+            excludesStartup = $true
+            startsAfterPollIndex = 1
+            startedAtElapsedSeconds = $windowStartSeconds
+            seconds = $delta.elapsedRuntimeSeconds
+        }
         cpuTimeDeltaSeconds = $delta.cpuTimeDeltaSeconds
         averageCpuPercent = $delta.averageCpuPercent
         processorCount = $delta.processorCount

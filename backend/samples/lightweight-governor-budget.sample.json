@@ -7,7 +7,8 @@
   "risk": "low",
   "budgets": {
     "idleBackendCpuAveragePercentMax": 0.5,
-    "backendPrivateBytesOverPowerShellFloorMax": 25165824,
+    "backendPrivateBytesOverPowerShellFloorMax": 16777216,
+    "backendPrivateBytesOverPowerShellFloorRule": "The memory budget is what the backend's own code adds on top of what Windows PowerShell costs on this PC to run any script: a PowerShell process started in the same run with only its built-in Management and Utility modules loaded.",
     "backendStateEntryCountMaxAfterValidation": 0,
     "pollIntervalMillisecondsMin": 500,
     "defaultResidentMaxDurationSeconds": 5,

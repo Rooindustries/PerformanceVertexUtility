@@ -10,6 +10,12 @@
   "sampleDurationSeconds": 3,
   "pollIntervalMilliseconds": 1000,
   "elapsedRuntimeSeconds": 3.004,
+  "idleWindow": {
+    "excludesStartup": true,
+    "startsAfterPollIndex": 1,
+    "startedAtElapsedSeconds": 1.001,
+    "seconds": 2.003
+  },
   "currentProcessCount": 214,
   "processCount": {
     "before": 214,
@@ -25,13 +31,17 @@
     "powerShellFloor": {
       "processId": 12004,
       "executablePath": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
-      "privateBytes": 36700160
+      "loadedModules": [
+        "Microsoft.PowerShell.Management",
+        "Microsoft.PowerShell.Utility"
+      ],
+      "privateBytes": 41943040
     },
-    "privateBytesOverPowerShellFloor": 12582912,
+    "privateBytesOverPowerShellFloor": 7340032,
     "cpuTimeSecondsBefore": 0.3125,
     "cpuTimeSecondsAfter": 0.328125,
     "cpuTimeDeltaSeconds": 0.015625,
-    "averageCpuPercent": 0.0163,
+    "averageCpuPercent": 0.0244,
     "processorCount": 32,
     "handleCount": 612,
     "handleCountAvailable": true
@@ -40,10 +50,10 @@
   "budgetEvaluation": {
     "profileId": "lightweight-governor-budget",
     "idleBackendCpuAveragePercentMax": 0.5,
-    "backendPrivateBytesOverPowerShellFloorMax": 25165824,
+    "backendPrivateBytesOverPowerShellFloorMax": 16777216,
     "privateBytes": 49283072,
-    "powerShellFloorPrivateBytes": 36700160,
-    "privateBytesOverPowerShellFloor": 12582912,
+    "powerShellFloorPrivateBytes": 41943040,
+    "privateBytesOverPowerShellFloor": 7340032,
     "backendStateEntryCountMaxAfterValidation": 0,
     "persistentUiProcessRequired": false,
     "withinBudget": true,
