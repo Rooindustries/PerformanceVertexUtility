@@ -507,7 +507,7 @@ try {
             Set-RooIndustriesProcessPolicyStoredRule -StateRoot $StateRoot -Rule $rule | Out-Null
             Add-RooIndustriesProcessPolicyAuditRows -StateRoot $StateRoot -Rows @($auditRows.ToArray()) | Out-Null
             $status = if ($changedItems.Count -gt 0 -and $skippedItems.Count -gt 0) { 'partial' } elseif ($changedItems.Count -gt 0) { 'applied' } elseif ($skippedItems.Count -gt 0) { 'skipped' } else { 'noChange' }
-            Write-LifecycleOutput -Status $status -Rule $rule -Preview $previewEntries -ChangedItems @($changedItems.ToArray()) -SkippedItems @($skippedItems.ToArray()) -Backup (if ($backupInfo) { $backupInfo.manifest } else { $null }) -AuditRows @($auditRows.ToArray())
+            Write-LifecycleOutput -Status $status -Rule $rule -Preview $previewEntries -ChangedItems @($changedItems.ToArray()) -SkippedItems @($skippedItems.ToArray()) -Backup $(if ($backupInfo) { $backupInfo.manifest } else { $null }) -AuditRows @($auditRows.ToArray())
         }
         'status' {
             $store = Read-RooIndustriesProcessPolicyRuleStore $StateRoot
@@ -570,13 +570,13 @@ try {
             Set-RooIndustriesProcessPolicyObjectProperty $rule 'removed' $true
             Set-LifecycleRuleTimestamp $rule 'removedAtUtc'
             Set-RooIndustriesProcessPolicyStoredRule -StateRoot $StateRoot -Rule $rule | Out-Null
-            $auditRows.Add((New-RooIndustriesProcessPolicyAuditRow -Action 'remove' -RuleId ([string](Get-RooIndustriesPropertyValue $rule 'id' '')) -Target $null -Control 'ruleLifecycle' -BeforeValue $beforeStatus -AfterValue 'removed' -Reason (if ([string]::IsNullOrWhiteSpace($Reason)) { 'Rule was tombstoned after active effects were restored or found inactive.' } else { $Reason }) -ProtectionCategory (Get-RooIndustriesPropertyValue $rule 'protectionCategory' 'unknown') -RestoreAvailable $false -Outcome 'removed' -DryRun $false)) | Out-Null
+            $auditRows.Add((New-RooIndustriesProcessPolicyAuditRow -Action 'remove' -RuleId ([string](Get-RooIndustriesPropertyValue $rule 'id' '')) -Target $null -Control 'ruleLifecycle' -BeforeValue $beforeStatus -AfterValue 'removed' -Reason $(if ([string]::IsNullOrWhiteSpace($Reason)) { 'Rule was tombstoned after active effects were restored or found inactive.' } else { $Reason }) -ProtectionCategory (Get-RooIndustriesPropertyValue $rule 'protectionCategory' 'unknown') -RestoreAvailable $false -Outcome 'removed' -DryRun $false)) | Out-Null
             Add-RooIndustriesProcessPolicyAuditRows -StateRoot $StateRoot -Rows @($auditRows.ToArray()) | Out-Null
             Write-LifecycleOutput -Status 'removed' -Rule $rule -RestoredItems @(if ($restoreResult) { Get-RooIndustriesPropertyArray $restoreResult 'restoredItems' } else { @() }) -SkippedItems @(if ($restoreResult) { Get-RooIndustriesPropertyArray $restoreResult 'skippedItems' } else { @() }) -AuditRows @($auditRows.ToArray())
         }
     }
 } catch {
-    $error = New-RooIndustriesIssue 'PROCESS_POLICY_RULE_LIFECYCLE_FAILED' $_.Exception.Message 'error' 'performance.policy' $RuleId $true 'Review the rule id, profile path, runtime state root, and confirmation flags.' $null
-    Write-LifecycleOutput -Status 'failed' -Errors @($error)
+    $issue = New-RooIndustriesIssue 'PROCESS_POLICY_RULE_LIFECYCLE_FAILED' $_.Exception.Message 'error' 'performance.policy' $RuleId $true 'Review the rule id, profile path, runtime state root, and confirmation flags.' $null
+    Write-LifecycleOutput -Status 'failed' -Errors @($issue)
     exit 1
 }

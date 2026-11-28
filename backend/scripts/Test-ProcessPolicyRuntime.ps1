@@ -589,6 +589,33 @@ try {
     Add-Failure "Persistent policy status notFound check failed: $($_.Exception.Message)"
 }
 
+$lifecycleRoot = Join-Path ([System.IO.Path]::GetTempPath()) "roo-industries-rule-lifecycle-$([guid]::NewGuid().ToString('N'))"
+try {
+    $lifecycle = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $PSScriptRoot 'Invoke-ProcessPolicyRuleLifecycle.ps1'))
+    $ruleId = 'rule-contoso-launcher-helper-balanced'
+    $samplePath = Join-Path $repoRoot 'backend\samples\process-policy-rule.sample.json'
+    & powershell.exe @lifecycle -Action preview -RulePath $samplePath -StateRoot $lifecycleRoot | Out-Null
+    & powershell.exe @lifecycle -Action approve -RuleId $ruleId -StateRoot $lifecycleRoot | Out-Null
+    $applied = & powershell.exe @lifecycle -Action apply -RuleId $ruleId -StateRoot $lifecycleRoot -ConfirmApply | ConvertFrom-Json
+    $removed = & powershell.exe @lifecycle -Action remove -RuleId $ruleId -StateRoot $lifecycleRoot -ConfirmApply | ConvertFrom-Json
+    $lastAudit = Get-Content -LiteralPath $removed.auditPath | Select-Object -Last 1 | ConvertFrom-Json
+    if ($applied.status -eq 'noChange' -and $removed.status -eq 'removed' -and $lastAudit.action -eq 'remove') {
+        Add-Pass 'Rule lifecycle apply and remove finish and remove writes its audit row'
+    } else {
+        Add-Failure "Rule lifecycle apply=$($applied.status) remove=$($removed.status) last audit=$($lastAudit.action)"
+    }
+    $missing = & powershell.exe @lifecycle -Action apply -RuleId 'missing-rule' -StateRoot $lifecycleRoot -ConfirmApply | ConvertFrom-Json
+    if ($missing.status -eq 'failed' -and $missing.errors[0].code -eq 'PROCESS_POLICY_RULE_LIFECYCLE_FAILED') {
+        Add-Pass 'Rule lifecycle reports a failed action as a failed envelope'
+    } else {
+        Add-Failure "Rule lifecycle failed action returned status $($missing.status)"
+    }
+} catch {
+    Add-Failure "Rule lifecycle check failed: $($_.Exception.Message)"
+} finally {
+    if (Test-Path -LiteralPath $lifecycleRoot) { Remove-Item -LiteralPath $lifecycleRoot -Recurse -Force }
+}
+
 $stateBefore = Get-StateEntryCount
 $frontendBefore = @(Get-FrontendProcessIds)
 $backendHostBefore = @(Get-BackendScriptHostProcesses)
