@@ -64,8 +64,8 @@ public static class RuntimeEnvironment
     private static readonly string[] DeveloperNames = ["DOTNET_ROOT", "DOTNET_ROOT_X64", "DOTNET_ROOT_X86", "DOTNET_ROOT_ARM64", "DOTNET_ROOT(x86)"];
     private static string? _protectedTemp;
 
-    private static string ModulePath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "WindowsPowerShell", "Modules") + ";" +
-        Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "Modules");
+    private static string ModulePath => Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "Modules") + ";" +
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "WindowsPowerShell", "Modules");
 
     // Windows PowerShell writes progress (such as "Preparing modules for first use") to a redirected error stream as a
     // CLIXML block. Nothing here shows progress, so it stays out of the stream the app reads errors from.
