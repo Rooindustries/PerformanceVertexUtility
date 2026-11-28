@@ -408,8 +408,11 @@ public static class RooIndustriesGovernorDenied {
     Worker 'Sync'|Out-Null
     $session=New-GameSessionPreview
     $sessionRoot=$session.root
-    & $sessionScript -Action Start -PreviewPath $session.file -ReviewHash $session.hash -SessionRoot $sessionRoot -HostDirectory $hostDirectory -DotNetPath $DotNetPath -ConfirmApply|Out-Null
+    $started=& $sessionScript -Action Start -PreviewPath $session.file -ReviewHash $session.hash -SessionRoot $sessionRoot -HostDirectory $hostDirectory -DotNetPath $DotNetPath -ConfirmApply
     $sessionActive=$true
+    $sessionTask=Get-ScheduledTask -TaskName ((@($started) -join "`n"|ConvertFrom-Json).data.taskName)
+    Note 'sessionTask' ([ordered]@{name=$sessionTask.TaskName;priority=$sessionTask.Settings.Priority})
+    Assert ($sessionTask.Settings.Priority -eq 6) 'The protected-session host task is registered at normal priority'
     $sessionRefusal=$null;try {Core 'rule-save' @{rule=$gameRule}|Out-Null} catch {$sessionRefusal=$_.Exception.Message}
     Note 'gameSessionRefusal' $sessionRefusal
     Assert ($sessionRefusal -like 'A game session for RooIndustriesGovernorGame.exe already controls gpuPriority*') 'Saving a rule that overlaps a running game session is refused with a clear message'
@@ -508,10 +511,6 @@ try {[IO.File]::WriteAllText('LEGACY\rules\note.txt','x');$r='allowed'} catch {$
     Worker 'Remove' $legacyRoot|Out-Null
     Assert (Same (Read-Controls $first) $original) 'Removing the migrated governor restores the process'
 
-    $sessionScript=[Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot 'Invoke-ProtectedGameSession.ps1'),[ref]$null,[ref]$null)
-    $sessionSettings=@($sessionScript.FindAll({param($node) $node -is [Management.Automation.Language.CommandAst] -and $node.GetCommandName() -eq 'New-ScheduledTaskSettingsSet'},$true))
-    $sessionPriority=@($sessionSettings|ForEach-Object {$elements=$_.CommandElements;for($i=0;$i -lt $elements.Count-1;$i++){if($elements[$i] -is [Management.Automation.Language.CommandParameterAst] -and $elements[$i].ParameterName -eq 'Priority'){$elements[$i+1].Extent.Text}}})
-    Assert ($sessionSettings.Count -eq 1 -and $sessionPriority.Count -eq 1 -and $sessionPriority[0] -eq '6') 'The protected-session host task is registered at normal priority'
 } finally {
     if($moved -and (Test-Path -LiteralPath $moved)){if(Test-Path -LiteralPath $policyRoot){Remove-Item -LiteralPath $policyRoot -Recurse -Force};[IO.Directory]::Move($moved,$policyRoot)}
     if(Test-Path -LiteralPath (Join-Path $hostDirectory 'Optimizer.Host.dll')){
