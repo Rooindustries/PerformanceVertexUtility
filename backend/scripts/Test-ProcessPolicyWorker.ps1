@@ -46,7 +46,8 @@ function Get-NewProcessCheck([Diagnostics.Process]$Process){
     $late=@($others|Where-Object {-not (& $before $_.previousCheckStartedAtUtc)})
     $gpu=@($records|Where-Object {$_.field -eq 'gpuPriority'})
     $gpuRefusedJustBefore=$gpu.Count -eq 1 -and $gpu[0].failedCheckStartedAtUtc -and [string]$gpu[0].previousCheckStartedAtUtc -eq [string]$gpu[0].failedCheckStartedAtUtc
-    return [ordered]@{created=$created.ToString('o');checks=$checks;gpu=$gpu
+    $gpuTimes=@($gpu|ForEach-Object {[ordered]@{previous=$_.previousCheckStartedAtUtc;refused=$_.failedCheckStartedAtUtc;check=$_.checkStartedAtUtc}})
+    return [ordered]@{created=$created.ToString('o');checks=$checks;gpu=$gpuTimes
         sevenInFirstCheck=($others.Count -eq 7 -and $checks.Count -eq 1 -and $late.Count -eq 0)
         gpuOnTime=($gpu.Count -eq 1 -and ((& $before $gpu[0].previousCheckStartedAtUtc) -or $gpuRefusedJustBefore))
         processorSeconds=($records|Measure-Object -Property processorSecondsToApply -Maximum).Maximum}
