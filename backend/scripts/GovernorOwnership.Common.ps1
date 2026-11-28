@@ -280,7 +280,7 @@ function Enter-RooIndustriesGovernorGate([double]$Seconds=30) {
             continue
         }
         $held=$false
-        try {$held=$mutex.WaitOne([TimeSpan]::FromSeconds([Math]::Max(0,$Seconds-$clock.Elapsed.TotalSeconds)))}
+        try {$held=$mutex.WaitOne([TimeSpan]::FromSeconds([Math]::Max(0.0,$Seconds-$clock.Elapsed.TotalSeconds)))}
         catch {
             $failure=$_.Exception
             while($failure -is [Management.Automation.MethodInvocationException] -and $failure.InnerException){$failure=$failure.InnerException}

@@ -343,6 +343,7 @@ try {
     $polls = New-Object System.Collections.Generic.List[object]
     $snapshots = New-Object System.Collections.Generic.List[object]
     $overThresholdSince = @{}
+    $decisions = @{}
     $activeRestraints = @{}
     $lastRestoreAt = @{}
 
@@ -398,6 +399,7 @@ try {
         $pollIndex++
         $pollStartedAtUtc = Get-RooIndustriesUtcStamp
         $sample = Get-RooIndustriesGovernorCpuSample -SampleIntervalMilliseconds $SampleIntervalMilliseconds -IncludeCommandLine:$IncludeCommandLine
+        $sampledAt = Get-Date
         $pollWouldRestrain = New-Object System.Collections.Generic.List[object]
         $pollChanged = New-Object System.Collections.Generic.List[object]
         $pollSkipped = New-Object System.Collections.Generic.List[object]
@@ -411,12 +413,18 @@ try {
         }
         try {
             if ($null -ne $gate) {
+                $pollDecisions = @{}
                 foreach ($proc in @(Get-RooIndustriesPropertyArray $sample 'processes')) {
                     $processId = [int](Get-RooIndustriesPropertyValue $proc 'pid' 0)
                     $processName = [string](Get-RooIndustriesPropertyValue $proc 'name' '')
                     $key = Get-GovernorProcessKey $proc
                     $seenKeys.Add($key) | Out-Null
-                    $decision = Get-RooIndustriesProcessGovernorDecision $proc $profile $protectedCatalog $foregroundPid $config
+                    $decisionKey = "$key|$([string](Get-RooIndustriesPropertyValue $proc 'commandLine' ''))"
+                    $decision = $decisions[$decisionKey]
+                    if ($null -eq $decision) {
+                        $decision = Get-RooIndustriesProcessGovernorDecision $proc $profile $protectedCatalog $foregroundPid $config
+                    }
+                    $pollDecisions[$decisionKey] = $decision
                     $cpuPercent = [double](Get-RooIndustriesPropertyValue $proc 'cpuPercent' 0)
                     $pressureMet = ([double](Get-RooIndustriesPropertyValue $sample 'totalCpuPercent' 0) -ge [double]$config.totalCpuPressureThresholdPercent -and $cpuPercent -ge [double]$config.perProcessCpuThresholdPercent)
 
@@ -437,12 +445,12 @@ try {
                         if (-not $overThresholdSince.ContainsKey($key)) {
                             $sampleSeconds = [double](Get-RooIndustriesPropertyValue $sample 'sampleIntervalSeconds' 0)
                             if ($sampleSeconds -lt 0) { $sampleSeconds = 0 }
-                            $overThresholdSince[$key] = $now.AddSeconds(-1 * $sampleSeconds)
+                            $overThresholdSince[$key] = $sampledAt.AddSeconds(-1 * $sampleSeconds)
                         }
                     } else {
                         if ($overThresholdSince.ContainsKey($key)) { $overThresholdSince.Remove($key) }
                     }
-                    $sustainedSeconds = if ($overThresholdSince.ContainsKey($key)) { [math]::Max(0, ($now - [datetime]$overThresholdSince[$key]).TotalSeconds) } else { 0 }
+                    $sustainedSeconds = if ($overThresholdSince.ContainsKey($key)) { [math]::Max(0.0, ($sampledAt - [datetime]$overThresholdSince[$key]).TotalSeconds) } else { 0 }
 
                     if ($activeRestraints.ContainsKey($key)) {
                         Invoke-GovernorActiveRestore `
@@ -567,6 +575,7 @@ try {
                         $pollSkipped.Add($skip) | Out-Null
                     }
                 }
+                $decisions = $pollDecisions
 
                 foreach ($key in @($activeRestraints.Keys)) {
                     if (-not $seenKeys.Contains([string]$key)) {
