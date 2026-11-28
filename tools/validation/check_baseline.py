@@ -382,11 +382,10 @@ def reparse_walk_negative_controls():
         'yml': {'job-level workflow': 'jobs:\n  j:\n    uses: zq/x/.github/workflows/y.yml@v1', 'expression in a run step': 'jobs:\n  j:\n    runs-on: ubuntu-24.04\n    steps:\n      - run: echo ${{ env.X }}'},
     }
     always['ps1'].update({'wildcard folder in a path': "Remove-Item -Path (Join-Path $a '*\\*') -Force", 'function drive assignment': "${function:Zqvx} = 'Write-Output'",
-                          'options object set from a hashtable': 'New-Object System.Data.DataTable -Property @{ TableName = $a }', 'dot-source of a script the check does not read': ". (Join-Path $PSScriptRoot '..\\..\\..\\Zqvx.ps1')"})
+                          'dot-source of a script the check does not read': ". (Join-Path $PSScriptRoot '..\\..\\..\\Zqvx.ps1')"})
     always['sh'].update({'glob with a wildcard folder': 'for f in "$a"/*/*; do echo "$f"; done'})
     always['py'].update({'self that is not a method parameter': 'class A:\n    def zqvx(self): pass\nself = object()\nself.zqvx()',
-                         'value from a repo function': 'class A:\n    def zqvx(self): pass\ndef make():\n    return object()\nm = make()\nm.zqvx()',
-                         'archive add on a typed value': "import tarfile\nt = tarfile.open(a, 'w')\nt.add(b)"})
+                         'value from a repo function': 'class A:\n    def zqvx(self): pass\ndef make():\n    return object()\nm = make()\nm.zqvx()'})
     always['cs'].update({'options object made elsewhere': cs('var o = System.Text.Json.JsonSerializer.Deserialize<System.IO.EnumerationOptions>("{}")!; System.IO.Directory.GetFiles(dir, "*", o);')})
     always['targets'].update({'item from an unknown property': '<Project><ItemGroup><I Include="$(Zqvx)" /></ItemGroup></Project>'})
     harmless = {
@@ -428,6 +427,7 @@ def reparse_walk_negative_controls():
     cases['a line in a helper file is refused'] = ('tools/validation/OptimizerCore/TestFixtures.cs', cs('System.IO.Directory.GetFiles(dir, "*", System.IO.SearchOption.AllDirectories);'), True)
     cases['a line in the Python walk helper is refused'] = ('tools/validation/local_tree.py', "import os\nos.walk('a')", True)
     cases['a recursive walk in product code is refused'] = ('backend/native/Control/Walk.cs', cs('System.IO.Directory.GetFiles(dir, "*", System.IO.SearchOption.AllDirectories);'), True)
+    cases['a recursive walk in product code that names no tool is refused'] = ('backend/native/Control/Cast.cs', cs('System.IO.Directory.GetFiles(dir, "*", (System.IO.SearchOption)1);'), True)
     cases['a one-folder listing in product code passes'] = ('backend/native/Control/List.cs', cs('System.IO.Directory.GetFiles(dir, "*", System.IO.SearchOption.TopDirectoryOnly);'), False)
     cases['a file type with no reader is refused'] = ('tools/validation/Control/run.foo', 'zqvx a', True)
     cases['a script outside the read scope is written'] = ('Zqvx.ps1', 'Write-Output hi', False)
@@ -443,6 +443,7 @@ def reparse_walk_negative_controls():
     reasoned.append({'file': 'tools/validation/Control/twice.ps1', 'line': 'Get-ChildItem -Recurse $a', 'reason': 'control'})
     cases['an entry without a reason is refused'] = ('tools/validation/Control/unexplained.ps1', 'Get-ChildItem -Recurse $a', True)
     reasoned.append({'file': 'tools/validation/Control/unexplained.ps1', 'line': 'Get-ChildItem -Recurse $a', 'reason': ' '})
+    tree_tool = table['names']['R1']['anywhere'][0]
     for label, extension, source, line, kind, starts, refused in (
             ('a walk that follows links', 'ps1', 'Copy-Item -Recurse $a $b', None, 'R1', 'copy-item', True),
             ('a measured tree delete', 'ps1', 'Remove-Item -Recurse $a', None, 'tree delete, does not follow links (measured)', 'remove-item', False),
@@ -459,7 +460,12 @@ def reparse_walk_negative_controls():
             ('an alias for a tree tool', 'ps1', 'Set-Alias -Name q -Value cpio', None, 'command the table does not list', 'set-alias', True),
             ('a tree listing whose shortened switch follows links', 'ps1', 'Get-ChildItem -Recurse -Fol $a', None, 'tree listing, does not follow links (measured)', 'get-childitem', True),
             ('a full program path joined to its switch', 'cmd', 'C:\\Windows\\System32\\attrib.exe/s a', None, 'program', 'c:\\windows\\system32\\attrib.exe/s', True),
-            ('start settings changed through the argument list indexer', 'cs', cs('var p = new ProcessStartInfo("zqvx.exe"); p.ArgumentList.Add("a"); p.ArgumentList[0] = "b"; Process.Start(p);'), 'Process.Start(p);', 'program', 'zqvx.exe', True)):
+            ('start settings changed through the argument list indexer', 'cs', cs('var p = new ProcessStartInfo("zqvx.exe"); p.ArgumentList.Add("a"); p.ArgumentList[0] = "b"; Process.Start(p);'), 'Process.Start(p);', 'program', 'zqvx.exe', True),
+            ('a tree tool started through a variable', 'ps1', "$p = '" + tree_tool + "'\n& $p a b", '& $p a b', 'program', tree_tool, True),
+            ('a folder move called through a using alias', 'cs', cs('L.Move(dir, dir + "x");', 'using L = System.IO.Directory;'), 'L.Move(', 'call the table does not list', 'system.io.directory.move', True),
+            ('a full program path joined to its switch, started from C#', 'cs', cs('Process.Start(@"C:\\Windows\\System32\\attrib.exe/s");'), 'Process.Start(', 'program', 'c:\\windows\\system32\\attrib.exe/s', True),
+            ('an archive add on a typed value', 'py', "import tarfile\nt = tarfile.open(a, 'w')\nt.add(b)", "t = tarfile.open(a, 'w')", 'call the table does not list', 'tarfile.open', True),
+            ('a type name built from values the check cannot read, reported on its own line', 'ps1', 'New-Object System.Data.DataTable -Property @{ TableName = $a }', None, 'the type name is built from values the check cannot read', '', False)):
         path = f'tools/validation/Control/known-{label.replace(" ", "-")}.{extension}'
         cases[f'{label} on the known list {"is refused" if refused else "passes"}'] = (path, source, refused)
         known.append({'file': path, 'line': next(l.strip() for l in module['lines_of'](source) if line in l) if line else source, 'kind': kind, 'starts': starts})
@@ -485,6 +491,8 @@ def reparse_walk_negative_controls():
                 hit = any(f.startswith(relative + ':') for f in failures)
                 if label == 'an entry without a reason is refused':
                     hit = any(f.startswith(allowlist + ':') and 'unexplained.ps1' in f for f in failures)
+                if label == 'start settings changed through the argument list indexer on the known list is refused':
+                    hit = any(f.startswith(relative + ':') and 'the program this starts is built from values the check cannot read' in f for f in failures)
                 results[label] = hit == refused
             if projects:
                 results['a refused project file stops the check before any project is evaluated'] = any('stopped before evaluating any project' in f for f in failures)

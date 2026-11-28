@@ -1086,11 +1086,6 @@ class Classifier:
             if any(lowered in names for names in self.defined.values()):
                 found = launch(lowered, tokens)
                 return [found if found[1] in NEEDS else (f'this runs {name}, a function defined in another checked repo file that this file reaches through its caller', 'repo function reached through its caller', lowered)]
-            if cmdlet in ('set-alias', 'new-alias'):
-                words = [t if isinstance(t, str) else ''.join(t) for t in tokens if isinstance(t, (str, list)) and all(p not in MARKERS for p in t)]
-                harm = next((h for word in words if not word.startswith('-') for h in [harm_of(word, [])] if h in REASONS), None)
-                if harm:
-                    return [(f'this makes an alias for a program that is {harm}', harm, cmdlet)]
             if re.fullmatch(r'[a-z]+-[a-z0-9]+', cmdlet):
                 return [(f'this runs {name}, a command the table does not list', call_harm(cmdlet) or 'command the table does not list', cmdlet)]
             return [launch(name, tokens)]
