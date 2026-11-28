@@ -13,7 +13,7 @@ PRODUCT = ('backend/native/', 'docs/internal/frontend/')
 HOLE, PATH, SELF, BLOCK, ROOT = '\0', '\1', '\2', '\3', '\4'
 MARKERS = (HOLE, PATH, SELF, BLOCK, ROOT)
 UNREADABLE_FILE = ('Python cannot read this file', 'PowerShell cannot read this:', 'bash cannot read this', 'MSBuild cannot read this project', 'MSBuild cannot give the compiler arguments',
-                   'YAML cannot read this workflow', 'the compiler cannot read this', 'no reader reads this file type', 'this file holds NUL bytes')
+                   'YAML cannot read this workflow', 'the compiler cannot read this', 'cmd reads this file in the console code page', 'the check has no reader for the')
 
 
 def fact(file, line, text, kind, name, args=None, **extra):
@@ -161,8 +161,6 @@ def holds(condition, args):
         return condition.get('absent', False)
     if condition.get('absent') and not condition.get('in') and 'value' not in condition:
         return False
-    if 'types' in condition:
-        return found[0].get('type') in condition['types']
     if 'literal not in' in condition:
         return isinstance(found[0].get('value'), str) and found[0]['value'].lower() not in (v.lower() for v in condition['literal not in'])
     if 'one folder' in condition:
@@ -183,7 +181,7 @@ def fits(kind, value):
     if kind == 'plain':
         return not re.search(r'[*?[`]', value)
     if kind == 'name':
-        return bool(re.fullmatch(r'[A-Za-z_]\w*', value)) and value.lower() not in ('psdefaultparametervalues', 'path', 'pathext', 'psmodulepath')
+        return bool(re.fullmatch(r'[A-Za-z_]\w*', value)) and value.lower() != 'psdefaultparametervalues' and value not in ('PATH', 'PATHEXT', 'BASH_ENV', 'ENV')
     return value.lower() in (v.lower() for v in kind)
 
 
@@ -199,8 +197,10 @@ def program_tokens(row, tokens):
             key, _, attached = case(token).partition('=')
             if '=' not in token or key not in options:
                 key, attached = case(token), None
+            if key not in options and len(key) > 2 and options.get(key[:2]) not in (None, 'flag') and not isinstance(options.get(key[:2]), int):
+                key, attached = key[:2], token[2:]
             spec = options.get(key)
-            if spec is None:
+            if spec is None or attached is not None and (spec == 'flag' or isinstance(spec, int)):
                 return False
             if isinstance(spec, int):
                 at += spec
@@ -471,9 +471,10 @@ class Classifier:
                 if not item.get('fromParameter'):
                     continue
                 found = [message for message, outcome, _ in self.classify(item) if outcome in ('reason', 'known')]
-                runner = re.sub(r'\.(exe|com)$', '', re.split(r'[\\/]', (item.get('path') or item.get('name') or '').lower())[-1]) in TABLE['runners']
+                named = 'invoke-expression' if item['kind'] == 'unreadable' and item['name'].startswith('Invoke-Expression') else item.get('path') or item.get('name') or ''
+                runner = re.sub(r'\.(exe|com)$', '', re.split(r'[\\/]', named.lower())[-1]) in TABLE['runners']
                 forwards = any(m.startswith('this runs a repo function that starts') for m in found)
-                if forwards or any(m.startswith(('this starts', 'the program', 'arguments passed', 'a starred')) for m in found) and (item.get('programFromParameter') or runner):
+                if forwards or found and runner or any(m.startswith(('this starts', 'the program', 'arguments passed', 'a starred')) for m in found) and item.get('programFromParameter'):
                     self.launchers.add(('powershell', item['file'], item['within'].lower()) if item.get('language') == 'powershell' else (item.get('language'), item['within'].lower()))
         findings = {}
         for item in facts:

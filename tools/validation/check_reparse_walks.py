@@ -124,7 +124,7 @@ class PythonReader:
         return context
 
     def within_one(self, node):
-        function = self.parent.get(node) if hasattr(self, 'parent') else None
+        function = self.parent.get(node)
         while function is not None and not isinstance(function, (ast.FunctionDef, ast.AsyncFunctionDef)):
             function = self.parent.get(function)
         if function is None:
@@ -528,7 +528,7 @@ class PythonReader:
         if name is None:
             self.add(node, 'unreadable', 'the program this starts is built from values the check cannot read', launch=True, program=self.program)
         else:
-            self.add(node, 'command', name, tokens, raw=raw, path=literal(program), program=getattr(self, 'program', None))
+            self.add(node, 'command', name, tokens, raw=raw, path=literal(program), program=self.program)
 
 
 def git(root, *arguments):
@@ -644,7 +644,8 @@ def bash_facts(relative, text, offset=0, lines=None):
             if isinstance(item, list):
                 pending += item
             elif isinstance(item, dict):
-                found = item.get('Type') in ('ParamExp', 'CmdSubst', 'ProcSubst') or item.get('Type') == 'Lit' and not re.fullmatch(r'\d+|0[xX][\da-fA-F]+|\d+#[\w@]+|[@*]', item.get('Value', ''))
+                found = item.get('Type') in ('CmdSubst', 'ProcSubst') or item.get('Type') == 'ParamExp' and (item.get('Param') or {}).get('Value') not in ('#', '?', '$', '!') \
+                    or item.get('Type') == 'Lit' and not re.fullmatch(r'\d+|0[xX][\da-fA-F]+|\d+#[\w@]+|[@*]', item.get('Value', ''))
                 pending += [v for k, v in item.items() if k not in ('Pos', 'End')]
         return found
 
@@ -682,7 +683,7 @@ def bash_facts(relative, text, offset=0, lines=None):
             if re.search(r'[*?\[][^/]*/', text):
                 line = node['Pos']['Line'] + offset
                 facts.append(fact(relative, line, lines[line - 1] if line <= len(lines) else '', 'call', 'glob:wildcard folder', None, language='bash'))
-        pending += [(v, globbed and k not in ('Hdoc', 'Patterns')) for k, v in node.items() if k not in ('Pos', 'End')]
+        pending += [(v, globbed and k not in ('Hdoc', 'Patterns') and kind not in ('ParamExp', 'TestClause', 'ArithmExp', 'ArithmCmd', 'LetClause', 'CStyleLoop')) for k, v in node.items() if k not in ('Pos', 'End')]
 
     def pieces(word):
         out = [[]]
@@ -693,8 +694,11 @@ def bash_facts(relative, text, offset=0, lines=None):
         return out[0] if len(out) == 1 else [HOLE]
 
     positional = lambda words: any(part.get('Type') == 'ParamExp' and re.fullmatch(r'[0-9@*]', (part.get('Param') or {}).get('Value', '')) for word in words for part in json_parts(word))
-    launchers = {name for call in calls for name, start, end in spans if start <= call['Pos']['Offset'] < end and literal(pieces(call['Args'][0])) not in APPROVED['bash']
-                 and (positional(call['Args'][:1]) or (literal(pieces(call['Args'][0])) or '') in TABLE['runners'] and positional(call['Args'][1:]))}
+    launchers, before = set(), None
+    while launchers != before:
+        before = set(launchers)
+        launchers |= {name for call in calls for name, start, end in spans if start <= call['Pos']['Offset'] < end and literal(pieces(call['Args'][0])) not in APPROVED['bash']
+                      and (positional(call['Args'][:1]) or (literal(pieces(call['Args'][0])) or '') in {*TABLE['runners'], *launchers} and positional(call['Args'][1:]))}
     for call in calls:
         line = call['Pos']['Line'] + offset
         words = [pieces(word) for word in call['Args']]

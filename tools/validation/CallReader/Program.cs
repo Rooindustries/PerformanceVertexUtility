@@ -9,6 +9,7 @@ var facts = new JsonArray();
 var units = input["units"]!.AsArray().Select(unit => new Unit(unit!, (string)input["root"]!, facts)).ToList();
 foreach (var unit in units)
     unit.Read(units);
+Unit.Spread(units);
 foreach (var unit in units)
     unit.ScanAll();
 Console.Out.Write(facts.ToJsonString());
@@ -187,7 +188,7 @@ sealed class Unit
             {
                 case IInvocationOperation invocation:
                     Add(calls, invocation.TargetMethod.OriginalDefinition, operation);
-                    if (IsStart(invocation.TargetMethod) && invocation.SemanticModel?.GetEnclosingSymbol(invocation.Syntax.SpanStart) is IMethodSymbol starter)
+                    if (IsStart(invocation.TargetMethod) && Encloser(invocation) is { } starter)
                         Launching.Add(Qualified(starter.OriginalDefinition));
                     if (invocation.TargetMethod.Name == "Add" && invocation.Instance is { } list && Key(list) is { } added)
                         Add(writes, added, invocation.Arguments.FirstOrDefault()?.Value ?? operation);
@@ -313,15 +314,15 @@ sealed class Unit
                     Launch(file, line, invocation);
                     break;
                 case IInvocationOperation invocation:
-                    if ((SymbolEqualityComparer.Default.Equals(invocation.TargetMethod.ContainingAssembly, compilation.Assembly) || repo.Contains(invocation.TargetMethod.ContainingAssembly))
-                        && Launching.Contains(Qualified(invocation.TargetMethod.OriginalDefinition)) && model.GetEnclosingSymbol(invocation.Syntax.SpanStart) is IMethodSymbol caller)
-                        Emit(file, line, "call", "repo:" + Qualified(invocation.TargetMethod.OriginalDefinition), null, Within(caller, invocation.Arguments.Any(a => FromParameter(a.Value, caller))));
+                    Reach(file, line, invocation, invocation.TargetMethod, invocation.Arguments);
                     Use(file, line, invocation.TargetMethod, Arguments(invocation.Arguments));
                     break;
                 case IObjectCreationOperation { Constructor: { } constructor } creation:
+                    Reach(file, line, creation, constructor, creation.Arguments);
                     Use(file, line, constructor, Arguments(creation.Arguments));
                     break;
                 case IMethodReferenceOperation reference:
+                    Reach(file, line, reference, reference.Method, []);
                     Use(file, line, reference.Method, new JsonArray(reference.Method.Parameters.Select(p => (JsonNode?)new JsonObject { ["i"] = p.Ordinal, ["name"] = p.Name, ["type"] = p.Type.ToDisplayString(TypeFormat) }).ToArray()));
                     break;
                 case IPropertyReferenceOperation property:
@@ -498,9 +499,38 @@ sealed class Unit
 
     static JsonObject Within(IMethodSymbol method, bool from) => new() { ["within"] = Qualified(method.OriginalDefinition), ["fromParameter"] = from };
 
+    static IMethodSymbol? Encloser(IOperation operation)
+    {
+        var symbol = operation.SemanticModel?.GetEnclosingSymbol(operation.Syntax.SpanStart);
+        while (symbol is IMethodSymbol { MethodKind: MethodKind.AnonymousFunction } lambda)
+            symbol = lambda.ContainingSymbol;
+        return symbol as IMethodSymbol;
+    }
+
+    public static void Spread(List<Unit> units)
+    {
+        for (var grown = true; grown;)
+        {
+            grown = false;
+            foreach (var unit in units)
+                foreach (var (target, sites) in unit.calls)
+                    if (target is IMethodSymbol method && Launching.Contains(Qualified(method)))
+                        foreach (var site in sites)
+                            if (Encloser(site) is { } caller && Launching.Add(Qualified(caller.OriginalDefinition)))
+                                grown = true;
+        }
+    }
+
+    void Reach(string file, int line, IOperation operation, IMethodSymbol target, IEnumerable<IArgumentOperation> arguments)
+    {
+        if ((SymbolEqualityComparer.Default.Equals(target.ContainingAssembly, compilation.Assembly) || repo.Contains(target.ContainingAssembly))
+            && Launching.Contains(Qualified(target.OriginalDefinition)) && Encloser(operation) is { } caller)
+            Emit(file, line, "call", "repo:" + Qualified(target.OriginalDefinition), null, Within(caller, arguments.Any(a => FromParameter(a.Value, caller))));
+    }
+
     void Launch(string file, int line, IInvocationOperation invocation)
     {
-        var method = invocation.SemanticModel?.GetEnclosingSymbol(invocation.Syntax.SpanStart) as IMethodSymbol;
+        var method = Encloser(invocation);
         (launching, touched, argumentsTouched) = (method, false, false);
         var sites = method is not null && method.MethodKind != MethodKind.AnonymousFunction && !grouped.Contains(method.OriginalDefinition)
             && !method.IsVirtual && !method.IsOverride && !method.IsAbstract && calls.TryGetValue(method.OriginalDefinition, out var found) ? found : [];

@@ -2,9 +2,9 @@
  "contract": [
   "1. Outcomes. Every program launch and every call a reader finds in a scanned file is approved, known or refused. Approved: a row in 'approved' allows it in the form written, and it needs no list entry. Known: a row in 'programs' allows it in the form written, and it needs an exact-line entry in the known list that names that row. Refused: no row allows it, and it needs an exact-line reasoned exception whose reason is true of that line. A line that has a refused call needs a reason even if its other calls are approved or known. A file a reader cannot parse, or a code file of a type no reader reads, fails the check, and no entry clears it.",
   "2. What a row may allow. A row names one program, cmdlet or fully resolved call, and the subcommands, options and argument shapes under which it cannot walk a tree, enter a link while walking, make a link, mount a volume, map a drive, make a share or a virtual disk, or change a permission or an owner. Walking a tree means listing or acting on what lies below the entries of a folder it is given, or matching a wildcard against folder names. Opening, reading, writing, renaming or deleting one named file or empty folder, and listing the entries of one named folder, is not a walk. When in doubt the row is left out and the lines carry reasons.",
-  "3. Programs ('programs', and the bash and cmd rows in 'approved'). A program matches its row only when it is named by its bare name or by a literal absolute path; .exe or .com may follow the name. If the row has 'subcommands', the first argument must be one of them, written literally, and the rest is matched against that subcommand's row. Every argument that starts with the row's switch characters ('-' unless 'switch' says otherwise) must be one of its 'options', written exactly (in any case unless the row says 'case': 'sensitive'); 'flag' takes no value, a number takes that many following arguments, and any other kind takes one value that must fit it. Every other argument is an operand and must fit 'operands'; a row without 'operands' takes none. A computed argument counts as a possible option, so it matches only where 'operands' is 'any'. 'literal': n requires the first n arguments to be literal and not to start with '-'. Kinds: 'any' (computed allowed), 'literal' (any literal), 'plain' (a literal with no * ? [ or `), 'name' (an identifier that is not PSDefaultParameterValues, PATH, PATHEXT or PSModulePath), or a list of literal values.",
+  "3. Programs ('programs', and the bash and cmd rows in 'approved'). A program matches its row only when it is named by its bare name or by a literal absolute path; .exe or .com may follow the name. If the row has 'subcommands', the first argument must be one of them, written literally, and the rest is matched against that subcommand's row. Every argument that starts with the row's switch characters ('-' unless 'switch' says otherwise) must be one of its 'options', written exactly (in any case unless the row says 'case': 'sensitive'), or a two-character option that takes a value written with its value attached (-f1); 'flag' takes no value, a number takes that many following arguments, and any other kind takes one value that must fit it, written as the next argument or after '=' (--format=x). Every other argument is an operand and must fit 'operands'; a row without 'operands' takes none. A computed argument counts as a possible option, so it matches only where 'operands' is 'any'. 'literal': n requires the first n arguments to be literal and not to start with '-'. Kinds: 'any' (computed allowed), 'literal' (any literal), 'plain' (a literal with no * ? [ or `), 'name' (an identifier that is not PSDefaultParameterValues in any case, or PATH, PATHEXT, BASH_ENV or ENV), or a list of literal values.",
   "4. PowerShell cmdlets ('approved' 'powershell'). A row given as text allows the cmdlet in every form, so only cmdlets that take no file path and load no code get one. Otherwise a line matches only if every parameter is written by its exact full name (in any case) from 'params' or the common parameters, and its value fits the kind there ('switch' needs no value; 'block' needs a script block literal); arguments without a parameter name bind in order to 'positional' (the 'remaining' one takes the rest); a splat matches nothing; a cmdlet that is not the first element of a pipeline matches only a row with 'pipeline'; a row with 'bound' matches only when one of those parameters is bound on the line. The aliases in 'powershell aliases' match their cmdlet's row, except those in 'powershell platform aliases', which name programs on Linux and macOS and so match no cmdlet row.",
-  "5. Calls. A .NET, Python, native or workflow row names the exact resolved call; a method called on a value whose type the reader cannot tell is matched by its name alone ('python methods', 'powershell methods'), so a name that some known type implements unsafely is never on those two lists. Every condition in a row's 'args' must hold: 'in' (the argument is a literal in the list), 'absent' (the argument may be left out), 'types' (the argument's static type), 'one folder' (a literal with no wildcard in any folder part), 'literal not in' (a literal not in the list).",
+  "5. Calls. A .NET, Python, native or workflow row names the exact resolved call; a method called on a value whose type the reader cannot tell is matched by its name alone ('python methods', 'powershell methods'), so a name that some known type implements unsafely is never on those two lists. Every condition in a row's 'args' must hold: 'in' (the argument is a literal in the list), 'absent' (the argument may be left out), 'one folder' (a literal with no wildcard in any folder part), 'literal not in' (a literal not in the list), 'type' (an argument of another static type holds only when it is made in the call, so the calls that set it up are matched by their own rows).",
   "6. Functions. A PowerShell or bash call runs a repo function, and needs nothing, only when an unconditional definition of that name is in effect at the call: a direct statement of its file that comes before the call or before any code of that file runs, a direct statement of the function body that holds the call and comes before it, or a direct statement of a script dot-sourced before the call. A name that Set-Alias or the function: or alias: drive may rename in scope resolves to no function. Every other call is matched as the cmdlet or program of that name. A repo function (PowerShell, Python, C# or bash) that starts a program named by one of its parameters, or gives a parameter to one of the 'runners' (programs that run a program or code from their arguments), is a launcher: every call to it is refused too, and so is every call that passes its own parameters on to a launcher.",
   "7. Refused because the parser cannot resolve them, so only a reasoned exception clears them: dynamic invocation (reflection, a delegate built at run time, getattr, a method group's Invoke, Invoke-Expression, Add-Type, text parsed into code); a shell or interpreter given text; a program, subcommand or parameter name the reader cannot read as a literal; a splat; a definition made conditionally or at run time where no unconditional one is in effect; a dot-source of a script from a folder the reader cannot read (the script it names is still read); and every syntax node kind a reader has no rule for (Python ast node types, C# operation kinds, PowerShell AST types, bash syntax node types, workflow keys; cmd and MSBuild refuse what they cannot read)."
  ],
@@ -4162,8 +4162,7 @@
    "printf": {
     "does": "a bash builtin that prints a literal format; without -v it assigns no variable",
     "operands": "any",
-    "literal": 1,
-    "case": "sensitive"
+    "literal": 1
    },
    "read": {
     "does": "a bash builtin that reads a line into variables named by literals",
@@ -4272,13 +4271,11 @@
   },
   "dirname": {
    "does": "prints the folder part of a path",
-   "operands": "any",
-   "case": "sensitive"
+   "operands": "any"
   },
   "basename": {
    "does": "prints the last part of a path",
-   "operands": "any",
-   "case": "sensitive"
+   "operands": "any"
   },
   "realpath": {
    "does": "prints the resolved form of a path",
@@ -4292,8 +4289,7 @@
   },
   "cat": {
    "does": "prints the files it names",
-   "operands": "any",
-   "case": "sensitive"
+   "operands": "any"
   },
   "head": {
    "does": "prints the start of its input or the files it names",
@@ -4451,6 +4447,10 @@
     "--info": "flag",
     "--version": "flag"
    }
+  },
+  "touch": {
+   "does": "creates empty files or updates their times",
+   "operands": "any"
   }
  },
  "runners": [
