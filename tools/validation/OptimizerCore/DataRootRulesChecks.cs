@@ -440,11 +440,11 @@ static partial class DataFolderChecks
             {
                 ["ROO_INDUSTRIES_TEST_TIMER_CONTROL"] = control, ["ROO_INDUSTRIES_TEST_TIMER_STATE"] = state, ["ROO_INDUSTRIES_TEST_SPLIT_TOKEN"] = "0",
             };
-            foreach (var (entry, message) in new[] { ("sign-in", SignInJobRefusal), ("app", AppJobRefusal) })
+            foreach (var (entry, label, message) in new[] { ("sign-in", "A sign-in", SignInJobRefusal), ("app", "An app", AppJobRefusal) })
             {
                 var refused = H.Child(["--child-timer-in-job", entry, control], env);
                 check(refused.Output == "FAILED InvalidOperationException: " + message && !store.Read(timer).Value.GetBoolean(),
-                    "A " + entry + " start inside a job that ends its processes, with no breakaway and no desktop shell, " +
+                    label + " start inside a job that ends its processes, with no breakaway and no desktop shell, " +
                     "refuses instead of starting a worker that job will end: " + refused.Output);
             }
             var script = Path.Combine(control, "startup.ps1");
@@ -469,7 +469,8 @@ static partial class DataFolderChecks
                 rights + " (pid " + worker + ", enabled=" + (admins?.ToString() ?? "unknown") + ")");
             var owners = Directory.EnumerateFileSystemEntries(state).Select(OwnerOf).ToArray();
             check(owners.All(owner => owner == user || elevated && owner == "S-1-5-32-544"),
-                "Everything the sign-in worker keeps in its own folder was created by the signed-in user: " + string.Join(", ", owners.Distinct()));
+                "Everything the sign-in worker keeps in its own folder is owned by the signed-in user, " +
+                "or by Administrators when their own token is elevated: " + string.Join(", ", owners.Distinct()));
             store.Write(store.Read(timer), ControlValues.From(false));
             check(!store.Read(timer).Value.GetBoolean(), "The app stops the sign-in worker through the administrators-only control folder");
             var gone = false;
