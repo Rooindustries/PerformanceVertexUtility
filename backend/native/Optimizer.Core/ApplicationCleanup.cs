@@ -43,6 +43,10 @@ public sealed class ApplicationCleanupJournal
     public string? RegistryStatus { get; set; }
     public string? FileStatus { get; set; }
     public required List<string> Errors { get; set; }
+    // Restored leftovers that were changed after cleanup, so Restore left them as they are now.
+    public List<string> LeftAsChanged { get; set; } = [];
+    // Leftovers Restore couldn't put back, each naming its path and why.
+    public List<string> NotRestored { get; set; } = [];
     public required DateTime UpdatedAtUtc { get; set; }
 }
 
@@ -119,6 +123,8 @@ public sealed class ApplicationCleanup(Func<CleanupContext> currentContext,
         };
         if (journal.ReviewHash != reviewHash) throw new InvalidDataException("The recovery journal belongs to another cleanup review.");
         if (journal.RestoreStarted) return journal;
+        if (preview.Files is { } planned && !File.Exists(planned.JournalPath))
+            FileCleanupEngine.RequireSpace([(OperationFiles.Read<FileCleanupPreview>(planned.PreviewPath, planned.ReviewHash), planned.JournalPath)]);
         journal.Errors = [];
         Save(journalPath, journal);
         CleanupAuthority Authority()
@@ -129,6 +135,20 @@ public sealed class ApplicationCleanup(Func<CleanupContext> currentContext,
         try
         {
             Authority();
+            var fileEngine = new FileCleanupEngine(Authority);
+            FileCleanupHold? held;
+            // Every leftover file is held and checked, and its undo copies made, before the first registry change, so a file that's in use
+            // or can't be backed up refuses the whole app before anything changes.
+            try { held = preview.Files is { } part ? fileEngine.Prepare(part.PreviewPath, part.ReviewHash, part.JournalPath) : null; }
+            catch (Exception error) when (journal.RegistryStatus is null && journal.FileStatus is null)
+            {
+                // Nothing of this app has changed, so it's refused rather than stopped partway, and runs again as it is once the cause is gone.
+                journal.Errors.Add(error.Message);
+                journal.Status = "refused";
+                Save(journalPath, journal);
+                return journal;
+            }
+            using var hold = held;
             if (preview.Registry is { } registry)
             {
                 journal.RegistryStatus = "applying";
@@ -138,11 +158,11 @@ public sealed class ApplicationCleanup(Func<CleanupContext> currentContext,
                 if (result.Status != "applied") throw new InvalidOperationException(result.Error ?? "Registry cleanup requires recovery: " + result.Status);
                 Save(journalPath, journal);
             }
-            if (preview.Files is { } files)
+            if (held is not null)
             {
                 journal.FileStatus = "applying";
                 Save(journalPath, journal);
-                var result = new FileCleanupEngine(Authority).Apply(files.PreviewPath, files.ReviewHash, files.JournalPath);
+                var result = fileEngine.Apply(held);
                 journal.FileStatus = result.Status;
                 if (result.Status != "applied") throw new InvalidOperationException(string.Join("; ", result.Entries.Where(entry => entry.Error is not null).Select(entry => entry.Error)));
             }
@@ -172,7 +192,9 @@ public sealed class ApplicationCleanup(Func<CleanupContext> currentContext,
             {
                 var result = new FileCleanupEngine(Authority).Restore(files.JournalPath);
                 journal.FileStatus = result.Status;
-                if (result.Status != "restored")
+                journal.LeftAsChanged = result.Entries.Where(entry => entry.LeftAsChanged is not null).Select(entry => entry.Original.Path).ToList();
+                journal.NotRestored = result.Entries.Where(entry => entry.Error is not null).Select(entry => entry.Error!).ToList();
+                if (result.Status is not ("restored" or "notStarted"))
                 {
                     journal.Errors.Add("File restoration requires reconciliation: " + result.Status);
                     journal.Errors.AddRange(result.Entries.Where(entry => entry.Error is not null).Select(entry => entry.Error!));
@@ -181,7 +203,8 @@ public sealed class ApplicationCleanup(Func<CleanupContext> currentContext,
             catch (Exception error) { journal.Errors.Add(error.Message); }
             Save(journalPath, journal);
         }
-        else if (journal.FileStatus is not null) journal.Errors.Add("The file recovery journal is missing.");
+        // The file journal is written before any leftover changes, so an app stopped while its file part was starting has none and nothing to put back.
+        else if (journal.FileStatus is not (null or "applying")) journal.Errors.Add("The file recovery journal is missing.");
         if (preview.Registry is { } registry && File.Exists(registry.JournalPath))
         {
             try
@@ -250,10 +273,10 @@ public sealed class ApplicationCleanup(Func<CleanupContext> currentContext,
     {
         var journal = OperationFiles.Read<ApplicationCleanupJournal>(path);
         Validate(journal.Preview);
-        if (journal.SchemaVersion != 1 || journal.Status is not ("prepared" or "applied" or "needsReconciliation" or "restoring" or "restored"))
+        if (journal.SchemaVersion != 1 || journal.Status is not ("prepared" or "refused" or "applied" or "needsReconciliation" or "restoring" or "restored"))
             throw new InvalidDataException("Unknown application cleanup state.");
         if (!journal.RestoreStarted && journal.Status is ("restoring" or "restored")
-            || journal.RestoreStarted && journal.Status is ("prepared" or "applied"))
+            || journal.RestoreStarted && journal.Status is ("prepared" or "refused" or "applied"))
             throw new InvalidDataException("Application cleanup recovery phase contradicts its restore state.");
         var original = OperationFiles.Read<ApplicationCleanupPreview>(journal.PreviewPath, journal.ReviewHash);
         if (System.Text.Json.JsonSerializer.Serialize(original, OperationFiles.Json) != System.Text.Json.JsonSerializer.Serialize(journal.Preview, OperationFiles.Json))

@@ -70,8 +70,11 @@ static class FileConflictChecks
             OperationFiles.Write(path, preview);
             File.Move(replaced, original);
             File.Copy(original, replaced);
-            var result = engine.Apply(path, OperationFiles.HashFile(path), Path.Combine(root, "replacement-journal.json"));
-            check(result.Status == "needsReconciliation" && File.Exists(original) && File.ReadAllBytes(replaced).SequenceEqual(new byte[] { 4, 5, 6 }), "A replacement with identical bytes cannot reuse the reviewed file identity");
+            rejected = false;
+            try { engine.Apply(path, OperationFiles.HashFile(path), Path.Combine(root, "replacement-journal.json")); }
+            catch (InvalidDataException) { rejected = true; }
+            check(rejected && File.Exists(original) && File.ReadAllBytes(replaced).SequenceEqual(new byte[] { 4, 5, 6 }) && !File.Exists(Path.Combine(root, "replacement-journal.json")),
+                "A replacement with identical bytes cannot reuse the reviewed file identity, and the refusal leaves no journal");
 
             var directory = Path.Combine(root, "new-child");
             Directory.CreateDirectory(directory);
@@ -90,7 +93,7 @@ static class FileConflictChecks
             var journal = Path.Combine(root, "new-child-journal.json");
             OperationFiles.Write(path, preview);
             armed = true;
-            result = racing.Apply(path, OperationFiles.HashFile(path), journal);
+            var result = racing.Apply(path, OperationFiles.HashFile(path), journal);
             check(result.Status == "needsReconciliation" && !File.Exists(approved) && File.ReadAllText(inserted) == "independent writer", "A child inserted after backup survives while only the reviewed file is deleted");
             var restored = racing.Restore(journal);
             check(restored.Status == "restored" && File.ReadAllText(approved) == "approved original" && File.ReadAllText(inserted) == "independent writer", "Partial cleanup recovery preserves an unreviewed child and restores the deleted file");

@@ -290,7 +290,8 @@ namespace RooIndustries.OptimizationSuite.Services
         public List<string> Dismissed { get; } = new();
         public Task<BulkRemovalSession?> ReadLastRemovalAsync() => Task.FromResult(LastRemoval);
         public Task<(string Path, BulkRemovalJournal State)[]> ReadRemovalHistoryAsync() => Task.FromResult(RemovalHistory);
-        public Task<CleanupBatchSession[]> ReadCleanupHistoryAsync() => Task.FromResult(Array.Empty<CleanupBatchSession>());
+        public CleanupBatchSession[] CleanupHistory { get; set; } = [];
+        public Task<CleanupBatchSession[]> ReadCleanupHistoryAsync() => Task.FromResult(CleanupHistory);
         public RemovalCleanupReview? FileRestore { get; set; }
         public Task<RemovalCleanupReview?> ReadLastFileCleanupAsync() => Task.FromResult(FileRestore);
         public Task<OptimizerResult<BulkRemovalJournal>> DismissRemovalAsync(string journal) { Dismissed.Add(journal); return DismissRemoval(journal); }
@@ -306,7 +307,8 @@ namespace RooIndustries.OptimizationSuite.Services
         public Task<CleanupBatchReview> PreviewCleanupBatchAsync(CleanupPart[] applications) => throw new InvalidOperationException("Unexpected cleanup batch preview.");
         public Task<CleanupBatchJournal> ApplyCleanupBatchAsync(CleanupBatchReview review, string? cancellationId, IProgress<CleanupBatchJournal> progress) => throw new InvalidOperationException("Unexpected cleanup apply.");
         public Task<CleanupBatchCancellation> CancelCleanupBatchAsync(string journalPath) => throw new InvalidOperationException("Unexpected cleanup cancel.");
-        public Task<CleanupBatchJournal> RestoreCleanupBatchAsync(string journalPath) => throw new InvalidOperationException("Unexpected cleanup restore.");
+        public Func<string, Task<CleanupBatchJournal>> RestoreCleanupBatch { get; set; } = _ => throw new InvalidOperationException("Unexpected cleanup restore.");
+        public Task<CleanupBatchJournal> RestoreCleanupBatchAsync(string journalPath) => RestoreCleanupBatch(journalPath);
         public Task<OptimizerResult<FileCleanupResult>> RestoreRemovedFilesAsync(RemovalCleanupReview review)
             => ServiceSteps.Then("earlier files restore", () =>
             {
