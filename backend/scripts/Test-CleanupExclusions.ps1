@@ -10,8 +10,10 @@ $command=Join-Path $scripts 'Invoke-CleanupExclusions.ps1'
 function Assert([bool]$Condition,[string]$Message){if(-not $Condition){throw $Message};Write-Output ('PASS '+$Message)}
 try {
     [IO.Directory]::CreateDirectory((Split-Path $scripts -Parent))|Out-Null
+    $backend=Split-Path $PSScriptRoot -Parent
     Copy-Item -LiteralPath $PSScriptRoot -Destination $scripts -Recurse
-    $project=Join-Path (Split-Path $PSScriptRoot -Parent) 'native\Optimizer.Host\Optimizer.Host.csproj'
+    Copy-Item -LiteralPath (Join-Path $backend 'profiles') -Destination (Join-Path $root 'source\backend\profiles') -Recurse
+    $project=Join-Path $backend 'native\Optimizer.Host\Optimizer.Host.csproj'
     $hostOutput=Join-Path $root 'source\backend\bin\optimizer'
     & $DotNetPath publish $project -c Release --self-contained false -p:GovernorTestHooks=true -o $hostOutput|Out-Null
     if($LASTEXITCODE -ne 0){throw 'Cleanup host build failed'}

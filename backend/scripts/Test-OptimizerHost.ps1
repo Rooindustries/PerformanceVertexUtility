@@ -92,13 +92,17 @@ if($Scenario -eq 'RequestFiles'){
         [Environment]::SetEnvironmentVariable('DOTNET_EnableDiagnostics','1','Process')
         try {$onValue=Invoke-HostRaw $dll 'policy-status' '-' $statusBody} finally {[Environment]::SetEnvironmentVariable('DOTNET_EnableDiagnostics',$null,'Process')}
         Assert ($onValue.exit -ne 0 -and $onValue.message -like '*DOTNET_EnableDiagnostics*') 'A release helper refuses the diagnostics switch when it holds anything but 0'
+        $plainHost=Join-Path $caseRoot 'plain-host'
+        $hostProject=Join-Path $repoRoot 'backend\native\Optimizer.Host\Optimizer.Host.csproj'
+        & $DotNetPath publish $hostProject -c Release --self-contained false -o $plainHost|Out-Null
+        if($LASTEXITCODE -ne 0){throw 'Optimizer host publish failed.'}
         $decoy=Join-Path $caseRoot 'cleanup-exclusions.json'
         $sid=([Security.Principal.WindowsIdentity]::GetCurrent()).User.Value
         $owner=@{machine=[Environment]::MachineName;userSid=$sid}
         $decoyList=@{schemaVersion=1;owner=$owner;exclusions=@{paths=@($decoy);registry=@()}}
         Write-RooIndustriesOperationJson $decoyList $decoy
         $env:ROO_INDUSTRIES_TEST_CLEANUP_EXCLUSIONS=$decoy
-        try {$ignored=Invoke-HostRaw $dll 'cleanup-exclusions-status' '-' $statusBody}
+        try {$ignored=Invoke-HostRaw (Join-Path $plainHost 'Optimizer.Host.dll') 'cleanup-exclusions-status' '-' $statusBody}
         finally {Remove-Item Env:\ROO_INDUSTRIES_TEST_CLEANUP_EXCLUSIONS}
         $decoyHash=(Get-FileHash $decoy).Hash
         $followed=$ignored.status -ne 'completed' -or ($ignored.text|ConvertFrom-Json).data.revision -eq $decoyHash
