@@ -127,7 +127,7 @@ function Test-ScenarioRuleEditOrphan {
     Save-Rule $rule|Out-Null
     Start-Sleep -Milliseconds 300
     $rule.enabled=$true
-    Save-Rule $rule|Out-Null
+    Use-Rule $rule|Out-Null
     $settled=Wait-OrphanSettled $probe $before
     $open=@(Get-OrphanOpen $probe)
     Note 'afterOffOn' ([ordered]@{seconds=$settled;value=(Read-Field $probe 'cpuPriority');open=@($open|ForEach-Object {$_.ruleHash.Substring(0,8)+' '+$_.status})})
