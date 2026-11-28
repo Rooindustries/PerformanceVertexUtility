@@ -4,15 +4,17 @@ $ErrorActionPreference='Stop'
 if(-not $DotNetPath){$DotNetPath=(Get-Command dotnet.exe -ErrorAction Stop).Source}
 $env:ROO_INDUSTRIES_DOTNET_EXE=$DotNetPath
 $root=Join-Path ([IO.Path]::GetTempPath()) ('roo-industries-exclusion-host-'+[Guid]::NewGuid().ToString('N'))
-. (Join-Path $PSScriptRoot 'BrandCompatibility.Common.ps1')
-$policy=Join-Path (Get-RooIndustriesLocalDataRoot) 'cleanup-exclusions.json'
-$before=if(Test-Path $policy){[IO.File]::ReadAllBytes($policy)}else{$null}
-$ownedRevision=$null
-$command=Join-Path $PSScriptRoot 'Invoke-CleanupExclusions.ps1'
+$scripts=Join-Path $root 'source\backend\scripts'
+$policy=Join-Path $root 'cleanup-exclusions.json'
+$command=Join-Path $scripts 'Invoke-CleanupExclusions.ps1'
 function Assert([bool]$Condition,[string]$Message){if(-not $Condition){throw $Message};Write-Output ('PASS '+$Message)}
 try {
-    & (Join-Path $PSScriptRoot 'Build-OptimizerHost.ps1') -DotNetPath $DotNetPath|Out-Null
+    [IO.Directory]::CreateDirectory((Split-Path $scripts -Parent))|Out-Null
+    Copy-Item -LiteralPath $PSScriptRoot -Destination $scripts -Recurse
+    $project=Join-Path (Split-Path $PSScriptRoot -Parent) 'native\Optimizer.Host\Optimizer.Host.csproj'
+    & $DotNetPath publish $project -c Release --self-contained false -p:GovernorTestHooks=true -o (Join-Path $root 'source\backend\bin\optimizer')|Out-Null
     if($LASTEXITCODE -ne 0){throw 'Cleanup host build failed'}
+    $env:ROO_INDUSTRIES_TEST_CLEANUP_EXCLUSIONS=$policy
     $original=(& $command -Action Status -DotNetPath $DotNetPath)|ConvertFrom-Json
     $target=Join-Path $root 'sample\keep'
     [IO.Directory]::CreateDirectory($target)|Out-Null
@@ -45,20 +47,17 @@ try {
     Write-RooIndustriesOperationJson @{status='preview';commands=@(@{appId='fixture:exclusion';executable=$null;blocked=$false;protected=$false;reviewRequired=$false});errors=@()} $officialPath
     Write-RooIndustriesOperationJson @{appId='fixture:exclusion';manifestId='fixture-exclusion';items=@($item);errors=@()} $manifestPath
     Write-RooIndustriesOperationJson @{appId='fixture:exclusion';scanId='fixture-scan';items=@($item);errors=@()} $scanPath
-    $manifest=(& (Join-Path $PSScriptRoot 'New-CleanupDeletionManifest.ps1') -ScanPath $scanPath -ItemId @('folder'))|ConvertFrom-Json
+    $manifest=(& (Join-Path $scripts 'New-CleanupDeletionManifest.ps1') -ScanPath $scanPath -ItemId @('folder'))|ConvertFrom-Json
     Assert (@($manifest.errors).Count -eq 1 -and $manifest.errors[0].message -like '*Excluded path:*') 'Legacy manifest creation respects native cleanup exclusions'
     $arguments=@{OfficialPreviewPath=$officialPath;CleanupManifestPath=$manifestPath;ApprovedAppId='fixture:exclusion';ExecutorMode='Real';
         OfficialPreviewSha256=(Get-FileHash $officialPath).Hash;CleanupManifestSha256=(Get-FileHash $manifestPath).Hash;
         ExactTargetAllowlist=@($target);BackupRoot=(Join-Path $root 'backup');RollbackManifestPath=(Join-Path $root 'backup\journal.json');
         ConfirmApply=$true;OfficialUninstallCommandApproved=$true;CleanupDeletionManifestApproved=$true;UserApproved=$true;AllowRealSystemExecution=$true}
-    $blocked=(& (Join-Path $PSScriptRoot 'Invoke-UninstallCleanupApplyPackage.ps1') @arguments)|ConvertFrom-Json
+    $blocked=(& (Join-Path $scripts 'Invoke-UninstallCleanupApplyPackage.ps1') @arguments)|ConvertFrom-Json
     Assert ($blocked.status -eq 'failed' -and $blocked.dryRun -and $blocked.errors[0].message -like '*Excluded path:*' -and
         [IO.File]::ReadAllText($sentinel) -eq 'independent legacy sentinel' -and -not(Test-Path $arguments.RollbackManifestPath)) 'Legacy execution cannot bypass the current exclusion list'
 } finally {
-    if($ownedRevision){
-        if(-not(Test-Path $policy) -or (Get-FileHash $policy).Hash -ne $ownedRevision){throw 'Exclusions changed outside this test; current settings were preserved for review'}
-        if($null -eq $before){Remove-Item -LiteralPath $policy}else{[IO.File]::WriteAllBytes($policy,$before)}
-    }
+    Remove-Item Env:\ROO_INDUSTRIES_TEST_CLEANUP_EXCLUSIONS -ErrorAction SilentlyContinue
     if(Test-Path $root){Remove-Item -LiteralPath $root -Recurse -Force}
 }
-Assert ((-not(Test-Path $root)) -and $(if($null -eq $before){-not(Test-Path $policy)}else{[Convert]::ToBase64String([IO.File]::ReadAllBytes($policy)) -ceq [Convert]::ToBase64String($before)})) 'Exclusion validation restores original settings and removes its fixture'
+Assert (-not(Test-Path $root)) 'Exclusion validation removes its fixture and its exclusion list'

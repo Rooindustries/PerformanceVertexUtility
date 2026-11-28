@@ -101,7 +101,21 @@ public sealed record CleanupExclusionState(CleanupExclusions Exclusions, string?
 
 public sealed class CleanupExclusionStore(string path)
 {
-    public static string DefaultPath => Path.Combine(BrandCompatibility.LocalDataRoot, "cleanup-exclusions.json");
+    public static string DefaultPath =>
+#if GOVERNOR_TEST_HOOKS
+        Environment.GetEnvironmentVariable("ROO_INDUSTRIES_TEST_CLEANUP_EXCLUSIONS") is { Length: > 0 } test ? TestPath(test) :
+#endif
+        Path.Combine(BrandCompatibility.LocalDataRoot, "cleanup-exclusions.json");
+
+#if GOVERNOR_TEST_HOOKS
+    private static string TestPath(string path)
+    {
+        var full = Path.GetFullPath(path);
+        if (!full.StartsWith(Path.Combine(Path.GetTempPath(), "roo-industries-"), StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException("Test cleanup exclusions must stay inside an isolated temporary folder.");
+        return full;
+    }
+#endif
 
     public CleanupExclusionState Read()
     {

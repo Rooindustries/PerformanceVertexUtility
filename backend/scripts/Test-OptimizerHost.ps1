@@ -13,10 +13,8 @@ $dataRoot='Software\RooIndustriesHostFixture-'+$caseId
 $apps=@();$reviews=@()
 . (Join-Path $PSScriptRoot 'BrandCompatibility.Common.ps1')
 try {$null=Get-RooIndustriesLocalDataRoot -Protected}
-catch {throw ('This suite exercises the production removal queue, whose claims and cleanup exclusions live in the app''s protected data folder, and that folder is not protected on this PC: '+$_.Exception.Message+' Open the app once as an administrator (or run the verification runner''s validators phase, which protects it inside its backup frame) and run the suite again.')}
-$exclusionPath=Join-Path (Get-RooIndustriesLocalDataRoot) 'cleanup-exclusions.json'
-$exclusionBefore=if(Test-Path $exclusionPath){[IO.File]::ReadAllBytes($exclusionPath)}else{$null}
-$ownedExclusionHash=$null
+catch {throw ('This suite exercises the production removal queue, whose claims live in the app''s protected data folder, and that folder is not protected on this PC: '+$_.Exception.Message+' Open the app once as an administrator (or run the verification runner''s validators phase, which protects it inside its backup frame) and run the suite again.')}
+$exclusionPath=Join-Path $root 'cleanup-exclusions.json'
 $hive=[Microsoft.Win32.RegistryKey]::OpenBaseKey([Microsoft.Win32.RegistryHive]::CurrentUser,[Microsoft.Win32.RegistryView]::Registry64)
 function Assert([bool]$Condition,[string]$Message){if(-not $Condition){throw $Message};Write-Output ('PASS '+$Message)}
 if($Scenario -eq 'RequestFiles'){
@@ -88,6 +86,13 @@ if($Scenario -eq 'RequestFiles'){
         [Environment]::SetEnvironmentVariable('DOTNET_EnableDiagnostics','1','Process')
         try {$onValue=Invoke-HostRaw $dll 'policy-status' '-' $statusBody} finally {[Environment]::SetEnvironmentVariable('DOTNET_EnableDiagnostics',$null,'Process')}
         Assert ($onValue.exit -ne 0 -and $onValue.message -like '*DOTNET_EnableDiagnostics*') 'A release helper refuses the diagnostics switch when it holds anything but 0'
+        $decoy=Join-Path $caseRoot 'cleanup-exclusions.json'
+        $owner=@{machine=[Environment]::MachineName;userSid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value}
+        Write-RooIndustriesOperationJson @{schemaVersion=1;owner=$owner;exclusions=@{paths=@($decoy);registry=@()}} $decoy
+        $env:ROO_INDUSTRIES_TEST_CLEANUP_EXCLUSIONS=$decoy
+        try {$ignored=Invoke-HostRaw $dll 'cleanup-exclusions-status' '-' $statusBody} finally {Remove-Item Env:\ROO_INDUSTRIES_TEST_CLEANUP_EXCLUSIONS}
+        $ignoredRevision=($ignored.text|ConvertFrom-Json).data.revision
+        Assert ($ignored.status -eq 'completed' -and $ignoredRevision -ne (Get-FileHash $decoy).Hash) 'A helper built without test hooks ignores the test exclusion list location'
     } finally {
         foreach($item in $netNames){[Environment]::SetEnvironmentVariable($item.name,$item.value,'Process')}
         if(Test-Path -LiteralPath $caseRoot){Remove-Item -LiteralPath $caseRoot -Recurse -Force}
@@ -108,11 +113,12 @@ function Core([string]$CoreAction,[object]$Fields){
 }
 try {
     [IO.Directory]::CreateDirectory($root)|Out-Null
+    $env:ROO_INDUSTRIES_TEST_CLEANUP_EXCLUSIONS=$exclusionPath
     $rootSecurity=[Security.AccessControl.DirectorySecurity]::new()
     $rootSecurity.SetAccessRuleProtection($true,$false)
     foreach($sid in 'S-1-5-18','S-1-5-32-544',[Security.Principal.WindowsIdentity]::GetCurrent().User.Value){$rootSecurity.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new([Security.Principal.SecurityIdentifier]::new($sid),'FullControl','ContainerInherit,ObjectInherit','None','Allow'))}
     ([IO.DirectoryInfo]::new($root)).SetAccessControl($rootSecurity)
-    & $DotNetPath publish (Join-Path $repoRoot 'backend\native\Optimizer.Host\Optimizer.Host.csproj') -c Release --self-contained false -o $hostDirectory|Out-Null
+    & $DotNetPath publish (Join-Path $repoRoot 'backend\native\Optimizer.Host\Optimizer.Host.csproj') -c Release --self-contained false -p:GovernorTestHooks=true -o $hostDirectory|Out-Null
     if($LASTEXITCODE -ne 0){throw 'Optimizer host publish failed.'}
     $secured=@((@{schemaVersion=1;repoRoot=$repoRoot;operationsRoot=$operations;confirm=$true}|ConvertTo-Json -Compress)|& $DotNetPath (Join-Path $hostDirectory 'Optimizer.Host.dll') 'operations-secure' '-') -join "`n"
     if(($secured|ConvertFrom-Json).status -ne 'completed'){throw ('The fixture recovery folder could not be protected: '+$secured)}
@@ -214,26 +220,29 @@ public class RooIndustriesHostRemover {
         $originalExclusions=Core 'cleanup-exclusions-status' @{}
         $protectedExclusions=@{paths=@($originalExclusions.exclusions.paths)+@((Join-Path $apps[0].install 'preferences.txt'));registry=@($originalExclusions.exclusions.registry)}
         $savedExclusions=Core 'cleanup-exclusions-save' @{exclusions=$protectedExclusions;expectedRevision=$originalExclusions.revision;confirm=$true}
-        $ownedExclusionHash=$savedExclusions.revision
         $markerRoot=Join-Path $root 'poisoned-environment'
-        foreach($folder in @('profile','local','roaming','temp')){[IO.Directory]::CreateDirectory((Join-Path $markerRoot $folder))|Out-Null}
+        foreach($folder in @('profile','local\RooIndustriesOptimizationSuite','roaming','temp')){[IO.Directory]::CreateDirectory((Join-Path $markerRoot $folder))|Out-Null}
+        Copy-Item -LiteralPath $exclusionPath -Destination (Join-Path $markerRoot 'local\RooIndustriesOptimizationSuite')
         $poison=[ordered]@{USERPROFILE=(Join-Path $markerRoot 'profile');LOCALAPPDATA=(Join-Path $markerRoot 'local');APPDATA=(Join-Path $markerRoot 'roaming');TEMP=(Join-Path $markerRoot 'temp');TMP=(Join-Path $markerRoot 'temp');ComSpec=(Join-Path $markerRoot 'cmd.exe')}
         $kept=@{};foreach($name in $poison.Keys){$kept[$name]=[Environment]::GetEnvironmentVariable($name,'Process')}
+        Remove-Item Env:\ROO_INDUSTRIES_TEST_CLEANUP_EXCLUSIONS
         try {
+            $plainStatus=Core 'cleanup-exclusions-status' @{}
             foreach($name in $poison.Keys){[Environment]::SetEnvironmentVariable($name,$poison[$name],'Process')}
             $poisonedStatus=Core 'cleanup-exclusions-status' @{}
-        } finally {foreach($name in $poison.Keys){[Environment]::SetEnvironmentVariable($name,$kept[$name],'Process')}}
-        Assert ($poisonedStatus.revision -eq $savedExclusions.revision -and @($poisonedStatus.exclusions.paths).Count -eq @($protectedExclusions.paths).Count) 'A Host started with USERPROFILE, LOCALAPPDATA, APPDATA, TEMP, TMP and ComSpec pointing at marker values reads the same app data folder as without them'
+        } finally {
+            foreach($name in $poison.Keys){[Environment]::SetEnvironmentVariable($name,$kept[$name],'Process')}
+            $env:ROO_INDUSTRIES_TEST_CLEANUP_EXCLUSIONS=$exclusionPath
+        }
+        Assert ($poisonedStatus.revision -eq $plainStatus.revision -and $poisonedStatus.revision -ne $savedExclusions.revision) 'A Host started with USERPROFILE, LOCALAPPDATA, APPDATA, TEMP, TMP and ComSpec pointing at marker values reads the same app data folder as without them'
         $excluded=Core 'cleanup-batch-apply' @{previewPath=$batchPath;reviewHash=(Get-FileHash -LiteralPath $batchPath).Hash;journalPath=$batchJournal;confirm=$true}
         Assert ($excluded.status -eq 'needsReconciliation' -and $excluded.entries[0].error -like '*Excluded path:*') 'The public batch endpoint enforces exclusions added after review'
         foreach($app in $apps){$key=$hive.OpenSubKey($app.dataPath);try{Assert ((Test-Path (Join-Path $app.install 'preferences.txt')) -and $null -ne $key) 'Late exclusions preserve both applications before deletion'}finally{if($key){$key.Dispose()}}}
-        $savedExclusions=Core 'cleanup-exclusions-save' @{exclusions=$originalExclusions.exclusions;expectedRevision=$ownedExclusionHash;confirm=$true}
-        $ownedExclusionHash=$savedExclusions.revision
+        $null=Core 'cleanup-exclusions-save' @{exclusions=$originalExclusions.exclusions;expectedRevision=$savedExclusions.revision;confirm=$true}
         $applied=Core 'cleanup-batch-apply' @{previewPath=$batchPath;reviewHash=(Get-FileHash -LiteralPath $batchPath -Algorithm SHA256).Hash;journalPath=$batchJournal;confirm=$true}
         Assert ($applied.status -eq 'applied') 'The public batch endpoint completes both reviewed cleanup operations'
         foreach($app in $apps){$key=$hive.OpenSubKey($app.dataPath);try{Assert (-not(Test-Path -LiteralPath $app.install) -and $null -eq $key) 'Independent Windows reads confirm the selected file and registry resources are absent'}finally{if($key){$key.Dispose()}}}
         [IO.File]::WriteAllText($exclusionPath,'{"schemaVersion":1}')
-        $ownedExclusionHash=(Get-FileHash $exclusionPath).Hash
         $partial=Core 'cleanup-batch-restore' @{journalPath=$batchJournal;restoreAppIds=@($apps[0].appId);confirm=$true}
         Assert ($partial.status -eq 'partiallyRestored' -and (Test-Path $apps[0].install) -and -not(Test-Path $apps[1].install)) 'Public selective recovery works despite an unreadable exclusion policy and leaves the other app deleted'
         $restored=Core 'cleanup-batch-restore' @{journalPath=$batchJournal;confirm=$true}
@@ -244,19 +253,13 @@ public class RooIndustriesHostRemover {
         }
     }
 } finally {
-    try {
-        if($ownedExclusionHash){
-            if(-not(Test-Path $exclusionPath) -or (Get-FileHash $exclusionPath).Hash -ne $ownedExclusionHash){throw 'Cleanup settings changed outside the fixture; current exclusions were preserved'}
-            if($null -eq $exclusionBefore){Remove-Item -LiteralPath $exclusionPath}else{[IO.File]::WriteAllBytes($exclusionPath,$exclusionBefore)}
-        }
-    } finally {
-        $markers=[Microsoft.Win32.Registry]::LocalMachine.OpenSubKey('SOFTWARE\RooIndustries\OptimizationSuite\GovernorRoots',$true)
-        if($markers){$markerName=Get-RooIndustriesDataRootMarkerName $operations;$markers.DeleteValue($markerName,$false);$markers.DeleteValue($markerName+'|protected-at',$false);$markers.Dispose()}
-        foreach($app in $apps){$hive.DeleteSubKeyTree($registrationRoot+'\'+$app.keyName,$false)}
-        foreach($review in $reviews){if($review.preview.registry){$registry=(Get-Content -LiteralPath $review.preview.registry.previewPath -Raw|ConvertFrom-Json);$hive.DeleteSubKeyTree($registry.receipt.keyPath,$false)}}
-        $hive.DeleteSubKeyTree($dataRoot,$false);$hive.Dispose()
-        if(Test-Path -LiteralPath $root){Remove-Item -LiteralPath $root -Recurse -Force}
-    }
+    Remove-Item Env:\ROO_INDUSTRIES_TEST_CLEANUP_EXCLUSIONS -ErrorAction SilentlyContinue
+    $markers=[Microsoft.Win32.Registry]::LocalMachine.OpenSubKey('SOFTWARE\RooIndustries\OptimizationSuite\GovernorRoots',$true)
+    if($markers){$markerName=Get-RooIndustriesDataRootMarkerName $operations;$markers.DeleteValue($markerName,$false);$markers.DeleteValue($markerName+'|protected-at',$false);$markers.Dispose()}
+    foreach($app in $apps){$hive.DeleteSubKeyTree($registrationRoot+'\'+$app.keyName,$false)}
+    foreach($review in $reviews){if($review.preview.registry){$registry=(Get-Content -LiteralPath $review.preview.registry.previewPath -Raw|ConvertFrom-Json);$hive.DeleteSubKeyTree($registry.receipt.keyPath,$false)}}
+    $hive.DeleteSubKeyTree($dataRoot,$false);$hive.Dispose()
+    if(Test-Path -LiteralPath $root){Remove-Item -LiteralPath $root -Recurse -Force}
 }
 Assert (-not(Test-Path -LiteralPath $root)) 'Host validation removes its registrations, receipts, binaries, journals and leftovers'
 if(-not $SharedQueuePaths){& $PSCommandPath -DotNetPath $DotNetPath -SharedQueuePaths}
