@@ -96,30 +96,43 @@ function Test-ScenarioReassert {
     Assert ($journal.status -eq 'restored' -and $journal.changes.Count -eq 1 -and $journal.changes[0].status -eq 'leftAsSet' -and $journal.changes[0].error -eq 'Left as another program set it.') 'The stepped-back recovery journal is closed without claiming the original was restored'
 }
 
+function Get-OrphanOpen([Diagnostics.Process]$Probe){
+    return @(Get-Open $Probe.Id|Where-Object {-not $_.field -or $_.field -eq 'cpuPriority'})
+}
+
+function Wait-OrphanSettled([Diagnostics.Process]$Probe,[string]$Before){
+    $owned={$o=@(Get-OrphanOpen $Probe);$o.Count -eq 1 -and $o[0].ruleHash -ne $Before -and $o[0].status -eq 'active'}
+    return Wait-Until $owned 40 250
+}
+
 function Test-ScenarioRuleEditOrphan {
     $path=Copy-Probe
     $probe=Start-Probe $path
     $rule=New-Rule $path @{cpuPriority='AboveNormal'} 'Orphan'
     Use-Rule $rule|Out-Null
     Assert ($null -ne (Wait-Field $probe 'cpuPriority' 'AboveNormal')) 'The rule is applied'
+    $before=@(Get-OrphanOpen $probe)[0].ruleHash
     Set-Field $probe 'cpuPriority' 'BelowNormal'
     $rule.name='Orphan renamed'
     Save-Rule $rule|Out-Null
-    Start-Sleep -Seconds 40
-    $open=@(Get-Open $probe.Id|Where-Object {-not $_.field -or $_.field -eq 'cpuPriority'})
-    Note 'afterRename' ([ordered]@{value=(Read-Field $probe 'cpuPriority');open=@($open|ForEach-Object {$_.ruleHash.Substring(0,8)+' '+$_.status})})
-    Assert ((Read-Field $probe 'cpuPriority') -eq 'AboveNormal') 'Forty seconds after a rule edit the app has the rule''s value, not an old original'
+    $settled=Wait-OrphanSettled $probe $before
+    $open=@(Get-OrphanOpen $probe)
+    Note 'afterRename' ([ordered]@{seconds=$settled;value=(Read-Field $probe 'cpuPriority');open=@($open|ForEach-Object {$_.ruleHash.Substring(0,8)+' '+$_.status})})
+    Assert ($null -ne $settled) 'The old record closes and the edited rule owns the field'
+    Assert ((Read-Field $probe 'cpuPriority') -eq 'AboveNormal') 'After a rule edit the app has the rule''s value, not an old original'
     Assert ($open.Count -eq 1) 'Only one unfinished record controls the field after the edit'
+    $before=$open[0].ruleHash
     Set-Field $probe 'cpuPriority' 'BelowNormal'
     $rule.enabled=$false
     Save-Rule $rule|Out-Null
     Start-Sleep -Milliseconds 300
     $rule.enabled=$true
     Save-Rule $rule|Out-Null
-    Start-Sleep -Seconds 40
-    $open=@(Get-Open $probe.Id|Where-Object {-not $_.field -or $_.field -eq 'cpuPriority'})
-    Note 'afterOffOn' ([ordered]@{value=(Read-Field $probe 'cpuPriority');open=@($open|ForEach-Object {$_.ruleHash.Substring(0,8)+' '+$_.status})})
-    Assert ((Read-Field $probe 'cpuPriority') -eq 'AboveNormal') 'Forty seconds after turning the rule off and on the app has the rule''s value'
+    $settled=Wait-OrphanSettled $probe $before
+    $open=@(Get-OrphanOpen $probe)
+    Note 'afterOffOn' ([ordered]@{seconds=$settled;value=(Read-Field $probe 'cpuPriority');open=@($open|ForEach-Object {$_.ruleHash.Substring(0,8)+' '+$_.status})})
+    Assert ($null -ne $settled) 'The record from before off and on closes and the rule owns the field again'
+    Assert ((Read-Field $probe 'cpuPriority') -eq 'AboveNormal') 'After turning the rule off and on the app has the rule''s value'
     Assert ($open.Count -eq 1) 'Only one unfinished record controls the field after off and on'
 }
 
@@ -289,7 +302,8 @@ while(Get-Process -Id $($worker.Id) -ErrorAction SilentlyContinue){Start-Sleep -
 Start-ScheduledTask -TaskName '$($synced.taskName)'
 "@))) -WindowStyle Hidden -PassThru
     $script:probes.Add($watcher)
-    Start-Sleep -Seconds 17
+    $stale=Wait-Until {(Core 'policy-status').error -like '*heartbeat is stale*'} 30 500
+    Assert ($null -ne $stale) 'The suspended governor is reported as not answering'
     $env:ROO_INDUSTRIES_TEST_RESTORE_RUN_DELAY_MS='3000'
     $result=$null;$failure=$null
     try {$result=Worker 'Sync'} catch {$failure=$_.Exception.Message} finally {Remove-Item Env:\ROO_INDUSTRIES_TEST_RESTORE_RUN_DELAY_MS}
