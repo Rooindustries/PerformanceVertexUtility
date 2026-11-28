@@ -20,7 +20,7 @@ HERE = Path(__file__).resolve().parent
 local_tree = runpy.run_path(str(HERE / 'local_tree.py'))['entries']
 ALLOWLIST = 'tools/validation/reparse-walk-allowlist.json'
 sys.path.insert(0, str(HERE))
-from reparse_names import (HOLE, PATH, SELF, BLOCK, ROOT, MARKERS, split_command_line, cmd_facts, CLASSES, SCOPE, PRODUCT, fact, tagged, lines_of, msbuild_facts, REASONS, launch, call_harm, name_findings)
+from reparse_names import (HOLE, PATH, SELF, BLOCK, ROOT, MARKERS, split_command_line, cmd_facts, CLASSES, NAMED, SCOPE, PRODUCT, fact, tagged, lines_of, msbuild_facts, REASONS, launch, call_harm, name_findings)
 PROJECTS = ('.csproj', '.props', '.targets')
 UNREADABLE_FILE = ('Python cannot read this file', 'PowerShell cannot read this:', 'bash cannot read this', 'MSBuild cannot read this project', 'MSBuild cannot give the compiler arguments',
                    'YAML cannot read this workflow', 'the check has no reader for the', 'cmd reads this file in the console code page', 'the compiler cannot read this',
@@ -794,7 +794,7 @@ class Classifier:
         broken = [c for c in entry.get('safe', []) if not self.holds(c, args, None)]
         if 'safe' in entry and not broken:
             return None
-        rule = next((c for c in broken if c.get('harm') in REASONS), None) or next((c for c in broken if 'harm' in c or 'known' in c), None) or entry
+        rule = next((c for c in broken if 'harm' in c or 'known' in c), None) or entry
         return entry['does'], rule.get('harm') or rule.get('known') or 'call'
 
     def called(self, section, name, args):
@@ -812,8 +812,6 @@ class Classifier:
             return [(f'this calls native code {name}', call_harm(name) or 'native call', name.lower())]
         if kind == 'call' and name.startswith('com:'):
             return [(f'this uses the COM class {name[4:]}', call_harm(name) or 'COM class', name.lower())]
-        if kind == 'call' and name == 'msbuild:item glob':
-            return [('this MSBuild item glob walks every folder its wildcard folder matches when the project is evaluated', 'R1', '')]
         if kind == 'call' and name == 'msbuild:item from a property':
             return [('this MSBuild item takes its files from a property the check cannot read, which can hold a wildcard folder that is walked when the project is evaluated', 'R1', '')]
         if kind == 'call' and name == 'glob:wildcard folder':

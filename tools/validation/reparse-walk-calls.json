@@ -1,13 +1,13 @@
 {
  "contract": [
-  "1. A name is on this list only if the thing it names itself performs a walk (R1), applies a permission or owner change that propagates or recurses (R2), or makes a link, mount, drive mapping, share or virtual disk (R3). The repo's own link and walk helpers do not count, and neither does an identifier or a message that merely contains Junction, SymbolicLink, Symlink, HardLink, link, mount, move or expand. Python add and walk count only in qualified forms (os.walk, Path.walk(, an archive's add).",
+  "1. A name is on this list only if the thing it names itself performs a walk (R1), applies a permission or owner change that propagates or recurses (R2), or makes a link, mount, drive mapping, share or virtual disk (R3). The repo's own link and walk helpers do not count. Python add and walk count only in qualified forms (os.walk, Path.walk(, an archive's add). Junction, SymbolicLink, Symlink and HardLink count as string values, and link, mount, move, expand and junction as programs, as 'How names match' says; a message that uses one of them in that shape is matched and carries a reasoned exception.",
   "2. R2 is the call that applies a permission or owner to the file system, not the ones that build a security object in memory: SetOwner, SetAccessRuleProtection, AddAccessRule, RemoveAccessRule and their kind are not on the list.",
-  "3. R2 is a change that propagates or recurses. A call that by its definition changes exactly one object and cannot propagate is not on the list: SetKernelObjectSecurity, SetFileSecurity, chmod or os.chmod without -R, File.SetAttributes. chmod -R, chown -R, chgrp -R, chattr -R, chcon -R, icacls, takeown and attrib are. Windows SetAccessControl on a folder propagates inheritance, so it is.",
-  "4. R1 is the call that walks or unpacks a tree, not the module it lives in: bare zipfile, tarfile and ZipFile are not on the list; extractall, an archive's add, make_archive, unpack_archive, create_archive, compile_dir, dircmp, CreateFromDirectory, ExtractToDirectory, ZipDirectory, Compress-Archive, Expand-Archive and copytree are. A move that can carry a folder to another volume is a copy and delete, so it is R1: Move-Item and its aliases mi, mv and move (measured on windows-2025: Windows PowerShell 5.1 and PowerShell 7 move a folder to another volume and empty the folder behind a junction inside it), shutil.move, MoveDirectory, MoveFolder, CopyHere, MoveHere, SHFileOperation and IFileOperation. File.Move, FileInfo.MoveTo and the MoveFile calls carry one file; Directory.Move and DirectoryInfo.MoveTo refuse a folder on another volume, and so does cmd move (measured on windows-2025: Access is denied, nothing moved); so none of these is on the list, and cmd move is on it only because move is also PowerShell's alias for Move-Item.",
+  "3. R2 is a change that propagates or recurses. A call that by its definition changes exactly one object and cannot propagate is not on the list: SetKernelObjectSecurity, SetFileSecurity, chmod or os.chmod without -R, File.SetAttributes. chmod -R, chown -R, chgrp -R, chattr -R, chcon -R, icacls, takeown, setacl, attrib, Win32_Directory ChangeSecurityPermissions and TakeOwnerShipEx are. Windows SetAccessControl on a folder propagates inheritance, so it is.",
+  "4. R1 is the call that walks or unpacks a tree, not the module it lives in: bare zipfile, tarfile and ZipFile are not on the list; extractall, an archive's add, make_archive, unpack_archive, create_archive, compile_dir, dircmp, CreateFromDirectory, ExtractToDirectory, ZipDirectory, Compress-Archive, Expand-Archive, copytree and the Win32_Directory CopyEx, DeleteEx, CompressEx and UncompressEx methods are. compileall and zipapp count by name, because each module exists to walk or pack a folder (python -m compileall, python -m zipapp). A move that can carry a folder to another volume is a copy and delete, so it is R1: Move-Item and its aliases mi, mv and move (measured on windows-2025: Windows PowerShell 5.1 and PowerShell 7 move a folder to another volume and empty the folder behind a junction inside it), shutil.move, MoveDirectory, MoveFolder, CopyHere, MoveHere, SHFileOperation and IFileOperation. File.Move, FileInfo.MoveTo and the MoveFile calls carry one file; Directory.Move and DirectoryInfo.MoveTo refuse a folder on another volume, and so does cmd move (measured on windows-2025: Access is denied, nothing moved); so none of these is on the list, and cmd move is on it only because move is also PowerShell's alias for Move-Item.",
   "5. Every scanned file is matched against this list, the check's own source included. The names live here, in data the check does not scan, and not in code.",
-  "Not on the list: tree deletes and listings measured not to follow links (rd /s, rmdir /s, Remove-Item -Recurse, Get-ChildItem -Recurse without -FollowSymlink, Directory.Delete with recursive, shutil.rmtree); they are known kinds named by that measurement. find, zip and tree are listed with the switch that makes them follow links or recurse (find -L, -follow or -H; zip -r; tree -l), because without it find never follows a link, zip adds only the files it is given and tree never enters a link.",
-  "How names match: every line of every scanned file is read as raw text, in every file type, validation and product code alike, in any case, whatever the line is: code, a string, a list, a format string, an argument to a shell or to Process.Start, a message. A line is also read as part of its statement: the line joined with the lines after it while a ( or [ it opened is still open or it ends in \\ ` ^ , | && + ( or [, at most 12 lines. A name is reported on the line that holds it. The shapes: 'anywhere' names have no letter, digit or underscore right before them and anything after them. An escape for a line break or tab (\\n, \\r, \\t, `n, `r, `t) right before a name counts as a separator, for every shape. 'words' are whole words: no letter, digit, underscore, dot, $ or hyphen right before them and none of those right after them, except that .exe or .com may be glued on; a path may come before them. 'switched' names are words with their switch text anywhere on the line or in its statement, in any order and at any distance: 'letters' is a short option cluster of one to four letters or digits holding one of the letters (-r, -rf, -9r) that is not a PowerShell operator from 'not switches' (-or, -lt, -like); 'long' is a long option or a prefix of it (--recur); 'param' is a PowerShell parameter or a prefix of it (-r, -Rec, -Recurse); 'slash' is a cmd switch run whose parts are one or two letters, one of them holding the letter, and a part may carry a :value (/s, /s/b, /bs, /s:C:\\); 'words' are words (clean, use, -L). 'values' are a whole quoted value ('Junction', \"HardLink\") or a bare value right after a parameter or = (-ItemType Junction, Type=SymbolicLink). 'programs' (link, mount, move, expand) count only where the text shows a program: glued to .exe or .com, right after a path separator, right after an opening quote, or at a command position. In bash, cmd, PowerShell, workflow and MSBuild files a command position is the start of the line, or after ; | & ( { ` $( then do else -c /c /k or -Command; in Python and C# files, where a program appears only in text handed to a shell, it is after ; | & -c /c /k or -Command. A program a line starts (net 2) is R1, R2 or R3 when its own name is an 'anywhere', 'words', 'programs' or 'values' name of that list, or a 'switched' name given its switch. 'patterns' are names whose spellings are given as a regular expression: an archive's add is .add( on a name made of tar, tarball, tarfile, tf or archive, alone or joined to other words by underscores. Python's Path.walk counts as the unbound call Path.walk( (an instance walk is read by the Python reader), and setting a volume's DriveLetter to a letter (WMI or CIM) is R3.",
-  "Wildcard folder: a path segment that is a wildcard pattern followed by a separator walks every folder it matches, so it is R1 in every file type: a * followed by \\ or /, a ? followed by / right after ?, / or a quote, or ** next to a separator or a quote. A * that is a regex quantifier is not one: it follows ] ) } . + * whitespace or a backslash escape (\\s \\d \\w \\b). A * inside a character class is not one: an [ not followed by a quote, opened before it on the line with no ] or whitespace between. A * in a bash ${name#pattern} or ${name%pattern} trim follows # or % and is not one. A comment edge is not one: */ after whitespace, /** at the start of a line or after whitespace. A ? before a backslash is not one, because \\\\?\\ and \\??\\ are Windows path prefixes; a ? after a letter is a regex quantifier (https?://)."
+  "Not on the list: tree deletes and listings measured not to follow links (rd /s, rmdir /s, Remove-Item -Recurse, Get-ChildItem -Recurse without -FollowSymlink, Directory.Delete with recursive, shutil.rmtree); they are known kinds named by that measurement. find, zip, tree, rg and fd are listed with the switch that makes them follow links or recurse (find -L, -follow or -H; zip -r, -R or --recurse-paths/--recurse-patterns; tree -l; rg and fd -L or --follow), because without it they do neither. findstr is listed by name, because its /s can be joined with its other letters.",
+  "How names match. (a) Every line of every scanned file is read as raw text, in every file type, validation and product code alike; a file that starts with a UTF-16 byte order mark is read as UTF-16. (b) Case does not matter, except for the switch text of a tool marked \"case\": \"sensitive\". (c) A line is also read as part of its statement: it is joined with the lines after it while a (, [ or { it opened is still open, or while a line ends in \\ ` ^ , | && or +, at most 12 lines in all; a name is reported on the line that holds it. (d) 'anywhere' names have no letter, digit or underscore right before them and anything after them. (e) 'words' are whole words: no letter, digit, underscore, dot, $ or hyphen right before them and none of those right after them, except that .exe or .com may be glued on; a path may come before them. (f) An escape for a line break or tab (\\n, \\r, \\t, `n, `r, `t) right before an 'anywhere', 'words', 'switched' or 'programs' name counts as a separator. (g) 'switched' names are words with their switch text anywhere on the line or in its statement, in any order and at any distance: 'letters' is a short option cluster, a hyphen and one or more letters that are all among the tool's single-letter options ('cluster'), at least one of them a trigger letter (-r, -rf, -afvpR, -oR); 'long' is a long option or any prefix of it, with or without =value (--recur, --follow); 'param' is a PowerShell parameter written from the shortest prefix the table gives up to its full name, with or without :value, in any case (-Fol, -Recurse:$true); 'slash' is a cmd switch, / and the letter, followed by the end of the word, another /switch or :value, in any case (/s, /s/a-d, /a-d/s, /s:C:\\); 'words' are words (clean, use, -L). (h) Every alias in 'powershell aliases' of a listed cmdlet counts as well: as a whole word for an 'anywhere' or 'words' cmdlet, or with the cmdlet's switch text for a 'switched' cmdlet, added to the alias's own switch text when the alias is also a listed program (cp, ls, dir); an alias already listed under another rule (mount, move, mv) keeps that rule. (i) 'values' are a whole quoted value ('Junction', \"HardLink\") or a bare value right after a parameter, with or without :, or after = (-ItemType Junction, -ItemType:Junction, Type=SymbolicLink). (j) 'programs' (link, mount, move, expand, junction) are whole words with no letter, digit, underscore, dot, $, colon or hyphen right before them (so a property, a static member such as ::Move, a $variable or a -Parameter does not count) and no letter, digit, underscore, dot, = or hyphen right after them, except .exe or .com. In bash, cmd, PowerShell and workflow files they match anywhere on the line; in Python, C# and MSBuild files they match inside a string literal, and anywhere when glued to .exe or .com or right after a path separator. (k) A string literal is '...', \"...\" (a backslash escapes the next character), a triple-quoted string (over lines), a C# verbatim @\"...\" (\"\" inside, over lines) or an MSBuild attribute value; Python # and C# // comments are not read for strings. (l) A program a line starts (net 2) is R1, R2 or R3 when its own name is an 'anywhere', 'words', 'programs' or 'values' name of that list, or a 'switched' name given its switch. (m) 'patterns' are names whose spellings are given as a regular expression: an archive's add is .add( on a name made of tar, tarball, tarfile, tf or archive, alone or joined to other words by underscores; Python's Path.walk counts as the unbound call Path.walk(; setting a volume's DriveLetter to a letter (WMI or CIM) is R3; a Recurse or FollowSymlink default (Copy-Item:Recurse); the reparse point control code in any zero-padding or decimal.",
+  "Wildcard folder: a * or ? that is followed, later in the same word or string, by \\ or / makes a path segment a wildcard pattern, which walks every folder it matches, so it is R1 in every file type. In Python and C# files the text read is each string literal; in every other file it is the raw line, where a word ends at whitespace, a quote or a backtick. ** at the start or end of that text, or next to a separator or a quote, is a recursive wildcard and counts too. Nothing else is excluded: a regular expression, a URL query, a Windows path prefix (\\\\?\\) or arithmetic that matches is refused like any other line and carries a reasoned exception that says what it is."
  ],
  "names": {
   "R1": {
@@ -75,9 +75,14 @@
     "pax",
     "sftp",
     "scp",
-    "attrib",
     "mv",
-    "mi"
+    "compileall",
+    "zipapp",
+    "findstr",
+    "CopyEx",
+    "DeleteEx",
+    "CompressEx",
+    "UncompressEx"
    ],
    "programs": [
     "move",
@@ -85,6 +90,7 @@
    ],
    "switched": {
     "find": {
+     "case": "sensitive",
      "words": [
       "-L",
       "-follow",
@@ -92,90 +98,125 @@
      ]
     },
     "zip": {
-     "letters": "r",
+     "case": "sensitive",
+     "letters": "rR",
+     "cluster": "0123456789AbcdDefFghjJklLmnoqrRSTuvwXyz",
      "long": [
-      "--recurse-paths"
+      "--recurse-paths",
+      "--recurse-patterns"
      ]
     },
     "tree": {
-     "letters": "l"
+     "case": "sensitive",
+     "letters": "l",
+     "cluster": "adlfiqNQpugshDFIPoLCnrtvUxJRSX"
     },
     "cp": {
-     "letters": "ra",
+     "case": "sensitive",
+     "letters": "rRa",
+     "cluster": "abdfHilLnPprRsStTuvxZ",
      "long": [
       "--recursive",
       "--archive"
-     ],
-     "param": [
-      "Recurse"
      ]
     },
     "copy-item": {
-     "param": [
-      "Recurse"
-     ]
+     "param": {
+      "Recurse": "R"
+     }
     },
-    "cpi": {
-     "param": [
-      "Recurse"
-     ]
-    },
-    "copy": {
-     "param": [
-      "Recurse"
-     ]
+    "get-childitem": {
+     "param": {
+      "FollowSymlink": "Fol"
+     }
     },
     "rm": {
-     "letters": "r",
+     "case": "sensitive",
+     "letters": "rR",
+     "cluster": "dfiIrRv",
      "long": [
       "--recursive"
      ]
     },
     "ls": {
-     "letters": "r",
+     "case": "sensitive",
+     "letters": "R",
+     "cluster": "aAbBcCdDfFgGhHiIklLmnNopqQrRsStTuUvwxXZ1",
      "long": [
       "--recursive"
      ]
     },
     "grep": {
-     "letters": "r",
+     "case": "sensitive",
+     "letters": "rR",
+     "cluster": "ABCDEFGHILPRTUVZabcdefhilmnoqrsuvwxyz0123456789",
      "long": [
       "--recursive",
       "--dereference-recursive"
      ]
     },
     "egrep": {
-     "letters": "r",
+     "case": "sensitive",
+     "letters": "rR",
+     "cluster": "ABCDEFGHILPRTUVZabcdefhilmnoqrsuvwxyz0123456789",
      "long": [
-      "--recursive"
+      "--recursive",
+      "--dereference-recursive"
      ]
     },
     "fgrep": {
-     "letters": "r",
+     "case": "sensitive",
+     "letters": "rR",
+     "cluster": "ABCDEFGHILPRTUVZabcdefhilmnoqrsuvwxyz0123456789",
      "long": [
-      "--recursive"
+      "--recursive",
+      "--dereference-recursive"
+     ]
+    },
+    "rg": {
+     "case": "sensitive",
+     "letters": "L",
+     "cluster": "aABcCeEfFgHiIjlLmMnNoOpPqrsStTuUvVwxz0123456789",
+     "long": [
+      "--follow"
+     ]
+    },
+    "fd": {
+     "case": "sensitive",
+     "letters": "L",
+     "cluster": "aAcdeEgHhiIlLpsStuxX0123456789",
+     "long": [
+      "--follow"
      ]
     },
     "diff": {
+     "case": "sensitive",
      "letters": "r",
+     "cluster": "abBcCdDeEfFiIlnNpPqrsStTuUvwWxXyZ0123456789",
      "long": [
       "--recursive"
      ]
     },
     "gzip": {
+     "case": "sensitive",
      "letters": "r",
+     "cluster": "cdfhklLnNqrStv123456789",
      "long": [
       "--recursive"
      ]
     },
     "gunzip": {
+     "case": "sensitive",
      "letters": "r",
+     "cluster": "cdfhklLnNqrStv123456789",
      "long": [
       "--recursive"
      ]
     },
     "zstd": {
-     "letters": "r"
+     "case": "sensitive",
+     "letters": "r",
+     "cluster": "0123456789cdDfhHklLoqrtTvVzM"
     },
     "dir": {
      "slash": "s"
@@ -192,9 +233,6 @@
     "cipher": {
      "slash": "s"
     },
-    "findstr": {
-     "slash": "s"
-    },
     "replace": {
      "slash": "s"
     },
@@ -205,6 +243,7 @@
      "slash": "r"
     },
     "git": {
+     "case": "sensitive",
      "words": [
       "clean"
      ]
@@ -218,10 +257,6 @@
     "a Recurse default for a cmdlet": {
      "pattern": ":(Recurse|FollowSymlink)\\b",
      "example": "Copy-Item:Recurse"
-    },
-    "a tree tool run as a Python module": {
-     "pattern": "(?<![\\w-])-m\\s+(compileall|zipapp)\\b",
-     "example": "python -m compileall src"
     },
     "an unbound Path.walk call": {
      "pattern": "\\bPath\\.walk\\s*\\(",
@@ -242,36 +277,49 @@
     "SetNamedSecurityInfo",
     "TreeSetNamedSecurityInfo",
     "TreeResetNamedSecurityInfo",
-    "NativeObjectSecurity.Persist"
+    "NativeObjectSecurity.Persist",
+    "ChangeSecurityPermissions"
    ],
    "words": [
     "takeown",
-    "setacl"
+    "setacl",
+    "attrib",
+    "TakeOwnerShipEx"
    ],
    "switched": {
     "chmod": {
-     "letters": "r",
+     "case": "sensitive",
+     "letters": "R",
+     "cluster": "cfvR",
      "long": [
       "--recursive"
      ]
     },
     "chown": {
-     "letters": "r",
+     "case": "sensitive",
+     "letters": "R",
+     "cluster": "cfvRhHLP",
      "long": [
       "--recursive"
      ]
     },
     "chgrp": {
-     "letters": "r",
+     "case": "sensitive",
+     "letters": "R",
+     "cluster": "cfvRhHLP",
      "long": [
       "--recursive"
      ]
     },
     "chattr": {
-     "letters": "r"
+     "case": "sensitive",
+     "letters": "R",
+     "cluster": "RVfvp"
     },
     "chcon": {
-     "letters": "r",
+     "case": "sensitive",
+     "letters": "R",
+     "cluster": "hvRHLPurtl",
      "long": [
       "--recursive"
      ]
@@ -330,7 +378,9 @@
     "New-SmbShare",
     "New-SmbGlobalMapping",
     "junction.exe",
-    "junction64.exe"
+    "junction64.exe",
+    "WNetUseConnection",
+    "AddAccessPath"
    ],
    "words": [
     "subst",
@@ -341,7 +391,8 @@
    ],
    "programs": [
     "link",
-    "mount"
+    "mount",
+    "junction"
    ],
    "values": [
     "Junction",
@@ -364,16 +415,18 @@
      ]
     },
     "cp": {
+     "case": "sensitive",
      "letters": "sl",
+     "cluster": "abdfHilLnPprRsStTuvxZ",
      "long": [
       "--symbolic-link",
       "--link"
      ]
     },
     "New-Partition": {
-     "param": [
-      "DriveLetter"
-     ]
+     "param": {
+      "DriveLetter": "Dr"
+     }
     }
    },
    "patterns": {
@@ -388,67 +441,36 @@
    }
   },
   "wildcard folder": {
-   "pattern": "(?<![\\s\\]).}+*#%])(?<!\\\\[sdwb])\\*(?=[\\\\/])|(?<=[?/'\\\"])\\?(?=/)|(?:(?<=[^\\s/*]/)|(?<=[\\\\'\\\"]))\\*\\*|\\*\\*(?=[\\\\/'\\\"])",
+   "pattern": "[*?][^\\s'\"`]*?[\\\\/]|(?:^|(?<=[\\\\/'\"]))\\*\\*|\\*\\*(?=[\\\\/'\"]|$)",
    "example": "Remove-Item 'a/*/b'",
    "refused": [
     "a/*/b",
     "a\\*\\b",
+    "cache*v2/tmp",
+    "a/v1.*/x",
+    "${w}*/x",
+    "$($w)*/x",
+    "[a-z]*/x",
+    "*/canary.txt",
+    "a/??/b",
+    "a\\????\\b",
+    "lin?/x",
     "**",
     "a/**",
     "**/b",
-    "a/??/b",
-    "$a/*/*"
+    "[-+*/]",
+    "\\s*/x",
+    "\\\\?\\C:\\x"
    ],
    "passes": [
-    "[^/]*/",
-    "\\s*/x",
-    "(a)*/",
-    "[-+*/]",
-    "x */ y",
     "f(**kw)",
     "x ** 2",
-    "https?://x",
-    "\\\\?\\C:\\x",
-    "${f##*/}",
-    "[a*/]",
-    "\\??\\C:\\x"
+    "*.log",
+    "a * b / c",
+    "a* b/c",
+    "'*' + '/x'"
    ]
   },
-  "not switches": [
-   "eq",
-   "ne",
-   "gt",
-   "ge",
-   "lt",
-   "le",
-   "ieq",
-   "ine",
-   "igt",
-   "ige",
-   "ilt",
-   "ile",
-   "ceq",
-   "cne",
-   "cgt",
-   "cge",
-   "clt",
-   "cle",
-   "like",
-   "in",
-   "is",
-   "as",
-   "and",
-   "or",
-   "xor",
-   "not",
-   "band",
-   "bor",
-   "bxor",
-   "bnot",
-   "shl",
-   "shr",
-   "f"
-  ],
   "measured programs": {
    "rd": "folder delete; rd /s does not follow links (measured)",
    "rmdir": "folder delete; rd /s does not follow links (measured)"

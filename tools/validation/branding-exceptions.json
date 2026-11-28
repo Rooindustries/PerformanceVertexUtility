@@ -659,7 +659,8 @@
     {
       "text": "roo-blackwell-uac-approval/v1",
       "files": [
-        "tools/validation/Release/Test-BlackwellInteractiveReadme.ps1"
+        "tools/validation/Release/Test-BlackwellInteractiveReadme.ps1",
+        "tools/validation/reparse-walk-allowlist.json"
       ],
       "reason": "Versioned protocol identifier serialized in an on-disk ledger, handoff or approval receipt and checked by later runs; preserve its existing wire spelling."
     },
@@ -810,6 +811,13 @@
         "tools/validation/reparse-walk-allowlist.json"
       ],
       "reason": "Private on-disk historical recovery folder from Test-HistoricalBlackwell.ps1, quoted as that line's text in the walk check's known list."
+    },
+    {
+      "text": "SHORT_NAME = re.compile(r\\\"\\\\bRoo(?!Industries|industries| Industries)(?:\\\\b|[A-Z])|(?<=\\\\w)Roo(?=[A-Z])(?!Industries)|\\\\bROO(?:_(?!INDUSTRIES_)|\\\\b(?! INDUSTRIES))|\\\\broo(?!industries|-industries)(?:[-_.]|\\\\b)\\\")",
+      "files": [
+        "tools/validation/reparse-walk-allowlist.json"
+      ],
+      "reason": "The walk check's allowlist quotes the branding check's own short-name regular expression as the line a reasoned exception covers."
     }
   ]
 }

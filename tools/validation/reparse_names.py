@@ -111,8 +111,6 @@ def msbuild_facts(relative, data, files=()):
         elif name == 'Import' and not ('$' not in project.replace('$(MSBuildThisFileDirectory)', '') and '*' not in project and local in files) or (
                 name in ('Project', 'Import', 'Sdk') and 'Sdk' in attributes and not re.fullmatch(r'Microsoft\.NET\.Sdk(\.\w+)*', attributes['Sdk'])):
             facts.append(fact(relative, line, source, 'call', 'msbuild:import', None))
-        elif stack and stack[-1] == 'ItemGroup' and any(re.search(r'\*\*|[*?][^\\/;]*[\\/]', expanded(attributes.get(key, ''))) for key in ('Include', 'Exclude', 'Remove', 'Update')):
-            facts.append(fact(relative, line, source, 'call', 'msbuild:item glob', None))
         elif stack and stack[-1] == 'ItemGroup' and any('$(' in expanded(attributes.get(key, '')) for key in ('Include', 'Exclude', 'Remove', 'Update')):
             facts.append(fact(relative, line, source, 'call', 'msbuild:item from a property', None))
         elif stack and stack[-1] == 'Target' and name not in ('PropertyGroup', 'ItemGroup', 'OnError'):
@@ -143,13 +141,31 @@ def msbuild_facts(relative, data, files=()):
     return facts
 
 
-NAMED = CLASSES['names']
 REASONS = ('R1', 'R2', 'R3')
 LANGUAGES = {'py': 'python', 'ps1': 'powershell', 'psm1': 'powershell', 'psd1': 'powershell', 'cs': 'csharp', 'sh': 'bash', 'cmd': 'cmd', 'bat': 'cmd', 'yml': 'workflow', 'yaml': 'workflow',
              'csproj': 'msbuild', 'props': 'msbuild', 'targets': 'msbuild'}
-SHELL_LANGUAGES = ('bash', 'cmd', 'powershell', 'workflow', 'msbuild')
-TAIL = r'(?:\.exe|\.com)?(?![\w.-])'
+SHELL_LANGUAGES = ('bash', 'cmd', 'powershell', 'workflow')
+STRING_LANGUAGES = ('python', 'csharp')
 ESCAPED = r'(?<=[\\`][ntr])'
+LEFT = r'(?:(?<![\w.$-])|' + ESCAPED + ')'
+TAIL = r'(?:\.exe|\.com)?(?![\w.-])'
+
+
+def listed():
+    names = {harm: {kind: dict(rules) if isinstance(rules, dict) else {n: None for n in rules} for kind, rules in CLASSES['names'][harm].items()} for harm in REASONS}
+    for alias, cmdlet in CLASSES['powershell aliases'].items():
+        for harm in REASONS:
+            kinds = {kind: next((n for n in rules if n.lower() == cmdlet), None) for kind, rules in names[harm].items()}
+            own = {kind: next((n for n in rules if n.lower() == alias), None) for kind, rules in names[harm].items()}
+            if kinds.get('switched'):
+                rule = names[harm]['switched'][kinds['switched']]
+                names[harm]['switched'][own['switched'] or alias] = {**rule, **names[harm]['switched'].get(own['switched'], {})} if own['switched'] else dict(rule)
+            elif (kinds.get('anywhere') or kinds.get('words')) and not any(own.values()):
+                names[harm]['words'][alias] = None
+    return names
+
+
+NAMED = listed()
 
 
 def anywhere(name):
@@ -157,32 +173,35 @@ def anywhere(name):
 
 
 def word(name):
-    return re.compile(r'(?:(?<![\w.$-])|' + ESCAPED + ')' + re.escape(name) + TAIL, re.IGNORECASE)
+    return re.compile(LEFT + re.escape(name) + TAIL, re.IGNORECASE)
 
 
-def prefixes(text):
-    return re.escape(text[0]) + ''.join('(?:' + re.escape(letter) for letter in text[1:]) + ')?' * (len(text) - 1)
+def grown(least, name):
+    rest = name[len(least):]
+    return re.escape(least) + ''.join('(?:' + re.escape(letter) for letter in rest) + ')?' * len(rest)
 
 
 def switch(rule):
-    parts = [r'(?<![\w-])-(?!(?:' + '|'.join(NAMED['not switches']) + r')(?![\w-]))(?=[a-z0-9]{1,4}(?![\w-]))[a-z0-9]*[' + re.escape(rule['letters']) + ']'] if 'letters' in rule else []
-    parts += [r'(?<![\w-])--' + prefixes(option[2:]) + r'(?![\w-])' for option in rule.get('long', [])]
-    parts += [r'(?<![\w-])-' + prefixes(name) + r'(?![\w-])' for name in rule.get('param', [])]
-    if 'slash' in rule:
-        letters = re.escape(rule['slash'])
-        parts.append(r'(?:/[a-z?]{1,2})*/(?:[a-z]?[' + letters + r']|[' + letters + r'][a-z]?)(?::\S*)?(?:/[a-z?]{1,2})*(?![\w\\./-])')
-    parts += [(r'(?<![\w.$-])' if text[0].isalnum() else r'(?<![\w.$])') + re.escape(text) + r'(?![\w.-])' for text in rule.get('words', [])]
-    return re.compile('|'.join(parts), re.IGNORECASE)
+    case = '' if rule.get('case') == 'sensitive' else 'i'
+    scoped = lambda text, flags=case: f'(?{flags}:{text})' if flags else f'(?:{text})'
+    parts = []
+    if 'letters' in rule:
+        cluster = re.escape(rule.get('cluster', rule['letters']))
+        parts.append(scoped(r'(?<![\w-])-(?=[' + cluster + r']*[' + re.escape(rule['letters']) + r'])[' + cluster + r']+(?![\w-])'))
+    parts += [scoped(r'(?<![\w-])--' + grown(option[2], option[2:]) + r'(?![\w-])') for option in rule.get('long', [])]
+    parts += [scoped(r'(?<![\w-])-' + grown(least, name) + r'(?![\w-])', 'i') for name, least in rule.get('param', {}).items()]
+    parts += [scoped('/[' + re.escape(rule['slash']) + r'](?=[\s/\'":]|$)', 'i')] if 'slash' in rule else []
+    parts += [scoped((r'(?<![\w.$-])' if text[0].isalnum() else r'(?<![\w.$])') + re.escape(text) + r'(?![\w.-])') for text in rule.get('words', [])]
+    return re.compile('|'.join(parts))
 
 
 def value(name):
     return re.compile(r'(?<=[\'"])' + re.escape(name) + r'(?=[\'"])|(?:(?<![\w-])-\w+\s*:?\s*|=\s*)' + re.escape(name) + r'(?![\w.-])', re.IGNORECASE)
 
 
-def program(name, shell):
-    name = re.escape(name)
-    position = r'(?:^\s*[@&.]?|[;|&({`]|\$\(|\b(?:then|do|else)\s|(?<![\w-])[-/](?:c|k|command)\s)\s*' if shell else r'(?:[;|&]|(?<![\w-])[-/](?:c|k|command)\s)\s*'
-    return re.compile(name + r'\.(?:exe|com)(?![\w.-])|(?<=[\\/])' + name + TAIL + r'|(?<=[\'"])' + name + TAIL + '|' + position + name + TAIL, re.IGNORECASE)
+def program(name):
+    whole = r'(?:(?<![\w.$:-])|' + ESCAPED + ')' + re.escape(name) + r'(?:\.exe|\.com)?(?![\w.=-])'
+    return {'text': re.compile(whole, re.IGNORECASE), 'outside': re.compile(LEFT + re.escape(name) + r'\.(?:exe|com)(?![\w.-])|(?<=[\\/])' + re.escape(name) + TAIL, re.IGNORECASE)}
 
 
 MATCHERS = []
@@ -191,27 +210,62 @@ for _harm in REASONS:
     MATCHERS += [(_harm, n, 'anywhere', anywhere(n), None) for n in _rules['anywhere']]
     MATCHERS += [(_harm, n, 'word', word(n), None) for n in _rules['words']]
     MATCHERS += [(_harm, n, 'switched', word(n), switch(rule)) for n, rule in _rules['switched'].items()]
-    MATCHERS += [(_harm, n, 'value', value(n), None) for n in _rules.get('values', [])]
-    MATCHERS += [(_harm, n, 'program', None, {True: program(n, True), False: program(n, False)}) for n in _rules.get('programs', [])]
+    MATCHERS += [(_harm, n, 'value', value(n), None) for n in _rules.get('values', {})]
+    MATCHERS += [(_harm, n, 'program', None, program(n)) for n in _rules.get('programs', {})]
     MATCHERS += [(_harm, n, 'pattern', re.compile(rule['pattern'], re.IGNORECASE), None) for n, rule in _rules['patterns'].items()]
-WILDCARD = re.compile(NAMED['wildcard folder']['pattern'], re.IGNORECASE)
+WILDCARD = re.compile(CLASSES['names']['wildcard folder']['pattern'])
 
 
-def in_class(text, index):
-    opened = text.rfind('[', 0, index)
-    return opened >= 0 and text[opened + 1:opened + 2] not in ('"', "'") and not re.search(r'[\]\s]', text[opened + 1:index])
-
-
-def named(text, language, statement):
+def named(text, language, statement, strings):
     shell = language in SHELL_LANGUAGES
     found = []
     for harm, name, kind, pattern, extra in MATCHERS:
-        searched = extra[shell] if kind == 'program' else pattern
-        if searched.search(text) and (kind != 'switched' or extra.search(statement)):
+        if kind == 'program':
+            hit = extra['text'].search(text) if shell else extra['outside'].search(text) or any(extra['text'].search(s) for s in strings)
+        else:
+            hit = pattern.search(text) and (kind != 'switched' or extra.search(statement))
+        if hit:
             found.append((harm, name))
-    if any(not in_class(text, match.start()) for match in WILDCARD.finditer(text)):
+    if any(WILDCARD.search(piece) for piece in (strings if language in STRING_LANGUAGES else [text])):
         found.append(('R1', 'a wildcard folder'))
     return found
+
+
+def string_texts(lines, language):
+    out, state = [], None
+    for line in lines:
+        texts, index, current = [], 0, ''
+        while index < len(line):
+            if state:
+                close, raw = state
+                if line.startswith(close, index) and not (raw == '@' and line.startswith(close * 2, index)):
+                    texts.append(current); current, state = '', None
+                    index += len(close)
+                    continue
+                if raw == '@' and line.startswith('""', index):
+                    current += '"'; index += 2
+                    continue
+                if raw == '\\' and line[index] == '\\':
+                    current += line[index:index + 2]; index += 2
+                    continue
+                current += line[index]; index += 1
+                continue
+            rest = line[index:]
+            if language == 'python' and rest.startswith('#') or language == 'csharp' and rest.startswith('//'):
+                break
+            quote = re.match(r'@"|"""|\'\'\'|"|\'', rest) if language != 'msbuild' else re.match(r'"|\'', rest)
+            if quote:
+                opened = quote.group(0)
+                state = ('"', '@') if opened == '@"' else (opened, '"""' if len(opened) == 3 else 'x' if language == 'msbuild' else '\\')
+                index += len(opened)
+                continue
+            index += 1
+        if state:
+            texts.append(current)
+            if state[1] == '\\':
+                state = None
+        out.append(texts)
+    return out
 
 
 def statements(lines):
@@ -219,8 +273,8 @@ def statements(lines):
     while start < len(lines):
         end, depth = start, 0
         while True:
-            depth = max(depth + len(re.findall(r'[(\[]', lines[end])) - len(re.findall(r'[)\]]', lines[end])), 0)
-            if not (depth or re.search(r'(?:[\\`^,|+(\[]|&&)\s*$', lines[end])) or end + 1 >= len(lines) or end - start >= 11:
+            depth = max(depth + len(re.findall(r'[(\[{]', lines[end])) - len(re.findall(r'[)\]}]', lines[end])), 0)
+            if not (depth or re.search(r'(?:[\\`^,|+]|&&)\s*$', lines[end])) or end + 1 >= len(lines) or end - start >= 11:
                 break
             end += 1
         out.append((start, end))
@@ -232,14 +286,13 @@ def harm_of(program, tokens):
     base = re.sub(r'\.(exe|com)$', '', re.split(r'[\\/]', program.lower())[-1])
     switches = ' '.join(t for t in tokens or [] if isinstance(t, str))
     for harm in REASONS:
-        rules = NAMED[harm]
-        if base in (n.lower() for n in rules['anywhere'] + rules['words'] + rules.get('programs', []) + rules.get('values', [])):
+        if base in (n.lower() for kind in ('anywhere', 'words', 'programs', 'values') for n in NAMED[harm].get(kind, {})):
             return harm
     for harm in REASONS:
         rule = next((r for n, r in NAMED[harm]['switched'].items() if n.lower() == base), None)
         if rule and switch(rule).search(switches):
             return harm
-    return NAMED['measured programs'].get(base, 'program')
+    return CLASSES['names']['measured programs'].get(base, 'program')
 
 
 def launch(program, tokens=None):
@@ -270,9 +323,10 @@ def name_findings(root, paths):
         data = (root / relative).read_bytes()
         text = data.decode('utf-16') if data.startswith((b'\xff\xfe', b'\xfe\xff')) else data.decode('utf-8-sig', 'replace')
         lines = lines_of(text)
+        strings = string_texts(lines, language) if language not in SHELL_LANGUAGES else [[] for _ in lines]
         for start, end in statements(lines):
             joined = ' '.join(lines[start:end + 1])
             for number in range(start, end + 1):
-                for harm, name in named(lines[number], language, joined):
+                for harm, name in named(lines[number], language, joined, strings[number]):
                     found.setdefault((relative, number + 1), (lines[number], []))[1].append((f'this line names {name}, which the names list calls {harm}', harm, ''))
     return found
