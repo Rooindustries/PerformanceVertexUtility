@@ -22,6 +22,7 @@ switch($Mode){
   Write-RooIndustriesOperationJson @{paths=@((Join-Path $env:USERPROFILE 'Documents\keep-this.txt'));registry=@()} $input
   $null=& (Join-Path $repo 'backend\scripts\Invoke-CleanupExclusions.ps1') -Action Save -InputPath $input -ConfirmApply
   Write-Host ('Seeded user exclusions in '+$data)
+  [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey('Software\Microsoft\Windows\CurrentVersion\Uninstall').Dispose()
  }
  'Snapshot' {$rows=State;[IO.File]::WriteAllLines($Path,$rows);Write-Host ('Snapshot '+$rows.Count+' entries')}
  'Settle' {
