@@ -637,7 +637,8 @@
     {
       "text": "roo-blackwell-private-state-",
       "files": [
-        "tools/validation/Release/Analyze-HistoricalBlackwell.py"
+        "tools/validation/Release/Analyze-HistoricalBlackwell.py",
+        "tools/validation/reparse-walk-allowlist.json"
       ],
       "reason": "On-disk temporary file or directory prefix used by harness evidence or restoration; retained conservatively because earlier-run artifacts can outlive the creating process."
     },
@@ -672,7 +673,8 @@
     {
       "text": "roo-f12-",
       "files": [
-        "tools/validation/SetupMigration/run.py"
+        "tools/validation/SetupMigration/run.py",
+        "tools/validation/reparse-walk-allowlist.json"
       ],
       "reason": "On-disk temporary file or directory prefix used by harness evidence or restoration; retained conservatively because earlier-run artifacts can outlive the creating process."
     },
@@ -761,14 +763,16 @@
     {
       "text": "roo-unreachable-",
       "files": [
-        "tools/validation/Update/check_windows_transport.py"
+        "tools/validation/Update/check_windows_transport.py",
+        "tools/validation/reparse-walk-allowlist.json"
       ],
       "reason": "On-disk temporary file or directory prefix used by harness evidence or restoration; retained conservatively because earlier-run artifacts can outlive the creating process."
     },
     {
       "text": "roo-verification-evidence-",
       "files": [
-        "tools/validation/Release/Test-VerificationEvidence.py"
+        "tools/validation/Release/Test-VerificationEvidence.py",
+        "tools/validation/reparse-walk-allowlist.json"
       ],
       "reason": "On-disk temporary file or directory prefix used by harness evidence or restoration; retained conservatively because earlier-run artifacts can outlive the creating process."
     },
