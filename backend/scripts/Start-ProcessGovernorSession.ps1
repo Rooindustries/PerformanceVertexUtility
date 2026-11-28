@@ -343,7 +343,6 @@ try {
     $polls = New-Object System.Collections.Generic.List[object]
     $snapshots = New-Object System.Collections.Generic.List[object]
     $overThresholdSince = @{}
-    $decisions = @{}
     $activeRestraints = @{}
     $lastRestoreAt = @{}
 
@@ -400,6 +399,7 @@ try {
         $pollStartedAtUtc = Get-RooIndustriesUtcStamp
         $sample = Get-RooIndustriesGovernorCpuSample -SampleIntervalMilliseconds $SampleIntervalMilliseconds -IncludeCommandLine:$IncludeCommandLine
         $sampledAt = Get-Date
+        if ($pollIndex -eq 1 -and $env:ROO_FORCE_FIRST_POLL_LAG_MS) { Start-Sleep -Milliseconds ([int]$env:ROO_FORCE_FIRST_POLL_LAG_MS) }
         $pollWouldRestrain = New-Object System.Collections.Generic.List[object]
         $pollChanged = New-Object System.Collections.Generic.List[object]
         $pollSkipped = New-Object System.Collections.Generic.List[object]
@@ -413,18 +413,12 @@ try {
         }
         try {
             if ($null -ne $gate) {
-                $pollDecisions = @{}
                 foreach ($proc in @(Get-RooIndustriesPropertyArray $sample 'processes')) {
                     $processId = [int](Get-RooIndustriesPropertyValue $proc 'pid' 0)
                     $processName = [string](Get-RooIndustriesPropertyValue $proc 'name' '')
                     $key = Get-GovernorProcessKey $proc
                     $seenKeys.Add($key) | Out-Null
-                    $decisionKey = "$key|$([string](Get-RooIndustriesPropertyValue $proc 'commandLine' ''))"
-                    $decision = $decisions[$decisionKey]
-                    if ($null -eq $decision) {
-                        $decision = Get-RooIndustriesProcessGovernorDecision $proc $profile $protectedCatalog $foregroundPid $config
-                    }
-                    $pollDecisions[$decisionKey] = $decision
+                    $decision = Get-RooIndustriesProcessGovernorDecision $proc $profile $protectedCatalog $foregroundPid $config
                     $cpuPercent = [double](Get-RooIndustriesPropertyValue $proc 'cpuPercent' 0)
                     $pressureMet = ([double](Get-RooIndustriesPropertyValue $sample 'totalCpuPercent' 0) -ge [double]$config.totalCpuPressureThresholdPercent -and $cpuPercent -ge [double]$config.perProcessCpuThresholdPercent)
 
@@ -575,7 +569,6 @@ try {
                         $pollSkipped.Add($skip) | Out-Null
                     }
                 }
-                $decisions = $pollDecisions
 
                 foreach ($key in @($activeRestraints.Keys)) {
                     if (-not $seenKeys.Contains([string]$key)) {
