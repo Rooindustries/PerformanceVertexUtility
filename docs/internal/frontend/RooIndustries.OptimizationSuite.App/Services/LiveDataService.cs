@@ -1367,6 +1367,7 @@ public sealed partial class LiveDataService
         catch (OperationCanceledException)
         {
             TryKill(process, BackendScriptPolicy.StopWholeTree(scriptPath));
+            await process.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false);
             AppLog.Write("backend", "Timed out running " + Path.GetFileName(scriptPath));
             return new(null, AppLog.TimedOut);
         }
