@@ -440,7 +440,6 @@ try {
             $liveProbe.Kill()
             $liveProbe.WaitForExit()
         }
-        if ($liveProbe) { $liveProbe.Dispose() }
     }
     $tempRoot = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath())
     $fullLiveRoot = [System.IO.Path]::GetFullPath($liveRoot)
