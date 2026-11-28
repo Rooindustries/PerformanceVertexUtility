@@ -95,7 +95,7 @@ reboot_wait() {
   done
   echo 'The PC did not return with a desktop session'; return 1
 }
-fetch() { local remote="$1" local_dir="$2"; mkdir -p "$local_dir"; scp -o BatchMode=yes -o ProxyCommand=none -o ProxyJump=none -r "$HOST:${remote//\\//}" "$local_dir/"; }
+fetch() { local remote="$1" local_dir="$2" linked; linked="$(winps_text "$(printf "if(((Get-Item -LiteralPath %s -Force).Attributes -band 1024) -or @(Get-ChildItem -LiteralPath %s -Recurse -Force -Attributes ReparsePoint -ErrorAction Stop).Count){'LINKED'}else{'PLAIN'}" "$(ps_literal "$remote")" "$(ps_literal "$remote")")" | tail -1)" || return 1; [[ "$linked" == PLAIN ]] || { echo "The remote folder is or holds a link, so it is not copied with scp -r: $remote" >&2; return 1; }; mkdir -p "$local_dir"; scp -o BatchMode=yes -o ProxyCommand=none -o ProxyJump=none -r "$HOST:${remote//\\//}" "$local_dir/"; }
 run_all() {
   load_run
   [[ -n "$OLD_INSTALLER" ]] || { echo 'Set OLD_INSTALLER to the explicit retained 0.9.0-beta installer.' >&2; return 1; }

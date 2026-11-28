@@ -10,6 +10,10 @@ ROOT = Path(__file__).resolve().parents[3]
 spec = importlib.util.spec_from_file_location('windows_ssh', ROOT / 'tools/validation/windows_ssh.py')
 windows = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(windows)
+spec = importlib.util.spec_from_file_location('local_tree', ROOT / 'tools/validation/local_tree.py')
+tree = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(tree)
+local_tree = tree.entries
 
 
 def scope(frame):
@@ -41,6 +45,8 @@ def collect(args, frame, evidence, out):
     with zipfile.ZipFile(local) as archive:
         for name in archive.namelist():
             windows.safe_archive_path(name)
+        if any(p.is_symlink() for p in local_tree(out / 'evidence', links=True)):
+            raise RuntimeError('The evidence folder is or holds a link, so the archive is not extracted into it.')
         archive.extractall(out / 'evidence')
 
 

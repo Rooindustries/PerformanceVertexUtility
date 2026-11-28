@@ -71,11 +71,11 @@ hdr && /^\+\+\+ / { path = substr($0, 7); sub(/\t$/, "", path); if ($0 == "+++ /
 /^@@ / {
   hdr = 0; split($0, h, " ")
   sub(/^-/, "", h[2]); split(h[2], o, ","); oln = o[1] + 0
-  sub(/^\+/, "", h[3]); split(h[3], c, ","); ln = c[1] + 0
+  sub(/^\+/, "", h[3]); split(h[3], c, ","); lno = c[1] + 0
   next
 }
 hdr { next }
-/^\+/ { if (path != "") printf "%s\t%d\t%s\n", path, ln, substr($0, 2) > added; ln++; next }
+/^\+/ { if (path != "") printf "%s\t%d\t%s\n", path, lno, substr($0, 2) > added; lno++; next }
 /^-/ { if (opath != "") printf "%s\t%d\n", opath, oln > removed; oln++ }
 ' "$work/diff"
 touch "$work/added" "$work/removed"
@@ -113,7 +113,7 @@ lang_of() {
 
 lex() {
   awk -v lang="$1" '
-function out(ln, s, k) { if (k == "x") return; seen[ln] = 1; txt[ln] = txt[ln] s; if (k == "d") kind[ln] = "d"; if (ln > last) last = ln }
+function out(lno, s, k) { if (k == "x") return; seen[lno] = 1; txt[lno] = txt[lno] s; if (k == "d") kind[lno] = "d"; if (lno > last) last = lno }
 function open_str(q, e, t) { st = "str"; sq = q; sesc = e; sterm = t }
 function stmt_start(pre) { sub(/[rRbBuUfF]+$/, "", pre); return pre ~ /^[ \t]*$/ && depth == 0 && !cont }
 BEGIN { st = "code"; f = lang; yb = 0; depth = 0; cont = 0; tsp = 0; bd = 0; lastsig = ""; fc = 0; te = 0 }
@@ -343,10 +343,10 @@ BEGIN { st = "code"; f = lang; yb = 0; depth = 0; cont = 0; tsp = 0; bd = 0; las
 }
 END {
   g = 0
-  for (ln = 1; ln <= last; ln++) {
-    if (!(ln in seen)) continue
-    if (!((ln - 1) in seen)) g++
-    printf "%d\t%d\t%s\t%d\t%s\n", ln, g, (kind[ln] == "d" ? "d" : "c"), (fc == 0 || ln < fc), txt[ln]
+  for (lno = 1; lno <= last; lno++) {
+    if (!(lno in seen)) continue
+    if (!((lno - 1) in seen)) g++
+    printf "%d\t%d\t%s\t%d\t%s\n", lno, g, (kind[lno] == "d" ? "d" : "c"), (fc == 0 || lno < fc), txt[lno]
   }
 }'
 }

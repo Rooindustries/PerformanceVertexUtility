@@ -46,6 +46,8 @@ class Tour(memory.Measurement):
         with zipfile.ZipFile(local) as archive:
             for name in archive.namelist():
                 w.safe_archive_path(name)
+            if any(p.is_symlink() for p in local_tree(self.out / 'evidence', links=True)):
+                raise RuntimeError('The evidence folder is or holds a link, so the archive is not extracted into it.')
             archive.extractall(self.out / 'evidence')
 
     def clear(self):

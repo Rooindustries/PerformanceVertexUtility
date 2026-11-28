@@ -112,6 +112,7 @@ try {
     Check $true 'B startup and helper elevation expectation is recorded' ('EnableLUA=' + $script:EnableLUA + ' expectedElevated=' + $script:ExpectedStartupElevated)
     $acl = [Security.AccessControl.DirectorySecurity]::new()
     $acl.SetSecurityDescriptorSddlForm('O:BAG:BAD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)')
+    if (((Get-Item -LiteralPath $OutDir -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) -or @(Get-ChildItem -LiteralPath $OutDir -Recurse -Force -Attributes ReparsePoint -ErrorAction Stop).Count) { throw 'The output folder is or holds a link, so its permissions are not changed.' }
     Set-Acl -LiteralPath $OutDir -AclObject $acl
     . (Join-Path $PSScriptRoot 'CleanupOwnership.Common.ps1')
     Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes, System.Xml.Linq

@@ -440,7 +440,7 @@ while($clock.Elapsed.TotalSeconds -lt 90){
         $temp=[IO.Path]::GetTempPath()
         $candidates=@([IO.Directory]::GetFiles($temp,'*.json'))
         foreach($folder in [IO.Directory]::GetDirectories($temp,'roo-industries-*')){try{$candidates+=@([IO.Directory]::GetFiles($folder,'*.json'))}catch{}}
-        try{$candidates+=@([IO.Directory]::GetFiles('PARENT','*.json',[IO.SearchOption]::AllDirectories))}catch{$errors.Add('parent: '+$_.Exception.Message)}
+        try{$candidates+=@(Get-ChildItem -LiteralPath 'PARENT' -Filter '*.json' -Recurse -File -Force -ErrorAction Stop|ForEach-Object FullName)}catch{$errors.Add('parent: '+$_.Exception.Message)}
         foreach($path in $candidates){
             try{$written=[IO.File]::GetLastWriteTimeUtc($path)}catch{continue}
             if($written -lt $since -or $known[$path] -eq $written.Ticks){continue}

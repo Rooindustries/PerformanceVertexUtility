@@ -19,6 +19,9 @@ def load(name, path):
     return module
 
 
+local_tree = load('memory_local_tree', ROOT / 'tools/validation/local_tree.py').entries
+
+
 def save(path, value):
     path.write_text(json.dumps(value, indent=2) + '\n')
 
@@ -190,6 +193,8 @@ class Measurement:
         with zipfile.ZipFile(local) as archive:
             for name in archive.namelist():
                 w.safe_archive_path(name)
+            if any(p.is_symlink() for p in local_tree(self.out / 'evidence', links=True)):
+                raise RuntimeError('The evidence folder is or holds a link, so the archive is not extracted into it.')
             archive.extractall(self.out / 'evidence')
 
     def restore(self):
