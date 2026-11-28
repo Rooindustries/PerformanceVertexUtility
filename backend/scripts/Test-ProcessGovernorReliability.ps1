@@ -336,7 +336,26 @@ try {
     $relaunchFirst = $null
     Start-Sleep -Milliseconds 700
 
+    if ($env:ROO_FORCE_LAUNCH_SYNC_DIR) {
+        $sync = $env:ROO_FORCE_LAUNCH_SYNC_DIR
+        Set-Content -LiteralPath (Join-Path $sync 'arm') -Value arm
+        $syncLaunched = @()
+        $next = 1
+        while (-not $relaunchSessionProc.HasExited) {
+            $polls = @(Get-ChildItem -LiteralPath $sync -Filter 'poll-*' -ErrorAction SilentlyContinue | ForEach-Object { [int]($_.Name -replace 'poll-', '') } | Where-Object { $_ -ge $next } | Sort-Object)
+            if ($polls.Count -gt 0) {
+                $i = $polls[0]
+                $launched = Start-Process -FilePath $probeExe -ArgumentList (Join-RooIndustriesWindowsArguments @('-NoProfile','-WindowStyle','Hidden','-Command','Start-Sleep -Seconds 120')) -WindowStyle Hidden -PassThru
+                $syncLaunched += [pscustomobject]@{ poll = $i; pid = $launched.Id; process = $launched }
+                Set-Content -LiteralPath (Join-Path $sync "launched-$i") -Value launched
+                $next = $i + 1
+            }
+            Start-Sleep -Milliseconds 5
+        }
+        $relaunchSecond = $syncLaunched[-1].process
+    } else {
     $relaunchSecond = Start-Process -FilePath $probeExe -ArgumentList (Join-RooIndustriesWindowsArguments @('-NoProfile','-WindowStyle','Hidden','-Command','Start-Sleep -Seconds 120')) -WindowStyle Hidden -PassThru
+    }
     Start-Sleep -Milliseconds 800
     $beforeSecond = Get-RooIndustriesProcessControlState $relaunchSecond.Id $null
 
@@ -350,6 +369,14 @@ try {
     }
 
     $session = Get-Content -LiteralPath $sessionOutput -Raw | ConvertFrom-Json
+    if ($env:ROO_FORCE_LAUNCH_SYNC_DIR) {
+        foreach ($l in $syncLaunched) {
+            $seen = @($session.polls | Where-Object { [int]$_.pollIndex -ge $l.poll } | ForEach-Object { $p = $_; @($p.candidates | Where-Object { [int]$_.pid -eq $l.pid }) | ForEach-Object { "poll$($p.pollIndex):cpu=$($_.cpuPercent),prior=$($_.hadPrior),pressure=$($_.pressureMet)" } }) -join ' '
+            $chg = @($session.changedItems | Where-Object { [int]$_.processId -eq $l.pid }).Count -gt 0
+            Write-Host "FORCED launchedBeforePoll=$($l.poll) pid=$($l.pid) restrained=$chg governorSaw=[$seen]"
+        }
+        foreach ($l in $syncLaunched) { Stop-ReliabilityProbe -Process $l.process }
+    }
     $firstExitSkip = @($session.skippedItems | Where-Object { [int]$_.processId -eq [int]$firstChange.changedItem.processId -and [string]$_.reason -like '*exited*' }) | Select-Object -First 1
     $secondChanged = @($session.changedItems | Where-Object { [int]$_.processId -eq $relaunchSecond.Id }) | Select-Object -First 1
     $backupBeforeRestoreCount = Get-ReliabilityBackupFileCount -Path $relaunchRoot

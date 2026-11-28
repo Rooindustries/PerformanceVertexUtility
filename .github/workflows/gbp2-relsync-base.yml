@@ -1,0 +1,31 @@
+name: gbp2-relsync-base
+on:
+  push:
+    branches: ['servi/proof-gbp2-relsync-base']
+jobs:
+  proof:
+    name: proof (${{ matrix.i }})
+    strategy:
+      fail-fast: false
+      matrix:
+        i: [1, 2]
+    runs-on: windows-2025
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Protect the app data folder as the app does on first start
+        shell: powershell
+        run: .\tools\scripts\Initialize-CiDataFolder.ps1
+      - name: Reliability
+        shell: powershell
+        run: |
+          for ($r = 1; $r -le 4; $r++) {
+            if ('1' -eq '1') { $env:ROO_FORCE_LAUNCH_SYNC_DIR = Join-Path $env:RUNNER_TEMP "sync-$r"; New-Item -ItemType Directory -Path $env:ROO_FORCE_LAUNCH_SYNC_DIR -Force | Out-Null }
+            & .\tools\scripts\Test-Baseline.ps1 -TestName Test-ProcessGovernorReliability.ps1 -ResultsRoot (Join-Path $PWD "artifacts\validation\r$r")
+            Get-Content -LiteralPath (Join-Path $PWD "artifacts\validation\r$r\Test-ProcessGovernorReliability.stdout.log") | Where-Object { $_ -match 'FORCED|FAIL|PASS Relaunch' }
+          }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: proof-${{ matrix.i }}
+          path: artifacts/validation/
