@@ -7,8 +7,7 @@
   "risk": "low",
   "budgets": {
     "idleBackendCpuAveragePercentMax": 0.5,
-    "backendPowerShellPrivateBytesMax": 78643200,
-    "backendPowerShellPrivateMegabytesMax": 75,
+    "backendPrivateBytesOverPowerShellFloorMax": 25165824,
     "backendStateEntryCountMaxAfterValidation": 0,
     "pollIntervalMillisecondsMin": 500,
     "defaultResidentMaxDurationSeconds": 5,

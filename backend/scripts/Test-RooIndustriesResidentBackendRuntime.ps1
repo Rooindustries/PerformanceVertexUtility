@@ -72,6 +72,29 @@ function Test-BudgetEvaluation {
     }
 }
 
+function Test-PowerShellFloor {
+    param(
+        [object]$Measurement,
+        [int]$HostProcessId,
+        [string]$Label
+    )
+    $floor = $Measurement.powerShellFloor
+    $floorPid = [int]$floor.processId
+    $sameRuntime = [string]$floor.executablePath -eq (Get-Process -Id $PID).Path
+    $separate = $floorPid -gt 0 -and $floorPid -ne $HostProcessId
+    $below = [int64]$floor.privateBytes -gt 0 -and [int64]$floor.privateBytes -lt [int64]$Measurement.privateBytes
+    $ownCost = [int64]$Measurement.privateBytes - [int64]$floor.privateBytes
+    $consistent = [int64]$Measurement.privateBytesOverPowerShellFloor -eq $ownCost
+    $ended = $null -eq (Get-Process -Id $floorPid -ErrorAction SilentlyContinue)
+    $numbers = "floor $($floor.privateBytes), host $($Measurement.privateBytes), own cost $ownCost bytes"
+    if ($sameRuntime -and $separate -and $below -and $consistent -and $ended) {
+        Add-Pass "$Label measured a separate PowerShell floor: $numbers"
+    } else {
+        $flags = "pid=$floorPid host=$HostProcessId sameRuntime=$sameRuntime consistent=$consistent ended=$ended"
+        Add-Failure "$Label PowerShell floor is not a separate bare process: $numbers, $flags"
+    }
+}
+
 $requiredFiles = @(
     'backend\profiles\lightweight-governor-budget.profile.json',
     'backend\scripts\ResidentSessionHost.Common.ps1',
@@ -139,6 +162,8 @@ try {
     } else {
         Add-Pass 'Footprint measurement reported handle count as unavailable without failing'
     }
+    $footprintPid = [int]$footprint.backendScriptProcess.processId
+    Test-PowerShellFloor $footprint.backendScriptProcess $footprintPid 'Footprint measurement'
     Test-BudgetEvaluation $footprint.budgetEvaluation 'Footprint measurement'
 
     $residentOut = Join-Path $tempRoot 'resident-output.json'
@@ -184,6 +209,7 @@ try {
     } else {
         Add-Failure 'Resident host dependency proof was not clean'
     }
+    Test-PowerShellFloor $resident.footprint ([int]$resident.host.processId) 'Resident host idle monitor'
     Test-BudgetEvaluation $resident.footprint.budgetEvaluation 'Resident host idle monitor'
 
     $status = & (Join-Path $PSScriptRoot 'Get-RooIndustriesResidentHostStatus.ps1') -ProcessId $PID | ConvertFrom-Json

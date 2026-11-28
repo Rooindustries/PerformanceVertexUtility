@@ -22,6 +22,12 @@
     "scriptPath": "backend\\scripts\\Measure-RooIndustriesBackendFootprint.ps1",
     "workingSetBytes": 68157440,
     "privateBytes": 49283072,
+    "powerShellFloor": {
+      "processId": 12004,
+      "executablePath": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+      "privateBytes": 36700160
+    },
+    "privateBytesOverPowerShellFloor": 12582912,
     "cpuTimeSecondsBefore": 0.3125,
     "cpuTimeSecondsAfter": 0.328125,
     "cpuTimeDeltaSeconds": 0.015625,
@@ -34,7 +40,10 @@
   "budgetEvaluation": {
     "profileId": "lightweight-governor-budget",
     "idleBackendCpuAveragePercentMax": 0.5,
-    "backendPowerShellPrivateBytesMax": 78643200,
+    "backendPrivateBytesOverPowerShellFloorMax": 25165824,
+    "privateBytes": 49283072,
+    "powerShellFloorPrivateBytes": 36700160,
+    "privateBytesOverPowerShellFloor": 12582912,
     "backendStateEntryCountMaxAfterValidation": 0,
     "persistentUiProcessRequired": false,
     "withinBudget": true,

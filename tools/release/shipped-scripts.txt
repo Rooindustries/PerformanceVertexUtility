@@ -2,6 +2,7 @@ Apply-ProcessProfile.ps1
 BackgroundPlacement.Common.ps1
 AppxInventory.Common.ps1
 BackendExecutor.Common.ps1
+BackendOutput.Common.ps1
 BrandCompatibility.Common.ps1
 Build-StandbyMemoryHelper.ps1
 BulkUninstall.Common.ps1

@@ -3549,7 +3549,7 @@
           "additionalProperties": true,
           "required": [
             "idleBackendCpuAveragePercentMax",
-            "backendPowerShellPrivateBytesMax",
+            "backendPrivateBytesOverPowerShellFloorMax",
             "persistentUiProcessRequired",
             "unboundedStateGrowthAllowed"
           ]

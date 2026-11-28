@@ -1,4 +1,4 @@
-. (Join-Path $PSScriptRoot 'ProcessProfile.Common.ps1')
+. (Join-Path $PSScriptRoot 'BackendOutput.Common.ps1')
 
 function Get-RooIndustriesBackendProcessCount {
     return @(Get-Process -ErrorAction SilentlyContinue).Count
@@ -34,6 +34,43 @@ function Get-RooIndustriesBackendScriptProcessMeasurement {
         handleCount = $handleCount
         handleCountAvailable = $handleCountAvailable
     }
+}
+
+function Start-RooIndustriesPowerShellFloor {
+    $info = New-Object System.Diagnostics.ProcessStartInfo
+    $info.FileName = (Get-Process -Id $PID).Path
+    $command = "[Console]::Out.WriteLine('ready'); [void][Console]::In.ReadLine()"
+    $info.Arguments = "-NoLogo -NoProfile -NonInteractive -Command `"$command`""
+    $info.UseShellExecute = $false
+    $info.CreateNoWindow = $true
+    $info.RedirectStandardInput = $true
+    $info.RedirectStandardOutput = $true
+    $floor = [System.Diagnostics.Process]::Start($info)
+    if ($floor.StandardOutput.ReadLine() -ne 'ready') {
+        Stop-RooIndustriesPowerShellFloor $floor
+        throw 'The PowerShell floor process did not start.'
+    }
+    return $floor
+}
+
+function Get-RooIndustriesPowerShellFloorMeasurement {
+    param([System.Diagnostics.Process]$Floor)
+    $Floor.Refresh()
+    if ($Floor.HasExited) { throw 'The PowerShell floor process exited before it was measured.' }
+    return [pscustomobject]@{
+        processId = [int]$Floor.Id
+        executablePath = $Floor.StartInfo.FileName
+        privateBytes = [int64]$Floor.PrivateMemorySize64
+    }
+}
+
+function Stop-RooIndustriesPowerShellFloor {
+    param([System.Diagnostics.Process]$Floor)
+    if ($null -eq $Floor) { return }
+    $Floor.StandardInput.Close()
+    if (-not $Floor.WaitForExit(5000)) { $Floor.Kill() }
+    $Floor.WaitForExit()
+    $Floor.Dispose()
 }
 
 function Get-RooIndustriesBackendFootprintDelta {
@@ -82,22 +119,27 @@ function New-RooIndustriesBackendBudgetEvaluation {
         [object]$BudgetProfile,
         [double]$AverageCpuPercent,
         [int64]$PrivateBytes,
+        [int64]$FloorPrivateBytes,
         [int64]$StateEntryCount,
         [bool]$PersistentUiProcessRequired
     )
     if ($null -eq $BudgetProfile) { return $null }
     $budgets = Get-RooIndustriesPropertyValue $BudgetProfile 'budgets' $null
     $cpuMax = [double](Get-RooIndustriesPropertyValue $budgets 'idleBackendCpuAveragePercentMax' 0.5)
-    $privateMax = [int64](Get-RooIndustriesPropertyValue $budgets 'backendPowerShellPrivateBytesMax' 78643200)
+    $overFloorMax = [int64](Get-RooIndustriesPropertyValue $budgets 'backendPrivateBytesOverPowerShellFloorMax' 24MB)
     $stateMax = [int64](Get-RooIndustriesPropertyValue $budgets 'backendStateEntryCountMaxAfterValidation' 0)
     $idleWithinBudget = ($AverageCpuPercent -le $cpuMax)
-    $privateWithinBudget = ($PrivateBytes -le $privateMax)
+    $privateOverFloor = $PrivateBytes - $FloorPrivateBytes
+    $privateWithinBudget = ($privateOverFloor -le $overFloorMax)
     $stateWithinBudget = ($StateEntryCount -le $stateMax)
     $uiWithinBudget = (-not $PersistentUiProcessRequired)
     return [pscustomobject]@{
         profileId = [string](Get-RooIndustriesPropertyValue $BudgetProfile 'profileId' 'lightweight-governor-budget')
         idleBackendCpuAveragePercentMax = $cpuMax
-        backendPowerShellPrivateBytesMax = $privateMax
+        backendPrivateBytesOverPowerShellFloorMax = $overFloorMax
+        privateBytes = $PrivateBytes
+        powerShellFloorPrivateBytes = $FloorPrivateBytes
+        privateBytesOverPowerShellFloor = $privateOverFloor
         backendStateEntryCountMaxAfterValidation = $stateMax
         persistentUiProcessRequired = $PersistentUiProcessRequired
         withinBudget = ($idleWithinBudget -and $privateWithinBudget -and $stateWithinBudget -and $uiWithinBudget)

@@ -430,7 +430,7 @@
             "target": "backend/scripts/Measure-RooIndustriesBackendFootprint.ps1"
           }
         ],
-        "notes": "Budget profile constrains resident/backend CPU, memory, state growth, frontend dependency, and session duration."
+        "notes": "Budget profile constrains resident/backend CPU, memory over a bare PowerShell process on the same PC, state growth, frontend dependency, and session duration."
       },
       "preview": {
         "status": "implemented",

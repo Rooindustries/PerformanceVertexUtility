@@ -7,6 +7,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'ResidentSessionHost.Common.ps1')
+$floor = $null
 
 try {
     if ($SampleDurationSeconds -lt 1) { $SampleDurationSeconds = 1 }
@@ -16,6 +17,7 @@ try {
 
     $repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..\..')
     $budget = Get-RooIndustriesBackendBudgetProfile $BudgetProfilePath
+    $floor = Start-RooIndustriesPowerShellFloor
     $process = Get-Process -Id $PID
     $startedAtUtc = Get-RooIndustriesUtcStamp
     $processCountBefore = Get-RooIndustriesBackendProcessCount
@@ -42,6 +44,9 @@ try {
 
     $watch.Stop()
     $after = Get-RooIndustriesBackendScriptProcessMeasurement $process
+    $floorMeasurement = Get-RooIndustriesPowerShellFloorMeasurement $floor
+    Stop-RooIndustriesPowerShellFloor $floor
+    $floor = $null
     $delta = Get-RooIndustriesBackendFootprintDelta $before $after $watch.Elapsed.TotalSeconds
     $processCountAfter = Get-RooIndustriesBackendProcessCount
     $stateEntryCount = Get-RooIndustriesBackendStateEntryCount $repoRoot.Path
@@ -50,6 +55,7 @@ try {
             -BudgetProfile $budget.profile `
             -AverageCpuPercent $delta.averageCpuPercent `
             -PrivateBytes $after.privateBytes `
+            -FloorPrivateBytes $floorMeasurement.privateBytes `
             -StateEntryCount $stateEntryCount `
             -PersistentUiProcessRequired:$false
     } else {
@@ -80,6 +86,8 @@ try {
             scriptPath = $PSCommandPath
             workingSetBytes = $after.workingSetBytes
             privateBytes = $after.privateBytes
+            powerShellFloor = $floorMeasurement
+            privateBytesOverPowerShellFloor = ($after.privateBytes - $floorMeasurement.privateBytes)
             cpuTimeSecondsBefore = $before.cpuSeconds
             cpuTimeSecondsAfter = $after.cpuSeconds
             cpuTimeDeltaSeconds = $delta.cpuTimeDeltaSeconds
@@ -123,4 +131,6 @@ try {
     }
     Write-RooIndustriesJsonOutput $errorResult $OutputPath
     exit 1
+} finally {
+    Stop-RooIndustriesPowerShellFloor $floor
 }

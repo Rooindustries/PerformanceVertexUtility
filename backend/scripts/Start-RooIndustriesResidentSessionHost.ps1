@@ -7,6 +7,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'ResidentSessionHost.Common.ps1')
+$floor = $null
 
 try {
     if ($MaxDurationSeconds -lt 1) { $MaxDurationSeconds = 1 }
@@ -16,6 +17,7 @@ try {
 
     $repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..\..')
     $budget = Get-RooIndustriesBackendBudgetProfile $BudgetProfilePath
+    $floor = Start-RooIndustriesPowerShellFloor
     $sessionId = "resident-host-$(Get-RooIndustriesFileStamp)"
     $startedAtUtc = Get-RooIndustriesUtcStamp
     $process = Get-Process -Id $PID
@@ -50,6 +52,9 @@ try {
 
     $watch.Stop()
     $after = Get-RooIndustriesBackendScriptProcessMeasurement $process
+    $floorMeasurement = Get-RooIndustriesPowerShellFloorMeasurement $floor
+    Stop-RooIndustriesPowerShellFloor $floor
+    $floor = $null
     $processCountAfter = Get-RooIndustriesBackendProcessCount
     if ([int64]$after.workingSetBytes -gt $peakWorkingSetBytes) { $peakWorkingSetBytes = [int64]$after.workingSetBytes }
     if ([int64]$after.privateBytes -gt $peakPrivateBytes) { $peakPrivateBytes = [int64]$after.privateBytes }
@@ -60,6 +65,7 @@ try {
             -BudgetProfile $budget.profile `
             -AverageCpuPercent $delta.averageCpuPercent `
             -PrivateBytes $after.privateBytes `
+            -FloorPrivateBytes $floorMeasurement.privateBytes `
             -StateEntryCount $stateEntryCount `
             -PersistentUiProcessRequired:$false
     } else {
@@ -72,6 +78,8 @@ try {
         processorCount = $delta.processorCount
         workingSetBytes = $after.workingSetBytes
         privateBytes = $after.privateBytes
+        powerShellFloor = $floorMeasurement
+        privateBytesOverPowerShellFloor = ($after.privateBytes - $floorMeasurement.privateBytes)
         peakWorkingSetBytes = $peakWorkingSetBytes
         peakPrivateBytes = $peakPrivateBytes
         handleCount = $after.handleCount
@@ -126,4 +134,6 @@ try {
     $errorStatus.actionId = 'backend.residentHost.start'
     Write-RooIndustriesJsonOutput $errorStatus $OutputPath
     exit 1
+} finally {
+    Stop-RooIndustriesPowerShellFloor $floor
 }

@@ -21,6 +21,12 @@
     "processorCount": 32,
     "workingSetBytes": 69468160,
     "privateBytes": 50593792,
+    "powerShellFloor": {
+      "processId": 12044,
+      "executablePath": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+      "privateBytes": 36700160
+    },
+    "privateBytesOverPowerShellFloor": 13893632,
     "peakWorkingSetBytes": 69468160,
     "peakPrivateBytes": 50593792,
     "handleCount": 618,
@@ -29,7 +35,10 @@
     "budgetEvaluation": {
       "profileId": "lightweight-governor-budget",
       "idleBackendCpuAveragePercentMax": 0.5,
-      "backendPowerShellPrivateBytesMax": 78643200,
+      "backendPrivateBytesOverPowerShellFloorMax": 25165824,
+      "privateBytes": 50593792,
+      "powerShellFloorPrivateBytes": 36700160,
+      "privateBytesOverPowerShellFloor": 13893632,
       "backendStateEntryCountMaxAfterValidation": 0,
       "persistentUiProcessRequired": false,
       "withinBudget": true,
