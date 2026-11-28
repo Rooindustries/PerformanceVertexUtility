@@ -1,0 +1,57 @@
+name: Proof uc shard
+on:
+  push:
+    branches: ['servi/proof-uc2']
+permissions:
+  contents: read
+jobs:
+  uc:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - lane: base-a
+            sha: 168857dbafe78df15b36b1c3b73abce14efa6729
+          - lane: base-b
+            sha: 168857dbafe78df15b36b1c3b73abce14efa6729
+          - lane: head-a
+            sha: 58283727b165a31a096432d20214aeb4196557c6
+          - lane: head-b
+            sha: 58283727b165a31a096432d20214aeb4196557c6
+    runs-on: windows-2025
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - run: python -m pip install -r tools/validation/requirements.txt
+      - name: Protect the app data folder as the app does on first start
+        shell: powershell
+        run: .\tools\scripts\Initialize-CiDataFolder.ps1
+      - name: Show the manifest error
+        shell: powershell
+        run: |
+          $p = 'backend\scripts\Test-UninstallCleanupBackend.ps1'
+          $s = [IO.File]::ReadAllText($p)
+          $a = "Add-Failure 'Cleanup deletion manifest reported unsafe apply state'"
+          if (-not $s.Contains($a)) { throw 'anchor' }
+          $s = $s.Replace($a, "Add-Failure ('Cleanup deletion manifest reported unsafe apply state: ' + (`$manifest.errors | ConvertTo-Json -Compress -Depth 5))")
+          [IO.File]::WriteAllText($p, $s)
+      - name: Shard
+        shell: powershell
+        run: |
+          .\tools\scripts\Test-Baseline.ps1 -ExcludeTestName Test-GovernorScenarios.ps1 -ShardCount 2 -ShardIndex 0 -BuildFrontend
+          Get-ChildItem artifacts/validation -Recurse -Filter 'Test-UninstallCleanupBackend.stdout.log' | ForEach-Object { Get-Content $_.FullName | Select-String '^FAIL' | ForEach-Object { Write-Host ('UCB ' + $_.Line) } }
+          $s = Get-ChildItem artifacts/validation -Recurse -Filter summary.json | Select-Object -First 1
+          (Get-Content $s.FullName -Raw | ConvertFrom-Json).tests | Where-Object { $_.exitCode -ne 0 -or $_.timedOut } | ForEach-Object { Write-Host ('BAD ' + $_.test + ' ' + $_.exitCode + ' ' + $_.timedOut) }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: shard-${{ matrix.lane }}
+          path: artifacts/validation/
