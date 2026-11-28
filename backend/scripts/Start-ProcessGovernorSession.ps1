@@ -159,7 +159,7 @@ function Get-GovernorProcessKey {
     $processId = [int](Get-RooIndustriesPropertyValue $Process 'pid' 0)
     $processName = [string](Get-RooIndustriesPropertyValue $Process 'name' '')
     $processPath = [string](Get-RooIndustriesPropertyValue $Process 'executablePath' '')
-    return "$processId|$processName|$processPath"
+    return "$processName|$processPath"
 }
 
 function Invoke-GovernorActiveRestore {
