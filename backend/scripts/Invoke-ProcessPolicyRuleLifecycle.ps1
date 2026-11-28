@@ -219,6 +219,7 @@ function Invoke-LifecycleRestore {
 
     foreach ($backupPath in @(Get-LifecycleBackupPaths $Rule)) {
         if (-not (Test-Path -LiteralPath $backupPath)) {
+            $failedControlCount++
             $auditRows.Add((New-RooIndustriesProcessPolicyAuditRow -Action 'restore' -RuleId $ruleId -Target $null -Control 'backupManifest' -BeforeValue $backupPath -AfterValue $null -Reason 'Backup manifest was not available for restore.' -ProtectionCategory (Get-RooIndustriesPropertyValue $Rule 'protectionCategory' 'unknown') -RestorePath $backupPath -RestoreAvailable $false -Outcome 'skipped' -DryRun (-not $ApplyRestore))) | Out-Null
             continue
         }
@@ -466,6 +467,23 @@ try {
             if ($eligible.Count -gt 0) {
                 $backupInfo = New-RooIndustriesProcessPolicyRuleBackupManifest -StateRoot $StateRoot -Rule $rule -ActionId 'performance.policy.rule.apply' -Snapshots @($eligible | ForEach-Object { $_.snapshot })
                 Add-LifecycleBackupPath -Rule $rule -Path $backupInfo.path
+                foreach ($item in @($eligible.ToArray())) {
+                    $entry = $item.entry
+                    $effect = [pscustomobject]@{
+                        processId = [int](Get-RooIndustriesPropertyValue $entry 'processId' 0)
+                        processName = Get-RooIndustriesPropertyValue $entry 'processName' ''
+                        executablePath = Get-RooIndustriesPropertyValue $entry 'executablePath' $null
+                        startTimeUtc = Get-RooIndustriesPropertyValue (Get-RooIndustriesPropertyValue $entry 'currentState' $null) 'startTimeUtc' $null
+                        ruleId = Get-RooIndustriesPropertyValue $rule 'id' ''
+                        backupManifestPath = $backupInfo.path
+                        backupSnapshotId = Get-RooIndustriesPropertyValue $item.snapshot 'snapshotId' ''
+                        appliedControls = @($item.changes)
+                        appliedAtUtc = $null
+                    }
+                    $item | Add-Member -NotePropertyName effect -NotePropertyValue $effect
+                    Add-LifecycleActiveEffect -Rule $rule -Effect $effect
+                }
+                Set-RooIndustriesProcessPolicyStoredRule -StateRoot $StateRoot -Rule $rule | Out-Null
             }
 
             foreach ($item in @($eligible.ToArray())) {
@@ -486,17 +504,11 @@ try {
                     $appliedState = Get-RooIndustriesProcessControlState $processId $null
                     $changed = New-RooIndustriesProcessPolicyChangedItem $entry $item.originalState $appliedState @($appliedControls.ToArray()) 0
                     $changedItems.Add($changed) | Out-Null
-                    Add-LifecycleActiveEffect -Rule $rule -Effect ([pscustomobject]@{
-                        processId = $processId
-                        processName = Get-RooIndustriesPropertyValue $entry 'processName' ''
-                        executablePath = Get-RooIndustriesPropertyValue $entry 'executablePath' $null
-                        startTimeUtc = Get-RooIndustriesPropertyValue (Get-RooIndustriesPropertyValue $entry 'currentState' $null) 'startTimeUtc' $null
-                        ruleId = Get-RooIndustriesPropertyValue $rule 'id' ''
-                        backupManifestPath = $backupInfo.path
-                        backupSnapshotId = Get-RooIndustriesPropertyValue $item.snapshot 'snapshotId' ''
-                        appliedControls = @($appliedControls.ToArray())
-                        appliedAtUtc = Get-RooIndustriesUtcStamp
-                    })
+                    $item.effect.appliedControls = @($appliedControls.ToArray())
+                    $item.effect.appliedAtUtc = Get-RooIndustriesUtcStamp
+                } else {
+                    $kept = @(Get-RooIndustriesPropertyArray $rule 'activeEffects' | Where-Object { $_.backupSnapshotId -ne $item.effect.backupSnapshotId })
+                    Set-RooIndustriesProcessPolicyObjectProperty $rule 'activeEffects' $kept
                 }
             }
 

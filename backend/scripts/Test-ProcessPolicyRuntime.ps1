@@ -590,6 +590,7 @@ try {
 }
 
 $lifecycleRoot = Join-Path ([System.IO.Path]::GetTempPath()) "roo-industries-rule-lifecycle-$([guid]::NewGuid().ToString('N'))"
+$lifecycleProbe = $null
 try {
     $lifecycle = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $PSScriptRoot 'Invoke-ProcessPolicyRuleLifecycle.ps1'))
     $ruleId = 'rule-contoso-launcher-helper-balanced'
@@ -610,9 +611,45 @@ try {
     } else {
         Add-Failure "Rule lifecycle failed action returned status $($missing.status)"
     }
+
+    $probeExe = Join-Path $lifecycleRoot 'RooIndustriesLifecycleProbe.exe'
+    Copy-Item -LiteralPath "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -Destination $probeExe
+    $lifecycleProbe = Start-Process -FilePath $probeExe -ArgumentList '-NoProfile -Command Start-Sleep -Seconds 300' -WindowStyle Hidden -PassThru
+    $probeProfile = Join-Path $lifecycleRoot 'profile.json'
+    Write-PolicyValidationProfile -Path $probeProfile -LiveRoot $lifecycleRoot -Mode 'session-priority-only'
+    $probeRule = Join-Path $lifecycleRoot 'rule.json'
+    $ruleBody = @{ id = 'rule-lifecycle-probe'; allowConfirmedApply = $true; requestedControls = @{ priorityClass = 'BelowNormal' } }
+    $ruleBody.match = @{ processNames = @('RooIndustriesLifecycleProbe.exe') }
+    @{ rule = $ruleBody } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $probeRule -Encoding UTF8
+    $engine = Join-Path $lifecycleRoot 'engine'
+    New-Item -ItemType Directory -Path $engine | Out-Null
+    Copy-Item -Path (Join-Path $PSScriptRoot '*.ps1') -Destination $engine
+    $cutWrite = '$global:RooIndustriesRealChange = ${function:Invoke-RooIndustriesProcessControlChange}'
+    $cutWrite += "`nfunction Invoke-RooIndustriesProcessControlChange { param(`$Process, `$Change)"
+    $cutWrite += ' & $global:RooIndustriesRealChange $Process $Change; [Environment]::Exit(137) }'
+    Add-Content -LiteralPath (Join-Path $engine 'ProcessProfile.Common.ps1') -Value $cutWrite
+    $cut = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $engine 'Invoke-ProcessPolicyRuleLifecycle.ps1'))
+    $probeArgs = @('-RuleId', 'rule-lifecycle-probe', '-ProfilePath', $probeProfile, '-StateRoot', (Join-Path $lifecycleRoot 'probe'))
+    & powershell.exe @lifecycle -Action preview -RulePath $probeRule @probeArgs | Out-Null
+    & powershell.exe @lifecycle -Action approve @probeArgs | Out-Null
+    foreach ($case in @(@($cut, 'restore', 137), @($lifecycle, 'restore', 0), @($cut, 'remove', 137))) {
+        $applyArgs = $case[0]
+        & powershell.exe @applyArgs -Action apply @probeArgs -ConfirmApply | Out-Null
+        $applyExit = $LASTEXITCODE
+        $changedTo = [string](Get-Process -Id $lifecycleProbe.Id).PriorityClass
+        $undone = & powershell.exe @lifecycle -Action $case[1] @probeArgs -ConfirmApply | ConvertFrom-Json
+        $restoredTo = [string](Get-Process -Id $lifecycleProbe.Id).PriorityClass
+        $label = "Rule lifecycle $($case[1]) after an apply that exited $($case[2])"
+        if ($applyExit -eq $case[2] -and $changedTo -eq 'BelowNormal' -and @($undone.restoredItems).Count -eq 1 -and $restoredTo -eq 'Normal') {
+            Add-Pass "$label puts the probe back to Normal and reports it"
+        } else {
+            Add-Failure "$label`: exit=$applyExit changed=$changedTo status=$($undone.status) restored=$(@($undone.restoredItems).Count) after=$restoredTo"
+        }
+    }
 } catch {
     Add-Failure "Rule lifecycle check failed: $($_.Exception.Message)"
 } finally {
+    if ($lifecycleProbe) { Stop-RooIndustriesValidationProcess $lifecycleProbe }
     if (Test-Path -LiteralPath $lifecycleRoot) { Remove-Item -LiteralPath $lifecycleRoot -Recurse -Force }
 }
 
