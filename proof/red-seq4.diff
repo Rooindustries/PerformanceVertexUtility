@@ -1,0 +1,26 @@
+diff --git a/backend/native/Optimizer.Core/ProcessPolicies.cs b/backend/native/Optimizer.Core/ProcessPolicies.cs
+index 59eda7fa..6099dac6 100644
+--- a/backend/native/Optimizer.Core/ProcessPolicies.cs
++++ b/backend/native/Optimizer.Core/ProcessPolicies.cs
+@@ -1187,7 +1187,7 @@ public sealed partial class ProcessPolicyHost
+     private void Fail(string key, string kind, string message, string? field, string identity, bool starting = false)
+     {
+         var attempt = _retries.TryGetValue(key, out var earlier) ? earlier.Attempt + 1 : 0;
+-        var retryAt = attempt == 0 && starting ? Now : Now + Delay(attempt);
++        var retryAt = starting && attempt < 3 ? Now : Now + Delay(attempt);
+         _retries[key] = new(kind, message, field, retryAt, attempt, identity, _checkStarted);
+     }
+ 
+diff --git a/backend/scripts/Test-ProcessPolicyWorker.ps1 b/backend/scripts/Test-ProcessPolicyWorker.ps1
+index 22dc8630..5df09808 100644
+--- a/backend/scripts/Test-ProcessPolicyWorker.ps1
++++ b/backend/scripts/Test-ProcessPolicyWorker.ps1
+@@ -208,7 +208,7 @@ try {
+     $held=[Diagnostics.Process]::GetProcessById($heldId)
+     $probes.Add($held)
+     $heldTries={@(Get-GovernorChecks $held|Where-Object {$null -ne $_.refused.gpuPriority})}
+-    $null=Wait-Until {@(& $heldTries|Where-Object {$_.refused.gpuPriority -eq 4}).Count -gt 0} 30
++    $null=Wait-Until {@(& $heldTries|Where-Object {$_.refused.gpuPriority -eq 5}).Count -gt 0} 30
+     $tries=@(& $heldTries)
+     Note 'alwaysRefusedGpu' @($tries|ForEach-Object {[ordered]@{attempt=$_.refused.gpuPriority;checkStarted=$_.checkStarted}})
+     $firstTry=@($tries|Where-Object {$_.refused.gpuPriority -eq 1})

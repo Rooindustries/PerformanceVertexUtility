@@ -1,0 +1,21 @@
+diff --git a/backend/native/Optimizer.Core/ProcessPolicies.cs b/backend/native/Optimizer.Core/ProcessPolicies.cs
+index 59eda7fa..7eafebe6 100644
+--- a/backend/native/Optimizer.Core/ProcessPolicies.cs
++++ b/backend/native/Optimizer.Core/ProcessPolicies.cs
+@@ -1023,6 +1023,8 @@ public sealed partial class ProcessPolicyHost
+     {
+         var created = new List<(PolicyInstance Instance, string Key)>();
+         var done = new List<string>();
++        var burnStart = ProcessorTime();
++        while ((ProcessorTime() - burnStart).TotalSeconds < 0.6) { }
+         foreach (var (field, key) in fields)
+         {
+             try
+@@ -1030,6 +1032,7 @@ public sealed partial class ProcessPolicyHost
+                 var desired = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
+                 if (field != "cpuSets") desired[field] = rule.Controls[field];
+                 _processOpens++;
++                if (field == "gpuPriority" && !_retries.ContainsKey(key)) throw new InvalidDataException("forced", new ControlReadException(new ApiError("D3DKMTGetProcessSchedulingPriorityClass", "ntstatus", 0xC000000D, "", "forced")));
+                 var preview = _engine.Preview(identity.ProcessId, desired, field == "cpuSets" ? rule.CpuSelection : null);
+                 identity.Verify(preview.Identity);
+                 var directory = Path.Combine(_store.Root, "operations", preview.OperationId);

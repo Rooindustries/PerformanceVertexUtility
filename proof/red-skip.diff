@@ -1,0 +1,20 @@
+diff --git a/backend/native/Optimizer.Core/ProcessPolicies.cs b/backend/native/Optimizer.Core/ProcessPolicies.cs
+index 59eda7fa..7000ed22 100644
+--- a/backend/native/Optimizer.Core/ProcessPolicies.cs
++++ b/backend/native/Optimizer.Core/ProcessPolicies.cs
+@@ -539,6 +539,7 @@ public sealed partial class ProcessPolicyHost
+     private PolicyDiagnostics? _diagnostics;
+     private PolicyHostState _state;
+     private byte[]? _lastSavedState;
++    private readonly HashSet<string> _seenOnce = new(StringComparer.Ordinal);
+ 
+     private sealed class Watch
+     {
+@@ -987,6 +988,7 @@ public sealed partial class ProcessPolicyHost
+                     if (_retries.TryGetValue(key, out var waiting) && Now < waiting.RetryAt) { Issue(rule, running, identity.ExecutablePath, waiting.Kind, waiting.Message, field); continue; }
+                     pending.Add((field, key));
+                 }
++                if (pending.Count > 0 && _seenOnce.Add(Key(identity))) continue;
+                 if (pending.Count > 0) LogCheck(identity, pending, Apply(rule, hash, identity, pending));
+             }
+         }

@@ -1,0 +1,40 @@
+name: Proof
+on: push
+permissions:
+  contents: read
+jobs:
+  windows:
+    name: windows (${{ matrix.variant }})
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [head, score-1, score-2, red-skip, red-nofast, red-gpulate, red-burn, red-split, red-nobound, red-seq4, late-record]
+    runs-on: windows-2025
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - run: python -m pip install -r tools/validation/requirements.txt
+      - name: Protect the app data folder as the app does on first start
+        shell: powershell
+        run: .\tools\scripts\Initialize-CiDataFolder.ps1
+      - name: Fault
+        if: startsWith(matrix.variant, 'red') || matrix.variant == 'late-record'
+        run: git apply proof/${{ matrix.variant }}.diff
+      - name: Load harness
+        if: startsWith(matrix.variant, 'score')
+        run: python proof/insert.py
+      - run: git diff --stat
+      - name: Backend regression suite
+        shell: powershell
+        run: .\tools\scripts\Test-Baseline.ps1 -TestName Test-ProcessPolicyWorker.ps1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-validation-${{ matrix.variant }}
+          path: artifacts/validation/

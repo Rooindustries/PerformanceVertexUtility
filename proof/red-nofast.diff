@@ -1,0 +1,21 @@
+diff --git a/backend/native/Optimizer.Core/ProcessPolicies.cs b/backend/native/Optimizer.Core/ProcessPolicies.cs
+index 59eda7fa..e7b8c358 100644
+--- a/backend/native/Optimizer.Core/ProcessPolicies.cs
++++ b/backend/native/Optimizer.Core/ProcessPolicies.cs
+@@ -1030,6 +1030,7 @@ public sealed partial class ProcessPolicyHost
+                 var desired = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
+                 if (field != "cpuSets") desired[field] = rule.Controls[field];
+                 _processOpens++;
++                if (field == "gpuPriority" && !_retries.ContainsKey(key)) throw new InvalidDataException("forced", new ControlReadException(new ApiError("D3DKMTGetProcessSchedulingPriorityClass", "ntstatus", 0xC000000D, "", "forced")));
+                 var preview = _engine.Preview(identity.ProcessId, desired, field == "cpuSets" ? rule.CpuSelection : null);
+                 identity.Verify(preview.Identity);
+                 var directory = Path.Combine(_store.Root, "operations", preview.OperationId);
+@@ -1187,7 +1188,7 @@ public sealed partial class ProcessPolicyHost
+     private void Fail(string key, string kind, string message, string? field, string identity, bool starting = false)
+     {
+         var attempt = _retries.TryGetValue(key, out var earlier) ? earlier.Attempt + 1 : 0;
+-        var retryAt = attempt == 0 && starting ? Now : Now + Delay(attempt);
++        var retryAt = Now + Delay(attempt);
+         _retries[key] = new(kind, message, field, retryAt, attempt, identity, _checkStarted);
+     }
+ 

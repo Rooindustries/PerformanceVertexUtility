@@ -1,0 +1,13 @@
+diff --git a/backend/native/Optimizer.Core/ProcessPolicies.cs b/backend/native/Optimizer.Core/ProcessPolicies.cs
+index 59eda7fa..dcee25ea 100644
+--- a/backend/native/Optimizer.Core/ProcessPolicies.cs
++++ b/backend/native/Optimizer.Core/ProcessPolicies.cs
+@@ -1187,7 +1187,7 @@ public sealed partial class ProcessPolicyHost
+     private void Fail(string key, string kind, string message, string? field, string identity, bool starting = false)
+     {
+         var attempt = _retries.TryGetValue(key, out var earlier) ? earlier.Attempt + 1 : 0;
+-        var retryAt = attempt == 0 && starting ? Now : Now + Delay(attempt);
++        var retryAt = starting ? Now : Now + Delay(attempt);
+         _retries[key] = new(kind, message, field, retryAt, attempt, identity, _checkStarted);
+     }
+ 

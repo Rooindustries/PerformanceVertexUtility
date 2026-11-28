@@ -1,0 +1,13 @@
+diff --git a/backend/native/Optimizer.Core/ProcessPolicies.cs b/backend/native/Optimizer.Core/ProcessPolicies.cs
+index 59eda7fa..efd7983a 100644
+--- a/backend/native/Optimizer.Core/ProcessPolicies.cs
++++ b/backend/native/Optimizer.Core/ProcessPolicies.cs
+@@ -1059,6 +1059,8 @@ public sealed partial class ProcessPolicyHost
+             }
+             return done;
+         }
++        var burnStart = ProcessorTime();
++        while ((ProcessorTime() - burnStart).TotalSeconds < 1.2) { }
+         foreach (var (instance, key) in created)
+         {
+             try

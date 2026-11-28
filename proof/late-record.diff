@@ -1,0 +1,12 @@
+diff --git a/backend/native/Optimizer.Core/ProcessPolicyChecks.cs b/backend/native/Optimizer.Core/ProcessPolicyChecks.cs
+index fb5712dd..ab6ebfac 100644
+--- a/backend/native/Optimizer.Core/ProcessPolicyChecks.cs
++++ b/backend/native/Optimizer.Core/ProcessPolicyChecks.cs
+@@ -37,6 +37,7 @@ public sealed partial class ProcessPolicyHost
+             Refused = refused,
+             ProcessorSeconds = (ProcessorTime() - _launches[Key(identity)]).TotalSeconds,
+         };
++        Thread.Sleep(1000);
+         GovernorLog.Write(_store.Root, "Checked a matching process: " + JsonSerializer.Serialize(check, CheckJson));
+     }
+ }

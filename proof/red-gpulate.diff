@@ -1,0 +1,28 @@
+diff --git a/backend/native/Optimizer.Core/ProcessPolicies.cs b/backend/native/Optimizer.Core/ProcessPolicies.cs
+index 59eda7fa..04d717ab 100644
+--- a/backend/native/Optimizer.Core/ProcessPolicies.cs
++++ b/backend/native/Optimizer.Core/ProcessPolicies.cs
+@@ -539,6 +539,7 @@ public sealed partial class ProcessPolicyHost
+     private PolicyDiagnostics? _diagnostics;
+     private PolicyHostState _state;
+     private byte[]? _lastSavedState;
++    private readonly Dictionary<string, int> _gpuSkips = new(StringComparer.Ordinal);
+ 
+     private sealed class Watch
+     {
+@@ -985,6 +986,7 @@ public sealed partial class ProcessPolicyHost
+                     if (field == "affinity" && gate.Topology != rule.AffinityTopologyHash) { Issue(rule, running, identity.ExecutablePath, "topology", TopologyChanged, field); continue; }
+                     var key = rule.RuleId + "|" + hash + "|" + Key(identity) + "|" + field;
+                     if (_retries.TryGetValue(key, out var waiting) && Now < waiting.RetryAt) { Issue(rule, running, identity.ExecutablePath, waiting.Kind, waiting.Message, field); continue; }
++                    if (field == "gpuPriority" && (_gpuSkips[Key(identity)] = _gpuSkips.GetValueOrDefault(Key(identity)) + 1) <= 2) continue;
+                     pending.Add((field, key));
+                 }
+                 if (pending.Count > 0) LogCheck(identity, pending, Apply(rule, hash, identity, pending));
+@@ -1030,6 +1032,7 @@ public sealed partial class ProcessPolicyHost
+                 var desired = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
+                 if (field != "cpuSets") desired[field] = rule.Controls[field];
+                 _processOpens++;
++                if (field == "gpuPriority" && !_retries.ContainsKey(key)) throw new InvalidDataException("forced", new ControlReadException(new ApiError("D3DKMTGetProcessSchedulingPriorityClass", "ntstatus", 0xC000000D, "", "forced")));
+                 var preview = _engine.Preview(identity.ProcessId, desired, field == "cpuSets" ? rule.CpuSelection : null);
+                 identity.Verify(preview.Identity);
+                 var directory = Path.Combine(_store.Root, "operations", preview.OperationId);
