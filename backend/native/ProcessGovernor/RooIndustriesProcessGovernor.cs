@@ -13,8 +13,9 @@ public sealed class RooIndustriesProcessGovernor
     private const string ProductName = "Roo Industries Optimization Suite";
     private const string ActionId = "performance.nativeGovernor.startSession";
     private const int ProcessIoPriorityInformationClass = 33;
-    private const int MoveFileReplaceExisting = 0x1;
-    private const int MoveFileWriteThrough = 0x8;
+    private const int DeleteAccess = 0x110000;
+    private const int RenameInfoEx = 22;
+    private const byte ReplacePosix = 3;
 
     [DllImport("user32.dll")]
     private static extern IntPtr GetForegroundWindow();
@@ -28,8 +29,13 @@ public sealed class RooIndustriesProcessGovernor
     [DllImport("ntdll.dll")]
     private static extern int NtSetInformationProcess(IntPtr process, int informationClass, ref int information, int informationLength);
 
-    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern bool MoveFileEx(string existingFileName, string newFileName, int flags);
+    [DllImport("kernel32.dll", EntryPoint = "CreateFileW", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern Microsoft.Win32.SafeHandles.SafeFileHandle CreateFile(
+        string path, int access, FileShare share, IntPtr security, FileMode mode, int flags, IntPtr template);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool SetFileInformationByHandle(
+        Microsoft.Win32.SafeHandles.SafeFileHandle file, int kind, byte[] information, int length);
 
     [DllImport("gdi32.dll")]
     private static extern int D3DKMTGetProcessSchedulingPriorityClass(IntPtr process, out int priorityClass);
@@ -2064,12 +2070,27 @@ public sealed class RooIndustriesProcessGovernor
             }
             FileInfo current = new FileInfo(path);
             if (current.Exists) File.SetCreationTimeUtc(temporary, current.CreationTimeUtc);
-            if (!MoveFileEx(temporary, path, MoveFileReplaceExisting | MoveFileWriteThrough))
+            ReplaceWith(temporary, path);
+        }
+        finally { if (File.Exists(temporary)) File.Delete(temporary); }
+    }
+
+    private static void ReplaceWith(string temporary, string path)
+    {
+        FileShare share = FileShare.ReadWrite | FileShare.Delete;
+        using (var file = CreateFile(temporary, DeleteAccess, share, IntPtr.Zero, FileMode.Open, 0, IntPtr.Zero))
+        {
+            if (file.IsInvalid) Marshal.ThrowExceptionForHR(Marshal.GetHRForLastWin32Error());
+            byte[] name = System.Text.Encoding.Unicode.GetBytes(Path.GetFullPath(path));
+            byte[] rename = new byte[24 + name.Length];
+            rename[0] = ReplacePosix;
+            BitConverter.GetBytes(name.Length).CopyTo(rename, 16);
+            name.CopyTo(rename, 20);
+            if (!SetFileInformationByHandle(file, RenameInfoEx, rename, rename.Length))
             {
                 Marshal.ThrowExceptionForHR(Marshal.GetHRForLastWin32Error());
             }
         }
-        finally { if (File.Exists(temporary)) File.Delete(temporary); }
     }
 
     private static JavaScriptSerializer NewSerializer()

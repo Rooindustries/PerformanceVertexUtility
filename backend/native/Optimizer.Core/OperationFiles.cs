@@ -1,8 +1,11 @@
 #nullable enable
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Security.Principal;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Microsoft.Win32.SafeHandles;
 
 namespace RooIndustries.Optimizer;
 
@@ -72,10 +75,35 @@ public static class OperationFiles
             }
             var current = new FileInfo(path);
             if (current.Exists) File.SetCreationTimeUtc(temporary, current.CreationTimeUtc);
-            File.Move(temporary, path, overwrite: true);
+            ReplaceWith(temporary, path);
         }
         finally { File.Delete(temporary); }
     }
+
+    private const uint DeleteAccess = 0x110000;
+    private const int RenameInfoEx = 22;
+    private const byte ReplacePosix = 3;
+
+    private static void ReplaceWith(string temporary, string path)
+    {
+        var share = FileShare.ReadWrite | FileShare.Delete;
+        using var file = CreateFile(temporary, DeleteAccess, share, IntPtr.Zero, FileMode.Open, 0, IntPtr.Zero);
+        if (file.IsInvalid) Marshal.ThrowExceptionForHR(Marshal.GetHRForLastWin32Error());
+        var name = Encoding.Unicode.GetBytes(path);
+        var rename = new byte[24 + name.Length];
+        rename[0] = ReplacePosix;
+        BitConverter.TryWriteBytes(rename.AsSpan(16), name.Length);
+        name.CopyTo(rename, 20);
+        if (!SetFileInformationByHandle(file, RenameInfoEx, rename, rename.Length))
+            Marshal.ThrowExceptionForHR(Marshal.GetHRForLastWin32Error());
+    }
+
+    [DllImport("kernel32.dll", EntryPoint = "CreateFileW", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern SafeFileHandle CreateFile(
+        string path, uint access, FileShare share, IntPtr security, FileMode mode, uint flags, IntPtr template);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool SetFileInformationByHandle(SafeFileHandle file, int kind, byte[] information, int length);
 
     public static string? ExternalPathProblem(string? path)
     {

@@ -4,7 +4,7 @@ $root=Join-Path ([IO.Path]::GetTempPath()) ('roo-industries-exclusion-policy-'+[
 try {
     $scripts=Join-Path $root 'scripts'
     [IO.Directory]::CreateDirectory($scripts)|Out-Null
-    foreach($name in 'UninstallCleanup.Common.ps1','BrandCompatibility.Common.ps1'){Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination $scripts}
+    foreach($name in 'UninstallCleanup.Common.ps1','BrandCompatibility.Common.ps1','OperationState.Common.ps1'){Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination $scripts}
     $calls=Join-Path $root 'calls.log'
     [IO.File]::WriteAllText((Join-Path $scripts 'Invoke-CleanupExclusions.ps1'),"param([string]`$Action,[string[]]`$FileTarget)`n[IO.File]::AppendAllText('$calls',(`$FileTarget -join ';')+[Environment]::NewLine)`n")
     . (Join-Path $scripts 'UninstallCleanup.Common.ps1')

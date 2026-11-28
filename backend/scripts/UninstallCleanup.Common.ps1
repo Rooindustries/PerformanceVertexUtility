@@ -1,4 +1,5 @@
 . (Join-Path $PSScriptRoot 'BrandCompatibility.Common.ps1')
+. (Join-Path $PSScriptRoot 'OperationState.Common.ps1')
 $script:RooIndustriesUninstallProductName = 'Roo Industries Optimization Suite'
 
 function Get-RooIndustriesUninstallUtcStamp {
@@ -96,19 +97,7 @@ function Read-RooIndustriesUninstallJsonFile {
 
 function Write-RooIndustriesCleanupJournal {
     param([object]$Value, [string]$Path)
-    Ensure-RooIndustriesUninstallDirectory (Split-Path $Path -Parent)
-    $temporary = $Path + '.' + [guid]::NewGuid().ToString('N') + '.tmp'
-    try {
-        $bytes = [System.Text.Encoding]::UTF8.GetBytes(($Value | ConvertTo-Json -Depth 32))
-        $stream = [System.IO.File]::Open($temporary, [System.IO.FileMode]::CreateNew, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None)
-        try { $stream.Write($bytes, 0, $bytes.Length); $stream.Flush($true) } finally { $stream.Dispose() }
-        $current = [System.IO.FileInfo]::new($Path)
-        if ($current.Exists) { [System.IO.File]::SetCreationTimeUtc($temporary, $current.CreationTimeUtc) }
-        Add-Type -AssemblyName Microsoft.VisualBasic
-        [Microsoft.VisualBasic.FileIO.FileSystem]::MoveFile($temporary, $Path, $true)
-    } finally {
-        if (Test-Path -LiteralPath $temporary) { Remove-Item -LiteralPath $temporary -Force }
-    }
+    Write-RooIndustriesOperationJson $Value $Path
 }
 
 function Test-RooIndustriesCleanupPathWithin {

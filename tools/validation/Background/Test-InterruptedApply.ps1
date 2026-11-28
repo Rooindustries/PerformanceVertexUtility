@@ -161,8 +161,8 @@ try {
      $tail=$tail.Replace("`$Change.outcome = 'applied'","`$Change.outcome = 'applied'; Wait-RooIndustriesInterruptedBoundary (`$control+'-after')")
      [IO.File]::WriteAllText($commonPath,($commonText.Substring(0,$start)+$tail),$utf8)
      $stateInstrumented=$stateText.Replace('$stream.Flush($true)',"`$stream.Flush(`$true); Wait-RooIndustriesInterruptedBoundary 'backup-flushed'")
-     $move='[Microsoft.VisualBasic.FileIO.FileSystem]::MoveFile($temporary, $full, $true)'
-     $stateInstrumented=$stateInstrumented.Replace($move,"if(`$current.Exists){Wait-RooIndustriesInterruptedBoundary 'backup-replacing'}; $move; if(`$current.Exists){Wait-RooIndustriesInterruptedBoundary 'backup-replaced'}")
+     $move='Move-RooIndustriesReplacement $temporary $full'
+     $stateInstrumented=$stateInstrumented.Replace($move,"`$replacing=[IO.File]::Exists(`$full); if(`$replacing){Wait-RooIndustriesInterruptedBoundary 'backup-replacing'}; $move; if(`$replacing){Wait-RooIndustriesInterruptedBoundary 'backup-replaced'}")
      [IO.File]::WriteAllText($statePath,$stateInstrumented,$utf8)
      $app=StartApply $settings ($name+'-apply');$script=ScriptOf $app;$deadline=[DateTime]::UtcNow.AddSeconds(120)
      while(-not(Test-Path -LiteralPath $marker)){if($script.process.HasExited -or [DateTime]::UtcNow -gt $deadline){throw ('The real apply never reached '+$point)};Start-Sleep -Milliseconds 10}
@@ -200,9 +200,9 @@ try {
    foreach($mode in @('move')){
     $name='replace-'+$mode;$fixtures=Fixtures $name 1;Profile $fixtures;$before=Before $fixtures;$settings=Settings $name
     try {
-     $move='[Microsoft.VisualBasic.FileIO.FileSystem]::MoveFile($temporary, $full, $true)'
+     $move='Move-RooIndustriesReplacement $temporary $full'
      if(-not$stateText.Contains($move)){throw 'The real replacement call was not found'}
-     $instrumented=$stateText.Replace($move,("if(`$current.Exists -and -not`$global:rooReplaceFailed){`$global:rooReplaceFailed=`$true; throw [IO.IOException]::new('Fixture replacement failure')}; "+$move))
+     $instrumented=$stateText.Replace($move,("if([IO.File]::Exists(`$full) -and -not`$global:rooReplaceFailed){`$global:rooReplaceFailed=`$true; throw [IO.IOException]::new('Fixture replacement failure')}; "+$move))
      [IO.File]::WriteAllText($statePath,$instrumented,$utf8)
      $apply=Service 'apply' $settings ($name+'-apply')
      $changed=(Changed $fixtures).Count;Save ($name+'-state') @{changed=$changed;recoveryPath=$apply.result.RecoveryPath}

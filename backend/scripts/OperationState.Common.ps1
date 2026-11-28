@@ -19,11 +19,49 @@ function Write-RooIndustriesOperationJson {
     try {
         $stream = [IO.FileStream]::new($temporary, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
         try { $stream.Write($bytes,0,$bytes.Length); $stream.Flush($true) } finally { $stream.Dispose() }
-        $current = [IO.FileInfo]::new($full)
-        if ($current.Exists) { [IO.File]::SetCreationTimeUtc($temporary, $current.CreationTimeUtc) }
-        Add-Type -AssemblyName Microsoft.VisualBasic
-        [Microsoft.VisualBasic.FileIO.FileSystem]::MoveFile($temporary, $full, $true)
+        Move-RooIndustriesReplacement $temporary $full
     } finally { if ([IO.File]::Exists($temporary)) { [IO.File]::Delete($temporary) } }
+}
+
+function Move-RooIndustriesReplacement {
+    param([Parameter(Mandatory=$true)][string]$Temporary, [Parameter(Mandatory=$true)][string]$Path)
+    if (-not ('RooIndustriesAtomicReplace' -as [type])) {
+        Add-Type -TypeDefinition @'
+using System;
+using System.IO;
+using System.Runtime.InteropServices;
+using System.Text;
+using Microsoft.Win32.SafeHandles;
+public static class RooIndustriesAtomicReplace {
+    const int DeleteAccess = 0x110000;
+    const int RenameInfoEx = 22;
+    const byte ReplacePosix = 3;
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    static extern SafeFileHandle CreateFileW(
+        string name, int access, FileShare share, IntPtr security, FileMode mode, int flags, IntPtr template);
+    [DllImport("kernel32.dll", SetLastError = true)]
+    static extern bool SetFileInformationByHandle(SafeFileHandle file, int kind, byte[] information, int length);
+    public static void Move(string temporary, string path) {
+        FileInfo current = new FileInfo(path);
+        if (current.Exists) File.SetCreationTimeUtc(temporary, current.CreationTimeUtc);
+        FileShare share = FileShare.ReadWrite | FileShare.Delete;
+        IntPtr none = IntPtr.Zero;
+        using (SafeFileHandle file = CreateFileW(temporary, DeleteAccess, share, none, FileMode.Open, 0, none)) {
+            if (file.IsInvalid) Fail();
+            byte[] name = Encoding.Unicode.GetBytes(path);
+            int offset = IntPtr.Size == 8 ? 20 : 12;
+            byte[] rename = new byte[offset + name.Length + 8];
+            rename[0] = ReplacePosix;
+            BitConverter.GetBytes(name.Length).CopyTo(rename, offset - 4);
+            name.CopyTo(rename, offset);
+            if (!SetFileInformationByHandle(file, RenameInfoEx, rename, rename.Length)) Fail();
+        }
+    }
+    static void Fail() { Marshal.ThrowExceptionForHR(Marshal.GetHRForLastWin32Error()); }
+}
+'@
+    }
+    [RooIndustriesAtomicReplace]::Move([IO.Path]::GetFullPath($Temporary), [IO.Path]::GetFullPath($Path))
 }
 
 function Read-RooIndustriesOperationJson {

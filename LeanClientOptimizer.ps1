@@ -16,6 +16,7 @@ if ([string]::IsNullOrWhiteSpace($ManifestPath)) {
     $ManifestPath = Join-Path $PSScriptRoot 'modules\tweak_manifest.json'
 }
 $PolicyEditionsPath = Join-Path $PSScriptRoot 'backend\catalogs\windows-policy-editions.json'
+. (Join-Path $PSScriptRoot 'backend\scripts\OperationState.Common.ps1')
 
 function Get-NowStamp {
     return (Get-Date).ToString('yyyyMMdd-HHmmssfff') + '-' + [guid]::NewGuid().ToString('N')
@@ -36,10 +37,7 @@ function Write-JsonFile {
         $Value | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $temp -Encoding UTF8
         $stream = [IO.File]::Open($temp, [IO.FileMode]::Open, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None)
         try { $stream.Flush($true) } finally { $stream.Dispose() }
-        $current = [IO.FileInfo]::new($Path)
-        if ($current.Exists) { [IO.File]::SetCreationTimeUtc($temp, $current.CreationTimeUtc) }
-        Add-Type -AssemblyName Microsoft.VisualBasic
-        [Microsoft.VisualBasic.FileIO.FileSystem]::MoveFile($temp, $Path, $true)
+        Move-RooIndustriesReplacement $temp $Path
     } finally {
         if ([IO.File]::Exists($temp)) { [IO.File]::Delete($temp) }
     }
