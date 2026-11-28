@@ -9,6 +9,8 @@ var facts = new JsonArray();
 var units = input["units"]!.AsArray().Select(unit => new Unit(unit!, (string)input["root"]!, facts)).ToList();
 foreach (var unit in units)
     unit.Read(units);
+foreach (var unit in units)
+    unit.ScanAll();
 Console.Out.Write(facts.ToJsonString());
 
 sealed class Unit
@@ -88,7 +90,8 @@ sealed class Unit
             .OfType<INamedTypeSymbol>().Where(type => type.GetMembers("InitializeComponent").IsEmpty).ToList();
         if (markup.Count > 0)
             result = result.AddSyntaxTrees(markup.Select(type => CSharpSyntaxTree.ParseText(
-                (type.ContainingNamespace.IsGlobalNamespace ? "" : "namespace " + type.ContainingNamespace.ToDisplayString() + ";") + " partial class " + type.Name + " { void InitializeComponent() { } }",
+                (type.ContainingNamespace.IsGlobalNamespace ? "" : "namespace " + type.ContainingNamespace.ToDisplayString() + ";") + " partial class " + type.Name + " { void InitializeComponent() { } "
+                + Named(result, type.DeclaringSyntaxReferences.Select(r => Path.ChangeExtension(r.SyntaxTree.FilePath, null)).First(File.Exists)) + " }",
                 parsed.ParseOptions, Path.Combine(dir, type.Name + ".markup.g.cs"))));
         var loader = new Loader();
         var generators = parsed.AnalyzerReferences.SelectMany(r => new Microsoft.CodeAnalysis.Diagnostics.AnalyzerFileReference(Path.GetFullPath(r.FilePath, dir), loader).GetGenerators(LanguageNames.CSharp)).ToList();
@@ -101,6 +104,23 @@ sealed class Unit
         }
         building = false;
         return built = result;
+    }
+
+    static string Named(CSharpCompilation compilation, string markup)
+    {
+        var xaml = System.Xml.Linq.XNamespace.Get("http://schemas.microsoft.com/winfx/2006/xaml");
+        var presentation = new[] { "Microsoft.UI.Xaml.Controls", "Microsoft.UI.Xaml.Controls.Primitives", "Microsoft.UI.Xaml.Shapes", "Microsoft.UI.Xaml.Documents", "Microsoft.UI.Xaml.Media", "Microsoft.UI.Xaml.Media.Animation", "Microsoft.UI.Xaml.Media.Imaging", "Microsoft.UI.Xaml" };
+        var fields = new Dictionary<string, string>();
+        foreach (var element in System.Xml.Linq.XDocument.Load(markup).Descendants())
+        {
+            var name = (string?)element.Attribute(xaml + "Name") ?? (string?)element.Attribute("Name");
+            var space = element.Name.NamespaceName;
+            var spaces = space.StartsWith("using:") ? [space[6..]] : space.StartsWith("clr-namespace:") ? [space[14..].Split(';')[0]] : presentation;
+            var type = spaces.Select(n => compilation.GetTypeByMetadataName(n + "." + element.Name.LocalName)).FirstOrDefault(t => t is not null);
+            if (name is not null && type is not null)
+                fields.TryAdd(name, "internal global::" + type.ToDisplayString() + " " + name + " = null!;");
+        }
+        return string.Join(" ", fields.Values);
     }
 
     public void Read(List<Unit> units)
@@ -120,13 +140,29 @@ sealed class Unit
         foreach (var reference in compilation.References)
             if (compilation.GetAssemblyOrModuleSymbol(reference) is IAssemblySymbol assembly && reference is CompilationReference)
                 repo.Add(assembly);
-        var trees = compilation.SyntaxTrees.Where(t => parsed.SourceFiles.Any(s => s.Path == t.FilePath)).ToList();
+        trees = compilation.SyntaxTrees.Where(t => parsed.SourceFiles.Any(s => s.Path == t.FilePath)).ToList();
         foreach (var tree in trees)
             Index(tree);
+        this.report = report;
+    }
+
+    List<SyntaxTree> trees = [];
+    Dictionary<string, (string, int)> report = [];
+    static readonly HashSet<string> Launching = [];
+    IMethodSymbol? launching;
+    bool touched, argumentsTouched;
+
+    static string Qualified(IMethodSymbol method) => method.ContainingType.OriginalDefinition.ToDisplayString(TypeFormat) + "." + method.Name;
+
+    public void ScanAll()
+    {
         foreach (var tree in trees)
             if (report.TryGetValue(Path.GetFullPath(tree.FilePath), out var place))
                 Scan(tree, place.Item1, place.Item2);
     }
+
+    bool FromParameter(IOperation operation, ISymbol? method) =>
+        method is not null && operation.DescendantsAndSelf().OfType<IParameterReferenceOperation>().Any(p => SymbolEqualityComparer.Default.Equals(p.Parameter.ContainingSymbol.OriginalDefinition, method.OriginalDefinition));
 
     static int Errors(CSharpCompilation compilation, Dictionary<string, (string, int)> report) =>
         compilation.SyntaxTrees.Where(t => report.ContainsKey(Path.GetFullPath(t.FilePath)))
@@ -136,8 +172,9 @@ sealed class Unit
     {
         var model = compilation.GetSemanticModel(tree);
         foreach (var node in tree.GetRoot().DescendantNodesAndSelf())
-            if (model.GetOperation(node) is { } operation)
-                yield return operation;
+            if (model.GetOperation(node) is { Parent: null } root and not IAttributeOperation)
+                foreach (var operation in root.DescendantsAndSelf())
+                    yield return operation;
     }
 
     void Index(SyntaxTree tree)
@@ -150,6 +187,8 @@ sealed class Unit
             {
                 case IInvocationOperation invocation:
                     Add(calls, invocation.TargetMethod.OriginalDefinition, operation);
+                    if (IsStart(invocation.TargetMethod) && invocation.SemanticModel?.GetEnclosingSymbol(invocation.Syntax.SpanStart) is IMethodSymbol starter)
+                        Launching.Add(Qualified(starter.OriginalDefinition));
                     if (invocation.TargetMethod.Name == "Add" && invocation.Instance is { } list && Key(list) is { } added)
                         Add(writes, added, invocation.Arguments.FirstOrDefault()?.Value ?? operation);
                     foreach (var argument in invocation.Arguments.Where(a => a.Parameter?.RefKind is RefKind.Out or RefKind.Ref && Key(a.Value) is not null))
@@ -274,6 +313,9 @@ sealed class Unit
                     Launch(file, line, invocation);
                     break;
                 case IInvocationOperation invocation:
+                    if ((SymbolEqualityComparer.Default.Equals(invocation.TargetMethod.ContainingAssembly, compilation.Assembly) || repo.Contains(invocation.TargetMethod.ContainingAssembly))
+                        && Launching.Contains(Qualified(invocation.TargetMethod.OriginalDefinition)) && model.GetEnclosingSymbol(invocation.Syntax.SpanStart) is IMethodSymbol caller)
+                        Emit(file, line, "call", "repo:" + Qualified(invocation.TargetMethod.OriginalDefinition), null, Within(caller, invocation.Arguments.Any(a => FromParameter(a.Value, caller))));
                     Use(file, line, invocation.TargetMethod, Arguments(invocation.Arguments));
                     break;
                 case IObjectCreationOperation { Constructor: { } constructor } creation:
@@ -297,9 +339,81 @@ sealed class Unit
                 case IFunctionPointerInvocationOperation:
                     Emit(file, line, "unreadable", "a function pointer call names no member the check can classify");
                     break;
+                case IConversionOperation { OperatorMethod: { } method }:
+                    Use(file, line, method, null);
+                    break;
+                case IUnaryOperation { OperatorMethod: { } method }:
+                    Use(file, line, method, null);
+                    break;
+                case IBinaryOperation { OperatorMethod: { } method }:
+                    Use(file, line, method, null);
+                    break;
+                case ICompoundAssignmentOperation { OperatorMethod: { } method }:
+                    Use(file, line, method, null);
+                    break;
+                case IIncrementOrDecrementOperation { OperatorMethod: { } method }:
+                    Use(file, line, method, null);
+                    break;
+                case IForEachLoopOperation when operation.Syntax is Microsoft.CodeAnalysis.CSharp.Syntax.CommonForEachStatementSyntax loop:
+                    var each = model.GetForEachStatementInfo(loop);
+                    foreach (var method in new[] { each.GetEnumeratorMethod, each.MoveNextMethod, each.CurrentProperty?.GetMethod, each.DisposeMethod }.OfType<IMethodSymbol>())
+                        Use(file, line, method, null);
+                    break;
+                case IAwaitOperation when operation.Syntax is Microsoft.CodeAnalysis.CSharp.Syntax.AwaitExpressionSyntax awaited:
+                    var wait = model.GetAwaitExpressionInfo(awaited);
+                    foreach (var method in new[] { wait.GetAwaiterMethod, wait.GetResultMethod, wait.IsCompletedProperty?.GetMethod }.OfType<IMethodSymbol>())
+                        Use(file, line, method, null);
+                    break;
+                case IUsingOperation { Resources: var held }:
+                    Dispose(file, line, held);
+                    break;
+                case IUsingDeclarationOperation { DeclarationGroup: var held }:
+                    Dispose(file, line, held);
+                    break;
+                case IDeconstructionAssignmentOperation when operation.Syntax is Microsoft.CodeAnalysis.CSharp.Syntax.AssignmentExpressionSyntax split && model.GetDeconstructionInfo(split).Method is { } method:
+                    Use(file, line, method, null);
+                    break;
+                case IRecursivePatternOperation { DeconstructSymbol: IMethodSymbol method }:
+                    Use(file, line, method, null);
+                    break;
+                case IImplicitIndexerReferenceOperation reference:
+                    foreach (var method in new[] { (reference.LengthSymbol as IPropertySymbol)?.GetMethod, reference.IndexerSymbol as IMethodSymbol, (reference.IndexerSymbol as IPropertySymbol)?.GetMethod }.OfType<IMethodSymbol>())
+                        Use(file, line, method, null);
+                    break;
+                case ICollectionExpressionOperation { ConstructMethod: { } method }:
+                    Use(file, line, method, null);
+                    break;
             }
+            if (!Understood.Contains(operation.Kind) && !(operation.Kind == OperationKind.None && operation.Parent is INameOfOperation))
+                Emit(file, line, "unreadable", "the check has no rule for the C# operation " + operation.Kind);
         }
     }
+
+    void Dispose(string file, int line, IOperation held)
+    {
+        foreach (var type in held.DescendantsAndSelf().Select(o => o switch { IVariableDeclaratorOperation d => d.Symbol.Type, IVariableDeclarationGroupOperation => null, IVariableDeclarationOperation => null, _ => o.Parent is IUsingOperation ? o.Type : null }).OfType<ITypeSymbol>())
+            if (type.AllInterfaces.Concat([type]).SelectMany(i => i.GetMembers("Dispose")).OfType<IMethodSymbol>().FirstOrDefault(m => m.Parameters.Length == 0) is { } method)
+                Use(file, line, type.TypeKind == TypeKind.Interface || method.ContainingType.TypeKind != TypeKind.Interface ? method : type.FindImplementationForInterfaceMember(method) as IMethodSymbol ?? method, null);
+    }
+
+    static readonly HashSet<OperationKind> Understood = [OperationKind.Block, OperationKind.VariableDeclarationGroup, OperationKind.Switch, OperationKind.Loop, OperationKind.Labeled, OperationKind.Branch,
+        OperationKind.Empty, OperationKind.Return, OperationKind.YieldBreak, OperationKind.Lock, OperationKind.Try, OperationKind.Using, OperationKind.YieldReturn, OperationKind.ExpressionStatement,
+        OperationKind.LocalFunction, OperationKind.RaiseEvent, OperationKind.Literal, OperationKind.Conversion, OperationKind.Invocation, OperationKind.ArrayElementReference, OperationKind.LocalReference,
+        OperationKind.ParameterReference, OperationKind.FieldReference, OperationKind.MethodReference, OperationKind.PropertyReference, OperationKind.EventReference, OperationKind.Unary, OperationKind.Binary,
+        OperationKind.Conditional, OperationKind.Coalesce, OperationKind.AnonymousFunction, OperationKind.ObjectCreation, OperationKind.ArrayCreation, OperationKind.InstanceReference, OperationKind.IsType,
+        OperationKind.Await, OperationKind.SimpleAssignment, OperationKind.CompoundAssignment, OperationKind.EventAssignment, OperationKind.ConditionalAccess, OperationKind.ConditionalAccessInstance,
+        OperationKind.InterpolatedString, OperationKind.AnonymousObjectCreation, OperationKind.ObjectOrCollectionInitializer, OperationKind.MemberInitializer, OperationKind.NameOf, OperationKind.Tuple,
+        OperationKind.DynamicObjectCreation, OperationKind.DynamicMemberReference, OperationKind.DynamicInvocation, OperationKind.DynamicIndexerAccess, OperationKind.TranslatedQuery, OperationKind.DelegateCreation,
+        OperationKind.DefaultValue, OperationKind.TypeOf, OperationKind.SizeOf, OperationKind.AddressOf, OperationKind.IsPattern, OperationKind.Increment, OperationKind.Throw, OperationKind.Decrement,
+        OperationKind.DeconstructionAssignment, OperationKind.DeclarationExpression, OperationKind.OmittedArgument, OperationKind.FieldInitializer, OperationKind.VariableInitializer, OperationKind.PropertyInitializer,
+        OperationKind.ParameterInitializer, OperationKind.ArrayInitializer, OperationKind.VariableDeclarator, OperationKind.VariableDeclaration, OperationKind.Argument, OperationKind.CatchClause,
+        OperationKind.SwitchCase, OperationKind.CaseClause, OperationKind.InterpolatedStringText, OperationKind.Interpolation, OperationKind.ConstantPattern, OperationKind.DeclarationPattern,
+        OperationKind.TupleBinary, OperationKind.MethodBody, OperationKind.ConstructorBody, OperationKind.Discard, OperationKind.CoalesceAssignment, OperationKind.Range, OperationKind.RecursivePattern,
+        OperationKind.DiscardPattern, OperationKind.SwitchExpression, OperationKind.SwitchExpressionArm, OperationKind.PropertySubpattern, OperationKind.UsingDeclaration, OperationKind.NegatedPattern,
+        OperationKind.BinaryPattern, OperationKind.TypePattern, OperationKind.RelationalPattern, OperationKind.With, OperationKind.InterpolatedStringHandlerCreation, OperationKind.InterpolatedStringAddition,
+        OperationKind.InterpolatedStringAppendLiteral, OperationKind.InterpolatedStringAppendFormatted, OperationKind.InterpolatedStringAppendInvalid, OperationKind.InterpolatedStringHandlerArgumentPlaceholder,
+        OperationKind.FunctionPointerInvocation, OperationKind.ListPattern, OperationKind.SlicePattern, OperationKind.ImplicitIndexerReference, OperationKind.Utf8String, OperationKind.Attribute,
+        OperationKind.InlineArrayAccess, OperationKind.CollectionExpression, OperationKind.Spread];
 
     static bool IsStart(IMethodSymbol method) =>
         method.Name == "Start" && method.ContainingType.ToDisplayString(TypeFormat) == "System.Diagnostics.Process";
@@ -382,9 +496,12 @@ sealed class Unit
 
     static Start Unknown => new([[Hole]], [null], []);
 
+    static JsonObject Within(IMethodSymbol method, bool from) => new() { ["within"] = Qualified(method.OriginalDefinition), ["fromParameter"] = from };
+
     void Launch(string file, int line, IInvocationOperation invocation)
     {
         var method = invocation.SemanticModel?.GetEnclosingSymbol(invocation.Syntax.SpanStart) as IMethodSymbol;
+        (launching, touched, argumentsTouched) = (method, false, false);
         var sites = method is not null && method.MethodKind != MethodKind.AnonymousFunction && !grouped.Contains(method.OriginalDefinition)
             && !method.IsVirtual && !method.IsOverride && !method.IsAbstract && calls.TryGetValue(method.OriginalDefinition, out var found) ? found : [];
         var emitted = new HashSet<string>();
@@ -428,7 +545,13 @@ sealed class Unit
             items.AddRange(Elements(arguments));
             arguments = null;
         }
-        return new(program is null ? [] : Resolve(program), arguments is null ? [] : Resolve(arguments).Select(r => (List<string>?)r).ToList(), items.Select(Item).ToList());
+        var wasProgram = resolvingProgram;
+        resolvingProgram = true;
+        var programs = program is null ? [] : Resolve(program);
+        resolvingProgram = false;
+        var start = new Start(programs, arguments is null ? [] : Resolve(arguments).Select(r => (List<string>?)r).ToList(), items.Select(Item).ToList());
+        resolvingProgram = wasProgram;
+        return start;
     }
 
     List<string> Item(IOperation item) => Resolve(item) is { Count: 1 } single ? single[0] : [Hole];
@@ -437,6 +560,17 @@ sealed class Unit
     {
         while (operation is IConversionOperation conversion)
             operation = conversion.Operand;
+        if (operation is IParameterReferenceOperation reached && launching is not null && SymbolEqualityComparer.Default.Equals(reached.Parameter.ContainingSymbol.OriginalDefinition, launching.OriginalDefinition))
+            touched = true;
+        var wasProgram = resolvingProgram;
+        resolvingProgram = true;
+        try { return InfoOf(operation, member); } finally { resolvingProgram = wasProgram; }
+    }
+
+    bool resolvingProgram;
+
+    List<Start> InfoOf(IOperation operation, string member)
+    {
         if (operation is IInvocationOperation call && Returns(call.TargetMethod) is { } returned)
             return returned.SelectMany(r => Info(r, member)).ToList();
         if (operation is IObjectCreationOperation creation)
@@ -469,6 +603,7 @@ sealed class Unit
                 foreach (var whole in Writes(symbol, member))
                     bases.AddRange(Info(whole, ""));
             var programs = Writes(symbol, Join(member, "FileName")).SelectMany(p => Resolve(p)).ToList();
+            resolvingProgram = false;
             var raws = Writes(symbol, Join(member, "Arguments")).SelectMany(p => Resolve(p)).Select(r => (List<string>?)r).ToList();
             var items = Writes(symbol, Join(member, "ArgumentList")).Select(Item).ToList();
             var merged = bases.Select(b => new Start([.. b.Programs, .. programs], [.. b.Raws, .. raws], [.. b.List, .. items])).ToList();
@@ -549,6 +684,8 @@ sealed class Unit
 
     List<List<string>> Resolve(IOperation? operation, int depth = 0)
     {
+        if (operation is IParameterReferenceOperation reached && launching is not null && SymbolEqualityComparer.Default.Equals(reached.Parameter.ContainingSymbol.OriginalDefinition, launching.OriginalDefinition))
+            (touched, argumentsTouched) = (touched || resolvingProgram, argumentsTouched || !resolvingProgram);
         if (operation is null || depth > 12)
             return [[Hole]];
         if (operation.ConstantValue is { HasValue: true } constant)
@@ -667,10 +804,18 @@ sealed class Unit
         foreach (var token in (raw is null ? [] : Split(raw)).Concat(list))
             tokens.Add(Token(token));
         var text = raw is not null && raw.All(p => !IsMarker(p)) && list.Count == 0 ? string.Concat(raw) : null;
+        var context = launching is null ? new JsonObject() : Within(launching, touched || argumentsTouched);
+        if (launching is not null)
+            context["programFromParameter"] = touched;
         if (name is null)
-            Emit(file, line, "unreadable", "the program this starts is built from values the check cannot read");
+            Emit(file, line, "unreadable", "the program this starts is built from values the check cannot read", null, context);
         else
-            Emit(file, line, "command", name, tokens, new JsonObject { ["raw"] = text, ["via"] = "System.Diagnostics.Process.Start" });
+        {
+            context["raw"] = text;
+            context["via"] = "System.Diagnostics.Process.Start";
+            context["path"] = program.All(p => !IsMarker(p)) ? string.Concat(program) : null;
+            Emit(file, line, "command", name, tokens, context);
+        }
     }
 
     static string? Program(List<string> pieces)

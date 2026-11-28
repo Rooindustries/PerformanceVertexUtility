@@ -10,9 +10,39 @@ $switches = @('Wait', 'PassThru', 'NoNewWindow', 'UseNewEnvironment', 'LoadUserP
 $facts = [Collections.Generic.List[object]]::new()
 
 function Add-Fact($Node, [string]$Kind, [string]$Name, $Arguments = $null, [hashtable]$Extra = @{}) {
-    $fact = [ordered]@{ file = $script:file; line = $Node.Extent.StartLineNumber + $script:offset; text = $Node.Extent.StartScriptPosition.Line; kind = $Kind; name = $Name; args = $Arguments }
+    $fact = [ordered]@{ file = $script:file; line = $Node.Extent.StartLineNumber + $script:offset; offset = $Node.Extent.StartOffset; text = $Node.Extent.StartScriptPosition.Line; kind = $Kind; name = $Name; args = $Arguments }
     foreach ($key in $Extra.Keys) { $fact[$key] = $Extra[$key] }
+    if ($Kind -in 'command', 'unreadable') {
+        for ($at = $Node.Parent; $null -ne $at -and $at -isnot [System.Management.Automation.Language.FunctionDefinitionAst]; $at = $at.Parent) { }
+        if ($null -ne $at) {
+            $fact.within = $at.Name
+            $fact.fromParameter = Test-FromParameter $Node $at
+            $program = if ($null -ne $script:programNode) { $script:programNode } elseif ($Node -is [System.Management.Automation.Language.CommandAst]) { $Node.CommandElements[0] } else { $Node }
+            $fact.programFromParameter = $null -ne $program -and (Test-FromParameter $program $at)
+        }
+    }
     $facts.Add([pscustomobject]$fact)
+}
+
+function Test-FromParameter($Ast, $Function) {
+    if ($Ast -isnot [System.Management.Automation.Language.Ast]) { return $false }
+    $names = @(@(if ($Function.Parameters) { $Function.Parameters } elseif ($Function.Body.ParamBlock) { $Function.Body.ParamBlock.Parameters }) | ForEach-Object { $_.Name.VariablePath.UserPath }) + @('args', 'input')
+    $seen = @{}
+    $pending = [Collections.Generic.Queue[object]]::new()
+    $pending.Enqueue($Ast)
+    while ($pending.Count) {
+        foreach ($variable in $pending.Dequeue().FindAll({ $args[0] -is [System.Management.Automation.Language.VariableExpressionAst] }, $true)) {
+            $name = $variable.VariablePath.UserPath -replace '^(script|global|local|private):'
+            if ($name -in $names) { return $true }
+            if (-not $seen.ContainsKey($name)) {
+                $seen[$name] = $true
+                foreach ($key in @($script:assigned.Keys | Where-Object { $_ -eq $name -or $_ -like "$name.*" })) {
+                    foreach ($value in $script:assigned[$key]) { if ($value -isnot [string] -and $value.Extent.StartOffset -ge $Function.Extent.StartOffset -and $value.Extent.EndOffset -le $Function.Extent.EndOffset) { $pending.Enqueue($value) } }
+                }
+            }
+        }
+    }
+    return $false
 }
 
 function Join-Pieces([string[]]$Left, [string[]]$Right) {
@@ -86,8 +116,16 @@ function Get-NodeValues($Node, [int]$Depth) {
                 $list = if ($scope -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $scope.Parameters) { $scope.Parameters } elseif ($scope -is [System.Management.Automation.Language.ScriptBlockAst] -and $scope.ParamBlock) { $scope.ParamBlock.Parameters } else { $null }
                 if ($null -ne $list) { foreach ($parameter in $list) { if ($parameter.Name.VariablePath.UserPath -eq $name) { $declared = $parameter; break } } }
             }
-            if (($null -eq $declared -and -not $script:assigned.ContainsKey($name)) -or $script:resolving.Contains($name)) { return $hole }
-            [void]$script:resolving.Add($name)
+            for ($loop = $Node.Parent; $null -ne $loop -and $null -eq $declared; $loop = $loop.Parent) {
+                if ($loop -is [System.Management.Automation.Language.ForEachStatementAst] -and $loop.Variable.VariablePath.UserPath -eq $name -and $loop.Body.Extent.StartOffset -le $Node.Extent.StartOffset) {
+                    $elements = Get-Elements $loop.Condition
+                    if ($null -eq $elements) { return Get-Values $loop.Condition ($Depth + 1) }
+                    return @(foreach ($element in $elements) { Get-Values $element ($Depth + 1) })
+                }
+            }
+            $guard = $name + '|' + $(if ($declared) { $declared.Extent.StartOffset } else { '' })
+            if (($null -eq $declared -and -not $script:assigned.ContainsKey($name)) -or $script:resolving.Contains($guard)) { return $hole }
+            [void]$script:resolving.Add($guard)
             try {
                 $owner = if ($declared) { $declared.Parent } else { $null }
                 if ($owner -is [System.Management.Automation.Language.ParamBlockAst]) { $owner = $owner.Parent }
@@ -96,9 +134,9 @@ function Get-NodeValues($Node, [int]$Depth) {
                 $local = @(if ($script:assigned.ContainsKey($name)) { $script:assigned[$name] | Where-Object { ($null -eq $owner -or ($_ -isnot [string] -and $owner.Extent.StartOffset -le $_.Extent.StartOffset -and $_.Extent.EndOffset -le $owner.Extent.EndOffset)) -and ($_ -is [string] -or $repeats -or (Get-Scope $_) -ne $scope -or $_.Extent.StartOffset -lt $Node.Extent.StartOffset) } })
                 $sources = @(if ($declared) { $script:parameterValues[$declared] }) + $local
                 $all = @(foreach ($value in $sources) { Get-Values $value ($Depth + 1) })
-                if ($all.Count -gt 16) { return $hole }
+                if ($all.Count -gt 64) { return $hole }
                 return $all
-            } finally { [void]$script:resolving.Remove($name) }
+            } finally { [void]$script:resolving.Remove($guard) }
         }
         'MemberExpressionAst' {
             $text = $Node.Extent.Text
@@ -181,6 +219,19 @@ function Get-Items($Node) {
     return , $Node
 }
 
+function Get-Elements($Node) {
+    while ($Node -is [System.Management.Automation.Language.PipelineAst] -and $Node.PipelineElements.Count -eq 1) { $Node = $Node.PipelineElements[0] }
+    while ($Node -is [System.Management.Automation.Language.CommandExpressionAst]) { $Node = $Node.Expression }
+    if ($Node -is [System.Management.Automation.Language.ArrayExpressionAst] -and $Node.SubExpression.Statements.Count -eq 1) { return Get-Elements $Node.SubExpression.Statements[0] }
+    if ($Node -is [System.Management.Automation.Language.ArrayLiteralAst]) { return , @($Node.Elements) }
+    if ($Node -is [System.Management.Automation.Language.VariableExpressionAst] -and $script:assigned.ContainsKey(($key = $Node.VariablePath.UserPath -replace '^(script|global|local|private):'))) {
+        $all = [Collections.Generic.List[object]]::new()
+        foreach ($source in $script:assigned[$key]) { if ($source -is [string]) { return $null }; $found = Get-Elements $source; if ($null -eq $found) { return $null }; $all.AddRange([object[]]$found) }
+        return , $all.ToArray()
+    }
+    return $null
+}
+
 function Get-Single($Node) {
     $values = @(Get-Values $Node)
     if ($values.Count -eq 1) { return $values[0] }
@@ -250,7 +301,9 @@ function Read-Command($Node) {
             $program = Get-Bound $Node @('FilePath') 0
             $list = Get-Bound $Node @('ArgumentList') 1
             $argumentsOut = @(if ($null -ne $list) { Get-Items $list | ForEach-Object { [pscustomobject]@{ line = (Get-Single $_) } } })
+            $script:programNode = $program
             foreach ($value in @(Get-Some $program)) { Add-Fact $Node 'command' '' $argumentsOut @{ pieces = $value; operator = 'Start-Process' } }
+            $script:programNode = $null
             return
         }
         '^(ForEach-Object|%|foreach)$' {
@@ -264,7 +317,9 @@ function Read-Command($Node) {
             $program = Get-Bound $Node @('Execute') 0
             $list = Get-Bound $Node @('Argument') 1
             $argumentsOut = @(if ($null -ne $list) { [pscustomobject]@{ line = (Get-Single $list) } })
+            $script:programNode = $program
             foreach ($value in @(Get-Some $program)) { Add-Fact $Node 'command' '' $argumentsOut @{ pieces = $value; operator = 'New-ScheduledTaskAction' } }
+            $script:programNode = $null
             return
         }
         '^New-Object$' {
@@ -275,7 +330,7 @@ function Read-Command($Node) {
             return
         }
     }
-    Add-Fact $Node 'command' $name $arguments @{ operator = $operator }
+    Add-Fact $Node 'command' $name $arguments @{ operator = $operator; piped = ($Node.Parent -is [System.Management.Automation.Language.PipelineAst] -and $Node.Parent.PipelineElements.IndexOf($Node) -gt 0) }
 }
 
 function Read-Start($Node, $Info) {
@@ -330,9 +385,20 @@ function Resolve-TypeName([string]$Name) {
     return ($Name -replace '\[.*$', '')
 }
 
+$understood = @('ArrayExpressionAst', 'ArrayLiteralAst', 'AssignmentStatementAst', 'AttributeAst', 'AttributedExpressionAst', 'BinaryExpressionAst', 'BlockStatementAst', 'BreakStatementAst', 'CatchClauseAst',
+    'CommandAst', 'CommandExpressionAst', 'CommandParameterAst', 'ConstantExpressionAst', 'ContinueStatementAst', 'ConvertExpressionAst', 'DataStatementAst', 'DoUntilStatementAst', 'DoWhileStatementAst',
+    'ExitStatementAst', 'ExpandableStringExpressionAst', 'FileRedirectionAst', 'ForEachStatementAst', 'ForStatementAst', 'FunctionDefinitionAst', 'FunctionMemberAst', 'HashtableAst', 'IfStatementAst',
+    'IndexExpressionAst', 'InvokeMemberExpressionAst', 'MemberExpressionAst', 'MergingRedirectionAst', 'NamedAttributeArgumentAst', 'NamedBlockAst', 'ParamBlockAst', 'ParameterAst', 'ParenExpressionAst',
+    'PipelineAst', 'PipelineChainAst', 'PropertyMemberAst', 'ReturnStatementAst', 'ScriptBlockAst', 'ScriptBlockExpressionAst', 'StatementBlockAst', 'StringConstantExpressionAst', 'SubExpressionAst',
+    'SwitchStatementAst', 'TernaryExpressionAst', 'ThrowStatementAst', 'TrapStatementAst', 'TryStatementAst', 'TypeConstraintAst', 'TypeDefinitionAst', 'TypeExpressionAst', 'UnaryExpressionAst',
+    'UsingExpressionAst', 'UsingStatementAst', 'VariableExpressionAst', 'WhileStatementAst')
+
 function Read-Ast($Ast, [bool]$Nested) {
+    if ($Ast.ScriptRequirements -and ($Ast.ScriptRequirements.RequiredModules.Count -or $Ast.ScriptRequirements.RequiredAssemblies.Count)) { Add-Fact $Ast 'unreadable' 'a #requires line loads a module or assembly the check does not read' }
     foreach ($node in $Ast.FindAll({ $true }, $true)) {
+        if ($node.GetType().Name -notin $understood) { Add-Fact $node 'unreadable' ('the check has no rule for the PowerShell construct ' + $node.GetType().Name); continue }
         switch ($node.GetType().Name) {
+            'TypeDefinitionAst' { Add-Fact $node 'type' $node.Name $null; if ($node.BaseTypes.Count) { Add-Fact $node 'unreadable' 'a class that derives from another type runs code of that type the check does not see' } }
             'CommandAst' { Read-Command $node }
             'MemberExpressionAst' {
                 if (-not $node.Static) { continue }
@@ -343,7 +409,10 @@ function Read-Ast($Ast, [bool]$Nested) {
             'ConvertExpressionAst' { if ($node.Type.TypeName.Name -eq 'scriptblock' -and $node.Child -isnot [System.Management.Automation.Language.ScriptBlockExpressionAst]) { Add-Fact $node 'unreadable' 'this turns text into a script block' } }
             'VariableExpressionAst' { if ($node.VariablePath.UserPath -match '^((global|script|local|private):)?PSDefaultParameterValues$') { Add-Fact $node 'unreadable' 'this changes $PSDefaultParameterValues, which changes what later commands do' } }
             'AssignmentStatementAst' { if ($node.Left -is [System.Management.Automation.Language.VariableExpressionAst] -and $node.Left.VariablePath.DriveName -in 'function', 'alias') { Add-Fact $node 'unreadable' 'this defines a command at run time through the function: or alias: drive' } }
-            'UsingStatementAst' { if ($node.UsingStatementKind -eq 'Module') { Add-Fact $node 'command' 'Import-Module' @([pscustomobject]@{ pieces = $node.Name.Value; values = @($node.Name.Value) }) @{ operator = '' } } }
+            'UsingStatementAst' {
+                if ($node.UsingStatementKind -eq 'Module') { Add-Fact $node 'command' 'Import-Module' @([pscustomobject]@{ pieces = $node.Name.Value; values = @($node.Name.Value) }) @{ operator = '' } }
+                elseif ($node.UsingStatementKind -ne 'Namespace') { Add-Fact $node 'unreadable' 'a using statement loads code the check does not read' }
+            }
             'InvokeMemberExpressionAst' {
                 $given = @(if ($node.Arguments) { $node.Arguments })
                 $arguments = @(for ($index = 0; $index -lt $given.Count; $index++) {
@@ -374,7 +443,7 @@ function Read-Ast($Ast, [bool]$Nested) {
                 $type = Resolve-TypeName $node.Expression.TypeName.FullName
                 if ($type -eq 'System.Diagnostics.Process' -and $member -eq 'Start') {
                     $given = @(if ($node.Arguments) { $node.Arguments })
-                    if ($given.Count -ge 2) { foreach ($value in @(Get-Some $given[0])) { Add-Fact $node 'command' '' @([pscustomobject]@{ line = (Get-Single $given[1]) }) @{ pieces = $value; operator = 'Process.Start' } } }
+                    if ($given.Count -ge 2) { $script:programNode = $given[0]; foreach ($value in @(Get-Some $given[0])) { Add-Fact $node 'command' '' @([pscustomobject]@{ line = (Get-Single $given[1]) }) @{ pieces = $value; operator = 'Process.Start' } }; $script:programNode = $null }
                     elseif ($given.Count -eq 1) { Read-Start $node $given[0] }
                     else { Add-Fact $node 'unreadable' 'the program this starts comes from start settings the check cannot read' }
                     continue
@@ -388,10 +457,27 @@ function Read-Ast($Ast, [bool]$Nested) {
 
 $functions = @{}
 $aliases = @{}
+$starts = @{}
 function Add-Definitions([string]$File, $Tree) {
-    $functions[$File] = @($Tree.FindAll({ $args[0] -is [System.Management.Automation.Language.FunctionDefinitionAst] }, $true) | ForEach-Object { $_.Name }) + @($Tree.FindAll({ $args[0] -is [System.Management.Automation.Language.AssignmentStatementAst] -and $args[0].Left -is [System.Management.Automation.Language.VariableExpressionAst] -and $args[0].Left.VariablePath.DriveName -eq 'function' }, $true) | ForEach-Object { $_.Left.VariablePath.UserPath.Substring(9) })
-    $aliases[$File] = @($Tree.FindAll({ $args[0] -is [System.Management.Automation.Language.CommandAst] -and $args[0].GetCommandName() -in 'Set-Alias', 'New-Alias', 'sal', 'nal' }, $true) | ForEach-Object { $bound = Get-Bound $_ @('Name') 0; if ($bound -is [System.Management.Automation.Language.StringConstantExpressionAst]) { $bound.Value } else { '*' } })
+    $functions[$File] = @($Tree.FindAll({ $args[0] -is [System.Management.Automation.Language.FunctionDefinitionAst] }, $true) | ForEach-Object {
+            $container = $_.Parent.Parent
+            , @($_.Name, ($_.Parent -is [System.Management.Automation.Language.NamedBlockAst] -and $container -is [System.Management.Automation.Language.ScriptBlockAst]), $_.Extent.StartOffset, $container.Extent.StartOffset, $container.Extent.EndOffset, [object]::ReferenceEquals($container, $Tree)) })
+    $starts[$File] = @(@($Tree.BeginBlock, $Tree.ProcessBlock, $Tree.EndBlock) | Where-Object { $_ } | ForEach-Object { $_.Statements } | Where-Object { $_ -isnot [System.Management.Automation.Language.FunctionDefinitionAst] -and $_.Find({ $args[0] -is [System.Management.Automation.Language.CommandAst] -or $args[0] -is [System.Management.Automation.Language.InvokeMemberExpressionAst] }, $true) } | ForEach-Object { $_.Extent.StartOffset } | Select-Object -First 1) + @($Tree.Extent.EndOffset) | Select-Object -First 1
+    $aliases[$File] = @($Tree.FindAll({ $args[0] -is [System.Management.Automation.Language.CommandAst] -and $args[0].GetCommandName() -in 'Set-Alias', 'New-Alias', 'sal', 'nal' }, $true) | ForEach-Object { Get-Renamed (Get-Bound $_ @('Name') 0) }) +
+        @($Tree.FindAll({ $args[0] -is [System.Management.Automation.Language.AssignmentStatementAst] -and $args[0].Left -is [System.Management.Automation.Language.VariableExpressionAst] -and $args[0].Left.VariablePath.DriveName -in 'function', 'alias' }, $true) | ForEach-Object { $_.Left.VariablePath.UserPath -replace '^\w+:' }) +
+        @($Tree.FindAll({ ($args[0] -is [System.Management.Automation.Language.StringConstantExpressionAst] -or $args[0] -is [System.Management.Automation.Language.ExpandableStringExpressionAst]) -and $args[0].Value -match '^(function|alias):' }, $true) | ForEach-Object {
+            $whole = $_
+            while ($whole.Parent -is [System.Management.Automation.Language.BinaryExpressionAst] -or $whole.Parent -is [System.Management.Automation.Language.ParenExpressionAst] -or ($whole.Parent -is [System.Management.Automation.Language.PipelineAst] -and $whole.Parent.PipelineElements.Count -eq 1) -or $whole.Parent -is [System.Management.Automation.Language.CommandExpressionAst]) { $whole = $whole.Parent }
+            if ($whole.Parent -isnot [System.Management.Automation.Language.CommandAst] -or $whole.Parent.GetCommandName() -notin 'Get-Item', 'gi', 'Test-Path', 'Get-ChildItem', 'gci', 'dir', 'Get-Content', 'gc', 'type') { Get-Renamed $whole -Drive } })
 }
+
+function Get-Renamed($Node, [switch]$Drive) {
+    if ($null -eq $Node -or ($null -eq $script:memo -and $Node -isnot [System.Management.Automation.Language.StringConstantExpressionAst])) { return '*' }
+    $pattern = if ($Drive) { '^(?:function|alias):(?:(?:script|global|local|private):)?\\?(.+)$' } else { '^(.+)$' }
+    foreach ($value in @(if ($Node -is [System.Management.Automation.Language.StringConstantExpressionAst]) { $Node.Value } else { Get-Values $Node })) { if ($value -notmatch '[\x00-\x04]' -and $value -match $pattern) { $Matches[1] } else { '*' } }
+}
+$script:memo = $null
+$script:programNode = $null
 foreach ($definition in @($request.definitions)) {
     $tokens = $null
     $errors = $null
@@ -408,7 +494,6 @@ foreach ($item in $items) {
         $facts.Add([pscustomobject]@{ file = $item.file; line = $errors[0].Extent.StartLineNumber + $script:offset; text = $errors[0].Extent.StartScriptPosition.Line; kind = 'unreadable'; name = 'PowerShell cannot read this: ' + $errors[0].Message; args = $null })
         continue
     }
-    if ($null -eq $item.source) { Add-Definitions $item.file $ast }
     $script:memo = [Collections.Generic.Dictionary[object, object]]::new([Collections.Generic.ReferenceEqualityComparer]::Instance)
     $script:calls = @{}
     foreach ($call in $ast.FindAll({ $args[0] -is [System.Management.Automation.Language.CommandAst] }, $true)) {
@@ -418,7 +503,8 @@ foreach ($item in $items) {
     $script:assigned = @{}
     $script:parameterValues = [Collections.Generic.Dictionary[object, object]]::new()
     $script:resolving = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
-    foreach ($node in $ast.FindAll({ $args[0] -is [System.Management.Automation.Language.AssignmentStatementAst] -or $args[0] -is [System.Management.Automation.Language.ParameterAst] -or $args[0] -is [System.Management.Automation.Language.ForEachStatementAst] }, $true)) {
+    $nodes = @($ast.FindAll({ $args[0] -is [System.Management.Automation.Language.AssignmentStatementAst] -or $args[0] -is [System.Management.Automation.Language.ParameterAst] -or $args[0] -is [System.Management.Automation.Language.ForEachStatementAst] }, $true))
+    foreach ($node in @($nodes | Where-Object { $_ -isnot [System.Management.Automation.Language.ForEachStatementAst] }) + @($nodes | Where-Object { $_ -is [System.Management.Automation.Language.ForEachStatementAst] })) {
         $target = $null
         $value = $null
         if ($node -is [System.Management.Automation.Language.ParameterAst]) {
@@ -437,7 +523,7 @@ foreach ($item in $items) {
                 continue
             }
         }
-        if ($node -is [System.Management.Automation.Language.ForEachStatementAst]) { $value = if ($node.Condition -is [System.Management.Automation.Language.PipelineAst] -and $node.Condition.PipelineElements.Count -eq 1 -and $node.Condition.PipelineElements[0].Expression -is [System.Management.Automation.Language.ArrayLiteralAst]) { $node.Condition.PipelineElements[0].Expression.Elements } else { $node.Condition } }
+        if ($node -is [System.Management.Automation.Language.ForEachStatementAst]) { $elements = Get-Elements $node.Condition; $value = if ($null -ne $elements) { $elements } else { $node.Condition } }
         elseif ($null -eq $value) { $value = $hole }
         foreach ($variable in @($target) + @(if ($target -is [System.Management.Automation.Language.ArrayLiteralAst]) { $target.Elements })) {
             if ($variable -isnot [System.Management.Automation.Language.VariableExpressionAst]) { continue }
@@ -446,6 +532,7 @@ foreach ($item in $items) {
             foreach ($each in @(if ($target -is [System.Management.Automation.Language.ArrayLiteralAst]) { $hole } else { $value })) { $script:assigned[$key].Add($each) }
         }
     }
+    if ($null -eq $item.source) { Add-Definitions $item.file $ast }
     Read-Ast $ast $false
 }
-[pscustomobject]@{ facts = $facts; functions = $functions; aliases = $aliases } | ConvertTo-Json -Depth 8 -Compress
+[pscustomobject]@{ facts = $facts; functions = $functions; aliases = $aliases; starts = $starts } | ConvertTo-Json -Depth 8 -Compress

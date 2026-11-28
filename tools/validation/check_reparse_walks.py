@@ -20,11 +20,8 @@ HERE = Path(__file__).resolve().parent
 local_tree = runpy.run_path(str(HERE / 'local_tree.py'))['entries']
 ALLOWLIST = 'tools/validation/reparse-walk-allowlist.json'
 sys.path.insert(0, str(HERE))
-from reparse_names import (HOLE, PATH, SELF, BLOCK, ROOT, MARKERS, split_command_line, cmd_facts, CLASSES, NAMED, SCOPE, PRODUCT, fact, tagged, lines_of, msbuild_facts, REASONS, launch, call_harm, name_findings)
+from reparse_rows import (HOLE, PATH, SELF, BLOCK, ROOT, MARKERS, split_command_line, cmd_facts, TABLE, APPROVED, SCOPE, PRODUCT, fact, tagged, lines_of, msbuild_facts, literal, Classifier)
 PROJECTS = ('.csproj', '.props', '.targets')
-UNREADABLE_FILE = ('Python cannot read this file', 'PowerShell cannot read this:', 'bash cannot read this', 'MSBuild cannot read this project', 'MSBuild cannot give the compiler arguments',
-                   'YAML cannot read this workflow', 'the check has no reader for the', 'cmd reads this file in the console code page', 'the compiler cannot read this',
-                   'no reader reads this file type')
 
 
 def concat(left, right):
@@ -91,6 +88,11 @@ def token_of(pieces):
 
 class PythonReader:
     LAUNCHERS = {'subprocess.run', 'subprocess.call', 'subprocess.check_call', 'subprocess.check_output', 'subprocess.Popen', 'os.system'}
+    KINDS = set('Module FunctionDef AsyncFunctionDef ClassDef Return Delete Assign TypeAlias AugAssign AnnAssign For AsyncFor While If With AsyncWith Match Raise Try TryStar Assert Import ImportFrom '
+                'Global Nonlocal Expr Pass Break Continue BoolOp NamedExpr BinOp UnaryOp Lambda IfExp Dict Set ListComp SetComp DictComp GeneratorExp Await Yield YieldFrom Compare Call FormattedValue '
+                'JoinedStr Constant Attribute Subscript Starred Name List Tuple Slice Load Store Del And Or Add Sub Mult MatMult Div Mod Pow LShift RShift BitOr BitXor BitAnd FloorDiv Invert Not UAdd '
+                'USub Eq NotEq Lt LtE Gt GtE Is IsNot In NotIn comprehension ExceptHandler arguments arg keyword alias withitem match_case MatchValue MatchSingleton MatchSequence MatchMapping '
+                'MatchClass MatchStar MatchAs MatchOr TypeIgnore TypeVar ParamSpec TypeVarTuple'.split())
     SCOPES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)
     repo_modules = set()
     files = set()
@@ -111,7 +113,43 @@ class PythonReader:
 
     def add(self, node, kind, name, args=None, **extra):
         line = getattr(node, 'lineno', 1)
-        self.facts.append(fact(self.relative, line, self.lines[line - 1] if line <= len(self.lines) else '', kind, name, args, **extra))
+        program = extra.pop('program', None)
+        context = self.within(node, program) if extra.pop('launch', False) or kind == 'command' or kind == 'call' and name.startswith('repo:') else {}
+        self.facts.append(fact(self.relative, line, self.lines[line - 1] if line <= len(self.lines) else '', kind, name, args, **context, **extra))
+
+    def within(self, node, program=None):
+        context = self.within_one(node)
+        if context and program is not None:
+            context['programFromParameter'] = self.within_one(program).get('fromParameter', False)
+        return context
+
+    def within_one(self, node):
+        function = self.parent.get(node) if hasattr(self, 'parent') else None
+        while function is not None and not isinstance(function, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            function = self.parent.get(function)
+        if function is None:
+            return {}
+        names = {a.arg for a in function.args.posonlyargs + function.args.args + function.args.kwonlyargs + [a for a in (function.args.vararg, function.args.kwarg) if a]}
+        pending, seen = [node], set()
+        while pending:
+            for name in (n for n in ast.walk(pending.pop()) if isinstance(n, ast.Name)):
+                if name.id in names:
+                    return {'within': f'{Path(self.relative).stem}.{function.name}', 'fromParameter': True}
+                for binding in (self.lookup(name.id, name) or []) if name.id not in seen else []:
+                    seen.add(name.id)
+                    if binding[0] == 'value' and binding[1] is not None:
+                        pending.append(binding[1])
+        return {'within': f'{Path(self.relative).stem}.{function.name}', 'fromParameter': False}
+
+    def target(self, func):
+        if isinstance(func, ast.Name):
+            found = {f'{Path(self.relative).stem}.{b[1].name}' if isinstance(b[1], (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) else f'{b[1].module}.{b[2]}' if isinstance(b[1], ast.ImportFrom) else None
+                     for b in self.lookup(func.id, func) or [] if b[0] == 'repo'}
+            return found.pop() if len(found) == 1 else None
+        if isinstance(func, ast.Attribute) and isinstance(func.value, ast.Name):
+            found = {f'{b[2]}.{func.attr}' for b in self.lookup(func.value.id, func.value) or [] if b[0] == 'repo' and isinstance(b[1], ast.Import)}
+            return found.pop() if len(found) == 1 else None
+        return None
 
     def scope_of(self, node):
         node = self.parent.get(node)
@@ -147,13 +185,13 @@ class PythonReader:
             if isinstance(node, ast.Import):
                 for alias in node.names:
                     module = alias.name if alias.asname else alias.name.split('.')[0]
-                    bind(alias.asname or alias.name.split('.')[0], ('repo', node) if module.split('.')[0] in self.repo_modules else ('module', module))
+                    bind(alias.asname or alias.name.split('.')[0], ('repo', node, module) if module.split('.')[0] in self.repo_modules else ('module', module))
             elif isinstance(node, ast.ImportFrom):
                 for alias in node.names:
                     if alias.name == '*' or node.level:
                         self.add(node, 'unreadable', 'a star or relative import binds names the check cannot list')
                     else:
-                        bind(alias.asname or alias.name, ('repo', node) if node.module.split('.')[0] in self.repo_modules else ('import', f'{node.module}.{alias.name}'))
+                        bind(alias.asname or alias.name, ('repo', node, alias.name) if node.module.split('.')[0] in self.repo_modules else ('import', f'{node.module}.{alias.name}'))
             elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and node is not scope:
                 bind(node.name, ('repo', node))
             elif isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign, ast.NamedExpr)) and getattr(node, 'value', None) is not None:
@@ -415,6 +453,8 @@ class PythonReader:
     def read(self):
         skipped = set()
         for node in ast.walk(self.tree):
+            if type(node).__name__ not in self.KINDS:
+                self.add(node, 'unreadable', f'the check has no rule for the Python construct {type(node).__name__}')
             if isinstance(node, ast.Attribute):
                 skipped.add(id(node.value))
             if not isinstance(node, ast.Call):
@@ -423,9 +463,13 @@ class PythonReader:
             names = self.qualified(node.func)
             if None in names and not self.traced(node.func):
                 self.add(node, 'unreadable', 'this calls a value the check cannot trace to a function it can classify')
+            if '<repo>' in names and self.target(node.func):
+                self.add(node, 'call', 'repo:' + self.target(node.func), None)
             for name in names - {None, '<repo>'}:
                 if name in self.LAUNCHERS:
                     self.launch(node, name)
+                elif name == 'runpy.run_path' and node.args and self.repo_path(node.args[0]):
+                    continue
                 else:
                     self.add(node, 'native' if '!' in name else 'method' if name.startswith('.') else 'call', name, self.arguments(node))
         for node in ast.walk(self.tree):
@@ -438,10 +482,11 @@ class PythonReader:
 
     def launch(self, node, name):
         first = node.args[0] if node.args else next((k.value for k in node.keywords if k.arg in ('args', 'command')), None)
+        self.program = first.elts[0] if isinstance(first, (ast.List, ast.Tuple)) and first.elts else first
         shell = name == 'os.system' or any(k.arg == 'shell' and not (isinstance(k.value, ast.Constant) and k.value.value is False) for k in node.keywords)
         executable = next((k.value for k in node.keywords if k.arg == 'executable'), None)
         if any(k.arg is None for k in node.keywords) or any(isinstance(a, ast.Starred) for a in node.args):
-            self.add(node, 'unreadable', 'arguments passed with * or ** hide the program this starts')
+            self.add(node, 'unreadable', 'arguments passed with * or ** hide the program this starts', launch=True, program=self.program)
             return
         candidates = [first]
         if isinstance(first, ast.Name):
@@ -449,12 +494,12 @@ class PythonReader:
             if bindings and all(b[0] == 'value' for b in bindings) and not self.changed(first):
                 candidates = [b[1] for b in bindings]
             elif bindings:
-                self.add(node, 'unreadable', 'the program list this starts is changed or built where the check cannot follow it')
+                self.add(node, 'unreadable', 'the program list this starts is changed or built where the check cannot follow it', launch=True, program=self.program)
                 return
         for value in candidates:
             if isinstance(value, (ast.List, ast.Tuple)):
                 if any(isinstance(e, ast.Starred) for e in value.elts):
-                    self.add(node, 'unreadable', 'a starred program list hides what this starts')
+                    self.add(node, 'unreadable', 'a starred program list hides what this starts', launch=True, program=self.program)
                     continue
                 pieces = [t[0] if len(t) == 1 else [HOLE] for t in (self.resolve(e) for e in value.elts)]
                 if shell:
@@ -481,9 +526,9 @@ class PythonReader:
     def command(self, node, program, tokens, raw):
         name = program_of(program)
         if name is None:
-            self.add(node, 'unreadable', 'the program this starts is built from values the check cannot read')
+            self.add(node, 'unreadable', 'the program this starts is built from values the check cannot read', launch=True, program=self.program)
         else:
-            self.add(node, 'command', name, tokens, raw=raw)
+            self.add(node, 'command', name, tokens, raw=raw, path=literal(program), program=getattr(self, 'program', None))
 
 
 def git(root, *arguments):
@@ -494,7 +539,7 @@ def read_powershell(root, files, texts, definitions=()):
     with tempfile.TemporaryDirectory() as folder:
         request = Path(folder, 'request.json')
         request.write_text(json.dumps({'root': str(root), 'files': files, 'texts': texts, 'definitions': list(definitions),
-                                       'passthrough': list(CLASSES['powershell path functions']), 'joiners': list(CLASSES['powershell argument joiners'])}), encoding='utf-8')
+                                       'passthrough': list(TABLE['powershell path functions']), 'joiners': list(TABLE['powershell argument joiners'])}), encoding='utf-8')
         output = subprocess.run(['pwsh', '-NoProfile', '-NonInteractive', '-File', str(HERE / 'read_powershell.ps1'), str(request)], capture_output=True, text=True, encoding='utf-8')
     if output.returncode:
         raise SystemExit('The PowerShell reader failed: ' + output.stdout + output.stderr)
@@ -573,6 +618,11 @@ def cmd_script(relative, source, offset=0, lines=None):
     return facts
 
 
+BASH_KINDS = {'File', 'CallExpr', 'BinaryCmd', 'Block', 'Subshell', 'IfClause', 'WhileClause', 'ForClause', 'WordIter', 'CStyleLoop', 'CaseClause', 'FuncDecl', 'ArithmCmd', 'TestClause',
+              'DeclClause', 'LetClause', 'TimeClause', 'CoprocClause', 'Word', 'Lit', 'SglQuoted', 'DblQuoted', 'CmdSubst', 'ParamExp', 'ArithmExp', 'ProcSubst', 'ExtGlob', 'BraceExp',
+              'ArrayExpr', 'BinaryArithm', 'UnaryArithm', 'ParenArithm', 'BinaryTest', 'UnaryTest', 'ParenTest'}
+
+
 def bash_facts(relative, text, offset=0, lines=None):
     shfmt = os.environ.get('SHFMT', 'shfmt')
     output = subprocess.run([shfmt, '--to-json', '--filename', relative], input=text, capture_output=True, text=True, encoding='utf-8')
@@ -580,24 +630,59 @@ def bash_facts(relative, text, offset=0, lines=None):
         return [fact(relative, 1 + offset, '', 'unreadable', 'bash cannot read this: ' + output.stderr.strip()[:200])]
     tree = json.loads(output.stdout)
     lines = lines or lines_of(text)
-    functions, calls, globs = {}, [], []
-    pending = [tree]
+    facts, functions, changed, calls, spans = [], {}, set(), [], []
+    top = {id(stmt.get('Cmd')) for stmt in tree.get('Stmts') or []}
+
+    def refuse(node, why):
+        line = node['Pos']['Line'] + offset
+        facts.append(fact(relative, line, lines[line - 1] if line <= len(lines) else '', 'unreadable', why))
+
+    def variables(node):
+        found, pending = False, [node]
+        while pending and not found:
+            item = pending.pop()
+            if isinstance(item, list):
+                pending += item
+            elif isinstance(item, dict):
+                found = item.get('Type') in ('ParamExp', 'CmdSubst', 'ProcSubst') or item.get('Type') == 'Lit' and not re.fullmatch(r'\d+|0[xX][\da-fA-F]+|\d+#[\w@]+|[@*]', item.get('Value', ''))
+                pending += [v for k, v in item.items() if k not in ('Pos', 'End')]
+        return found
+
+    pending = [(tree, True)]
     while pending:
-        node = pending.pop()
+        node, globbed = pending.pop()
         if isinstance(node, list):
-            pending += node
-        elif isinstance(node, dict):
-            if node.get('Type') == 'FuncDecl':
-                functions.setdefault(node['Name'].get('Value', ''), []).append((node['Pos']['Offset'], node['End']['Offset']))
-            if node.get('Type') == 'CallExpr' and node.get('Args'):
-                calls.append(node)
-            if node.get('Type') in ('TestClause', 'ParamExp', 'ArithmExp', 'ArithmCmd', 'LetClause'):
-                continue
-            if 'Parts' in node and node.get('Type') not in ('DblQuoted', 'SglQuoted'):
-                text = ''.join(part.get('Value', '') if part.get('Type') == 'Lit' else re.sub(r'[*?\[]', '', part.get('Value', '') or ''.join(q.get('Value', '') for q in part.get('Parts', []) if q.get('Type') == 'Lit')) if part.get('Type') in ('SglQuoted', 'DblQuoted') else 'x' for part in node['Parts'])
-                if re.search(r'[*?\[][^/]*/', text):
-                    globs.append(node)
-            pending += [v for k, v in node.items() if k not in ('Pos', 'End', 'Patterns', 'Hdoc')]
+            pending += [(n, globbed) for n in node]
+            continue
+        if not isinstance(node, dict):
+            continue
+        kind = node.get('Type')
+        if kind is not None and kind not in BASH_KINDS:
+            refuse(node, f'the check has no rule for the bash construct {kind}')
+        if kind == 'FuncDecl':
+            functions.setdefault(node['Name'].get('Value', ''), []).append((node['Pos']['Offset'], id(node) in top))
+            spans.append((node['Name'].get('Value', ''), node['Pos']['Offset'], node['End']['Offset']))
+        if kind == 'CallExpr' and node.get('Args'):
+            calls.append(node)
+            first = node['Args'][0].get('Parts', [{}])
+            if len(first) == 1 and first[0].get('Value') in ('unset', 'alias'):
+                for word in node['Args'][1:]:
+                    value = ''.join(p.get('Value', '') for p in word.get('Parts', []) if p.get('Type') == 'Lit') if all(p.get('Type') == 'Lit' for p in word.get('Parts', [])) else '*'
+                    if not value.startswith('-'):
+                        changed.add(value.split('=')[0])
+        if kind in ('ArithmExp', 'ArithmCmd', 'LetClause', 'CStyleLoop') and variables(node) or kind == 'BinaryTest' and node.get('Op') in ('-eq', '-ne', '-lt', '-le', '-gt', '-ge') and variables([node.get('X'), node.get('Y')]) \
+                or kind == 'UnaryTest' and node.get('Op') == '-v' or kind == 'ParamExp' and (variables([node.get('Index'), node.get('Slice')]) or (node.get('Exp') or {}).get('Op') == '@' and 'P' in ''.join(p.get('Value', '') for p in (node['Exp'].get('Word') or {}).get('Parts', []))
+                                                                                         or node.get('Excl') and not node.get('Names') and (node.get('Index') is None or variables(node.get('Index')))) \
+                or kind == 'DeclClause' and (node.get('Variant', {}).get('Value') == 'nameref' or any(a.get('Naked') and re.fullmatch(r'[-+]\w*[in]\w*', ''.join(p.get('Value', '') for p in (a.get('Value') or {}).get('Parts', []))) for a in node.get('Args') or [])):
+            refuse(node, 'bash evaluates this as arithmetic or a variable name, so a value in it can hold text that bash runs as code')
+        if 'Index' in node and kind is None and variables(node.get('Index')):
+            refuse(node, 'bash evaluates this array index as arithmetic, so a value in it can hold text that bash runs as code')
+        if globbed and 'Parts' in node and kind not in ('DblQuoted', 'SglQuoted'):
+            text = ''.join(part.get('Value', '') if part.get('Type') == 'Lit' else re.sub(r'[*?\[]', '', part.get('Value', '') or ''.join(q.get('Value', '') for q in part.get('Parts', []) if q.get('Type') == 'Lit')) if part.get('Type') in ('SglQuoted', 'DblQuoted') else '*' if part.get('Type') == 'ExtGlob' else 'x' for part in node['Parts'])
+            if re.search(r'[*?\[][^/]*/', text):
+                line = node['Pos']['Line'] + offset
+                facts.append(fact(relative, line, lines[line - 1] if line <= len(lines) else '', 'call', 'glob:wildcard folder', None, language='bash'))
+        pending += [(v, globbed and k not in ('Hdoc', 'Patterns')) for k, v in node.items() if k not in ('Pos', 'End')]
 
     def pieces(word):
         out = [[]]
@@ -607,21 +692,38 @@ def bash_facts(relative, text, offset=0, lines=None):
             out = concat(out, value)
         return out[0] if len(out) == 1 else [HOLE]
 
-    facts = []
-    for glob in globs:
-        line = glob['Pos']['Line'] + offset
-        facts.append(fact(relative, line, lines[line - 1] if line <= len(lines) else '', 'call', 'glob:wildcard folder', None, language='bash'))
+    positional = lambda words: any(part.get('Type') == 'ParamExp' and re.fullmatch(r'[0-9@*]', (part.get('Param') or {}).get('Value', '')) for word in words for part in json_parts(word))
+    launchers = {name for call in calls for name, start, end in spans if start <= call['Pos']['Offset'] < end and literal(pieces(call['Args'][0])) not in APPROVED['bash']
+                 and (positional(call['Args'][:1]) or (literal(pieces(call['Args'][0])) or '') in TABLE['runners'] and positional(call['Args'][1:]))}
     for call in calls:
         line = call['Pos']['Line'] + offset
         words = [pieces(word) for word in call['Args']]
         program = program_of(words[0]) if words[0] and all(p not in (HOLE, PATH) for p in words[0]) else None
         source = lines[line - 1] if line <= len(lines) else ''
+        defined = functions.get(program, [])
         if program is None:
             facts.append(fact(relative, line, source, 'unreadable', 'bash runs a command built from values the check cannot read'))
-        elif not any(start < call['Pos']['Offset'] or start <= call['Pos']['Offset'] < end for start, end in functions.get(program, [])) and not (
-                program in functions and any(start <= call['Pos']['Offset'] < end for spans in functions.values() for start, end in spans)):
-            facts.append(fact(relative, line, source, 'command', program, [token_of(w) for w in words[1:]], shell='bash', language='bash'))
+        elif not any(top and at < call['Pos']['Offset'] for at, top in defined) or program in changed or '*' in changed:
+            facts.append(fact(relative, line, source, 'command', program, [token_of(w) for w in words[1:]], shell='bash', language='bash', path=literal(words[0])))
+        elif program in launchers:
+            facts.append(fact(relative, line, source, 'unreadable', f'bash runs {program}, a function that starts a program from the arguments it is given'))
     return facts
+
+
+def json_parts(node):
+    pending, found = [node], []
+    while pending:
+        item = pending.pop()
+        if isinstance(item, list):
+            pending += item
+        elif isinstance(item, dict):
+            found.append(item)
+            pending += [v for k, v in item.items() if k not in ('Pos', 'End')]
+    return found
+
+
+WORKFLOW_KEYS = {'job': {'name', 'permissions', 'needs', 'if', 'runs-on', 'environment', 'concurrency', 'outputs', 'env', 'defaults', 'steps', 'timeout-minutes', 'strategy', 'continue-on-error'},
+                 'step': {'id', 'if', 'name', 'uses', 'run', 'working-directory', 'shell', 'with', 'env', 'continue-on-error', 'timeout-minutes'}}
 
 
 def yaml_scalars(node):
@@ -652,14 +754,18 @@ def workflow_facts(relative, data, texts):
             return [fact(relative, fields['steps'].start_mark.line + 1, '', 'unreadable', 'YAML cannot read this workflow: a job has steps the check cannot read')]
         runner = ' '.join(n.value for n in yaml_scalars(fields.get('runs-on')))
         default = mapping(mapping(fields.get('defaults')).get('run')).get('shell') or mapping(mapping(mapping(document).get('defaults')).get('run')).get('shell')
-        if 'uses' in fields:
-            line = fields['uses'].start_mark.line + 1
-            facts.append(fact(relative, line, lines[line - 1], 'call', 'action:' + fields['uses'].value.split('@')[0], None, language='workflow'))
-        for step in fields.get('steps').value if isinstance(fields.get('steps'), yaml.SequenceNode) else []:
-            step = mapping(step)
+        steps = fields.get('steps').value if isinstance(fields.get('steps'), yaml.SequenceNode) else []
+        for owner, known in [(job, WORKFLOW_KEYS['job'])] + [(step, WORKFLOW_KEYS['step']) for step in steps]:
+            for key, value in owner.value:
+                if key.value not in known:
+                    facts.append(fact(relative, key.start_mark.line + 1, lines[key.start_mark.line], 'unreadable', f'the check has no rule for the workflow key {key.value}'))
+        for step in [fields] + [mapping(step) for step in steps]:
             if 'uses' in step:
                 line = step['uses'].start_mark.line + 1
-                facts.append(fact(relative, line, lines[line - 1], 'call', 'action:' + step['uses'].value.split('@')[0], None, language='workflow'))
+                given = [{'name': k, 'value': v.value if isinstance(v, yaml.ScalarNode) and '${{' not in v.value else {'unknown': True}} for k, v in mapping(step.get('with')).items()]
+                facts.append(fact(relative, line, lines[line - 1], 'call', 'action:' + step['uses'].value.split('@')[0], given, language='workflow'))
+        for step in steps:
+            step = mapping(step)
             if 'run' not in step:
                 continue
             node = step['run']
@@ -689,193 +795,6 @@ def workflow_facts(relative, data, texts):
     return facts
 
 
-PS_ALIASES = CLASSES['powershell aliases']
-
-
-def wildcard_folder(cmdlet, args):
-    values, prior, position, path_at = [], None, 0, CLASSES['powershell wildcard paths'][cmdlet]
-    for a in args or []:
-        if 'param' in a:
-            if 'value' in a and 'path'.startswith(a['param'].lower()):
-                values.append(a['value'])
-            prior = None if 'value' in a or a['param'].lower() in CLASSES['powershell switches'] else a['param'].lower()
-            continue
-        if prior is not None and 'path'.startswith(prior) or prior is None and position == path_at:
-            values += a.get('values') or ([a['pieces']] if a.get('pieces') else [])
-        position += prior is None
-        prior = None
-    return any(isinstance(v, str) and re.search(r'[*?\[][^\\/]*[\\/]', v) for v in values)
-
-
-class Classifier:
-    def __init__(self, paths, defined, types=(), includes=None, read=()):
-        self.files = set(paths)
-        self.read = set(read)
-        self.defined = {file: {name.lower() for name in names} for file, names in defined['functions'].items()}
-        self.aliases = {file: {name.lower() for name in names} for file, names in defined['aliases'].items()}
-        self.includes = {file: {target for target, _ in found} for file, found in (includes or {}).items()}
-        self.includers = {}
-        for file, found in (includes or {}).items():
-            for target, shared in found:
-                if shared:
-                    self.includers.setdefault(target, set()).add(file)
-        self.scopes = {}
-        self.types = {name.lower() for name in types}
-
-    def scope(self, file):
-        if file not in self.scopes:
-            up, pending = {file}, [file]
-            while pending:
-                for caller in self.includers.get(pending.pop(), ()):
-                    if caller not in up:
-                        up.add(caller)
-                        pending.append(caller)
-            down, pending = set(up), list(up)
-            while pending:
-                for target in self.includes.get(pending.pop(), ()):
-                    if target not in down:
-                        down.add(target)
-                        pending.append(target)
-            self.scopes[file] = down
-        return self.scopes[file]
-
-    def aliased(self, file):
-        return set().union(*(self.aliases.get(f, set()) for f in self.scope(file)))
-
-    def visible(self, file):
-        aliased = self.aliased(file)
-        return set() if '*' in aliased else set().union(*(self.defined.get(f, set()) for f in self.scope(file))) - aliased
-
-    def scripts(self, file, pieces):
-        if len(pieces) < 2 or pieces[0] != ROOT or any(p in MARKERS for p in pieces[1:]):
-            return []
-        rest = ''.join(pieces[1:]).replace('\\', '/').lstrip('/')
-        folder, _, name = posixpath.normpath(posixpath.join(posixpath.dirname(file), rest)).rpartition('/')
-        if not re.search(r'\.(ps1|psm1|psd1)$', name.lower()) or re.search(r'[*?\[]', folder):
-            return []
-        return [p for p in self.files if p.rpartition('/')[0] == folder and fnmatch.fnmatchcase(p.rpartition('/')[2].lower(), name.lower())]
-
-    @staticmethod
-    def lookup(section, name):
-        return CLASSES.get(section, {}).get(name)
-
-    @staticmethod
-    def holds(condition, args, tokens):
-        if 'without' in condition:
-            return args is not None and not any('splat' in a or 'param' in a and any(w.lower().startswith(a['param'].lower()) for w in condition['without']) for a in args)
-        if 'one folder' in condition:
-            found = [a for a in args or [] if a.get('i') == condition['arg']]
-            value = found[0].get('value') if found else None
-            if not isinstance(value, str) or any(m in value for m in (HOLE, SELF, BLOCK)) or '**' in value:
-                return False
-            return not any(re.search(r'[*?[]', part) for part in re.split(r'[\\/]', value)[:-1])
-        if args is None or any('splat' in a for a in args):
-            return False
-        if 'blocks' in condition:
-            return all('block' in a or 'param' in a and not any(n.startswith(a['param'].lower()) for n in ('membername', 'filepath', 'file', 'argumentlist')) for a in args)
-        if 'param' in condition:
-            for index, a in enumerate(args):
-                if 'param' in a and any(n.lower().startswith(a['param'].lower()) for n in condition['param']):
-                    value = a.get('value') if 'value' in a else args[index + 1].get('pieces') if index + 1 < len(args) else None
-                    return isinstance(value, str) and value.lower() in condition['in']
-            return condition.get('absent', False)
-        found = [a for a in args if a.get('i') == condition['arg'] or a.get('name') == condition['arg']]
-        if not found:
-            return condition.get('absent', False)
-        if 'types' in condition:
-            return found[0].get('type') in condition['types']
-        if 'type' in condition and found[0].get('type') not in (None, condition['type']):
-            return bool(found[0].get('created'))
-        return 'value' in found[0] and found[0]['value'] in condition['in']
-
-    def verdict(self, entry, args=None):
-        if isinstance(entry, str):
-            return None
-        broken = [c for c in entry.get('safe', []) if not self.holds(c, args, None)]
-        if 'safe' in entry and not broken:
-            return None
-        rule = next((c for c in broken if c.get('harm') in REASONS), None) or next((c for c in broken if 'harm' in c or 'known' in c), None) or entry
-        return entry['does'], rule.get('harm') or rule.get('known') or 'call'
-
-    def called(self, section, name, args):
-        entry = self.lookup(section, name)
-        if entry is None:
-            return [(f'this calls {name}, which the table does not list', call_harm(name) or 'call the table does not list', name.lower())]
-        found = self.verdict(entry, args)
-        return [(f'this calls {name}, which {found[0]}', found[1], name.lower())] if found else []
-
-    def classify(self, item):
-        kind, name, language = item['kind'], item['name'], item.get('language', '')
-        if kind == 'unreadable':
-            return [(name, 'file' if name.startswith(UNREADABLE_FILE) else name, '')]
-        if kind == 'native':
-            return [(f'this calls native code {name}', call_harm(name) or 'native call', name.lower())]
-        if kind == 'call' and name.startswith('com:'):
-            return [(f'this uses the COM class {name[4:]}', call_harm(name) or 'COM class', name.lower())]
-        if kind == 'call' and name == 'msbuild:item from a property':
-            return [('this MSBuild item takes its files from a property the check cannot read, which can hold a wildcard folder that is walked when the project is evaluated', 'R1', '')]
-        if kind == 'call' and name == 'glob:wildcard folder':
-            return [('this glob has a wildcard folder, so it walks every folder it matches', 'R1', '')]
-        if kind == 'call' and name == 'msbuild:import':
-            return [('this imports MSBuild code the check does not read', 'MSBuild import', '')]
-        if kind == 'call' and language == 'powershell' and re.sub(r'\.(\.ctor|[^.]+)$', '', name).lower() in self.types:
-            return []
-        if kind in ('call', 'method'):
-            section = 'workflow' if name.startswith(('action:', 'msbuild:')) else f'{language} methods' if kind == 'method' else 'python' if language == 'python' else 'dotnet'
-            return self.called(section, name.lower() if kind == 'method' else name, item['args'])
-        if kind != 'command':
-            return [(f'the check does not know the kind {kind}', 'file', '')]
-        tokens = [t for t in item['args'] or [] if not isinstance(t, dict) or 'param' not in t] if language != 'powershell' else \
-            [('-' + a['param']) if isinstance(a, dict) and 'param' in a else a.get('pieces') if isinstance(a, dict) else a for a in item['args'] or []]
-        if language == 'powershell':
-            if not name:
-                pieces = pieces_of(item['pieces'])
-                targets = self.scripts(item['file'], pieces) if item.get('operator') in ('Dot', 'Ampersand') else []
-                if targets and any(t not in self.read for t in targets):
-                    return [(f'this runs {", ".join(sorted(t for t in targets if t not in self.read))}, a script the check does not read', 'file', '')]
-                if targets:
-                    return []
-                if item.get('operator') in ('Dot', 'Ampersand') and len(pieces) == 1 and re.fullmatch(r'[A-Za-z]+-\w+', pieces[0]):
-                    return self.classify(dict(item, name=pieces[0]))
-                return [launch(program_of(pieces), tokens)]
-            lowered = name.lower()
-            if re.search(r'[\\/]|\.\w+$', lowered):
-                return [launch(program_of([name]) or name, tokens)]
-            if lowered in self.visible(item['file']):
-                return []
-            cmdlet = PS_ALIASES.get(lowered, lowered)
-            if lowered in self.aliased(item['file']) or '*' in self.aliased(item['file']):
-                return [(f'{name} may be renamed by Set-Alias in this scope', 'command renamed by Set-Alias in its scope', lowered)]
-            wild = [(f'{name} is given a path with a wildcard folder, so it walks every folder that matches', 'R1', cmdlet)] if cmdlet in CLASSES['powershell wildcard paths'] and wildcard_folder(cmdlet, item['args']) else []
-            if cmdlet in CLASSES['powershell']:
-                found = self.verdict(CLASSES['powershell'][cmdlet], item['args'])
-                return wild + ([(f'{name} {found[0]}', found[1], cmdlet)] if found else [])
-            if wild:
-                return wild
-            if any(lowered in names for names in self.defined.values()):
-                found = launch(lowered, tokens)
-                return [found if found[1] in REASONS else (f'this runs {name}, a function defined in another checked repo file that this file reaches through its caller', 'repo function reached through its caller', lowered)]
-            if re.fullmatch(r'[a-z]+-[a-z0-9]+', cmdlet):
-                return [(f'this runs {name}, a command the table does not list', call_harm(cmdlet) or 'command the table does not list', cmdlet)]
-            return [launch(name, tokens)]
-        if language in ('bash', 'cmd') and name in CLASSES[language]:
-            found = self.verdict(CLASSES[language][name], None)
-            return [(f'{language} {name} {found[0]}', found[1], name)] if found else []
-        return [launch(name, tokens)]
-
-    def run(self, facts):
-        findings = {}
-        for item in facts:
-            if item['file'].startswith(PRODUCT) and item.get('language') != 'msbuild':
-                entry = self.lookup('dotnet', item['name']) if item['kind'] == 'call' else None
-                found = [(f'this calls {item["name"]}, which {entry["does"]}', 'R1', item['name'].lower())] if isinstance(entry, dict) and entry.get('walk') and self.verdict(entry, item['args']) else []
-            else:
-                found = self.classify(item)
-            if found:
-                findings.setdefault((item['file'], item['line']), (item['text'], []))[1].extend(found)
-        return findings
-
-
 def check(root):
     root = Path(root).resolve()
     failures = []
@@ -887,16 +806,11 @@ def check(root):
         entries = [p for p in local_tree(root, links=True) if p.is_symlink() or p.is_file()]
         failures += [f'{p.relative_to(root).as_posix()}: a link lets a copy of the repo reach outside it' for p in entries if p.is_symlink()]
         paths = sorted(p.relative_to(root).as_posix() for p in entries if not p.is_symlink())
-    PythonReader.repo_modules = {Path(p).stem for p in paths if p.endswith('.py') and p.startswith(SCOPE)}
+    PythonReader.repo_modules = {Path(p).stem for p in paths if p.endswith('.py') and p.startswith(SCOPE + PRODUCT)}
     PythonReader.files = {p for p in paths if p.startswith(SCOPE + PRODUCT)}
     projects = [f for p in paths if p.lower().endswith(PROJECTS) for f in tagged(msbuild_facts(p, (root / p).read_bytes(), set(paths)), 'msbuild')]
-    classifier = Classifier(paths, {'functions': {}, 'aliases': {}})
-    findings = classifier.run(projects)
-    names = name_findings(root, paths)
-    for key, value in names.items():
-        if key[0].lower().endswith(PROJECTS):
-            findings.setdefault(key, (value[0], []))[1].extend(value[1])
-    allowed = listed(root)
+    findings = Classifier(paths, {'functions': {}, 'aliases': {}}).run(projects)
+    allowed = {(e.get('file'), e.get('line')) for e in sum(lists(root), [])}
     if any((file, text.strip()) not in allowed for (file, _), (text, _) in findings.items()):
         failures.append('the check stopped before evaluating any project, because a project file runs something no list clears')
         return failures, findings, False
@@ -911,11 +825,7 @@ def check(root):
             continue
         extension = relative.rsplit('.', 1)[-1].lower() if '.' in relative.rsplit('/', 1)[-1] else ''
         data = (root / relative).read_bytes()
-        if relative.startswith(PRODUCT):
-            if extension == 'cs':
-                csharp.append(relative)
-            continue
-        if b'\x00' in data and extension not in CLASSES['data'] and not data.startswith((b'\xff\xfe', b'\xfe\xff')):
+        if b'\x00' in data and extension not in TABLE['data'] and not data.startswith((b'\xff\xfe', b'\xfe\xff')):
             failures.append(f'{relative}: this file holds NUL bytes and no byte order mark, so no reader reads it the way its shell does')
             continue
         if extension == 'py':
@@ -928,7 +838,7 @@ def check(root):
             facts += tagged(bash_facts(relative, data.decode('utf-8')), 'bash')
         elif extension in ('cmd', 'bat'):
             facts += tagged(cmd_script(relative, data), 'cmd')
-        elif extension not in CLASSES['data']:
+        elif extension not in TABLE['data']:
             failures.append(f'{relative}: no reader reads this file type, so the check cannot see what it runs')
     read = read_powershell(root, powershell, texts, [p for p in paths if p.lower().endswith(('.ps1', '.psm1')) and p not in powershell])
     facts += tagged(read['facts'], 'powershell')
@@ -941,32 +851,23 @@ def check(root):
     classifier = Classifier(paths, read)
     includes = {}
     for item in facts:
-        if item['kind'] != 'command' or item.get('language') != 'powershell' or item['name']:
+        if item['kind'] != 'command' or item.get('language') != 'powershell':
             continue
-        if item.get('operator') in ('Dot', 'Ampersand'):
+        if not item['name'] and item.get('operator') in ('Dot', 'Ampersand'):
             for target in classifier.scripts(item['file'], pieces_of(item['pieces'])):
-                includes.setdefault(item['file'], set()).add((target, True))
-    for item in facts:
-        if item['kind'] == 'command' and item.get('language') == 'powershell' and (item['name'] or '').lower() in ('import-module', 'ipmo'):
+                includes.setdefault(item['file'], []).append((target, 'dot' if item['operator'] == 'Dot' else 'call', item['offset']))
+        if (item['name'] or '').lower() in ('import-module', 'ipmo'):
             for element in item['args'] or []:
                 for target in classifier.scripts(item['file'], pieces_of(element['pieces'])) if 'pieces' in element else []:
-                    includes.setdefault(item['file'], set()).add((target, False))
+                    includes.setdefault(item['file'], []).append((target, 'module', item['offset']))
     classifier = Classifier(paths, read, {f['name'] for f in facts if f['kind'] == 'type'}, includes, powershell)
     findings.update(classifier.run([f for f in facts if f['kind'] != 'type']))
-    for key, value in names.items():
-        if not key[0].lower().endswith(PROJECTS):
-            findings.setdefault(key, (value[0], []))[1].extend(value[1])
     return failures, findings, True
 
 
 def lists(root):
     data = json.loads((root / ALLOWLIST).read_text(encoding='utf-8-sig')) if (root / ALLOWLIST).exists() else {}
     return data.get('reasoned exceptions', []), data.get('known', [])
-
-
-def listed(root):
-    reasoned, launches = lists(root)
-    return {(e.get('file'), e.get('line')) for e in reasoned + launches}
 
 
 def report(root, failures, findings, complete=True, cleared=None):
@@ -976,7 +877,7 @@ def report(root, failures, findings, complete=True, cleared=None):
     for (file, number), (text, found) in sorted(findings.items()):
         messages = list(dict.fromkeys(m for m, _, _ in found))
         where = f'{file}:{number}: {"; ".join(messages)}: {(text or "").strip()[:160]}'
-        if any(harm == 'file' for _, harm, _ in found):
+        if any(outcome == 'file' for _, outcome, _ in found):
             failures.append(f'{where}; no list can clear a file the check cannot read')
             continue
         hits = {}
@@ -984,19 +885,17 @@ def report(root, failures, findings, complete=True, cleared=None):
             hits[name] = next((i for i, e in enumerate(entries) if i not in used[name] and e.get('file') == file and e.get('line') == (text or '').strip()), None)
             if hits[name] is not None:
                 used[name].add(hits[name])
-        harms = sorted({harm for _, harm, _ in found if harm in REASONS})
-        kinds = ', '.join(sorted({harm for _, harm, _ in found}))
-        starts = ', '.join(sorted({what for _, _, what in found if what}))
+        rows = ', '.join(sorted({row for _, _, row in found if row}))
         if hits['reasoned'] is not None:
             cleared is not None and cleared.append(f'{file}:{number}: cleared by a reasoned exception')
-        elif harms:
-            failures.append(f'{where}; this is {"/".join(harms)}, so only a reasoned exception in {ALLOWLIST} or a fix (LocalTree.Entries, local_tree, TestFixtures) clears it')
-        elif hits['known'] is not None and (known[hits['known']].get('kind'), known[hits['known']].get('starts')) == (kinds, starts):
-            cleared is not None and cleared.append(f'{file}:{number}: cleared by the known list ({kinds}: {starts})')
+        elif any(outcome == 'reason' for _, outcome, _ in found):
+            failures.append(f'{where}; no row of the safe table allows this, so only a reasoned exception in {ALLOWLIST} that is true of this line, or a fix (LocalTree.Entries, local_tree, TestFixtures), clears it')
+        elif hits['known'] is not None and known[hits['known']].get('row') == rows:
+            cleared is not None and cleared.append(f'{file}:{number}: cleared by the known list ({rows})')
         elif hits['known'] is not None:
-            failures.append(f'{where}; its known entry says {known[hits["known"]].get("kind")!r}: {known[hits["known"]].get("starts")!r}, but the line is {kinds!r}: {starts!r}')
+            failures.append(f'{where}; its known entry names the row {known[hits["known"]].get("row")!r}, but the line matches {rows!r}')
         else:
-            failures.append(f'{where}; list it in {ALLOWLIST} as known with kind {kinds!r} and starts {starts!r}, or give it a reasoned exception')
+            failures.append(f'{where}; list it in {ALLOWLIST} as known with the row {rows!r}, or give it a reasoned exception')
     if complete:
         failures += [f'{ALLOWLIST}: stale entry in {name}: {e.get("file")} {e.get("line")!r}' for name, entries in (('reasoned', reasoned), ('known', known))
                      for i, e in enumerate(entries) if i not in used[name]]
